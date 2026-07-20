@@ -1,0 +1,9 @@
+/var/log/agentbox.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

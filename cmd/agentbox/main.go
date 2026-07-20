@@ -56,11 +56,13 @@ func lockDataDir(dir string) (*os.File, error) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		owner, _ := io.ReadAll(f)
 		f.Close()
-		held := strings.TrimSpace(string(owner))
-		if held == "" {
-			held = "unknown pid"
+		log.Printf("data dir %s is locked by another process", dir)
+		// Best effort only: the pid is whatever the last successful holder
+		// wrote, so it can be stale if something other than agentbox took the
+		// lock. Enough to start looking, not something to trust blindly.
+		if held := strings.TrimSpace(string(owner)); held != "" {
+			log.Printf("last recorded owner: %s (verify with: fuser -v %s/agentbox.lock)", held, dir)
 		}
-		log.Printf("data dir %s is already in use by %s", dir, held)
 		log.Printf("if you meant to restart the service, use: systemctl restart agentbox")
 		return nil, err
 	}

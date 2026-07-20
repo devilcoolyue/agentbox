@@ -1,0 +1,22 @@
+[Unit]
+Description=agentbox - containerized AI coding workbench
+Documentation=https://agentbox.example.com
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+# Without a limit, an unrecoverable start failure (a taken port, a bad config)
+# retries every RestartSec forever — one such loop ran 31h and 2600+ restarts
+# unnoticed. Five failures in a minute now parks the unit in failed state.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/agentbox -config config.json
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/agentbox.log
+StandardError=append:/var/log/agentbox.log
+
+[Install]
+WantedBy=multi-user.target

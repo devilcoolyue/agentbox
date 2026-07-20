@@ -46,6 +46,18 @@ mkdir -p accounts/claude-1
 # 登录后可在「系统设置 → 安全与访问」修改密码、创建普通用户
 ```
 
+上面第 4 步是前台试跑。要托管给 systemd（开机自启、崩溃循环保护、日志轮转），
+用 `deploy/`：
+
+```bash
+sudo ./deploy/install.sh   # 装单元，路径按当前目录注入
+sudo ./deploy/deploy.sh    # 构建 + 启动；日常发布也是这一条
+```
+
+单元文件、迁移步骤与排查手册见 [`deploy/README.md`](deploy/README.md)。
+注意同一个 `data_dir` 只允许一个实例（flock 保证），重启一律走
+`systemctl restart agentbox`，不要在服务运行时手动跑二进制。
+
 ### 镜像内 CLI 的升级
 
 容器内禁用了 Claude Code / Codex 的自升级（CLI 装在镜像的 root 目录，
