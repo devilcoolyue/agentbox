@@ -88,9 +88,9 @@
 /* 行内代码：暗底暖字的磷光小片 */
 .msg code {
   font-family: var(--mono); font-size: 12.5px;
-  color: #e5c07b;
-  background: #0d1016;
-  border: 1px solid #242b3a;
+  color: var(--code-text);
+  background: var(--code-bg);
+  border: 1px solid var(--code-line);
   border-radius: 5px;
   padding: 1.5px 6px;
 }
@@ -100,14 +100,14 @@
   margin: 2px 0 10px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #0d1016;
+  background: var(--code-bg);
   overflow: hidden;
 }
 .cb-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 4px 7px 4px 8px;
-  background: #151a24;
-  border-bottom: 1px solid #242b3a;
+  background: var(--code-head);
+  border-bottom: 1px solid var(--code-line);
 }
 /* 折叠开关：箭头 + 语言 + 行数，整块可点 */
 .cb-toggle {
@@ -251,7 +251,7 @@ details.think.streaming .think-body::after {
   display: inline-flex; align-items: center; gap: 6px;
   margin: 3px 4px;
   border: 1px solid var(--line); border-radius: 10px;
-  background: #0d1016;
+  background: var(--code-bg);
   padding: 5px 10px;
   font-size: 12px; color: var(--amber);
   text-decoration: none;
@@ -263,13 +263,13 @@ details.think.streaming .think-body::after {
   width: 64px; height: 64px;
   border: 1px solid var(--line); border-radius: 10px;
   overflow: hidden;
-  background: #0d1016;
+  background: var(--code-bg);
   display: flex; align-items: center; justify-content: center;
 }
 .attach-thumb img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
 .attach-thumb .badge {
   position: absolute; left: 3px; top: 3px; z-index: 1;
-  background: rgba(6, 8, 12, 0.72);
+  background: var(--overlay-chip);
   color: var(--amber);
   font-family: var(--mono); font-size: 10px;
   padding: 1px 5px; border-radius: 4px;
@@ -360,7 +360,7 @@ details.think.streaming .think-body::after {
   border: 1px solid var(--line); border-radius: 999px;
   color: var(--amber);
   font-size: 12.5px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ---- 输入卡：大圆角悬浮卡，聚焦时琥珀微光 ---- */
@@ -375,13 +375,13 @@ details.think.streaming .think-body::after {
   border: 1px solid var(--line);
   border-radius: 24px;
   padding: 12px 12px 10px 16px;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.32);
+  box-shadow: var(--shadow-md);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .composer:focus-within {
   border-color: var(--amber-dim);
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.32),
-    0 0 0 3px color-mix(in srgb, var(--amber) 9%, transparent);
+  box-shadow: var(--shadow-md),
+    0 0 0 3px color-mix(in srgb, var(--amber) 12%, transparent);
 }
 .composer textarea {
   background: transparent; border: none; outline: none;
@@ -406,32 +406,32 @@ details.think.streaming .think-body::after {
 }
 .icon-btn:hover { color: var(--text); background: var(--panel-2); }
 .icon-btn.rec {
-  color: #fff; background: var(--red);
+  color: var(--on-red); background: var(--red);
   animation: voice-pulse 1.4s ease-out infinite;
 }
 @keyframes voice-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(224, 108, 95, 0.45); }
-  100% { box-shadow: 0 0 0 9px rgba(224, 108, 95, 0); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--red) 45%, transparent); }
+  100% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--red) 0%, transparent); }
 }
 
 /* 发送：琥珀实心圆纸飞机，执行中变红色中断钮（两个 SVG 靠 .stop 切换） */
 .send-btn {
   width: 34px; height: 34px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--amber);
+  background: var(--accent);
   border: none; border-radius: 50%;
-  color: #17130a;
+  color: var(--on-accent);
   line-height: 1;
   margin-left: 6px;
   transition: background 0.12s ease, transform 0.12s ease;
 }
-.send-btn:hover { background: #f0b45a; }
+.send-btn:hover { background: var(--accent-hi); }
 .send-btn:active { transform: scale(0.92); }
 .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .send-btn .ic-send { display: block; transform: translate(-1px, 1px); } /* 机头朝右上，视觉重心回正 */
 .send-btn .ic-stop { display: none; }
-.send-btn.stop { background: var(--red); color: #fff; }
-.send-btn.stop:hover { background: #e98376; }
+.send-btn.stop { background: var(--red); color: var(--on-red); }
+.send-btn.stop:hover { background: var(--red-hi); }
 .send-btn.stop .ic-send { display: none; }
 .send-btn.stop .ic-stop { display: block; }
 
@@ -459,7 +459,7 @@ details.think.streaming .think-body::after {
   background: var(--panel);
   border: 1px solid var(--line); border-radius: 14px;
   padding: 6px;
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--shadow-lg);
 }
 /* 悬停浮层：贴在面板左侧，展示某个属性的全部选项 */
 .pick-fly {
@@ -468,7 +468,7 @@ details.think.streaming .think-body::after {
   background: var(--panel);
   border: 1px solid var(--line); border-radius: 14px;
   padding: 6px;
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--shadow-lg);
 }
 .pick-fly-h {
   color: var(--muted);

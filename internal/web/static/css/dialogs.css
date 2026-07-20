@@ -12,7 +12,7 @@ dialog {
   max-height: 90dvh;
   overflow-y: auto;
 }
-dialog::backdrop { background: rgba(6, 8, 12, 0.7); }
+dialog::backdrop { background: var(--backdrop); }
 dialog h2 { margin: 0 0 16px; font-size: 16px; }
 dialog form { display: flex; flex-direction: column; gap: 14px; }
 dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
@@ -84,7 +84,7 @@ dialog label.check input { margin: 0; flex: none; }
   overflow: hidden;
 }
 .dlg-img[open] { display: flex; flex-direction: column; }
-.dlg-img::backdrop { background: rgba(6, 8, 12, 0.82); }
+.dlg-img::backdrop { background: var(--backdrop-strong); }
 .dlg-img img {
   flex: 1; min-height: 0;
   width: 100%;
@@ -98,11 +98,12 @@ dialog label.check input { margin: 0; flex: none; }
   color: var(--muted); font-size: 12px;
 }
 .lb-bar span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 灯箱 ✕：悬浮在图片右上角 */
+/* 灯箱 ✕：悬浮在图片右上角。灯箱背板两个主题下都是深色，
+ * 所以这枚钮固定深底浅字，不跟随主题。 */
 .lb-x {
   position: absolute; top: 10px; right: 10px; z-index: 2;
   width: 34px; height: 34px; margin: 0;
-  background: rgba(6, 8, 12, 0.65); border-radius: 50%;
+  background: var(--overlay-chip); border-radius: 50%;
   color: #dfe3ea; font-size: 15px;
 }
 .lb-x:hover { background: rgba(6, 8, 12, 0.88); color: #fff; }

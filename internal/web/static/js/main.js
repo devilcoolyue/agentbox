@@ -4,6 +4,7 @@
 
 import { S } from "./state.js";
 import "./util.js";
+import "./theme.js";
 import "./shell.js";
 import "./data.js";
 import { showLogin, tryEnter } from "./login.js";
@@ -23,6 +24,8 @@ const boxi = document.getElementById("tpl-mascot").content;
 for (const m of document.querySelectorAll("[data-mascot]")) m.append(boxi.cloneNode(true));
 const mark = document.getElementById("tpl-mark").content;
 for (const m of document.querySelectorAll("[data-mark]")) m.replaceWith(mark.cloneNode(true).firstElementChild);
+const themeIco = document.getElementById("tpl-theme-ico").content;
+for (const m of document.querySelectorAll("[data-theme-ico]")) m.append(themeIco.cloneNode(true));
 
 if (S.token) tryEnter();
 else showLogin();

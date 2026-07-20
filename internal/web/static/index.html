@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AGENTBOX 控制台</title>
+<!-- 主题：在样式表之前落 data-theme，避免浅色用户刷新时闪一帧深色底。
+     默认深色，切换与持久化见 js/theme.js。 -->
+<script>
+  try {
+    if (localStorage.getItem("agentbox_theme") === "light") document.documentElement.dataset.theme = "light";
+  } catch (e) {}
+</script>
+<meta name="theme-color" content="#12151c">
 <!-- favicon：logo 主形——敞开的箱子里一对发光的眼睛（16px 下省略正面唛头） -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5.6 12 1.2 5.8 4.9 2.9 9.9 9.9Z' fill='%23e8a33d'/%3E%3Cpath d='M26.4 12 30.8 5.8 27.1 2.9 22.1 9.9Z' fill='%23e8a33d'/%3E%3Crect x='5' y='11.4' width='22' height='16.2' rx='3' fill='%23e8a33d'/%3E%3Crect x='8' y='11.4' width='16' height='6.6' rx='1.8' fill='%23241803'/%3E%3Crect x='10.6' y='12.7' width='4' height='4' rx='1.3' fill='%23ffc76b'/%3E%3Crect x='17.4' y='12.7' width='4' height='4' rx='1.3' fill='%23ffc76b'/%3E%3C/svg%3E">
 <!-- {{BUILD}} 由服务端替换为资源内容哈希：URL 随内容变化，穿透 CF/浏览器缓存 -->
@@ -73,8 +81,20 @@
   </svg>
 </template>
 
+<!-- 主题切换图标：两枚都在 DOM 里，由 shell.css 按 data-theme 显示对应的一枚 -->
+<template id="tpl-theme-ico">
+  <svg class="ic-theme ic-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="4.2"/>
+    <path d="M12 2.4v2.4M12 19.2v2.4M4.2 12H1.8M22.2 12h-2.4M6.5 6.5 4.8 4.8M19.2 19.2l-1.7-1.7M17.5 6.5l1.7-1.7M4.8 19.2l1.7-1.7"/>
+  </svg>
+  <svg class="ic-theme ic-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M20.5 14.3A8.6 8.6 0 1 1 9.7 3.5a6.8 6.8 0 0 0 10.8 10.8Z"/>
+  </svg>
+</template>
+
 <!-- 登录 -->
 <div id="login" class="login hidden">
+  <button id="btn-theme-login" type="button" class="theme-fab" data-theme-toggle><span data-theme-ico></span></button>
   <form id="login-form" class="login-card">
     <div class="mascot mascot-login" data-mascot aria-hidden="true"></div>
     <div class="wordmark"><span data-mark></span>AGENTBOX<span class="cursor">▊</span></div>
@@ -123,6 +143,7 @@
       <div id="session-list" class="session-list"></div>
 
       <div class="side-foot">
+        <button id="btn-theme" class="side-item" data-theme-toggle><span class="glyph" data-theme-ico></span><span id="theme-label">浅色主题</span></button>
         <button id="btn-tunnel" class="side-item hidden"><span class="glyph">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>

@@ -13,6 +13,8 @@ const FitAddonClass = window.FitAddon && (window.FitAddon.FitAddon || window.Fit
 const ENC = new TextEncoder();
 const IMG_PATH_RE = /\/shared\/\.images\/[A-Za-z0-9._-]+/g;
 
+const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
 $("btn-term-shell").addEventListener("click", () => openTerm("shell"));
 $("btn-term-agent").addEventListener("click", () => openTerm("agent"));
 
@@ -44,11 +46,12 @@ function openTerm(mode) {
     fontFamily: "JetBrains Mono, Menlo, Consolas, monospace",
     fontSize: isMobile() ? 12 : 13, // 窄屏降一号，约 46 列
     cursorBlink: true,
+    // 配色取 css/base.css 的 --term-* 令牌（深浅主题下都是深色，见那里的说明）
     theme: {
-      background: "#0d1016",
-      foreground: "#d6dae3",
-      cursor: "#e8a33d",
-      selectionBackground: "#2e3646",
+      background: token("--term-bg"),
+      foreground: token("--term-fg"),
+      cursor: token("--term-cursor"),
+      selectionBackground: token("--term-sel"),
     },
   });
   const fit = new FitAddonClass();

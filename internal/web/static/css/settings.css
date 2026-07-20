@@ -32,7 +32,7 @@
 .set-nav button:hover { color: var(--text); background: var(--panel); }
 .set-nav button.active {
   color: var(--amber);
-  background: rgba(232, 163, 61, 0.08);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
   border-color: var(--amber-dim);
 }
 .set-nav .count {
@@ -93,7 +93,7 @@
   white-space: nowrap;
 }
 .tag.restart { color: var(--amber); border-color: var(--amber-dim); }
-.tag.live { color: var(--green); border-color: #2c4636; }
+.tag.live { color: var(--green); border-color: var(--green-line); }
 
 /* 账号池列表 */
 .acct-list { display: flex; flex-direction: column; gap: 10px; }
@@ -107,7 +107,7 @@
   gap: 6px 16px;
   align-items: center;
 }
-.acct-row.stale { border-color: #57352f; }
+.acct-row.stale { border-color: var(--red-line); }
 .acct-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .acct-type {
   display: inline-flex; align-items: center; gap: 5px;
@@ -144,7 +144,7 @@
 .model-row {
   display: flex; align-items: center; gap: 12px;
   padding: 8px 2px;
-  border-bottom: 1px solid #1d2330;
+  border-bottom: 1px solid var(--line-soft);
 }
 .model-row:last-child { border-bottom: none; }
 .model-row .m-label { font-size: 13.5px; flex: none; }
@@ -161,7 +161,7 @@
 .user-row {
   display: flex; align-items: center; gap: 12px;
   padding: 8px 2px;
-  border-bottom: 1px solid #1d2330;
+  border-bottom: 1px solid var(--line-soft);
 }
 .user-row:last-child { border-bottom: none; }
 .user-row .u-name { font-size: 13.5px; font-weight: 600; flex: none; }

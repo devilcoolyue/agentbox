@@ -21,18 +21,18 @@
 /* 内边距必须放在 .xterm 上而不是挂载容器上：FitAddon 用容器的 computed 尺寸
    （border-box，含 padding）算行列数，只会减去 .xterm 自身的 padding，
    放容器上会导致终端比容器大一圈、把整页撑出滚动条 */
-.term-mount { flex: 1; min-height: 0; background: #0d1016; overflow: hidden; }
+.term-mount { flex: 1; min-height: 0; background: var(--term-bg); overflow: hidden; }
 .term-mount .xterm { height: 100%; padding: 8px 8px 8px 16px; }
 /* 连接加载态：盖在终端显示区上（而非按钮条），底色与终端一致 */
 .term-loading {
   position: absolute; inset: 0; z-index: 10;
-  background: #0d1016;
+  background: var(--term-bg);
 }
 
 /* 终端图片上传遮罩：盖住整个终端页，阻断误操作 */
 .term-overlay {
   position: absolute; inset: 0; z-index: 20;
-  background: rgba(13, 16, 22, 0.55);
+  background: color-mix(in srgb, var(--term-bg) 55%, transparent);
   display: flex; align-items: center; justify-content: center;
   cursor: progress;
 }
@@ -42,7 +42,7 @@
   border: 1px solid var(--line); border-radius: 10px;
   padding: 20px 28px;
   font-family: var(--mono); font-size: 12px; color: var(--amber);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-md);
 }
 .term-overlay-box .spin { width: 26px; height: 26px; border-width: 3px; }
 
