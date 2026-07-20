@@ -13,10 +13,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -183,6 +185,14 @@ func (s *Server) Run() error {
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	// Bind before announcing: ListenAndServe would let us log "listening" and
+	// only then fail on a taken port, which reads as a healthy start in the
+	// log right up until the process dies.
+	ln, err := net.Listen("tcp", srv.Addr)
+	if err != nil {
+		return err
+	}
+
 	go s.imageJanitor() // 粘贴图片 48 小时自动清理
 	go s.credSyncLoop() // OAuth 凭证与账号池双向收敛（刷新令牌轮换制）
 	// A tunnel misconfiguration must not take down the whole server: log and
@@ -192,7 +202,26 @@ func (s *Server) Run() error {
 		log.Printf("tunnel disabled: %v", err)
 	}
 	log.Printf("agentbox listening on http://%s", s.bootListen)
-	return srv.ListenAndServe()
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- srv.Serve(ln) }()
+
+	// The Go runtime kills the process outright on SIGTERM, which leaves an
+	// operator-initiated stop indistinguishable from a crash in the log.
+	// Handling it ourselves makes every shutdown attributable.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(stop)
+
+	select {
+	case err := <-serveErr:
+		return err
+	case sig := <-stop:
+		log.Printf("received %s, shutting down", sig)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return srv.Shutdown(ctx)
+	}
 }
 
 // staticHandler 用「内容哈希版本化路径」发布前端资源：index.html 里的资源
