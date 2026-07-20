@@ -1,0 +1,38 @@
+{
+  "listen": "127.0.0.1:8180",
+  "auth_token": "CHANGE_ME_TO_A_LONG_RANDOM_TOKEN",
+  "data_dir": "data",
+  "agent_image": "agentbox-agent:latest",
+  "permission_mode": "bypassPermissions",
+  "max_upload_mb": 512,
+  "container": {
+    "memory_mb": 2048,
+    "cpus": 2,
+    "pids_limit": 512,
+    "network": "bridge"
+  },
+  "tunnel": {
+    "enabled": false,
+    "proxy_bind": "172.17.0.1:1080"
+  },
+  "accounts": [
+    {
+      "id": "claude-1",
+      "type": "claude",
+      "label": "Claude 订阅 #1",
+      "credentials_dir": "accounts/claude-1"
+    },
+    {
+      "id": "claude-apikey",
+      "type": "claude",
+      "label": "Claude API Key",
+      "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }
+    },
+    {
+      "id": "codex-1",
+      "type": "codex",
+      "label": "Codex 订阅 #1",
+      "credentials_dir": "accounts/codex-1"
+    }
+  ]
+}

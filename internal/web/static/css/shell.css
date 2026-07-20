@@ -1,0 +1,216 @@
+/* shell：登录页 + 应用外壳（顶栏 / 侧栏 / 抽屉 / 主区视图切换）。 */
+
+/* ---- 登录：牛皮纸点阵衬底 + 盒仔迎宾 ---- */
+.login {
+  height: 100vh;
+  height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  background-image: radial-gradient(rgba(232, 163, 61, 0.05) 1px, transparent 1.4px);
+  background-size: 26px 26px;
+}
+.login-card {
+  width: min(380px, 90vw);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 30px 32px 34px;
+  display: flex; flex-direction: column; gap: 14px;
+  text-align: center;
+}
+.mascot-login { width: 138px; margin: 0 auto; }
+.login-card .wordmark { justify-content: center; }
+.login-hint { color: var(--muted); margin: 0; font-size: 13px; }
+.login-error { color: var(--red); margin: 0; font-size: 13px; }
+
+/* ---- 外壳：顶栏（仅窄屏）+ 侧栏 + 主区 ---- */
+.app {
+  display: flex; flex-direction: column;
+  height: 100vh;
+  height: 100dvh; /* iOS 地址栏伸缩时保持底部输入区可见 */
+}
+
+.topbar {
+  display: none;
+  flex: none;
+  align-items: center; gap: 10px;
+  padding: 9px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.menu-btn {
+  width: 36px; height: 36px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); padding: 0;
+  font-size: 17px; line-height: 1;
+}
+.menu-btn svg { display: block; }
+.tb-title {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 8px;
+}
+.tb-ico { display: inline-flex; flex: none; }
+.topbar-title {
+  font-weight: 600; font-size: 14.5px;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ⋯ 会话操作菜单（仅窄屏工作台视图出现） */
+.kebab-wrap { position: relative; flex: none; }
+.kebab-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
+  width: 168px;
+  background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 5px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+}
+.kebab-menu button {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; text-align: left;
+  background: none; border: none; border-radius: 7px;
+  color: var(--text); font-size: 13.5px;
+  padding: 9px 11px;
+}
+.kebab-menu button:hover { background: var(--panel-2); }
+.kebab-menu button:disabled { color: var(--muted); opacity: 0.55; cursor: not-allowed; }
+.kebab-menu button.danger { color: var(--red); }
+.kebab-menu .sep { height: 1px; background: var(--line); margin: 4px 6px; }
+/* 图标槽位：固定宽度让三行文字左边缘对齐，图标由 sessions.js 注入 */
+.kebab-menu .glyph {
+  flex: none; width: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.kebab-menu .glyph svg { display: block; }
+
+.shell { flex: 1; min-height: 0; display: flex; }
+
+/* ---- 侧栏：桌面常驻，窄屏抽屉 ---- */
+.sidebar {
+  width: 264px; flex: none;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  padding: 18px 14px;
+  display: flex; flex-direction: column; gap: 12px;
+  overflow-y: auto;
+}
+.sidebar > * { flex-shrink: 0; }
+/* 字标即首页入口：点击回到工作台空状态 */
+.side-brand {
+  background: none; border: none; padding: 0;
+  text-align: left; cursor: pointer;
+}
+.side-brand:hover { color: #fff; }
+.side-label {
+  font-family: var(--mono);
+  font-size: 11px; letter-spacing: 0.22em;
+  color: var(--muted);
+  margin-top: 8px;
+  text-transform: uppercase;
+}
+.side-foot {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.side-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; text-align: left;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  color: var(--muted);
+  padding: 9px 12px;
+  font-size: 13.5px;
+}
+.side-item:hover { color: var(--text); background: var(--panel-2); }
+.side-item.active {
+  color: var(--amber);
+  background: rgba(232, 163, 61, 0.08);
+  border-color: var(--amber-dim);
+}
+.side-item .glyph {
+  font-family: var(--mono); font-size: 15px;
+  flex: none; width: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.side-item .glyph svg { display: block; }
+
+/* ---- 内网隧道入口：右侧状态灯 + 文案（在线时点亮） ---- */
+.tunnel-state {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--muted);
+}
+.t-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+.t-dot.on {
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(87, 199, 138, 0.55);
+}
+
+/* ---- 会话卡片（签名元素：品牌头像瓦片 + 角标呼吸状态灯） ---- */
+.session-list { display: flex; flex-direction: column; gap: 8px; }
+.session-card {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.session-card:hover { border-color: var(--muted); }
+.session-card.active {
+  border-color: var(--amber-dim);
+  box-shadow: inset 0 0 0 1px var(--amber-dim);
+}
+.session-card .agent-avatar .led { border-color: var(--panel-2); }
+.sc-body { flex: 1; min-width: 0; }
+.session-card h3 {
+  margin: 0 0 2px;
+  font-size: 13.5px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session-card .meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- 抽屉遮罩：仅窄屏显示 ---- */
+.scrim {
+  display: none;
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(6, 8, 12, 0.6);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* ---- 窄屏 ---- */
+@media (max-width: 760px) {
+  .topbar { display: flex; }
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 50;
+    width: min(300px, 84vw);
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 0 0 48px rgba(0, 0, 0, 0.6);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .scrim { display: block; }
+  .scrim:not(.show) { pointer-events: none; }
+  .scrim.show { opacity: 1; }
+}
+@media (min-width: 761px) {
+  .kebab-wrap { display: none; } /* 桌面端会话操作在工作台头部 */
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .scrim { transition: none; }
+}

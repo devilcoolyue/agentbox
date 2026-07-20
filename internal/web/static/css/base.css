@@ -1,0 +1,190 @@
+/* AGENTBOX — 深蓝黑机房控制台，琥珀磷光作为工作态强调色。
+ * base：设计令牌、基础元素、跨页面通用组件（按钮/状态灯/转圈/气泡/字标）。
+ * 断点约定：全站移动端断点统一为 max-width: 760px，各文件就近写自己的窄屏规则。 */
+
+:root {
+  --bg: #12151c;
+  --panel: #1a1f29;
+  --panel-2: #222834;
+  --line: #2e3646;
+  --text: #d6dae3;
+  --muted: #8a93a5;
+  --amber: #e8a33d;
+  --amber-dim: #7a5c28;
+  --green: #57c78a;
+  --red: #e06c5f;
+  --claude: #d97757; /* Claude 官方陶土橙（simple-icons 品牌色） */
+  --openai: #10a37f; /* ChatGPT 官方青绿 */
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.hidden { display: none !important; }
+.mono { font-family: var(--mono); }
+
+button { font: inherit; cursor: pointer; }
+input, textarea, select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}
+input[type="checkbox"], input[type="radio"] { accent-color: var(--amber); }
+
+/* ---- 字标：logo 主形 + AGENTBOX + 呼吸光标 ---- */
+.wordmark {
+  display: flex; align-items: center;
+  font-family: var(--mono);
+  font-size: 22px;
+  letter-spacing: 0.18em;
+  color: var(--text);
+}
+.wordmark-sm { font-size: 15px; }
+.wordmark .mark { flex: none; width: 23px; height: 23px; margin-right: 9px; }
+.wordmark-sm .mark { width: 17px; height: 17px; margin-right: 7px; }
+/* 光标画成色块而非字符：▊ 字形各字体基线不一，色块才能真正垂直居中；
+ * 字符保留在 DOM 里只为可复制，视觉上透明。文字末尾的 letter-spacing 自带间距。 */
+.wordmark .cursor {
+  display: block; flex: none; overflow: hidden;
+  width: 0.55em; height: 1.02em;
+  background: var(--amber); color: transparent;
+  animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ---- 吉祥物「盒仔」：开箱纸箱里的小机器人（模板在 index.html，两处挂载） ----
+ * 动画三件套：整体浮动 / 眨眼 / 天线呼吸光，reduced-motion 下全部静止。 */
+.mascot svg { display: block; width: 100%; height: auto; }
+.boxi-bob { animation: boxi-bob 3.4s ease-in-out infinite; }
+.boxi-eye { transform-box: fill-box; transform-origin: center; animation: boxi-blink 4.6s infinite; }
+.boxi-glow { animation: boxi-glow 2.6s ease-in-out infinite; }
+@keyframes boxi-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3.5px); } }
+@keyframes boxi-blink { 0%, 90.5%, 94.5%, 100% { transform: scaleY(1); } 92.5% { transform: scaleY(0.12); } }
+@keyframes boxi-glow { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.45; } }
+
+/* ---- 按钮 ---- */
+.btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 14px;
+}
+.btn:hover { border-color: var(--muted); }
+.btn-primary { background: var(--amber); border-color: var(--amber); color: #17130a; font-weight: 600; }
+.btn-primary:hover { background: #f0b45a; border-color: #f0b45a; }
+.btn-danger { color: var(--red); border-color: #57352f; }
+.btn-danger:hover { border-color: var(--red); }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn-ghost:hover { color: var(--text); }
+.btn-sm { padding: 5px 10px; font-size: 13px; }
+/* 图标按钮：图标随文字取色（danger 变体自动跟着变红），大小固定不被挤压 */
+.btn-ico { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-ico svg { flex: none; }
+.btn-block { width: 100%; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 按钮加载态：转圈 + 锁定点击 */
+.btn.loading, .btn.loading:disabled {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  opacity: 0.85; cursor: progress; pointer-events: none;
+}
+.btn.loading .spin { width: 11px; height: 11px; }
+.btn-primary .spin { border-color: rgba(23, 19, 10, 0.35); border-top-color: #17130a; }
+
+/* ---- Agent 品牌标识：官方 logo + 品牌色，跨侧栏/工作台/弹窗/设置复用 ----
+ * .agent-claude / .agent-codex 设定 --brand，图标、文字、头像瓦片各自取用。 */
+.agent-claude { --brand: var(--claude); }
+.agent-codex { --brand: var(--openai); }
+.agent-ico { display: block; flex: none; color: var(--brand); }
+.agent-text { color: var(--brand); }
+.agent-avatar {
+  position: relative;
+  width: 30px; height: 30px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 32%, transparent);
+}
+/* 头像右下角状态灯：外圈颜色须与所在底色一致，默认页面底，卡片内在 shell.css 覆盖 */
+.agent-avatar .led {
+  position: absolute; right: -4px; bottom: -4px;
+  width: 8px; height: 8px;
+  border: 2px solid var(--bg);
+}
+
+/* ---- 状态灯 ---- */
+.led {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--line);
+  display: inline-block; flex: none;
+}
+.led.on {
+  background: var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 50% { box-shadow: 0 0 0 4px rgba(87,199,138,0.18); } }
+
+/* ---- 转圈 ---- */
+.spin {
+  width: 12px; height: 12px; flex: none;
+  border: 2px solid var(--amber-dim);
+  border-top-color: var(--amber);
+  border-radius: 50%;
+  animation: rot 0.9s linear infinite;
+}
+@keyframes rot { to { transform: rotate(360deg); } }
+
+/* ---- 区域加载态：加载动画大、居中在内容展示区，提示语小字排在下方。
+ * 历史对话 / 文件列表 / 终端连接 / 文件预览共用。 ---- */
+.loading-block {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 14px;
+  padding: 36px 20px;
+  color: var(--muted);
+  font-family: var(--mono); font-size: 12px;
+}
+.loading-block .spin { width: 30px; height: 30px; border-width: 3px; }
+
+/* ---- 操作反馈气泡 ---- */
+.toast {
+  position: fixed; left: 50%; bottom: 26px; z-index: 100;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--panel);
+  border: 1px solid var(--amber-dim); border-radius: 8px;
+  color: var(--text);
+  font-size: 12.5px;
+  padding: 9px 16px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  max-width: min(520px, 88vw);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { border-color: #57352f; color: var(--red); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wordmark .cursor { animation: none; }
+  .boxi-bob, .boxi-eye, .boxi-glow { animation: none; }
+  .led.on { animation: none; }
+  .spin { animation: none; }
+  .toast { transition: none; }
+}

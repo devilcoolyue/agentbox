@@ -1,0 +1,200 @@
+/* files：文件页（工具条 / 范围切换 / 目录树）+ 文件预览弹窗。 */
+
+.files-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.files-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; min-width: 0; }
+.files-crumb { color: var(--muted); font-size: 12.5px; }
+.files-crumb a { color: var(--amber); text-decoration: none; cursor: pointer; }
+
+/* 工作区 / 共享目录切换 */
+.scope-switch { display: inline-flex; align-items: center; gap: 8px; }
+.scope-btn {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--mono); font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.scope-btn:first-child { border-radius: 6px 0 0 6px; margin-right: -9px; }
+.scope-btn + .scope-btn { border-radius: 0 6px 6px 0; }
+.scope-btn.active {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: rgba(232, 163, 61, 0.08);
+  position: relative; z-index: 1;
+}
+.scope-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ? 帮助提示（hover / 键盘聚焦 / 触屏点按均可弹出） */
+.help {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px;
+  border: 1px solid var(--line); border-radius: 50%;
+  color: var(--muted);
+  font-family: var(--mono); font-size: 11px;
+  cursor: help; user-select: none;
+}
+.help:hover, .help:focus { color: var(--amber); border-color: var(--amber); outline: none; }
+.help-tip {
+  display: none;
+  position: absolute; top: 24px; left: -12px; z-index: 30;
+  width: min(340px, 72vw);
+  background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 12.5px; line-height: 1.7; text-align: left;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  cursor: auto;
+}
+.help-tip b { color: var(--amber); font-weight: 600; }
+.help-tip code {
+  font-family: var(--mono); font-size: 11.5px;
+  background: #0d1016; border-radius: 4px; padding: 1px 5px;
+}
+.help:hover .help-tip, .help:focus .help-tip, .help:focus-within .help-tip { display: block; }
+.files-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.check { color: var(--muted); font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+
+/* 文件列表：名称 | 权限 | 大小 | 修改时间 */
+.files-head, .file-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 88px 168px;
+  gap: 14px; align-items: center;
+  padding: 0 10px;
+}
+.files-head {
+  margin: 8px 20px 0;
+  padding-top: 6px; padding-bottom: 6px;
+  font-size: 11px; letter-spacing: 0.14em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  text-transform: uppercase;
+}
+.files-head .num { text-align: right; }
+.files-list { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
+.file-row {
+  padding-top: 6px; padding-bottom: 6px;
+  border-bottom: 1px solid #1d2330;
+  font-family: var(--mono); font-size: 13px;
+}
+.file-row:hover { background: rgba(232, 163, 61, 0.04); }
+.file-row .fname {
+  display: flex; align-items: center; gap: 7px;
+  min-width: 0;
+  padding-left: calc(var(--depth, 0) * 20px);
+}
+.file-row .farrow {
+  flex: none;
+  width: 16px; text-align: center;
+  color: var(--muted);
+  cursor: pointer; user-select: none;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.file-row .farrow:hover, .file-row .farrow:focus { color: var(--amber); outline: none; }
+.file-row .farrow.open { transform: rotate(90deg); color: var(--amber); }
+/* 展开加载中：箭头原地换成小转圈 */
+.file-row .farrow.busy {
+  transform: none; cursor: progress;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.file-row .farrow .spin { width: 9px; height: 9px; border-width: 2px; }
+.file-row .fglyph { flex: none; width: 16px; text-align: center; color: var(--muted); }
+.file-row .flabel {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: pointer;
+}
+.file-row .flabel:hover { color: var(--amber); text-decoration: underline; text-underline-offset: 3px; }
+.file-row.dir .flabel { color: var(--amber); }
+.file-row.empty-dir { border-bottom: none; }
+.file-row .muted { color: var(--muted); font-style: normal; }
+.file-row .fperm { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; }
+.file-row .fsize { color: var(--muted); font-size: 12px; text-align: right; }
+.file-row .ftime { color: var(--muted); font-size: 12px; }
+.files-empty { color: var(--muted); padding: 24px 10px; font-size: 13px; }
+/* 目录读取中：直接用 base.css 的 .loading-block */
+
+/* ---- 文件预览 / 编辑 ---- */
+.dlg-file {
+  width: min(960px, 94vw);
+  height: min(82vh, 900px);
+  padding: 0;
+}
+.fv { display: flex; flex-direction: column; height: 100%; }
+.fv-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.fv-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1; }
+.fv-name { color: var(--amber); font-size: 14px; font-weight: 600; }
+.fv-meta {
+  color: var(--muted); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fv-actions { display: flex; align-items: center; gap: 8px; }
+.fv-state {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--muted); font-size: 12px; margin-right: 4px;
+}
+.fv-body { flex: 1; min-height: 0; display: flex; }
+.fv-editor {
+  flex: 1;
+  background: #0d1016;
+  color: var(--text);
+  border: none; outline: none; resize: none;
+  padding: 14px 16px;
+  font-size: 13px; line-height: 1.65;
+  tab-size: 4;
+}
+.fv-imgwrap {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  overflow: auto;
+  background:
+    repeating-conic-gradient(#161a22 0% 25%, #12151c 0% 50%) 0 0 / 24px 24px;
+  padding: 16px;
+}
+.fv-imgwrap img { max-width: 100%; max-height: 100%; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5); }
+.fv-notice {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  color: var(--muted); font-size: 13px;
+  padding: 24px; text-align: center;
+}
+.fv-notice .spin { width: 30px; height: 30px; border-width: 3px; }
+.fv-actions .dlg-x { margin: 0; }
+
+/* ---- 窄屏：工具条两行化、面包屑横滚、行高加大、列只留名称+大小、预览全屏 ---- */
+@media (max-width: 760px) {
+  .files-bar { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 12px; }
+  .files-left { flex-wrap: nowrap; gap: 10px; }
+  .files-crumb {
+    flex: 1; min-width: 0;
+    overflow-x: auto; white-space: nowrap;
+    scrollbar-width: none;
+  }
+  .files-crumb::-webkit-scrollbar { display: none; }
+  .files-actions { justify-content: flex-end; }
+  .files-actions .check { margin-right: auto; }
+
+  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) 76px; gap: 12px; }
+  .files-head span:nth-child(2), .files-head span:nth-child(4),
+  .file-row .fperm, .file-row .ftime { display: none; }
+  .files-head { margin: 4px 12px 0; }
+  .files-list { padding: 0 12px 14px; }
+  .file-row { padding-top: 10px; padding-bottom: 10px; } /* 触控行高 ≈40px */
+
+  .dlg-file {
+    width: 100vw; height: 100dvh;
+    max-width: 100vw; max-height: 100dvh;
+    margin: 0; border: none; border-radius: 0;
+  }
+}

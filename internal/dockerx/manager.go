@@ -1,0 +1,338 @@
+// Package dockerx wraps the Docker Engine API for agentbox: one container per
+// active session, plus exec-based PTY and streaming channels into it.
+package dockerx
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"net"
+	"strings"
+	"time"
+
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
+
+	"agentbox/internal/config"
+	"agentbox/internal/store"
+)
+
+const (
+	// AgentUID / AgentGID must match the "agent" user baked into the image.
+	AgentUID = 1000
+	AgentGID = 1000
+
+	ContainerHome  = "/home/agent"
+	WorkspaceMount = "/workspace"
+	SharedMount    = "/shared" // 同一用户所有会话共用的目录
+	execUser       = "1000:1000"
+)
+
+type Manager struct {
+	cli *client.Client
+	cfg *config.Config
+}
+
+func New(cfg *config.Config) (*Manager, error) {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, err
+	}
+	if _, err := cli.Ping(context.Background()); err != nil {
+		return nil, fmt.Errorf("docker daemon unreachable: %w", err)
+	}
+	return &Manager{cli: cli, cfg: cfg}, nil
+}
+
+// NetworkGateway returns the gateway IP of a docker network (the address a
+// container reaches the host at). Used to sanity-check the tunnel proxy bind.
+func (m *Manager) NetworkGateway(ctx context.Context, name string) (string, error) {
+	n, err := m.cli.NetworkInspect(ctx, name, network.InspectOptions{})
+	if err != nil {
+		return "", err
+	}
+	for _, cfg := range n.IPAM.Config {
+		if cfg.Gateway != "" {
+			return cfg.Gateway, nil
+		}
+	}
+	return "", fmt.Errorf("network %q has no gateway configured", name)
+}
+
+// ContainerIPs returns the container's IP on every network it is attached to
+// (empty when stopped or unknown). Tunnel port-map listeners authorize
+// connections by these source addresses.
+func (m *Manager) ContainerIPs(ctx context.Context, containerID string) []string {
+	if containerID == "" {
+		return nil
+	}
+	info, err := m.cli.ContainerInspect(ctx, containerID)
+	if err != nil || info.NetworkSettings == nil {
+		return nil
+	}
+	var out []string
+	for _, nw := range info.NetworkSettings.Networks {
+		if nw.IPAddress != "" {
+			out = append(out, nw.IPAddress)
+		}
+	}
+	return out
+}
+
+// ServerVersion returns the Docker daemon version, or "" when unreachable.
+func (m *Manager) ServerVersion(ctx context.Context) string {
+	v, err := m.cli.ServerVersion(ctx)
+	if err != nil {
+		return ""
+	}
+	return v.Version
+}
+
+// IsRunning reports whether the container exists and is running.
+func (m *Manager) IsRunning(ctx context.Context, containerID string) bool {
+	if containerID == "" {
+		return false
+	}
+	info, err := m.cli.ContainerInspect(ctx, containerID)
+	return err == nil && info.State != nil && info.State.Running
+}
+
+// RunningWithMount reports whether the container is running AND has dest
+// mounted. Containers from before a mount was introduced fail this check so
+// the start path falls through to EnsureRunning, which recreates them.
+func (m *Manager) RunningWithMount(ctx context.Context, containerID, dest string) bool {
+	if containerID == "" {
+		return false
+	}
+	info, err := m.cli.ContainerInspect(ctx, containerID)
+	if err != nil || info.State == nil || !info.State.Running {
+		return false
+	}
+	for _, mnt := range info.Mounts {
+		if mnt.Destination == dest {
+			return true
+		}
+	}
+	return false
+}
+
+// EnsureRunning brings the session's container up, reusing an existing one
+// when possible, and returns its id.
+func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct config.Account, workspaceDir, homeDir, sharedDir string) (string, error) {
+	if sess.ContainerID != "" {
+		info, err := m.cli.ContainerInspect(ctx, sess.ContainerID)
+		if err == nil {
+			hasShared := false
+			for _, mnt := range info.Mounts {
+				if mnt.Destination == SharedMount {
+					hasShared = true
+					break
+				}
+			}
+			// 镜像 tag 被重建后，旧容器仍指向旧镜像层；停着的容器直接换新。
+			imageFresh := true
+			if img, ierr := m.cli.ImageInspect(ctx, m.cfg.GetAgentImage()); ierr == nil {
+				imageFresh = info.Image == img.ID
+			}
+			if hasShared {
+				if info.State != nil && info.State.Running {
+					return sess.ContainerID, nil // 运行中不打断，停一次后吃到新镜像
+				}
+				if imageFresh {
+					if err := m.cli.ContainerStart(ctx, sess.ContainerID, container.StartOptions{}); err == nil {
+						return sess.ContainerID, nil
+					}
+				}
+			}
+			// Unstartable leftover, a pre-/shared container, or a stale image:
+			// replace it (workspace/home live on the host, so recreation loses
+			// nothing).
+			_ = m.cli.ContainerRemove(ctx, sess.ContainerID, container.RemoveOptions{Force: true})
+		}
+	}
+
+	// CLI 属 root、容器跑 agent 用户，自升级必然失败；镜像 ENV 也设了，
+	// 这里再设一份是让旧镜像建出的容器同样安静。
+	env := []string{"HOME=" + ContainerHome, "TERM=xterm-256color", "LANG=C.UTF-8", "DISABLE_AUTOUPDATER=1"}
+	for k, v := range acct.Env {
+		env = append(env, k+"="+v)
+	}
+	lim := m.cfg.GetContainer()
+	pids := lim.PidsLimit
+	cc := &container.Config{
+		Image:      m.cfg.GetAgentImage(),
+		Cmd:        []string{"sleep", "infinity"},
+		WorkingDir: WorkspaceMount,
+		User:       execUser,
+		Env:        env,
+		Labels: map[string]string{
+			"agentbox.session": sess.ID,
+			"agentbox.user":    sess.User,
+			"agentbox.account": acct.ID,
+		},
+	}
+	hc := &container.HostConfig{
+		Binds: []string{
+			workspaceDir + ":" + WorkspaceMount,
+			homeDir + ":" + ContainerHome,
+			sharedDir + ":" + SharedMount,
+		},
+		NetworkMode: container.NetworkMode(lim.Network),
+		SecurityOpt: []string{"no-new-privileges:true"},
+		Resources: container.Resources{
+			Memory:    lim.MemoryMB << 20,
+			NanoCPUs:  int64(lim.CPUs * 1e9),
+			PidsLimit: &pids,
+		},
+	}
+
+	name := "agentbox-" + sess.ID
+	resp, err := m.cli.ContainerCreate(ctx, cc, hc, nil, nil, name)
+	if err != nil {
+		if strings.Contains(err.Error(), "is already in use") {
+			// Stale container from a lost state file: remove by name and retry.
+			_ = m.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+			resp, err = m.cli.ContainerCreate(ctx, cc, hc, nil, nil, name)
+		}
+		if err != nil {
+			return "", fmt.Errorf("create container: %w", err)
+		}
+	}
+	if err := m.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+		return "", fmt.Errorf("start container: %w", err)
+	}
+	return resp.ID, nil
+}
+
+func (m *Manager) Stop(ctx context.Context, containerID string) error {
+	timeout := 10
+	return m.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
+}
+
+func (m *Manager) Remove(ctx context.Context, containerID string) error {
+	return m.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true, RemoveVolumes: true})
+}
+
+// PTY is an attached interactive exec (Tty=true).
+type PTY struct {
+	ExecID string
+	Conn   net.Conn
+	Reader *bufio.Reader
+	closer func()
+}
+
+func (p *PTY) Close() { p.closer() }
+
+// extraEnv carries per-account variables (e.g. ANTHROPIC_BASE_URL): container
+// env is frozen at creation, so exec-time injection is what makes account env
+// edits reach containers that already exist.
+func (m *Manager) ExecPTY(ctx context.Context, containerID string, cmd []string, extraEnv []string) (*PTY, error) {
+	idResp, err := m.cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		User:         execUser,
+		Tty:          true,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		WorkingDir:   WorkspaceMount,
+		// DISABLE_AUTOUPDATER also lives in the image ENV and container env,
+		// but containers created from older images have neither; exec env is
+		// the only knob that reaches those without recreating them.
+		Env: append([]string{"TERM=xterm-256color", "DISABLE_AUTOUPDATER=1"}, extraEnv...),
+		Cmd: cmd,
+	})
+	if err != nil {
+		return nil, err
+	}
+	hj, err := m.cli.ContainerExecAttach(ctx, idResp.ID, container.ExecAttachOptions{Tty: true})
+	if err != nil {
+		return nil, err
+	}
+	return &PTY{ExecID: idResp.ID, Conn: hj.Conn, Reader: hj.Reader, closer: hj.Close}, nil
+}
+
+func (m *Manager) ResizePTY(ctx context.Context, execID string, cols, rows uint) error {
+	return m.cli.ContainerExecResize(ctx, execID, container.ResizeOptions{Width: cols, Height: rows})
+}
+
+// Stream is a non-TTY exec used for headless chat turns: stdin carries the
+// prompt, stdout carries JSONL events.
+type Stream struct {
+	ExecID string
+	conn   net.Conn
+	reader *bufio.Reader
+	closer func()
+}
+
+func (m *Manager) ExecStream(ctx context.Context, containerID string, cmd []string, extraEnv []string) (*Stream, error) {
+	idResp, err := m.cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		User:         execUser,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		WorkingDir:   WorkspaceMount,
+		Env:          append([]string{"DISABLE_AUTOUPDATER=1"}, extraEnv...),
+		Cmd:          cmd,
+	})
+	if err != nil {
+		return nil, err
+	}
+	hj, err := m.cli.ContainerExecAttach(ctx, idResp.ID, container.ExecAttachOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return &Stream{ExecID: idResp.ID, conn: hj.Conn, reader: hj.Reader, closer: hj.Close}, nil
+}
+
+func (s *Stream) Write(p []byte) (int, error) { return s.conn.Write(p) }
+
+// CloseWrite signals EOF on the agent's stdin.
+func (s *Stream) CloseWrite() error {
+	type closeWriter interface{ CloseWrite() error }
+	if cw, ok := s.conn.(closeWriter); ok {
+		return cw.CloseWrite()
+	}
+	return s.conn.Close()
+}
+
+// Demux copies the multiplexed exec output into stdout/stderr writers,
+// returning when the process exits or the connection drops.
+func (s *Stream) Demux(stdout, stderr interface{ Write([]byte) (int, error) }) error {
+	_, err := stdcopy.StdCopy(stdout, stderr, s.reader)
+	return err
+}
+
+func (s *Stream) Close() { s.closer() }
+
+// ExitCode waits briefly for the exec to settle and returns its exit code.
+func (m *Manager) ExitCode(ctx context.Context, execID string) (int, error) {
+	for i := 0; i < 50; i++ {
+		insp, err := m.cli.ContainerExecInspect(ctx, execID)
+		if err != nil {
+			return -1, err
+		}
+		if !insp.Running {
+			return insp.ExitCode, nil
+		}
+		select {
+		case <-ctx.Done():
+			return -1, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	return -1, fmt.Errorf("exec still running")
+}
+
+// ExecFireAndForget runs a short command (e.g. interrupt) detached.
+func (m *Manager) ExecFireAndForget(ctx context.Context, containerID string, cmd []string) error {
+	idResp, err := m.cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
+		User:   execUser,
+		Detach: true,
+		Cmd:    cmd,
+	})
+	if err != nil {
+		return err
+	}
+	return m.cli.ContainerExecStart(ctx, idResp.ID, container.ExecStartOptions{Detach: true})
+}

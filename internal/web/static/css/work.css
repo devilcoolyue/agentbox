@@ -1,0 +1,77 @@
+/* work：工作台外壳（空状态 / 头部 / 标签页）。对话、终端、文件各自独立文件。 */
+
+/* ---- 空状态：盒仔 + 「开箱，即用。」 ---- */
+.empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: var(--muted); gap: 8px;
+  text-align: center; padding: 20px;
+}
+.mascot-empty { width: 176px; }
+.empty-title {
+  margin: 8px 0 0;
+  font-size: 30px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--text);
+}
+.empty-sub { margin: 0; font-size: 13.5px; line-height: 2; }
+.empty-cta { margin-top: 12px; padding: 9px 26px; }
+.empty-ready {
+  margin-top: 26px;
+  display: flex; align-items: center; gap: 12px;
+  font-size: 11px; letter-spacing: 0.2em;
+}
+.empty-brands { display: flex; gap: 8px; letter-spacing: normal; }
+.brand-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 26%, transparent);
+  font-size: 12px; color: var(--text);
+}
+@media (max-width: 760px) {
+  .mascot-empty { width: 136px; }
+  .empty-title { font-size: 24px; }
+  .empty-sub { font-size: 12.5px; }
+}
+
+/* ---- 工作台 ---- */
+.workbench { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wb-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.wb-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.wb-avatar { display: inline-flex; flex: none; }
+.wb-title h1 {
+  margin: 0; font-size: 16px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wb-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.wb-actions { display: flex; gap: 8px; flex: none; }
+
+.tabs {
+  display: flex; gap: 2px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  background: none; border: none;
+  color: var(--muted);
+  padding: 10px 14px;
+  border-bottom: 2px solid transparent;
+  font-family: var(--mono); font-size: 13px; letter-spacing: 0.08em;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--amber); border-bottom-color: var(--amber); }
+
+.pane { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+
+/* ---- 窄屏：头部并入顶栏（状态灯+会话名+⋯菜单），标签等宽三段 ---- */
+@media (max-width: 760px) {
+  .wb-head { display: none; }
+  .tabs { padding: 0; gap: 0; }
+  .tab { flex: 1; padding: 0; height: 44px; }
+}

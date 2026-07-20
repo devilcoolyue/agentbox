@@ -1,0 +1,701 @@
+/* chat：对话通道（WS）、历史加载、composer（发送/中断/附件/自增高）、
+ * 模型与思考强度选择、空会话引导。渲染管线在 chat-render.js。 */
+"use strict";
+
+import { S } from "./state.js";
+import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, toast } from "./util.js";
+import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
+import { refreshAll } from "./data.js";
+import { chip, divider, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon } from "./chat-render.js";
+import { archiveList } from "./chat-archive.js";
+import { agentIcon, agentAvatar } from "./brand.js";
+
+/* ---------------- 对话通道 ---------------- */
+
+export function connectChat() {
+  const sess = S.current; if (!sess) return;
+  const gen = ++S.chatWSGen;
+  const ws = new WebSocket(wsURL(`/sessions/${sess.id}/chat`));
+  S.chatWS = ws;
+  ws.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch (_) { return; }
+    handleChatMsg(msg);
+  };
+  ws.onclose = () => {
+    if (gen !== S.chatWSGen) return; // 已切换会话
+    S.chatWS = null;
+    setTimeout(() => { if (gen === S.chatWSGen && S.current) connectChat(); }, 4000);
+  };
+}
+
+/* 切换/删除会话时收尾：作废重连定时器、关连接、复位状态 */
+export function chatTeardown() {
+  S.chatWSGen++;
+  if (S.chatWS) { S.chatWS.close(); S.chatWS = null; }
+  setChatStatus("idle");
+}
+
+/* ---------------- 流式增量渲染 ----------------
+ * --include-partial-messages 下，完整 assistant 事件之前会先收到
+ * stream_event（content_block_start/delta/stop）。delta 到达节奏不均
+ * （常一次一整句），直接上屏会一段一段蹦：先进缓冲，由 rAF 打字机
+ * 匀速放出，积压越多放得越快，显示只滞后生成零点几秒。text 块每次
+ * 放出后整段重跑 Markdown（与最终渲染同一管线），代码块、列表边生成
+ * 边呈现；完整事件到达后移除临时节点交回 renderEvent 正式渲染，
+ * 两边产物一致，替换无观感跳变。增量事件服务端只广播不落盘，
+ * 历史回放天然只有完整事件。 */
+
+let liveEls = [];     // 本条消息的临时节点，完整事件到达后整体移除
+let liveBlock = null; // 当前追加目标 { el, body, kind, shown, buf, carry, tick, raf }
+
+/* 回合结束收尾：缓冲余量上屏，临时节点保留在页面上（中断时留住
+ * 已生成的部分），只是不再跟踪、去掉光标 */
+function streamSettle() {
+  liveDrain();
+  for (const el of liveEls) el.classList.remove("streaming");
+  liveEls = [];
+  liveBlock = null;
+}
+
+function liveClear() {
+  if (liveBlock && liveBlock.raf) cancelAnimationFrame(liveBlock.raf);
+  for (const el of liveEls) el.remove();
+  liveEls = [];
+  liveBlock = null;
+}
+
+function handleAgentEvent(ev) {
+  if (ev && ev.type === "stream_event") { handleStreamEvent(ev.event); return; }
+  // 完整 assistant 事件带全部内容，先移除对应的增量节点再正式渲染
+  if (ev && ev.type === "assistant") liveClear();
+  for (const node of renderEvent(ev)) appendChat(node);
+}
+
+function handleStreamEvent(e) {
+  if (!e || typeof e !== "object") return;
+  switch (e.type) {
+    case "message_start":
+      // 正常流程上一条已被完整事件清掉（此处空转）；若断连错过了完整
+      // 事件则保留残留文本，只停止跟踪，避免删掉用户已看到的内容
+      streamSettle();
+      break;
+    case "content_block_start": {
+      liveDrain(); // 上一块若有残余（丢了 stop 事件）先补齐
+      const t = e.content_block && e.content_block.type;
+      if (t === "text" || t === "thinking") {
+        liveBlock = { ...liveNode(t), kind: t, shown: "", buf: "", carry: 0, tick: 0, raf: 0 };
+        liveBlock.el.classList.add("streaming");
+        appendChat(liveBlock.el);
+        liveEls.push(liveBlock.el);
+      } else {
+        liveBlock = null; // tool_use 等交给完整事件渲染
+      }
+      break;
+    }
+    case "content_block_delta": {
+      if (!liveBlock || !e.delta) break;
+      const txt = e.delta.type === "text_delta" ? e.delta.text
+        : e.delta.type === "thinking_delta" ? e.delta.thinking : "";
+      if (txt) liveFeed(txt);
+      break;
+    }
+    case "content_block_stop":
+      if (liveBlock) {
+        liveDrain();
+        liveBlock.el.classList.remove("streaming");
+      }
+      liveBlock = null;
+      break;
+  }
+}
+
+/* ---- 打字机：缓冲 → rAF 匀速放出 ---- */
+
+function liveFeed(text) {
+  const b = liveBlock;
+  b.buf += text;
+  if (document.hidden) { liveDrain(); return; } // 后台标签页 rAF 停摆，直接上屏
+  if (!b.raf) {
+    b.tick = performance.now();
+    b.raf = requestAnimationFrame(liveTick);
+  }
+}
+
+function liveTick(now) {
+  const b = liveBlock;
+  if (!b || !b.raf) return;
+  b.raf = 0;
+  const dt = Math.min(now - b.tick, 200);
+  if (dt >= 33) { // Markdown 整段重渲染有成本，帧率封顶 ~30fps
+    b.tick = now;
+    // 基础 80 字/秒；按积压加速（约 0.4s 追平），滞后有上界
+    b.carry += (dt / 1000) * Math.max(80, b.buf.length * 2.5);
+    const n = Math.min(b.buf.length, Math.floor(b.carry));
+    if (n > 0) {
+      b.carry -= n;
+      b.shown += b.buf.slice(0, n);
+      b.buf = b.buf.slice(n);
+      liveRender(b);
+    }
+  }
+  if (b.buf) b.raf = requestAnimationFrame(liveTick);
+  else b.carry = 0;
+}
+
+/* 缓冲余量一次性上屏（块结束/回合收尾/后台标签页时用） */
+function liveDrain() {
+  const b = liveBlock;
+  if (!b) return;
+  if (b.raf) { cancelAnimationFrame(b.raf); b.raf = 0; }
+  if (b.buf) {
+    b.shown += b.buf;
+    b.buf = "";
+    liveRender(b);
+  }
+}
+
+function liveRender(b) {
+  const log = $("chat-log");
+  const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+  if (b.kind === "text") b.body.replaceChildren(formatText(b.shown));
+  else b.body.textContent = b.shown; // thinking 与最终渲染一致，保持纯文本
+  if (stick) log.scrollTop = log.scrollHeight;
+}
+
+function handleChatMsg(msg) {
+  switch (msg.type) {
+    case "user_message":
+      appendChat(renderUserMsg(msg.text));
+      break;
+    case "agent_event":
+      handleAgentEvent(msg.event);
+      break;
+    case "agent_raw":
+      appendChat(chip(msg.text));
+      break;
+    case "divider":
+      appendChat(divider());
+      break;
+    case "status":
+      setChatStatus(msg.state, msg.error);
+      if (msg.state === "idle" || msg.state === "error") refreshAll();
+      break;
+    case "error":
+      appendChat(chip(msg.error, "err"));
+      break;
+  }
+}
+
+/* 发送按钮双态：空闲=琥珀纸飞机发送，执行中=红色 ■ 中断。
+ * 图标是按钮里的两个 SVG，靠 .stop class 切换显隐，别用 textContent 覆盖 */
+export function setChatStatus(state, error) {
+  S.chatState = state === "running" ? "running" : "idle";
+  if (S.chatState !== "running") streamSettle();
+  const bar = $("chat-status");
+  const send = $("chat-send");
+  if (state === "running") {
+    bar.classList.remove("hidden");
+    $("chat-status-text").textContent = "Agent 执行中…";
+    send.classList.add("stop");
+    send.title = "中断";
+    send.disabled = false;
+  } else {
+    bar.classList.add("hidden");
+    send.classList.remove("stop");
+    send.title = "发送";
+    send.disabled = chatImgs.uploading > 0;
+    if (state === "error" && error) appendChat(chip(error, "err"));
+  }
+  updateHero();
+}
+
+$("chat-send").addEventListener("click", () => {
+  if (S.chatState === "running") sendInterrupt();
+  else sendChat();
+});
+$("chat-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+});
+/* 占位提示：窄屏一行放不下长文案，且键盘快捷键提示在手机上无意义 */
+function updateChatPlaceholder() {
+  $("chat-input").placeholder = isMobile()
+    ? "向 Agent 下达任务…"
+    : "随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）";
+}
+onMobileChange(updateChatPlaceholder);
+updateChatPlaceholder();
+
+/* 输入框随内容自动增高（1 行起步，封顶后内部滚动） */
+$("chat-input").addEventListener("input", autoGrow);
+export function autoGrow() {
+  const t = $("chat-input");
+  t.style.height = "auto";
+  t.style.height = Math.min(t.scrollHeight, 220) + "px";
+}
+
+export function sendChat() {
+  let text = $("chat-input").value.trim();
+  if (!text || S.chatState === "running") return;
+  if (chatImgs.uploading > 0) {
+    appendChat(chip("附件仍在上传中，请稍候…", "err"));
+    return;
+  }
+  if (!S.chatWS || S.chatWS.readyState !== WebSocket.OPEN) {
+    appendChat(chip("连接尚未就绪，请稍候重试", "err"));
+    return;
+  }
+  // [Image #N] / [File #N] 占位符替换为容器内真实路径，Agent 可直接读取
+  for (const [n, info] of chatImgs.map) {
+    if (!info.path) continue;
+    text = text.split(`[Image #${n}]`).join(`[图片#${n} ${info.path}]`);
+    text = text.split(`[File #${n}]`).join(`[附件#${n} ${info.path}]`);
+  }
+  S.chatWS.send(JSON.stringify({
+    type: "user_message", text,
+    model: S.pick.model, effort: S.pick.effort,
+  }));
+  $("chat-input").value = "";
+  autoGrow();
+  resetChatImgs();
+}
+
+/* 新对话：清掉服务端记录的 provider 会话 id，下一轮不再 resume。
+ * 分割线由服务端广播回来（所有打开的页面同步），WS 断开时才本地补画。 */
+$("btn-chat-reset").addEventListener("click", async () => {
+  const sess = S.current; if (!sess) return;
+  if (S.chatState === "running") { toast("Agent 执行中，请先等待完成或中断", true); return; }
+  if (!window.confirm("开启新对话？之后的消息不再携带此前上下文（历史仍可回看）。")) return;
+  try {
+    const res = await api(`/sessions/${sess.id}/chat/reset`, { method: "POST" });
+    if (!res.reset) { toast("当前已是新对话"); return; }
+    if (!S.chatWS || S.chatWS.readyState !== WebSocket.OPEN) appendChat(divider());
+  } catch (e) { alert("重置失败：" + e.message); }
+});
+
+function sendInterrupt() {
+  if (S.chatWS && S.chatWS.readyState === WebSocket.OPEN) {
+    S.chatWS.send(JSON.stringify({ type: "interrupt" }));
+  }
+}
+
+/* ---------------- 附件（粘贴图片 / 上传文件） ---------------- */
+
+const chatImgs = { seq: 0, map: new Map(), uploading: 0 }; // n -> {path, name, orig, kind}
+
+export function resetChatImgs() {
+  chatImgs.seq = 0;
+  chatImgs.map.clear();
+  chatImgs.uploading = 0;
+  renderAttach();
+}
+
+function renderAttach() {
+  const strip = $("chat-attach");
+  strip.replaceChildren();
+  if (!chatImgs.map.size) {
+    strip.classList.add("hidden");
+  } else {
+    strip.classList.remove("hidden");
+  }
+  for (const [n, info] of chatImgs.map) {
+    if (info.kind === "file") {
+      const box = document.createElement("div");
+      box.className = "attach-file mono";
+      const name = document.createElement("span");
+      name.className = "fn";
+      name.textContent = info.orig || info.name || "附件";
+      if (info.path) {
+        box.append(document.createTextNode("📄"), name);
+        box.title = `附件 #${n} · ${info.path}`;
+      } else {
+        box.append(spinEl(), name);
+      }
+      strip.appendChild(box);
+      continue;
+    }
+    const box = document.createElement("div");
+    box.className = "attach-thumb";
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = "#" + n;
+    box.appendChild(badge);
+    if (info.path) {
+      const img = document.createElement("img");
+      img.src = imgURLFromPath(info.path);
+      img.alt = "Image #" + n;
+      img.addEventListener("click", () => openLightbox(imgURLFromPath(info.path), `图片 #${n} · ${info.path}`));
+      box.appendChild(img);
+    } else {
+      const up = document.createElement("span");
+      up.className = "up";
+      up.append(spinEl(), document.createTextNode("上传中"));
+      box.appendChild(up);
+    }
+    strip.appendChild(box);
+  }
+  // 附件没传完不许发送（执行中按钮是「中断」，不能动）
+  if (S.chatState !== "running") $("chat-send").disabled = chatImgs.uploading > 0;
+}
+
+async function attachFile(file) {
+  const isImg = (file.type || "").startsWith("image/");
+  const tag = isImg ? "Image" : "File";
+  const n = ++chatImgs.seq;
+  chatImgs.map.set(n, { path: "", name: "", orig: file.name || "", kind: isImg ? "img" : "file" });
+  insertAtCursor($("chat-input"), `[${tag} #${n}]`);
+  autoGrow();
+  chatImgs.uploading++;
+  renderAttach();
+  try {
+    const res = await uploadAttachment(file);
+    chatImgs.map.set(n, { ...res, kind: isImg ? "img" : "file" });
+  } catch (e) {
+    chatImgs.map.delete(n);
+    $("chat-input").value = $("chat-input").value.replace(`[${tag} #${n}]`, "");
+    appendChat(chip("附件上传失败：" + e.message, "err"));
+  } finally {
+    chatImgs.uploading--;
+    renderAttach();
+  }
+}
+
+export function pastedImages(e) {
+  return [...(e.clipboardData?.items || [])]
+    .filter((i) => i.kind === "file" && i.type.startsWith("image/"))
+    .map((i) => i.getAsFile())
+    .filter(Boolean);
+}
+
+$("chat-input").addEventListener("paste", (e) => {
+  const files = pastedImages(e);
+  if (!files.length || !S.current) return;
+  e.preventDefault();
+  for (const f of files) attachFile(f);
+});
+
+$("btn-attach").addEventListener("click", () => $("attach-input").click());
+$("attach-input").addEventListener("change", () => {
+  if (!S.current) return;
+  for (const f of [...$("attach-input").files]) attachFile(f);
+  $("attach-input").value = "";
+});
+
+/* ---------------- 模型 / 思考强度选择 ----------------
+ * 两级菜单（仿 Codex 桌面端）：主面板是「模型 / 思考强度」两行，
+ * 点进去选具体项。模型列表由服务端下发（系统设置可维护），
+ * 另有「自定义模型…」可手输任意模型 ID，新模型无需改代码。 */
+
+const FALLBACK_MODELS = {
+  claude: [
+    { id: "claude-fable-5", label: "Fable 5" },
+    { id: "claude-opus-4-8", label: "Opus 4.8" },
+    { id: "claude-sonnet-5", label: "Sonnet 5" },
+    { id: "claude-haiku-4-5", label: "Haiku 4.5" },
+  ],
+  codex: [
+    { id: "gpt-5.5", label: "GPT-5.5" },
+    { id: "gpt-5.5-codex", label: "GPT-5.5 Codex" },
+  ],
+};
+const EFFORT_OPTS = [
+  { v: "", l: "默认强度" },
+  { v: "low", l: "轻度" },
+  { v: "medium", l: "中" },
+  { v: "high", l: "高" },
+  { v: "xhigh", l: "极高", sub: "更快消耗使用额度" },
+];
+export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+function modelOpts() {
+  const agent = S.current && S.current.agent;
+  const fromSrv = S.models && S.models[agent];
+  if (fromSrv && fromSrv.length) return fromSrv;
+  return FALLBACK_MODELS[agent] || FALLBACK_MODELS.claude;
+}
+function pickKey() { return "agentbox_pick_" + (S.current ? S.current.id : ""); }
+function modelLabel(v) {
+  if (!v) return "默认模型";
+  const hit = modelOpts().find((o) => o.id === v);
+  return hit ? hit.label : v; // 自定义 ID 直接展示
+}
+function effortLabel(v) { return (EFFORT_OPTS.find((o) => o.v === v) || EFFORT_OPTS[0]).l; }
+
+export function loadPick() {
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem(pickKey())) || {}; } catch (_) {}
+  S.pick = {
+    model: typeof p.model === "string" && (p.model === "" || MODEL_ID_RE.test(p.model)) ? p.model : "",
+    effort: EFFORT_OPTS.some((o) => o.v === p.effort) ? p.effort : "",
+  };
+  renderPickPill();
+  closePickMenu();
+}
+
+function savePick() { localStorage.setItem(pickKey(), JSON.stringify(S.pick)); }
+function closePickMenu() { $("pick-menu").classList.add("hidden"); hideFly(); }
+
+function renderPickPill() {
+  const btn = $("btn-pick");
+  btn.replaceChildren();
+  if (S.current) btn.appendChild(agentIcon(S.current.agent, 13));
+  btn.appendChild(Object.assign(document.createElement("span"), {
+    className: "t",
+    textContent: `${modelLabel(S.pick.model)} · ${effortLabel(S.pick.effort)}`,
+  }));
+  btn.appendChild(svgIcon("chevron", 12)); // 独立元素：既能垂直居中，也不被文字省略号裁掉
+}
+
+/* 面板样式按 Agent 区分：
+ * codex —— 只有「模型 / 推理强度」两行入口，悬停某行在左侧浮出该属性列表，
+ *          移到另一行即换列表，移出整个选择器则收回浮层，只剩两行。
+ * claude —— 直接铺开模型列表，底部单独一行「思考强度」，悬停浮出强度列表。
+ * 两者都：点击选项即选中并收起，点击外部收起整个面板。
+ * 移动端无悬停，退回「点击进二级 + 返回」的抽屉式。 */
+function pickStyle() { return S.current && S.current.agent === "codex" ? "codex" : "claude"; }
+function effortTitle() { return pickStyle() === "codex" ? "推理强度" : "思考强度"; }
+function customModel() {
+  return S.pick.model && !modelOpts().some((o) => o.id === S.pick.model) ? S.pick.model : "";
+}
+
+function choose(kind, v) {
+  if (kind === "model") S.pick.model = v; else S.pick.effort = v;
+  savePick();
+  renderPickPill();
+  closePickMenu();
+}
+
+function askCustomModel() {
+  const cur = customModel();
+  const v = window.prompt("输入模型 ID（留空恢复默认）", cur);
+  if (v === null) return;
+  const t = v.trim();
+  if (t && !MODEL_ID_RE.test(t)) { alert("模型 ID 格式不合法（字母数字开头，可含 . _ -）"); return; }
+  choose("model", t);
+}
+
+/* 某属性的完整选项列表，浮层与移动端二级面板共用 */
+function optList(kind) {
+  if (kind === "effort") {
+    return EFFORT_OPTS.map((o) => pickOpt(o.l, o.sub || "", S.pick.effort === o.v, () => choose("effort", o.v)));
+  }
+  const out = [pickOpt("默认模型", "跟随账号配置", S.pick.model === "", () => choose("model", ""))];
+  for (const o of modelOpts()) {
+    out.push(pickOpt(o.label, o.id, S.pick.model === o.id, () => choose("model", o.id)));
+  }
+  const cur = customModel();
+  out.push(pickOpt("自定义模型…", cur, !!cur, askCustomModel));
+  return out;
+}
+
+/* ---- 悬停浮层 ---- */
+
+let flyTimer = 0;
+function cancelHideFly() { clearTimeout(flyTimer); }
+function scheduleHideFly() { clearTimeout(flyTimer); flyTimer = setTimeout(hideFly, 160); }
+function hideFly() {
+  clearTimeout(flyTimer);
+  $("pick-fly").classList.add("hidden");
+  for (const r of document.querySelectorAll(".pick-row.open")) r.classList.remove("open");
+}
+
+function showFly(row, kind) {
+  cancelHideFly();
+  const menu = $("pick-menu"), fly = $("pick-fly");
+  if (fly.dataset.kind !== kind || fly.classList.contains("hidden")) {
+    const head = document.createElement("div");
+    head.className = "pick-fly-h";
+    head.textContent = kind === "model" ? "模型" : effortTitle();
+    fly.replaceChildren(head, ...optList(kind));
+    fly.dataset.kind = kind;
+  }
+  for (const r of document.querySelectorAll(".pick-row.open")) r.classList.remove("open");
+  row.classList.add("open");
+  fly.classList.remove("hidden");
+  // 与悬停行顶端对齐，贴在面板左侧；超出视口时上下回拉
+  fly.style.right = menu.offsetWidth + 6 + "px";
+  const top = menu.offsetTop + row.offsetTop - menu.scrollTop;
+  fly.style.top = top + "px";
+  const r = fly.getBoundingClientRect();
+  let dy = 0;
+  if (r.top < 8) dy = 8 - r.top;
+  else if (r.bottom > window.innerHeight - 8) dy = Math.max(8 - r.top, window.innerHeight - 8 - r.bottom);
+  if (dy) fly.style.top = top + dy + "px";
+}
+
+/* ---- 面板 ---- */
+
+function pickRow(label, value, kind) {
+  const b = document.createElement("button");
+  b.className = "pick-row";
+  const l = document.createElement("span");
+  l.textContent = label;
+  const r = document.createElement("span");
+  r.className = "val mono";
+  r.textContent = value + " ›";
+  b.append(l, r);
+  if (isMobile()) {
+    b.addEventListener("click", (e) => { e.stopPropagation(); buildPickSub(kind); });
+  } else {
+    b.addEventListener("mouseenter", () => showFly(b, kind));
+    b.addEventListener("click", (e) => { e.stopPropagation(); showFly(b, kind); });
+  }
+  return b;
+}
+
+function buildPickMain() {
+  const menu = $("pick-menu");
+  hideFly();
+  menu.replaceChildren();
+  if (pickStyle() === "codex") {
+    menu.append(
+      pickRow("模型", modelLabel(S.pick.model), "model"),
+      pickRow(effortTitle(), effortLabel(S.pick.effort), "effort"),
+    );
+    return;
+  }
+  const head = document.createElement("div");
+  head.className = "pick-fly-h";
+  head.textContent = "模型";
+  const sep = document.createElement("div");
+  sep.className = "pick-sep";
+  menu.append(head, ...optList("model"), sep, pickRow(effortTitle(), effortLabel(S.pick.effort), "effort"));
+}
+
+/* 移动端二级面板（无悬停可用） */
+function buildPickSub(kind) {
+  const menu = $("pick-menu");
+  menu.replaceChildren();
+  const h = document.createElement("button");
+  h.className = "pick-back mono";
+  h.textContent = "‹ " + (kind === "model" ? "模型" : effortTitle());
+  h.addEventListener("click", (e) => { e.stopPropagation(); buildPickMain(); });
+  menu.append(h, ...optList(kind));
+}
+
+function pickOpt(label, sub, on, onPick) {
+  const b = document.createElement("button");
+  b.className = "pick-opt" + (on ? " on" : "");
+  const lbl = document.createElement("span");
+  lbl.className = "lbl";
+  lbl.textContent = label;
+  if (sub) {
+    const s = document.createElement("span");
+    s.className = "sub";
+    s.textContent = sub;
+    lbl.appendChild(s);
+  }
+  const check = document.createElement("span");
+  check.className = "check";
+  check.textContent = "✓";
+  b.append(lbl, check);
+  b.addEventListener("click", (e) => { e.stopPropagation(); onPick(); });
+  return b;
+}
+
+$("btn-pick").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const menu = $("pick-menu");
+  if (menu.classList.contains("hidden")) {
+    buildPickMain();
+    menu.classList.remove("hidden");
+  } else {
+    closePickMenu();
+  }
+});
+// 悬停行外的任何位置（面板其余部分 / 选择器之外）都收回浮层，回到默认层级
+$("pick-menu").addEventListener("mouseover", (e) => {
+  if (!e.target.closest(".pick-row")) scheduleHideFly();
+});
+$("pick-fly").addEventListener("mouseenter", cancelHideFly);
+$("picker").addEventListener("mouseleave", scheduleHideFly);
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".picker")) closePickMenu();
+});
+onMobileChange(closePickMenu);
+
+/* ---------------- 空状态引导 ---------------- */
+
+export function updateHero() {
+  const loading = S.histLoading;
+  $("chat-loading").classList.toggle("hidden", !loading);
+  const show = !loading && !!S.current &&
+    !$("chat-log").childElementCount && S.chatState !== "running";
+  if (show) {
+    // 问候区头像跟随会话的 Agent 品牌
+    const agent = S.current.agent || "claude";
+    const mount = $("hero-avatar");
+    if (mount.dataset.agent !== agent) {
+      mount.dataset.agent = agent;
+      mount.replaceChildren(agentAvatar(agent, { icon: 30 }));
+    }
+  }
+  $("chat-hero").classList.toggle("hidden", !show);
+  $("chat-log").classList.toggle("hidden", loading || show);
+}
+
+for (const c of document.querySelectorAll(".hero-pill")) {
+  c.addEventListener("click", () => {
+    insertAtCursor($("chat-input"), c.dataset.fill);
+    autoGrow();
+  });
+}
+
+/* ---------------- 历史对话 ---------------- */
+
+export async function loadHistory() {
+  const sess = S.current; if (!sess) return;
+  S.histLoading = true;
+  updateHero(); // 中央显示加载态，加载完一次性呈现，避免先闪新会话引导页
+  try {
+    // 服务端按「新对话」分割线切段：entries 只含最近一段，更早的段折叠
+    // 在顶部按需加载（chat-archive.js），对话再多首屏也只渲染最后一段
+    const { entries, archives } = await api(`/sessions/${sess.id}/history`);
+    if (S.current !== sess) return; // 加载途中切走了
+    if (archives && archives.length) $("chat-log").appendChild(archiveList(sess.id, archives));
+    for (const raw of entries) for (const n of renderEntry(raw)) appendChat(n);
+  } catch (_) {}
+  if (S.current !== sess) return;
+  S.histLoading = false;
+  updateHero();
+  const log = $("chat-log");
+  log.scrollTop = log.scrollHeight; // 隐藏期间无法定位，呈现后直接落底
+}
+
+/* Agent 回合分组：两条用户消息之间的 agent 输出（文字/工具行/思考…）
+ * 归入同一个 .turn 容器，左侧挂品牌头像（OpenWebUI 式对话流）。
+ * 用户消息与分割线打断分组；切会话清空 log 后 isConnected 失效自动重开。 */
+let agentTurn = null; // 当前回合的内容列（.turn-body）
+
+function turnBody() {
+  if (agentTurn && agentTurn.isConnected) return agentTurn;
+  const turn = document.createElement("div");
+  turn.className = "turn";
+  const av = document.createElement("span");
+  av.className = "turn-avatar";
+  av.appendChild(agentAvatar(S.current ? S.current.agent : "claude", { icon: 14 }));
+  const body = document.createElement("div");
+  body.className = "turn-body";
+  turn.append(av, body);
+  $("chat-log").appendChild(turn);
+  agentTurn = body;
+  return body;
+}
+
+export function appendChat(node) {
+  if (!node) return;
+  const log = $("chat-log");
+  const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+  const breaks = node.classList.contains("user") || node.classList.contains("chat-divider");
+  if (breaks) {
+    agentTurn = null;
+    log.appendChild(node);
+  } else {
+    turnBody().appendChild(node);
+  }
+  updateHero();
+  if (stick) log.scrollTop = log.scrollHeight;
+}

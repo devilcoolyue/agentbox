@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AGENTBOX 控制台</title>
+<!-- favicon：logo 主形——敞开的箱子里一对发光的眼睛（16px 下省略正面唛头） -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5.6 12 1.2 5.8 4.9 2.9 9.9 9.9Z' fill='%23e8a33d'/%3E%3Cpath d='M26.4 12 30.8 5.8 27.1 2.9 22.1 9.9Z' fill='%23e8a33d'/%3E%3Crect x='5' y='11.4' width='22' height='16.2' rx='3' fill='%23e8a33d'/%3E%3Crect x='8' y='11.4' width='16' height='6.6' rx='1.8' fill='%23241803'/%3E%3Crect x='10.6' y='12.7' width='4' height='4' rx='1.3' fill='%23ffc76b'/%3E%3Crect x='17.4' y='12.7' width='4' height='4' rx='1.3' fill='%23ffc76b'/%3E%3C/svg%3E">
+<!-- {{BUILD}} 由服务端替换为资源内容哈希：URL 随内容变化，穿透 CF/浏览器缓存 -->
+<link rel="stylesheet" href="/_v/{{BUILD}}/vendor/xterm.css">
+<!-- 模块化样式：base 先行（令牌/通用组件），其余按功能域拆分 -->
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/base.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/shell.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/work.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/chat.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/term.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/files.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/settings.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/dialogs.css">
+</head>
+<body>
+
+<!-- 吉祥物「盒仔」：模板一份，main.js 盖章到各 [data-mascot] 挂载点。
+     动画类（boxi-bob / boxi-eye / boxi-glow）在 base.css 定义。 -->
+<template id="tpl-mascot">
+  <!-- viewBox 顶部留 5 单位余量：天线光晕上沿正好在 y=0，boxi-bob 上浮 3.5 会被裁掉 -->
+  <svg viewBox="0 -5 200 173" aria-hidden="true">
+    <ellipse cx="100" cy="158" rx="56" ry="7" fill="#000" opacity=".3"/>
+    <path d="M53 96 L17 87 L21.5 73.5 L55 85 Z" fill="#e8a33d" stroke="#a8712a" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M147 96 L183 87 L178.5 73.5 L145 85 Z" fill="#e8a33d" stroke="#a8712a" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M58 86 L142 86 L137 60 L63 60 Z" fill="#b97b2c" stroke="#8f5f22" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="54" y="82" width="92" height="14" rx="3" fill="#231803"/>
+    <g class="boxi-bob">
+      <rect x="74" y="70" width="52" height="32" rx="12" fill="#232a37" stroke="#3d4a63" stroke-width="2"/>
+      <path d="M100 22 V11" stroke="#3d4a63" stroke-width="3" stroke-linecap="round"/>
+      <circle class="boxi-glow" cx="100" cy="9" r="9" fill="#ffbe55" opacity=".2"/>
+      <circle cx="100" cy="9" r="4.5" fill="#ffbe55"/>
+      <circle cx="66" cy="47" r="5.5" fill="#e8a33d" stroke="#a8712a" stroke-width="1.5"/>
+      <circle cx="134" cy="47" r="5.5" fill="#e8a33d" stroke="#a8712a" stroke-width="1.5"/>
+      <rect x="68" y="22" width="64" height="50" rx="17" fill="#232a37" stroke="#3d4a63" stroke-width="2"/>
+      <rect x="77" y="32" width="46" height="30" rx="10" fill="#0b0e15"/>
+      <circle cx="84.5" cy="54" r="2.6" fill="#ffbe55" opacity=".22"/>
+      <circle cx="115.5" cy="54" r="2.6" fill="#ffbe55" opacity=".22"/>
+      <rect class="boxi-eye" x="86" y="39" width="8" height="12" rx="3.5" fill="#ffbe55"/>
+      <rect class="boxi-eye" x="106" y="39" width="8" height="12" rx="3.5" fill="#ffbe55"/>
+      <path d="M92.5 56 Q100 62 107.5 56" stroke="#ffbe55" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+    </g>
+    <rect x="52" y="94" width="96" height="58" rx="7" fill="#cf8f36" stroke="#a8712a" stroke-width="2"/>
+    <rect x="55" y="96" width="90" height="5" rx="2.5" fill="#e8a33d"/>
+    <rect x="93" y="94" width="14" height="58" fill="#f2ca7c" stroke="#d9a94f" stroke-width="1"/>
+    <path d="M64 115 L74 123.5 L64 132" stroke="#7c5a1e" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="78" y="128.5" width="11" height="5.5" rx="2.5" fill="#7c5a1e"/>
+    <rect x="112" y="106" width="26" height="16" rx="2" fill="#f4e8cd" stroke="#d9c9a3"/>
+    <path d="M116 111 H134 M116 115 H128" stroke="#b09b6e" stroke-width="1.7" stroke-linecap="round"/>
+    <g class="boxi-bob">
+      <rect x="58" y="88" width="15" height="17" rx="7.5" fill="#232a37" stroke="#3d4a63" stroke-width="2"/>
+      <rect x="127" y="88" width="15" height="17" rx="7.5" fill="#232a37" stroke="#3d4a63" stroke-width="2"/>
+    </g>
+  </svg>
+</template>
+
+<!-- logo 主形（内联字标用）：与 favicon 同源，多一枚正面唛头 >_ -->
+<template id="tpl-mark">
+  <svg class="mark" viewBox="0 0 32 32" fill="#e8a33d" aria-hidden="true">
+    <path d="M5.6 12 1.2 5.8 4.9 2.9 9.9 9.9Z"/>
+    <path d="M26.4 12 30.8 5.8 27.1 2.9 22.1 9.9Z"/>
+    <rect x="5" y="11.4" width="22" height="16.2" rx="3"/>
+    <rect x="8" y="11.4" width="16" height="6.6" rx="1.8" fill="#241803"/>
+    <rect x="10.6" y="12.7" width="4" height="4" rx="1.3" fill="#ffc76b"/>
+    <rect x="17.4" y="12.7" width="4" height="4" rx="1.3" fill="#ffc76b"/>
+    <path d="M10.6 20.3 13.7 22.8 10.6 25.3" stroke="#8a5f1f" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="16.4" y="23.9" width="4.6" height="2" rx="1" fill="#8a5f1f"/>
+  </svg>
+</template>
+
+<!-- 登录 -->
+<div id="login" class="login hidden">
+  <form id="login-form" class="login-card">
+    <div class="mascot mascot-login" data-mascot aria-hidden="true"></div>
+    <div class="wordmark"><span data-mark></span>AGENTBOX<span class="cursor">▊</span></div>
+    <p class="login-hint">开箱即用的编码智能体，跑在你自己的服务器上</p>
+    <input id="login-user" type="text" placeholder="账号" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <input id="login-pass" type="password" placeholder="密码" autocomplete="current-password" required>
+    <button type="submit" id="login-btn" class="btn btn-primary">登录</button>
+    <p id="login-error" class="login-error hidden"></p>
+  </form>
+</div>
+
+<!-- 主界面 -->
+<div id="app" class="app hidden">
+  <!-- 顶栏：仅窄屏出现。☰ 抽屉 + 状态灯/会话名（工作台）或页面标题（设置）+ ⋯ 会话操作 -->
+  <header class="topbar">
+    <button id="btn-menu" class="menu-btn" aria-label="打开菜单">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+        <path d="M2.5 4.5h13M2.5 9h13M2.5 13.5h13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <div class="tb-title">
+      <span id="tb-led" class="led hidden"></span>
+      <span id="tb-ico" class="tb-ico hidden"></span>
+      <span id="topbar-title" class="topbar-title"></span>
+    </div>
+    <div id="kebab-wrap" class="kebab-wrap hidden">
+      <button id="btn-kebab" class="menu-btn" aria-label="会话操作">⋯</button>
+      <div id="kebab-menu" class="kebab-menu hidden">
+        <button id="kb-start"><span class="glyph"></span>启动</button>
+        <button id="kb-stop"><span class="glyph"></span>停止</button>
+        <div class="sep"></div>
+        <button id="kb-delete" class="danger"><span class="glyph"></span>删除会话</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <div id="scrim" class="scrim"></div>
+
+    <aside id="sidebar" class="sidebar">
+      <button id="btn-home" type="button" class="wordmark wordmark-sm side-brand" title="回到工作台首页"><span data-mark></span>AGENTBOX<span class="cursor">▊</span></button>
+
+      <button id="btn-new" class="btn btn-primary btn-block">＋ 新建会话</button>
+
+      <div class="side-label">会话</div>
+      <div id="session-list" class="session-list"></div>
+
+      <div class="side-foot">
+        <button id="btn-tunnel" class="side-item hidden"><span class="glyph">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+        </span>内网隧道<span id="tunnel-state" class="tunnel-state mono"><span id="tunnel-dot" class="t-dot"></span><span id="tunnel-text">离线</span></span></button>
+        <button id="btn-settings" class="side-item"><span class="glyph">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.2"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+          </svg>
+        </span>系统设置</button>
+        <button id="btn-logout" class="side-item"><span class="glyph">⏻</span>退出登录</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- 会话工作台视图 -->
+      <div id="view-work" class="view">
+        <div id="empty" class="empty">
+          <div class="mascot mascot-empty" data-mascot aria-hidden="true"></div>
+          <h1 class="empty-title">开箱，即用。</h1>
+          <p class="empty-sub">每个会话都是一个独立容器里的编码智能体——工作区持久保存，随时停、随时续。<br>选择左侧会话继续，或现在拆一个新的。</p>
+          <button id="empty-new" class="btn btn-primary empty-cta">＋ 新建会话</button>
+          <div class="empty-ready mono">已就绪<span id="empty-brands" class="empty-brands"></span></div>
+        </div>
+
+        <div id="workbench" class="workbench hidden">
+          <header class="wb-head">
+            <div class="wb-title">
+              <span id="wb-avatar" class="wb-avatar"></span>
+              <h1 id="wb-name"></h1>
+              <span id="wb-meta" class="wb-meta mono"></span>
+            </div>
+            <div class="wb-actions">
+              <button id="btn-start" class="btn btn-sm btn-ico">启动</button>
+              <button id="btn-stop" class="btn btn-sm btn-ico">停止</button>
+              <button id="btn-delete" class="btn btn-sm btn-ico btn-danger">删除</button>
+            </div>
+          </header>
+
+          <nav class="tabs">
+            <button class="tab active" data-tab="chat">对话</button>
+            <button class="tab" data-tab="term">终端</button>
+            <button class="tab" data-tab="files">文件</button>
+          </nav>
+
+          <!-- 对话 -->
+          <section id="tab-chat" class="pane">
+            <div id="chat-log" class="chat-log"></div>
+            <div id="chat-loading" class="loading-block hidden">
+              <span class="spin"></span><span>正在加载历史对话…</span>
+            </div>
+            <div id="chat-hero" class="chat-hero hidden">
+              <div id="hero-avatar" class="hero-avatar"></div>
+              <h2>我们该构建什么？<span class="hero-cursor">▊</span></h2>
+              <div class="hero-pills">
+                <button class="hero-pill" data-fill="帮我梳理这个仓库的整体结构和核心模块，讲讲代码是如何组织的。">
+                  <span class="hp-ico">🔭</span>梳理仓库结构
+                </button>
+                <button class="hero-pill" data-fill="我想实现一个新功能：">
+                  <span class="hp-ico">🔨</span>实现一个新功能
+                </button>
+                <button class="hero-pill" data-fill="请审查当前代码，找出问题并提出具体修改建议。">
+                  <span class="hp-ico">✅</span>审查当前代码
+                </button>
+                <button class="hero-pill" data-fill="现在有一个问题需要修复：">
+                  <span class="hp-ico">🐛</span>修复一个问题
+                </button>
+              </div>
+            </div>
+            <div class="composer-wrap">
+              <div id="chat-status" class="chat-status hidden">
+                <span class="spin"></span><span id="chat-status-text">Agent 执行中…</span>
+              </div>
+              <div class="composer">
+                <div id="chat-attach" class="chat-attach hidden"></div>
+                <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）"></textarea>
+                <div class="composer-bar">
+                  <button id="btn-attach" class="icon-btn" title="添加附件（图片或文件，48 小时后过期）">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                      <path d="M9 3.75v10.5M3.75 9h10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                  <button id="btn-chat-reset" class="icon-btn" title="新对话：之后的消息不再携带此前上下文，历史仍可回看">
+                    <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                      <path d="M9.75 3.75H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h7.5a1.5 1.5 0 0 0 1.5-1.5V8.25M13.06 2.94a1.5 1.5 0 0 1 2.12 2.12L9.62 10.62l-2.87.75.75-2.87Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                  <button id="btn-voice" class="icon-btn" title="语音输入：点击说话，再点一次停止并发送">
+                    <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                      <path d="M6.75 4.5a2.25 2.25 0 0 1 4.5 0v3.75a2.25 2.25 0 0 1-4.5 0ZM3.75 8.25a5.25 5.25 0 0 0 10.5 0M9 13.5v2.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                  <input id="attach-input" type="file" multiple class="hidden">
+                  <div id="picker" class="picker">
+                    <button id="btn-pick" class="pick-pill mono"></button>
+                    <div id="pick-menu" class="pick-menu hidden"></div>
+                    <div id="pick-fly" class="pick-fly hidden"></div>
+                  </div>
+                  <button id="chat-send" class="send-btn" title="发送">
+                    <svg class="ic-send" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <svg class="ic-stop" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 终端 -->
+          <section id="tab-term" class="pane hidden">
+            <div class="term-bar">
+              <button id="btn-term-shell" class="btn btn-sm">Shell 终端</button>
+              <button id="btn-term-agent" class="btn btn-sm">Agent 交互终端</button>
+              <span class="term-hint mono">可直接粘贴图片，路径可点击预览</span>
+              <span id="term-state" class="term-state mono"></span>
+            </div>
+            <div class="term-body">
+              <div id="term-mount" class="term-mount"></div>
+              <div id="term-loading" class="term-loading loading-block hidden">
+                <span class="spin"></span><span>连接中…（首次可能需要拉起容器）</span>
+              </div>
+            </div>
+            <div id="term-overlay" class="term-overlay hidden">
+              <div class="term-overlay-box"><span class="spin"></span><span id="term-overlay-text">图片上传中…</span></div>
+            </div>
+          </section>
+
+          <!-- 文件 -->
+          <section id="tab-files" class="pane hidden">
+            <div class="files-bar">
+              <div class="files-left">
+                <div class="scope-switch" role="tablist">
+                  <button id="scope-ws" class="scope-btn active">工作区</button>
+                  <button id="scope-shared" class="scope-btn">共享目录</button>
+                  <span class="help" tabindex="0" aria-label="共享目录说明">?
+                    <span class="help-tip" role="tooltip">
+                      <b>共享目录</b>是本账号下<b>所有会话共用</b>的存储空间：放在这里的文件，
+                      其他会话也能看到并读写，适合把代码、构建产物从一个会话传给另一个会话。
+                      容器内路径为 <code>/shared</code>（对话或终端里让 Agent 直接读写该路径即可）。
+                      而「工作区」<code>/workspace</code> 是每个会话独立的，互相看不到。
+                    </span>
+                  </span>
+                </div>
+                <div id="files-crumb" class="files-crumb mono"></div>
+              </div>
+              <div class="files-actions">
+                <label class="check"><input type="checkbox" id="upload-clear"> <span id="upload-clear-label">上传前清空工作区</span></label>
+                <button id="btn-upload" class="btn btn-sm">上传代码包</button>
+                <input id="upload-input" type="file" class="hidden" accept=".zip,.tar,.tar.gz,.tgz,*/*">
+                <button id="btn-download" class="btn btn-sm">下载工作区 (zip)</button>
+              </div>
+            </div>
+            <div id="files-head" class="files-head mono hidden">
+              <span>名称</span><span>权限</span><span class="num">大小</span><span>修改时间</span>
+            </div>
+            <div id="files-list" class="files-list"></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- 系统设置视图 -->
+      <div id="view-settings" class="view hidden">
+        <header class="set-head">
+          <h1>系统设置</h1>
+          <p>账号池与服务端配置的集中维护入口。改动写入 config.json，多数即时生效。</p>
+        </header>
+
+        <div class="set-body">
+          <nav id="set-nav" class="set-nav">
+            <button class="active" data-sec="accounts">账号池 <span id="set-acct-count" class="count">0</span></button>
+            <button data-sec="container">容器与资源</button>
+            <button data-sec="models">模型管理</button>
+            <button data-sec="security">安全与访问</button>
+            <button data-sec="about">关于</button>
+          </nav>
+
+          <div id="set-content" class="set-content">
+            <!-- 账号池 -->
+            <section id="sec-accounts" class="set-section">
+              <div class="sec-intro">
+                <div>
+                  <h2>账号池</h2>
+                  <p>供会话选用的订阅账号与 API Key。凭证保存在服务器上，容器启动时注入，令牌刷新后自动播发到运行中的会话。</p>
+                </div>
+                <button id="btn-acct-add" class="btn btn-primary btn-sm">＋ 添加账号</button>
+              </div>
+              <div id="acct-list-box" class="acct-list"></div>
+            </section>
+
+            <!-- 容器与资源 -->
+            <section id="sec-container" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2>容器与资源</h2>
+                  <p>每个会话容器的镜像与资源限制。保存后对新启动的容器生效，运行中的会话重启后应用。</p>
+                </div>
+              </div>
+              <div class="card">
+                <h3>Agent 镜像</h3>
+                <label class="field">
+                  <span>镜像名称 <span class="tag live">新容器生效</span></span>
+                  <input id="set-image" type="text" class="mono">
+                  <span class="hint">重新构建镜像后无需改动此项，重启会话即可拉起新镜像。</span>
+                </label>
+              </div>
+              <div class="card">
+                <h3>资源限制</h3>
+                <div class="field-row">
+                  <label class="field">
+                    <span>内存上限（MB）</span>
+                    <input id="set-mem" type="number" min="128" class="mono">
+                  </label>
+                  <label class="field">
+                    <span>CPU 核数</span>
+                    <input id="set-cpus" type="number" min="0.5" step="0.5" class="mono">
+                  </label>
+                  <label class="field">
+                    <span>进程数上限</span>
+                    <input id="set-pids" type="number" min="16" class="mono">
+                  </label>
+                </div>
+                <label class="field">
+                  <span>网络模式</span>
+                  <select id="set-net">
+                    <option value="bridge">bridge — 默认桥接，可访问外网</option>
+                    <option value="none">none — 完全断网</option>
+                  </select>
+                </label>
+                <div class="card-foot">
+                  <span class="note">对新启动的容器生效</span>
+                  <button id="btn-save-container" class="btn btn-primary btn-sm">保存</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- 模型管理 -->
+            <section id="sec-models" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2>模型管理</h2>
+                  <p>对话输入框「模型选择」菜单里的候选列表。新模型上线时在这里补一行即可，无需重新构建。</p>
+                </div>
+              </div>
+              <div class="card">
+                <h3 data-agent="claude">Claude Code</h3>
+                <div class="model-rows" data-agent="claude"></div>
+                <div class="model-add">
+                  <input id="mdl-claude-label" type="text" placeholder="显示名称，如 Fable 5">
+                  <input id="mdl-claude-id" type="text" placeholder="模型 ID，如 claude-fable-5" class="mono">
+                  <button class="btn btn-sm mdl-add" data-agent="claude">添加</button>
+                </div>
+              </div>
+              <div class="card">
+                <h3 data-agent="codex">Codex CLI</h3>
+                <div class="model-rows" data-agent="codex"></div>
+                <div class="model-add">
+                  <input id="mdl-codex-label" type="text" placeholder="显示名称">
+                  <input id="mdl-codex-id" type="text" placeholder="模型 ID" class="mono">
+                  <button class="btn btn-sm mdl-add" data-agent="codex">添加</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- 安全与访问 -->
+            <section id="sec-security" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2>安全与访问</h2>
+                  <p>控制台的访问凭证与 Agent 的权限边界。</p>
+                </div>
+              </div>
+              <div class="card">
+                <h3>用户管理</h3>
+                <p class="card-desc">普通用户用账号密码登录控制台，各自拥有独立的会话与工作区，看不到系统设置。删除用户会一并删除其全部会话容器（工作区文件保留在磁盘上）。</p>
+                <div id="user-list" class="user-list"></div>
+                <div class="user-add">
+                  <input id="user-new-name" type="text" class="mono" placeholder="用户名（小写字母数字开头，可含 - _）" autocapitalize="none" spellcheck="false">
+                  <input id="user-new-pass" type="password" placeholder="初始密码（至少 8 位）" autocomplete="new-password">
+                  <button id="btn-user-add" class="btn btn-sm">添加用户</button>
+                </div>
+              </div>
+              <div class="card">
+                <h3>修改登录密码</h3>
+                <p class="card-desc">修改当前管理员账号的登录密码。修改后本端保持登录，其他已登录端下次请求起需重新登录。</p>
+                <div class="field-row">
+                  <label class="field">
+                    <span>当前密码</span>
+                    <input id="pw-old" type="password" autocomplete="current-password">
+                  </label>
+                  <label class="field">
+                    <span>新密码（至少 8 位）</span>
+                    <input id="pw-new" type="password" autocomplete="new-password">
+                  </label>
+                </div>
+                <div class="card-foot">
+                  <span class="note">密码保存在服务端数据库（PBKDF2 哈希），不再依赖 config.json 的 auth_token</span>
+                  <button id="btn-pw-save" class="btn btn-primary btn-sm">修改密码</button>
+                </div>
+              </div>
+              <div class="card">
+                <h3>Agent 权限模式</h3>
+                <label class="field">
+                  <span>容器内 Agent 的操作确认策略 <span class="tag live">下一轮对话生效</span></span>
+                  <select id="set-perm">
+                    <option value="bypassPermissions">bypassPermissions — 免确认（容器已隔离，推荐）</option>
+                    <option value="acceptEdits">acceptEdits — 自动接受文件编辑</option>
+                    <option value="plan">plan — 仅规划，不执行</option>
+                    <option value="default">default — 每步确认</option>
+                  </select>
+                </label>
+              </div>
+              <div class="card">
+                <h3>内网反向隧道</h3>
+                <p class="card-desc">用户在自己电脑上运行 abox-link 客户端拨回服务器后，其会话容器可经
+                SOCKS5 代理与端口映射访问该用户本机可达的内网。放行规则由用户在本机侧声明（默认拒绝），
+                各用户隧道相互隔离。</p>
+                <label class="check"><input type="checkbox" id="set-tunnel-on"> 启用隧道 <span class="tag live">即时生效</span></label>
+                <div class="field-row">
+                  <label class="field">
+                    <span>SOCKS 监听地址（须容器可达）</span>
+                    <input id="set-tunnel-bind" type="text" class="mono" placeholder="172.17.0.1:1080">
+                  </label>
+                  <label class="field">
+                    <span>注入容器的代理主机（可选）</span>
+                    <input id="set-tunnel-host" type="text" class="mono" placeholder="默认取监听地址的主机">
+                  </label>
+                </div>
+                <div class="card-foot">
+                  <span id="tunnel-note" class="note">默认绑定 docker 网桥网关 172.17.0.1，仅容器与本机可达</span>
+                  <button id="btn-save-tunnel" class="btn btn-primary btn-sm">保存</button>
+                </div>
+              </div>
+              <div class="card">
+                <h3>上传与监听</h3>
+                <div class="field-row">
+                  <label class="field">
+                    <span>上传大小上限（MB）</span>
+                    <input id="set-upload" type="number" min="1" class="mono">
+                  </label>
+                  <label class="field">
+                    <span>监听地址 <span class="tag restart">需重启</span></span>
+                    <input id="set-listen" type="text" class="mono" placeholder="127.0.0.1:8180">
+                  </label>
+                </div>
+                <div class="card-foot">
+                  <span id="security-note" class="note">权限模式与上传上限即时生效；监听地址需重启 agentbox 服务</span>
+                  <button id="btn-save-security" class="btn btn-primary btn-sm">保存</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- 关于 -->
+            <section id="sec-about" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2>关于</h2>
+                  <p>服务运行状态与环境信息，便于排障时截图。</p>
+                </div>
+              </div>
+              <div class="card">
+                <div id="about-loading" class="loading-block hidden">
+                  <span class="spin"></span><span>读取系统信息中…</span>
+                </div>
+                <dl id="about-kv" class="kv"></dl>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- 新建会话 -->
+<dialog id="dlg-new">
+  <form id="new-form" method="dialog">
+    <div class="dlg-head">
+      <h2>新建会话</h2>
+      <button type="button" id="new-cancel" class="dlg-x" aria-label="关闭">✕</button>
+    </div>
+    <label>会话名称
+      <input id="new-name" type="text" maxlength="64" placeholder="例如：订单服务重构" required>
+    </label>
+    <label>Agent 类型
+      <div class="agent-row">
+        <label class="agent-opt"><input type="radio" name="agent" value="claude" checked>Claude Code</label>
+        <label class="agent-opt"><input type="radio" name="agent" value="codex">Codex CLI</label>
+      </div>
+    </label>
+    <label>使用账号
+      <select id="new-account"></select>
+    </label>
+    <p id="new-error" class="login-error hidden"></p>
+    <div class="dlg-actions">
+      <button type="submit" id="new-ok" class="btn btn-primary">创建</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 文件预览 / 编辑 -->
+<dialog id="dlg-file" class="dlg-file">
+  <div class="fv">
+    <header class="fv-head">
+      <div class="fv-title">
+        <span id="fv-name" class="fv-name mono"></span>
+        <span id="fv-meta" class="fv-meta mono"></span>
+      </div>
+      <div class="fv-actions">
+        <span id="fv-state" class="fv-state mono"></span>
+        <button id="fv-save" class="btn btn-sm btn-primary" disabled>保存</button>
+        <button id="fv-download" class="btn btn-sm">下载</button>
+        <button id="fv-close" class="dlg-x" aria-label="关闭" title="关闭">✕</button>
+      </div>
+    </header>
+    <div class="fv-body">
+      <textarea id="fv-editor" class="fv-editor mono hidden" spellcheck="false" wrap="off"></textarea>
+      <div id="fv-imgwrap" class="fv-imgwrap hidden"><img id="fv-img" alt=""></div>
+      <div id="fv-notice" class="fv-notice hidden"></div>
+    </div>
+  </div>
+</dialog>
+
+<!-- 图片灯箱 -->
+<dialog id="dlg-img" class="dlg-img">
+  <button id="lb-close" class="dlg-x lb-x" aria-label="关闭">✕</button>
+  <img id="lb-img" alt="图片预览">
+  <div class="lb-bar mono">
+    <span id="lb-name"></span>
+  </div>
+</dialog>
+
+<!-- 账号登录 / 配置 -->
+<dialog id="dlg-auth" class="dlg-auth">
+  <div class="dlg-head">
+    <h2 id="auth-title">账号登录</h2>
+    <button type="button" id="auth-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <div id="auth-modes" class="auth-modes hidden">
+    <button type="button" id="auth-mode-oauth" class="seg">订阅 OAuth</button>
+    <button type="button" id="auth-mode-key" class="seg">中转站 API Key</button>
+  </div>
+  <div id="auth-oauth" class="auth-body hidden">
+    <p class="auth-hint">
+      1. 生成授权链接，在浏览器中打开并用该账号完成授权；<br>
+      2. 授权页会回显一串授权码，粘贴回下方输入框完成登录。<br>
+      这是一条独立的授权链，不影响你本机日常使用的 Claude 登录。
+    </p>
+    <button id="auth-gen" class="btn">生成授权链接</button>
+    <div id="auth-linkrow" class="auth-linkrow hidden">
+      <a id="auth-link" class="auth-link mono" target="_blank" rel="noopener"></a>
+      <button id="auth-copy" class="btn btn-sm">复制</button>
+    </div>
+    <input id="auth-code" type="text" placeholder="粘贴授权码（形如 xxxx#yyyy）" autocomplete="off" class="hidden">
+    <button id="auth-finish" class="btn btn-primary hidden">完成登录</button>
+  </div>
+  <div id="auth-key" class="auth-body hidden">
+    <p id="auth-key-hint" class="auth-hint"></p>
+    <input id="auth-apikey" type="password" placeholder="API Key（sk-...，已保存过的话测试时可留空）" autocomplete="off">
+    <input id="auth-baseurl" type="text" class="mono" placeholder="Base URL，如 https://api.1024gate.com" autocomplete="off" spellcheck="false">
+    <div class="auth-keyrow">
+      <select id="auth-wire" title="中转站接口协议">
+        <option value="responses">Responses API</option>
+        <option value="chat">Chat Completions</option>
+      </select>
+      <button id="auth-test" class="btn">测试连接</button>
+      <button id="auth-savekey" class="btn btn-primary">保存</button>
+    </div>
+    <div id="auth-models" class="auth-models hidden"></div>
+    <button id="auth-clearkey" class="btn btn-ghost btn-sm hidden">清除中转站配置，切回订阅凭证</button>
+  </div>
+  <p id="auth-msg" class="auth-msg hidden"></p>
+</dialog>
+
+<!-- 内网隧道：状态 + 接入指引 -->
+<dialog id="dlg-tunnel" class="dlg-tunnel">
+  <div class="dlg-head">
+    <h2>内网隧道</h2>
+    <button type="button" id="tun-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+
+  <div id="tun-status" class="tun-status">
+    <span id="tun-st-dot" class="t-dot big"></span>
+    <div class="tun-st-text">
+      <b id="tun-st-title">离线</b>
+      <span id="tun-st-sub" class="tun-st-sub mono"></span>
+    </div>
+  </div>
+  <div id="tun-maps" class="tun-maps hidden"></div>
+  <p id="tun-admin-online" class="field-hint hidden"></p>
+
+  <div id="tun-off-admin" class="tun-hint hidden">
+    <p>隧道功能未启用。启用后，你可以在自己的电脑上运行 abox-link 客户端，
+    让云端容器里的智能体访问「只有你本机能连」的内网（公司内网、局域网设备、本地数据库）。</p>
+    <button id="tun-goto-settings" class="btn btn-primary btn-sm">前往设置启用</button>
+  </div>
+
+  <div id="tun-guide" class="tun-guide hidden">
+    <h3>接入步骤</h3>
+    <ol>
+      <li>
+        <b>下载 abox-link 客户端</b>（放到你自己的电脑上）
+        <div id="tun-dl" class="tun-dl"></div>
+        <span id="tun-dl-empty" class="field-hint hidden">服务器上未放置预编译客户端，可在仓库中执行
+        <code>go build ./cmd/abox-link</code> 自行构建。</span>
+      </li>
+      <li>
+        <b>在你的电脑上运行</b>（默认拒绝一切目标，按需放行；<code>--map</code> 给
+        psql/mysql 等不支持 SOCKS 的客户端开直连端口）
+        <pre id="tun-cmd" class="tun-cmd mono"></pre>
+        <div class="tun-cmd-foot">
+          <span class="field-hint">Windows 下先 <code>set ABOX_PASSWORD=…</code> 再运行 abox-link.exe</span>
+          <button id="tun-copy" class="btn btn-sm">复制命令</button>
+        </div>
+      </li>
+      <li>
+        <b>完成。</b>连接成功后此处状态变为「在线」，会话容器内自动注入
+        <code>$AGENTBOX_INTRANET_PROXY</code>（及 <code>$AGENTBOX_INTRANET_MAPS</code>），
+        智能体即可按需访问你本机可达的内网；断开后自动失效。
+      </li>
+    </ol>
+  </div>
+</dialog>
+
+<!-- 删除会话确认 -->
+<dialog id="dlg-del">
+  <form id="del-form" method="dialog">
+    <div class="dlg-head">
+      <h2>删除会话</h2>
+      <button type="button" id="del-cancel" class="dlg-x" aria-label="关闭">✕</button>
+    </div>
+    <p id="del-text"></p>
+    <label class="check"><input type="checkbox" id="del-purge"> 同时删除工作区文件（不可恢复）</label>
+    <div class="dlg-actions">
+      <button type="submit" id="del-ok" class="btn btn-danger">删除</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 添加账号 -->
+<dialog id="dlg-acct">
+  <form id="acct-form" method="dialog">
+    <div class="dlg-head">
+      <h2>添加账号</h2>
+      <button type="button" id="acct-cancel" class="dlg-x" aria-label="关闭">✕</button>
+    </div>
+    <label>账号类型
+      <div class="agent-row">
+        <label class="agent-opt"><input type="radio" name="atype" value="claude" checked>Claude Code</label>
+        <label class="agent-opt"><input type="radio" name="atype" value="codex">Codex CLI</label>
+      </div>
+    </label>
+    <label>显示名称
+      <input id="acct-label" type="text" maxlength="32" placeholder="例如：团队 Max 账号 2">
+    </label>
+    <label>账号 ID
+      <input id="acct-id" type="text" maxlength="32" placeholder="例如：claude-2" class="mono" required>
+      <span class="field-hint">小写字母/数字开头，可含 - 和 _。用于会话关联与凭证目录命名，创建后不可修改；凭证目录自动创建于 data/creds/&lt;ID&gt;。</span>
+    </label>
+    <label>环境变量（可选，每行一条 KEY=VALUE）
+      <textarea id="acct-env" rows="2" class="mono" placeholder="ANTHROPIC_BASE_URL=https://…" spellcheck="false"></textarea>
+    </label>
+    <p id="acct-error" class="login-error hidden"></p>
+    <div class="dlg-actions">
+      <button type="submit" id="acct-ok" class="btn btn-primary">创建并登录</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 编辑账号 -->
+<dialog id="dlg-acct-edit">
+  <form id="acct-edit-form" method="dialog">
+    <div class="dlg-head">
+      <h2 id="acct-edit-title">编辑账号</h2>
+      <button type="button" id="acct-edit-cancel" class="dlg-x" aria-label="关闭">✕</button>
+    </div>
+    <label>显示名称
+      <input id="acct-edit-label" type="text" maxlength="32">
+    </label>
+    <label>环境变量（每行一条 KEY=VALUE，留空清除）
+      <textarea id="acct-edit-env" rows="2" class="mono" spellcheck="false"></textarea>
+    </label>
+    <p id="acct-edit-error" class="login-error hidden"></p>
+    <div class="dlg-actions">
+      <button type="submit" id="acct-edit-ok" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 删除账号确认 -->
+<dialog id="dlg-acct-del">
+  <form id="acct-del-form" method="dialog">
+    <div class="dlg-head">
+      <h2>删除账号</h2>
+      <button type="button" id="acct-del-cancel" class="dlg-x" aria-label="关闭">✕</button>
+    </div>
+    <p id="acct-del-text"></p>
+    <p class="field-hint">凭证目录会保留在服务器磁盘上，不会随配置一起删除。</p>
+    <div class="dlg-actions">
+      <button type="submit" id="acct-del-ok" class="btn btn-danger">删除</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast"></div>
+
+<script src="/_v/{{BUILD}}/vendor/xterm.js"></script>
+<script src="/_v/{{BUILD}}/vendor/addon-fit.js"></script>
+<script type="module" src="/_v/{{BUILD}}/js/main.js"></script>
+</body>
+</html>

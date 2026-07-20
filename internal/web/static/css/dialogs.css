@@ -1,0 +1,200 @@
+/* dialogs：通用对话框底座 + 图片灯箱 + 账号登录/配置弹窗。
+ * 文件预览弹窗（结构特殊、全屏化）在 files.css。 */
+
+dialog {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 26px 28px;
+  width: min(420px, 92vw);
+  max-height: 90vh;
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+dialog::backdrop { background: rgba(6, 8, 12, 0.7); }
+dialog h2 { margin: 0 0 16px; font-size: 16px; }
+dialog form { display: flex; flex-direction: column; gap: 14px; }
+dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+dialog input[type="text"], dialog select, dialog textarea { width: 100%; }
+dialog textarea { resize: vertical; }
+
+/* ---- 弹窗统一头部：标题居左，✕ 关闭钮固定右上角（全部弹窗共用） ---- */
+.dlg-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  margin: 0 0 16px;
+}
+dialog form .dlg-head { margin: 0; } /* form 自带 gap，避免双份间距 */
+.dlg-head h2 { margin: 0; }
+.dlg-x {
+  flex: none;
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin: -6px -10px 0 0; /* 视觉贴向弹窗右上角 */
+  background: transparent; border: none; border-radius: 7px;
+  color: var(--muted); font-size: 14px; line-height: 1;
+}
+.dlg-x:hover { color: var(--text); background: var(--panel-2); }
+.dlg-x:disabled { opacity: 0.4; cursor: not-allowed; }
+.dlg-x:disabled:hover { color: var(--muted); background: transparent; }
+
+/* 弹窗内勾选行：通用 dialog label 是纵向布局，勾选框必须与文字同行 */
+dialog label.check {
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--muted);
+  cursor: pointer;
+}
+dialog label.check input { margin: 0; flex: none; }
+.field-hint { font-size: 12px; color: var(--muted); opacity: 0.85; line-height: 1.6; }
+.radio-row { display: flex; gap: 18px; }
+.radio { flex-direction: row !important; align-items: center; color: var(--text); }
+
+/* Agent 类型选择卡：官方图标 + 名称，选中项亮出品牌色描边与浅底 */
+.agent-row { display: flex; gap: 10px; }
+.agent-opt {
+  position: relative;
+  flex: 1;
+  flex-direction: row !important; align-items: center; justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 11px 10px;
+  color: var(--muted); font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.agent-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.agent-opt .agent-ico { opacity: 0.55; transition: opacity 0.15s ease; }
+.agent-opt:hover { border-color: var(--muted); }
+.agent-opt:has(input:checked) {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--brand) 55%, transparent);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+.agent-opt:has(input:checked) .agent-ico { opacity: 1; }
+.agent-opt:has(input:focus-visible) { outline: 2px solid var(--amber); outline-offset: 1px; }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+
+/* ---- 图片灯箱：固定窗口大小，图片等比缩放完整展示，不出现滚动条。
+   通用 dialog 规则会把 width 锁成 420px，这里必须显式覆盖 ---- */
+.dlg-img {
+  background: transparent; border: none; padding: 0;
+  width: min(1280px, 92vw);
+  height: min(86vh, 960px);
+  max-width: 92vw; max-height: 86vh;
+  overflow: hidden;
+}
+.dlg-img[open] { display: flex; flex-direction: column; }
+.dlg-img::backdrop { background: rgba(6, 8, 12, 0.82); }
+.dlg-img img {
+  flex: 1; min-height: 0;
+  width: 100%;
+  object-fit: contain;
+  cursor: zoom-out;
+}
+.lb-bar {
+  flex: none;
+  display: flex; justify-content: center; align-items: center; gap: 12px;
+  padding: 10px 2px 0;
+  color: var(--muted); font-size: 12px;
+}
+.lb-bar span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 灯箱 ✕：悬浮在图片右上角 */
+.lb-x {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  width: 34px; height: 34px; margin: 0;
+  background: rgba(6, 8, 12, 0.65); border-radius: 50%;
+  color: #dfe3ea; font-size: 15px;
+}
+.lb-x:hover { background: rgba(6, 8, 12, 0.88); color: #fff; }
+
+/* ---- 账号登录 / 配置对话框 ---- */
+.dlg-auth { width: min(520px, 92vw); }
+.auth-body { display: flex; flex-direction: column; gap: 12px; }
+.auth-hint { margin: 0; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.auth-linkrow {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; background: var(--panel-2);
+  min-width: 0;
+}
+.auth-link {
+  flex: 1; min-width: 0;
+  font-size: 11px; color: var(--amber); text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.auth-link:hover { text-decoration: underline; }
+.dlg-auth input[type="text"], .dlg-auth input[type="password"] { width: 100%; }
+.auth-msg { margin: 10px 0 0; font-size: 12px; color: var(--green); }
+.auth-msg.err { color: var(--red); }
+.auth-modes {
+  display: flex; margin-bottom: 14px;
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+}
+.auth-modes .seg {
+  flex: 1; padding: 8px 0; font-size: 12px;
+  background: var(--panel); color: var(--muted); border: 0; cursor: pointer;
+}
+.auth-modes .seg + .seg { border-left: 1px solid var(--line); }
+.auth-modes .seg.active { background: var(--panel-2); color: var(--text); font-weight: 600; }
+.auth-keyrow { display: flex; gap: 8px; align-items: center; }
+.auth-keyrow select { flex: 1; min-width: 0; }
+.auth-models {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  max-height: 180px; overflow-y: auto;
+  padding: 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel-2);
+}
+.auth-model-chip {
+  font-size: 11px; padding: 3px 8px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); cursor: pointer;
+}
+.auth-model-chip:hover { border-color: var(--amber); }
+.auth-model-chip.in { color: var(--muted); border-style: dashed; cursor: default; }
+.auth-model-chip.in:hover { border-color: var(--line); }
+
+/* ---- 内网隧道弹窗：状态卡 + 接入指引 ---- */
+.dlg-tunnel { width: min(560px, 94vw); }
+.tun-status {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel-2);
+  margin-bottom: 12px;
+}
+.t-dot.big { width: 11px; height: 11px; }
+.tun-st-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tun-st-text b { font-size: 14px; }
+.tun-st-sub { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.tun-maps {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 14px;
+  border: 1px dashed var(--line); border-radius: 8px;
+  margin-bottom: 12px;
+}
+.tun-map { font-size: 12px; color: var(--text); white-space: pre; overflow-x: auto; }
+.tun-hint { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.tun-hint p { margin: 0 0 12px; }
+.tun-guide h3 { margin: 14px 0 8px; font-size: 13.5px; }
+.tun-guide ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 14px; }
+.tun-guide li { font-size: 13px; color: var(--muted); line-height: 1.7; }
+.tun-guide li b { color: var(--text); }
+.tun-guide code {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 5px; padding: 1px 5px;
+}
+.tun-dl { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.tun-dl-btn { text-decoration: none; }
+.tun-cmd {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  font-size: 12px; line-height: 1.7;
+  overflow-x: auto; white-space: pre;
+  user-select: all;
+}
+.tun-cmd-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 8px;
+}

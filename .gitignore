@@ -1,0 +1,13 @@
+# 编译产物与备份
+/agentbox
+agentbox.bak-*
+bin-abox-link
+
+# 运行时配置与凭证(含密钥,勿提交)
+/config.json
+config.json.bak*
+/accounts/
+/data/
+
+# 日志
+*.log
