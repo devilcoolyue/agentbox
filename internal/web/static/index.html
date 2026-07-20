@@ -135,7 +135,12 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
           </svg>
         </span>系统设置</button>
-        <button id="btn-logout" class="side-item"><span class="glyph">⏻</span>退出登录</button>
+        <button id="btn-logout" class="side-item"><span class="glyph">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v9"/>
+            <path d="M18.36 7.64a9 9 0 1 1-12.73 0"/>
+          </svg>
+        </span>退出登录</button>
       </div>
     </aside>
 
@@ -634,13 +639,16 @@
         <code>go build ./cmd/abox-link</code> 自行构建。</span>
       </li>
       <li>
-        <b>在你的电脑上运行</b>（默认拒绝一切目标，按需放行；<code>--map</code> 给
-        psql/mysql 等不支持 SOCKS 的客户端开直连端口）
-        <pre id="tun-cmd" class="tun-cmd mono"></pre>
+        <b>双击运行</b>，它会自动打开本机控制台 <code>http://127.0.0.1:7801</code>
+      </li>
+      <li>
+        <b>粘贴配对码完成接入</b>——不用输服务器地址和密码。
+        之后在控制台里点选放行规则、点「启动」即可，还能勾选开机自启。
         <div class="tun-cmd-foot">
-          <span class="field-hint">Windows 下先 <code>set ABOX_PASSWORD=…</code> 再运行 abox-link.exe</span>
-          <button id="tun-copy" class="btn btn-sm">复制命令</button>
+          <button id="tun-pair" class="btn btn-primary btn-sm">生成配对码</button>
+          <span id="tun-pair-hint" class="field-hint">10 分钟内有效，只能用一次</span>
         </div>
+        <pre id="tun-pair-code" class="tun-cmd mono hidden"></pre>
       </li>
       <li>
         <b>完成。</b>连接成功后此处状态变为「在线」，会话容器内自动注入

@@ -110,16 +110,35 @@ API Key 方式则直接在账号的 `env` 字段配置（见 `config.example.jso
   所有用户侧栏可见「内网隧道」入口——在线状态、活动端口映射、接入指引与各平台
   abox-link 下载（把交叉编译好的二进制放进 `data/abox-link/` 即出现下载按钮）
 - 构建客户端：`go build -o abox-link ./cmd/abox-link`
-- 在你本机运行（**默认拒绝**，必须显式放行目标）：
 
-  ```
-  ABOX_PASSWORD=<你的密码> ./abox-link \
-      --server https://box.example.com --user alice \
-      --allow 192.168.1.0/24 --allow db.corp.local:5432
-  ```
+### 用法一：本机控制台（默认，不用碰命令行）
 
-  `--allow` 可重复，支持 CIDR、主机名、`主机:端口`；放行判断在本机侧强制执行，
-  即使服务器被攻破也无法把你的机器当作任意内网跳板。每条连接都会打印审计日志。
+abox-link 不带任何参数运行时，会在 `127.0.0.1:7801` 起一个本机控制台并自动打开浏览器：
+
+1. 在 agentbox 的「内网隧道」弹窗点**生成配对码**（10 分钟有效、只能用一次），复制
+2. 双击运行 abox-link，把配对码粘进去——**不用填服务器地址，也不用输密码**
+3. 在页面上增删放行规则与端口映射，点「启动」；可勾选**开机自启**与**启动时自动连接**
+
+配置存在 `~/.abox-link/config.json`（0600）。配对换回来的是一枚会话令牌，**密码不落盘**；
+改过密码后令牌失效，控制台会提示重新配对。控制台只监听回环地址，并要求
+`X-Abox-Panel` 头与回环 `Host`/`Origin`，挡掉 DNS 重绑定与网页发起的跨站请求。
+
+开机自启按平台落地为 systemd 用户单元 / LaunchAgent / 登录计划任务，均**不需要管理员权限**。
+（Linux 上未开 linger 时注销即停，控制台会把这句提示显示出来。）
+
+### 用法二：命令行（无头机器 / 脚本）
+
+带 `--server` 即走原来的一次性模式，行为不变：
+
+```
+ABOX_PASSWORD=<你的密码> ./abox-link \
+    --server https://box.example.com --user alice \
+    --allow 192.168.1.0/24 --allow db.corp.local:5432
+```
+
+`--allow` 可重复，支持 CIDR、主机名、`主机:端口`；放行判断在本机侧强制执行，
+即使服务器被攻破也无法把你的机器当作任意内网跳板。每条连接都会打印审计日志。
+两种模式共用同一套白名单与重连逻辑，只是前者把开关做成了按钮。
 - 隧道在线时，容器内自动注入 `AGENTBOX_INTRANET_PROXY=socks5h://<user>:<secret>@<gateway>`。
   它**不是**全局 `HTTP_PROXY`（避免模型 API 等全部流量绕行你的家宽），智能体按需使用，例如
   `curl --proxy "$AGENTBOX_INTRANET_PROXY" http://gitlab.corp.local/...`。
@@ -162,6 +181,8 @@ WS     /api/sessions/{id}/term      终端通道（二进制 PTY；?mode=shell|a
 GET    /api/accounts                账号池
 WS     /api/tunnel                  内网反向隧道（abox-link 客户端拨入；yamux over WSS）
 GET    /api/tunnel/status           本用户隧道状态（在线/映射；管理员另见在线用户列表）
+POST   /api/tunnel/pair             生成配对码（一次性，10 分钟有效）
+POST   /api/tunnel/pair/redeem      用配对码换会话令牌（无需登录：码本身即凭证）
 GET    /api/tunnel/clients          可下载的 abox-link 预编译客户端列表
 GET    /api/tunnel/clients/{name}   下载客户端二进制（data/abox-link/ 下的文件）
 ```

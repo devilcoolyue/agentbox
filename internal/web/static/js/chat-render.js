@@ -15,23 +15,27 @@ const ICONS = {
   check: "M3.75 9.75 7.5 13.5l6.75-8.25",
   caret: "M6.75 3.75 12 9l-5.25 5.25",
   chevron: "M3.75 6.75 9 12l5.25-5.25",
-  play: "M6.375 4.125 13.5 9l-7.125 4.875Z",
-  stop: "M6 6h6v6H6Z",
-  trash: "M3.75 5.25h10.5M7.125 5.25V3.75h3.75v1.5M5.625 5.25l.75 9h5.25l.75-9",
+  /* 会话动作三件套：与侧栏（内网隧道/系统设置/退出登录）同为 24 视框、1.8 线宽，
+   * 同尺寸渲染时观感才一致——18 视框的字形留白更多，会显得小一号。 */
+  play: { d: "M6.5 3.5 20 12 6.5 20.5Z", box: 24, width: 1.8 },
+  stop: { d: "M5.5 5.5h13v13h-13Z", box: 24, width: 1.8 },
+  trash: { d: "M3 6h18M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6M5.5 6l1 14.5h11L18.5 6", box: 24, width: 1.8 },
 };
 
 export function svgIcon(name, size = 13) {
+  const ico = ICONS[name];
+  const { d, box = 18, width = 1.5 } = typeof ico === "string" ? { d: ico } : ico;
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 18 18");
+  svg.setAttribute("viewBox", `0 0 ${box} ${box}`);
   svg.setAttribute("width", size);
   svg.setAttribute("height", size);
   svg.setAttribute("fill", "none");
   svg.setAttribute("aria-hidden", "true");
   const p = document.createElementNS(ns, "path");
-  p.setAttribute("d", ICONS[name]);
+  p.setAttribute("d", d);
   p.setAttribute("stroke", "currentColor");
-  p.setAttribute("stroke-width", "1.5");
+  p.setAttribute("stroke-width", width);
   p.setAttribute("stroke-linecap", "round");
   p.setAttribute("stroke-linejoin", "round");
   svg.appendChild(p);
@@ -410,6 +414,39 @@ function thinkBlock(text) {
   return el;
 }
 
+/* rateLimitType → 额度名称，对齐原生 Claude Code 的 session/weekly limit 措辞 */
+const RATE_LIMIT_LABEL = {
+  five_hour: "5 小时额度",
+  seven_day: "周额度",
+  seven_day_opus: "Opus 周额度",
+  seven_day_sonnet: "Sonnet 周额度",
+  seven_day_overage_included: "周额度",
+  overage: "用量积分额度",
+};
+
+function resetsAt(sec) {
+  if (!sec) return "";
+  const d = new Date(sec * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())} 重置`;
+}
+
+/* 限流事件：allowed=正常不展示，allowed_warning=接近上限（黄），rejected=已被拦（红） */
+function rateLimitChip(info) {
+  if (!info || !info.status || info.status === "allowed") return null;
+  const label = RATE_LIMIT_LABEL[info.rateLimitType] || "用量额度";
+  const reset = resetsAt(info.resetsAt);
+  if (info.status === "rejected") {
+    return chip(["⛔ 已用尽" + label, reset].filter(Boolean).join(" · "), "err");
+  }
+  const pct = typeof info.utilization === "number" ? "已用 " + Math.round(info.utilization * 100) + "%" : "";
+  // allowed_warning 之外的未知状态照原样带出，免得又变成看不懂的提示
+  const head = (info.status === "allowed_warning" ? "接近" : info.status + " · ") + label;
+  const parts = ["⚠ " + head, pct, reset];
+  if (info.isUsingOverage) parts.push("正在使用用量积分");
+  return chip(parts.filter(Boolean).join(" · "), "warn");
+}
+
 /* 渲染一条 agent 事件（Claude stream-json / Codex --json），返回节点数组 */
 export function renderEvent(ev) {
   if (!ev || typeof ev !== "object") return [];
@@ -432,9 +469,9 @@ export function renderEvent(ev) {
     return out; // 工具结果回填，不展示（终端里能看到实际效果）
   }
   if (ev.type === "rate_limit_event") {
-    const st = ev.rate_limit_info && ev.rate_limit_info.status;
-    if (st && st !== "allowed") out.push(chip("⏳ 账号限流 (" + st + ")", "err"));
-    return out; // allowed 状态是噪音，不展示
+    const c = rateLimitChip(ev.rate_limit_info);
+    if (c) out.push(c);
+    return out;
   }
   if (ev.type === "result") {
     if (ev.subtype === "success") {

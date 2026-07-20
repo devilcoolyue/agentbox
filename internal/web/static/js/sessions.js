@@ -135,8 +135,8 @@ function openDeleteDlg() {
 /* 静态装饰：工作台按钮与 ⋯ 菜单共用同一组图标。工作台直接前置（btnBusy 换成转圈后
  * 仍能原样还原）；菜单放进 .glyph 定宽槽位，保证三行文字左边缘对齐。 */
 for (const [act, ico] of [["start", "play"], ["stop", "stop"], ["delete", "trash"]]) {
-  $("btn-" + act).prepend(svgIcon(ico, 12));
-  $("kb-" + act).querySelector(".glyph").appendChild(svgIcon(ico, 13));
+  $("btn-" + act).prepend(svgIcon(ico, 17));
+  $("kb-" + act).querySelector(".glyph").appendChild(svgIcon(ico, 17));
 }
 
 $("btn-start").addEventListener("click", doStart);

@@ -56,6 +56,7 @@ type Server struct {
 	dock    *dockerx.Manager
 	chat    *chatManager
 	tunnels *tunnelHub
+	pairs   *pairStore    // outstanding abox-link pairing codes
 	mapAuth mapSourceAuth // source-IP cache for tunnel port-map listeners
 
 	tunnelMu   sync.Mutex   // guards the SOCKS listener lifecycle below
@@ -88,6 +89,7 @@ func New(cfg *config.Config) (*Server, error) {
 		store:      st,
 		dock:       dock,
 		tunnels:    newTunnelHub(),
+		pairs:      newPairStore(),
 		startedAt:  time.Now(),
 		bootListen: cfg.GetListen(),
 		starts:     map[string]*sync.Mutex{},
@@ -175,6 +177,9 @@ func (s *Server) Run() error {
 	mux.Handle("POST /api/sessions/{id}/chat/reset", s.auth(s.withSession(s.handleChatReset)))
 	mux.Handle("GET /api/tunnel", s.auth(http.HandlerFunc(s.handleTunnelWS)))
 	mux.Handle("GET /api/tunnel/status", s.auth(http.HandlerFunc(s.handleTunnelStatus)))
+	mux.Handle("POST /api/tunnel/pair", s.auth(http.HandlerFunc(s.handleTunnelPair)))
+	// Redemption is unauthenticated by design: the pairing code is the credential.
+	mux.HandleFunc("POST /api/tunnel/pair/redeem", s.handleTunnelPairRedeem)
 	mux.Handle("GET /api/tunnel/clients", s.auth(http.HandlerFunc(s.handleTunnelClients)))
 	mux.Handle("GET /api/tunnel/clients/{name}", s.auth(http.HandlerFunc(s.handleTunnelClientGet)))
 

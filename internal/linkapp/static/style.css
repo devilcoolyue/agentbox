@@ -1,0 +1,157 @@
+/* abox-link 控制台。配色沿用 agentbox（深底 + 琥珀主色），让两端看起来是一套产品。 */
+
+:root {
+  --bg: #12151c;
+  --panel: #1a1f29;
+  --line: #2e3646;
+  --text: #d6dae3;
+  --muted: #8a93a5;
+  --amber: #e8a33d;
+  --green: #57c78a;
+  --red: #e06c5f;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+          "Noto Sans CJK SC", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.6 var(--sans);
+  padding-bottom: 88px; /* 给保存条留位置 */
+}
+
+code { font-family: var(--mono); font-size: .92em; color: var(--amber); }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.hidden { display: none !important; }
+.err { color: var(--red); font-size: 13px; }
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* --- 顶栏 --- */
+
+.top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  position: sticky; top: 0; z-index: 5;
+}
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand strong { letter-spacing: .3px; }
+
+/* --- 状态灯 --- */
+
+.dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); flex: none;
+  transition: background .2s, box-shadow .2s;
+}
+.dot.big { width: 12px; height: 12px; }
+.dot.on { background: var(--green); box-shadow: 0 0 0 3px rgb(87 199 138 / .18); }
+.dot.busy { background: var(--amber); box-shadow: 0 0 0 3px rgb(232 163 61 / .18); }
+.dot.bad { background: var(--red); box-shadow: 0 0 0 3px rgb(224 108 95 / .18); }
+
+/* --- 布局与卡片 --- */
+
+main { max-width: 720px; margin: 0 auto; padding: 20px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+.card h2 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+.card p { margin: 0 0 14px; font-size: 13px; }
+
+.card.status {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.status-main { display: flex; align-items: center; gap: 12px; }
+.st-title { font-size: 16px; font-weight: 600; }
+
+/* --- 表单件 --- */
+
+button {
+  font: inherit; font-size: 13px;
+  padding: 8px 16px; border-radius: 7px;
+  border: 1px solid var(--line); background: transparent; color: var(--text);
+  cursor: pointer; transition: border-color .15s, background .15s, opacity .15s;
+}
+button:hover { border-color: var(--muted); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary {
+  background: var(--amber); border-color: var(--amber); color: #1a1207; font-weight: 600;
+}
+button.primary:hover { filter: brightness(1.08); }
+button.ghost { color: var(--muted); }
+button.ghost:hover { color: var(--text); }
+button.danger:hover { border-color: var(--red); color: var(--red); }
+
+input[type=text], textarea {
+  font: inherit; width: 100%;
+  padding: 8px 10px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+}
+input[type=text] { font-family: var(--mono); font-size: 13px; }
+textarea { font-family: var(--mono); font-size: 12px; resize: vertical; }
+input:focus, textarea:focus { outline: none; border-color: var(--amber); }
+
+.check {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 7px 0; cursor: pointer; font-size: 13px;
+}
+.check input { margin-top: 3px; accent-color: var(--amber); flex: none; }
+
+/* --- 规则行 --- */
+
+.rules { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.rule { display: flex; gap: 8px; align-items: center; }
+.rule .sep { color: var(--muted); flex: none; }
+.rule button {
+  flex: none; padding: 6px 10px; color: var(--muted); line-height: 1;
+}
+.rule button:hover { color: var(--red); border-color: var(--red); }
+.rules:empty + button { margin-top: 0; }
+
+/* --- 日志 --- */
+
+.log {
+  font-family: var(--mono); font-size: 12px; line-height: 1.7;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; height: 240px; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-all;
+}
+.log .t { color: var(--muted); margin-right: 8px; }
+
+/* --- 保存条 --- */
+
+.savebar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  max-width: 720px; margin: 0 auto 16px; padding: 12px 20px;
+  background: var(--panel); border: 1px solid var(--amber); border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / .4);
+  font-size: 13px;
+}
+
+/* --- toast --- */
+
+.toast {
+  position: fixed; left: 50%; top: 20px; transform: translateX(-50%);
+  z-index: 20; padding: 10px 18px; border-radius: 8px; font-size: 13px;
+  background: var(--panel); border: 1px solid var(--line);
+  box-shadow: 0 6px 20px rgb(0 0 0 / .4);
+}
+.toast.bad { border-color: var(--red); color: var(--red); }
+
+@media (max-width: 560px) {
+  .card.status { flex-direction: column; align-items: stretch; }
+  .card.status button { width: 100%; }
+  .savebar { flex-direction: column; align-items: stretch; }
+}

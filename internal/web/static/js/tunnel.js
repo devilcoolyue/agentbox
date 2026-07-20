@@ -71,15 +71,6 @@ function renderDialog() {
 
   $("tun-off-admin").classList.toggle("hidden", st.enabled);
   $("tun-guide").classList.toggle("hidden", !st.enabled);
-  if (st.enabled) $("tun-cmd").textContent = cmdText();
-}
-
-function cmdText() {
-  return "ABOX_PASSWORD=你的登录密码 ./abox-link \\\n" +
-    "  --server " + location.origin + " \\\n" +
-    "  --user " + S.user + " \\\n" +
-    "  --allow 192.168.1.0/24 --allow db.corp.local:5432 \\\n" +
-    "  --map 3306=10.0.1.5:3306";
 }
 
 /* 平台名映射：文件名里带 os-arch，展示成人话 */
@@ -115,6 +106,15 @@ $("btn-tunnel").addEventListener("click", () => {
   refreshStatus(true);
   loadClients();
 });
+let pairTimer = 0; // 配对码有效期倒计时
+
+/* 关闭时清掉配对码，免得下次打开还挂着一个多半已失效的码 */
+$("dlg-tunnel").addEventListener("close", () => {
+  clearInterval(pairTimer);
+  $("tun-pair-code").classList.add("hidden");
+  $("tun-pair-code").textContent = "";
+  $("tun-pair-hint").textContent = "10 分钟内有效，只能用一次";
+});
 $("tun-close").addEventListener("click", () => $("dlg-tunnel").close());
 
 $("tun-goto-settings").addEventListener("click", () => {
@@ -123,14 +123,51 @@ $("tun-goto-settings").addEventListener("click", () => {
   emit("open-settings");
 });
 
-$("tun-copy").addEventListener("click", async () => {
+/* 配对码：一次性、短时效，粘进 abox-link 控制台即完成接入。
+ * 生成后顺手复制到剪贴板，并倒计时显示剩余有效期。 */
+$("tun-pair").addEventListener("click", async () => {
+  const btn = $("tun-pair");
+  btn.disabled = true;
   try {
-    await navigator.clipboard.writeText($("tun-cmd").textContent);
-    toast("命令已复制，替换密码与放行规则后在你的电脑上运行");
-  } catch (_) {
-    toast("复制失败，请手动选中复制", true);
+    const res = await api("/tunnel/pair", {
+      method: "POST",
+      body: JSON.stringify({ origin: location.origin }),
+    });
+    const box = $("tun-pair-code");
+    box.textContent = res.code;
+    box.classList.remove("hidden");
+    try {
+      await navigator.clipboard.writeText(res.code);
+      toast("配对码已复制，粘贴到 abox-link 控制台");
+    } catch (_) {
+      toast("配对码已生成，请手动选中复制");
+    }
+    startPairCountdown(res.expires_in);
+  } catch (e) {
+    toast(e.message || "生成配对码失败", true);
+  } finally {
+    btn.disabled = false;
   }
 });
+
+function startPairCountdown(seconds) {
+  clearInterval(pairTimer);
+  const hint = $("tun-pair-hint");
+  const deadline = Date.now() + seconds * 1000;
+  const tick = () => {
+    const left = Math.round((deadline - Date.now()) / 1000);
+    if (left <= 0) {
+      clearInterval(pairTimer);
+      hint.textContent = "已过期，请重新生成";
+      $("tun-pair-code").classList.add("hidden");
+      return;
+    }
+    hint.textContent = "剩余 " + Math.floor(left / 60) + ":" +
+      String(left % 60).padStart(2, "0") + " 内有效，只能用一次";
+  };
+  tick();
+  pairTimer = setInterval(tick, 1000);
+}
 
 /* 弹窗打开期间 5s 一刷，让「等待接入 → 在线」立刻可见 */
 setInterval(() => {

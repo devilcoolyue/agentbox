@@ -79,7 +79,7 @@
 .kebab-menu .sep { height: 1px; background: var(--line); margin: 4px 6px; }
 /* 图标槽位：固定宽度让三行文字左边缘对齐，图标由 sessions.js 注入 */
 .kebab-menu .glyph {
-  flex: none; width: 14px;
+  flex: none; width: 18px;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .kebab-menu .glyph svg { display: block; }
