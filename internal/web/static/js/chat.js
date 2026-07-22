@@ -2,12 +2,12 @@
  * 模型与思考强度选择、空会话引导。渲染管线在 chat-render.js。 */
 "use strict";
 
-import { S } from "./state.js";
-import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, toast } from "./util.js";
+import { S, bus } from "./state.js";
+import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
-import { chip, divider, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon } from "./chat-render.js";
-import { archiveList } from "./chat-archive.js";
+import { chip, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon } from "./chat-render.js";
+import { setThreadBar, noteThreadTitle } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
 
 /* ---------------- 对话通道 ---------------- */
@@ -69,7 +69,22 @@ function handleAgentEvent(ev) {
   if (ev && ev.type === "stream_event") { handleStreamEvent(ev.event); return; }
   // 完整 assistant 事件带全部内容，先移除对应的增量节点再正式渲染
   if (ev && ev.type === "assistant") liveClear();
+  workLabelFromEvent(ev);
   for (const node of renderEvent(ev)) appendChat(node);
+}
+
+/* 依据整包事件刷新执行指示的阶段文案（流式的文字/思考在 handleStreamEvent 里更新） */
+function workLabelFromEvent(ev) {
+  if (!ev || S.chatState !== "running") return;
+  if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
+    for (const b of ev.message.content) {
+      if (b.type === "tool_use") { setWorkingLabel("运行工具 " + b.name + "…"); return; }
+    }
+  } else if (ev.type === "item.started" && ev.item && ev.item.type === "command_execution") {
+    setWorkingLabel("执行命令…");
+  } else if (ev.type === "item.completed" && ev.item && ev.item.type === "reasoning") {
+    setWorkingLabel("推理中…");
+  }
 }
 
 function handleStreamEvent(e) {
@@ -84,6 +99,7 @@ function handleStreamEvent(e) {
       liveDrain(); // 上一块若有残余（丢了 stop 事件）先补齐
       const t = e.content_block && e.content_block.type;
       if (t === "text" || t === "thinking") {
+        setWorkingLabel(t === "thinking" ? "思考中…" : "生成回复…");
         liveBlock = { ...liveNode(t), kind: t, shown: "", buf: "", carry: 0, tick: 0, raf: 0 };
         liveBlock.el.classList.add("streaming");
         appendChat(liveBlock.el);
@@ -155,9 +171,15 @@ function liveDrain() {
   }
 }
 
+/* 贴底判定：用户已在底部附近（正在跟读）才把视口拉到最底，
+ * 上滚回看历史时不打扰。务必在追加内容「之前」判定，追加后再滚。 */
+function nearBottom(log) {
+  return log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+}
+
 function liveRender(b) {
   const log = $("chat-log");
-  const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+  const stick = nearBottom(log);
   if (b.kind === "text") b.body.replaceChildren(formatText(b.shown));
   else b.body.textContent = b.shown; // thinking 与最终渲染一致，保持纯文本
   if (stick) log.scrollTop = log.scrollHeight;
@@ -166,6 +188,7 @@ function liveRender(b) {
 function handleChatMsg(msg) {
   switch (msg.type) {
     case "user_message":
+      noteThreadTitle(msg.text);
       appendChat(renderUserMsg(msg.text));
       break;
     case "agent_event":
@@ -174,8 +197,10 @@ function handleChatMsg(msg) {
     case "agent_raw":
       appendChat(chip(msg.text));
       break;
-    case "divider":
-      appendChat(divider());
+    case "thread":
+      // 另一个页面切换 / 新建 / 删除了对话线程；本端发起的操作已通过
+      // thread-changed 重载过（S.thread 已对上），据此跳过重复加载
+      if (!S.thread || S.thread.id !== msg.id) reloadThread();
       break;
     case "status":
       setChatStatus(msg.state, msg.error);
@@ -188,20 +213,24 @@ function handleChatMsg(msg) {
 }
 
 /* 发送按钮双态：空闲=琥珀纸飞机发送，执行中=红色 ■ 中断。
- * 图标是按钮里的两个 SVG，靠 .stop class 切换显隐，别用 textContent 覆盖 */
+ * 图标是按钮里的两个 SVG，靠 .stop class 切换显隐，别用 textContent 覆盖。
+ * 执行进度不再用输入框上方的浮动胶囊，而是在对话流末尾挂一枚会动的品牌头像
+ * + 阶段文案（详见 ensureWorking）。 */
 export function setChatStatus(state, error) {
   S.chatState = state === "running" ? "running" : "idle";
   if (S.chatState !== "running") streamSettle();
-  const bar = $("chat-status");
   const send = $("chat-send");
   if (state === "running") {
-    bar.classList.remove("hidden");
-    $("chat-status-text").textContent = "Agent 执行中…";
+    // 思考指示接在末尾，若用户正跟读（贴底）就滚出来，免得藏在折叠线下方
+    const log = $("chat-log");
+    const stick = nearBottom(log);
+    ensureWorking();
+    if (stick) log.scrollTop = log.scrollHeight;
     send.classList.add("stop");
     send.title = "中断";
     send.disabled = false;
   } else {
-    bar.classList.add("hidden");
+    clearWorking();
     send.classList.remove("stop");
     send.title = "发送";
     send.disabled = chatImgs.uploading > 0;
@@ -262,19 +291,6 @@ export function sendChat() {
   autoGrow();
   resetChatImgs();
 }
-
-/* 新对话：清掉服务端记录的 provider 会话 id，下一轮不再 resume。
- * 分割线由服务端广播回来（所有打开的页面同步），WS 断开时才本地补画。 */
-$("btn-chat-reset").addEventListener("click", async () => {
-  const sess = S.current; if (!sess) return;
-  if (S.chatState === "running") { toast("Agent 执行中，请先等待完成或中断", true); return; }
-  if (!window.confirm("开启新对话？之后的消息不再携带此前上下文（历史仍可回看）。")) return;
-  try {
-    const res = await api(`/sessions/${sess.id}/chat/reset`, { method: "POST" });
-    if (!res.reset) { toast("当前已是新对话"); return; }
-    if (!S.chatWS || S.chatWS.readyState !== WebSocket.OPEN) appendChat(divider());
-  } catch (e) { alert("重置失败：" + e.message); }
-});
 
 function sendInterrupt() {
   if (S.chatWS && S.chatWS.readyState === WebSocket.OPEN) {
@@ -644,26 +660,39 @@ for (const c of document.querySelectorAll(".hero-pill")) {
   });
 }
 
-/* ---------------- 历史对话 ---------------- */
+/* ---------------- 历史对话（当前线程） ---------------- */
+
+let histGen = 0; // 并发重载守卫：作废在途的旧加载，防止内容追加进新视图
 
 export async function loadHistory() {
   const sess = S.current; if (!sess) return;
+  const gen = ++histGen;
   S.histLoading = true;
   updateHero(); // 中央显示加载态，加载完一次性呈现，避免先闪新会话引导页
   try {
-    // 服务端按「新对话」分割线切段：entries 只含最近一段，更早的段折叠
-    // 在顶部按需加载（chat-archive.js），对话再多首屏也只渲染最后一段
-    const { entries, archives } = await api(`/sessions/${sess.id}/history`);
-    if (S.current !== sess) return; // 加载途中切走了
-    if (archives && archives.length) $("chat-log").appendChild(archiveList(sess.id, archives));
+    // 只返回当前对话线程的全文；其余线程在历史对话面板（chat-threads.js）
+    // 里列表展示，切换后经 reloadThread 重新加载
+    const { entries, thread } = await api(`/sessions/${sess.id}/history`);
+    if (S.current !== sess || gen !== histGen) return; // 加载途中切走了
+    setThreadBar(thread);
     for (const raw of entries) for (const n of renderEntry(raw)) appendChat(n);
   } catch (_) {}
-  if (S.current !== sess) return;
+  if (S.current !== sess || gen !== histGen) return;
   S.histLoading = false;
   updateHero();
   const log = $("chat-log");
   log.scrollTop = log.scrollHeight; // 隐藏期间无法定位，呈现后直接落底
 }
+
+/* 对话线程发生切换（本端操作经 bus，或其它页面广播）后重载对话流 */
+export async function reloadThread() {
+  if (!S.current) return;
+  histGen++; // 立刻作废在途加载，clear 之后它们不得再往里追加
+  $("chat-log").replaceChildren();
+  setThreadBar(null);
+  await loadHistory();
+}
+bus.addEventListener("thread-changed", () => { reloadThread(); });
 
 /* Agent 回合分组：两条用户消息之间的 agent 输出（文字/工具行/思考…）
  * 归入同一个 .turn 容器，左侧挂品牌头像（OpenWebUI 式对话流）。
@@ -676,7 +705,7 @@ function turnBody() {
   turn.className = "turn";
   const av = document.createElement("span");
   av.className = "turn-avatar";
-  av.appendChild(agentAvatar(S.current ? S.current.agent : "claude", { icon: 14 }));
+  av.appendChild(agentIcon(S.current ? S.current.agent : "claude", 24));
   const body = document.createElement("div");
   body.className = "turn-body";
   turn.append(av, body);
@@ -688,7 +717,7 @@ function turnBody() {
 export function appendChat(node) {
   if (!node) return;
   const log = $("chat-log");
-  const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+  const stick = nearBottom(log);
   const breaks = node.classList.contains("user") || node.classList.contains("chat-divider");
   if (breaks) {
     agentTurn = null;
@@ -696,6 +725,44 @@ export function appendChat(node) {
   } else {
     turnBody().appendChild(node);
   }
+  ensureWorking(); // 新内容后把执行指示重新压回末尾（仅运行中生效）
   updateHero();
   if (stick) log.scrollTop = log.scrollHeight;
+}
+
+/* ---------------- 执行指示 ----------------
+ * 仿 Claude 桌面端的「Contemplating」：运行中在对话流末尾挂一枚会动的品牌
+ * 头像 + 阶段文案，取代旧的输入框上方浮动胶囊。头像动画由 chat.css 按品牌区分
+ * （Claude 星芒脉动 / Codex 图标转圈），文案随阶段更新（思考 / 生成 / 运行工具…）。 */
+let workingEl = null;
+
+function ensureWorking() {
+  if (S.chatState !== "running") return;
+  if (!workingEl) {
+    const agent = S.current ? S.current.agent : "claude";
+    const turn = document.createElement("div");
+    turn.className = "turn working";
+    const av = document.createElement("span");
+    av.className = "turn-avatar";
+    av.appendChild(agentIcon(agent, 24));
+    const body = document.createElement("div");
+    body.className = "turn-body";
+    const label = document.createElement("span");
+    label.className = "work-label";
+    label.textContent = agent === "codex" ? "推理中…" : "思考中…";
+    body.append(label);
+    turn.append(av, body);
+    workingEl = turn;
+  }
+  $("chat-log").appendChild(workingEl); // 移到末尾（已在 DOM 中则只是重新排位）
+}
+
+function clearWorking() {
+  if (workingEl) workingEl.remove();
+  workingEl = null;
+}
+
+function setWorkingLabel(text) {
+  const l = workingEl && workingEl.querySelector(".work-label");
+  if (l) l.textContent = text;
 }

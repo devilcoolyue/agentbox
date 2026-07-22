@@ -4,7 +4,8 @@
  *   unauthorized             — api 收到 401
  *   data-updated             — refreshAll 拉到新的 sessions/accounts
  *   open-session  {detail}   — 侧栏点击会话卡片
- *   open-settings            — 侧栏点击系统设置 */
+ *   open-settings            — 侧栏点击系统设置
+ *   thread-changed           — 对话线程切换/新建/删除，chat.js 重载对话流 */
 "use strict";
 
 export const bus = new EventTarget();
@@ -31,6 +32,7 @@ export const S = {
   refreshTimer: null,
   actionBusy: false,  // 启动/停止执行中，期间锁住生命周期按钮
   chatState: "idle",  // "idle" | "running"，决定发送按钮是发送还是中断
+  thread: null,       // 当前对话线程元数据（/history 返回；空的新对话为 null）
   pick: { model: "", effort: "" }, // 当前会话的模型/思考强度选择（"" = 默认）
   models: null,       // 服务端下发的可选模型表 { claude: [{id,label}], codex: [...] }
   histLoading: false, // 历史对话加载中：中央转圈，不闪新会话引导页

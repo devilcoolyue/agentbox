@@ -8,6 +8,7 @@ import { api } from "./api.js";
 import { refreshAll } from "./data.js";
 import { showView, renderSidebar, updateTopbarTitle } from "./shell.js";
 import { chatTeardown, resetChatImgs, loadPick, updateHero, loadHistory, connectChat } from "./chat.js";
+import { setThreadBar, closeThreadPanel } from "./chat-threads.js";
 import { svgIcon } from "./chat-render.js";
 import { termTeardown, termDisconnect } from "./term.js";
 import { resetTree, loadFiles } from "./files.js";
@@ -27,6 +28,7 @@ export async function openSession(sess) {
   $("empty").classList.add("hidden");
   $("workbench").classList.remove("hidden");
   $("chat-log").replaceChildren();
+  setThreadBar(null); // 切换会话时先清掉上一个会话的线程标题
   S.histLoading = true; // loadHistory 还没跑之前也不要闪引导页
   updateHero();
   setTab("chat");
@@ -63,6 +65,7 @@ export function renderHead() {
 function closeChannels() {
   chatTeardown();
   termTeardown();
+  closeThreadPanel();
 }
 
 bus.addEventListener("open-session", (e) => openSession(e.detail));

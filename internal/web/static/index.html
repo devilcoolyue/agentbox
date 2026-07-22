@@ -16,6 +16,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5.6 12 1.2 5.8 4.9 2.9 9.9 9.9Z' fill='%23e8a33d'/%3E%3Cpath d='M26.4 12 30.8 5.8 27.1 2.9 22.1 9.9Z' fill='%23e8a33d'/%3E%3Crect x='5' y='11.4' width='22' height='16.2' rx='3' fill='%23e8a33d'/%3E%3Crect x='8' y='11.4' width='16' height='6.6' rx='1.8' fill='%23241803'/%3E%3Crect x='10.6' y='12.7' width='4' height='4' rx='1.3' fill='%23ffc76b'/%3E%3Crect x='17.4' y='12.7' width='4' height='4' rx='1.3' fill='%23ffc76b'/%3E%3C/svg%3E">
 <!-- {{BUILD}} 由服务端替换为资源内容哈希：URL 随内容变化，穿透 CF/浏览器缓存 -->
 <link rel="stylesheet" href="/_v/{{BUILD}}/vendor/xterm.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/vendor/katex/katex.min.css">
 <!-- 模块化样式：base 先行（令牌/通用组件），其余按功能域拆分 -->
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/base.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/shell.css">
@@ -143,6 +144,10 @@
       <div id="session-list" class="session-list"></div>
 
       <div class="side-foot">
+        <div id="conn-latency" class="conn-latency" title="到服务器的连接延迟">
+          <span id="conn-dot" class="t-dot"></span>
+          <span id="conn-text" class="conn-text mono">连接中…</span>
+        </div>
         <button id="btn-theme" class="side-item" data-theme-toggle><span class="glyph" data-theme-ico></span><span id="theme-label">浅色主题</span></button>
         <button id="btn-tunnel" class="side-item hidden"><span class="glyph">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -198,6 +203,13 @@
 
           <!-- 对话 -->
           <section id="tab-chat" class="pane">
+            <!-- 对话切换栏：当前对话标题（点击打开历史面板）+ 新对话入口 -->
+            <div class="thread-bar">
+              <button id="btn-threads" class="thread-cur" title="历史对话：查看、切换并继续之前的对话">
+                <span id="thread-title" class="t">新对话</span>
+              </button>
+              <button id="btn-thread-new" class="thread-new" title="开启新对话（当前对话保留在历史中，可随时切回）">＋ 新对话</button>
+            </div>
             <div id="chat-log" class="chat-log"></div>
             <div id="chat-loading" class="loading-block hidden">
               <span class="spin"></span><span>正在加载历史对话…</span>
@@ -221,9 +233,6 @@
               </div>
             </div>
             <div class="composer-wrap">
-              <div id="chat-status" class="chat-status hidden">
-                <span class="spin"></span><span id="chat-status-text">Agent 执行中…</span>
-              </div>
               <div class="composer">
                 <div id="chat-attach" class="chat-attach hidden"></div>
                 <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）"></textarea>
@@ -231,11 +240,6 @@
                   <button id="btn-attach" class="icon-btn" title="添加附件（图片或文件，48 小时后过期）">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
                       <path d="M9 3.75v10.5M3.75 9h10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                    </svg>
-                  </button>
-                  <button id="btn-chat-reset" class="icon-btn" title="新对话：之后的消息不再携带此前上下文，历史仍可回看">
-                    <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                      <path d="M9.75 3.75H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h7.5a1.5 1.5 0 0 0 1.5-1.5V8.25M13.06 2.94a1.5 1.5 0 0 1 2.12 2.12L9.62 10.62l-2.87.75.75-2.87Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                   </button>
                   <button id="btn-voice" class="icon-btn" title="语音输入：点击说话，再点一次停止并发送">
@@ -760,10 +764,24 @@
   </form>
 </dialog>
 
+<!-- 历史对话：右侧滑出面板（chat-threads.js）。每条对话独立上下文，可切换续聊 -->
+<div id="tp-scrim" class="tp-scrim"></div>
+<aside id="thread-panel" class="thread-panel" aria-label="历史对话" aria-hidden="true">
+  <header class="tp-head">
+    <b>历史对话</b>
+    <span id="tp-count" class="tp-count mono"></span>
+    <button id="tp-close" class="dlg-x" aria-label="关闭">✕</button>
+  </header>
+  <button id="tp-new" class="btn btn-primary tp-new">＋ 开启新对话</button>
+  <div id="tp-list" class="tp-list"></div>
+  <p class="tp-hint">每条对话是独立的上下文，切换后接着聊，互不串扰。</p>
+</aside>
+
 <div id="toast" class="toast"></div>
 
 <script src="/_v/{{BUILD}}/vendor/xterm.js"></script>
 <script src="/_v/{{BUILD}}/vendor/addon-fit.js"></script>
+<script src="/_v/{{BUILD}}/vendor/katex/katex.min.js"></script>
 <script type="module" src="/_v/{{BUILD}}/js/main.js"></script>
 </body>
 </html>

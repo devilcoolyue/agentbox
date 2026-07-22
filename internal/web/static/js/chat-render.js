@@ -20,6 +20,8 @@ const ICONS = {
   play: { d: "M6.5 3.5 20 12 6.5 20.5Z", box: 24, width: 1.8 },
   stop: { d: "M5.5 5.5h13v13h-13Z", box: 24, width: 1.8 },
   trash: { d: "M3 6h18M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6M5.5 6l1 14.5h11L18.5 6", box: 24, width: 1.8 },
+  /* 历史对话入口：表盘 + 指针 */
+  clock: { d: "M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18ZM12 7.2v5l3.4 2", box: 24, width: 1.8 },
 };
 
 export function svgIcon(name, size = 13) {
@@ -220,6 +222,51 @@ function codeBlock(lang, body) {
   return box;
 }
 
+/* ================= 数学公式（KaTeX） =================
+ * 块级 $$…$$ / \[…\]（可跨行）在 renderBlocks 里成段渲染，行内 $…$ / \(…\)
+ * 在 appendInline 里先于其它行内语法抽出。KaTeX 未加载或解析失败时回退成
+ * 原样文本（throwOnError:false 让它把错误红字画在原位而不抛异常）。 */
+function renderMath(tex, display) {
+  const el = document.createElement(display ? "div" : "span");
+  el.className = display ? "math-display" : "math-inline";
+  const k = typeof window !== "undefined" ? window.katex : null;
+  if (k) {
+    try {
+      k.render(tex, el, { displayMode: display, throwOnError: false });
+      return el;
+    } catch (_) { /* 回退到原样文本 */ }
+  }
+  el.textContent = (display ? "$$" : "$") + tex + (display ? "$$" : "$");
+  return el;
+}
+
+/* lines[i] 若是块级公式起始（$$ 或 \[），渲染并返回消费到的下一行下标；
+ * 否则返回 -1，交回普通块处理。未找到闭合分隔符时同样返回 -1（按普通文本处理）。 */
+function tryDisplayMath(parent, lines, i, flush) {
+  const trimmed = lines[i].trim();
+  const open = trimmed.startsWith("$$") ? "$$" : trimmed.startsWith("\\[") ? "\\[" : "";
+  if (!open) return -1;
+  const close = open === "$$" ? "$$" : "\\]";
+  const rest = trimmed.slice(open.length);
+  const inline = rest.indexOf(close);
+  if (inline !== -1) { // 单行 $$ … $$
+    const tex = rest.slice(0, inline).trim();
+    if (tex) { flush(); parent.appendChild(renderMath(tex, true)); }
+    return i + 1;
+  }
+  const buf = rest ? [rest] : [];
+  for (let j = i + 1; j < lines.length; j++) {
+    const ci = lines[j].indexOf(close);
+    if (ci === -1) { buf.push(lines[j]); continue; }
+    const head = lines[j].slice(0, ci);
+    if (head.trim()) buf.push(head);
+    flush();
+    parent.appendChild(renderMath(buf.join("\n").trim(), true));
+    return j + 1;
+  }
+  return -1; // 没有闭合，当普通文本
+}
+
 const LIST_ITEM_RE = /^\s*(?:[-*+]|\d+[.)])\s+/;
 
 function renderBlocks(parent, text) {
@@ -236,6 +283,8 @@ function renderBlocks(parent, text) {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
+    const dm = tryDisplayMath(parent, lines, i, flush);
+    if (dm !== -1) { i = dm; continue; }
     let m;
     if ((m = line.match(/^(#{1,4})\s+(.*)$/))) {
       flush();
@@ -333,7 +382,23 @@ function renderTable(parent, lines, i) {
 /* 行内：`code`、**粗**、*斜*、~~删除~~、[文字](http://…)、裸链接 */
 const INLINE_RE = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|~~([^~\n]+)~~|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()"']+)/g;
 
+/* 行内数学：\(…\) 或 $…$（$ 后不接空白、闭合 $ 前不接空白、闭合后不接数字，
+ * 避开 $$ 与转义 \$，以降低把货币金额误判成公式的概率）。先抽公式，其余文字
+ * 再交给 appendInlineFmt 走常规行内语法。 */
+const INLINE_MATH_RE = /\\\(([\s\S]+?)\\\)|(?<![\\$])\$(?!\s)([^$\n]+?)(?<!\s)\$(?!\$)(?!\d)/g;
+
 function appendInline(parent, text) {
+  const str = String(text);
+  let last = 0;
+  for (const m of str.matchAll(INLINE_MATH_RE)) {
+    if (m.index > last) appendInlineFmt(parent, str.slice(last, m.index));
+    parent.appendChild(renderMath(m[1] != null ? m[1] : m[2], false));
+    last = m.index + m[0].length;
+  }
+  appendInlineFmt(parent, str.slice(last));
+}
+
+function appendInlineFmt(parent, text) {
   const str = String(text);
   let last = 0;
   for (const m of str.matchAll(INLINE_RE)) {
@@ -368,8 +433,8 @@ function appendInline(parent, text) {
   if (last < str.length) parent.appendChild(document.createTextNode(str.slice(last)));
 }
 
-/* 一条落盘的 logEntry（chat.jsonl 行）→ 节点数组。
- * 历史加载（chat.js）与折叠段按需渲染（chat-archive.js）共用同一入口。 */
+/* 一条落盘的 logEntry（线程 jsonl 行）→ 节点数组（历史加载入口）。
+ * chat_session 等簿记类条目对用户不可见，落到兜底分支返回空。 */
 export function renderEntry(raw) {
   if (!raw || typeof raw !== "object") return [];
   if (raw.kind === "user") return [renderUserMsg(raw.text)];
@@ -453,9 +518,8 @@ export function renderEvent(ev) {
   const out = [];
 
   // Claude Code 事件
-  if (ev.type === "system" && ev.subtype === "init") {
-    out.push(chip(`▸ 会话就绪 · ${ev.model || ""} · ${(ev.session_id || "").slice(0, 8)}`));
-    return out;
+  if (ev.type === "system") {
+    return out; // 所有 system 事件（init 及其它 subtype）均属系统信息，对用户无意义，一律不展示
   }
   if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
     for (const block of ev.message.content) {
@@ -486,8 +550,7 @@ export function renderEvent(ev) {
 
   // Codex 事件（0.14x 的 thread/turn/item 结构）
   if (ev.type === "thread.started") {
-    out.push(chip(`▸ 会话就绪 · ${(ev.thread_id || "").slice(0, 8)}`));
-    return out;
+    return out; // 同 Claude init：会话就绪属 system 信息，不展示
   }
   if (ev.type === "item.started" && ev.item) {
     if (ev.item.type === "command_execution") {

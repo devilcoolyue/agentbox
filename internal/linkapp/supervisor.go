@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
+
+	"github.com/hashicorp/yamux"
 
 	"agentbox/internal/tunnel"
 )
@@ -28,6 +31,9 @@ type Status struct {
 	Detail string      `json:"detail"`
 	Since  int64       `json:"since"` // unix millis the current session came online, 0 if not online
 	Maps   []MapStatus `json:"maps"`
+	// PingMS is the tunnel round-trip latency in milliseconds (one decimal), or
+	// -1 when offline or not yet sampled.
+	PingMS float64 `json:"ping_ms"`
 }
 
 // Supervisor owns the tunnel's lifecycle: one connection attempt loop that can
@@ -47,6 +53,8 @@ type Supervisor struct {
 	detail  string
 	since   time.Time
 	maps    []MapStatus
+	ping    time.Duration // last measured tunnel round-trip
+	pingOK  bool          // a sample has landed for the current online session
 	running bool
 	cancel  context.CancelFunc
 	done    chan struct{}
@@ -74,9 +82,12 @@ func (s *Supervisor) MirrorTo(fn func(string)) {
 func (s *Supervisor) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := Status{State: s.state, Detail: s.detail, Maps: s.maps}
+	st := Status{State: s.state, Detail: s.detail, Maps: s.maps, PingMS: -1}
 	if s.state == StateOnline && !s.since.IsZero() {
 		st.Since = s.since.UnixMilli()
+		if s.pingOK {
+			st.PingMS = math.Round(float64(s.ping.Microseconds())/100) / 10
+		}
 	}
 	return st
 }
@@ -136,7 +147,7 @@ func (s *Supervisor) run(ctx context.Context, cfg Config, wl tunnel.Whitelist, m
 	defer func() {
 		s.mu.Lock()
 		s.running, s.cancel, s.done = false, nil, nil
-		s.since, s.maps = time.Time{}, nil
+		s.since, s.maps, s.pingOK = time.Time{}, nil, false
 		// An auth failure is the reason we stopped — keep it on screen instead
 		// of overwriting it with a bland "stopped".
 		if s.state != StateAuthFailed {
@@ -216,9 +227,15 @@ func (s *Supervisor) serveOnce(ctx context.Context, link *tunnel.Link, cfg Confi
 	}
 
 	s.mu.Lock()
-	s.state, s.detail, s.since, s.maps = StateOnline, "", time.Now(), mapStatus
+	s.state, s.detail, s.since, s.maps, s.pingOK = StateOnline, "", time.Now(), mapStatus, false
 	s.mu.Unlock()
 	s.log.Printf("隧道已建立，容器现在可以访问你的内网了")
+
+	// Sample tunnel latency alongside the live session; the loop dies when the
+	// session drops (Ping errors) or the connection winds down (ctx cancel).
+	pingCtx, cancelPing := context.WithCancel(ctx)
+	defer cancelPing()
+	go s.pingLoop(pingCtx, sess)
 
 	// Stopping the panel must unblock Serve, which is parked in AcceptStream.
 	stop := context.AfterFunc(ctx, func() { _ = sess.Close() })
@@ -226,11 +243,33 @@ func (s *Supervisor) serveOnce(ctx context.Context, link *tunnel.Link, cfg Confi
 	return link.Serve(sess)
 }
 
+// pingLoop measures the tunnel round-trip over the live yamux session and
+// records it for the panel. It samples immediately, then every 10s, and returns
+// once the session goes away or ctx is cancelled.
+func (s *Supervisor) pingLoop(ctx context.Context, sess *yamux.Session) {
+	for {
+		rtt, err := sess.Ping()
+		if err != nil {
+			return // session going away; the serve loop surfaces the drop
+		}
+		s.mu.Lock()
+		if s.state == StateOnline {
+			s.ping, s.pingOK = rtt, true
+		}
+		s.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+	}
+}
+
 func (s *Supervisor) setState(st State, detail string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state, s.detail = st, detail
 	if st != StateOnline {
-		s.since, s.maps = time.Time{}, nil
+		s.since, s.maps, s.pingOK = time.Time{}, nil, false
 	}
 }

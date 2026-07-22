@@ -140,6 +140,7 @@ func (s *Server) Run() error {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/login", s.handleLogin)
+	mux.HandleFunc("GET /api/ping", s.handlePing)
 	mux.Handle("POST /api/logout", s.auth(http.HandlerFunc(s.handleLogout)))
 	mux.Handle("GET /api/me", s.auth(http.HandlerFunc(s.handleMe)))
 	mux.Handle("POST /api/me/password", s.auth(http.HandlerFunc(s.handleChangePassword)))
@@ -174,7 +175,12 @@ func (s *Server) Run() error {
 	mux.Handle("GET /api/sessions/{id}/history", s.auth(s.withSession(s.handleHistory)))
 	mux.Handle("GET /api/sessions/{id}/term", s.auth(s.withSession(s.handleTermWS)))
 	mux.Handle("GET /api/sessions/{id}/chat", s.auth(s.withSession(s.handleChatWS)))
-	mux.Handle("POST /api/sessions/{id}/chat/reset", s.auth(s.withSession(s.handleChatReset)))
+	mux.Handle("GET /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadList)))
+	mux.Handle("POST /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadNew)))
+	mux.Handle("POST /api/sessions/{id}/chat/threads/{tid}/activate", s.auth(s.withSession(s.handleThreadActivate)))
+	mux.Handle("DELETE /api/sessions/{id}/chat/threads/{tid}", s.auth(s.withSession(s.handleThreadDelete)))
+	// 旧入口：语义已并入「新建对话线程」，保留路由兼容尚未刷新的页面
+	mux.Handle("POST /api/sessions/{id}/chat/reset", s.auth(s.withSession(s.handleThreadNew)))
 	mux.Handle("GET /api/tunnel", s.auth(http.HandlerFunc(s.handleTunnelWS)))
 	mux.Handle("GET /api/tunnel/status", s.auth(http.HandlerFunc(s.handleTunnelStatus)))
 	mux.Handle("POST /api/tunnel/pair", s.auth(http.HandlerFunc(s.handleTunnelPair)))
@@ -338,6 +344,15 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	u := reqUser(r)
 	writeJSON(w, http.StatusOK, map[string]any{"user": u.Name, "role": u.Role, "models": s.cfg.GetModels()})
+}
+
+// handlePing answers a tiny, unauthenticated request the client uses to gauge
+// round-trip latency to the server. no-store keeps any proxy (Cloudflare) or the
+// browser from serving it from cache, which would turn the measurement into
+// fiction; the client also appends a cache-busting query.
+func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type acctView struct {

@@ -54,6 +54,9 @@ function render() {
 function subtitle(st) {
   if (st.state === "online") {
     const parts = ["已连接 " + uptime(Date.now() - st.since)];
+    if (typeof st.ping_ms === "number" && st.ping_ms >= 0) {
+      parts.push("延迟 " + fmtLatency(st.ping_ms));
+    }
     for (const m of st.maps || []) {
       parts.push("映射 " + m.port + (m.ok ? "" : "（失败：" + m.detail + "）"));
     }
@@ -274,6 +277,13 @@ function hostOf(url) {
 function splitMap(spec) {
   const i = (spec || "").indexOf("=");
   return i < 0 ? [spec, ""] : [spec.slice(0, i), spec.slice(i + 1)];
+}
+
+/* 延迟展示：<1ms 收成「<1」，个位数保留一位小数，其余取整 */
+function fmtLatency(ms) {
+  if (ms < 1) return "<1 ms";
+  if (ms < 10) return ms.toFixed(1) + " ms";
+  return Math.round(ms) + " ms";
 }
 
 function uptime(ms) {

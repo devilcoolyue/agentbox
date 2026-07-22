@@ -7,6 +7,7 @@ import { S, bus } from "./state.js";
 import { $, btnBusy, btnDone } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll, startPolling } from "./data.js";
+import { startPing } from "./ping.js";
 
 export function showLogin(err) {
   $("app").classList.add("hidden");
@@ -32,6 +33,7 @@ export async function tryEnter() {
   $("app").classList.remove("hidden");
   await refreshAll();
   startPolling();
+  startPing();
 }
 
 bus.addEventListener("unauthorized", () => showLogin("登录已过期，请重新登录"));

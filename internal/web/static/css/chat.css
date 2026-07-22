@@ -2,12 +2,28 @@
  * 结构：用户消息=右侧圆角气泡；agent 回合=左侧品牌头像 + 内容列（.turn，
  * 由 chat.js 分组）；工具调用/状态为无框细行，不打断阅读流。 */
 
-/* 对话流与输入区共用一条居中栏（内容宽度封顶 800px） */
+/* 对话流与输入区共用一条居中栏（内容宽度封顶 800px）。
+ * position:relative 必须保留：KaTeX 的无障碍 MathML 节点是 position:absolute
+ * 的隐藏元素，若最近的定位祖先在滚动容器之外（.pane），长对话里深处的公式
+ * 会以内容坐标锚出去，把整页撑出一条看不见的滚动区（双滚动条）。 */
 .chat-log {
+  position: relative;
   flex: 1; overflow-y: auto;
   padding: 24px max(20px, calc((100% - 800px) / 2)) 8px;
   display: flex; flex-direction: column; gap: 14px;
   scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+  /* 上下边界虚化：对话内容在贴近「对话切换栏」和「输入卡」时渐隐，
+   * 与上下两栏之间留出一道柔和的分界，视觉上把中间的对话流单独划出来。
+   * 顶部渐隐更长（旧内容滚上去时溶入切换栏），底部只轻描一笔，
+   * 避免流式输出时最新一行被压暗影响阅读。 */
+  --fade-top: 30px;
+  --fade-bottom: 14px;
+  -webkit-mask-image: linear-gradient(to bottom,
+    transparent 0, #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)), transparent 100%);
+  mask-image: linear-gradient(to bottom,
+    transparent 0, #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)), transparent 100%);
 }
 .chat-log::-webkit-scrollbar { width: 8px; }
 .chat-log::-webkit-scrollbar-track { background: transparent; }
@@ -37,8 +53,9 @@
 
 /* ---- Agent 回合：品牌头像 + 内容列 ---- */
 .turn { display: flex; gap: 12px; align-items: flex-start; }
-.turn-avatar { flex: none; margin-top: 1px; }
-.turn-avatar .agent-avatar { width: 26px; height: 26px; border-radius: 50%; }
+/* 回合头像用原始品牌 logo（不套圆圈瓦片），略放大，色随品牌 */
+.turn-avatar { flex: none; margin-top: 2px; }
+.turn-avatar .agent-ico { width: 24px; height: 24px; }
 .turn-body {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; align-items: stretch; gap: 8px;
@@ -58,6 +75,16 @@
 .md-h3 { font-size: 15.5px; }
 .md-h4 { font-size: 15px; color: var(--muted); }
 .md-hr { height: 1px; background: var(--line); margin: 14px 0; }
+
+/* 数学公式（KaTeX）：字号与正文协调，颜色随文本；块级居中，过宽时自身横向滚动 */
+.katex { font-size: 1.05em; }
+.math-inline { white-space: normal; }
+.math-display {
+  margin: 12px 0; padding: 2px 0;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+}
+.math-display .katex-display { margin: 0; }
 .md-list { margin: 0 0 10px; padding-left: 22px; }
 .md-list li { margin: 3px 0; white-space: pre-wrap; }
 .md-list li::marker { color: var(--muted); }
@@ -290,56 +317,112 @@ details.think.streaming .think-body::after {
 .msg.user .chat-thumb:hover { border-color: var(--amber); }
 .img-gone { color: var(--muted); font-size: 12px; font-family: var(--mono); }
 
-/* ---- 历史对话折叠列表：更早的对话段收成一行，点击按需加载（chat-archive.js）。
- * 行 = 展开箭头 + 起始时间 + 轮数徽章 + 首条消息预览；展开后内容渲染进
- * 行下方的内衬区，与实时对话流同一套气泡/回合样式。 ---- */
-.arch-list {
-  display: flex; flex-direction: column; gap: 8px;
-  margin-bottom: 10px;
-}
-.arch-list .chat-divider { margin: 0 0 4px; }
-.arch {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.arch-head {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; text-align: left;
-  background: none; border: none;
-  color: var(--muted);
-  font-size: 13px; line-height: 1.5;
-  padding: 9px 14px 9px 11px;
-}
-.arch-head:hover { background: var(--panel); color: var(--text); }
-.arch-caret {
-  display: inline-flex; flex: none;
-  color: var(--muted);
-  transition: transform 0.15s ease;
-}
-.arch-head:hover .arch-caret { color: var(--amber); }
-.arch.open .arch-caret { transform: rotate(90deg); }
-.arch-caret .spin { width: 11px; height: 11px; }
-.arch-time { flex: none; font-size: 11.5px; }
-.arch-cnt {
+/* ---- 对话切换栏：当前对话标题（历史面板入口）+ 新对话（chat-threads.js） ---- */
+.thread-bar {
   flex: none;
-  font-size: 11px;
-  border: 1px solid var(--line); border-radius: 999px;
-  padding: 0 8px;
-  opacity: 0.85;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px max(20px, calc((100% - 800px) / 2)) 0;
 }
-.arch-preview {
-  flex: 1; min-width: 0;
+.thread-cur {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-width: 0;
+  background: none; border: none; border-radius: 999px;
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 6px 12px;
+}
+.thread-cur:hover { color: var(--text); background: var(--panel); }
+.thread-cur .t {
+  min-width: 0; max-width: 52vw;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.arch.open .arch-head { background: var(--panel); border-bottom: 1px solid var(--line); }
-.arch-body {
-  display: flex; flex-direction: column; gap: 14px;
-  padding: 16px 14px 18px;
-  background: color-mix(in srgb, var(--panel) 38%, transparent);
+.thread-cur svg { flex: none; display: block; }
+.thread-new {
+  flex: none; margin-left: auto;
+  background: none;
+  border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 5px 13px;
 }
-.arch-body > * { min-width: 0; flex-shrink: 0; }
-.arch-body > .msg.user:first-child { margin-top: 0; }
+.thread-new:hover { color: var(--text); border-color: var(--amber-dim); background: var(--panel); }
+
+/* ---- 历史对话面板：右侧滑出，列表可切换 / 新建 / 删除 ---- */
+.tp-scrim {
+  position: fixed; inset: 0; z-index: 79;
+  background: var(--scrim);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.tp-scrim.show { opacity: 1; pointer-events: auto; }
+.thread-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 80;
+  width: min(360px, 92vw);
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(102%);
+  transition: transform 0.22s ease;
+  display: flex; flex-direction: column;
+}
+.thread-panel.open { transform: none; }
+.tp-head {
+  flex: none;
+  display: flex; align-items: center; gap: 9px;
+  padding: 16px 14px 12px 18px;
+}
+.tp-head b { font-size: 15px; }
+.tp-count { flex: 1; color: var(--muted); font-size: 11.5px; }
+.tp-new { flex: none; margin: 0 16px 10px 18px; }
+.tp-list {
+  flex: 1; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 2px 10px 12px;
+  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+}
+.tp-item {
+  display: flex; align-items: stretch;
+  border-radius: 10px;
+}
+.tp-item:hover { background: var(--panel-2); }
+.tp-item.on { background: color-mix(in srgb, var(--amber) 9%, transparent); }
+.tp-open {
+  flex: 1; min-width: 0; text-align: left;
+  display: flex; flex-direction: column; gap: 3px;
+  background: none; border: none; border-radius: 10px 0 0 10px;
+  padding: 9px 4px 9px 10px;
+}
+.tp-title {
+  color: var(--text); font-size: 13.5px; line-height: 1.5;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tp-item.on .tp-title { color: var(--amber); }
+.tp-meta { color: var(--muted); font-size: 11px; }
+.tp-del {
+  flex: none; align-self: center;
+  width: 30px; height: 30px; margin: 0 6px 0 2px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: 8px;
+  color: var(--muted);
+}
+.tp-del:hover { color: var(--red); background: var(--panel); }
+/* 桌面端删除钮悬停行才浮现；触屏无悬停，常驻可见 */
+@media (hover: hover) {
+  .tp-item .tp-del { opacity: 0; }
+  .tp-item:hover .tp-del, .tp-item .tp-del:focus-visible { opacity: 1; }
+}
+.tp-empty {
+  color: var(--muted); font-size: 13px; line-height: 1.7;
+  text-align: center;
+  padding: 34px 18px;
+}
+.tp-empty .spin { margin-right: 8px; }
+.tp-hint {
+  flex: none;
+  color: var(--muted); font-size: 11.5px; line-height: 1.6;
+  border-top: 1px solid var(--line);
+  margin: 0; padding: 10px 18px 12px;
+}
 
 /* ---- 上下文分割线：新对话起点 ---- */
 .chat-divider {
@@ -351,17 +434,31 @@ details.think.streaming .think-body::after {
 .chat-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .chat-divider span { white-space: nowrap; }
 
-/* ---- 执行状态：composer 上方居中浮动小胶囊 ---- */
-.chat-status {
-  align-self: center;
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 6px 16px;
-  background: var(--panel);
-  border: 1px solid var(--line); border-radius: 999px;
-  color: var(--amber);
-  font-size: 12.5px;
-  box-shadow: var(--shadow-sm);
+/* ---- 执行指示：对话流末尾一枚会动的品牌头像 + 阶段文案（仿桌面端 Contemplating）。
+ * 沿用 .turn 布局（左头像 + 右内容列），头像按品牌做不同动画，文案在头像右侧。 ---- */
+.turn.working .turn-body { justify-content: center; }
+.work-label {
+  font-family: var(--mono); font-size: 13px;
+  color: var(--muted);
+  animation: work-breathe 1.6s ease-in-out infinite;
 }
+@keyframes work-breathe { 50% { opacity: 0.45; } }
+
+/* Claude：星芒脉动（触手伸缩跳动） */
+.turn.working .agent-ico.agent-claude {
+  transform-origin: center;
+  animation: claude-throb 1.15s ease-in-out infinite;
+}
+@keyframes claude-throb {
+  0%, 100% { transform: scale(0.82); }
+  50% { transform: scale(1.08); }
+}
+/* Codex：图标转圈 */
+.turn.working .agent-ico.agent-codex {
+  transform-origin: center;
+  animation: codex-spin 1.4s linear infinite;
+}
+@keyframes codex-spin { to { transform: rotate(360deg); } }
 
 /* ---- 输入卡：大圆角悬浮卡，聚焦时琥珀微光 ---- */
 .composer-wrap {
@@ -557,12 +654,12 @@ details.think.streaming .think-body::after {
 
 /* ---- 窄屏：收窄留白、放宽气泡、防 iOS 聚焦缩放、引导 pills 改单列 ---- */
 @media (max-width: 760px) {
-  .chat-log { padding: 14px 12px 4px; gap: 12px; }
+  .chat-log { padding: 14px 12px 4px; gap: 12px; --fade-top: 20px; --fade-bottom: 10px; }
   .msg.user { max-width: 88%; }
-  .arch-head { gap: 8px; padding: 8px 12px 8px 9px; }
-  .arch-body { padding: 12px 10px 14px; gap: 12px; }
+  .thread-bar { padding: 6px 8px 0; }
+  .thread-cur { padding: 6px 10px; }
   .turn { gap: 9px; }
-  .turn-avatar .agent-avatar { width: 24px; height: 24px; }
+  .turn-avatar .agent-ico { width: 22px; height: 22px; }
   .chip { max-width: 100%; }
   .composer-wrap { padding: 4px 10px 12px; }
   .composer { border-radius: 20px; padding: 10px 10px 8px 12px; }
@@ -577,10 +674,12 @@ details.think.streaming .think-body::after {
 
 @media (prefers-reduced-motion: reduce) {
   .msg, .turn { animation: none; }
+  .work-label, .turn.working .agent-ico { animation: none; }
   .icon-btn.rec { animation: none; }
   .hero-cursor { animation: none; }
   .msg.live-text.streaming:empty::after,
   .msg.live-text.streaming > :last-child::after,
   details.think.streaming .think-body::after { animation: none; }
-  .send-btn, .composer, .hero-pill, .cb-caret, .arch-caret { transition: none; }
+  .send-btn, .composer, .hero-pill, .cb-caret { transition: none; }
+  .thread-panel, .tp-scrim { transition: none; }
 }

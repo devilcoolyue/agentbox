@@ -18,7 +18,7 @@
 - **粘贴图片**：对话输入框和终端里都可以直接 Ctrl+V 粘贴截图。图片自动上传到 `/shared/.images/`，对话里以 `[Image #N]` 占位（发送时替换为容器内路径，Agent 用 Read 工具查看），消息里显示可点击缩略图；终端里直接注入路径文本，路径可点击弹出预览。图片保留 48 小时后由服务端自动清理。
 - **账号池（Accounts）**：配置多个订阅账号或 API Key，新建会话时选择。凭证在每次启动时从池目录同步进会话 home。
 - **两种交互**：
-  - **对话**：服务端用 `claude -p --output-format stream-json`（或 `codex exec --json`）跑无头回合，事件流经 WebSocket 推给浏览器，全部落盘到 `chat.jsonl`。
+  - **对话**：服务端用 `claude -p --output-format stream-json`（或 `codex exec --json`）跑无头回合，事件流经 WebSocket 推给浏览器。一个会话可以开多条**对话线程**（各自独立上下文，可随时切回继续），每条线程落盘为 `chats/<线程id>.jsonl` 并记录自己的 provider 会话 id 供 `--resume` 续聊；旧版单文件 `chat.jsonl` 首次访问时自动迁移。
   - **终端**：浏览器 xterm.js ⇄ WebSocket ⇄ `docker exec` PTY，可选进 Shell 或直接进 Agent 交互界面。
 
 ## 部署
@@ -175,7 +175,11 @@ PUT    /api/sessions/{id}/file      保存文件内容（body 即内容，上限
 POST   /api/sessions/{id}/images    粘贴图片上传（multipart file，上限 20MB），
                                     存入 /shared/.images/，48 小时后自动清理
 （以上文件类接口均支持 ?scope=shared 操作共享目录，默认工作区）
-GET    /api/sessions/{id}/history   对话历史（chat.jsonl 尾部）
+GET    /api/sessions/{id}/history   当前对话线程的历史（含线程元数据）
+GET    /api/sessions/{id}/chat/threads              对话线程列表（标题/时间/轮数/是否可续聊）
+POST   /api/sessions/{id}/chat/threads              开启新对话线程（旧线程保留可切回）
+POST   /api/sessions/{id}/chat/threads/{tid}/activate  切换到指定线程并恢复其上下文
+DELETE /api/sessions/{id}/chat/threads/{tid}        删除线程（删当前线程自动切到最近一条）
 WS     /api/sessions/{id}/chat      对话通道（JSON 事件）
 WS     /api/sessions/{id}/term      终端通道（二进制 PTY；?mode=shell|agent）
 GET    /api/accounts                账号池

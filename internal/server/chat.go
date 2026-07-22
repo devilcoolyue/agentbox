@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -65,6 +64,10 @@ type chatRoom struct {
 	mu      sync.Mutex
 	conns   map[*connWriter]bool
 	running bool
+
+	// fileMu guards the session's on-disk chat state: thread transcripts,
+	// the active-thread pointer and the one-time legacy migration.
+	fileMu sync.Mutex
 }
 
 func (r *chatRoom) broadcast(v any) {
@@ -119,12 +122,13 @@ func (r *chatRoom) end() {
 	r.running = false
 }
 
-// --- persistence: every chat event is appended to chat.jsonl so the UI can
-// restore the transcript after the session (or server) restarts ---
+// --- persistence: every chat event is appended to the active thread's
+// transcript (chats/<threadID>.jsonl, see threads.go) so the UI can restore
+// the conversation after the session (or server) restarts ---
 
 type logEntry struct {
 	TS    time.Time       `json:"ts"`
-	Kind  string          `json:"kind"` // "user" | "event" | "status" | "divider"
+	Kind  string          `json:"kind"` // "user" | "event" | "status" | "chat_session" | "divider"(旧)
 	Text  string          `json:"text,omitempty"`
 	Event json.RawMessage `json:"event,omitempty"`
 	State string          `json:"state,omitempty"`
@@ -136,12 +140,23 @@ func (r *chatRoom) appendLog(e logEntry) {
 	if !ok {
 		return
 	}
+	r.fileMu.Lock()
+	defer r.fileMu.Unlock()
+	if err := r.srv.migrateThreads(sess); err != nil {
+		log.Printf("chat threads %s: %v", r.sessID, err)
+		return
+	}
+	tid, err := r.srv.ensureActiveThread(sess)
+	if err != nil {
+		log.Printf("chat threads %s: %v", r.sessID, err)
+		return
+	}
 	e.TS = time.Now()
 	raw, err := json.Marshal(e)
 	if err != nil {
 		return
 	}
-	f, err := os.OpenFile(r.srv.chatLogPath(sess), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(r.srv.threadPath(sess, tid), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		log.Printf("chat log %s: %v", r.sessID, err)
 		return
@@ -297,6 +312,8 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 				if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.ChatSession = id }); err != nil {
 					log.Printf("save chat session id %s: %v", sess.ID, err)
 				}
+				// 同时落进线程文件：切走再切回来时据此恢复上下文续聊
+				r.appendLog(logEntry{Kind: "chat_session", Text: id})
 			}
 		} else {
 			r.broadcast(map[string]any{"type": "agent_raw", "text": string(line)})
@@ -326,159 +343,6 @@ func (r *chatRoom) interrupt() {
 	if err := r.srv.dock.ExecFireAndForget(ctx, sess.ContainerID, agent.InterruptCommand()); err != nil {
 		log.Printf("interrupt %s: %v", r.sessID, err)
 	}
-}
-
-// handleChatReset starts a fresh conversation thread: the provider-side
-// session id is cleared so the next turn runs without resume, and a divider
-// entry is recorded so the transcript shows where context was cut. Occupying
-// the room prevents a turn from racing in and re-saving the old id.
-func (s *Server) handleChatReset(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	room := s.chat.room(sess.ID)
-	if !room.tryBegin() {
-		writeErr(w, http.StatusConflict, "有消息正在处理中，请等待完成或先中断")
-		return
-	}
-	defer room.end()
-	cur, ok := s.store.Get(sess.ID)
-	if !ok {
-		writeErr(w, http.StatusNotFound, "session not found")
-		return
-	}
-	if cur.ChatSession == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"reset": false})
-		return
-	}
-	if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.ChatSession = "" }); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	room.appendLog(logEntry{Kind: "divider"})
-	room.broadcast(map[string]any{"type": "divider"})
-	writeJSON(w, http.StatusOK, map[string]any{"reset": true})
-}
-
-// handleHistory returns the persisted transcript. The log is split into
-// conversation segments at divider entries ("新对话" resets); the default
-// response carries only the latest segment in full plus a metadata list of
-// earlier ones (archives) that the UI shows as collapsed rows. ?seg=N fetches
-// one earlier segment's entries on demand.
-func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	const maxHistory = 2000
-	raw, err := os.ReadFile(s.chatLogPath(sess))
-	if err != nil {
-		if os.IsNotExist(err) {
-			writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "archives": []any{}})
-			return
-		}
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	segs := splitConversations(raw)
-
-	if q := r.URL.Query().Get("seg"); q != "" {
-		n, err := strconv.Atoi(q)
-		if err != nil || n < 0 || n >= len(segs) {
-			writeErr(w, http.StatusBadRequest, "无效的对话段序号")
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"entries": segEntries(segs[n], maxHistory)})
-		return
-	}
-
-	last := len(segs) - 1
-	archives := []histArchive{}
-	for i := 0; i < last; i++ {
-		if a, ok := summarizeSeg(i, segs[i]); ok {
-			archives = append(archives, a)
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"entries":  segEntries(segs[last], maxHistory),
-		"archives": archives,
-	})
-}
-
-type histEntry struct {
-	raw  json.RawMessage
-	meta struct {
-		TS   time.Time `json:"ts"`
-		Kind string    `json:"kind"`
-		Text string    `json:"text"`
-	}
-}
-
-// histArchive is the collapsed-row metadata of one earlier conversation.
-type histArchive struct {
-	Seg     int       `json:"seg"`     // index into splitConversations output
-	TS      time.Time `json:"ts"`      // when the conversation started
-	Turns   int       `json:"turns"`   // user messages in the segment
-	Preview string    `json:"preview"` // first user message, truncated
-}
-
-// splitConversations cuts chat.jsonl at divider entries. Each divider leads
-// the segment it starts, so the latest conversation still renders its
-// "新对话 · 时间" line at the top.
-func splitConversations(raw []byte) [][]histEntry {
-	segs := [][]histEntry{}
-	cur := []histEntry{}
-	for _, l := range bytes.Split(raw, []byte{'\n'}) {
-		l = bytes.TrimSpace(l)
-		if len(l) == 0 || !json.Valid(l) {
-			continue
-		}
-		e := histEntry{raw: json.RawMessage(l)}
-		_ = json.Unmarshal(l, &e.meta)
-		if e.meta.Kind == "divider" {
-			segs = append(segs, cur)
-			cur = []histEntry{e}
-			continue
-		}
-		cur = append(cur, e)
-	}
-	return append(segs, cur)
-}
-
-func segEntries(seg []histEntry, max int) []json.RawMessage {
-	if len(seg) > max {
-		seg = seg[len(seg)-max:]
-	}
-	out := make([]json.RawMessage, len(seg))
-	for i, e := range seg {
-		out[i] = e.raw
-	}
-	return out
-}
-
-// summarizeSeg builds the collapsed-row metadata; segments with nothing to
-// show (double reset, only status noise) are dropped from the list.
-func summarizeSeg(idx int, seg []histEntry) (histArchive, bool) {
-	a := histArchive{Seg: idx}
-	visible := false
-	for _, e := range seg {
-		switch e.meta.Kind {
-		case "user":
-			a.Turns++
-			visible = true
-			if a.Preview == "" {
-				a.Preview = truncRunes(e.meta.Text, 120)
-			}
-		case "event":
-			visible = true
-		}
-	}
-	if !visible {
-		return a, false
-	}
-	a.TS = seg[0].meta.TS
-	return a, true
-}
-
-func truncRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n]) + "…"
 }
 
 // tailBuffer keeps only the last max bytes written (stderr diagnostics).

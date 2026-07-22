@@ -64,6 +64,13 @@ export function fmtUptime(ms) {
   return `${m} 分钟`;
 }
 
+/* 延迟展示：<1ms 收成「<1」，个位数保留一位小数，其余取整 */
+export function fmtLatency(ms) {
+  if (ms < 1) return "<1 ms";
+  if (ms < 10) return ms.toFixed(1) + " ms";
+  return Math.round(ms) + " ms";
+}
+
 export function insertAtCursor(t, text) {
   const start = t.selectionStart ?? t.value.length;
   t.setRangeText(text, start, t.selectionEnd ?? start, "end");
