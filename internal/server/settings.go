@@ -21,6 +21,7 @@ type settingsView struct {
 	AgentImage      string                          `json:"agent_image"`
 	PermissionMode  string                          `json:"permission_mode"`
 	MaxUploadMB     int64                           `json:"max_upload_mb"`
+	IdleTimeoutMin  int64                           `json:"idle_timeout_min"`
 	Container       config.ContainerLimits          `json:"container"`
 	Models          map[string][]config.ModelOption `json:"models"`
 	Tunnel          config.TunnelConfig             `json:"tunnel"`
@@ -35,6 +36,7 @@ func (s *Server) settingsView() settingsView {
 		AgentImage:      s.cfg.GetAgentImage(),
 		PermissionMode:  s.cfg.GetPermissionMode(),
 		MaxUploadMB:     s.cfg.GetMaxUploadMB(),
+		IdleTimeoutMin:  s.cfg.GetIdleTimeoutMin(),
 		Container:       s.cfg.GetContainer(),
 		Models:          s.cfg.GetModels(),
 		Tunnel:          s.cfg.GetTunnel(),

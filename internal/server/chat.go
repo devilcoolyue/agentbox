@@ -245,6 +245,11 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 	defer r.end()
 	s := r.srv
 
+	// An in-flight turn may run for many minutes (tests/builds); hold the
+	// session so the idle reaper never stops the container mid-turn.
+	s.idle.hold(r.sessID)
+	defer s.idle.release(r.sessID)
+
 	fail := func(msg string) {
 		r.appendLog(logEntry{Kind: "status", State: "error", Error: msg})
 		r.broadcast(map[string]any{"type": "status", "state": "error", "error": msg})

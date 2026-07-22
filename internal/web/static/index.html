@@ -340,6 +340,7 @@
             <button data-sec="container">容器与资源</button>
             <button data-sec="models">模型管理</button>
             <button data-sec="security">安全与访问</button>
+            <button data-sec="monitor">运维监控</button>
             <button data-sec="about">关于</button>
           </nav>
 
@@ -398,6 +399,18 @@
                 <div class="card-foot">
                   <span class="note">对新启动的容器生效</span>
                   <button id="btn-save-container" class="btn btn-primary btn-sm">保存</button>
+                </div>
+              </div>
+              <div class="card">
+                <h3>空闲自动停机</h3>
+                <p class="card-desc">会话在无活动（没有对话进行、没有终端连接）达到设定时长后，自动停止其容器以释放内存与 CPU。工作区文件不受影响，下次对话或连终端时会自动重新拉起。设为 0 关闭自动停机。</p>
+                <label class="field">
+                  <span>空闲超时（分钟）<span class="tag live">即时生效</span></span>
+                  <input id="set-idle" type="number" min="0" step="1" class="mono">
+                </label>
+                <div class="card-foot">
+                  <span class="note">即时生效，无需重启；0 表示永不自动停机</span>
+                  <button id="btn-save-idle" class="btn btn-primary btn-sm">保存</button>
                 </div>
               </div>
             </section>
@@ -514,6 +527,45 @@
                 <div class="card-foot">
                   <span id="security-note" class="note">权限模式与上传上限即时生效；监听地址需重启 agentbox 服务</span>
                   <button id="btn-save-security" class="btn btn-primary btn-sm">保存</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- 运维监控 -->
+            <section id="sec-monitor" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2>运维监控</h2>
+                  <p>后端服务与主机的实时资源占用，以及每个会话容器的 CPU / 内存明细。开启自动刷新时每 5 秒采样一次。</p>
+                </div>
+                <label class="mon-auto"><input type="checkbox" id="mon-auto" checked> 自动刷新</label>
+              </div>
+              <div id="mon-loading" class="loading-block hidden">
+                <span class="spin"></span><span>采样资源占用中…</span>
+              </div>
+              <div id="mon-tiles" class="mon-tiles"></div>
+              <div class="card mon-card">
+                <div class="mon-card-head">
+                  <h3>会话容器</h3>
+                  <span id="mon-sub" class="note"></span>
+                </div>
+                <div class="mon-table-wrap">
+                  <table class="mon-table">
+                    <thead>
+                      <tr>
+                        <th>会话</th>
+                        <th>用户</th>
+                        <th>Agent</th>
+                        <th>状态</th>
+                        <th>启动时间</th>
+                        <th>运行时长</th>
+                        <th class="num">CPU</th>
+                        <th class="num">内存</th>
+                        <th class="num">进程</th>
+                      </tr>
+                    </thead>
+                    <tbody id="mon-tbody"></tbody>
+                  </table>
                 </div>
               </div>
             </section>

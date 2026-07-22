@@ -77,6 +77,7 @@ type Config struct {
 	AgentImage     string                   `json:"agent_image"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
+	IdleTimeoutMin int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
 	Container      ContainerLimits          `json:"container"`
 	Tunnel         TunnelConfig             `json:"tunnel"`
 	Accounts       []Account                `json:"accounts"`
@@ -97,6 +98,7 @@ func Load(path string) (*Config, error) {
 		AgentImage:     "agentbox-agent:latest",
 		PermissionMode: "bypassPermissions",
 		MaxUploadMB:    512,
+		IdleTimeoutMin: 30, // 缺省 30 分钟空闲即停机；config 里显式写 0 可关闭
 		Container: ContainerLimits{
 			MemoryMB:  2048,
 			CPUs:      2,
@@ -173,6 +175,9 @@ func (c *Config) validateLocked() error {
 	}
 	if c.MaxUploadMB < 1 {
 		return fmt.Errorf("max_upload_mb must be >= 1")
+	}
+	if c.IdleTimeoutMin < 0 {
+		return fmt.Errorf("idle_timeout_min must be >= 0 (0 关闭自动停机)")
 	}
 	switch c.PermissionMode {
 	case "default", "acceptEdits", "plan", "bypassPermissions":
@@ -257,6 +262,7 @@ type persistConfig struct {
 	AgentImage     string                   `json:"agent_image"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
+	IdleTimeoutMin int64                    `json:"idle_timeout_min"`
 	Container      ContainerLimits          `json:"container"`
 	Tunnel         TunnelConfig             `json:"tunnel"`
 	Accounts       []persistAccount         `json:"accounts"`
@@ -273,6 +279,7 @@ func (c *Config) saveLocked() error {
 		AgentImage:     c.AgentImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
+		IdleTimeoutMin: c.IdleTimeoutMin,
 		Container:      c.Container,
 		Tunnel:         c.Tunnel,
 		Accounts:       make([]persistAccount, 0, len(c.Accounts)),
@@ -349,6 +356,14 @@ func (c *Config) GetMaxUploadMB() int64 {
 	return c.MaxUploadMB
 }
 
+// GetIdleTimeoutMin returns the idle-stop threshold in minutes; 0 disables the
+// idle reaper.
+func (c *Config) GetIdleTimeoutMin() int64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.IdleTimeoutMin
+}
+
 func (c *Config) GetContainer() ContainerLimits {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -394,6 +409,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		AgentImage:     c.AgentImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
+		IdleTimeoutMin: c.IdleTimeoutMin,
 		Container:      c.Container,
 		Tunnel:         c.Tunnel,
 		Accounts:       append([]Account(nil), c.Accounts...),
@@ -415,6 +431,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.AgentImage = work.AgentImage
 	c.PermissionMode = work.PermissionMode
 	c.MaxUploadMB = work.MaxUploadMB
+	c.IdleTimeoutMin = work.IdleTimeoutMin
 	c.Container = work.Container
 	c.Tunnel = work.Tunnel
 	c.Accounts = work.Accounts
@@ -428,6 +445,7 @@ type SettingsPatch struct {
 	AgentImage     *string                  `json:"agent_image"`
 	PermissionMode *string                  `json:"permission_mode"`
 	MaxUploadMB    *int64                   `json:"max_upload_mb"`
+	IdleTimeoutMin *int64                   `json:"idle_timeout_min"`
 	Container      *ContainerLimits         `json:"container"`
 	Models         map[string][]ModelOption `json:"models"`
 	Tunnel         *TunnelConfig            `json:"tunnel"`
@@ -446,6 +464,9 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.MaxUploadMB != nil {
 			w.MaxUploadMB = *p.MaxUploadMB
+		}
+		if p.IdleTimeoutMin != nil {
+			w.IdleTimeoutMin = *p.IdleTimeoutMin
 		}
 		if p.Container != nil {
 			w.Container = *p.Container

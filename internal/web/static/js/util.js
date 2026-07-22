@@ -70,6 +70,16 @@ export function fmtSize(n) {
   return (n / (1 << 20)).toFixed(1) + " MB";
 }
 
+/* 字节量：fmtSize 到 MB 就封顶，监控里主机内存动辄几十 GB，这里补到 TB。 */
+export function fmtBytes(n) {
+  if (typeof n !== "number" || !isFinite(n) || n < 0) return "—";
+  if (n < 1024) return n + " B";
+  const u = ["KB", "MB", "GB", "TB"];
+  let v = n / 1024, i = 0;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return (v < 10 ? v.toFixed(1) : Math.round(v)) + " " + u[i];
+}
+
 export function fmtUptime(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);

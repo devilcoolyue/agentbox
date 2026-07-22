@@ -51,6 +51,11 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 	defer conn.Close()
 	defer pty.Close()
 
+	// An attached terminal runs a live PTY exec inside the container; hold it
+	// so the idle reaper can't stop the container out from under the shell.
+	s.idle.hold(sess.ID)
+	defer s.idle.release(sess.ID)
+
 	conn.SetReadDeadline(time.Now().Add(wsPongWait))
 	conn.SetPongHandler(func(string) error {
 		conn.SetReadDeadline(time.Now().Add(wsPongWait))

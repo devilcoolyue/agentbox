@@ -145,6 +145,7 @@ func (s *Server) startSession(ctx context.Context, sess store.Session) (store.Se
 		s.syncRotatingCred(acct, cur)
 	}
 	if cur.Status == store.StatusRunning && s.dock.RunningWithMount(ctx, cur.ContainerID, dockerx.SharedMount) {
+		s.idle.touch(cur.ID)
 		return cur, nil
 	}
 
@@ -167,6 +168,7 @@ func (s *Server) startSession(ctx context.Context, sess store.Session) (store.Se
 	if err != nil {
 		return store.Session{}, err
 	}
+	s.idle.touch(cur.ID)
 	return s.store.Update(cur.ID, func(x *store.Session) {
 		x.ContainerID = cid
 		x.Status = store.StatusRunning
@@ -221,6 +223,7 @@ func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request, ses
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.idle.forget(sess.ID)
 	if r.URL.Query().Get("purge") == "1" {
 		if err := os.RemoveAll(s.sessionDir(sess)); err != nil {
 			writeErr(w, http.StatusInternalServerError, "session deleted but purge failed: "+err.Error())

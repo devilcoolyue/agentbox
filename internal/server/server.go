@@ -70,6 +70,10 @@ type Server struct {
 
 	startMu sync.Mutex
 	starts  map[string]*sync.Mutex // per-session start locks
+
+	idle *activity // per-session liveness for the idle reaper
+
+	mon *monState // 上一帧计数器快照，供监控页按轮询间隔算 CPU 速率
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -93,6 +97,8 @@ func New(cfg *config.Config) (*Server, error) {
 		startedAt:  time.Now(),
 		bootListen: cfg.GetListen(),
 		starts:     map[string]*sync.Mutex{},
+		idle:       newActivity(),
+		mon:        newMonState(),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  32 << 10,
 			WriteBufferSize: 32 << 10,
@@ -117,6 +123,9 @@ func (s *Server) reconcile() {
 		status := store.StatusStopped
 		if running {
 			status = store.StatusRunning
+			// Give a container that survived the restart a fresh idle window
+			// instead of letting the first sweep stop it out from under a user.
+			s.idle.touch(sess.ID)
 		}
 		if sess.Status != status {
 			if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.Status = status }); err != nil {
@@ -160,6 +169,7 @@ func (s *Server) Run() error {
 	mux.Handle("GET /api/settings", s.admin(http.HandlerFunc(s.handleGetSettings)))
 	mux.Handle("PUT /api/settings", s.admin(http.HandlerFunc(s.handlePutSettings)))
 	mux.Handle("GET /api/system", s.admin(http.HandlerFunc(s.handleSystem)))
+	mux.Handle("GET /api/monitor", s.admin(http.HandlerFunc(s.handleMonitor)))
 	mux.Handle("GET /api/sessions", s.auth(http.HandlerFunc(s.handleListSessions)))
 	mux.Handle("POST /api/sessions", s.auth(http.HandlerFunc(s.handleCreateSession)))
 	mux.Handle("GET /api/sessions/{id}", s.auth(s.withSession(s.handleGetSession)))
@@ -206,6 +216,7 @@ func (s *Server) Run() error {
 
 	go s.imageJanitor() // 粘贴图片 48 小时自动清理
 	go s.credSyncLoop() // OAuth 凭证与账号池双向收敛（刷新令牌轮换制）
+	go s.idleReaper()   // 空闲会话容器自动停机（30 分钟无活动）
 	// A tunnel misconfiguration must not take down the whole server: log and
 	// keep serving without it (systemd Restart=always would otherwise
 	// crash-loop agentbox on, say, a taken port).

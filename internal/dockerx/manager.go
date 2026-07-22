@@ -6,10 +6,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -90,6 +92,89 @@ func (m *Manager) ServerVersion(ctx context.Context) string {
 		return ""
 	}
 	return v.Version
+}
+
+// ContainerState reports whether the container is running and when it last
+// started (zero time when stopped, removed or unknown). The运维监控 uses it to
+// show per-session uptime without pulling full stats for stopped containers.
+func (m *Manager) ContainerState(ctx context.Context, containerID string) (bool, time.Time) {
+	if containerID == "" {
+		return false, time.Time{}
+	}
+	info, err := m.cli.ContainerInspect(ctx, containerID)
+	if err != nil || info.State == nil {
+		return false, time.Time{}
+	}
+	started, _ := time.Parse(time.RFC3339Nano, info.State.StartedAt)
+	return info.State.Running, started
+}
+
+// RawStat is a cumulative resource snapshot of one container. CPU is a
+// monotonically increasing counter, so deriving a percentage needs two
+// snapshots a known window apart (see StatSnapshots).
+type RawStat struct {
+	CPUTotal uint64    // cpu_usage.total_usage, nanoseconds of CPU time
+	MemUsage uint64    // resident memory minus reclaimable file cache, bytes
+	MemLimit uint64    // container memory limit, bytes (host total when unlimited)
+	Pids     uint64    // processes currently in the cgroup
+	Read     time.Time // daemon-side read timestamp, the window's true clock
+	OK       bool      // false when the snapshot could not be taken
+}
+
+// statSnapshot reads one-shot stats for a single container. OneShot omits the
+// daemon's own precpu frame, so callers pair two of these to get a rate.
+func (m *Manager) statSnapshot(ctx context.Context, containerID string) RawStat {
+	resp, err := m.cli.ContainerStatsOneShot(ctx, containerID)
+	if err != nil {
+		return RawStat{}
+	}
+	defer resp.Body.Close()
+	var s container.StatsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+		return RawStat{}
+	}
+	return RawStat{
+		CPUTotal: s.CPUStats.CPUUsage.TotalUsage,
+		MemUsage: memUsage(s.MemoryStats),
+		MemLimit: s.MemoryStats.Limit,
+		Pids:     s.PidsStats.Current,
+		Read:     s.Read,
+		OK:       true,
+	}
+}
+
+// memUsage mirrors `docker stats`: resident usage minus the reclaimable file
+// cache (inactive_file on cgroup v2, total_inactive_file on cgroup v1).
+func memUsage(m container.MemoryStats) uint64 {
+	cache := m.Stats["inactive_file"]
+	if cache == 0 {
+		cache = m.Stats["total_inactive_file"]
+	}
+	if cache > m.Usage {
+		return m.Usage
+	}
+	return m.Usage - cache
+}
+
+// StatSnapshots samples every id concurrently. Call it twice a short window
+// apart and diff the CPU counters to turn them into percentages; a container
+// that fails to sample yields a !OK entry the caller skips.
+func (m *Manager) StatSnapshots(ctx context.Context, ids []string) map[string]RawStat {
+	out := make(map[string]RawStat, len(ids))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			st := m.statSnapshot(ctx, id)
+			mu.Lock()
+			out[id] = st
+			mu.Unlock()
+		}(id)
+	}
+	wg.Wait()
+	return out
 }
 
 // IsRunning reports whether the container exists and is running.

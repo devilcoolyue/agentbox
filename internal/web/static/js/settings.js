@@ -3,12 +3,12 @@
 "use strict";
 
 import { S, bus } from "./state.js";
-import { $, btnBusy, btnDone, toast, fmtTime, fmtUptime } from "./util.js";
+import { $, btnBusy, btnDone, toast, fmtTime, fmtUptime, fmtBytes } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
 import { showView } from "./shell.js";
 import { MODEL_ID_RE } from "./chat.js";
-import { agentKey, agentIcon, decorateAgentOpts } from "./brand.js";
+import { agentKey, agentName, agentIcon, decorateAgentOpts } from "./brand.js";
 
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
@@ -32,7 +32,7 @@ export async function openSettingsView() {
   }
 }
 
-const SET_SECS = ["accounts", "container", "models", "security", "about"];
+const SET_SECS = ["accounts", "container", "models", "security", "monitor", "about"];
 
 function setSec(name) {
   S.sec = name;
@@ -43,8 +43,10 @@ function setSec(name) {
     $("sec-" + sec).classList.toggle("hidden", sec !== name);
   }
   $("set-content").scrollTop = 0;
+  stopMonitor(); // 离开监控页就停轮询，任何切换都先关掉
   if (name === "about") loadSystem();
   if (name === "security") loadUsers();
+  if (name === "monitor") startMonitor();
 }
 
 $("set-nav").addEventListener("click", (e) => {
@@ -476,6 +478,7 @@ function fillSettingsForms() {
     net.appendChild(new Option(st.container.network + " — 自定义网络", st.container.network));
   }
   net.value = st.container.network;
+  $("set-idle").value = st.idle_timeout_min;
   $("set-perm").value = st.permission_mode;
   $("set-upload").value = st.max_upload_mb;
   $("set-listen").value = st.listen;
@@ -517,6 +520,12 @@ $("btn-save-container").addEventListener("click", () => {
       network: $("set-net").value,
     },
   }, $("btn-save-container"), "已保存，对新启动的容器生效");
+});
+
+$("btn-save-idle").addEventListener("click", () => {
+  putSettings({
+    idle_timeout_min: Number($("set-idle").value),
+  }, $("btn-save-idle"), "空闲停机设置已保存并即时生效");
 });
 
 $("btn-save-tunnel").addEventListener("click", async () => {
@@ -745,4 +754,138 @@ async function loadSystem() {
   add("数据目录", sys.data_dir);
   add("配置文件", sys.config_path);
   add("运行时长", fmtUptime(Date.now() - sys.started_at) + "（自 " + new Date(sys.started_at).toLocaleString() + "）");
+}
+
+/* ---------------- 运维监控 ---------------- */
+
+let monTimer = null;
+
+function startMonitor() {
+  stopMonitor();
+  $("mon-tiles").replaceChildren();
+  $("mon-tbody").replaceChildren();
+  $("mon-loading").classList.remove("hidden");
+  loadMonitor(true); // 初次加载才弹错，之后的自动刷新失败静默重试
+  // 后端每次请求会阻塞一个采样窗口（~300ms），5 秒一轮足够跟手又不压服务。
+  monTimer = setInterval(() => {
+    if (S.view !== "settings" || S.sec !== "monitor") { stopMonitor(); return; }
+    if (!$("mon-auto").checked) return;
+    loadMonitor(false);
+  }, 5000);
+}
+
+function stopMonitor() {
+  if (monTimer) { clearInterval(monTimer); monTimer = null; }
+}
+
+async function loadMonitor(surfaceErr) {
+  let m;
+  try {
+    m = await api("/monitor");
+  } catch (e) {
+    if (surfaceErr && S.sec === "monitor") toast("读取监控失败：" + e.message, true);
+    return;
+  }
+  if (S.sec !== "monitor") return; // 请求在途中切走了页，丢弃这帧
+  $("mon-loading").classList.add("hidden");
+  renderMonitorTiles(m);
+  renderMonitorTable(m);
+}
+
+function monTile(label, value, sub, pct) {
+  const el = document.createElement("div");
+  el.className = "mon-tile";
+  el.append(
+    Object.assign(document.createElement("div"), { className: "mt-label", textContent: label }),
+    Object.assign(document.createElement("div"), { className: "mt-value", textContent: value }),
+  );
+  if (typeof pct === "number") {
+    const bar = document.createElement("div");
+    bar.className = "mt-bar";
+    const fill = document.createElement("span");
+    const p = Math.max(0, Math.min(100, pct));
+    fill.style.width = p + "%";
+    if (p >= 90) fill.classList.add("hot");
+    else if (p >= 70) fill.classList.add("warn");
+    bar.appendChild(fill);
+    el.appendChild(bar);
+  }
+  if (sub) el.appendChild(Object.assign(document.createElement("div"), { className: "mt-sub", textContent: sub }));
+  return el;
+}
+
+function renderMonitorTiles(m) {
+  const box = $("mon-tiles");
+  const p = m.process, h = m.host, su = m.summary;
+  const memPct = h.mem_total ? (h.mem_used / h.mem_total) * 100 : 0;
+  // 首帧还没有上一帧可做差，CPU 速率标「测量中」而不是误导的 0.0%。
+  const cpu = (v) => (m.window_ms ? v.toFixed(1) + "%" : "测量中");
+  const cpuPct = (v) => (m.window_ms ? v : undefined);
+  box.replaceChildren(
+    monTile("后端 CPU", cpu(p.cpu_percent), "已运行 " + fmtUptime(p.uptime_ms), cpuPct(p.cpu_percent)),
+    monTile("后端内存", fmtBytes(p.rss), "Go 堆 " + fmtBytes(p.heap_alloc) + " · " + p.goroutines + " 协程"),
+    monTile("主机 CPU", cpu(h.cpu_percent), h.cpu_count + " 核 · 负载 " + h.load1.toFixed(2), cpuPct(h.cpu_percent)),
+    monTile("主机内存", fmtBytes(h.mem_used) + " / " + fmtBytes(h.mem_total), memPct.toFixed(0) + "% 已用", memPct),
+    monTile("运行容器", su.running + " / " + su.total, "个会话容器在运行"),
+    monTile("容器合计", cpu(su.cpu_percent), "内存 " + fmtBytes(su.mem_usage)),
+  );
+}
+
+function renderMonitorTable(m) {
+  const win = m.window_ms
+    ? "采样窗口 " + (m.window_ms / 1000).toFixed(1) + " 秒"
+    : "首次采样中";
+  $("mon-sub").textContent =
+    `共 ${m.summary.total} 个会话 · ${m.summary.running} 个运行中 · ${win}`;
+  const tb = $("mon-tbody");
+  tb.replaceChildren();
+  if (!m.containers.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 9;
+    td.className = "mon-empty";
+    td.textContent = "暂无会话容器";
+    tr.appendChild(td);
+    tb.appendChild(tr);
+    return;
+  }
+  for (const c of m.containers) tb.appendChild(monRow(c, m.now, !!m.window_ms));
+}
+
+function monCell(text, cls) {
+  const el = document.createElement("td");
+  el.textContent = text;
+  if (cls) el.className = cls;
+  return el;
+}
+
+function monRow(c, now, rate) {
+  const tr = document.createElement("tr");
+  if (!c.running) tr.className = "off";
+
+  const name = document.createElement("td");
+  name.className = "mon-name";
+  name.append(agentIcon(c.agent, 13), document.createTextNode(c.name || c.session_id));
+
+  const status = document.createElement("td");
+  status.className = "mon-status";
+  const dot = document.createElement("span");
+  dot.className = "mon-dot" + (c.running ? " on" : "");
+  status.append(dot, document.createTextNode(c.running ? "运行中" : "已停止"));
+
+  const mem = monCell(c.running ? fmtBytes(c.mem_usage) : "—", "num");
+  if (c.running && c.mem_limit) mem.title = fmtBytes(c.mem_usage) + " / " + fmtBytes(c.mem_limit) + " 上限";
+
+  tr.append(
+    name,
+    monCell(c.user),
+    monCell(agentName(c.agent)),
+    status,
+    monCell(c.running && c.started_at ? fmtTime(c.started_at) : "—"),
+    monCell(c.running && c.started_at ? fmtUptime(now - c.started_at) : "—"),
+    monCell(c.running ? (rate ? c.cpu_percent.toFixed(1) + "%" : "…") : "—", "num"),
+    mem,
+    monCell(c.running && c.pids ? String(c.pids) : "—", "num"),
+  );
+  return tr;
 }
