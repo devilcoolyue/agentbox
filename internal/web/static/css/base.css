@@ -233,6 +233,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 
 /* ---- 转圈 ---- */
 .spin {
+  display: inline-block; vertical-align: -2px;
   width: 12px; height: 12px; flex: none;
   border: 2px solid var(--amber-dim);
   border-top-color: var(--amber);

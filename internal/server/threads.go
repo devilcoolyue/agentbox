@@ -193,7 +193,7 @@ func (s *Server) migrateThreads(sess store.Session) error {
 
 type threadMeta struct {
 	ID        string    `json:"id"`
-	Title     string    `json:"title"` // 首条用户消息（截断）
+	Title     string    `json:"title"` // 模型总结的标题，没有则回退到首条用户消息（截断）
 	TS        time.Time `json:"ts"`
 	Updated   time.Time `json:"updated"`
 	Turns     int       `json:"turns"`
@@ -207,6 +207,7 @@ func (s *Server) scanThread(sess store.Session, tid string) (threadMeta, bool) {
 		return threadMeta{}, false
 	}
 	m := threadMeta{ID: tid}
+	firstMsg, genTitle := "", ""
 	for _, e := range parseEntries(raw) {
 		if m.TS.IsZero() && !e.meta.TS.IsZero() {
 			m.TS = e.meta.TS
@@ -217,14 +218,65 @@ func (s *Server) scanThread(sess store.Session, tid string) (threadMeta, bool) {
 		switch e.meta.Kind {
 		case "user":
 			m.Turns++
-			if m.Title == "" {
-				m.Title = truncRunes(e.meta.Text, 120)
+			if firstMsg == "" {
+				firstMsg = e.meta.Text
+			}
+		case "title":
+			if e.meta.Text != "" {
+				genTitle = e.meta.Text
 			}
 		case "chat_session":
 			m.Resumable = e.meta.Text != ""
 		}
 	}
+	// 优先用模型总结的标题，没有则回退到首条用户消息（截断）
+	if genTitle != "" {
+		m.Title = truncRunes(genTitle, 120)
+	} else {
+		m.Title = truncRunes(firstMsg, 120)
+	}
 	return m, true
+}
+
+// threadTitleSource returns the thread's first user message, its user-turn
+// count, and whether a model-generated title has already been stored. Callers
+// hold fileMu.
+func (s *Server) threadTitleSource(sess store.Session, tid string) (firstMsg string, userTurns int, hasTitle bool) {
+	raw, err := os.ReadFile(s.threadPath(sess, tid))
+	if err != nil {
+		return "", 0, false
+	}
+	for _, e := range parseEntries(raw) {
+		switch e.meta.Kind {
+		case "user":
+			userTurns++
+			if firstMsg == "" {
+				firstMsg = e.meta.Text
+			}
+		case "title":
+			if e.meta.Text != "" {
+				hasTitle = true
+			}
+		}
+	}
+	return firstMsg, userTurns, hasTitle
+}
+
+// appendThreadEntry appends one entry to a specific thread file (not
+// necessarily the active one). Callers hold fileMu.
+func (s *Server) appendThreadEntry(sess store.Session, tid string, e logEntry) error {
+	e.TS = time.Now()
+	raw, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(s.threadPath(sess, tid), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(append(raw, '\n'))
+	return err
 }
 
 func parseEntries(raw []byte) []histEntry {

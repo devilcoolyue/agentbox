@@ -36,12 +36,16 @@
 }
 
 /* ---- 工作台 ---- */
-.workbench { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* isolation：把内部所有 z-index 关进本层，让生命周期遮罩能盖住各标签页内部的
+ * 绝对定位元素（终端叠层、文件/对话浮层等），又不影响顶栏与抽屉。 */
+.workbench { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; isolation: isolate; }
 .wb-head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px;
   padding: 14px 20px 10px;
   border-bottom: 1px solid var(--line);
+  /* 抬到遮罩之上并铺底色：启动/停止时头部按钮仍露在毛玻璃上方 */
+  position: relative; z-index: 51; background: var(--bg);
 }
 .wb-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .wb-avatar { display: inline-flex; flex: none; }
@@ -68,6 +72,58 @@
 .tab.active { color: var(--amber); border-bottom-color: var(--amber); }
 
 .pane { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+
+/* ---- 生命周期遮罩：启动/停止时罩住工作区（头部按钮以下、不含侧栏）---- *
+ * 灰黑毛玻璃打底，卡片按动作点缀绿/红（--busy）。窄屏头部并入顶栏，遮罩即
+ * 覆盖顶栏以下全部，正好给「点了停止但界面没动静」补上明确反馈。 */
+.wb-busy {
+  --busy: var(--muted); /* 兜底，实际由 .start/.stop 覆盖成绿/红 */
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(11, 14, 20, 0.5);
+  -webkit-backdrop-filter: blur(10px) saturate(115%);
+  backdrop-filter: blur(10px) saturate(115%);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+.wb-busy.show { opacity: 1; visibility: visible; pointer-events: auto; }
+.wb-busy.start { --busy: var(--green); }
+.wb-busy.stop { --busy: var(--red); }
+
+.wb-busy-card {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  padding: 26px 40px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--busy) 45%, transparent);
+  box-shadow: var(--shadow-lg), 0 0 44px -10px color-mix(in srgb, var(--busy) 55%, transparent);
+  transform: translateY(8px) scale(0.97); opacity: 0.5;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.wb-busy.show .wb-busy-card { transform: none; opacity: 1; }
+
+.wb-busy-spin {
+  width: 38px; height: 38px; flex: none; border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--busy) 22%, transparent);
+  border-top-color: var(--busy);
+  animation: rot 0.8s linear infinite;
+}
+.wb-busy-text {
+  font-family: var(--mono); font-size: 13px; letter-spacing: 0.16em;
+  color: var(--busy);
+}
+/* 尾随省略号：steps 逐帧点出 . .. …，配合转圈让文字也有动静 */
+.wb-busy-dots::after {
+  content: ""; display: inline-block; width: 1.4em; text-align: left;
+  animation: wb-dots 1.4s steps(1) infinite;
+}
+@keyframes wb-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "…"; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-busy, .wb-busy-card { transition: none; }
+  .wb-busy-spin { animation: none; }
+  .wb-busy-dots::after { animation: none; content: "…"; }
+}
 
 /* ---- 窄屏：头部并入顶栏（状态灯+会话名+⋯菜单），标签等宽三段 ---- */
 @media (max-width: 760px) {

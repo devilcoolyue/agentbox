@@ -29,6 +29,17 @@ export function noteThreadTitle(text) {
   if (!S.thread) $("thread-title").textContent = previewText(text);
 }
 
+/* 服务端异步生成好线程标题后广播过来，即时替换切换栏标题。
+ * 新线程发首条消息时前端还没登记 S.thread（仍为 null），但 chat ws 按会话建立，
+ * 广播只会在正查看该会话时到达，此刻显示的就是这条刚起好标题的线程——直接更新。
+ * 已登记 S.thread 时则要 id 对上，避免改到已切走的其它线程。
+ * 面板若开着，其列表会在下次打开时按最新元数据刷新。 */
+export function applyThreadTitle(id, title) {
+  if (S.thread && S.thread.id !== id) return;
+  if (S.thread) S.thread.title = title;
+  $("thread-title").textContent = previewText(title);
+}
+
 /* ---- 面板开合 ---- */
 
 function panelOpen() { return $("thread-panel").classList.contains("open"); }

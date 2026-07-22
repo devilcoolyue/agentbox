@@ -7,7 +7,7 @@ import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange } fro
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
 import { chip, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon } from "./chat-render.js";
-import { setThreadBar, noteThreadTitle } from "./chat-threads.js";
+import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
 
 /* ---------------- 对话通道 ---------------- */
@@ -33,25 +33,37 @@ export function connectChat() {
 export function chatTeardown() {
   S.chatWSGen++;
   if (S.chatWS) { S.chatWS.close(); S.chatWS = null; }
+  replayReset();
   setChatStatus("idle");
 }
 
 /* ---------------- 流式增量渲染 ----------------
- * --include-partial-messages 下，完整 assistant 事件之前会先收到
+ * Claude：--include-partial-messages 下，完整 assistant 事件之前会先收到
  * stream_event（content_block_start/delta/stop）。delta 到达节奏不均
  * （常一次一整句），直接上屏会一段一段蹦：先进缓冲，由 rAF 打字机
  * 匀速放出，积压越多放得越快，显示只滞后生成零点几秒。text 块每次
  * 放出后整段重跑 Markdown（与最终渲染同一管线），代码块、列表边生成
  * 边呈现；完整事件到达后移除临时节点交回 renderEvent 正式渲染，
  * 两边产物一致，替换无观感跳变。增量事件服务端只广播不落盘，
- * 历史回放天然只有完整事件。 */
+ * 历史回放天然只有完整事件。
+ *
+ * Codex：服务端经 app-server 协议拿到真增量，翻译成与 Claude 相同的
+ * stream_event 形状广播，这条管线原样消费——真流式与 Claude 无异；
+ * 完整 item.completed 到达时同样移除临时节点交回正式渲染。
+ *
+ * 兜底（旧容器里的 codex 走 exec --json，没有增量，全文只在
+ * item.completed 一次性到达）：把全文喂进同一条 rAF 管线做「整段回放」，
+ * 速度取 max(140 字/秒, 全文/3s)，短文按打字节奏、长文封顶 3 秒放完。
+ * 回放中到达的其余事件（工具行、回合完成章等）排队，动画完成后按序
+ * 补上；回放不因回合结束被截断，但新用户消息 / 出错 / 切线程时立刻放完。 */
 
 let liveEls = [];     // 本条消息的临时节点，完整事件到达后整体移除
-let liveBlock = null; // 当前追加目标 { el, body, kind, shown, buf, carry, tick, raf }
+let liveBlock = null; // 当前追加目标 { el, body, kind, shown, buf, carry, tick, raf, replay?, rate? }
 
 /* 回合结束收尾：缓冲余量上屏，临时节点保留在页面上（中断时留住
  * 已生成的部分），只是不再跟踪、去掉光标 */
 function streamSettle() {
+  if (liveBlock && liveBlock.replay) return; // codex 回放自行收尾，不被回合结束截断
   liveDrain();
   for (const el of liveEls) el.classList.remove("streaming");
   liveEls = [];
@@ -70,7 +82,82 @@ function handleAgentEvent(ev) {
   // 完整 assistant 事件带全部内容，先移除对应的增量节点再正式渲染
   if (ev && ev.type === "assistant") liveClear();
   workLabelFromEvent(ev);
-  for (const node of renderEvent(ev)) appendChat(node);
+  if (replayFeed(ev)) return; // codex 整段文本 → 打字机回放
+  for (const node of renderEvent(ev)) replayAppend(node);
+}
+
+/* ---- codex 整段回放队列 ---- */
+
+let replayQueue = []; // { kind, text } 打字任务 | { node } 排在动画后的成品节点
+
+function replayActive() { return !!(liveBlock && liveBlock.replay) || replayQueue.length > 0; }
+
+/* codex 的文本事件（新旧两种结构）转打字任务；消费掉返回 true */
+function replayFeed(ev) {
+  if (!ev || typeof ev !== "object") return false;
+  let kind = "", text = "";
+  if (ev.type === "item.completed" && ev.item) {
+    if (ev.item.type === "agent_message") { kind = "text"; text = ev.item.text; }
+    else if (ev.item.type === "reasoning") { kind = "thinking"; text = ev.item.text; }
+  } else if (ev.msg && typeof ev.msg === "object") {
+    if (ev.msg.type === "agent_message") { kind = "text"; text = ev.msg.message; }
+    else if (ev.msg.type === "agent_reasoning") { kind = "thinking"; text = ev.msg.text; }
+  }
+  if (!kind || !text) return false;
+  // 真流式（app-server 增量）已把这条消息现场打出来：清掉临时节点交回
+  // 正式渲染（与 Claude 完整事件同一套路），不再回放
+  if (liveEls.length) { liveClear(); return false; }
+  replayQueue.push({ kind, text });
+  replayPump();
+  return true;
+}
+
+/* 回放进行中时后续事件的节点排队，保持时间线顺序；空闲时直接上屏 */
+function replayAppend(node) {
+  if (replayActive()) replayQueue.push({ node });
+  else appendChat(node);
+}
+
+function replayPump() {
+  if (liveBlock) return; // 已有动画在放
+  while (replayQueue.length) {
+    const job = replayQueue.shift();
+    if (job.node) { appendChat(job.node); continue; }
+    setWorkingLabel(job.kind === "thinking" ? "推理中…" : "生成回复…");
+    liveBlock = {
+      ...liveNode(job.kind), kind: job.kind, shown: "", buf: "", carry: 0, tick: 0, raf: 0,
+      replay: true, rate: Math.max(140, job.text.length / 3),
+    };
+    liveBlock.el.classList.add("streaming");
+    appendChat(liveBlock.el);
+    liveFeed(job.text);
+    return;
+  }
+}
+
+/* 一段回放放完：定格为与正式渲染一致的形态，接着放下一个排队项 */
+function replayFinish() {
+  const b = liveBlock;
+  if (!b || !b.replay) return;
+  if (b.raf) cancelAnimationFrame(b.raf);
+  b.el.classList.remove("streaming", "live-text");
+  if (b.kind === "thinking") b.el.open = false; // 与正式渲染一致：思考默认折叠
+  liveBlock = null;
+  replayPump();
+}
+
+/* 立刻放完全部积压：新用户消息 / 出错时调用，保证时间线完整不乱序 */
+function replayFlush() {
+  while (liveBlock && liveBlock.replay) liveDrain();
+}
+
+/* 丢弃回放状态：切线程 / 切会话时调用，对话流马上要整体重建 */
+function replayReset() {
+  replayQueue = [];
+  if (liveBlock && liveBlock.replay) {
+    if (liveBlock.raf) cancelAnimationFrame(liveBlock.raf);
+    liveBlock = null;
+  }
 }
 
 /* 依据整包事件刷新执行指示的阶段文案（流式的文字/思考在 handleStreamEvent 里更新） */
@@ -145,8 +232,9 @@ function liveTick(now) {
   const dt = Math.min(now - b.tick, 200);
   if (dt >= 33) { // Markdown 整段重渲染有成本，帧率封顶 ~30fps
     b.tick = now;
-    // 基础 80 字/秒；按积压加速（约 0.4s 追平），滞后有上界
-    b.carry += (dt / 1000) * Math.max(80, b.buf.length * 2.5);
+    // 真流式：基础 80 字/秒，按积压加速（约 0.4s 追平），滞后有上界；
+    // codex 回放：全文早已到齐，按定速放（rate 已封顶总时长）
+    b.carry += (dt / 1000) * (b.rate || Math.max(80, b.buf.length * 2.5));
     const n = Math.min(b.buf.length, Math.floor(b.carry));
     if (n > 0) {
       b.carry -= n;
@@ -156,6 +244,7 @@ function liveTick(now) {
     }
   }
   if (b.buf) b.raf = requestAnimationFrame(liveTick);
+  else if (b.replay) replayFinish();
   else b.carry = 0;
 }
 
@@ -169,6 +258,7 @@ function liveDrain() {
     b.buf = "";
     liveRender(b);
   }
+  if (b.replay) replayFinish();
 }
 
 /* 贴底判定：用户已在底部附近（正在跟读）才把视口拉到最底，
@@ -188,6 +278,7 @@ function liveRender(b) {
 function handleChatMsg(msg) {
   switch (msg.type) {
     case "user_message":
+      replayFlush(); // 上一回合的回放立刻放完，不让新消息插到它前面
       noteThreadTitle(msg.text);
       appendChat(renderUserMsg(msg.text));
       break;
@@ -195,12 +286,16 @@ function handleChatMsg(msg) {
       handleAgentEvent(msg.event);
       break;
     case "agent_raw":
-      appendChat(chip(msg.text));
+      replayAppend(chip(msg.text)); // 回放中则排队，保持时间线顺序
       break;
     case "thread":
       // 另一个页面切换 / 新建 / 删除了对话线程；本端发起的操作已通过
       // thread-changed 重载过（S.thread 已对上），据此跳过重复加载
       if (!S.thread || S.thread.id !== msg.id) reloadThread();
+      break;
+    case "thread_title":
+      // 服务端异步生成好了线程标题
+      applyThreadTitle(msg.id, msg.title);
       break;
     case "status":
       setChatStatus(msg.state, msg.error);
@@ -218,6 +313,7 @@ function handleChatMsg(msg) {
  * + 阶段文案（详见 ensureWorking）。 */
 export function setChatStatus(state, error) {
   S.chatState = state === "running" ? "running" : "idle";
+  if (state === "error") replayFlush(); // 出错立刻放完，错误提示紧随其后
   if (S.chatState !== "running") streamSettle();
   const send = $("chat-send");
   if (state === "running") {
@@ -688,6 +784,7 @@ export async function loadHistory() {
 export async function reloadThread() {
   if (!S.current) return;
   histGen++; // 立刻作废在途加载，clear 之后它们不得再往里追加
+  replayReset(); // 回放动画与积压一并丢弃，历史里有完整内容
   $("chat-log").replaceChildren();
   setThreadBar(null);
   await loadHistory();

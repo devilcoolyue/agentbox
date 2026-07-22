@@ -41,6 +41,20 @@ export function btnDone(btn) {
   btn.disabled = false;
 }
 
+/* 工作区生命周期遮罩：启动/停止时罩住头部按钮以下的整块工作区，
+ * 毛玻璃 + 绿/红点缀，给窄屏（按钮藏在 ⋯ 菜单里）一个明确的进行中反馈。 */
+const WB_BUSY_LABEL = { start: "正在启动", stop: "正在停止" };
+export function wbBusy(kind) {
+  const el = $("wb-busy");
+  if (!el) return;
+  $("wb-busy-label").textContent = WB_BUSY_LABEL[kind] || "处理中";
+  el.classList.remove("start", "stop");
+  el.classList.add(kind, "show");
+}
+export function wbIdle() {
+  $("wb-busy")?.classList.remove("show");
+}
+
 /* ---- 格式化 ---- */
 
 export function fmtTime(ms) {

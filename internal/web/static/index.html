@@ -315,6 +315,15 @@
             </div>
             <div id="files-list" class="files-list"></div>
           </section>
+
+          <!-- 生命周期遮罩：启动/停止时罩住头部按钮以下的整块工作区（不含侧栏），
+               毛玻璃 + 绿/红点缀，给窄屏一个明确的「正在启动/停止」反馈 -->
+          <div id="wb-busy" class="wb-busy" aria-live="polite">
+            <div class="wb-busy-card">
+              <span class="wb-busy-spin" aria-hidden="true"></span>
+              <span class="wb-busy-text"><span id="wb-busy-label">正在启动</span><span class="wb-busy-dots" aria-hidden="true"></span></span>
+            </div>
+          </div>
         </div>
       </div>
 

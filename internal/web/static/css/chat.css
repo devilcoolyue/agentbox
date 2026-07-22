@@ -658,6 +658,8 @@ details.think.streaming .think-body::after {
   .msg.user { max-width: 88%; }
   .thread-bar { padding: 6px 8px 0; }
   .thread-cur { padding: 6px 10px; }
+  /* 窄屏历史面板与左侧菜单抽屉同宽 */
+  .thread-panel { width: min(300px, 84vw); }
   .turn { gap: 9px; }
   .turn-avatar .agent-ico { width: 22px; height: 22px; }
   .chip { max-width: 100%; }

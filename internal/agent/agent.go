@@ -91,6 +91,34 @@ func ChatCommand(agentType, permissionMode, resumeID, model, effort string) ([]s
 	return wrapped, nil
 }
 
+// TitleCommand returns the argv for a one-shot, tool-free summarization that
+// names a conversation thread. The prompt (instruction + opening message) is
+// delivered on stdin; the command prints ONLY the resulting title to stdout.
+// It never resumes and never records a provider session, so it can't disturb
+// the real conversation. Tools are disabled and a small/fast model is used to
+// keep it cheap and inert.
+func TitleCommand(agentType string) ([]string, error) {
+	switch agentType {
+	case config.AgentClaude:
+		// --tools "" 彻底禁用工具；haiku 足够快且便宜；纯文本输出即标题
+		return []string{"claude", "-p", "--model", "haiku", "--tools", "", "--output-format", "text"}, nil
+	case config.AgentCodex:
+		// codex exec 没有“禁用全部工具”的开关，但纯总结提示不会触发命令；
+		// 起标题不需要推理深度，用 low 思考强度压低成本与时延。单引号保住
+		// TOML 值里的双引号，sh 才会把 model_reasoning_effort="low" 原样传给
+		// codex。最终消息写入临时文件后单独 cat，避开 stdout 上的框架噪声。
+		const in, out = "/tmp/.abox-title.in", "/tmp/.abox-title.out"
+		script := "cat >" + in + "; " +
+			"codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox " +
+			"-c 'model_reasoning_effort=\"low\"' " +
+			"--output-last-message " + out + " - <" + in + " >/dev/null 2>&1; " +
+			"cat " + out + " 2>/dev/null; rm -f " + in + " " + out
+		return []string{"/bin/sh", "-c", script}, nil
+	default:
+		return nil, fmt.Errorf("unknown agent type %q", agentType)
+	}
+}
+
 // InterruptCommand kills the current chat turn, if any.
 func InterruptCommand() []string {
 	return []string{"/bin/sh", "-c", "kill -INT $(cat " + PidFile + " 2>/dev/null) 2>/dev/null || true"}

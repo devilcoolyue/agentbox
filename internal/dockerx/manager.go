@@ -4,8 +4,10 @@ package dockerx
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -322,6 +324,60 @@ func (m *Manager) ExitCode(ctx context.Context, execID string) (int, error) {
 		}
 	}
 	return -1, fmt.Errorf("exec still running")
+}
+
+// ExecCapture runs cmd to completion, feeding stdin, and returns its stdout as
+// a string (stderr discarded). Meant for short, bounded helper calls such as
+// thread-title generation — not for long agent turns. Output is capped so a
+// misbehaving command can't balloon memory.
+func (m *Manager) ExecCapture(ctx context.Context, containerID string, cmd, extraEnv []string, stdin string) (string, error) {
+	stream, err := m.ExecStream(ctx, containerID, cmd, extraEnv)
+	if err != nil {
+		return "", err
+	}
+	defer stream.Close()
+	if stdin != "" {
+		if _, err := stream.Write([]byte(stdin)); err != nil {
+			return "", err
+		}
+	}
+	if err := stream.CloseWrite(); err != nil {
+		return "", err
+	}
+	var out bytes.Buffer
+	capped := &capWriter{w: &out, left: 64 << 10}
+	if err := stream.Demux(capped, io.Discard); err != nil {
+		return "", err
+	}
+	code, err := m.ExitCode(ctx, stream.ExecID)
+	if err != nil {
+		return "", err
+	}
+	if code != 0 {
+		return "", fmt.Errorf("exec exited %d", code)
+	}
+	return out.String(), nil
+}
+
+// capWriter forwards at most left bytes to w, silently dropping the rest.
+type capWriter struct {
+	w    io.Writer
+	left int
+}
+
+func (c *capWriter) Write(p []byte) (int, error) {
+	if c.left <= 0 {
+		return len(p), nil
+	}
+	if len(p) > c.left {
+		if _, err := c.w.Write(p[:c.left]); err != nil {
+			return 0, err
+		}
+		c.left = 0
+		return len(p), nil
+	}
+	c.left -= len(p)
+	return c.w.Write(p)
 }
 
 // ExecFireAndForget runs a short command (e.g. interrupt) detached.

@@ -5,22 +5,30 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 
 	"agentbox/internal/agent"
+	"agentbox/internal/config"
+	"agentbox/internal/dockerx"
 	"agentbox/internal/store"
 )
 
 // turnTimeout bounds a single headless conversation turn. Coding-agent turns
 // can legitimately run for many minutes while tests or builds execute.
 const turnTimeout = 30 * time.Minute
+
+// titleTimeout bounds the one-shot model call that names a new thread.
+const titleTimeout = 90 * time.Second
 
 // --- chat manager: one room per session, broadcasting to all open tabs ---
 
@@ -64,6 +72,7 @@ type chatRoom struct {
 	mu      sync.Mutex
 	conns   map[*connWriter]bool
 	running bool
+	stop    func() // 当前回合的优雅中断（app-server 回合设置）；nil 时走 SIGINT
 
 	// fileMu guards the session's on-disk chat state: thread transcripts,
 	// the active-thread pointer and the one-time legacy migration.
@@ -128,7 +137,7 @@ func (r *chatRoom) end() {
 
 type logEntry struct {
 	TS    time.Time       `json:"ts"`
-	Kind  string          `json:"kind"` // "user" | "event" | "status" | "chat_session" | "divider"(旧)
+	Kind  string          `json:"kind"` // "user" | "event" | "status" | "chat_session" | "title" | "divider"(旧)
 	Text  string          `json:"text,omitempty"`
 	Event json.RawMessage `json:"event,omitempty"`
 	State string          `json:"state,omitempty"`
@@ -250,6 +259,10 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		return
 	}
 
+	// 记录发消息前该线程的状态：首条消息且尚无标题时，回合成功后据首条
+	// 消息让模型生成一个简洁标题。房间占用期间线程不会被切换，titleTID 稳定。
+	titleTID, firstTurn := r.preTurnTitleState(sess)
+
 	r.appendLog(logEntry{Kind: "user", Text: text})
 	r.broadcast(map[string]any{"type": "user_message", "text": text})
 	r.broadcast(map[string]any{"type": "status", "state": "running"})
@@ -260,50 +273,20 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		return
 	}
 
-	cmd, err := agent.ChatCommand(sess.Agent, s.cfg.GetPermissionMode(), sess.ChatSession, model, effort)
-	if err != nil {
-		fail(err.Error())
-		return
-	}
-
-	stream, err := s.dock.ExecStream(ctx, sess.ContainerID, cmd, s.execEnv(sess))
-	if err != nil {
-		fail("exec失败: " + err.Error())
-		return
-	}
-	defer stream.Close()
-
-	if _, err := stream.Write([]byte(text)); err != nil {
-		fail("写入提示词失败: " + err.Error())
-		return
-	}
-	if err := stream.CloseWrite(); err != nil {
-		fail("关闭stdin失败: " + err.Error())
-		return
-	}
-
-	pr, pw := io.Pipe()
-	stderr := &tailBuffer{max: 8 << 10}
-	go func() {
-		err := stream.Demux(pw, stderr)
-		pw.CloseWithError(err)
-	}()
-
+	// 两条路径共用的行处理：JSON 事件落盘并广播（增量只广播），
+	// 顺带提取 provider 会话 id 供续聊；非 JSON 行按原文透传。
 	chatID := sess.ChatSession
-	scanner := bufio.NewScanner(pr)
-	scanner.Buffer(make([]byte, 1<<20), 32<<20) // single events can be large
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
+	onLine := func(line []byte) {
 		if len(line) == 0 {
-			continue
+			return
 		}
 		if line[0] == '{' && json.Valid(line) {
 			ev := make(json.RawMessage, len(line))
 			copy(ev, line)
 			if agent.IsPartialEvent(line) {
-				// 增量 delta 只广播不落盘：随后的完整 assistant 事件会带全文再来一份
+				// 增量 delta 只广播不落盘：随后的完整事件会带全文再来一份
 				r.broadcast(map[string]any{"type": "agent_event", "event": ev})
-				continue
+				return
 			}
 			r.appendLog(logEntry{Kind: "event", Event: ev})
 			r.broadcast(map[string]any{"type": "agent_event", "event": ev})
@@ -320,20 +303,233 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		}
 	}
 
-	code, err := s.dock.ExitCode(ctx, stream.ExecID)
-	if err != nil {
-		fail("等待退出码失败: " + err.Error())
-		return
+	// codex 优先走 app-server 协议（真流式增量）；容器里的 codex 太旧等
+	// 握手失败的情况回退传统 exec 路径（无增量，前端整段回放兜底）。
+	handled := false
+	if sess.Agent == config.AgentCodex {
+		fallback, err := r.appServerTurn(ctx, sess, text, model, effort, onLine)
+		switch {
+		case err == nil:
+			handled = true
+		case fallback:
+			log.Printf("codex app-server 不可用，回退 exec (%s): %v", r.sessID, err)
+		default:
+			fail(err.Error())
+			return
+		}
 	}
-	if code != 0 {
-		fail("agent 进程退出码 " + itoa(code) + ": " + stderr.String())
-		return
+	if !handled {
+		cmd, err := agent.ChatCommand(sess.Agent, s.cfg.GetPermissionMode(), chatID, model, effort)
+		if err != nil {
+			fail(err.Error())
+			return
+		}
+		if err := r.execTurn(ctx, sess, cmd, text, onLine); err != nil {
+			fail(err.Error())
+			return
+		}
 	}
 	r.appendLog(logEntry{Kind: "status", State: "idle"})
 	r.broadcast(map[string]any{"type": "status", "state": "idle"})
+
+	// 首条消息的对话：异步用模型总结出一个标题，不阻塞对话流。
+	if firstTurn && titleTID != "" {
+		go r.generateTitle(titleTID, text)
+	}
+}
+
+// execTurn 跑传统的一次性 CLI 回合：stdin 喂提示词后关闭，stdout 收 JSONL
+// 事件直到进程退出。claude 一直走这里；codex 仅在 app-server 不可用时回退。
+func (r *chatRoom) execTurn(ctx context.Context, sess store.Session, cmd []string, text string, onLine func([]byte)) error {
+	s := r.srv
+	stream, err := s.dock.ExecStream(ctx, sess.ContainerID, cmd, s.execEnv(sess))
+	if err != nil {
+		return errors.New("exec失败: " + err.Error())
+	}
+	defer stream.Close()
+
+	if _, err := stream.Write([]byte(text)); err != nil {
+		return errors.New("写入提示词失败: " + err.Error())
+	}
+	if err := stream.CloseWrite(); err != nil {
+		return errors.New("关闭stdin失败: " + err.Error())
+	}
+
+	pr, pw := io.Pipe()
+	defer pr.Close() // 提前返回时解开 demux 的阻塞写
+	stderr := &tailBuffer{max: 8 << 10}
+	go func() {
+		err := stream.Demux(pw, stderr)
+		pw.CloseWithError(err)
+	}()
+
+	scanner := bufio.NewScanner(pr)
+	scanner.Buffer(make([]byte, 1<<20), 32<<20) // single events can be large
+	for scanner.Scan() {
+		onLine(bytes.TrimSpace(scanner.Bytes()))
+	}
+
+	code, err := s.dock.ExitCode(ctx, stream.ExecID)
+	if err != nil {
+		return errors.New("等待退出码失败: " + err.Error())
+	}
+	if code != 0 {
+		return errors.New("agent 进程退出码 " + itoa(code) + ": " + stderr.String())
+	}
+	return nil
+}
+
+// appServerTurn 经 codex app-server 协议跑一回合，事件由协议驱动器翻译后
+// 进 onLine（含打字机用的流式增量）。返回 fallback=true 表示回合尚未开始
+// （握手/开线程失败），可安全改走传统 exec 路径。
+func (r *chatRoom) appServerTurn(ctx context.Context, sess store.Session, text, model, effort string, onLine func([]byte)) (fallback bool, err error) {
+	s := r.srv
+	stream, err := s.dock.ExecStream(ctx, sess.ContainerID, agent.AppServerCommand(), s.execEnv(sess))
+	if err != nil {
+		return false, errors.New("exec失败: " + err.Error())
+	}
+	defer stream.Close()
+
+	pr, pw := io.Pipe()
+	defer pr.Close() // 提前返回时解开 demux 的阻塞写
+	stderr := &tailBuffer{max: 8 << 10}
+	go func() {
+		err := stream.Demux(pw, stderr)
+		pw.CloseWithError(err)
+	}()
+
+	// 中断优先走协议内的 turn/interrupt（回合优雅收尾、不惊动进程），
+	// SIGINT 仅在协议没接管时兜底（见 interrupt）。
+	ich := make(chan struct{})
+	var once sync.Once
+	r.setStop(func() { once.Do(func() { close(ich) }) })
+	defer r.setStop(nil)
+
+	err = agent.RunCodexTurn(ctx, stream, pr,
+		func() { _ = stream.CloseWrite() }, // 硬断兜底：app-server 随 stdin EOF 退出
+		ich,
+		agent.CodexTurn{Prompt: text, ThreadID: sess.ChatSession, Model: model, Effort: effort, Cwd: dockerx.WorkspaceMount},
+		onLine)
+	if err != nil {
+		if errors.Is(err, agent.ErrAppServerUnavailable) {
+			return true, err
+		}
+		if tail := stderr.String(); tail != "" {
+			return false, fmt.Errorf("%v: %s", err, tail)
+		}
+		return false, err
+	}
+
+	_ = stream.CloseWrite()    // 正常收尾：关 stdin 让 app-server 退出
+	go io.Copy(io.Discard, pr) //nolint:errcheck // 放空尾部输出，让 demux 收尾
+	if code, err := s.dock.ExitCode(ctx, stream.ExecID); err != nil {
+		log.Printf("codex app-server 等退出码 %s: %v", r.sessID, err)
+	} else if code != 0 {
+		// 回合已完整走完，退出码异常只记日志不打扰用户
+		log.Printf("codex app-server 退出码 %d (%s): %s", code, r.sessID, stderr.String())
+	}
+	return false, nil
+}
+
+func (r *chatRoom) setStop(f func()) {
+	r.mu.Lock()
+	r.stop = f
+	r.mu.Unlock()
+}
+
+// preTurnTitleState resolves the active thread and reports whether this turn is
+// its first user message with no title yet — the trigger for title generation.
+func (r *chatRoom) preTurnTitleState(sess store.Session) (tid string, firstTurn bool) {
+	r.fileMu.Lock()
+	defer r.fileMu.Unlock()
+	if err := r.srv.migrateThreads(sess); err != nil {
+		return "", false
+	}
+	tid, err := r.srv.ensureActiveThread(sess)
+	if err != nil {
+		return "", false
+	}
+	_, userTurns, hasTitle := r.srv.threadTitleSource(sess, tid)
+	// 尚无标题、且这是线程最初的消息（含首条失败后的一次重试）时才触发，
+	// 既保证只据开场消息生成，也不会每轮都白跑一次模型。
+	return tid, !hasTitle && userTurns <= 1
+}
+
+// generateTitle asks the agent to summarize the thread's opening message into a
+// short title, stores it, and broadcasts it. Best-effort: any failure leaves
+// the thread on its first-message fallback title. Runs in its own goroutine.
+func (r *chatRoom) generateTitle(tid, firstMsg string) {
+	s := r.srv
+	sess, ok := s.store.Get(r.sessID)
+	if !ok || sess.ContainerID == "" {
+		return
+	}
+	cmd, err := agent.TitleCommand(sess.Agent)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), titleTimeout)
+	defer cancel()
+	out, err := s.dock.ExecCapture(ctx, sess.ContainerID, cmd, s.execEnv(sess), titlePrompt(firstMsg))
+	if err != nil {
+		log.Printf("gen title %s: %v", r.sessID, err)
+		return
+	}
+	title := sanitizeTitle(out)
+	if title == "" {
+		return
+	}
+	r.fileMu.Lock()
+	// 二次确认没有并发写入标题（另一个页面/回合），避免重复
+	if _, _, hasTitle := s.threadTitleSource(sess, tid); hasTitle {
+		r.fileMu.Unlock()
+		return
+	}
+	err = s.appendThreadEntry(sess, tid, logEntry{Kind: "title", Text: title})
+	r.fileMu.Unlock()
+	if err != nil {
+		log.Printf("save title %s: %v", r.sessID, err)
+		return
+	}
+	r.broadcast(map[string]any{"type": "thread_title", "id": tid, "title": title})
+}
+
+// titlePrompt wraps the opening message with instructions to produce a concise
+// thread title. Only the head of a long message is needed to capture intent.
+func titlePrompt(msg string) string {
+	msg = strings.TrimSpace(msg)
+	if rs := []rune(msg); len(rs) > 800 {
+		msg = string(rs[:800])
+	}
+	return "为下面这条对话的开场消息起一个简短标题，用于在历史对话列表中标识它。" +
+		"要求：概括核心意图；使用与原消息相同的语言；不超过16个汉字（英文不超过约6个词）；" +
+		"只输出标题本身，不要引号、不要句末标点、不要任何解释或前后缀。\n\n开场消息：\n" + msg
+}
+
+// sanitizeTitle reduces raw model output to a single clean title line.
+func sanitizeTitle(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
+		s = s[:i] // 只取首行，忽略偶发的多行解释
+	}
+	s = strings.TrimSpace(s)
+	s = strings.Trim(s, "\"'`“”‘’「」《》【】 　")
+	s = strings.TrimSpace(s)
+	if rs := []rune(s); len(rs) > 40 {
+		s = string(rs[:40]) + "…"
+	}
+	return s
 }
 
 func (r *chatRoom) interrupt() {
+	// app-server 回合注册了协议内的优雅中断，优先用它
+	r.mu.Lock()
+	stop := r.stop
+	r.mu.Unlock()
+	if stop != nil {
+		stop()
+		return
+	}
 	sess, ok := r.srv.store.Get(r.sessID)
 	if !ok || sess.ContainerID == "" {
 		return

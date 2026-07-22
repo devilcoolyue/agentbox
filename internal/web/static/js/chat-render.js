@@ -147,7 +147,11 @@ function agentText(text) {
  * 代码围栏 → 带语言头和复制按钮的代码块；围栏外逐行解析块级结构
  * （标题/列表/引用/分隔线/管道表格），行内解析 code/粗斜体/删除线/链接。
  * 流式渲染也复用本函数（chat.js 打字机逐帧整段重跑），未闭合围栏
- * 天然渲染成打开的代码块，生成中即可呈现。 */
+ * 天然渲染成打开的代码块，生成中即可呈现。
+ *
+ * 例外：语言标为 math / latex / tex 的围栏当展示式交给 KaTeX——Codex/GPT 惯用
+ * ```math 围栏承载公式（Claude 惯用 $$…$$），不特判就会渲染成代码块而非公式。 */
+const MATH_FENCE = new Set(["math", "latex", "tex"]);
 
 export function formatText(text) {
   const frag = document.createDocumentFragment();
@@ -157,6 +161,8 @@ export function formatText(text) {
   for (let i = 0; i < parts.length; i += 2) {
     const isCode = (i / 2) % 2 === 1;
     if (!isCode) renderBlocks(frag, parts[i]);
+    else if (MATH_FENCE.has((parts[i - 1] || "").toLowerCase()))
+      frag.appendChild(renderMath(parts[i].replace(/\n$/, "").trim(), true));
     else frag.appendChild(codeBlock(parts[i - 1] || "", parts[i].replace(/\n$/, "")));
   }
   return frag;
@@ -382,17 +388,22 @@ function renderTable(parent, lines, i) {
 /* 行内：`code`、**粗**、*斜*、~~删除~~、[文字](http://…)、裸链接 */
 const INLINE_RE = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|~~([^~\n]+)~~|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()"']+)/g;
 
-/* 行内数学：\(…\) 或 $…$（$ 后不接空白、闭合 $ 前不接空白、闭合后不接数字，
- * 避开 $$ 与转义 \$，以降低把货币金额误判成公式的概率）。先抽公式，其余文字
- * 再交给 appendInlineFmt 走常规行内语法。 */
-const INLINE_MATH_RE = /\\\(([\s\S]+?)\\\)|(?<![\\$])\$(?!\s)([^$\n]+?)(?<!\s)\$(?!\$)(?!\d)/g;
+/* 行内数学：\(…\)、$…$ 是行内式；\[…\]、$$…$$ 本是展示式，但只有「独占一行」
+ * 时才由 renderBlocks/tryDisplayMath 成段渲染——Codex/GPT 常把 \[…\] 写在句中或
+ * 列表项里（Claude 惯用 $ / 独占行的 $$，天然走块级），这类嵌在文内的展示式若不
+ * 在此兜住就会漏成原样文本。故这里一并抽出，展示式分隔符也按行内式呈现（不断行、
+ * 不丢渲染）。$…$ 规则：$ 后不接空白、闭合 $ 前不接空白、闭合后不接数字，且避开
+ * $$ 与转义 \$，以降低把货币金额误判成公式的概率。展示式分隔符更长，排在前面先匹配。
+ * 抽出公式后，其余文字再交给 appendInlineFmt 走常规行内语法。 */
+const INLINE_MATH_RE = /\\\[([\s\S]+?)\\\]|\$\$([\s\S]+?)\$\$|\\\(([\s\S]+?)\\\)|(?<![\\$])\$(?!\s)([^$\n]+?)(?<!\s)\$(?!\$)(?!\d)/g;
 
 function appendInline(parent, text) {
   const str = String(text);
   let last = 0;
   for (const m of str.matchAll(INLINE_MATH_RE)) {
     if (m.index > last) appendInlineFmt(parent, str.slice(last, m.index));
-    parent.appendChild(renderMath(m[1] != null ? m[1] : m[2], false));
+    const tex = m[1] != null ? m[1] : m[2] != null ? m[2] : m[3] != null ? m[3] : m[4];
+    parent.appendChild(renderMath(tex, false));
     last = m.index + m[0].length;
   }
   appendInlineFmt(parent, str.slice(last));

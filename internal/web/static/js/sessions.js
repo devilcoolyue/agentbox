@@ -3,7 +3,7 @@
 "use strict";
 
 import { S, bus } from "./state.js";
-import { $, btnBusy, btnDone } from "./util.js";
+import { $, btnBusy, btnDone, wbBusy, wbIdle } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
 import { showView, renderSidebar, updateTopbarTitle } from "./shell.js";
@@ -94,6 +94,7 @@ for (const t of document.querySelectorAll(".tab")) {
 async function doStart() {
   const s = S.current; if (!s || S.actionBusy) return;
   S.actionBusy = true;
+  wbBusy("start");
   btnBusy($("btn-start"), "启动中…");
   $("btn-stop").disabled = true;
   $("btn-delete").disabled = true;
@@ -104,6 +105,7 @@ async function doStart() {
     if (S.current && S.current.id === s.id) S.current = res; // 期间切换了会话则不覆盖
   } catch (e) { alert("启动失败：" + e.message); }
   S.actionBusy = false;
+  wbIdle();
   btnDone($("btn-start"));
   $("btn-delete").disabled = false;
   renderHead(); refreshAll();
@@ -112,6 +114,7 @@ async function doStart() {
 async function doStop() {
   const s = S.current; if (!s || S.actionBusy) return;
   S.actionBusy = true;
+  wbBusy("stop");
   btnBusy($("btn-stop"), "停止中…");
   $("btn-start").disabled = true;
   $("btn-delete").disabled = true;
@@ -123,6 +126,7 @@ async function doStop() {
     termDisconnect(); // 容器停了收掉连接，但保留终端画面
   } catch (e) { alert("停止失败：" + e.message); }
   S.actionBusy = false;
+  wbIdle();
   btnDone($("btn-stop"));
   $("btn-delete").disabled = false;
   renderHead(); refreshAll();
