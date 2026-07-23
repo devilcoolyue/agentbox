@@ -62,14 +62,18 @@
   border-bottom: 1px solid var(--line);
 }
 .tab {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   background: none; border: none;
   color: var(--muted);
   padding: 10px 14px;
   border-bottom: 2px solid transparent;
   font-family: var(--mono); font-size: 13px; letter-spacing: 0.08em;
 }
+.tab-ic { flex: none; opacity: 0.75; transition: opacity 0.15s; }
 .tab:hover { color: var(--text); }
+.tab:hover .tab-ic { opacity: 1; }
 .tab.active { color: var(--amber); border-bottom-color: var(--amber); }
+.tab.active .tab-ic { opacity: 1; }
 
 .pane { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 
