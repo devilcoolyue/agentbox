@@ -5,7 +5,8 @@
  *   data-updated             — refreshAll 拉到新的 sessions/accounts
  *   open-session  {detail}   — 侧栏点击会话卡片
  *   open-settings            — 侧栏点击系统设置
- *   thread-changed           — 对话线程切换/新建/删除，chat.js 重载对话流 */
+ *   thread-changed           — 对话线程切换/新建/删除，chat.js 重载对话流
+ *   tips-updated             — 终端提示语配置变化（登录下发 / 管理员保存），term.js 重排轮播 */
 "use strict";
 
 export const bus = new EventTarget();
@@ -25,6 +26,8 @@ export const S = {
   chatWS: null,
   chatWSGen: 0,       // 防止旧连接的重连定时器复活
   termWS: null,
+  termWSGen: 0,       // 终端连接代际：切换/收尾/手动重连时自增，作废旧连接的重连定时器
+  termTips: null,     // 终端提示语配置 { tips:[], interval_sec, animation }（/me 下发，全用户可见）
   term: null,
   fit: null,
   filePath: "",

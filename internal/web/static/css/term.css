@@ -1,17 +1,48 @@
 /* term：终端页（入口按钮条 / xterm 挂载 / 上传遮罩）。 */
 
 .term-bar {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 12px;
   padding: 10px 20px;
   border-bottom: 1px solid var(--line);
 }
-.term-hint { color: var(--muted); font-size: 12px; margin-left: 6px; }
-.term-state {
-  display: inline-flex; align-items: center; gap: 7px;
-  color: var(--muted); font-size: 12px; margin-left: auto;
-  min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+
+/* ---- 左侧提示轮播：单行视窗 + 纵向滚动轨道（term.js 逐条上移，末条无缝回卷） ---- */
+.term-tips {
+  --tip-h: 18px;
+  margin-left: 6px;
+  height: var(--tip-h);
+  min-width: 0; flex: 0 1 auto;
+  overflow: hidden;
 }
+.term-tips-track { display: flex; flex-direction: column; will-change: transform; }
+.term-tip {
+  height: var(--tip-h); line-height: var(--tip-h);
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- 右侧连接状态：状态点 + 文案 + 手动重连按钮 ---- */
+.term-conn {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-left: auto; flex: none;
+}
+.term-state {
+  color: var(--muted); font-size: 12px;
+  white-space: nowrap;
+}
+.term-state[data-state="connected"] { color: var(--green); }
+.term-state[data-state="closed"] { color: var(--red); }
+.term-reconnect {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 6px;
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  cursor: pointer; flex: none;
+  transition: color .15s, border-color .15s;
+}
+.term-reconnect:hover { border-color: var(--muted); color: var(--text-hi); }
+.term-reconnect svg { width: 14px; height: 14px; }
+/* 连接中 / 重连中：图标转圈（复用 base.css 的 rot 关键帧） */
+.term-reconnect.busy svg { animation: rot 1s linear infinite; }
 /* 终端显示区容器：挂载点 + 连接加载态覆盖层共用定位上下文 */
 .term-body {
   flex: 1; min-height: 0;
@@ -49,6 +80,6 @@
 /* ---- 窄屏：隐藏粘贴提示，压缩按钮条（xterm 字号在 js/term.js 里降到 12） ---- */
 @media (max-width: 760px) {
   .term-bar { padding: 8px 12px; }
-  .term-hint { display: none; }
+  .term-tips { display: none; } /* 窄屏隐藏提示轮播，给连接状态腾空间 */
   .term-mount .xterm { padding: 6px 6px 6px 10px; }
 }

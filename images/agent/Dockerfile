@@ -4,8 +4,12 @@ FROM node:22-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git curl wget ca-certificates procps ripgrep jq unzip zip less \
-      vim-tiny openssh-client python3 build-essential \
+      vim-tiny openssh-client python3 build-essential tmux \
     && rm -rf /var/lib/apt/lists/*
+
+# 终端持久化：网页终端 exec 统一 attach 到 tmux 会话（见 termws.go），断线重连后
+# claude/codex 原样还在。配置追求"隐形"，用户无感知（无状态栏、无前缀键）。
+COPY tmux.conf /etc/tmux.conf
 
 # 版本由 scripts/auto-update-image.sh 探测后经 build-arg 钉死：版本一变
 # 只有这一层缓存失效；手动 docker build 不带参数则装 latest

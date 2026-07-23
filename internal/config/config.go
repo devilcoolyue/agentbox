@@ -11,7 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 const (
@@ -70,6 +72,58 @@ type ModelOption struct {
 	Label string `json:"label"`
 }
 
+// TerminalTips drives the rotating hint ticker in the terminal page header.
+// Editable in 系统设置 and pushed to every user (admin and regular) via /me so
+// it shows for all. Tips rotate one at a time; IntervalSec <= 0 disables
+// rotation (only the first tip shows). Animation names the transition style —
+// currently only "scroll" (a vertical roll); kept as a field so more styles can
+// be added without a schema change.
+type TerminalTips struct {
+	Tips        []string `json:"tips"`
+	IntervalSec int      `json:"interval_sec"`
+	Animation   string   `json:"animation"`
+}
+
+const (
+	defaultTipInterval = 4   // 秒：新配置未显式设置时的默认轮播频率
+	maxTips            = 30  // 提示语条数上限
+	maxTipLen          = 200 // 单条提示语字符（rune）上限
+)
+
+// defaultTerminalTips is seeded when a config has no terminal_tips block yet, so
+// existing installs keep the original single hint.
+func defaultTerminalTips() TerminalTips {
+	return TerminalTips{
+		Tips:        []string{"可直接粘贴图片，路径可点击预览"},
+		IntervalSec: defaultTipInterval,
+		Animation:   "scroll",
+	}
+}
+
+// sanitizeTips trims/drops blank lines and caps count and length, so the admin
+// textarea can be pasted in freely without tripping validation.
+func sanitizeTips(tt TerminalTips) TerminalTips {
+	clean := make([]string, 0, len(tt.Tips))
+	for _, t := range tt.Tips {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if utf8.RuneCountInString(t) > maxTipLen {
+			t = string([]rune(t)[:maxTipLen])
+		}
+		clean = append(clean, t)
+		if len(clean) >= maxTips {
+			break
+		}
+	}
+	tt.Tips = clean
+	if tt.Animation == "" {
+		tt.Animation = "scroll"
+	}
+	return tt
+}
+
 type Config struct {
 	Listen         string                   `json:"listen"`
 	AuthToken      string                   `json:"auth_token"`
@@ -82,6 +136,7 @@ type Config struct {
 	Tunnel         TunnelConfig             `json:"tunnel"`
 	Accounts       []Account                `json:"accounts"`
 	Models         map[string][]ModelOption `json:"models,omitempty"`
+	TerminalTips   TerminalTips             `json:"terminal_tips"`
 
 	mu         sync.RWMutex
 	path       string
@@ -130,6 +185,14 @@ func Load(path string) (*Config, error) {
 			{ID: "gpt-5.5", Label: "GPT-5.5"},
 			{ID: "gpt-5.5-codex", Label: "GPT-5.5 Codex"},
 		}
+	}
+
+	// 未配置 terminal_tips（老配置文件里没这一块）时，补上原来的单条提示，
+	// 避免终端页顶栏空掉。已显式配置的（哪怕 interval 为 0）尊重原样。
+	if len(cfg.TerminalTips.Tips) == 0 {
+		cfg.TerminalTips = defaultTerminalTips()
+	} else {
+		cfg.TerminalTips = sanitizeTips(cfg.TerminalTips)
 	}
 
 	base := filepath.Dir(cfg.path)
@@ -240,6 +303,14 @@ func (c *Config) validateLocked() error {
 			}
 		}
 	}
+	if c.TerminalTips.IntervalSec < 0 || c.TerminalTips.IntervalSec > 3600 {
+		return fmt.Errorf("terminal_tips.interval_sec must be between 0 and 3600 (0 关闭轮播)")
+	}
+	switch c.TerminalTips.Animation {
+	case "", "scroll":
+	default:
+		return fmt.Errorf("terminal_tips.animation %q invalid (scroll)", c.TerminalTips.Animation)
+	}
 	return nil
 }
 
@@ -267,6 +338,7 @@ type persistConfig struct {
 	Tunnel         TunnelConfig             `json:"tunnel"`
 	Accounts       []persistAccount         `json:"accounts"`
 	Models         map[string][]ModelOption `json:"models,omitempty"`
+	TerminalTips   TerminalTips             `json:"terminal_tips"`
 }
 
 // saveLocked writes the config file atomically; callers must hold the write
@@ -284,6 +356,7 @@ func (c *Config) saveLocked() error {
 		Tunnel:         c.Tunnel,
 		Accounts:       make([]persistAccount, 0, len(c.Accounts)),
 		Models:         c.Models,
+		TerminalTips:   c.TerminalTips,
 	}
 	for _, a := range c.Accounts {
 		dir := a.rawCredDir
@@ -395,6 +468,16 @@ func (c *Config) GetModels() map[string][]ModelOption {
 	return out
 }
 
+// GetTerminalTips returns a copy of the terminal-page hint ticker config; the
+// slice is copied so callers can't mutate the shared config.
+func (c *Config) GetTerminalTips() TerminalTips {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	tt := c.TerminalTips
+	tt.Tips = append([]string(nil), c.TerminalTips.Tips...)
+	return tt
+}
+
 // --- 写访问：全部先在副本上验证，通过后才落盘并生效 ---
 
 // mutate runs fn on a shallow working copy of the mutable fields, validates
@@ -414,6 +497,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Tunnel:         c.Tunnel,
 		Accounts:       append([]Account(nil), c.Accounts...),
 		Models:         c.Models,
+		TerminalTips:   c.TerminalTips,
 		path:           c.path,
 		rawDataDir:     c.rawDataDir,
 	}
@@ -436,6 +520,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.Tunnel = work.Tunnel
 	c.Accounts = work.Accounts
 	c.Models = work.Models
+	c.TerminalTips = work.TerminalTips
 	return nil
 }
 
@@ -449,6 +534,7 @@ type SettingsPatch struct {
 	Container      *ContainerLimits         `json:"container"`
 	Models         map[string][]ModelOption `json:"models"`
 	Tunnel         *TunnelConfig            `json:"tunnel"`
+	TerminalTips   *TerminalTips            `json:"terminal_tips"`
 }
 
 func (c *Config) ApplySettings(p SettingsPatch) error {
@@ -479,6 +565,9 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 			if w.Tunnel.Enabled && w.Tunnel.ProxyBind == "" {
 				w.Tunnel.ProxyBind = defaultTunnelBind // same default as Load
 			}
+		}
+		if p.TerminalTips != nil {
+			w.TerminalTips = sanitizeTips(*p.TerminalTips)
 		}
 		return nil
 	})

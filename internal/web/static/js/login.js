@@ -3,7 +3,7 @@
  * 普通用户隐藏侧栏「系统设置」入口（服务端接口同样有管理员校验）。 */
 "use strict";
 
-import { S, bus } from "./state.js";
+import { S, bus, emit } from "./state.js";
 import { $, btnBusy, btnDone } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll, startPolling } from "./data.js";
@@ -28,6 +28,8 @@ export async function tryEnter() {
   S.user = me.user;
   S.role = me.role;
   S.models = me.models || null;
+  S.termTips = me.terminal_tips || null;
+  emit("tips-updated"); // 让 term.js 用下发的提示语初始化顶栏轮播
   $("btn-settings").classList.toggle("hidden", me.role !== "admin");
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");

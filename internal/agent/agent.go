@@ -124,16 +124,6 @@ func InterruptCommand() []string {
 	return []string{"/bin/sh", "-c", "kill -INT $(cat " + PidFile + " 2>/dev/null) 2>/dev/null || true"}
 }
 
-// InteractiveCommand is what a PTY terminal in "agent" mode runs.
-func InteractiveCommand(agentType string) []string {
-	switch agentType {
-	case config.AgentCodex:
-		return []string{"codex"}
-	default:
-		return []string{"claude"}
-	}
-}
-
 // claudeSeedState pre-accepts first-run dialogs so both headless and
 // interactive modes work immediately in a fresh session home.
 var claudeSeedState = map[string]any{

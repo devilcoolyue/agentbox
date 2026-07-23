@@ -278,10 +278,19 @@
           <!-- 终端 -->
           <section id="tab-term" class="pane hidden">
             <div class="term-bar">
-              <button id="btn-term-shell" class="btn btn-sm">Shell 终端</button>
-              <button id="btn-term-agent" class="btn btn-sm">Agent 交互终端</button>
-              <span class="term-hint mono">可直接粘贴图片，路径可点击预览</span>
-              <span id="term-state" class="term-state mono"></span>
+              <!-- 左侧提示轮播：条目与频率/动画在系统设置「界面与提示」里配置，term.js 驱动 -->
+              <div id="term-tips" class="term-tips" aria-live="off"></div>
+              <!-- 右侧连接状态：状态点 + 文案 + 手动重连 -->
+              <div class="term-conn">
+                <span id="term-conn-dot" class="t-dot"></span>
+                <span id="term-state" class="term-state mono"></span>
+                <button id="term-reconnect" class="term-reconnect" type="button" title="重新连接" aria-label="重新连接">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+                    <polyline points="21 3 21 8 16 8"/>
+                  </svg>
+                </button>
+              </div>
             </div>
             <div class="term-body">
               <div id="term-mount" class="term-mount"></div>
@@ -348,6 +357,7 @@
             <button class="active" data-sec="accounts">账号池 <span id="set-acct-count" class="count">0</span></button>
             <button data-sec="container">容器与资源</button>
             <button data-sec="models">模型管理</button>
+            <button data-sec="interface">界面与提示</button>
             <button data-sec="security">安全与访问</button>
             <button data-sec="monitor">运维监控</button>
             <button data-sec="about">关于</button>
@@ -448,6 +458,40 @@
                   <input id="mdl-codex-label" type="text" placeholder="显示名称">
                   <input id="mdl-codex-id" type="text" placeholder="模型 ID" class="mono">
                   <button class="btn btn-sm mdl-add" data-agent="codex">添加</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- 界面与提示 -->
+            <section id="sec-interface" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2>界面与提示</h2>
+                  <p>控制台界面的展示项。改动即时生效，对所有用户可见。</p>
+                </div>
+              </div>
+              <div class="card">
+                <h3>终端提示语</h3>
+                <p class="card-desc">终端页左上角轮播显示的提示。每行一条，可配置多条；设置轮播频率与切换动画。留空则不显示提示。</p>
+                <label class="field">
+                  <span>提示语（每行一条）<span class="tag live">即时生效</span></span>
+                  <textarea id="set-tips" rows="4" placeholder="可直接粘贴图片，路径可点击预览&#10;支持鼠标选中复制、右键粘贴"></textarea>
+                </label>
+                <div class="field-row">
+                  <label class="field">
+                    <span>轮播频率（秒）</span>
+                    <input id="set-tips-interval" type="number" min="0" max="3600" step="1" class="mono">
+                  </label>
+                  <label class="field">
+                    <span>切换动画</span>
+                    <select id="set-tips-anim">
+                      <option value="scroll">滚动</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="card-foot">
+                  <span class="note">每行一条，最多 30 条；频率 0 表示不轮播（只显示第一条）</span>
+                  <button id="btn-save-tips" class="btn btn-primary btn-sm">保存</button>
                 </div>
               </div>
             </section>
@@ -851,6 +895,7 @@
 
 <script src="/_v/{{BUILD}}/vendor/xterm.js"></script>
 <script src="/_v/{{BUILD}}/vendor/addon-fit.js"></script>
+<script src="/_v/{{BUILD}}/vendor/addon-webgl.js"></script>
 <script src="/_v/{{BUILD}}/vendor/katex/katex.min.js"></script>
 <script type="module" src="/_v/{{BUILD}}/js/main.js"></script>
 </body>

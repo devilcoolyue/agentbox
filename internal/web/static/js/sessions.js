@@ -10,7 +10,7 @@ import { showView, renderSidebar, updateTopbarTitle } from "./shell.js";
 import { chatTeardown, resetChatImgs, loadPick, updateHero, loadHistory, connectChat } from "./chat.js";
 import { setThreadBar, closeThreadPanel } from "./chat-threads.js";
 import { svgIcon } from "./chat-render.js";
-import { termTeardown, termDisconnect } from "./term.js";
+import { termTeardown, termDisconnect, openTerm } from "./term.js";
 import { resetTree, loadFiles } from "./files.js";
 import { agentKey, agentName, agentIcon, agentAvatar, decorateAgentOpts } from "./brand.js";
 
@@ -82,7 +82,7 @@ export function setTab(name) {
   $("tab-term").classList.toggle("hidden", name !== "term");
   $("tab-files").classList.toggle("hidden", name !== "files");
   if (name === "files") loadFiles();
-  if (name === "term" && S.term && S.fit) requestAnimationFrame(() => S.fit.fit());
+  if (name === "term") openTerm(); // 进入即自动拉起 shell；已连上则只重排尺寸
 }
 
 for (const t of document.querySelectorAll(".tab")) {

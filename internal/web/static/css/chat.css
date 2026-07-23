@@ -342,8 +342,8 @@ details.think.streaming .think-body::after {
   background: none;
   border: 1px solid var(--line); border-radius: 999px;
   color: var(--muted);
-  font-size: 12px;
-  padding: 5px 13px;
+  font-size: 11px;
+  padding: 3px 10px;
 }
 .thread-new:hover { color: var(--text); border-color: var(--amber-dim); background: var(--panel); }
 

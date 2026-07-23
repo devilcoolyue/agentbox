@@ -9,7 +9,6 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"agentbox/internal/agent"
 	"agentbox/internal/store"
 )
 
@@ -22,7 +21,6 @@ const (
 // handleTermWS bridges a browser xterm.js to a TTY exec inside the session
 // container. Protocol: binary frames are raw terminal bytes in both
 // directions; text frames are JSON control messages ({"type":"resize",...}).
-// ?mode=agent runs the interactive coding agent instead of a shell.
 func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	sess, err := s.startSession(ctx, sess)
@@ -32,12 +30,17 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 		return
 	}
 
-	cmd := []string{"/bin/bash"}
-	if r.URL.Query().Get("mode") == "agent" {
-		cmd = agent.InteractiveCommand(sess.Agent)
-	}
-
-	pty, err := s.dock.ExecPTY(context.Background(), sess.ContainerID, cmd, s.execEnv(sess))
+	// Attach to a persistent tmux session instead of spawning a bare bash:
+	// docker exec detach does NOT kill the process, so a bare shell (and any
+	// claude/codex inside) would linger unreachable after a reconnect. With
+	// tmux, reconnects land back in the same session, programs survive.
+	//   -A  attach if the session exists, create otherwise
+	//   -D  detach other clients (last connection wins; a displaced client's
+	//       exec exits cleanly, and the frontend treats clean closes as final
+	//       rather than auto-reconnecting, so two tabs don't fight)
+	// Containers built from pre-tmux images fall back to a plain bash.
+	const termCmd = "command -v tmux >/dev/null && exec tmux -u new-session -A -D -s main || exec /bin/bash"
+	pty, err := s.dock.ExecPTY(context.Background(), sess.ContainerID, []string{"/bin/bash", "-c", termCmd}, s.execEnv(sess))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "exec: "+err.Error())
 		return

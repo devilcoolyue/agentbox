@@ -2,7 +2,7 @@
  * 容器与资源、模型管理、安全与访问、关于。 */
 "use strict";
 
-import { S, bus } from "./state.js";
+import { S, bus, emit } from "./state.js";
 import { $, btnBusy, btnDone, toast, fmtTime, fmtUptime, fmtBytes } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
@@ -32,7 +32,7 @@ export async function openSettingsView() {
   }
 }
 
-const SET_SECS = ["accounts", "container", "models", "security", "monitor", "about"];
+const SET_SECS = ["accounts", "container", "models", "interface", "security", "monitor", "about"];
 
 function setSec(name) {
   S.sec = name;
@@ -491,6 +491,10 @@ function fillSettingsForms() {
   $("tunnel-note").textContent = st.tunnel && st.tunnel.enabled
     ? (st.tunnel_active ? "隧道已启用，SOCKS5 代理监听中" : "隧道已启用，但代理未在监听（检查绑定地址）")
     : "默认绑定 docker 网桥网关 172.17.0.1，仅容器与本机可达";
+  const tips = st.terminal_tips || {};
+  $("set-tips").value = (tips.tips || []).join("\n");
+  $("set-tips-interval").value = tips.interval_sec != null ? tips.interval_sec : 4;
+  $("set-tips-anim").value = tips.animation || "scroll";
   renderModels();
 }
 
@@ -500,6 +504,10 @@ async function putSettings(patch, btn, okMsg) {
     S.settings = await api("/settings", { method: "PUT", body: JSON.stringify(patch) });
     fillSettingsForms();
     if (S.settings.models) S.models = S.settings.models; // 对话框的模型菜单同步更新
+    if (S.settings.terminal_tips) { // 终端顶栏轮播实时刷新
+      S.termTips = S.settings.terminal_tips;
+      emit("tips-updated");
+    }
     toast(okMsg || "已保存");
     return true;
   } catch (e) {
@@ -526,6 +534,17 @@ $("btn-save-idle").addEventListener("click", () => {
   putSettings({
     idle_timeout_min: Number($("set-idle").value),
   }, $("btn-save-idle"), "空闲停机设置已保存并即时生效");
+});
+
+$("btn-save-tips").addEventListener("click", () => {
+  const tips = $("set-tips").value.split("\n").map((t) => t.trim()).filter(Boolean);
+  putSettings({
+    terminal_tips: {
+      tips,
+      interval_sec: Number($("set-tips-interval").value) || 0,
+      animation: $("set-tips-anim").value,
+    },
+  }, $("btn-save-tips"), "终端提示已保存并即时生效");
 });
 
 $("btn-save-tunnel").addEventListener("click", async () => {

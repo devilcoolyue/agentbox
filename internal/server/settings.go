@@ -24,6 +24,7 @@ type settingsView struct {
 	IdleTimeoutMin  int64                           `json:"idle_timeout_min"`
 	Container       config.ContainerLimits          `json:"container"`
 	Models          map[string][]config.ModelOption `json:"models"`
+	TerminalTips    config.TerminalTips             `json:"terminal_tips"`
 	Tunnel          config.TunnelConfig             `json:"tunnel"`
 	TunnelActive    bool                            `json:"tunnel_active"`          // SOCKS 代理是否真的监听中
 	TunnelError     string                          `json:"tunnel_error,omitempty"` // 最近一次启停失败的原因
@@ -39,6 +40,7 @@ func (s *Server) settingsView() settingsView {
 		IdleTimeoutMin:  s.cfg.GetIdleTimeoutMin(),
 		Container:       s.cfg.GetContainer(),
 		Models:          s.cfg.GetModels(),
+		TerminalTips:    s.cfg.GetTerminalTips(),
 		Tunnel:          s.cfg.GetTunnel(),
 		TunnelActive:    s.tunnels.proxyUp.Load(),
 		RestartRequired: s.cfg.GetListen() != s.bootListen,

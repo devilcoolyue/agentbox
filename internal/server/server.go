@@ -354,7 +354,12 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	u := reqUser(r)
-	writeJSON(w, http.StatusOK, map[string]any{"user": u.Name, "role": u.Role, "models": s.cfg.GetModels()})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user":          u.Name,
+		"role":          u.Role,
+		"models":        s.cfg.GetModels(),
+		"terminal_tips": s.cfg.GetTerminalTips(),
+	})
 }
 
 // handlePing answers a tiny, unauthenticated request the client uses to gauge
