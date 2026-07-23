@@ -302,7 +302,12 @@
           <section id="tab-term" class="pane hidden">
             <div class="term-bar">
               <!-- 左侧提示轮播：条目与频率/动画在系统设置「界面与提示」里配置，term.js 驱动 -->
-              <div id="term-tips" class="term-tips" aria-live="off"></div>
+              <div id="term-tip-wrap" class="term-tip-wrap hidden">
+                <svg class="term-tip-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M9 18h6M10 22h4M15.09 14c.18-.64.66-1.14 1.16-1.64A6 6 0 1 0 7.75 12.36c.48.47.97.99 1.16 1.64Z"/>
+                </svg>
+                <div id="term-tips" class="term-tips" aria-live="off"></div>
+              </div>
               <!-- 右侧连接状态：状态点 + 文案 + 手动重连 -->
               <div class="term-conn">
                 <span id="term-conn-dot" class="t-dot"></span>

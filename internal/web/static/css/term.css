@@ -7,11 +7,16 @@
 }
 
 /* ---- 左侧提示轮播：单行视窗 + 纵向滚动轨道（term.js 逐条上移，末条无缝回卷） ---- */
+.term-tip-wrap {
+  display: flex; align-items: center; gap: 7px;
+  margin-left: 6px;
+  min-width: 0; flex: 0 1 auto;
+}
+.term-tip-icon { flex: none; color: var(--amber); }
 .term-tips {
   --tip-h: 18px;
-  margin-left: 6px;
   height: var(--tip-h);
-  min-width: 0; flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
 }
 .term-tips-track { display: flex; flex-direction: column; will-change: transform; }
@@ -108,7 +113,8 @@
 /* ---- 窄屏：提示占据连接状态左侧的剩余空间（xterm 字号在 js/term.js 里降到 12） ---- */
 @media (max-width: 760px) {
   .term-bar { padding: 2px 12px; }
-  .term-tips { margin-left: 0; flex: 1 1 0; }
+  .term-tip-wrap { margin-left: 0; flex: 1 1 0; }
+  .term-tips { flex: 1 1 0; }
   .term-mount .xterm { padding: 6px 6px 6px 10px; }
 }
 

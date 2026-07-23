@@ -264,13 +264,14 @@ let tipsTimer = null;
 
 function initTermTips() {
   const host = $("term-tips");
-  if (!host) return;
+  const wrap = $("term-tip-wrap");
+  if (!host || !wrap) return;
   if (tipsTimer) { clearInterval(tipsTimer); tipsTimer = null; }
   host.replaceChildren();
 
   const cfg = S.termTips || {};
   const tips = Array.isArray(cfg.tips) ? cfg.tips.filter((t) => t && t.trim()) : [];
-  host.classList.toggle("hidden", tips.length === 0);
+  wrap.classList.toggle("hidden", tips.length === 0);
   if (!tips.length) return;
 
   const track = document.createElement("div");
