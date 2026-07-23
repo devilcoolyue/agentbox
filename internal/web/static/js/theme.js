@@ -42,7 +42,7 @@ function apply(mode, persist = true) {
   syncUI(mode, effective);
 }
 
-/* 主按钮显示当前模式；菜单里只露出另外两个选项（active 的那项被 CSS 藏起）。 */
+/* 主钮显示当前模式；菜单三行全列出，当前项加 active（CSS 打勾）。 */
 function syncUI(mode, effective) {
   const label = MODE_LABEL[mode];
   const current = mode === "system" ? `${label}（当前${MODE_LABEL[effective]}）` : label;
@@ -51,7 +51,7 @@ function syncUI(mode, effective) {
 
   for (const b of document.querySelectorAll("[data-theme-toggle]")) {
     b.title = "主题：" + current;
-    b.setAttribute("aria-label", "主题：" + current + "，点击展开主题选项");
+    b.setAttribute("aria-label", "主题：" + current + "，展开主题选项");
   }
   for (const opt of document.querySelectorAll("[data-theme-option]")) {
     const active = opt.dataset.themeOption === mode;
@@ -78,11 +78,10 @@ function positionMenu(sw) {
   const gap = 8;
   const mw = menu.offsetWidth;
   const mh = menu.offsetHeight;
-  const preferLeft = sw.classList.contains("theme-switch-fab"); // 右上角浮钮只能往左开
 
-  let left = preferLeft ? rect.left - mw - gap : rect.right + gap;
-  if (!preferLeft && left + mw > window.innerWidth - gap) left = rect.left - mw - gap;
-  if (preferLeft && left < gap) left = rect.right + gap;
+  // 侧栏主题钮：菜单默认浮到右侧；贴到屏幕右缘时回落到左侧
+  let left = rect.right + gap;
+  if (left + mw > window.innerWidth - gap) left = rect.left - mw - gap;
   left = Math.max(gap, Math.min(left, window.innerWidth - mw - gap));
 
   let top = rect.top + rect.height / 2;
@@ -139,6 +138,9 @@ for (const sw of switches) {
   for (const opt of sw.querySelectorAll("[data-theme-option]")) {
     opt.addEventListener("click", () => {
       apply(opt.dataset.themeOption);
+      // 点完选项按钮会留着焦点，:focus-within 会把菜单钉住不消失——
+      // 主动失焦，之后只剩 :hover 撑着，鼠标一移出即收起。
+      opt.blur();
       closeSwitch(sw);
     });
   }
