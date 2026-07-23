@@ -160,8 +160,13 @@
           <span id="conn-text" class="conn-text mono">连接中…</span>
         </div>
         <div class="theme-switch theme-switch-side" data-theme-switch>
-          <button id="btn-theme" class="side-item" data-theme-toggle aria-haspopup="true" aria-expanded="false"><span class="glyph" data-theme-ico></span><span id="theme-label">跟随系统</span></button>
-          <div class="theme-menu theme-menu-side" role="menu" aria-label="主题选项">
+          <button id="btn-theme" class="side-item" data-theme-toggle aria-expanded="false" aria-controls="theme-menu">
+            <span class="glyph" data-theme-ico></span>
+            <span class="theme-title">主题</span>
+            <span id="theme-label" class="theme-current">跟随系统</span>
+            <svg class="theme-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div id="theme-menu" class="theme-menu theme-menu-side" role="menu" aria-label="主题选项">
             <button type="button" role="menuitem" data-theme-option="system"><span class="glyph" data-theme-ico></span><span class="txt">跟随系统</span></button>
             <button type="button" role="menuitem" data-theme-option="light"><span class="glyph" data-theme-ico></span><span class="txt">浅色</span></button>
             <button type="button" role="menuitem" data-theme-option="dark"><span class="glyph" data-theme-ico></span><span class="txt">深色</span></button>

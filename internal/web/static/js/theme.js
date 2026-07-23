@@ -14,6 +14,8 @@ const MODE_LABEL = { system: "跟随系统", light: "浅色", dark: "深色" };
 
 const darkMQ = window.matchMedia("(prefers-color-scheme: dark)");
 const hoverMQ = window.matchMedia("(hover: hover)");
+const narrowMQ = window.matchMedia("(max-width: 760px)");
+const usesHoverMenu = () => hoverMQ.matches && !narrowMQ.matches;
 
 function storedMode() {
   try {
@@ -74,6 +76,11 @@ function positionMenu(sw) {
   const menu = sw.querySelector(".theme-menu");
   const btn = sw.querySelector("[data-theme-toggle]");
   if (!menu || !btn) return;
+  if (narrowMQ.matches) {
+    menu.style.removeProperty("left");
+    menu.style.removeProperty("top");
+    return;
+  }
   const rect = btn.getBoundingClientRect();
   const gap = 8;
   const mw = menu.offsetWidth;
@@ -125,14 +132,15 @@ for (const sw of switches) {
 
   // 只有真正具备悬停能力的设备才用 hover 展开；触屏走 click，避免
   // 移动浏览器“先 synthesized hover 再 click”导致刚展开又被点掉。
-  sw.addEventListener("pointerenter", () => { if (hoverMQ.matches) openSwitch(sw); });
-  sw.addEventListener("pointerleave", () => { if (hoverMQ.matches) closeSwitch(sw); });
-  sw.addEventListener("focusin", () => openSwitch(sw));
+  sw.addEventListener("pointerenter", () => { if (usesHoverMenu()) openSwitch(sw); });
+  sw.addEventListener("pointerleave", () => { if (usesHoverMenu()) closeSwitch(sw); });
+  sw.addEventListener("focusin", () => { if (usesHoverMenu()) openSwitch(sw); });
   sw.addEventListener("focusout", (e) => { if (!sw.contains(e.relatedTarget)) closeSwitch(sw); });
 
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
-    toggleSwitch(sw);
+    if (usesHoverMenu()) openSwitch(sw);
+    else toggleSwitch(sw);
   });
 
   for (const opt of sw.querySelectorAll("[data-theme-option]")) {
