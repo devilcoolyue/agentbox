@@ -2,7 +2,7 @@
 
 .term-bar {
   display: flex; align-items: center; gap: 12px;
-  padding: 6px 20px;
+  padding: 3px 20px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -19,6 +19,21 @@
   height: var(--tip-h); line-height: var(--tip-h);
   font-family: var(--mono); font-size: 12px; color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: linear-gradient(90deg,
+    var(--muted) 0%, var(--muted) 44%,
+    var(--text-hi) 48%, var(--amber) 50%, var(--text-hi) 52%,
+    var(--muted) 56%, var(--muted) 100%);
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: term-tip-scan 4s linear infinite;
+}
+@keyframes term-tip-scan {
+  0%, 18% { background-position: 100% 0; }
+  72%, 100% { background-position: 0 0; }
 }
 
 /* ---- 右侧连接状态：状态点 + 文案 + 手动重连按钮 ---- */
@@ -34,13 +49,15 @@
 .term-state[data-state="closed"] { color: var(--red); }
 .term-reconnect {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: 6px;
-  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  width: 26px; height: 26px; padding: 0;
+  border: 0; background: none; color: var(--muted);
   cursor: pointer; flex: none;
-  transition: color .15s, border-color .15s;
+  transition: color .15s, transform .12s;
 }
-.term-reconnect:hover { border-color: var(--muted); color: var(--text-hi); }
-.term-reconnect svg { width: 14px; height: 14px; }
+.term-reconnect:hover { color: var(--text-hi); }
+.term-reconnect:active { transform: scale(0.9); }
+.term-reconnect:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; border-radius: 50%; }
+.term-reconnect svg { width: 18px; height: 18px; }
 /* 连接中 / 重连中：图标转圈（复用 base.css 的 rot 关键帧） */
 .term-reconnect.busy svg { animation: rot 1s linear infinite; }
 /* 终端显示区容器：挂载点 + 连接加载态覆盖层共用定位上下文 */
@@ -88,9 +105,17 @@
 }
 .term-overlay-box .spin { width: 26px; height: 26px; border-width: 3px; }
 
-/* ---- 窄屏：隐藏粘贴提示，压缩按钮条（xterm 字号在 js/term.js 里降到 12） ---- */
+/* ---- 窄屏：提示占据连接状态左侧的剩余空间（xterm 字号在 js/term.js 里降到 12） ---- */
 @media (max-width: 760px) {
-  .term-bar { padding: 5px 12px; }
-  .term-tips { display: none; } /* 窄屏隐藏提示轮播，给连接状态腾空间 */
+  .term-bar { padding: 2px 12px; }
+  .term-tips { margin-left: 0; flex: 1 1 0; }
   .term-mount .xterm { padding: 6px 6px 6px 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .term-tip {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
 }
