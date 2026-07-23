@@ -107,6 +107,20 @@ export function termReconnect() {
   connectTermWS(false);
 }
 
+// Chrome（macOS 实测）对聚焦中的 textarea 切换过 readOnly（disableStdin 的底层实现）
+// 后，IME 可能就此失灵——打拼音直接上屏字母，点页面别处再点回终端才恢复。这里主动做
+// 一轮 blur→focus 刷新 IME 上下文；textarea 本就没聚焦时直接 focus，与原行为一致。
+function refocusTerm() {
+  if (!S.term) return;
+  const ta = S.term.textarea;
+  if (ta && document.activeElement === ta) {
+    ta.blur();
+    requestAnimationFrame(() => { if (S.term) S.term.focus(); });
+  } else {
+    S.term.focus();
+  }
+}
+
 // 创建 xterm 实例（若尚不存在）：渲染器、图片路径链接、输入/尺寸回调都在这里挂一次，
 // 之后跨重连复用同一实例，回调动态读取 S.termWS，避免重复叠加监听。
 function ensureTerm() {
@@ -201,7 +215,7 @@ function connectTermWS(isReconnect) {
     setConnStatus("connected");
     ws.send(JSON.stringify({ type: "resize", cols: S.term.cols, rows: S.term.rows }));
     if (S.fit) S.fit.fit();
-    S.term.focus();
+    refocusTerm(); // 重连场景顺带刷新 IME 上下文
     refreshAll(); // 终端会自动拉起容器，刷新状态灯
   };
   ws.onmessage = (e) => {
@@ -304,7 +318,7 @@ function termUploadUI() {
   }
   if (S.term) {
     S.term.options.disableStdin = on;
-    if (!on) S.term.focus();
+    if (!on) refocusTerm(); // disableStdin 切过 readOnly，须刷新 IME 上下文
   }
 }
 
