@@ -21,6 +21,7 @@
 - **两种交互**：
   - **对话**：服务端用 `claude -p --output-format stream-json`（或 `codex exec --json`）跑无头回合，事件流经 WebSocket 推给浏览器。一个会话可以开多条**对话线程**（各自独立上下文，可随时切回继续），每条线程落盘为 `chats/<线程id>.jsonl` 并记录自己的 provider 会话 id 供 `--resume` 续聊；旧版单文件 `chat.jsonl` 首次访问时自动迁移。
   - **终端**：浏览器 xterm.js ⇄ WebSocket ⇄ `docker exec` PTY，可选进 Shell 或直接进 Agent 交互界面。
+- **长对话定位**：上滚离开底部后，输入框上方会浮出返回最新消息按钮，接近底部时自动收起。
 
 ## 部署
 

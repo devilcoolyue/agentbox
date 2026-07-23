@@ -262,10 +262,37 @@ function liveDrain() {
 }
 
 /* 贴底判定：用户已在底部附近（正在跟读）才把视口拉到最底，
- * 上滚回看历史时不打扰。务必在追加内容「之前」判定，追加后再滚。 */
-function nearBottom(log) {
-  return log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+ * 上滚回看历史时不打扰。按钮使用稍宽的出现阈值形成滞回，避免在边界抖动。 */
+const CHAT_BOTTOM_HIDE_DISTANCE = 60;
+const CHAT_BOTTOM_SHOW_DISTANCE = 96;
+
+function distanceFromBottom(log) {
+  return Math.max(0, log.scrollHeight - log.scrollTop - log.clientHeight);
 }
+
+function nearBottom(log) {
+  return distanceFromBottom(log) < CHAT_BOTTOM_HIDE_DISTANCE;
+}
+
+function updateScrollBottomButton() {
+  const log = $("chat-log");
+  const btn = $("chat-scroll-bottom");
+  const wasVisible = btn.classList.contains("show");
+  const threshold = wasVisible ? CHAT_BOTTOM_HIDE_DISTANCE : CHAT_BOTTOM_SHOW_DISTANCE;
+  const show = !log.classList.contains("hidden") &&
+    log.childElementCount > 0 && distanceFromBottom(log) > threshold;
+  btn.classList.toggle("show", show);
+  btn.setAttribute("aria-hidden", String(!show));
+}
+
+$("chat-log").addEventListener("scroll", updateScrollBottomButton, { passive: true });
+$("chat-scroll-bottom").addEventListener("click", () => {
+  $("chat-log").scrollTo({
+    top: $("chat-log").scrollHeight,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+  });
+});
+window.addEventListener("resize", updateScrollBottomButton);
 
 function liveRender(b) {
   const log = $("chat-log");
@@ -747,6 +774,7 @@ export function updateHero() {
   }
   $("chat-hero").classList.toggle("hidden", !show);
   $("chat-log").classList.toggle("hidden", loading || show);
+  updateScrollBottomButton();
 }
 
 for (const c of document.querySelectorAll(".hero-pill")) {
@@ -778,6 +806,7 @@ export async function loadHistory() {
   updateHero();
   const log = $("chat-log");
   log.scrollTop = log.scrollHeight; // 隐藏期间无法定位，呈现后直接落底
+  updateScrollBottomButton();
 }
 
 /* 对话线程发生切换（本端操作经 bus，或其它页面广播）后重载对话流 */
@@ -825,6 +854,7 @@ export function appendChat(node) {
   ensureWorking(); // 新内容后把执行指示重新压回末尾（仅运行中生效）
   updateHero();
   if (stick) log.scrollTop = log.scrollHeight;
+  updateScrollBottomButton();
 }
 
 /* ---------------- 执行指示 ----------------
