@@ -9,8 +9,8 @@
   background-size: 26px 26px;
 }
 /* 登录页没有侧栏，主题钮浮在右上角 */
+.theme-switch-fab { position: fixed; top: 16px; right: 16px; z-index: 80; }
 .theme-fab {
-  position: fixed; top: 16px; right: 16px; z-index: 10;
   width: 36px; height: 36px;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--panel);
@@ -18,6 +18,7 @@
   color: var(--muted); padding: 0;
 }
 .theme-fab:hover { color: var(--amber); border-color: var(--amber-dim); }
+.theme-fab svg { display: block; }
 .login-card {
   width: min(380px, 90vw);
   background: var(--panel);
@@ -142,12 +143,51 @@
   background: color-mix(in srgb, var(--amber) 10%, transparent);
   border-color: var(--amber-dim);
 }
-/* 主题钮（侧栏项与登录页浮钮共用）：两枚图标常驻 DOM，露出的那枚代表
- * 「点下去会切到的主题」——暗色时亮太阳，浅色时亮月亮，文案由 theme.js 同步。
- * 写成「藏起另一枚」而不是「先全藏再露一枚」：后者的 display:none 权重压不过
- * .side-item .glyph svg { display: block }，两枚图标会一起冒出来。 */
-:root:not([data-theme="light"]) .ic-moon,
-:root[data-theme="light"] .ic-sun { display: none; }
+/* ---- 主题切换：主钮显示当前模式；悬停/聚焦/点按在右侧浮出另外两个选项。
+ * 菜单用 fixed 定位（由 theme.js 计算坐标），避免侧栏 overflow-y:auto 把它裁掉；
+ * 仍在 .theme-switch 子树里，所以指针从主钮移进菜单不会丢失 :hover。 */
+.theme-switch { position: relative; }
+.theme-switch-side { width: 100%; }
+.theme-switch-side > .side-item { width: 100%; }
+.theme-menu {
+  position: fixed; z-index: 90;
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px;
+  background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateY(-50%) translateX(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s;
+}
+.theme-switch.open .theme-menu,
+.theme-switch:hover .theme-menu,
+.theme-switch:focus-within .theme-menu {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transform: translateY(-50%) translateX(0);
+}
+.theme-menu button {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: none; border: 0; border-radius: 7px;
+  color: var(--muted);
+  padding: 7px 9px;
+  font-size: 12.5px; white-space: nowrap;
+}
+.theme-menu button:hover { background: var(--panel-2); color: var(--text); }
+.theme-menu button.active { display: none; } /* 菜单里只出现「另外两个」 */
+.theme-menu .glyph {
+  flex: none; width: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* 三枚图标常驻 DOM：主钮按 data-theme-mode 露当前模式，选项钮按自身
+ * data-theme-option 露对应图标。 */
+.theme-switch button svg.ic-theme { display: none; }
+:root[data-theme-mode="system"] [data-theme-toggle] .ic-system,
+:root[data-theme-mode="light"] [data-theme-toggle] .ic-sun,
+:root[data-theme-mode="dark"] [data-theme-toggle] .ic-moon,
+.theme-switch [data-theme-option="system"] svg.ic-system,
+.theme-switch [data-theme-option="light"] svg.ic-sun,
+.theme-switch [data-theme-option="dark"] svg.ic-moon { display: block; }
 .side-item .glyph {
   font-family: var(--mono); font-size: 15px;
   flex: none; width: 18px;
@@ -243,6 +283,10 @@
   .scrim { display: block; }
   .scrim:not(.show) { pointer-events: none; }
   .scrim.show { opacity: 1; }
+  /* 触屏没有悬停，点主钮展开；窄屏下选项收成纯图标，避免撑出屏幕 */
+  .theme-menu { gap: 2px; padding: 4px; }
+  .theme-menu button { padding: 8px; }
+  .theme-menu .txt { display: none; }
 }
 @media (min-width: 761px) {
   .kebab-wrap { display: none; } /* 桌面端会话操作在工作台头部 */

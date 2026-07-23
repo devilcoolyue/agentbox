@@ -3,8 +3,9 @@
  * base：设计令牌、基础元素、跨页面通用组件（按钮/状态灯/转圈/气泡/字标）。
  * 断点约定：全站移动端断点统一为 max-width: 760px，各文件就近写自己的窄屏规则。
  *
- * 主题切换：js/theme.js 在 <html> 上写 data-theme="dark|light"（index.html 头部
- * 有一段内联脚本先行落属性，避免首屏闪白）。全站颜色一律走下面的令牌，
+ * 主题切换：js/theme.js 在 <html> 上写 data-theme-mode="system|light|dark"
+ * （用户选择）与 data-theme="dark|light"（实际生效；index.html 头部有一段
+ * 内联脚本先行落属性，避免首屏闪白）。全站颜色一律走下面的令牌，
  * 任何新样式都不要再写死色值，否则浅色主题下会漏色。 */
 
 :root {
