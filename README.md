@@ -14,18 +14,23 @@
 ## 核心概念
 
 - **会话（Session）**：一个独立容器 + 一块宿主机持久目录（`data/users/<user>/sessions/<id>/`，含 `workspace` 与 `home`）。停止会话只是停容器，数据不丢；重新打开自动拉起容器并通过 `--resume` 续接对话。
-- **共享目录（Shared）**：每个用户一块跨会话共用的目录（`data/users/<user>/shared/`），挂载到该用户所有会话容器的 `/shared`。会话工作区互相隔离，需要在会话间传递代码/产物时放这里；文件页签可切换「工作区 / 共享目录」进行上传下载（API 加 `?scope=shared`）。
+- **共享目录（Shared）**：每个用户一块跨会话共用的目录（`data/users/<user>/shared/`），挂载到该用户所有会话容器的 `/shared`。会话工作区互相隔离，需要在会话间传递代码/产物时放这里；文件页签可切换「工作区 / 共享目录」进行上传下载，也可删除文件/目录，或把它们移动到两个范围内的任意目录（API 加 `?scope=shared`）。
 - **主题**：登录页与侧栏主题钮支持跟随系统（默认）、浅色、深色三种模式；桌面端悬停展开另外两个选项，触屏端点按展开。
-- **粘贴图片**：对话输入框和终端里都可以直接 Ctrl+V 粘贴截图。图片自动上传到 `/shared/.images/`，对话里以 `[Image #N]` 占位（发送时替换为容器内路径，Agent 用 Read 工具查看），消息里显示可点击缩略图；终端里直接注入路径文本，路径可点击弹出预览。图片保留 48 小时后由服务端自动清理。
+- **粘贴图片**：对话输入框和终端里都可以直接 Ctrl+V 粘贴截图。图片自动上传到 `/shared/.images/`，对话里以 `[Image #N]` 占位（发送时替换为容器内路径，Agent 用 Read 工具查看），消息里显示可点击缩略图；终端里直接注入路径文本，路径可点击弹出预览。图片保留 48 小时后由服务端自动清理；**仍被对话记录引用的附件不会被清掉**，历史里的缩略图不会随时间变成失效占位。
 - **账号池（Accounts）**：配置多个订阅账号或 API Key，新建会话时选择。凭证在每次启动时从池目录同步进会话 home。
 - **两种交互**：
-  - **对话**：服务端用 `claude -p --output-format stream-json`（或 `codex exec --json`）跑无头回合，事件流经 WebSocket 推给浏览器。一个会话可以开多条**对话线程**（各自独立上下文，可随时切回继续），每条线程落盘为 `chats/<线程id>.jsonl` 并记录自己的 provider 会话 id 供 `--resume` 续聊；旧版单文件 `chat.jsonl` 首次访问时自动迁移。
+  - **对话**：服务端用 `claude -p --output-format stream-json`（或 `codex exec --json`）跑无头回合，事件流经 WebSocket 推给浏览器。一个会话可以开多条**对话线程**（各自独立上下文，可随时切回继续），每条线程落盘为 `chats/<线程id>.jsonl` 并记录自己的 provider 会话 id 供 `--resume` 续聊；旧版单文件 `chat.jsonl` 首次访问时自动迁移。历史加载超时或失败时页面会显示重试入口，并在恢复前暂停发送，避免把消息发进尚未确认的线程。
   - **终端**：浏览器 xterm.js ⇄ WebSocket ⇄ `docker exec` PTY，可选进 Shell 或直接进 Agent 交互界面。
 - **长对话定位**：上滚离开底部后，输入框上方会浮出返回最新消息按钮，接近底部时自动收起。
+- **变更审查**：工作台「变更」页签直接看 workspace 相对上次提交的改动（文件列表 + 彩色 diff），可一键提交或丢弃（单文件/全部）。默认 `bypassPermissions` 下，这是审查 Agent 改动的主入口，不必切到终端敲 `git diff`。
+- **断线与休眠**：对话通道断开时页面顶部出现状态条并指数退避重连，重连后自动补拉断线期间错过的消息；与服务器彻底失联会常驻离线横幅。会话被空闲自动停机后标记为「休眠」（区别于手动停止），直接发消息即自动唤醒并把这条消息发出去。
+- **文件管理**：除上传/下载/移动/删除外，还可新建文件夹、重命名、多选与拖拽上传（带进度条）。
+- **重命名与检索**：会话可在 ⋯ 菜单里改名；对话线程可改名，历史面板支持按标题搜索。
 
 ## 部署
 
-前置：Linux、Docker、（编译需要 Go 1.26+，或直接使用编译好的 `agentbox` 二进制）。
+前置：Linux、Docker、git 与 sqlite3（变更审查与数据备份用）、python3（部署脚本用）；
+编译还需 Go 1.26+，或直接使用编译好的 `agentbox` 二进制。
 
 ```bash
 # 1. 构建服务端与 agent 镜像
@@ -43,7 +48,7 @@ mkdir -p accounts/claude-1
 
 # 4. 启动
 ./agentbox -config config.json
-# 浏览器打开 http://127.0.0.1:8080 ，用管理员账号 boxadmin 登录，
+# 浏览器打开 http://127.0.0.1:8180 ，用管理员账号 boxadmin 登录，
 # 初始密码 = config.json 里的 auth_token（首次启动时自动建号）
 # 登录后可在「系统设置 → 安全与访问」修改密码、创建普通用户
 ```
@@ -168,19 +173,30 @@ GET    /api/sessions                会话列表
 POST   /api/sessions                新建 {name, agent, account_id}
 POST   /api/sessions/{id}/start     启动容器（幂等）
 POST   /api/sessions/{id}/stop      停止容器（数据保留）
+PATCH  /api/sessions/{id}           重命名会话 {name}
 DELETE /api/sessions/{id}?purge=1   删除（purge 同时删工作区）
 POST   /api/sessions/{id}/upload    上传代码包 multipart(file)，zip/tar.gz；clear=1 先清空
 GET    /api/sessions/{id}/archive   打包下载 (zip)
 GET    /api/sessions/{id}/files     文件列表（含权限/大小/时间）?path=
+DELETE /api/sessions/{id}/files     递归删除文件或目录 ?path=
+POST   /api/sessions/{id}/files/move  移动文件或目录
+                                      {source_scope,source_path,destination_scope,destination_dir}
+POST   /api/sessions/{id}/files/mkdir 新建文件夹 {scope,dir,name}
+POST   /api/sessions/{id}/files/rename 重命名文件或目录 {scope,path,name}
 GET    /api/sessions/{id}/file      读单个文件 ?path=；dl=1 强制下载
 PUT    /api/sessions/{id}/file      保存文件内容（body 即内容，上限 16MB）
 POST   /api/sessions/{id}/images    粘贴图片上传（multipart file，上限 20MB），
                                     存入 /shared/.images/，48 小时后自动清理
 （以上文件类接口均支持 ?scope=shared 操作共享目录，默认工作区）
+GET    /api/sessions/{id}/git/status  变更列表（分支 + 文件状态；非 git 仓库时 is_repo=false）
+GET    /api/sessions/{id}/git/diff    unified diff（?path= 查看单文件）
+POST   /api/sessions/{id}/git/commit  git add -A 后提交 {message}
+POST   /api/sessions/{id}/git/discard 丢弃改动 {path?}（省略=全部，恢复到 HEAD）
 GET    /api/sessions/{id}/history   当前对话线程的历史（含线程元数据）
 GET    /api/sessions/{id}/chat/threads              对话线程列表（标题/时间/轮数/是否可续聊）
 POST   /api/sessions/{id}/chat/threads              开启新对话线程（旧线程保留可切回）
 POST   /api/sessions/{id}/chat/threads/{tid}/activate  切换到指定线程并恢复其上下文
+PATCH  /api/sessions/{id}/chat/threads/{tid}        重命名线程 {title}
 DELETE /api/sessions/{id}/chat/threads/{tid}        删除线程（删当前线程自动切到最近一条）
 WS     /api/sessions/{id}/chat      对话通道（JSON 事件）
 WS     /api/sessions/{id}/term      终端通道（二进制 PTY；?mode=shell|agent）
@@ -202,6 +218,5 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（data/abox-link/ �
 
 ## 后续扩展（预留）
 
-- 多用户：数据层已按 `users/<id>/` 组织，只需在服务端加 token→用户表。
 - 多宿主机：把 dockerx.Manager 换成远程 Docker host 或调度层。
 - Codex 适配为尽力实现（事件字段随版本变化），Claude 链路为主。
