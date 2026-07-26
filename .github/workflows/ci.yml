@@ -33,7 +33,26 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # 只对「代码里真正调用到」的漏洞失败，且允许在 .github/vuln-allowlist.txt
+      # 里按 ID 豁免（每条都写明理由）。清单之外的漏洞照常让 CI 红，新 CVE 不会
+      # 被悄悄放行。
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          govulncheck -format json ./... > vuln.json
+          jq -sr '[.[] | select(.finding) | .finding
+                  | select(.trace[0].function) | .osv] | unique | .[]' \
+            vuln.json | sort -u > called.txt
+          grep -vE '^\s*(#|$)' .github/vuln-allowlist.txt \
+            | awk '{print $1}' | sort -u > allowed.txt
+
+          echo "== 代码可达的漏洞 =="; cat called.txt
+          echo "== 已豁免 =="; cat allowed.txt
+
+          if comm -23 called.txt allowed.txt | grep -q .; then
+            echo "::error::发现未豁免的漏洞："
+            comm -23 called.txt allowed.txt
+            echo "确认不影响本项目的话，把 ID 连同理由加进 .github/vuln-allowlist.txt"
+            exit 1
+          fi
+          echo "没有未豁免的漏洞。"
