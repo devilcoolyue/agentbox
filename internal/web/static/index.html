@@ -357,13 +357,18 @@
               </div>
               <div class="files-actions">
                 <label class="check"><input type="checkbox" id="upload-clear"> <span id="upload-clear-label">上传前清空工作区</span></label>
+                <button id="btn-mkdir" class="btn btn-sm">新建文件夹</button>
                 <button id="btn-upload" class="btn btn-sm">上传代码包</button>
-                <input id="upload-input" type="file" class="hidden" accept=".zip,.tar,.tar.gz,.tgz,*/*">
+                <input id="upload-input" type="file" class="hidden" multiple accept=".zip,.tar,.tar.gz,.tgz,*/*">
                 <button id="btn-download" class="btn btn-sm">下载工作区 (zip)</button>
               </div>
             </div>
+            <div id="upload-progress" class="upload-progress hidden">
+              <div class="upload-progress-track"><span id="upload-progress-fill"></span></div>
+              <span id="upload-progress-text" class="mono"></span>
+            </div>
             <div id="files-head" class="files-head mono hidden">
-              <span>名称</span><span>权限</span><span class="num">大小</span><span>修改时间</span>
+              <span>名称</span><span>权限</span><span class="num">大小</span><span>修改时间</span><span class="factions-head">操作</span>
             </div>
             <div id="files-list" class="files-list"></div>
           </section>
@@ -725,6 +730,67 @@
       <div id="fv-imgwrap" class="fv-imgwrap hidden"><img id="fv-img" alt=""></div>
       <div id="fv-notice" class="fv-notice hidden"></div>
     </div>
+  </div>
+</dialog>
+
+<!-- 移动文件 / 目录 -->
+<dialog id="dlg-file-move" class="dlg-file-move">
+  <div class="dlg-head">
+    <h2 id="file-move-title">移动文件</h2>
+    <button type="button" id="file-move-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <div class="file-op-source">
+    <span>正在移动</span>
+    <code id="file-move-source" class="mono"></code>
+  </div>
+  <div class="file-move-nav">
+    <div class="scope-switch" role="tablist" aria-label="目标范围">
+      <button type="button" id="file-move-ws" class="scope-btn">工作区</button>
+      <button type="button" id="file-move-shared" class="scope-btn">共享目录</button>
+    </div>
+    <div id="file-move-crumb" class="file-move-crumb mono"></div>
+  </div>
+  <div id="file-move-dirs" class="file-move-dirs"></div>
+  <div class="file-move-target">
+    <span>目标目录</span>
+    <code id="file-move-target" class="mono"></code>
+  </div>
+  <p id="file-move-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="file-move-cancel" class="btn">取消</button>
+    <button type="button" id="file-move-ok" class="btn btn-primary">移动到这里</button>
+  </div>
+</dialog>
+
+<!-- 删除文件 / 目录确认 -->
+<dialog id="dlg-file-delete">
+  <div class="dlg-head">
+    <h2 id="file-delete-title">删除文件</h2>
+    <button type="button" id="file-delete-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <p id="file-delete-text"></p>
+  <p id="file-delete-warning" class="field-hint"></p>
+  <p id="file-delete-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="file-delete-cancel" class="btn">取消</button>
+    <button type="button" id="file-delete-ok" class="btn btn-danger">删除</button>
+  </div>
+</dialog>
+
+<!-- 新建文件夹 / 重命名 通用输入框 -->
+<dialog id="dlg-file-name">
+  <div class="dlg-head">
+    <h2 id="file-name-title">新建文件夹</h2>
+    <button type="button" id="file-name-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <div class="file-name-field">
+    <label id="file-name-label" for="file-name-input">文件夹名称</label>
+    <input id="file-name-input" type="text" class="mono" autocomplete="off" spellcheck="false">
+  </div>
+  <p id="file-name-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="file-name-cancel" class="btn">取消</button>
+    <button type="button" id="file-name-ok" class="btn btn-primary">确定</button>
   </div>
 </dialog>
 
