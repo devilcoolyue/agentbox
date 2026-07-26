@@ -3,7 +3,7 @@
 "use strict";
 
 import { S, bus, emit } from "./state.js";
-import { $, btnBusy, btnDone, toast, fmtTime, fmtUptime, fmtBytes } from "./util.js";
+import { $, btnBusy, btnDone, toast, fmtTime, fmtUptime, fmtBytes, askConfirm, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
 import { showView } from "./shell.js";
@@ -658,9 +658,14 @@ function userRow(u) {
   pw.className = "btn btn-sm btn-ghost";
   pw.textContent = "重置密码";
   pw.addEventListener("click", async () => {
-    const next = prompt("为用户「" + u.name + "」设置新密码（至少 8 位）：");
+    const next = await askPrompt({
+      title: "重置密码",
+      label: "为用户「" + u.name + "」设置新密码",
+      hint: "至少 8 位。重置后该用户其他已登录端会立即失效。",
+      password: true,
+      validate: (v) => (v.length < 8 ? "密码至少 8 位" : ""),
+    });
     if (next === null) return;
-    if (next.length < 8) { toast("密码至少 8 位", true); return; }
     try {
       await api("/users/" + u.name + "/password", {
         method: "POST", body: JSON.stringify({ password: next }),
@@ -676,7 +681,12 @@ function userRow(u) {
     del.className = "btn btn-sm btn-danger";
     del.textContent = "删除";
     del.addEventListener("click", async () => {
-      if (!confirm("删除用户「" + u.name + "」？其全部会话容器将一并删除，工作区文件保留在磁盘上。")) return;
+      const ok = await askConfirm("删除用户「" + u.name + "」？", {
+        title: "删除用户",
+        hint: "其全部会话容器将一并删除，工作区文件保留在磁盘上。",
+        okLabel: "删除", danger: true,
+      });
+      if (!ok) return;
       btnBusy(del, "删除中…");
       try {
         await api("/users/" + u.name, { method: "DELETE" });

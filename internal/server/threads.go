@@ -467,6 +467,51 @@ func (s *Server) handleThreadActivate(w http.ResponseWriter, r *http.Request, se
 	writeJSON(w, http.StatusOK, map[string]any{"id": tid, "resumable": resume != ""})
 }
 
+// handleThreadRename gives a thread a user-chosen title. Titles live as "title"
+// entries in the transcript and the newest one wins, so a rename is just one
+// more appended entry — no rewrite of the JSONL, and the model-generated title
+// it replaces stays in history.
+func (s *Server) handleThreadRename(w http.ResponseWriter, r *http.Request, sess store.Session) {
+	tid := r.PathValue("tid")
+	if !threadIDRe.MatchString(tid) {
+		writeErr(w, http.StatusBadRequest, "无效的对话 id")
+		return
+	}
+	var req struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体格式错误")
+		return
+	}
+	title := truncRunes(strings.TrimSpace(req.Title), 120)
+	if title == "" {
+		writeErr(w, http.StatusBadRequest, "标题不能为空")
+		return
+	}
+	room := s.chat.room(sess.ID)
+	room.fileMu.Lock()
+	if err := s.migrateThreads(sess); err != nil {
+		room.fileMu.Unlock()
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if _, err := os.Stat(s.threadPath(sess, tid)); err != nil {
+		room.fileMu.Unlock()
+		writeErr(w, http.StatusNotFound, "对话不存在")
+		return
+	}
+	err := s.appendThreadEntry(sess, tid, logEntry{Kind: "title", Text: title})
+	room.fileMu.Unlock()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// 其它打开着同一会话的标签页同步改名
+	room.broadcast(map[string]any{"type": "thread_title", "id": tid, "title": title})
+	writeJSON(w, http.StatusOK, map[string]string{"id": tid, "title": title})
+}
+
 func (s *Server) handleThreadDelete(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	tid := r.PathValue("tid")
 	if !threadIDRe.MatchString(tid) {

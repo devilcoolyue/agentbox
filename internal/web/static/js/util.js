@@ -113,6 +113,83 @@ export function toast(msg, isErr) {
   toastTimer = setTimeout(() => t.classList.remove("show"), isErr ? 4200 : 2600);
 }
 
+/* ---- 通用确认 / 输入对话框 ----
+ * 替代原生 alert/confirm/prompt：原生弹窗阻塞 JS、样式与深色主题割裂，
+ * 移动端（尤其 iOS 的 prompt）体验尤差。这里保持 Promise 化的调用形状，
+ * 调用点仍然是一行 await。 */
+
+function dlgOnce(dialog, resolveWith) {
+  return new Promise((resolve) => {
+    const done = (value) => {
+      dialog.removeEventListener("close", onClose);
+      resolve(value);
+    };
+    const onClose = () => done(resolveWith(dialog.returnValue));
+    dialog.addEventListener("close", onClose, { once: true });
+    dialog.showModal();
+  });
+}
+
+/* 确认：true=确定，false=取消/关闭。opts: {title, hint, okLabel, danger} */
+export function askConfirm(text, opts = {}) {
+  $("ask-title").textContent = opts.title || "确认";
+  $("ask-text").textContent = text;
+  const hint = $("ask-hint");
+  hint.textContent = opts.hint || "";
+  hint.classList.toggle("hidden", !opts.hint);
+  const ok = $("ask-ok");
+  ok.textContent = opts.okLabel || "确定";
+  ok.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
+  return dlgOnce($("dlg-ask"), (v) => v === "ok");
+}
+
+$("ask-ok").addEventListener("click", () => $("dlg-ask").close("ok"));
+$("ask-cancel").addEventListener("click", () => $("dlg-ask").close(""));
+$("ask-close").addEventListener("click", () => $("dlg-ask").close(""));
+
+/* 输入：返回字符串，取消返回 null（与 window.prompt 语义一致）。
+ * opts: {title, label, value, hint, placeholder, validate(v)->错误文案|""} */
+export function askPrompt(opts = {}) {
+  $("ask-input-title").textContent = opts.title || "输入";
+  $("ask-input-label").textContent = opts.label || "";
+  const field = $("ask-input-field");
+  field.value = opts.value || "";
+  field.type = opts.password ? "password" : "text";
+  field.placeholder = opts.placeholder || "";
+  const hint = $("ask-input-hint");
+  hint.textContent = opts.hint || "";
+  hint.classList.toggle("hidden", !opts.hint);
+  askInputValidate = opts.validate || null;
+  setAskInputError("");
+  const p = dlgOnce($("dlg-ask-input"), (v) => (v === "ok" ? field.value : null));
+  field.focus();
+  field.select();
+  return p;
+}
+
+let askInputValidate = null;
+function setAskInputError(msg) {
+  const el = $("ask-input-error");
+  el.textContent = msg || "";
+  el.classList.toggle("hidden", !msg);
+}
+
+function submitAskInput() {
+  const value = $("ask-input-field").value;
+  if (askInputValidate) {
+    const err = askInputValidate(value);
+    if (err) { setAskInputError(err); return; }
+  }
+  $("dlg-ask-input").close("ok");
+}
+
+$("ask-input-ok").addEventListener("click", submitAskInput);
+$("ask-input-cancel").addEventListener("click", () => $("dlg-ask-input").close(""));
+$("ask-input-close").addEventListener("click", () => $("dlg-ask-input").close(""));
+$("ask-input-field").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); submitAskInput(); }
+});
+
 /* ---- 图片灯箱（对话缩略图 / 终端路径预览共用） ---- */
 
 export function openLightbox(url, title) {

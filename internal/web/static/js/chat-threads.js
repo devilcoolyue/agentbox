@@ -7,7 +7,7 @@
 "use strict";
 
 import { S, emit } from "./state.js";
-import { $, fmtTime, toast, withSpin } from "./util.js";
+import { $, fmtTime, toast, withSpin, askConfirm, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { svgIcon, USER_ATTACH_RE } from "./chat-render.js";
 
@@ -58,6 +58,11 @@ async function openThreadPanel() {
   await refreshList();
 }
 
+/* 最近一次拉到的列表：搜索过滤在本地做，重度用户攒下几十条也不必每敲一个字
+ * 就打一次接口 */
+let allThreads = [];
+let activeID = "";
+
 async function refreshList() {
   const sess = S.current; if (!sess) return;
   const list = $("tp-list");
@@ -69,19 +74,43 @@ async function refreshList() {
   try {
     const { threads, active } = await api(`/sessions/${sess.id}/chat/threads`);
     if (S.current !== sess || !panelOpen()) return;
-    if (!threads.length) {
-      const d = document.createElement("div");
-      d.className = "tp-empty";
-      d.textContent = "还没有对话记录。发出第一条消息后，这里会出现历史对话。";
-      list.replaceChildren(d);
-      return;
-    }
-    $("tp-count").textContent = threads.length + " 条";
-    list.replaceChildren(...threads.map((t) => threadItem(t, t.id === active)));
+    allThreads = threads;
+    activeID = active;
+    renderList();
   } catch (e) {
     if (panelOpen()) toast("加载历史对话失败：" + e.message, true);
   }
 }
+
+function renderList() {
+  const list = $("tp-list");
+  const q = $("tp-search").value.trim().toLowerCase();
+  const shown = q
+    ? allThreads.filter((t) => previewText(t.title).toLowerCase().includes(q))
+    : allThreads;
+  $("tp-search").classList.toggle("hidden", allThreads.length < 2 && !q);
+  if (!allThreads.length) {
+    const d = document.createElement("div");
+    d.className = "tp-empty";
+    d.textContent = "还没有对话记录。发出第一条消息后，这里会出现历史对话。";
+    list.replaceChildren(d);
+    return;
+  }
+  if (!shown.length) {
+    const d = document.createElement("div");
+    d.className = "tp-empty";
+    d.textContent = `没有标题匹配「${q}」的对话。`;
+    list.replaceChildren(d);
+    $("tp-count").textContent = `0 / ${allThreads.length} 条`;
+    return;
+  }
+  $("tp-count").textContent = q
+    ? `${shown.length} / ${allThreads.length} 条`
+    : allThreads.length + " 条";
+  list.replaceChildren(...shown.map((t) => threadItem(t, t.id === activeID)));
+}
+
+$("tp-search").addEventListener("input", renderList);
 
 function threadItem(t, on) {
   const row = document.createElement("div");
@@ -101,6 +130,13 @@ function threadItem(t, on) {
   open.append(title, meta);
   open.addEventListener("click", () => { if (on) closeThreadPanel(); else switchThread(t); });
 
+  const ren = document.createElement("button");
+  ren.type = "button";
+  ren.className = "tp-del"; // 与删除同一套图标按钮样式
+  ren.title = "重命名这条对话";
+  ren.appendChild(svgIcon("rename", 15));
+  ren.addEventListener("click", (e) => { e.stopPropagation(); renameThread(t); });
+
   const del = document.createElement("button");
   del.type = "button";
   del.className = "tp-del";
@@ -108,8 +144,31 @@ function threadItem(t, on) {
   del.appendChild(svgIcon("trash", 15));
   del.addEventListener("click", (e) => { e.stopPropagation(); delThread(t); });
 
-  row.append(open, del);
+  row.append(open, ren, del);
   return row;
+}
+
+async function renameThread(t) {
+  const sess = S.current; if (!sess) return;
+  const name = await askPrompt({
+    title: "重命名对话",
+    label: "对话标题",
+    value: previewText(t.title),
+    hint: "留作辨认用；不会影响对话内容与上下文。",
+    validate: (v) => (v.trim() ? "" : "标题不能为空"),
+  });
+  if (name === null) return;
+  try {
+    const res = await api(`/sessions/${sess.id}/chat/threads/${t.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: name.trim() }),
+    });
+    t.title = res.title;
+    if (S.thread && S.thread.id === t.id) applyThreadTitle(t.id, res.title);
+    renderList();
+    toast("已重命名");
+  } catch (e) { toast("重命名失败：" + e.message, true); }
 }
 
 /* ---- 动作 ---- */
@@ -153,7 +212,10 @@ async function delThread(t) {
   const isCur = !!(S.thread && S.thread.id === t.id);
   if (isCur && busy()) return;
   const name = previewText(t.title);
-  if (!window.confirm(`删除对话「${name.length > 24 ? name.slice(0, 24) + "…" : name}」？记录不可恢复。`)) return;
+  const ok = await askConfirm(`删除对话「${name.length > 24 ? name.slice(0, 24) + "…" : name}」？`, {
+    title: "删除对话", hint: "该对话的全部消息记录不可恢复。", okLabel: "删除", danger: true,
+  });
+  if (!ok) return;
   try {
     await api(`/sessions/${sess.id}/chat/threads/${t.id}`, { method: "DELETE" });
     if (isCur) emit("thread-changed"); // 服务端已自动切到最近一条

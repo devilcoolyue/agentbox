@@ -175,6 +175,7 @@ func (s *Server) Run() error {
 	mux.Handle("GET /api/sessions/{id}", s.auth(s.withSession(s.handleGetSession)))
 	mux.Handle("POST /api/sessions/{id}/start", s.auth(s.withSession(s.handleStartSession)))
 	mux.Handle("POST /api/sessions/{id}/stop", s.auth(s.withSession(s.handleStopSession)))
+	mux.Handle("PATCH /api/sessions/{id}", s.auth(s.withSession(s.handleRenameSession)))
 	mux.Handle("DELETE /api/sessions/{id}", s.auth(s.withSession(s.handleDeleteSession)))
 	mux.Handle("POST /api/sessions/{id}/upload", s.auth(s.withSession(s.handleUpload)))
 	mux.Handle("GET /api/sessions/{id}/archive", s.auth(s.withSession(s.handleArchive)))
@@ -192,6 +193,7 @@ func (s *Server) Run() error {
 	mux.Handle("GET /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadList)))
 	mux.Handle("POST /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadNew)))
 	mux.Handle("POST /api/sessions/{id}/chat/threads/{tid}/activate", s.auth(s.withSession(s.handleThreadActivate)))
+	mux.Handle("PATCH /api/sessions/{id}/chat/threads/{tid}", s.auth(s.withSession(s.handleThreadRename)))
 	mux.Handle("DELETE /api/sessions/{id}/chat/threads/{tid}", s.auth(s.withSession(s.handleThreadDelete)))
 	// 旧入口：语义已并入「新建对话线程」，保留路由兼容尚未刷新的页面
 	mux.Handle("POST /api/sessions/{id}/chat/reset", s.auth(s.withSession(s.handleThreadNew)))

@@ -3,7 +3,7 @@
 "use strict";
 
 import { S, bus } from "./state.js";
-import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange } from "./util.js";
+import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
 import { chip, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon } from "./chat-render.js";
@@ -607,13 +607,17 @@ function choose(kind, v) {
   closePickMenu();
 }
 
-function askCustomModel() {
-  const cur = customModel();
-  const v = window.prompt("输入模型 ID（留空恢复默认）", cur);
+async function askCustomModel() {
+  const v = await askPrompt({
+    title: "自定义模型",
+    label: "模型 ID",
+    value: customModel(),
+    hint: "留空恢复默认模型。",
+    validate: (s) => (s.trim() && !MODEL_ID_RE.test(s.trim())
+      ? "模型 ID 格式不合法（字母数字开头，可含 . _ -）" : ""),
+  });
   if (v === null) return;
-  const t = v.trim();
-  if (t && !MODEL_ID_RE.test(t)) { alert("模型 ID 格式不合法（字母数字开头，可含 . _ -）"); return; }
-  choose("model", t);
+  choose("model", v.trim());
 }
 
 /* 某属性的完整选项列表，浮层与移动端二级面板共用 */

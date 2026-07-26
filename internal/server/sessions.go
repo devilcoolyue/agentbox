@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"agentbox/internal/agent"
@@ -188,6 +189,30 @@ func (s *Server) handleStartSession(w http.ResponseWriter, r *http.Request, sess
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 	updated, err := s.startSession(ctx, sess)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s.view(updated))
+}
+
+// handleRenameSession changes a session's display name. Only the label moves —
+// the id, directories and container name are all derived from the id, so a
+// rename touches nothing else.
+func (s *Server) handleRenameSession(w http.ResponseWriter, r *http.Request, sess store.Session) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体格式错误")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" || len([]rune(name)) > 64 {
+		writeErr(w, http.StatusBadRequest, "会话名称需为 1-64 个字符")
+		return
+	}
+	updated, err := s.store.Update(sess.ID, func(x *store.Session) { x.Name = name })
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return

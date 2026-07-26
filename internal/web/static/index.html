@@ -138,6 +138,7 @@
         <button id="kb-start"><span class="glyph"></span>启动</button>
         <button id="kb-stop"><span class="glyph"></span>停止</button>
         <div class="sep"></div>
+        <button id="kb-rename"><span class="glyph"></span>重命名会话</button>
         <button id="kb-delete" class="danger"><span class="glyph"></span>删除会话</button>
       </div>
     </div>
@@ -794,6 +795,38 @@
   </div>
 </dialog>
 
+<!-- 通用确认框（替代原生 confirm） -->
+<dialog id="dlg-ask">
+  <div class="dlg-head">
+    <h2 id="ask-title">确认</h2>
+    <button type="button" id="ask-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <p id="ask-text"></p>
+  <p id="ask-hint" class="field-hint hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="ask-cancel" class="btn">取消</button>
+    <button type="button" id="ask-ok" class="btn btn-primary">确定</button>
+  </div>
+</dialog>
+
+<!-- 通用输入框（替代原生 prompt） -->
+<dialog id="dlg-ask-input">
+  <div class="dlg-head">
+    <h2 id="ask-input-title">输入</h2>
+    <button type="button" id="ask-input-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <div class="file-name-field">
+    <label id="ask-input-label" for="ask-input-field"></label>
+    <input id="ask-input-field" type="text" class="mono" autocomplete="off" spellcheck="false">
+  </div>
+  <p id="ask-input-hint" class="field-hint hidden"></p>
+  <p id="ask-input-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="ask-input-cancel" class="btn">取消</button>
+    <button type="button" id="ask-input-ok" class="btn btn-primary">确定</button>
+  </div>
+</dialog>
+
 <!-- 图片灯箱 -->
 <dialog id="dlg-img" class="dlg-img">
   <button id="lb-close" class="dlg-x lb-x" aria-label="关闭">✕</button>
@@ -987,6 +1020,7 @@
     <button id="tp-close" class="dlg-x" aria-label="关闭">✕</button>
   </header>
   <button id="tp-new" class="btn btn-primary tp-new">＋ 开启新对话</button>
+  <input id="tp-search" class="tp-search" type="search" placeholder="搜索对话标题…" autocomplete="off">
   <div id="tp-list" class="tp-list"></div>
   <p class="tp-hint">每条对话是独立的上下文，切换后接着聊，互不串扰。</p>
 </aside>
