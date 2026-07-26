@@ -135,3 +135,58 @@
   .tabs { padding: 0; gap: 0; }
   .tab { flex: 1; padding: 0; height: 44px; }
 }
+
+/* ---- 变更（Git 审查）页 ---- */
+.changes-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px; border-bottom: 1px solid var(--line);
+}
+.changes-branch {
+  color: var(--muted); font-size: 12px; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.changes-actions { display: flex; gap: 8px; }
+.changes-body { flex: 1; min-height: 0; display: flex; }
+.changes-list {
+  width: 300px; flex-shrink: 0; overflow-y: auto;
+  border-right: 1px solid var(--line); padding: 6px;
+}
+.changes-diff { flex: 1; min-width: 0; overflow: auto; padding: 8px 14px; }
+.change-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border-radius: 7px; cursor: pointer;
+}
+.change-row:hover { background: var(--panel-2); }
+.change-row.active { background: var(--panel-2); outline: 1px solid var(--line); }
+.change-badge {
+  flex-shrink: 0; font-size: 11px; padding: 1px 6px; border-radius: 5px;
+  border: 1px solid var(--line);
+}
+.change-badge.k-add { color: #3fb950; border-color: color-mix(in srgb, #3fb950 45%, transparent); }
+.change-badge.k-del { color: var(--red); border-color: var(--red-line); }
+.change-badge.k-mod { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+.change-badge.k-ren { color: var(--muted); }
+.change-path {
+  flex: 1; min-width: 0; font-size: 12.5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.change-discard {
+  flex-shrink: 0; border: none; background: none; color: var(--muted);
+  cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 5px;
+}
+.change-discard:hover { color: var(--red); background: var(--panel); }
+.changes-diff .diff { margin: 0; font-size: 12.5px; line-height: 1.55; white-space: pre; }
+.diff span { display: block; }
+.diff .d-add { color: #3fb950; background: color-mix(in srgb, #3fb950 12%, transparent); }
+.diff .d-del { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+.diff .d-hunk { color: #6ea8fe; }
+.diff .d-meta { color: var(--muted); }
+.diff .d-ctx { color: var(--text); }
+
+@media (max-width: 760px) {
+  .changes-body { flex-direction: column; }
+  .changes-list {
+    width: auto; max-height: 42%;
+    border-right: none; border-bottom: 1px solid var(--line);
+  }
+}

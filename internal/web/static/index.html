@@ -232,6 +232,10 @@
               <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
               </svg><span class="t">文件</span></button>
+            <button class="tab" data-tab="changes">
+              <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7"/><circle cx="18" cy="7" r="2.5"/><path d="M18 9.5c0 5-6 3-6 6.5"/>
+              </svg><span class="t">变更</span></button>
           </nav>
 
           <!-- 对话 -->
@@ -380,6 +384,22 @@
               <span>名称</span><span>权限</span><span class="num">大小</span><span>修改时间</span><span class="factions-head">操作</span>
             </div>
             <div id="files-list" class="files-list"></div>
+          </section>
+
+          <!-- 变更（Git 审查） -->
+          <section id="tab-changes" class="pane hidden">
+            <div class="changes-bar">
+              <div id="changes-branch" class="changes-branch mono"></div>
+              <div class="changes-actions">
+                <button id="btn-changes-refresh" class="btn btn-sm">刷新</button>
+                <button id="btn-changes-discard-all" class="btn btn-sm" disabled>全部丢弃</button>
+                <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled>提交</button>
+              </div>
+            </div>
+            <div class="changes-body">
+              <div id="changes-list" class="changes-list"></div>
+              <div id="changes-diff" class="changes-diff"></div>
+            </div>
           </section>
 
           <!-- 生命周期遮罩：启动/停止时罩住头部按钮以下的整块工作区（不含侧栏），
@@ -783,6 +803,37 @@
   <div class="dlg-actions">
     <button type="button" id="file-delete-cancel" class="btn">取消</button>
     <button type="button" id="file-delete-ok" class="btn btn-danger">删除</button>
+  </div>
+</dialog>
+
+<!-- Git 提交 -->
+<dialog id="dlg-git-commit">
+  <div class="dlg-head">
+    <h2>提交变更</h2>
+    <button type="button" id="git-commit-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <div class="file-name-field">
+    <label for="git-commit-msg">提交信息</label>
+    <textarea id="git-commit-msg" class="mono" rows="3" placeholder="描述这次改动…"></textarea>
+  </div>
+  <p id="git-commit-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="git-commit-cancel" class="btn">取消</button>
+    <button type="button" id="git-commit-ok" class="btn btn-primary">提交</button>
+  </div>
+</dialog>
+
+<!-- Git 丢弃改动确认 -->
+<dialog id="dlg-git-discard">
+  <div class="dlg-head">
+    <h2 id="git-discard-title">丢弃改动</h2>
+    <button type="button" id="git-discard-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <p id="git-discard-text"></p>
+  <p class="field-hint">会把文件恢复到最近一次提交的状态，未提交的改动无法恢复。</p>
+  <div class="dlg-actions">
+    <button type="button" id="git-discard-cancel" class="btn">取消</button>
+    <button type="button" id="git-discard-ok" class="btn btn-danger">丢弃</button>
   </div>
 </dialog>
 

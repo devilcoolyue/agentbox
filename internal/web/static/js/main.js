@@ -13,6 +13,7 @@ import "./chat.js";
 import "./voice.js";
 import "./term.js";
 import "./files.js";
+import "./changes.js";
 import "./preview.js";
 import "./settings.js";
 import "./tunnel.js";
