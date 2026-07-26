@@ -1,4 +1,4 @@
-/var/log/agentbox.log {
+/var/log/agentbox.log /var/log/agentbox-image-update.log /var/log/agentbox-backup.log {
     weekly
     rotate 8
     compress

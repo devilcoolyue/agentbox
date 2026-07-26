@@ -847,17 +847,27 @@ function renderMonitorTiles(m) {
   const box = $("mon-tiles");
   const p = m.process, h = m.host, su = m.summary;
   const memPct = h.mem_total ? (h.mem_used / h.mem_total) * 100 : 0;
+  const diskPct = h.disk_total ? (h.disk_used / h.disk_total) * 100 : 0;
   // 首帧还没有上一帧可做差，CPU 速率标「测量中」而不是误导的 0.0%。
   const cpu = (v) => (m.window_ms ? v.toFixed(1) + "%" : "测量中");
   const cpuPct = (v) => (m.window_ms ? v : undefined);
-  box.replaceChildren(
+  const tiles = [
     monTile("后端 CPU", cpu(p.cpu_percent), "已运行 " + fmtUptime(p.uptime_ms), cpuPct(p.cpu_percent)),
     monTile("后端内存", fmtBytes(p.rss), "Go 堆 " + fmtBytes(p.heap_alloc) + " · " + p.goroutines + " 协程"),
     monTile("主机 CPU", cpu(h.cpu_percent), h.cpu_count + " 核 · 负载 " + h.load1.toFixed(2), cpuPct(h.cpu_percent)),
     monTile("主机内存", fmtBytes(h.mem_used) + " / " + fmtBytes(h.mem_total), memPct.toFixed(0) + "% 已用", memPct),
+  ];
+  // 数据盘写满会连带拖垮 SQLite 与所有会话，水位单独给一格（读不到则不显示）。
+  if (h.disk_total) {
+    const hint = diskPct >= 90 ? "数据盘将满，尽快清理" : "数据目录所在磁盘";
+    tiles.push(monTile("磁盘水位", fmtBytes(h.disk_used) + " / " + fmtBytes(h.disk_total),
+      diskPct.toFixed(0) + "% 已用 · " + hint, diskPct));
+  }
+  tiles.push(
     monTile("运行容器", su.running + " / " + su.total, "个会话容器在运行"),
     monTile("容器合计", cpu(su.cpu_percent), "内存 " + fmtBytes(su.mem_usage)),
   );
+  box.replaceChildren(...tiles);
 }
 
 function renderMonitorTable(m) {

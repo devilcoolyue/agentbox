@@ -248,6 +248,7 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 	}
 	lim := m.cfg.GetContainer()
 	pids := lim.PidsLimit
+	initProc := true // run an init (tini) as PID 1 to reap orphaned zombies
 	cc := &container.Config{
 		Image:      m.cfg.GetAgentImage(),
 		Cmd:        []string{"sleep", "infinity"},
@@ -268,6 +269,10 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 		},
 		NetworkMode: container.NetworkMode(lim.Network),
 		SecurityOpt: []string{"no-new-privileges:true"},
+		// PID 1 is `sleep infinity`, which never reaps children; without an init
+		// the zombies from every exec'd process tree would slowly exhaust
+		// PidsLimit on these long-lived containers.
+		Init: &initProc,
 		Resources: container.Resources{
 			Memory:    lim.MemoryMB << 20,
 			NanoCPUs:  int64(lim.CPUs * 1e9),

@@ -57,6 +57,22 @@ if [[ "$(systemctl is-active agentbox)" != "active" ]]; then
   exit 1
 fi
 
+# 端口绑定不代表 HTTP 栈可服务（SQLite 打不开、静态资源哈希构建失败等半死
+# 状态探不出来）。用无鉴权的 /api/ping 做应用级探活。
+if [[ -n "$listen" ]]; then
+  port=${listen##*:}
+  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$port/api/ping" || echo 000)
+  if [[ "$code" != "204" && "$code" != "200" ]]; then
+    echo
+    echo "!! /api/ping 返回 $code，服务未就绪，最近日志：" >&2
+    tail -20 /var/log/agentbox.log >&2
+    echo
+    echo "回滚：mv -f \$(ls -1t agentbox.bak-* | head -1) agentbox && systemctl restart agentbox" >&2
+    exit 1
+  fi
+  echo "==> 健康检查 /api/ping: $code"
+fi
+
 echo "==> 就绪"
 systemctl status agentbox --no-pager | head -6
 [[ -n "$listen" ]] && ss -ltnp 2>/dev/null | grep -F "$listen" || true

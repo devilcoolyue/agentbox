@@ -1,0 +1,10 @@
+[Unit]
+Description=agentbox data backup (SQLite + config + accounts)
+After=agentbox.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/scripts/backup.sh
+StandardOutput=append:/var/log/agentbox-backup.log
+StandardError=append:/var/log/agentbox-backup.log

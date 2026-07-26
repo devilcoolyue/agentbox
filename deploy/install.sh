@@ -17,7 +17,9 @@ fi
 
 echo "安装路径: $APP_DIR"
 
-for unit in agentbox.service agentbox-image-update.service agentbox-image-update.timer; do
+for unit in agentbox.service \
+  agentbox-image-update.service agentbox-image-update.timer \
+  agentbox-backup.service agentbox-backup.timer; do
   sed "s|__APP_DIR__|$APP_DIR|g" "deploy/$unit" > "$UNIT_DIR/$unit"
   echo "  -> $UNIT_DIR/$unit"
 done
@@ -26,8 +28,8 @@ install -m 0644 deploy/agentbox.logrotate /etc/logrotate.d/agentbox
 echo "  -> /etc/logrotate.d/agentbox"
 
 systemctl daemon-reload
-systemctl enable agentbox.service agentbox-image-update.timer >/dev/null
-systemctl start agentbox-image-update.timer
+systemctl enable agentbox.service agentbox-image-update.timer agentbox-backup.timer >/dev/null
+systemctl start agentbox-image-update.timer agentbox-backup.timer
 
 echo
 echo "单元已安装并设为开机自启。接着跑 ./deploy/deploy.sh 构建并启动。"
