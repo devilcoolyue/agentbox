@@ -78,6 +78,32 @@ func Login(server, user, password string, insecure bool) (string, error) {
 	return out.Token, nil
 }
 
+// RevokeToken best-effort asks the server to invalidate a session token
+// (POST /api/logout). Called on unpair so a copied config.json's token can't
+// outlive the unpair; a failure is non-fatal since the token also ages out via
+// the server-side TTL.
+func RevokeToken(server, token string, insecure bool) error {
+	base, err := baseURL(server)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, base.String()+"/api/logout", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := httpClient(insecure).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("logout: %s", resp.Status)
+	}
+	return nil
+}
+
 // wsURL builds the tunnel WebSocket URL for a base URL.
 func wsURL(base *url.URL) string {
 	scheme := "wss"

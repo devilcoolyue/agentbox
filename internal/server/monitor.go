@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"agentbox/internal/dockerx"
@@ -96,6 +97,8 @@ type hostStat struct {
 	Load1      float64 `json:"load1"`
 	MemTotal   uint64  `json:"mem_total"`
 	MemUsed    uint64  `json:"mem_used"`
+	DiskTotal  uint64  `json:"disk_total"` // data_dir 所在文件系统容量
+	DiskUsed   uint64  `json:"disk_used"`  // 已用（含系统保留块，近似）
 }
 
 type monitorSummary struct {
@@ -157,6 +160,7 @@ func (s *Server) handleMonitor(w http.ResponseWriter, r *http.Request) {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 	memTotal, memUsed := readMeminfo()
+	diskTotal, diskFree := readDiskUsage(s.cfg.DataDir)
 
 	view := monitorView{
 		Now:    cur.at.UnixMilli(),
@@ -169,10 +173,12 @@ func (s *Server) handleMonitor(w http.ResponseWriter, r *http.Request) {
 			Uptime:     time.Since(s.startedAt).Milliseconds(),
 		},
 		Host: hostStat{
-			CPUCount: runtime.NumCPU(),
-			Load1:    readLoad1(),
-			MemTotal: memTotal,
-			MemUsed:  memUsed,
+			CPUCount:  runtime.NumCPU(),
+			Load1:     readLoad1(),
+			MemTotal:  memTotal,
+			MemUsed:   memUsed,
+			DiskTotal: diskTotal,
+			DiskUsed:  diskTotal - diskFree,
 		},
 		Containers: []containerStat{},
 	}
@@ -345,6 +351,17 @@ func readRSS() uint64 {
 	}
 	pages, _ := strconv.ParseUint(fields[1], 10, 64)
 	return pages * uint64(os.Getpagesize())
+}
+
+// readDiskUsage returns total and available bytes of the filesystem holding
+// path. Statfs works on Linux and macOS; the server never builds for Windows.
+func readDiskUsage(path string) (total, free uint64) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(path, &st); err != nil {
+		return 0, 0
+	}
+	bsize := uint64(st.Bsize)
+	return st.Blocks * bsize, st.Bavail * bsize
 }
 
 func readLoad1() float64 {

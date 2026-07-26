@@ -150,7 +150,10 @@ func (s *Server) stopIdle(id string, d time.Duration) {
 		log.Printf("idle reaper stop %s: %v", id, err)
 		return
 	}
-	if _, err := s.store.Update(id, func(x *store.Session) { x.Status = store.StatusStopped }); err != nil {
+	if _, err := s.store.Update(id, func(x *store.Session) {
+		x.Status = store.StatusStopped
+		x.StopReason = store.StopIdle // 让前端把「休眠」与用户手动停止区分开
+	}); err != nil {
 		log.Printf("idle reaper mark %s: %v", id, err)
 	}
 	log.Printf("idle reaper: stopped %s after %s idle", id, d)

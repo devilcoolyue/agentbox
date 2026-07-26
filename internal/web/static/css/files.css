@@ -62,22 +62,23 @@
 .files-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .check { color: var(--muted); font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
 
-/* 文件列表：名称 | 权限 | 大小 | 修改时间 */
+/* 文件列表：名称 | 权限 | 大小 | 修改时间 | 操作 */
 .files-head, .file-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px 88px 168px;
+  grid-template-columns: minmax(0, 1fr) 110px 88px 168px 108px;
   gap: 14px; align-items: center;
   padding: 0 10px;
 }
 .files-head {
   margin: 8px 20px 0;
   padding-top: 6px; padding-bottom: 6px;
-  font-size: 11px; letter-spacing: 0.14em;
+  font-size: 11px; letter-spacing: 0;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
   text-transform: uppercase;
 }
 .files-head .num { text-align: right; }
+.files-head .factions-head { text-align: right; }
 .files-list { flex: 1; overflow-y: auto; padding: 0 20px 20px; }
 .file-row {
   padding-top: 6px; padding-bottom: 6px;
@@ -114,11 +115,70 @@
 .file-row.dir .flabel { color: var(--amber); }
 .file-row.empty-dir { border-bottom: none; }
 .file-row .muted { color: var(--muted); font-style: normal; }
-.file-row .fperm { color: var(--muted); font-size: 12px; letter-spacing: 0.04em; }
+.file-row .fperm { color: var(--muted); font-size: 12px; letter-spacing: 0; }
 .file-row .fsize { color: var(--muted); font-size: 12px; text-align: right; }
 .file-row .ftime { color: var(--muted); font-size: 12px; }
+.file-row .factions {
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  min-width: 72px;
+}
+.file-act {
+  width: 28px; height: 28px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--muted);
+}
+.file-act:hover, .file-act:focus-visible {
+  color: var(--amber); border-color: var(--line); background: var(--panel-2); outline: none;
+}
+.file-act.danger:hover, .file-act.danger:focus-visible { color: var(--red); border-color: var(--red-line); }
+.file-act:disabled { opacity: 0.4; cursor: progress; }
 .files-empty { color: var(--muted); padding: 24px 10px; font-size: 13px; }
 /* 目录读取中：直接用 base.css 的 .loading-block */
+
+/* ---- 移动 / 删除文件 ---- */
+.dlg-file-move { width: min(560px, 94vw); padding-bottom: 22px; overflow: hidden; }
+.file-op-source, .file-move-target {
+  display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: baseline; gap: 10px;
+  color: var(--muted); font-size: 12px;
+}
+.file-op-source { margin-bottom: 16px; }
+.file-op-source code, .file-move-target code {
+  min-width: 0; color: var(--text); overflow-wrap: anywhere; font-size: 12px;
+}
+.file-move-nav {
+  display: flex; align-items: center; gap: 14px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.file-move-crumb {
+  flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
+  color: var(--muted); font-size: 12px; scrollbar-width: none;
+}
+.file-move-crumb::-webkit-scrollbar { display: none; }
+.file-move-crumb button {
+  padding: 0; border: 0; background: transparent; color: var(--amber); font: inherit;
+}
+.file-move-dirs {
+  height: 260px; overflow-y: auto;
+  border-bottom: 1px solid var(--line);
+}
+.file-move-dir {
+  width: 100%; height: 40px;
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 8px; border: 0; border-bottom: 1px solid var(--line-soft);
+  border-radius: 0; background: transparent; color: var(--text); text-align: left;
+}
+.file-move-dir:hover, .file-move-dir:focus-visible { background: var(--panel-2); color: var(--amber); outline: none; }
+.file-move-dir .dir-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-move-dir .dir-arrow { color: var(--muted); }
+.file-move-dir:disabled { color: var(--muted); opacity: 0.5; cursor: not-allowed; }
+.file-move-dir:disabled:hover { background: transparent; color: var(--muted); }
+.file-move-empty { margin: 0; padding: 24px 8px; color: var(--muted); font-size: 12px; }
+.file-move-dirs .loading-block { min-height: 100%; }
+.file-move-target { padding-top: 12px; }
+.dlg-file-move .login-error, #dlg-file-delete .login-error { margin: 10px 0 0; }
+#dlg-file-delete p { line-height: 1.65; overflow-wrap: anywhere; }
 
 /* ---- 文件预览 / 编辑 ---- */
 .dlg-file {
@@ -185,12 +245,18 @@
   .files-actions { justify-content: flex-end; }
   .files-actions .check { margin-right: auto; }
 
-  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) 76px; gap: 12px; }
+  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) 66px 100px; gap: 8px; }
   .files-head span:nth-child(2), .files-head span:nth-child(4),
   .file-row .fperm, .file-row .ftime { display: none; }
   .files-head { margin: 4px 12px 0; }
   .files-list { padding: 0 12px 14px; }
   .file-row { padding-top: 10px; padding-bottom: 10px; } /* 触控行高 ≈40px */
+  .file-row .factions { min-width: 100px; gap: 2px; }
+
+  .dlg-file-move { width: 94vw; padding: 20px 18px; }
+  .file-move-nav { align-items: stretch; flex-direction: column; gap: 10px; }
+  .file-move-nav .scope-switch { align-self: flex-start; }
+  .file-move-dirs { height: min(42dvh, 300px); }
 
   .dlg-file {
     width: 100vw; height: 100dvh;
@@ -198,3 +264,41 @@
     margin: 0; border: none; border-radius: 0;
   }
 }
+
+/* 上传进度条 */
+.upload-progress {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 20px; border-bottom: 1px solid var(--line-soft);
+}
+.upload-progress-track {
+  flex: 1; height: 6px; border-radius: 3px;
+  background: var(--panel-2); overflow: hidden;
+}
+#upload-progress-fill {
+  display: block; height: 100%; width: 0;
+  background: var(--amber); transition: width 0.15s ease;
+}
+#upload-progress-text { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+/* 拖拽上传高亮 */
+#tab-files { position: relative; }
+#tab-files.drag-over { outline: 2px dashed var(--amber); outline-offset: -6px; }
+#tab-files.drag-over::after {
+  content: "松开以上传文件";
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--amber);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  pointer-events: none;
+}
+
+/* 新建文件夹 / 重命名 输入框 */
+#dlg-file-name { width: min(420px, 94vw); }
+.file-name-field { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.file-name-field label { font-size: 13px; color: var(--muted); }
+.file-name-field input {
+  padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel-2); color: var(--text); font-family: var(--mono);
+}
+.file-name-field input:focus-visible { outline: none; border-color: var(--amber); }
+#dlg-file-name .login-error { margin: 10px 0 0; }

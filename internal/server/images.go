@@ -98,29 +98,69 @@ func (s *Server) imageJanitor() {
 	}
 }
 
-func (s *Server) cleanExpiredImages() {
-	var dirs []string
-	for _, sub := range []string{imagesSubdir, filesSubdir} {
-		found, err := filepath.Glob(filepath.Join(s.cfg.DataDir, "users", "*", "shared", sub))
-		if err != nil {
-			continue
-		}
-		dirs = append(dirs, found...)
+// attachRefRe matches the stored container path of an attachment inside a chat
+// transcript, e.g. "[图片#1 /shared/.images/20260726-101500-ab12cd.png]".
+var attachRefRe = regexp.MustCompile(`/shared/\.(?:images|file)/([A-Za-z0-9._-]+)`)
+
+// referencedAttachments returns the attachment file names a user's chat
+// transcripts still point at. Those must survive the TTL sweep: an expired
+// image turns every past message that showed it into a broken placeholder,
+// which contradicts the promise that conversations are kept.
+func (s *Server) referencedAttachments(userDir string) map[string]bool {
+	refs := map[string]bool{}
+	transcripts, err := filepath.Glob(filepath.Join(userDir, "sessions", "*", "chats", "*.jsonl"))
+	if err != nil {
+		return refs
 	}
-	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
+	// The legacy single-file transcript may still be around next to the session.
+	if legacy, err := filepath.Glob(filepath.Join(userDir, "sessions", "*", "chat.jsonl")); err == nil {
+		transcripts = append(transcripts, legacy...)
+	}
+	for _, path := range transcripts {
+		raw, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		for _, e := range entries {
-			info, err := e.Info()
-			if err != nil || !info.Mode().IsRegular() {
+		for _, m := range attachRefRe.FindAllSubmatch(raw, -1) {
+			refs[string(m[1])] = true
+		}
+	}
+	return refs
+}
+
+func (s *Server) cleanExpiredImages() {
+	userDirs, err := filepath.Glob(filepath.Join(s.cfg.DataDir, "users", "*"))
+	if err != nil {
+		return
+	}
+	for _, userDir := range userDirs {
+		var expired []string
+		for _, sub := range []string{imagesSubdir, filesSubdir} {
+			dir := filepath.Join(userDir, "shared", sub)
+			entries, err := os.ReadDir(dir)
+			if err != nil {
 				continue
 			}
-			if time.Since(info.ModTime()) > imageTTL {
-				if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
-					log.Printf("image janitor: %v", err)
+			for _, e := range entries {
+				info, err := e.Info()
+				if err != nil || !info.Mode().IsRegular() {
+					continue
 				}
+				if time.Since(info.ModTime()) > imageTTL {
+					expired = append(expired, filepath.Join(dir, e.Name()))
+				}
+			}
+		}
+		if len(expired) == 0 {
+			continue // 没有过期候选就不必读转录，省掉绝大多数扫描
+		}
+		refs := s.referencedAttachments(userDir)
+		for _, path := range expired {
+			if refs[filepath.Base(path)] {
+				continue // 仍被某条消息引用，留着
+			}
+			if err := os.Remove(path); err != nil {
+				log.Printf("image janitor: %v", err)
 			}
 		}
 	}

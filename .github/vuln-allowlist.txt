@@ -1,0 +1,18 @@
+# govulncheck 豁免清单
+#
+# 这里只放「经过判断确认不影响 agentbox」的漏洞 ID，每条必须写明理由。
+# 不在清单里的漏洞一律让 CI 失败——新增 CVE 不会被这份清单悄悄放行。
+#
+# 空行与 # 开头的行会被忽略；ID 之后的内容是注释。
+
+# --- github.com/docker/docker（Moby）---
+# 以下四条都是 dockerd 守护进程侧的问题，而 agentbox 只引用其 Go 客户端库经
+# socket 与守护进程通信。govulncheck 把它们标成「已调用」是因为 docker/docker
+# 是一个巨型模块、漏洞库按模块登记，给出的调用轨迹基本都是 client.init 之类的
+# 包初始化，并非真实可达路径；四条也都是 Fixed in: N/A，客户端库本就无可修之处。
+# 真正的缓解措施是升级宿主机上的 Docker 守护进程，不是升级这个依赖。
+
+GO-2026-5668   docker cp 符号链接竞态可在宿主创建任意空文件；agentbox 不使用 docker cp（工作区走 bind mount，命令走 exec）
+GO-2026-5617   docker cp 竞态可把 bind mount 重定向到宿主路径；同上，不使用 docker cp
+GO-2026-4887   Moby 在超大请求体下 AuthZ 插件被绕过；agentbox 未启用任何 AuthZ 插件
+GO-2026-4883   Moby 插件权限校验 off-by-one；agentbox 不安装/授权 Docker 插件

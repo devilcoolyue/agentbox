@@ -4,10 +4,14 @@
 "use strict";
 
 import { $, fmtLatency } from "./util.js";
+import { refreshAll } from "./data.js";
 
 const INTERVAL = 5000;
 const TIMEOUT = 8000;
+/* 连续失败到这个次数才亮横幅：一次超时多半只是网络抖动，立刻弹横幅反而吵。 */
+const OFFLINE_AFTER = 2;
 let timer = 0;
+let fails = 0;
 
 async function measure() {
   if (document.hidden) return; // 后台标签不必刷，回到前台下一拍即恢复
@@ -17,12 +21,24 @@ async function measure() {
   try {
     const res = await fetch("/api/ping?t=" + Date.now(), { cache: "no-store", signal: ctrl.signal });
     if (!res.ok) throw new Error("bad");
+    const wasOffline = fails >= OFFLINE_AFTER;
+    fails = 0;
     render(performance.now() - t0, true);
+    setOffline(false);
+    // 断线期间的状态变化（会话被停、被别的端删除）没被 8 秒轮询拿到，补一次
+    if (wasOffline) refreshAll();
   } catch (_) {
+    fails++;
     render(0, false);
+    setOffline(fails >= OFFLINE_AFTER);
   } finally {
     clearTimeout(to);
   }
+}
+
+function setOffline(on) {
+  const el = $("offline-banner");
+  if (el) el.classList.toggle("hidden", !on);
 }
 
 function render(ms, ok) {
@@ -31,6 +47,12 @@ function render(ms, ok) {
   dot.className = "t-dot " + (!ok ? "bad" : ms < 120 ? "good" : ms < 350 ? "warn" : "bad");
   text.textContent = ok ? "连接 " + fmtLatency(ms) : "连接 已断开";
 }
+
+/* 从后台切回前台：轮询这段时间是停摆的，立刻测一次并刷新数据，
+ * 免得用户看着一屏 8 秒前（或几分钟前）的旧状态。 */
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && timer) { measure(); refreshAll(); }
+});
 
 /* 登录进入主界面后启动；重复调用只保留一个循环。 */
 export function startPing() {

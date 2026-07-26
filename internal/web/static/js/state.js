@@ -39,4 +39,5 @@ export const S = {
   pick: { model: "", effort: "" }, // 当前会话的模型/思考强度选择（"" = 默认）
   models: null,       // 服务端下发的可选模型表 { claude: [{id,label}], codex: [...] }
   histLoading: false, // 历史对话加载中：中央转圈，不闪新会话引导页
+  histError: "",      // 历史加载失败：保留错误态，禁止误在未知线程上发送消息
 };

@@ -291,6 +291,12 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* 休眠标记：空闲自动停机，与用户手动停止区分开 */
+.sc-sleep {
+  color: var(--amber);
+  opacity: 0.85;
+}
+
 /* ---- 抽屉遮罩：仅窄屏显示 ---- */
 .scrim {
   display: none;

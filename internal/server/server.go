@@ -71,6 +71,8 @@ type Server struct {
 	startMu sync.Mutex
 	starts  map[string]*sync.Mutex // per-session start locks
 
+	logins *loginGuard // per-IP failed-login throttle
+
 	idle *activity // per-session liveness for the idle reaper
 
 	mon *monState // 上一帧计数器快照，供监控页按轮询间隔算 CPU 速率
@@ -97,6 +99,7 @@ func New(cfg *config.Config) (*Server, error) {
 		startedAt:  time.Now(),
 		bootListen: cfg.GetListen(),
 		starts:     map[string]*sync.Mutex{},
+		logins:     newLoginGuard(),
 		idle:       newActivity(),
 		mon:        newMonState(),
 		upgrader: websocket.Upgrader{
@@ -128,7 +131,12 @@ func (s *Server) reconcile() {
 			s.idle.touch(sess.ID)
 		}
 		if sess.Status != status {
-			if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.Status = status }); err != nil {
+			if _, err := s.store.Update(sess.ID, func(x *store.Session) {
+				x.Status = status
+				if status == store.StatusRunning {
+					x.StopReason = ""
+				}
+			}); err != nil {
 				log.Printf("reconcile %s: %v", sess.ID, err)
 			}
 		}
@@ -175,19 +183,29 @@ func (s *Server) Run() error {
 	mux.Handle("GET /api/sessions/{id}", s.auth(s.withSession(s.handleGetSession)))
 	mux.Handle("POST /api/sessions/{id}/start", s.auth(s.withSession(s.handleStartSession)))
 	mux.Handle("POST /api/sessions/{id}/stop", s.auth(s.withSession(s.handleStopSession)))
+	mux.Handle("PATCH /api/sessions/{id}", s.auth(s.withSession(s.handleRenameSession)))
 	mux.Handle("DELETE /api/sessions/{id}", s.auth(s.withSession(s.handleDeleteSession)))
 	mux.Handle("POST /api/sessions/{id}/upload", s.auth(s.withSession(s.handleUpload)))
 	mux.Handle("GET /api/sessions/{id}/archive", s.auth(s.withSession(s.handleArchive)))
 	mux.Handle("GET /api/sessions/{id}/files", s.auth(s.withSession(s.handleFiles)))
+	mux.Handle("DELETE /api/sessions/{id}/files", s.auth(s.withSession(s.handleFileDelete)))
+	mux.Handle("POST /api/sessions/{id}/files/move", s.auth(s.withSession(s.handleFileMove)))
+	mux.Handle("POST /api/sessions/{id}/files/mkdir", s.auth(s.withSession(s.handleFileMkdir)))
+	mux.Handle("POST /api/sessions/{id}/files/rename", s.auth(s.withSession(s.handleFileRename)))
 	mux.Handle("GET /api/sessions/{id}/file", s.auth(s.withSession(s.handleFileGet)))
 	mux.Handle("PUT /api/sessions/{id}/file", s.auth(s.withSession(s.handleFilePut)))
 	mux.Handle("POST /api/sessions/{id}/images", s.auth(s.withSession(s.handleImageUpload)))
+	mux.Handle("GET /api/sessions/{id}/git/status", s.auth(s.withSession(s.handleGitStatus)))
+	mux.Handle("GET /api/sessions/{id}/git/diff", s.auth(s.withSession(s.handleGitDiff)))
+	mux.Handle("POST /api/sessions/{id}/git/commit", s.auth(s.withSession(s.handleGitCommit)))
+	mux.Handle("POST /api/sessions/{id}/git/discard", s.auth(s.withSession(s.handleGitDiscard)))
 	mux.Handle("GET /api/sessions/{id}/history", s.auth(s.withSession(s.handleHistory)))
 	mux.Handle("GET /api/sessions/{id}/term", s.auth(s.withSession(s.handleTermWS)))
 	mux.Handle("GET /api/sessions/{id}/chat", s.auth(s.withSession(s.handleChatWS)))
 	mux.Handle("GET /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadList)))
 	mux.Handle("POST /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadNew)))
 	mux.Handle("POST /api/sessions/{id}/chat/threads/{tid}/activate", s.auth(s.withSession(s.handleThreadActivate)))
+	mux.Handle("PATCH /api/sessions/{id}/chat/threads/{tid}", s.auth(s.withSession(s.handleThreadRename)))
 	mux.Handle("DELETE /api/sessions/{id}/chat/threads/{tid}", s.auth(s.withSession(s.handleThreadDelete)))
 	// 旧入口：语义已并入「新建对话线程」，保留路由兼容尚未刷新的页面
 	mux.Handle("POST /api/sessions/{id}/chat/reset", s.auth(s.withSession(s.handleThreadNew)))
@@ -217,6 +235,7 @@ func (s *Server) Run() error {
 	go s.imageJanitor() // 粘贴图片 48 小时自动清理
 	go s.credSyncLoop() // OAuth 凭证与账号池双向收敛（刷新令牌轮换制）
 	go s.idleReaper()   // 空闲会话容器自动停机（30 分钟无活动）
+	go s.tokenJanitor() // 过期登录令牌定期清理
 	// A tunnel misconfiguration must not take down the whole server: log and
 	// keep serving without it (systemd Restart=always would otherwise
 	// crash-loop agentbox on, say, a taken port).

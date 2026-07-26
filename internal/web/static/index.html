@@ -138,6 +138,7 @@
         <button id="kb-start"><span class="glyph"></span>启动</button>
         <button id="kb-stop"><span class="glyph"></span>停止</button>
         <div class="sep"></div>
+        <button id="kb-rename"><span class="glyph"></span>重命名会话</button>
         <button id="kb-delete" class="danger"><span class="glyph"></span>删除会话</button>
       </div>
     </div>
@@ -231,6 +232,10 @@
               <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
               </svg><span class="t">文件</span></button>
+            <button class="tab" data-tab="changes">
+              <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7"/><circle cx="18" cy="7" r="2.5"/><path d="M18 9.5c0 5-6 3-6 6.5"/>
+              </svg><span class="t">变更</span></button>
           </nav>
 
           <!-- 对话 -->
@@ -242,9 +247,17 @@
               </button>
               <button id="btn-thread-new" class="thread-new" title="开启新对话（当前对话保留在历史中，可随时切回）">＋ 新对话</button>
             </div>
+            <!-- 对话通道连接状态：仅在非正常连接时出现，避免占用常态空间 -->
+            <div id="chat-conn" class="chat-conn hidden">
+              <span id="chat-conn-dot" class="t-dot"></span>
+              <span id="chat-conn-text"></span>
+              <button id="chat-reconnect" type="button" class="btn btn-sm">立即重连</button>
+            </div>
             <div id="chat-log" class="chat-log"></div>
             <div id="chat-loading" class="loading-block hidden">
-              <span class="spin"></span><span>正在加载历史对话…</span>
+              <span id="chat-loading-spin" class="spin"></span>
+              <span id="chat-loading-text">正在加载历史对话…</span>
+              <button id="chat-loading-retry" type="button" class="btn btn-sm hidden">重试</button>
             </div>
             <div id="chat-hero" class="chat-hero hidden">
               <div id="hero-avatar" class="hero-avatar"></div>
@@ -357,15 +370,36 @@
               </div>
               <div class="files-actions">
                 <label class="check"><input type="checkbox" id="upload-clear"> <span id="upload-clear-label">上传前清空工作区</span></label>
+                <button id="btn-mkdir" class="btn btn-sm">新建文件夹</button>
                 <button id="btn-upload" class="btn btn-sm">上传代码包</button>
-                <input id="upload-input" type="file" class="hidden" accept=".zip,.tar,.tar.gz,.tgz,*/*">
+                <input id="upload-input" type="file" class="hidden" multiple accept=".zip,.tar,.tar.gz,.tgz,*/*">
                 <button id="btn-download" class="btn btn-sm">下载工作区 (zip)</button>
               </div>
             </div>
+            <div id="upload-progress" class="upload-progress hidden">
+              <div class="upload-progress-track"><span id="upload-progress-fill"></span></div>
+              <span id="upload-progress-text" class="mono"></span>
+            </div>
             <div id="files-head" class="files-head mono hidden">
-              <span>名称</span><span>权限</span><span class="num">大小</span><span>修改时间</span>
+              <span>名称</span><span>权限</span><span class="num">大小</span><span>修改时间</span><span class="factions-head">操作</span>
             </div>
             <div id="files-list" class="files-list"></div>
+          </section>
+
+          <!-- 变更（Git 审查） -->
+          <section id="tab-changes" class="pane hidden">
+            <div class="changes-bar">
+              <div id="changes-branch" class="changes-branch mono"></div>
+              <div class="changes-actions">
+                <button id="btn-changes-refresh" class="btn btn-sm">刷新</button>
+                <button id="btn-changes-discard-all" class="btn btn-sm" disabled>全部丢弃</button>
+                <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled>提交</button>
+              </div>
+            </div>
+            <div class="changes-body">
+              <div id="changes-list" class="changes-list"></div>
+              <div id="changes-diff" class="changes-diff"></div>
+            </div>
           </section>
 
           <!-- 生命周期遮罩：启动/停止时罩住头部按钮以下的整块工作区（不含侧栏），
@@ -728,6 +762,130 @@
   </div>
 </dialog>
 
+<!-- 移动文件 / 目录 -->
+<dialog id="dlg-file-move" class="dlg-file-move">
+  <div class="dlg-head">
+    <h2 id="file-move-title">移动文件</h2>
+    <button type="button" id="file-move-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <div class="file-op-source">
+    <span>正在移动</span>
+    <code id="file-move-source" class="mono"></code>
+  </div>
+  <div class="file-move-nav">
+    <div class="scope-switch" role="tablist" aria-label="目标范围">
+      <button type="button" id="file-move-ws" class="scope-btn">工作区</button>
+      <button type="button" id="file-move-shared" class="scope-btn">共享目录</button>
+    </div>
+    <div id="file-move-crumb" class="file-move-crumb mono"></div>
+  </div>
+  <div id="file-move-dirs" class="file-move-dirs"></div>
+  <div class="file-move-target">
+    <span>目标目录</span>
+    <code id="file-move-target" class="mono"></code>
+  </div>
+  <p id="file-move-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="file-move-cancel" class="btn">取消</button>
+    <button type="button" id="file-move-ok" class="btn btn-primary">移动到这里</button>
+  </div>
+</dialog>
+
+<!-- 删除文件 / 目录确认 -->
+<dialog id="dlg-file-delete">
+  <div class="dlg-head">
+    <h2 id="file-delete-title">删除文件</h2>
+    <button type="button" id="file-delete-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <p id="file-delete-text"></p>
+  <p id="file-delete-warning" class="field-hint"></p>
+  <p id="file-delete-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="file-delete-cancel" class="btn">取消</button>
+    <button type="button" id="file-delete-ok" class="btn btn-danger">删除</button>
+  </div>
+</dialog>
+
+<!-- Git 提交 -->
+<dialog id="dlg-git-commit">
+  <div class="dlg-head">
+    <h2>提交变更</h2>
+    <button type="button" id="git-commit-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <div class="file-name-field">
+    <label for="git-commit-msg">提交信息</label>
+    <textarea id="git-commit-msg" class="mono" rows="3" placeholder="描述这次改动…"></textarea>
+  </div>
+  <p id="git-commit-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="git-commit-cancel" class="btn">取消</button>
+    <button type="button" id="git-commit-ok" class="btn btn-primary">提交</button>
+  </div>
+</dialog>
+
+<!-- Git 丢弃改动确认 -->
+<dialog id="dlg-git-discard">
+  <div class="dlg-head">
+    <h2 id="git-discard-title">丢弃改动</h2>
+    <button type="button" id="git-discard-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <p id="git-discard-text"></p>
+  <p class="field-hint">会把文件恢复到最近一次提交的状态，未提交的改动无法恢复。</p>
+  <div class="dlg-actions">
+    <button type="button" id="git-discard-cancel" class="btn">取消</button>
+    <button type="button" id="git-discard-ok" class="btn btn-danger">丢弃</button>
+  </div>
+</dialog>
+
+<!-- 新建文件夹 / 重命名 通用输入框 -->
+<dialog id="dlg-file-name">
+  <div class="dlg-head">
+    <h2 id="file-name-title">新建文件夹</h2>
+    <button type="button" id="file-name-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <div class="file-name-field">
+    <label id="file-name-label" for="file-name-input">文件夹名称</label>
+    <input id="file-name-input" type="text" class="mono" autocomplete="off" spellcheck="false">
+  </div>
+  <p id="file-name-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="file-name-cancel" class="btn">取消</button>
+    <button type="button" id="file-name-ok" class="btn btn-primary">确定</button>
+  </div>
+</dialog>
+
+<!-- 通用确认框（替代原生 confirm） -->
+<dialog id="dlg-ask">
+  <div class="dlg-head">
+    <h2 id="ask-title">确认</h2>
+    <button type="button" id="ask-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <p id="ask-text"></p>
+  <p id="ask-hint" class="field-hint hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="ask-cancel" class="btn">取消</button>
+    <button type="button" id="ask-ok" class="btn btn-primary">确定</button>
+  </div>
+</dialog>
+
+<!-- 通用输入框（替代原生 prompt） -->
+<dialog id="dlg-ask-input">
+  <div class="dlg-head">
+    <h2 id="ask-input-title">输入</h2>
+    <button type="button" id="ask-input-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+  <div class="file-name-field">
+    <label id="ask-input-label" for="ask-input-field"></label>
+    <input id="ask-input-field" type="text" class="mono" autocomplete="off" spellcheck="false">
+  </div>
+  <p id="ask-input-hint" class="field-hint hidden"></p>
+  <p id="ask-input-error" class="login-error hidden"></p>
+  <div class="dlg-actions">
+    <button type="button" id="ask-input-cancel" class="btn">取消</button>
+    <button type="button" id="ask-input-ok" class="btn btn-primary">确定</button>
+  </div>
+</dialog>
+
 <!-- 图片灯箱 -->
 <dialog id="dlg-img" class="dlg-img">
   <button id="lb-close" class="dlg-x lb-x" aria-label="关闭">✕</button>
@@ -921,9 +1079,16 @@
     <button id="tp-close" class="dlg-x" aria-label="关闭">✕</button>
   </header>
   <button id="tp-new" class="btn btn-primary tp-new">＋ 开启新对话</button>
+  <input id="tp-search" class="tp-search" type="search" placeholder="搜索对话标题…" autocomplete="off">
   <div id="tp-list" class="tp-list"></div>
   <p class="tp-hint">每条对话是独立的上下文，切换后接着聊，互不串扰。</p>
 </aside>
+
+<!-- 全局离线横幅：与服务器失联时常驻，避免页面看起来一切正常实则数据早已过期 -->
+<div id="offline-banner" class="offline-banner hidden" role="status">
+  <span class="t-dot bad"></span>
+  <span id="offline-text">与服务器的连接已断开，正在重连…</span>
+</div>
 
 <div id="toast" class="toast"></div>
 

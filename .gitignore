@@ -9,5 +9,12 @@ config.json.bak*
 /accounts/
 /data/
 
+# 生产环境部署参数(含服务器地址,勿提交;模板见 deploy/production.env.example)
+/deploy/production.env
+
 # 日志
 *.log
+
+# 浏览器调试产物
+/.playwright-cli/
+/output/

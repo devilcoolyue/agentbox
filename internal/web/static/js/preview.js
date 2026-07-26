@@ -2,7 +2,7 @@
 "use strict";
 
 import { S } from "./state.js";
-import { $, withSpin, fmtSize } from "./util.js";
+import { $, withSpin, fmtSize, askConfirm } from "./util.js";
 import { scopeQS } from "./api.js";
 import { loadFiles } from "./files.js";
 
@@ -122,8 +122,13 @@ $("fv-download").addEventListener("click", () => {
   a.click();
 });
 
-function closePreview() {
-  if (FV.dirty && !confirm("有未保存的修改，确定关闭？")) return;
+async function closePreview() {
+  if (FV.dirty) {
+    const ok = await askConfirm("有未保存的修改，确定关闭？", {
+      title: "放弃修改", hint: "关闭后未保存的内容会丢失。", okLabel: "放弃并关闭", danger: true,
+    });
+    if (!ok) return;
+  }
   FV.dirty = false;
   if (FV.blobURL) { URL.revokeObjectURL(FV.blobURL); FV.blobURL = ""; }
   $("fv-editor").value = "";

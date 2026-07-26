@@ -323,6 +323,23 @@ details.think.streaming .think-body::after {
   display: flex; align-items: center; gap: 8px;
   padding: 8px max(20px, calc((100% - 800px) / 2)) 0;
 }
+
+/* 对话通道连接状态：仅断开/重连时出现（连上即隐藏），让长回合期间的掉线
+ * 可见，而不是等到用户按发送才发现发不出去。 */
+.chat-conn {
+  flex: none;
+  display: flex; align-items: center; gap: 8px;
+  margin: 8px max(20px, calc((100% - 800px) / 2)) 0;
+  padding: 7px 12px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--panel-2);
+  font-size: 12.5px; color: var(--muted);
+}
+.chat-conn .btn { margin-left: auto; }
+
+@media (max-width: 760px) {
+  .chat-conn { margin: 6px 8px 0; }
+}
 .thread-cur {
   display: inline-flex; align-items: center; gap: 7px;
   min-width: 0;
@@ -374,6 +391,16 @@ details.think.streaming .think-body::after {
 .tp-head b { font-size: 15px; }
 .tp-count { flex: 1; color: var(--muted); font-size: 11.5px; }
 .tp-new { flex: none; margin: 0 16px 10px 18px; }
+/* 搜索：对话攒多了靠标题快速定位；只有一条时由 JS 隐藏 */
+.tp-search {
+  flex: none; margin: 0 16px 10px 18px;
+  padding: 7px 10px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel-2); color: var(--text);
+  font-size: 13px;
+}
+.tp-search:focus-visible { outline: none; border-color: var(--amber); }
+.tp-search::placeholder { color: var(--muted); }
 .tp-list {
   flex: 1; overflow-y: auto;
   display: flex; flex-direction: column; gap: 3px;
@@ -641,7 +668,9 @@ details.think.streaming .think-body::after {
 .pick-opt .check { color: var(--amber); visibility: hidden; flex: none; }
 .pick-opt.on .check { visibility: visible; }
 
-/* 历史对话加载中：直接用 base.css 的 .loading-block */
+/* 历史对话失败时留在同一状态位，停止转圈并给出唯一恢复动作。 */
+#chat-loading.history-error { gap: 10px; }
+#chat-loading.history-error #chat-loading-text { color: var(--text); }
 
 /* ---- 空会话引导：品牌头像 + 问候 + 建议 pills ---- */
 .chat-hero {

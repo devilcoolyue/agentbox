@@ -160,6 +160,18 @@ func (p *Panel) handlePair(w http.ResponseWriter, r *http.Request) {
 func (p *Panel) handleUnpair(w http.ResponseWriter, r *http.Request) {
 	p.sup.Stop()
 
+	// Best-effort: revoke the session token on the server so a leaked or copied
+	// config.json can't keep using it after the user unpairs. Failure is
+	// non-fatal — proceed to clear local state either way.
+	old := p.Config()
+	if old.Server != "" && old.Token != "" {
+		if err := RevokeToken(old.Server, old.Token, old.Insecure); err != nil {
+			p.sup.Logf("解绑：服务端令牌吊销失败（%v），本地凭证仍会清除", err)
+		} else {
+			p.sup.Logf("解绑：已通知服务端吊销令牌")
+		}
+	}
+
 	p.mu.Lock()
 	cfg := p.cfg
 	cfg.Server, cfg.User, cfg.Token = "", "", ""

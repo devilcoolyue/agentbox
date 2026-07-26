@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"agentbox/internal/agent"
@@ -172,6 +173,7 @@ func (s *Server) startSession(ctx context.Context, sess store.Session) (store.Se
 	return s.store.Update(cur.ID, func(x *store.Session) {
 		x.ContainerID = cid
 		x.Status = store.StatusRunning
+		x.StopReason = "" // 又跑起来了，清掉上一次的休眠标记
 	})
 }
 
@@ -195,6 +197,30 @@ func (s *Server) handleStartSession(w http.ResponseWriter, r *http.Request, sess
 	writeJSON(w, http.StatusOK, s.view(updated))
 }
 
+// handleRenameSession changes a session's display name. Only the label moves —
+// the id, directories and container name are all derived from the id, so a
+// rename touches nothing else.
+func (s *Server) handleRenameSession(w http.ResponseWriter, r *http.Request, sess store.Session) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求体格式错误")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" || len([]rune(name)) > 64 {
+		writeErr(w, http.StatusBadRequest, "会话名称需为 1-64 个字符")
+		return
+	}
+	updated, err := s.store.Update(sess.ID, func(x *store.Session) { x.Name = name })
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s.view(updated))
+}
+
 func (s *Server) handleStopSession(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -203,7 +229,10 @@ func (s *Server) handleStopSession(w http.ResponseWriter, r *http.Request, sess 
 			log.Printf("stop %s: %v", sess.ID, err)
 		}
 	}
-	updated, err := s.store.Update(sess.ID, func(x *store.Session) { x.Status = store.StatusStopped })
+	updated, err := s.store.Update(sess.ID, func(x *store.Session) {
+		x.Status = store.StatusStopped
+		x.StopReason = "" // 用户主动停的，不是休眠
+	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return

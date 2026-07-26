@@ -11,14 +11,17 @@
 | `agentbox.service` | `/etc/systemd/system/` |
 | `agentbox-image-update.service` | `/etc/systemd/system/` |
 | `agentbox-image-update.timer` | `/etc/systemd/system/` |
+| `agentbox-backup.service` | `/etc/systemd/system/` |
+| `agentbox-backup.timer` | `/etc/systemd/system/` |
 | `agentbox.logrotate` | `/etc/logrotate.d/agentbox` |
+| `production.env.example` | 生产参数模板，复制为 `production.env`（不入库）后填真实值 |
 | `install.sh` | 装单元、`daemon-reload`、设开机自启 |
-| `deploy.sh` | 构建、换二进制、重启、验证 |
+| `deploy.sh` | 构建、换二进制、重启、验证（含 `/api/ping` 应用级探活） |
 
 ## 首次部署
 
-前置：Docker、Go 1.26+、python3。配置与账号凭证的准备见根目录 `README.md`
-的「部署」一节，这里只管进程托管。
+前置：Docker、Go 1.26+、python3、sqlite3（备份取一致快照用）。配置与账号凭证的
+准备见根目录 `README.md` 的「部署」一节，这里只管进程托管。
 
 ```bash
 sudo ./deploy/install.sh   # 装单元，路径按当前目录注入
@@ -79,13 +82,40 @@ journalctl -u agentbox -n 50
 
 修好之后要先 `systemctl reset-failed agentbox` 再 `start`。
 
+## 备份与恢复
+
+`install.sh` 会一并装上 `agentbox-backup.timer`，每天凌晨跑 `scripts/backup.sh`，
+把关键状态打包进 `<data_dir>/backups/`（保留最近 14 份，产物权限 0600）：
+
+- `state.db` — 用 `sqlite3 .backup` 取的一致快照（sessions/users/tokens）
+- `config.json` — 含 `auth_token` 与账号 env 密钥
+- `accounts/` — OAuth 凭证（刷新令牌轮换制，丢失需逐账号重新授权）
+
+> 备份内容含密钥，别把 `backups/` 暴露出去。设环境变量 `BACKUP_REMOTE=user@host:/path`
+> 可让脚本额外用 `rsync` 把每份备份推到异机（异地容灾），`BACKUP_KEEP` 改保留份数。
+
+手动备份：`sudo ./scripts/backup.sh`。恢复（服务停机下操作）：
+
+```bash
+sudo systemctl stop agentbox
+cd /path/to/agentbox
+tar -xzf data/backups/agentbox-backup-YYYYmmdd-HHMMSS.tar.gz -C /tmp/restore
+cp /tmp/restore/state.db   data/state.db      # 覆盖数据库
+cp /tmp/restore/config.json .                 # 如需恢复配置
+cp -a /tmp/restore/accounts .                 # 如需恢复凭证
+sudo systemctl start agentbox
+```
+
+恢复后确认 `journalctl -u agentbox` 无报错、`/api/ping` 返回 204。
+
 ## 排查
 
-日志分三处：
+日志分四处：
 
 - `/var/log/agentbox.log` — 服务自身 stdout/stderr，按周轮转保留 8 份
 - `journalctl -u agentbox` — systemd 视角的启停与失败原因
 - `/var/log/agentbox-image-update.log` — 每日镜像更新检查
+- `/var/log/agentbox-backup.log` — 每日数据备份
 
 正常关闭会记一行 `received terminated, shutting down`；没有这行而进程没了，
 说明是崩溃或被 SIGKILL，不是运维停的。

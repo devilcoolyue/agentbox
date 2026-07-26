@@ -3,7 +3,7 @@
 "use strict";
 
 import { S, bus } from "./state.js";
-import { $, btnBusy, btnDone, wbBusy, wbIdle } from "./util.js";
+import { $, btnBusy, btnDone, wbBusy, wbIdle, toast, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
 import { showView, renderSidebar, updateTopbarTitle } from "./shell.js";
@@ -12,6 +12,7 @@ import { setThreadBar, closeThreadPanel } from "./chat-threads.js";
 import { svgIcon } from "./chat-render.js";
 import { termTeardown, termDisconnect, openTerm } from "./term.js";
 import { resetTree, loadFiles } from "./files.js";
+import { loadChanges } from "./changes.js";
 import { agentKey, agentName, agentIcon, agentAvatar, decorateAgentOpts } from "./brand.js";
 
 /* ---------------- 打开 / 切换 ---------------- */
@@ -53,6 +54,13 @@ export function renderHead() {
   an.className = "agent-text agent-" + agentKey(sess.agent);
   an.textContent = agentName(sess.agent);
   meta.append(an, document.createTextNode(` · ${sess.account_label} · #${sess.id}`));
+  if (sess.stop_reason === "idle" && sess.status !== "running") {
+    const zzz = document.createElement("span");
+    zzz.className = "sc-sleep";
+    zzz.textContent = "休眠中";
+    zzz.title = "空闲自动停机，发消息或打开终端会自动唤醒";
+    meta.append(document.createTextNode(" · "), zzz);
+  }
   if (!S.actionBusy) { // 启动/停止执行中由按钮自己管理禁用态，轮询刷新不得复活
     const running = sess.status === "running";
     $("btn-start").disabled = running;
@@ -81,7 +89,9 @@ export function setTab(name) {
   $("tab-chat").classList.toggle("hidden", name !== "chat");
   $("tab-term").classList.toggle("hidden", name !== "term");
   $("tab-files").classList.toggle("hidden", name !== "files");
+  $("tab-changes").classList.toggle("hidden", name !== "changes");
   if (name === "files") loadFiles();
+  if (name === "changes") loadChanges();
   if (name === "term") openTerm(); // 进入即自动拉起 shell；已连上则只重排尺寸
 }
 
@@ -103,7 +113,7 @@ async function doStart() {
   try {
     const res = await api(`/sessions/${s.id}/start`, { method: "POST" });
     if (S.current && S.current.id === s.id) S.current = res; // 期间切换了会话则不覆盖
-  } catch (e) { alert("启动失败：" + e.message); }
+  } catch (e) { toast("启动失败：" + e.message, true); }
   S.actionBusy = false;
   wbIdle();
   btnDone($("btn-start"));
@@ -124,7 +134,7 @@ async function doStop() {
     const res = await api(`/sessions/${s.id}/stop`, { method: "POST" });
     if (S.current && S.current.id === s.id) S.current = res;
     termDisconnect(); // 容器停了收掉连接，但保留终端画面
-  } catch (e) { alert("停止失败：" + e.message); }
+  } catch (e) { toast("停止失败：" + e.message, true); }
   S.actionBusy = false;
   wbIdle();
   btnDone($("btn-stop"));
@@ -161,9 +171,40 @@ document.addEventListener("click", (e) => {
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") $("kebab-menu").classList.add("hidden");
 });
+/* 会话改名：只改展示名，id / 目录 / 容器名都从 id 派生，不受影响 */
+async function renameSession() {
+  const sess = S.current; if (!sess) return;
+  const name = await askPrompt({
+    title: "重命名会话",
+    label: "会话名称",
+    value: sess.name,
+    hint: "1-64 个字符。工作区、对话记录都不受影响。",
+    validate: (v) => {
+      const t = v.trim();
+      if (!t) return "名称不能为空";
+      if ([...t].length > 64) return "名称最多 64 个字符";
+      return "";
+    },
+  });
+  if (name === null) return;
+  try {
+    const res = await api(`/sessions/${sess.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if (S.current && S.current.id === sess.id) S.current = res;
+    renderHead();
+    renderSidebar();
+    refreshAll();
+    toast("会话已重命名");
+  } catch (e) { toast("重命名失败：" + e.message, true); }
+}
+
 const kebabDo = (fn) => () => { $("kebab-menu").classList.add("hidden"); fn(); };
 $("kb-start").addEventListener("click", kebabDo(doStart));
 $("kb-stop").addEventListener("click", kebabDo(doStop));
+$("kb-rename").addEventListener("click", kebabDo(renameSession));
 $("kb-delete").addEventListener("click", kebabDo(openDeleteDlg));
 
 $("del-cancel").addEventListener("click", () => $("dlg-del").close());
@@ -185,7 +226,7 @@ $("del-form").addEventListener("submit", async (e) => {
     $("empty").classList.remove("hidden");
     updateTopbarTitle();
     refreshAll();
-  } catch (err) { alert("删除失败：" + err.message); }
+  } catch (err) { toast("删除失败：" + err.message, true); }
   delBusy = false;
   btnDone($("del-ok"));
   $("del-cancel").disabled = false;

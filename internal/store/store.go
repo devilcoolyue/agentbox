@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -20,6 +21,10 @@ import (
 const (
 	StatusStopped = "stopped"
 	StatusRunning = "running"
+
+	// StopIdle marks a container the idle reaper stopped (as opposed to a stop
+	// the user asked for), so the UI can present it as sleeping and wake it.
+	StopIdle = "idle"
 
 	RoleAdmin = "admin"
 	RoleUser  = "user"
@@ -36,9 +41,13 @@ type Session struct {
 	// ChatSession is the provider-side conversation id of the latest headless
 	// turn; each new turn resumes from it so the conversation survives
 	// container restarts.
-	ChatSession string    `json:"chat_session,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ChatSession string `json:"chat_session,omitempty"`
+	// StopReason explains why a stopped session is stopped: "idle" when the
+	// reaper put it to sleep, "" when the user stopped it (or it never ran).
+	// Lets the UI show "已休眠" instead of a stop the user didn't ask for.
+	StopReason string    `json:"stop_reason,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type Store struct {
@@ -88,6 +97,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	s := &Store{db: db}
 	if err := s.importLegacyJSON(filepath.Join(filepath.Dir(path), "state.json")); err != nil {
 		db.Close()
@@ -97,6 +110,21 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// migrate applies additive column changes the CREATE TABLE above can't make to
+// an existing database. Each entry is idempotent: re-adding a column errors
+// with "duplicate column name", which is the already-applied case.
+func migrate(db *sql.DB) error {
+	stmts := []string{
+		`ALTER TABLE sessions ADD COLUMN stop_reason TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("migrate %q: %w", stmt, err)
+		}
+	}
+	return nil
+}
 
 // importLegacyJSON migrates sessions from the pre-SQLite state file. Existing
 // rows win over the file so a crash between import and rename cannot undo
@@ -122,10 +150,10 @@ func (s *Store) importLegacyJSON(jsonPath string) error {
 	defer tx.Rollback()
 	for _, sess := range legacy.Sessions {
 		if _, err := tx.Exec(`INSERT OR IGNORE INTO sessions
-			(id, user, name, agent, account_id, container_id, status, chat_session, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(id, user, name, agent, account_id, container_id, status, chat_session, stop_reason, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			sess.ID, sess.User, sess.Name, sess.Agent, sess.AccountID, sess.ContainerID,
-			sess.Status, sess.ChatSession,
+			sess.Status, sess.ChatSession, sess.StopReason,
 			sess.CreatedAt.Format(time.RFC3339Nano), sess.UpdatedAt.Format(time.RFC3339Nano)); err != nil {
 			return fmt.Errorf("import legacy session %s: %w", sess.ID, err)
 		}
@@ -144,13 +172,13 @@ func NewID() string {
 	return hex.EncodeToString(b)
 }
 
-const sessionCols = "id, user, name, agent, account_id, container_id, status, chat_session, created_at, updated_at"
+const sessionCols = "id, user, name, agent, account_id, container_id, status, chat_session, stop_reason, created_at, updated_at"
 
 func scanSession(row interface{ Scan(...any) error }) (Session, error) {
 	var sess Session
 	var created, updated string
 	if err := row.Scan(&sess.ID, &sess.User, &sess.Name, &sess.Agent, &sess.AccountID,
-		&sess.ContainerID, &sess.Status, &sess.ChatSession, &created, &updated); err != nil {
+		&sess.ContainerID, &sess.Status, &sess.ChatSession, &sess.StopReason, &created, &updated); err != nil {
 		return Session{}, err
 	}
 	var err error
@@ -196,15 +224,16 @@ func (s *Store) put(exec interface {
 	Exec(string, ...any) (sql.Result, error)
 }, sess Session) error {
 	_, err := exec.Exec(`INSERT INTO sessions
-		(id, user, name, agent, account_id, container_id, status, chat_session, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, user, name, agent, account_id, container_id, status, chat_session, stop_reason, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			user=excluded.user, name=excluded.name, agent=excluded.agent,
 			account_id=excluded.account_id, container_id=excluded.container_id,
 			status=excluded.status, chat_session=excluded.chat_session,
+			stop_reason=excluded.stop_reason,
 			created_at=excluded.created_at, updated_at=excluded.updated_at`,
 		sess.ID, sess.User, sess.Name, sess.Agent, sess.AccountID, sess.ContainerID,
-		sess.Status, sess.ChatSession,
+		sess.Status, sess.ChatSession, sess.StopReason,
 		sess.CreatedAt.Format(time.RFC3339Nano), sess.UpdatedAt.Format(time.RFC3339Nano))
 	return err
 }
@@ -356,6 +385,10 @@ func (s *Store) SetPassword(name, hash string) error {
 	return nil
 }
 
+// TokenTTL bounds how long a login token stays valid after issue. Absolute
+// (not sliding) so a leaked token can't be kept alive forever by being used.
+const TokenTTL = 30 * 24 * time.Hour
+
 func (s *Store) CreateToken(token, user string) error {
 	_, err := s.db.Exec("INSERT INTO tokens (token, user, created_at) VALUES (?, ?, ?)",
 		token, user, time.Now().Format(time.RFC3339Nano))
@@ -363,16 +396,37 @@ func (s *Store) CreateToken(token, user string) error {
 }
 
 // TokenUser resolves a login token to its user; the join makes tokens of a
-// deleted user dead even if a stray row survived.
+// deleted user dead even if a stray row survived. Tokens older than TokenTTL
+// are treated as invalid and deleted lazily on access.
 func (s *Store) TokenUser(token string) (User, bool) {
+	if token == "" {
+		return User{}, false
+	}
 	var u User
-	err := s.db.QueryRow(`SELECT u.name, u.role, u.pass_hash FROM tokens t
+	var created string
+	err := s.db.QueryRow(`SELECT u.name, u.role, u.pass_hash, t.created_at FROM tokens t
 		JOIN users u ON u.name = t.user WHERE t.token = ?`, token).
-		Scan(&u.Name, &u.Role, &u.PassHash)
+		Scan(&u.Name, &u.Role, &u.PassHash, &created)
 	if err != nil {
 		return User{}, false
 	}
+	if ts, perr := time.Parse(time.RFC3339Nano, created); perr == nil && time.Since(ts) > TokenTTL {
+		_, _ = s.db.Exec("DELETE FROM tokens WHERE token = ?", token)
+		return User{}, false
+	}
 	return u, true
+}
+
+// PurgeExpiredTokens deletes every login token past TokenTTL. Called
+// periodically so expired rows don't accumulate.
+func (s *Store) PurgeExpiredTokens() (int64, error) {
+	cutoff := time.Now().Add(-TokenTTL).Format(time.RFC3339Nano)
+	res, err := s.db.Exec("DELETE FROM tokens WHERE created_at < ?", cutoff)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 func (s *Store) DeleteToken(token string) error {
