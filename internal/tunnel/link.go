@@ -28,7 +28,15 @@ func ParseWhitelist(entries []string) (Whitelist, error) {
 		if e == "" {
 			continue
 		}
-		if _, cidr, err := net.ParseCIDR(e); err == nil {
+		// A slash means the user intended a CIDR; reject a malformed one
+		// instead of silently degrading it into a host rule that can never
+		// match (e.g. "192.168.1.0/33"), which would make an allow rule look
+		// active while the whole range stays denied.
+		if strings.Contains(e, "/") {
+			_, cidr, err := net.ParseCIDR(e)
+			if err != nil {
+				return nil, fmt.Errorf("invalid CIDR %q: %w", e, err)
+			}
 			rules = append(rules, Rule{CIDR: cidr})
 			continue
 		}

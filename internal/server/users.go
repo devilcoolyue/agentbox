@@ -13,10 +13,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"agentbox/internal/store"
@@ -66,6 +68,12 @@ func verifyPassword(stored, pw string) bool {
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
 
+// dummyHash is a real-format PBKDF2 hash used to run an equivalent password
+// check when the username doesn't exist, so a login attempt costs the same time
+// whether or not the account exists — closing the username-enumeration timing
+// side channel.
+var dummyHash = hashPassword("agentbox:nonexistent-account-timing-equalizer")
+
 const tokenChars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
 
 func newToken() string {
@@ -114,7 +122,14 @@ func bearerToken(r *http.Request) string {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimPrefix(h, "Bearer ")
 	}
-	return r.URL.Query().Get("token")
+	// A query-string token is honored only for GET requests: WebSocket upgrades
+	// and file/archive/image downloads can't set an Authorization header, but
+	// every state-changing request can. This keeps a token that leaked into an
+	// access/proxy log from being replayed to mutate anything.
+	if r.Method == http.MethodGet {
+		return r.URL.Query().Get("token")
+	}
+	return ""
 }
 
 func (s *Server) auth(next http.Handler) http.Handler {
@@ -150,18 +165,122 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
+	ip := clientIP(r)
+	if s.logins.blocked(ip) {
+		writeErr(w, http.StatusTooManyRequests, "登录尝试过于频繁，请稍后再试")
+		return
+	}
 	u, ok := s.store.GetUser(strings.TrimSpace(req.Username))
-	if !ok || !verifyPassword(u.PassHash, req.Password) {
-		time.Sleep(400 * time.Millisecond) // 拖慢在线爆破
+	// Always run one password verification, against the real hash when the user
+	// exists and a throwaway one otherwise, so the response time doesn't reveal
+	// whether the username is valid.
+	stored := dummyHash
+	if ok {
+		stored = u.PassHash
+	}
+	if !verifyPassword(stored, req.Password) || !ok {
+		s.logins.fail(ip)
+		time.Sleep(loginFailDelay) // 拖慢在线爆破
 		writeErr(w, http.StatusUnauthorized, "账号或密码错误")
 		return
 	}
+	s.logins.success(ip)
 	tok := newToken()
 	if err := s.store.CreateToken(tok, u.Name); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"token": tok, "user": u.Name, "role": u.Role})
+}
+
+// loginGuard throttles repeated failed logins per client key (IP). It's a
+// soft lock: after loginMaxFails failures inside loginFailWindow the key is
+// blocked for loginLockDur, then the counter resets. A correct login clears it.
+type loginGuard struct {
+	mu      sync.Mutex
+	entries map[string]*loginFail
+}
+
+type loginFail struct {
+	count       int
+	seen        time.Time
+	lockedUntil time.Time
+}
+
+const (
+	loginMaxFails   = 8
+	loginFailWindow = 5 * time.Minute
+	loginLockDur    = 2 * time.Minute
+)
+
+// loginFailDelay slows online brute force by delaying every failed login.
+// A var so tests can zero it out.
+var loginFailDelay = 400 * time.Millisecond
+
+func newLoginGuard() *loginGuard { return &loginGuard{entries: map[string]*loginFail{}} }
+
+func (g *loginGuard) blocked(key string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	e := g.entries[key]
+	return e != nil && time.Now().Before(e.lockedUntil)
+}
+
+func (g *loginGuard) fail(key string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	now := time.Now()
+	if len(g.entries) > 4096 { // bound memory under a distributed attack
+		for k, e := range g.entries {
+			if now.Sub(e.seen) > loginFailWindow && now.After(e.lockedUntil) {
+				delete(g.entries, k)
+			}
+		}
+	}
+	e := g.entries[key]
+	if e == nil || now.Sub(e.seen) > loginFailWindow {
+		e = &loginFail{}
+		g.entries[key] = e
+	}
+	e.count++
+	e.seen = now
+	if e.count >= loginMaxFails {
+		e.lockedUntil = now.Add(loginLockDur)
+		e.count = 0
+	}
+}
+
+func (g *loginGuard) success(key string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.entries, key)
+}
+
+// clientIP extracts the caller's address, honoring a single X-Forwarded-For hop
+// (agentbox sits behind an nginx/Cloudflare reverse proxy in production).
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+// tokenJanitor periodically deletes login tokens past their TTL.
+func (s *Server) tokenJanitor() {
+	for {
+		if n, err := s.store.PurgeExpiredTokens(); err != nil {
+			log.Printf("token janitor: %v", err)
+		} else if n > 0 {
+			log.Printf("token janitor: purged %d expired token(s)", n)
+		}
+		time.Sleep(6 * time.Hour)
+	}
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {

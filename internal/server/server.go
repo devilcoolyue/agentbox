@@ -71,6 +71,8 @@ type Server struct {
 	startMu sync.Mutex
 	starts  map[string]*sync.Mutex // per-session start locks
 
+	logins *loginGuard // per-IP failed-login throttle
+
 	idle *activity // per-session liveness for the idle reaper
 
 	mon *monState // 上一帧计数器快照，供监控页按轮询间隔算 CPU 速率
@@ -97,6 +99,7 @@ func New(cfg *config.Config) (*Server, error) {
 		startedAt:  time.Now(),
 		bootListen: cfg.GetListen(),
 		starts:     map[string]*sync.Mutex{},
+		logins:     newLoginGuard(),
 		idle:       newActivity(),
 		mon:        newMonState(),
 		upgrader: websocket.Upgrader{
@@ -223,6 +226,7 @@ func (s *Server) Run() error {
 	go s.imageJanitor() // 粘贴图片 48 小时自动清理
 	go s.credSyncLoop() // OAuth 凭证与账号池双向收敛（刷新令牌轮换制）
 	go s.idleReaper()   // 空闲会话容器自动停机（30 分钟无活动）
+	go s.tokenJanitor() // 过期登录令牌定期清理
 	// A tunnel misconfiguration must not take down the whole server: log and
 	// keep serving without it (systemd Restart=always would otherwise
 	// crash-loop agentbox on, say, a taken port).

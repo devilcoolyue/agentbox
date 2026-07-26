@@ -356,6 +356,10 @@ func (s *Store) SetPassword(name, hash string) error {
 	return nil
 }
 
+// TokenTTL bounds how long a login token stays valid after issue. Absolute
+// (not sliding) so a leaked token can't be kept alive forever by being used.
+const TokenTTL = 30 * 24 * time.Hour
+
 func (s *Store) CreateToken(token, user string) error {
 	_, err := s.db.Exec("INSERT INTO tokens (token, user, created_at) VALUES (?, ?, ?)",
 		token, user, time.Now().Format(time.RFC3339Nano))
@@ -363,16 +367,37 @@ func (s *Store) CreateToken(token, user string) error {
 }
 
 // TokenUser resolves a login token to its user; the join makes tokens of a
-// deleted user dead even if a stray row survived.
+// deleted user dead even if a stray row survived. Tokens older than TokenTTL
+// are treated as invalid and deleted lazily on access.
 func (s *Store) TokenUser(token string) (User, bool) {
+	if token == "" {
+		return User{}, false
+	}
 	var u User
-	err := s.db.QueryRow(`SELECT u.name, u.role, u.pass_hash FROM tokens t
+	var created string
+	err := s.db.QueryRow(`SELECT u.name, u.role, u.pass_hash, t.created_at FROM tokens t
 		JOIN users u ON u.name = t.user WHERE t.token = ?`, token).
-		Scan(&u.Name, &u.Role, &u.PassHash)
+		Scan(&u.Name, &u.Role, &u.PassHash, &created)
 	if err != nil {
 		return User{}, false
 	}
+	if ts, perr := time.Parse(time.RFC3339Nano, created); perr == nil && time.Since(ts) > TokenTTL {
+		_, _ = s.db.Exec("DELETE FROM tokens WHERE token = ?", token)
+		return User{}, false
+	}
 	return u, true
+}
+
+// PurgeExpiredTokens deletes every login token past TokenTTL. Called
+// periodically so expired rows don't accumulate.
+func (s *Store) PurgeExpiredTokens() (int64, error) {
+	cutoff := time.Now().Add(-TokenTTL).Format(time.RFC3339Nano)
+	res, err := s.db.Exec("DELETE FROM tokens WHERE created_at < ?", cutoff)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 func (s *Store) DeleteToken(token string) error {
