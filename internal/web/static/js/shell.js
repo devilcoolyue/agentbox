@@ -80,6 +80,15 @@ export function renderSidebar() {
     meta.className = "meta";
     meta.textContent = `${sess.account_label} · #${sess.id}`;
     body.append(h, meta);
+    // 休眠 = 空闲自动停机（数据都在，发消息/开终端即自动唤醒）。与用户手动
+    // 停止区分开，否则回来发现会话没了会以为服务出了故障。
+    if (sess.stop_reason === "idle" && sess.status !== "running") {
+      const zzz = document.createElement("span");
+      zzz.className = "sc-sleep";
+      zzz.textContent = "休眠";
+      zzz.title = "空闲自动停机，发消息或打开终端会自动唤醒";
+      meta.append(document.createTextNode(" · "), zzz);
+    }
     card.append(av, body);
     const open = () => emit("open-session", sess);
     card.addEventListener("click", open);

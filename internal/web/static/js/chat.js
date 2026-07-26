@@ -10,13 +10,57 @@ import { chip, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, sv
 import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
 
-/* ---------------- 对话通道 ---------------- */
+/* ---------------- 对话通道 ----------------
+ * 断线在移动端切网、挂后台时很常见，而一个回合可以跑上半小时，所以断开必须
+ * 可见（状态条 + 手动重连），且重连成功后要把断线期间错过的事件补回来——
+ * 服务端把完整事件落盘在线程 JSONL 里，重新拉一次历史即可对齐。
+ * 连接本身还兼作「唤醒」：服务端 chat WS 会幂等地拉起已休眠的容器。 */
+
+const CHAT_BACKOFF = [1000, 2000, 4000, 8000, 15000];
+let chatAttempt = 0;
+let chatRetryTimer = null;
+let chatWasOpen = false; // 曾经连上过 → 这次是重连，需要补拉错过的消息
+
+function setChatConn(state) {
+  const bar = $("chat-conn");
+  if (!bar) return;
+  if (state === "connected") { bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  const dot = $("chat-conn-dot");
+  const text = $("chat-conn-text");
+  const btn = $("chat-reconnect");
+  if (state === "connecting") {
+    dot.className = "t-dot warn";
+    text.textContent = chatAttempt > 1 ? `对话连接重连中…（第 ${chatAttempt} 次）` : "对话连接建立中…";
+    btn.classList.add("hidden");
+  } else if (state === "waking") {
+    dot.className = "t-dot warn";
+    text.textContent = "会话已休眠，正在唤醒…";
+    btn.classList.add("hidden");
+  } else {
+    dot.className = "t-dot bad";
+    text.textContent = "对话连接已断开，消息无法发送";
+    btn.classList.remove("hidden");
+  }
+}
 
 export function connectChat() {
   const sess = S.current; if (!sess) return;
+  clearTimeout(chatRetryTimer);
+  chatRetryTimer = null;
   const gen = ++S.chatWSGen;
+  setChatConn("connecting");
   const ws = new WebSocket(wsURL(`/sessions/${sess.id}/chat`));
   S.chatWS = ws;
+  ws.onopen = () => {
+    if (gen !== S.chatWSGen) return;
+    const reconnected = chatWasOpen;
+    chatWasOpen = true;
+    chatAttempt = 0;
+    setChatConn("connected");
+    // 断线期间服务端仍在跑回合，事件只进了落盘的 JSONL；重拉历史对齐。
+    if (reconnected) loadHistory({ silent: true });
+  };
   ws.onmessage = (e) => {
     let msg;
     try { msg = JSON.parse(e.data); } catch (_) { return; }
@@ -25,14 +69,31 @@ export function connectChat() {
   ws.onclose = () => {
     if (gen !== S.chatWSGen) return; // 已切换会话
     S.chatWS = null;
-    setTimeout(() => { if (gen === S.chatWSGen && S.current) connectChat(); }, 4000);
+    setChatConn("closed");
+    const delay = CHAT_BACKOFF[Math.min(chatAttempt, CHAT_BACKOFF.length - 1)];
+    chatAttempt++;
+    chatRetryTimer = setTimeout(() => {
+      if (gen === S.chatWSGen && S.current) connectChat();
+    }, delay);
   };
 }
+
+$("chat-reconnect").addEventListener("click", () => {
+  if (!S.current) return;
+  chatAttempt = 0;
+  connectChat();
+});
 
 /* 切换/删除会话时收尾：作废重连定时器、关连接、复位状态 */
 export function chatTeardown() {
   S.chatWSGen++;
+  clearTimeout(chatRetryTimer);
+  chatRetryTimer = null;
+  chatAttempt = 0;
+  chatWasOpen = false;
+  setChatConn("connected"); // 收起状态条
   if (S.chatWS) { S.chatWS.close(); S.chatWS = null; }
+  cancelHistoryLoad();
   replayReset();
   setChatStatus("idle");
 }
@@ -397,7 +458,9 @@ export function sendChat() {
     return;
   }
   if (!S.chatWS || S.chatWS.readyState !== WebSocket.OPEN) {
-    appendChat(chip("连接尚未就绪，请稍候重试", "err"));
+    // 多半是会话空闲休眠后连接被断开。别让用户先去点启动：重新连一次即可，
+    // 服务端的 chat 通道会幂等地把容器拉起来，连上后自动把这条消息发出去。
+    wakeAndSend();
     return;
   }
   // [Image #N] / [File #N] 占位符替换为容器内真实路径，Agent 可直接读取
@@ -413,6 +476,37 @@ export function sendChat() {
   $("chat-input").value = "";
   autoGrow();
   resetChatImgs();
+}
+
+/* 唤醒并重试发送：立刻重连（服务端顺带拉起容器），连上后把输入框里的内容
+ * 发出去。等待上限 60 秒——冷启容器 + 播种凭证通常几秒内完成。 */
+let waking = false;
+async function wakeAndSend() {
+  if (waking) return;
+  waking = true;
+  setChatConn("waking");
+  const send = $("chat-send");
+  send.disabled = true;
+  chatAttempt = 0;
+  connectChat();
+  const deadline = Date.now() + 60000;
+  try {
+    while (Date.now() < deadline) {
+      if (!S.current) return;
+      if (S.chatWS && S.chatWS.readyState === WebSocket.OPEN) {
+        waking = false;
+        send.disabled = false;
+        sendChat(); // 连上了，把用户刚才那条发出去
+        refreshAll(); // 状态从「休眠」翻回运行中
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    appendChat(chip("唤醒会话超时，请稍后重试或手动启动会话", "err"));
+  } finally {
+    waking = false;
+    send.disabled = chatImgs.uploading > 0;
+  }
 }
 
 function sendInterrupt() {
@@ -764,8 +858,14 @@ onMobileChange(closePickMenu);
 
 export function updateHero() {
   const loading = S.histLoading;
-  $("chat-loading").classList.toggle("hidden", !loading);
-  const show = !loading && !!S.current &&
+  const failed = !!S.histError;
+  const blocked = loading || failed;
+  $("chat-loading").classList.toggle("hidden", !blocked);
+  $("chat-loading").classList.toggle("history-error", failed);
+  $("chat-loading-spin").classList.toggle("hidden", !loading);
+  $("chat-loading-text").textContent = failed ? S.histError : "正在加载历史对话…";
+  $("chat-loading-retry").classList.toggle("hidden", !failed);
+  const show = !blocked && !!S.current &&
     !$("chat-log").childElementCount && S.chatState !== "running";
   if (show) {
     // 问候区头像跟随会话的 Agent 品牌
@@ -777,8 +877,12 @@ export function updateHero() {
     }
   }
   $("chat-hero").classList.toggle("hidden", !show);
-  $("chat-log").classList.toggle("hidden", loading || show);
+  $("chat-log").classList.toggle("hidden", blocked || show);
   updateScrollBottomButton();
+  $("chat-input").disabled = blocked;
+  if (S.chatState !== "running") {
+    $("chat-send").disabled = blocked || chatImgs.uploading > 0;
+  }
 }
 
 for (const c of document.querySelectorAll(".hero-pill")) {
@@ -790,27 +894,77 @@ for (const c of document.querySelectorAll(".hero-pill")) {
 
 /* ---------------- 历史对话（当前线程） ---------------- */
 
-let histGen = 0; // 并发重载守卫：作废在途的旧加载，防止内容追加进新视图
+const HISTORY_TIMEOUT = 15_000;
+let histGen = 0;   // 并发重载守卫：作废在途的旧加载，防止内容追加进新视图
+let histCtrl = null;
 
-export async function loadHistory() {
+function historyLoadIsStale(sessID, gen) {
+  // refreshAll 每 8 秒会用接口返回的新对象刷新 S.current。这里只能比较稳定
+  // 的会话 id；比较对象引用会把普通轮询误判成切换会话，并永远留下加载态。
+  return !S.current || S.current.id !== sessID || gen !== histGen;
+}
+
+function cancelHistoryLoad() {
+  histGen++;
+  if (histCtrl) histCtrl.abort();
+  histCtrl = null;
+  S.histLoading = false;
+  S.histError = "";
+}
+
+/* opts.silent：重连后的对齐式补拉——不显示加载态（页面已有内容，闪一下
+ * 加载中反而像出了故障），拉到后整体替换对话流以补上断线期间错过的事件，
+ * 并保持用户原本的阅读位置（除非本来就贴着底）。 */
+export async function loadHistory(opts = {}) {
   const sess = S.current; if (!sess) return;
+  const silent = !!opts.silent;
+  if (histCtrl) histCtrl.abort();
   const gen = ++histGen;
-  S.histLoading = true;
-  updateHero(); // 中央显示加载态，加载完一次性呈现，避免先闪新会话引导页
+  const ctrl = new AbortController();
+  histCtrl = ctrl;
+  let timedOut = false;
+  let loaded = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, HISTORY_TIMEOUT);
+  const log = $("chat-log");
+  const wasAtBottom = silent ? nearBottom(log) : true;
+  const prevScroll = log.scrollTop;
+  if (!silent) {
+    S.histLoading = true;
+    S.histError = "";
+    updateHero(); // 中央显示加载态，加载完一次性呈现，避免先闪新会话引导页
+  }
   try {
     // 只返回当前对话线程的全文；其余线程在历史对话面板（chat-threads.js）
     // 里列表展示，切换后经 reloadThread 重新加载
-    const { entries, thread } = await api(`/sessions/${sess.id}/history`);
-    if (S.current !== sess || gen !== histGen) return; // 加载途中切走了
+    const { entries, thread } = await api(`/sessions/${sess.id}/history`, { signal: ctrl.signal });
+    if (historyLoadIsStale(sess.id, gen)) return;
     setThreadBar(thread);
+    if (silent) log.replaceChildren(); // 整体替换，避免与已渲染内容重复
     for (const raw of entries) for (const n of renderEntry(raw)) appendChat(n);
-  } catch (_) {}
-  if (S.current !== sess || gen !== histGen) return;
-  S.histLoading = false;
-  updateHero();
-  const log = $("chat-log");
-  log.scrollTop = log.scrollHeight; // 隐藏期间无法定位，呈现后直接落底
-  updateScrollBottomButton();
+    loaded = true;
+  } catch (e) {
+    if (historyLoadIsStale(sess.id, gen)) return;
+    if (silent) return; // 补拉失败不打扰：下次重连或手动刷新还有机会
+    S.histError = timedOut
+      ? "历史对话加载超时"
+      : "历史对话加载失败：" + (e.message || "未知错误");
+  } finally {
+    clearTimeout(timer);
+    if (histCtrl === ctrl) histCtrl = null;
+    if (!historyLoadIsStale(sess.id, gen)) {
+      if (!silent) {
+        S.histLoading = false;
+        updateHero();
+      }
+      if (loaded) {
+        log.scrollTop = wasAtBottom ? log.scrollHeight : prevScroll;
+        updateScrollBottomButton();
+      }
+    }
+  }
 }
 
 /* 对话线程发生切换（本端操作经 bus，或其它页面广播）后重载对话流 */
@@ -823,6 +977,7 @@ export async function reloadThread() {
   await loadHistory();
 }
 bus.addEventListener("thread-changed", () => { reloadThread(); });
+$("chat-loading-retry").addEventListener("click", reloadThread);
 
 /* Agent 回合分组：两条用户消息之间的 agent 输出（文字/工具行/思考…）
  * 归入同一个 .turn 容器，左侧挂品牌头像（OpenWebUI 式对话流）。

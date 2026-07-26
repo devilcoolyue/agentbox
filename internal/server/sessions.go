@@ -173,6 +173,7 @@ func (s *Server) startSession(ctx context.Context, sess store.Session) (store.Se
 	return s.store.Update(cur.ID, func(x *store.Session) {
 		x.ContainerID = cid
 		x.Status = store.StatusRunning
+		x.StopReason = "" // 又跑起来了，清掉上一次的休眠标记
 	})
 }
 
@@ -228,7 +229,10 @@ func (s *Server) handleStopSession(w http.ResponseWriter, r *http.Request, sess 
 			log.Printf("stop %s: %v", sess.ID, err)
 		}
 	}
-	updated, err := s.store.Update(sess.ID, func(x *store.Session) { x.Status = store.StatusStopped })
+	updated, err := s.store.Update(sess.ID, func(x *store.Session) {
+		x.Status = store.StatusStopped
+		x.StopReason = "" // 用户主动停的，不是休眠
+	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return

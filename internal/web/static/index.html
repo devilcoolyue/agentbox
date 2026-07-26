@@ -243,9 +243,17 @@
               </button>
               <button id="btn-thread-new" class="thread-new" title="开启新对话（当前对话保留在历史中，可随时切回）">＋ 新对话</button>
             </div>
+            <!-- 对话通道连接状态：仅在非正常连接时出现，避免占用常态空间 -->
+            <div id="chat-conn" class="chat-conn hidden">
+              <span id="chat-conn-dot" class="t-dot"></span>
+              <span id="chat-conn-text"></span>
+              <button id="chat-reconnect" type="button" class="btn btn-sm">立即重连</button>
+            </div>
             <div id="chat-log" class="chat-log"></div>
             <div id="chat-loading" class="loading-block hidden">
-              <span class="spin"></span><span>正在加载历史对话…</span>
+              <span id="chat-loading-spin" class="spin"></span>
+              <span id="chat-loading-text">正在加载历史对话…</span>
+              <button id="chat-loading-retry" type="button" class="btn btn-sm hidden">重试</button>
             </div>
             <div id="chat-hero" class="chat-hero hidden">
               <div id="hero-avatar" class="hero-avatar"></div>
@@ -1024,6 +1032,12 @@
   <div id="tp-list" class="tp-list"></div>
   <p class="tp-hint">每条对话是独立的上下文，切换后接着聊，互不串扰。</p>
 </aside>
+
+<!-- 全局离线横幅：与服务器失联时常驻，避免页面看起来一切正常实则数据早已过期 -->
+<div id="offline-banner" class="offline-banner hidden" role="status">
+  <span class="t-dot bad"></span>
+  <span id="offline-text">与服务器的连接已断开，正在重连…</span>
+</div>
 
 <div id="toast" class="toast"></div>
 

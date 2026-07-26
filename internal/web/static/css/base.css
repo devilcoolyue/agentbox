@@ -257,6 +257,19 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .loading-block .spin { width: 30px; height: 30px; border-width: 3px; }
 
 /* ---- 操作反馈气泡 ---- */
+/* 全局离线横幅：连续 ping 失败后常驻顶部，一眼看出「屏幕上的数据已不可信」 */
+.offline-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 120;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 7px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--red-line);
+  color: var(--red);
+  font-size: 12.5px;
+  box-shadow: var(--shadow-md);
+}
+.offline-banner.hidden { display: none; }
+
 .toast {
   position: fixed; left: 50%; bottom: 26px; z-index: 100;
   transform: translateX(-50%) translateY(8px);

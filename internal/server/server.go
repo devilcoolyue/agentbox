@@ -131,7 +131,12 @@ func (s *Server) reconcile() {
 			s.idle.touch(sess.ID)
 		}
 		if sess.Status != status {
-			if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.Status = status }); err != nil {
+			if _, err := s.store.Update(sess.ID, func(x *store.Session) {
+				x.Status = status
+				if status == store.StatusRunning {
+					x.StopReason = ""
+				}
+			}); err != nil {
 				log.Printf("reconcile %s: %v", sess.ID, err)
 			}
 		}

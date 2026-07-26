@@ -53,6 +53,13 @@ export function renderHead() {
   an.className = "agent-text agent-" + agentKey(sess.agent);
   an.textContent = agentName(sess.agent);
   meta.append(an, document.createTextNode(` · ${sess.account_label} · #${sess.id}`));
+  if (sess.stop_reason === "idle" && sess.status !== "running") {
+    const zzz = document.createElement("span");
+    zzz.className = "sc-sleep";
+    zzz.textContent = "休眠中";
+    zzz.title = "空闲自动停机，发消息或打开终端会自动唤醒";
+    meta.append(document.createTextNode(" · "), zzz);
+  }
   if (!S.actionBusy) { // 启动/停止执行中由按钮自己管理禁用态，轮询刷新不得复活
     const running = sess.status === "running";
     $("btn-start").disabled = running;

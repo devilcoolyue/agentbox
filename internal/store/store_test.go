@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -189,5 +190,50 @@ func TestOpenWithoutLegacy(t *testing.T) {
 	defer s.Close()
 	if all := s.All(); len(all) != 0 {
 		t.Fatalf("expected empty store, got %+v", all)
+	}
+}
+
+func TestStopReasonRoundTripAndMigration(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.db")
+
+	// A database created before stop_reason existed: the legacy schema, minus
+	// the column migrate() adds.
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`CREATE TABLE sessions (
+		id TEXT PRIMARY KEY, user TEXT NOT NULL, name TEXT NOT NULL,
+		agent TEXT NOT NULL, account_id TEXT NOT NULL,
+		container_id TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
+		chat_session TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`INSERT INTO sessions
+		(id,user,name,agent,account_id,status,created_at,updated_at)
+		VALUES ('old','alice','legacy','claude','acct','stopped',?,?)`,
+		time.Now().Format(time.RFC3339Nano), time.Now().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	legacy.Close()
+
+	st, err := Open(path) // must migrate rather than fail
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	defer st.Close()
+
+	got, ok := st.Get("old")
+	if !ok || got.StopReason != "" {
+		t.Fatalf("migrated row = %+v, ok=%v; want empty stop reason", got, ok)
+	}
+
+	if _, err := st.Update("old", func(s *Session) { s.StopReason = StopIdle }); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.Get("old"); got.StopReason != StopIdle {
+		t.Fatalf("stop reason = %q, want %q", got.StopReason, StopIdle)
 	}
 }
