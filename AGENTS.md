@@ -21,7 +21,7 @@
 | `cmd/abox-link/main.go` | 隧道客户端入口；面板模式与 `--server` 无头模式分流。 |
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
 | `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）。 |
-| `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens；首次打开会导入旧版 `state.json`。 |
+| `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens/usage_events/quotas/credit_ledger；首次打开会导入旧版 `state.json`。 |
 | `internal/dockerx` | Docker Engine API 封装：容器生命周期、exec PTY/stream、stats、镜像/挂载检查。 |
 | `internal/agent` | Claude/Codex 适配层：headless 命令、标题生成、凭证播种、Claude HUD、Codex app-server 协议。 |
 | `internal/archivex` | 上传压缩包解压（防 zip-slip/符号链接/解压炸弹）与工作区 zip 下载。 |
@@ -188,6 +188,73 @@ data/
 - Claude 走 `claude -p --output-format stream-json`；Codex 优先走 `codex app-server`（真流式增量），握手失败回退 `codex exec --json`。
 - `stream_event`/增量事件只广播不落盘；完整事件落盘并广播。provider 会话 id 用 `agent.ExtractSessionID` 提取，写入 `chat_session` 供 `--resume`/thread resume。
 - 用户中断：Codex app-server 优先协议内 `turn/interrupt`，否则用容器里的 PID 文件发 SIGINT。
+
+### 用量计量
+
+- 回合收尾事件里的 token/费用落进 `usage_events` 表（`internal/server/usage.go` 解析，
+  `runTurn` 的 `onLine` 里挂钩），并在**同一个事务**里从用户额度扣掉（见下节）。
+- Claude 的 `type:"result"` 按 `modelUsage` **每个模型出一行**（含子 agent 用的 haiku），
+  同回合各行共享 `turn_id`。实测 `total_cost_usd` 等于各行 `costUSD` 之和，而顶层 `usage`
+  只覆盖主模型——计费别用顶层 `usage`，会漏记。
+- Codex 的 `type:"turn.completed"` 只有 token、**不报费用**（`cost_micro_usd` 记 0，
+  待定价表就位后按 token 折算）。两处形状已对 codex-cli 0.145.0 实测核对过，
+  app-server 翻译出的事件与 `codex exec --json` 自己吐的完全一致，`parseUsage` 一套
+  分支通吃。两条语义是实测结论，别按字面直觉改：
+  - `cached_input_tokens` 是 `input_tokens` 的**子集**，写库时减掉才对齐 Claude 的
+    「未命中缓存输入」语义；
+  - `reasoning_output_tokens` 已经含在 `output_tokens` 里（实测 output=150 /
+    reasoning=143 而答案只有几个字），**再加一遍就是重复计费**。
+- 费用一律存整数微美元（USD × 1e6），不进 float——报表是上万行累加，float 会漂。
+  原始事件存在 `raw`（每回合一份），归一化判断错了可据此重算。
+- `kind` 列分开「用户的对话」(`chat`) 与「服务端自动起标题」(`title`)。两者都可能
+  落在同一个便宜模型上，只看 `model` 分不出来。
+- 起标题的消耗两种 agent 都记，都由 `agent.TitleOutput` 从命令输出里拆出用量：
+  - claude 的 `TitleCommand` 用 `--output-format json`（不是 `text`），标题在
+    `result` 字段，同一对象带着 usage；
+  - codex 的 `TitleCommand` 把 `--json` 事件流写进临时文件，正文之后补一行
+    `---abox-usage---` 分隔符再接 `turn.completed`；`TitleOutput` 从**末尾**找分隔符，
+    这样标题里恰好出现这串字符也不会吞掉用量行。
+  **改这两处的输出格式会直接让标题消耗重新变成漏账。**
+- 回合跑完一行用量都没记到时会打 `usage: … 未记到用量` 警告。见到它说明有 agent
+  版本报用量的形状没被认出来，别忽略。
+
+### 额度与扣减
+
+`internal/store/quota.go`（账本）+ `internal/server/quota.go`（定价、拦截、管理接口）。
+
+- **没有 `quotas` 行 = 不限额。** 老库升上来一行都没有，所有人照旧畅通；管理员给谁
+  开额度谁才被计。别把「没开额度」写成「余额 0」，那等于全员断服。
+- **扣减和 `usage_events` 的插入同事务**（`store.InsertUsage`）。不存在「用量记了但
+  钱没扣」的中间态。想绕过它单独插用量行时先想清楚这一点。
+- **幂等键是 `credit_ledger.ref`，带 UNIQUE 索引。** 消耗流水用 `usage:<行id>`，
+  充值用 `grant:<管理员填的或服务端生成的>`——前缀是故意的，防止管理员填个
+  `usage:1` 撞掉一条扣款。重放同一个 ref 一分钱都不会动。
+- **余额可以是负数，这是设计。** 一个回合花多少钱要等 provider 收尾事件才知道，中途
+  没有可靠累计值，所以拦截只发生在**回合开始前**（`handleChatWS` 的 `user_message`
+  分支），余额见底的那个回合允许超支。宁可多花一个回合，也不把用户跑到一半的任务
+  腰斩。起标题这趟服务端自发的消耗在余额见底时直接跳过。
+- **claude 的价以 provider 报的为准**；只有不报价的 codex 用 `config.json` 的
+  `pricing` 按 token 折算。价目表单位是「每百万 token 多少美元」，微美元成本正好
+  等于 `tokens × rate`（两个 1e6 约掉）。查表顺序：精确模型名 → agent 名兜底
+  （codex 事件不报模型名，兜底那条要配成账号 `config.toml` 里的默认模型）。
+  **没配价目表的模型按 0 计**，只记不扣。
+- **长上下文是「过线整轮翻倍」，不是对超出部分加价。** 提示词超过
+  `long_context_over`（OpenAI 现为 272000 input token）后，整个回合的四个桶都按
+  `long` 那一档算。判定用的是「这轮喂进去多少」= 未命中缓存的输入 + 命中缓存的
+  输入，两者相加正好还原 codex 报的 `input_tokens`；`cache_write` 不计入，它是否
+  含在 `input_tokens` 里没实测过，而这家 provider 一直报 0。
+- `quotas.balance_micro_usd` 是账本的物化缓存，两者永远同事务更新；对不上账用
+  `store.RecomputeBalance` 按 `credit_ledger` 重算核对。
+- 管理接口：`GET/PUT /api/users/{name}/quota`、`POST /api/users/{name}/credits`、
+  `GET /api/usage`（普通用户只能看自己的）。前端在 `js/quota.js`：系统设置 → 用户
+  管理每行的「额度」按钮开弹窗（余额、三种模式、充值、流水），侧栏给用户显示自己
+  的剩余额度。**金额在前后端之间一律传微美元整数**，前端只在显示的最后一步除 1e6；
+  别把美元浮点传回服务端，绕一圈会把分账算歪。充值按钮每次点击生成一个 `ref`
+  幂等键，连点或重试不会重复入账。
+- 报表页（按用户/模型/时段的消耗统计）还没做，`GET /api/usage` 已经能出汇总。
+- **已知缺口：终端页不计费。** 用户在终端里直接敲 `claude`/`codex` 走的是容器内进程，
+  不经过 `runTurn`，既不记用量也不扣额度。要堵这个口子得从容器侧入手，不是这一层
+  能解决的。
 
 ### 终端
 

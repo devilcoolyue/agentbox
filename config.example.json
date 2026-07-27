@@ -15,6 +15,16 @@
     "enabled": false,
     "proxy_bind": "172.17.0.1:1080"
   },
+  "pricing": {
+    "codex": {
+      "input": 5.0, "cache_read": 0.5, "cache_write": 0.0, "output": 30.0,
+      "long_context_over": 272000,
+      "long": { "input": 10.0, "cache_read": 1.0, "cache_write": 0.0, "output": 45.0 }
+    },
+    "gpt-5.4-mini": {
+      "input": 0.75, "cache_read": 0.075, "cache_write": 0.0, "output": 4.5
+    }
+  },
   "accounts": [
     {
       "id": "claude-1",

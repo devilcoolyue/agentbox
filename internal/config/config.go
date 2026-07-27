@@ -72,6 +72,45 @@ type ModelOption struct {
 	Label string `json:"label"`
 }
 
+// TokenRates is one tier of per-million-token prices in USD. The four buckets
+// match store.UsageEvent's disjoint ones: Input counts input that missed the
+// cache, CacheRead the part served from cache, CacheWrite the part written into
+// it. A rate left at 0 prices that bucket free, which is what the "-" cells in
+// OpenAI's table mean.
+type TokenRates struct {
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cache_read"`
+	CacheWrite float64 `json:"cache_write"`
+}
+
+// ModelPrice is the rate sheet for one model, used to price usage the provider
+// itself doesn't price — Codex reports tokens only. Claude reports its own cost
+// and is never priced from this table.
+//
+// The embedded TokenRates is the short-context tier (flat keys in JSON). Models
+// that charge more once a prompt gets big carry a second tier: prompts over
+// LongContextOver tokens are billed entirely at Long's rates — it is a cliff,
+// not a surcharge on the excess.
+//
+// Keys of Config.Pricing are looked up in this order: the exact model id, then
+// the agent name ("codex") as the catch-all for turns whose event never names a
+// model. No match means no price, and the row records at cost 0.
+type ModelPrice struct {
+	TokenRates
+	LongContextOver int64       `json:"long_context_over,omitempty"`
+	Long            *TokenRates `json:"long,omitempty"`
+}
+
+// Rates picks the tier that applies to a turn whose prompt was promptTokens
+// long (everything fed in: cache misses plus cache hits).
+func (p ModelPrice) Rates(promptTokens int64) TokenRates {
+	if p.Long != nil && p.LongContextOver > 0 && promptTokens > p.LongContextOver {
+		return *p.Long
+	}
+	return p.TokenRates
+}
+
 // TerminalTips drives the rotating hint ticker in the terminal page header.
 // Editable in 系统设置 and pushed to every user (admin and regular) via /me so
 // it shows for all. Tips rotate one at a time; IntervalSec <= 0 disables
@@ -137,6 +176,7 @@ type Config struct {
 	Accounts       []Account                `json:"accounts"`
 	Models         map[string][]ModelOption `json:"models,omitempty"`
 	TerminalTips   TerminalTips             `json:"terminal_tips"`
+	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
 
 	mu         sync.RWMutex
 	path       string
@@ -339,6 +379,7 @@ type persistConfig struct {
 	Accounts       []persistAccount         `json:"accounts"`
 	Models         map[string][]ModelOption `json:"models,omitempty"`
 	TerminalTips   TerminalTips             `json:"terminal_tips"`
+	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
 }
 
 // saveLocked writes the config file atomically; callers must hold the write
@@ -357,6 +398,7 @@ func (c *Config) saveLocked() error {
 		Accounts:       make([]persistAccount, 0, len(c.Accounts)),
 		Models:         c.Models,
 		TerminalTips:   c.TerminalTips,
+		Pricing:        c.Pricing,
 	}
 	for _, a := range c.Accounts {
 		dir := a.rawCredDir
@@ -478,6 +520,21 @@ func (c *Config) GetTerminalTips() TerminalTips {
 	return tt
 }
 
+// Price resolves the rate sheet for one usage row: exact model id first, then
+// the agent name as the catch-all. The bool is false when nothing matches, so
+// callers can tell "no price configured" from "configured as free".
+func (c *Config) Price(agent, model string) (ModelPrice, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if p, ok := c.Pricing[model]; ok && model != "" {
+		return p, true
+	}
+	if p, ok := c.Pricing[agent]; ok && agent != "" {
+		return p, true
+	}
+	return ModelPrice{}, false
+}
+
 // --- 写访问：全部先在副本上验证，通过后才落盘并生效 ---
 
 // mutate runs fn on a shallow working copy of the mutable fields, validates
@@ -498,8 +555,11 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Accounts:       append([]Account(nil), c.Accounts...),
 		Models:         c.Models,
 		TerminalTips:   c.TerminalTips,
-		path:           c.path,
-		rawDataDir:     c.rawDataDir,
+		// 这份工作副本会被整体写回 config.json：**漏抄一个字段就等于从文件里
+		// 删掉它**。加字段时必须同时加到这里。
+		Pricing:    c.Pricing,
+		path:       c.path,
+		rawDataDir: c.rawDataDir,
 	}
 	if err := fn(work); err != nil {
 		return err
@@ -521,6 +581,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.Accounts = work.Accounts
 	c.Models = work.Models
 	c.TerminalTips = work.TerminalTips
+	c.Pricing = work.Pricing
 	return nil
 }
 

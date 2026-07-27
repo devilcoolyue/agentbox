@@ -227,6 +227,11 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 			if msg.Text == "" {
 				continue
 			}
+			// 额度拦在回合开始前：这里是唯一会花钱的入口，放进来就收不住了。
+			if why := s.quotaBlock(sess.User); why != "" {
+				_ = cw.send(map[string]any{"type": "error", "error": why})
+				continue
+			}
 			if !room.tryBegin() {
 				_ = cw.send(map[string]any{"type": "error", "error": "上一条消息仍在处理中，请等待或先中断"})
 				continue
@@ -265,8 +270,15 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 	}
 
 	// 记录发消息前该线程的状态：首条消息且尚无标题时，回合成功后据首条
-	// 消息让模型生成一个简洁标题。房间占用期间线程不会被切换，titleTID 稳定。
-	titleTID, firstTurn := r.preTurnTitleState(sess)
+	// 消息让模型生成一个简洁标题。房间占用期间线程不会被切换，tid 稳定，
+	// 用量流水也挂在它上面。
+	tid, firstTurn := r.preTurnTitleState(sess)
+
+	// 本回合的用量归属。turnID 把一个回合里按模型拆出的多行流水串起来；
+	// usageRows 数落库行数，收尾时为 0 说明这趟消耗没进账（见下方告警）。
+	// onLine 由回合的读循环串行调用，普通变量即可。
+	turnID := store.NewID()
+	usageRows := 0
 
 	r.appendLog(logEntry{Kind: "user", Text: text})
 	r.broadcast(map[string]any{"type": "user_message", "text": text})
@@ -295,6 +307,12 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 			}
 			r.appendLog(logEntry{Kind: "event", Event: ev})
 			r.broadcast(map[string]any{"type": "agent_event", "event": ev})
+			// 回合收尾事件带 token/费用，落进 usage_events（见 usage.go）。
+			usageRows += r.recordUsage(store.UsageEvent{
+				User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: turnID,
+				Agent: sess.Agent, AccountID: sess.AccountID, Model: model,
+				Kind: store.UsageKindChat,
+			}, line)
 			if id := agent.ExtractSessionID(line); id != "" && id != chatID {
 				chatID = id
 				if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.ChatSession = id }); err != nil {
@@ -334,12 +352,18 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 			return
 		}
 	}
+	// 回合正常跑完却一行用量都没记到，说明这个 agent/版本报用量的形状我们没
+	// 认出来——消耗真实发生了但不会进报表。宁可吵一句，也别让漏账无声无息。
+	if usageRows == 0 {
+		log.Printf("usage: 会话 %s 回合结束但未记到用量（agent=%s），该回合消耗不会进报表", r.sessID, sess.Agent)
+	}
+
 	r.appendLog(logEntry{Kind: "status", State: "idle"})
 	r.broadcast(map[string]any{"type": "status", "state": "idle"})
 
 	// 首条消息的对话：异步用模型总结出一个标题，不阻塞对话流。
-	if firstTurn && titleTID != "" {
-		go r.generateTitle(titleTID, text)
+	if firstTurn && tid != "" {
+		go r.generateTitle(tid, text)
 	}
 }
 
@@ -469,6 +493,11 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	if !ok || sess.ContainerID == "" {
 		return
 	}
+	// 起标题是服务端自己发起的额外一趟消耗。用户的额度刚被上一个回合花光时
+	// 就别再替他花了——标题只是锦上添花，欠着的账不是。
+	if s.quotaBlock(sess.User) != "" {
+		return
+	}
 	cmd, err := agent.TitleCommand(sess.Agent)
 	if err != nil {
 		return
@@ -480,7 +509,15 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 		log.Printf("gen title %s: %v", r.sessID, err)
 		return
 	}
-	title := sanitizeTitle(out)
+	raw, usage := agent.TitleOutput(sess.Agent, out)
+	// 先记账再管标题：钱已经花掉了，标题为空或被并发抢先都不改变这一点。
+	if len(usage) > 0 {
+		r.recordUsage(store.UsageEvent{
+			User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: store.NewID(),
+			Agent: sess.Agent, AccountID: sess.AccountID, Kind: store.UsageKindTitle,
+		}, usage)
+	}
+	title := sanitizeTitle(raw)
 	if title == "" {
 		return
 	}

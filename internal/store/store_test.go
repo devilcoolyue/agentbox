@@ -237,3 +237,109 @@ func TestStopReasonRoundTripAndMigration(t *testing.T) {
 		t.Fatalf("stop reason = %q, want %q", got.StopReason, StopIdle)
 	}
 }
+
+func TestUsageRoundTrip(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	now := time.Now().Truncate(time.Millisecond)
+	// 一个回合按模型拆成两行，共享 turn_id。
+	if err := s.InsertUsage(
+		UsageEvent{TS: now, User: "alice", SessionID: "s1", ThreadID: "t1", TurnID: "turn1",
+			Agent: "claude", AccountID: "a1", Model: "claude-haiku-4-5-20251001",
+			InputTokens: 531, OutputTokens: 18, CostMicroUSD: 621, DurationMS: 19788,
+			Raw: `{"type":"result"}`},
+		UsageEvent{TS: now, User: "alice", SessionID: "s1", ThreadID: "t1", TurnID: "turn1",
+			Agent: "claude", AccountID: "a1", Model: "claude-opus-4-8",
+			InputTokens: 2, OutputTokens: 1870, CacheReadTokens: 7342, CacheWriteTokens: 5265,
+			CostMicroUSD: 103081, DurationMS: 19788},
+	); err != nil {
+		t.Fatal(err)
+	}
+	// 另一个用户，用来验证过滤没串号。
+	if err := s.InsertUsage(UsageEvent{TS: now.Add(time.Second), User: "bob", SessionID: "s2",
+		TurnID: "turn2", Agent: "codex", InputTokens: 13109, CacheReadTokens: 3840, OutputTokens: 14}); err != nil {
+		t.Fatal(err)
+	}
+
+	all := s.ListUsage(UsageFilter{})
+	if len(all) != 3 {
+		t.Fatalf("总行数 = %d, want 3", len(all))
+	}
+
+	mine := s.ListUsage(UsageFilter{User: "alice"})
+	if len(mine) != 2 {
+		t.Fatalf("alice 的行数 = %d, want 2", len(mine))
+	}
+	var cost int64
+	for _, e := range mine {
+		if e.TurnID != "turn1" {
+			t.Errorf("turn_id 串了: %+v", e)
+		}
+		cost += e.CostMicroUSD
+	}
+	if cost != 103702 {
+		t.Errorf("alice 费用合计 = %d 微美元, want 103702", cost)
+	}
+
+	// 时间过滤：Until 是开区间，不应带上 bob 那条。
+	early := s.ListUsage(UsageFilter{Until: now.Add(time.Second)})
+	if len(early) != 2 {
+		t.Fatalf("Until 过滤后 = %d 行, want 2", len(early))
+	}
+
+	// 字段完整往返（含 raw 与缓存分桶）。
+	one := s.ListUsage(UsageFilter{User: "alice", Limit: 1})
+	if len(one) != 1 {
+		t.Fatalf("Limit 未生效: %d 行", len(one))
+	}
+	got := s.ListUsage(UsageFilter{SessionID: "s1"})
+	var opus UsageEvent
+	for _, e := range got {
+		if e.Model == "claude-opus-4-8" {
+			opus = e
+		}
+	}
+	if opus.CacheReadTokens != 7342 || opus.CacheWriteTokens != 5265 || opus.DurationMS != 19788 {
+		t.Errorf("opus 行往返丢字段: %+v", opus)
+	}
+	if !opus.TS.Equal(now) {
+		t.Errorf("时间戳往返不一致: got %v want %v", opus.TS, now)
+	}
+}
+
+// kind 把用户自己的对话和服务端自动起标题的消耗分开——两者都可能落在同一个
+// 便宜模型上，只看 model 区分不了。
+func TestUsageKindFilter(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	if err := s.InsertUsage(
+		UsageEvent{User: "alice", SessionID: "s1", TurnID: "t1", Agent: "claude",
+			Model: "claude-opus-4-8", Kind: UsageKindChat, CostMicroUSD: 103081},
+		UsageEvent{User: "alice", SessionID: "s1", TurnID: "t2", Agent: "claude",
+			Model: "claude-haiku-4-5-20251001", Kind: UsageKindTitle, CostMicroUSD: 621},
+		// kind 留空的旧行应落成 chat，而不是空串。
+		UsageEvent{User: "alice", SessionID: "s1", TurnID: "t3", Agent: "claude", CostMicroUSD: 1},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	chat := s.ListUsage(UsageFilter{User: "alice", Kind: UsageKindChat})
+	if len(chat) != 2 {
+		t.Fatalf("chat 行数 = %d, want 2（含 kind 留空补默认的那行）", len(chat))
+	}
+	titles := s.ListUsage(UsageFilter{User: "alice", Kind: UsageKindTitle})
+	if len(titles) != 1 || titles[0].CostMicroUSD != 621 {
+		t.Fatalf("title 行 = %+v", titles)
+	}
+	if titles[0].Model != "claude-haiku-4-5-20251001" {
+		t.Errorf("model 往返丢失: %q", titles[0].Model)
+	}
+}

@@ -100,23 +100,78 @@ func ChatCommand(agentType, permissionMode, resumeID, model, effort string) ([]s
 func TitleCommand(agentType string) ([]string, error) {
 	switch agentType {
 	case config.AgentClaude:
-		// --tools "" 彻底禁用工具；haiku 足够快且便宜；纯文本输出即标题
-		return []string{"claude", "-p", "--model", "haiku", "--tools", "", "--output-format", "text"}, nil
+		// --tools "" 彻底禁用工具；haiku 足够快且便宜。用 json 而非 text 输出：
+		// 同一个对象里既有标题（result 字段）又有 token/费用，起标题这点消耗
+		// 才能计入用量流水（见 TitleOutput）。
+		return []string{"claude", "-p", "--model", "haiku", "--tools", "", "--output-format", "json"}, nil
 	case config.AgentCodex:
 		// codex exec 没有“禁用全部工具”的开关，但纯总结提示不会触发命令；
 		// 起标题不需要推理深度，用 low 思考强度压低成本与时延。单引号保住
 		// TOML 值里的双引号，sh 才会把 model_reasoning_effort="low" 原样传给
 		// codex。最终消息写入临时文件后单独 cat，避开 stdout 上的框架噪声。
-		const in, out = "/tmp/.abox-title.in", "/tmp/.abox-title.out"
+		//
+		// --json 把事件流引到另一个文件，回合末尾的 turn.completed 带着 token
+		// 用量：标题之后跟一行分隔符再跟这条事件，由 TitleOutput 拆开，起标题
+		// 的消耗才不会漏账。
+		const in, out, ev = "/tmp/.abox-title.in", "/tmp/.abox-title.out", "/tmp/.abox-title.jsonl"
 		script := "cat >" + in + "; " +
-			"codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox " +
+			"codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox " +
 			"-c 'model_reasoning_effort=\"low\"' " +
-			"--output-last-message " + out + " - <" + in + " >/dev/null 2>&1; " +
-			"cat " + out + " 2>/dev/null; rm -f " + in + " " + out
+			"--output-last-message " + out + " - <" + in + " >" + ev + " 2>/dev/null; " +
+			"cat " + out + " 2>/dev/null; " +
+			"printf '\\n%s\\n' " + titleUsageMarker + "; " +
+			"grep -F '\"turn.completed\"' " + ev + " 2>/dev/null | tail -1; " +
+			"rm -f " + in + " " + out + " " + ev
 		return []string{"/bin/sh", "-c", script}, nil
 	default:
 		return nil, fmt.Errorf("unknown agent type %q", agentType)
 	}
+}
+
+// titleUsageMarker separates the title from the usage event on Codex's title
+// stdout. Quoted as a shell literal where TitleCommand builds the script.
+const titleUsageMarker = "'---abox-usage---'"
+
+// TitleOutput splits what TitleCommand wrote on stdout into the title text and,
+// when the agent reported it, the raw usage-bearing event.
+//
+// Claude answers with a single `--output-format json` object: the title sits in
+// `result`, and the very same object carries usage/modelUsage/total_cost_usd,
+// so it can be handed straight to the usage parser.
+//
+// Codex prints the title, then a marker line, then its turn.completed event.
+// The marker is matched from the end so a title that happens to contain it
+// cannot swallow the usage line.
+//
+// Either agent falling back to plain text (an older CLI ignoring the flags, a
+// killed process truncating the JSON) still yields a usable title, just no
+// usage — better a title without accounting than neither.
+func TitleOutput(agentType, out string) (title string, usage []byte) {
+	switch agentType {
+	case config.AgentClaude:
+		trimmed := strings.TrimSpace(out)
+		var res struct {
+			Type   string `json:"type"`
+			Result string `json:"result"`
+		}
+		if json.Unmarshal([]byte(trimmed), &res) != nil || res.Type != "result" {
+			return out, nil
+		}
+		return res.Result, []byte(trimmed)
+
+	case config.AgentCodex:
+		marker := strings.Trim(titleUsageMarker, "'")
+		i := strings.LastIndex(out, marker)
+		if i < 0 {
+			return out, nil
+		}
+		title, rest := out[:i], strings.TrimSpace(out[i+len(marker):])
+		if rest == "" || !json.Valid([]byte(rest)) {
+			return title, nil
+		}
+		return title, []byte(rest)
+	}
+	return out, nil
 }
 
 // InterruptCommand kills the current chat turn, if any.

@@ -165,6 +165,10 @@ func (s *Server) Run() error {
 	mux.Handle("POST /api/users", s.admin(http.HandlerFunc(s.handleUserCreate)))
 	mux.Handle("DELETE /api/users/{name}", s.admin(http.HandlerFunc(s.handleUserDelete)))
 	mux.Handle("POST /api/users/{name}/password", s.admin(http.HandlerFunc(s.handleUserSetPassword)))
+	mux.Handle("GET /api/users/{name}/quota", s.admin(http.HandlerFunc(s.handleQuotaGet)))
+	mux.Handle("PUT /api/users/{name}/quota", s.admin(http.HandlerFunc(s.handleQuotaSet)))
+	mux.Handle("POST /api/users/{name}/credits", s.admin(http.HandlerFunc(s.handleCreditGrant)))
+	mux.Handle("GET /api/usage", s.auth(http.HandlerFunc(s.handleUsageReport)))
 	mux.Handle("GET /api/accounts", s.auth(http.HandlerFunc(s.handleAccounts)))
 	mux.Handle("POST /api/accounts", s.admin(http.HandlerFunc(s.handleAccountCreate)))
 	mux.Handle("PATCH /api/accounts/{id}", s.admin(http.HandlerFunc(s.handleAccountPatch)))
@@ -373,11 +377,14 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	u := reqUser(r)
+	q, metered := s.store.GetQuota(u.Name)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user":          u.Name,
 		"role":          u.Role,
 		"models":        s.cfg.GetModels(),
 		"terminal_tips": s.cfg.GetTerminalTips(),
+		// 自己的额度：metered 为 false 就是不限额，前端不必显示余额。
+		"quota": viewQuota(u.Name, q, metered),
 	})
 }
 

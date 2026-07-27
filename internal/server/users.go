@@ -324,19 +324,23 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 // --- 用户管理（管理员） ---
 
 type userView struct {
-	Name      string `json:"name"`
-	Role      string `json:"role"`
-	Sessions  int    `json:"sessions"`
-	CreatedAt int64  `json:"created_at"`
+	Name      string    `json:"name"`
+	Role      string    `json:"role"`
+	Sessions  int       `json:"sessions"`
+	CreatedAt int64     `json:"created_at"`
+	Quota     quotaView `json:"quota"`
 }
 
 func (s *Server) handleUserList(w http.ResponseWriter, r *http.Request) {
 	counts := s.store.SessionCounts()
+	quotas := s.store.ListQuotas()
 	out := []userView{}
 	for _, u := range s.store.ListUsers() {
+		q, metered := quotas[u.Name]
 		out = append(out, userView{
 			Name: u.Name, Role: u.Role,
 			Sessions: counts[u.Name], CreatedAt: u.CreatedAt.UnixMilli(),
+			Quota: viewQuota(u.Name, q, metered),
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
