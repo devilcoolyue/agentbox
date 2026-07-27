@@ -533,6 +533,17 @@ func (s *Server) handleTunnelWS(w http.ResponseWriter, r *http.Request) {
 	log.Printf("tunnel down for user %q", user)
 }
 
+// The intranet variables injected into a session's execs. They are named
+// constants because the terminal has to mirror them into tmux — including
+// unsetting them when the link is down (see tmuxEnvSync).
+const (
+	envIntranetProxy = "AGENTBOX_INTRANET_PROXY"
+	envIntranetMaps  = "AGENTBOX_INTRANET_MAPS"
+)
+
+// tunnelEnvNames lists every variable tunnelEnvList may inject.
+var tunnelEnvNames = []string{envIntranetProxy, envIntranetMaps}
+
 // tunnelEnvList returns the proxy env injected into a session's execs when the
 // owning user has a live tunnel. It is intentionally NOT a global HTTP(S)_PROXY:
 // forcing all traffic (including model-API calls) through the user's home
@@ -551,7 +562,7 @@ func (s *Server) tunnelEnvList(sess store.Session) []string {
 	var env []string
 	if s.tunnels.proxyUp.Load() {
 		proxyURL := fmt.Sprintf("socks5h://%s:%s@%s:%s", sess.User, secret, tc.ProxyHost, portOf(tc.ProxyBind))
-		env = append(env, "AGENTBOX_INTRANET_PROXY="+proxyURL)
+		env = append(env, envIntranetProxy+"="+proxyURL)
 	}
 	// Port maps are independent listeners: they work even if the shared SOCKS
 	// proxy failed to bind. Format: "<listen host:port>=<intranet target>,..."
@@ -560,7 +571,7 @@ func (s *Server) tunnelEnvList(sess store.Session) []string {
 		for i, m := range maps {
 			parts[i] = fmt.Sprintf("%s=%s", net.JoinHostPort(tc.ProxyHost, strconv.Itoa(m.Port)), m.Target)
 		}
-		env = append(env, "AGENTBOX_INTRANET_MAPS="+strings.Join(parts, ","))
+		env = append(env, envIntranetMaps+"="+strings.Join(parts, ","))
 	}
 	return env
 }

@@ -149,6 +149,10 @@ ABOX_PASSWORD=<你的密码> ./abox-link \
 - 隧道在线时，容器内自动注入 `AGENTBOX_INTRANET_PROXY=socks5h://<user>:<secret>@<gateway>`。
   它**不是**全局 `HTTP_PROXY`（避免模型 API 等全部流量绕行你的家宽），智能体按需使用，例如
   `curl --proxy "$AGENTBOX_INTRANET_PROXY" http://gitlab.corp.local/...`。
+- 变量随每次 exec 注入，对话每回合都取当前值；终端因为附着在常驻 tmux 上，**已经在跑的
+  窗格保持它启动那一刻的环境**（进程改不了自己的环境变量）。所以会话先开、隧道后连时，
+  在旧窗格里会看不到该变量。重连终端会把最新值写进 tmux 全局环境，此时开一个新窗口
+  （`Ctrl-b c`）或重启智能体即可拿到；隧道断开同理会被清除。
 - **端口映射（`--map`）**：psql / mysql / redis-cli 及各类数据库驱动不认 SOCKS，
   用 `--map 3306=10.0.1.5:3306`（可重复，每用户最多 16 条）在网关上开一个原生
   TCP 端口，直通指定内网目标：
