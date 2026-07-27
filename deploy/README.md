@@ -20,8 +20,9 @@
 
 ## 首次部署
 
-前置：Docker、Go 1.26+、python3、sqlite3（备份取一致快照用）。配置与账号凭证的
-准备见根目录 `README.md` 的「部署」一节，这里只管进程托管。
+前置：Docker、Go 1.26+、python3。`sqlite3` 命令行装了会用，没装则由 python3 的
+sqlite3 模块顶上（同一套在线备份 API），不影响备份。配置与账号凭证的准备见根目录
+`README.md` 的「部署」一节，这里只管进程托管。
 
 ```bash
 sudo ./deploy/install.sh   # 装单元，路径按当前目录注入
@@ -87,7 +88,10 @@ journalctl -u agentbox -n 50
 `install.sh` 会一并装上 `agentbox-backup.timer`，每天凌晨跑 `scripts/backup.sh`，
 把关键状态打包进 `<data_dir>/backups/`（保留最近 14 份，产物权限 0600）：
 
-- `state.db` — 用 `sqlite3 .backup` 取的一致快照（sessions/users/tokens）
+- `state.db` — 在线备份 API 取的一致快照（sessions/users/tokens/usage_events），
+  取完会核对行数，快照为空则整个备份失败退出
+  > 库跑在 WAL 模式，主库文件常常几乎是空的、数据都在 `state.db-wal` 里。
+  > 任何时候都别用 `cp state.db` 当备份——会得到一个结构完整但没有内容的库。
 - `config.json` — 含 `auth_token` 与账号 env 密钥
 - `accounts/` — OAuth 凭证（刷新令牌轮换制，丢失需逐账号重新授权）
 
