@@ -226,6 +226,16 @@ function connectTermWS(isReconnect) {
     if (gen !== S.termWSGen) return; // 被 teardown/disconnect/手动重连接管，忽略
     S.termWS = null;
     $("term-loading").classList.add("hidden"); // 连接失败时不能留着转圈
+    // 4000–4999 是服务端的应用私有关闭码（目前只有额度用尽一种）：reason 是写给
+    // 人看的一句话，写进终端画面并顶到状态栏。绝不自动重连——理由不会因为重试
+    // 而改变，只会被同一句话再挡一次。
+    if (e && e.code >= 4000 && e.code < 5000) {
+      const why = e.reason || "连接已被服务端拒绝";
+      if (S.term) S.term.write("\r\n\x1b[31m" + why + "\x1b[0m\r\n");
+      setConnStatus("closed");
+      $("term-state").textContent = why;
+      return;
+    }
     // 干净关闭（1000，服务端在 shell 进程退出时发）意味着：用户主动 exit，
     // 或本终端被另一处打开的终端顶掉（tmux attach -D）。这两种都不该自动重连
     // ——尤其后者，自动重连会把对方再顶掉，两个页面无限拉锯。停在「已断开」，
