@@ -42,7 +42,7 @@ function render() {
   const st = state.status || { state: "stopped" };
   const look = ST[st.state] || ST.stopped;
   $("hdr-dot").className = "dot " + look.cls;
-  $("st-dot").className = "dot big " + look.cls;
+  $("wire").className = "wire " + look.cls; // 电路两条腿与三个节点全按状态取色
   $("st-title").textContent = look.title;
   $("st-sub").textContent = subtitle(st);
   $("btn-toggle").textContent = look.btn;
@@ -98,6 +98,9 @@ function keyOf(v) {
 
 function renderRules() {
   const v = view();
+
+  // 电路中点挂的就是白名单——放行规则在本机侧生效，这里是它作用的那一点
+  $("wire-rules").textContent = v.allow.length ? v.allow.length + " 条规则" : "无规则";
 
   // 轮询每 2 秒调一次 render()，这里必须只在规则真的变了时才重建 DOM，
   // 否则正在编辑的输入框会被换掉，焦点和光标位置跟着丢。

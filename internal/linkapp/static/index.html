@@ -4,106 +4,151 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>abox-link 内网隧道</title>
+  <link rel="icon" href="/img/logo.svg">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
 <header class="top">
   <div class="brand">
-    <span class="dot" id="hdr-dot"></span>
-    <strong>abox-link</strong>
-    <span class="muted">内网隧道</span>
+    <img class="brand-mark" src="/img/logo.svg" width="20" height="20" alt="">
+    <strong>ABOX-LINK</strong>
+    <span class="brand-sub">内网隧道</span>
   </div>
-  <span class="muted small" id="hdr-acct"></span>
+  <div class="acct">
+    <span class="acct-name" id="hdr-acct"></span>
+    <span class="dot" id="hdr-dot"></span>
+  </div>
 </header>
 
 <main>
 
   <!-- 首次使用：粘贴配对码 -->
-  <section class="card hidden" id="card-pair">
-    <h2>接入你的 agentbox</h2>
-    <p class="muted">
-      打开浏览器里的 agentbox → 侧栏「内网隧道」 → 点「生成配对码」，
-      把那串字符粘到下面。不需要在这里输密码。
-    </p>
-    <textarea id="pair-code" rows="3" spellcheck="false"
-              placeholder="ABOX1-…"></textarea>
-    <label class="check">
-      <input type="checkbox" id="pair-insecure">
-      <span>服务器用的是自签名证书，跳过证书校验</span>
-    </label>
-    <div class="row">
-      <button class="primary" id="btn-pair">接入</button>
-      <span class="err" id="pair-err"></span>
-    </div>
-  </section>
-
-  <!-- 已配对：状态与开关 -->
-  <section class="card status hidden" id="card-status">
-    <div class="status-main">
-      <span class="dot big" id="st-dot"></span>
-      <div>
-        <div class="st-title" id="st-title">未连接</div>
-        <div class="muted small" id="st-sub"></div>
-      </div>
-    </div>
-    <button class="primary" id="btn-toggle">启动</button>
-  </section>
-
-  <div id="panel-body" class="hidden">
-
-    <section class="card">
-      <h2>放行规则</h2>
-      <p class="muted">
-        容器只能访问这里列出的目标，其余一律拒绝。
-        可填网段 <code>192.168.1.0/24</code>、主机名 <code>db.corp.local</code>
-        或带端口的 <code>db.corp.local:5432</code>。
+  <section class="card card-pair hidden" id="card-pair">
+    <img class="pair-mascot" src="/img/mascot.svg" width="104" height="90" alt="">
+    <div class="pair-body">
+      <h2>接入你的 agentbox</h2>
+      <p>
+        打开浏览器里的 agentbox → 侧栏「内网隧道」 → 点「生成配对码」，
+        把那串字符粘到下面。不需要在这里输密码。
       </p>
-      <div id="allow-list" class="rules"></div>
-      <button class="ghost" id="btn-add-allow">+ 添加规则</button>
-    </section>
-
-    <section class="card">
-      <h2>端口映射 <span class="muted small">（可选）</span></h2>
-      <p class="muted">
-        给不会说 SOCKS 的客户端（psql、mysql、各类数据库驱动）用：
-        在服务端开一个固定端口，直通某个内网地址。映射的目标自动放行。
-      </p>
-      <div id="map-list" class="rules"></div>
-      <button class="ghost" id="btn-add-map">+ 添加映射</button>
-    </section>
-
-    <section class="card">
-      <h2>选项</h2>
+      <textarea id="pair-code" rows="3" spellcheck="false"
+                placeholder="ABOX1-…"></textarea>
       <label class="check">
-        <input type="checkbox" id="opt-auto">
-        <span>启动本程序时自动连接隧道</span>
-      </label>
-      <label class="check">
-        <input type="checkbox" id="opt-boot">
-        <span>开机自启 <span class="muted small" id="boot-detail"></span></span>
-      </label>
-      <label class="check">
-        <input type="checkbox" id="opt-insecure">
-        <span>跳过 TLS 证书校验（服务器用自签名证书时才勾）</span>
+        <input type="checkbox" id="pair-insecure">
+        <span>服务器用的是自签名证书，跳过证书校验</span>
       </label>
       <div class="row">
-        <button class="ghost danger" id="btn-unpair">解除绑定</button>
-        <span class="muted small">保留放行规则，只清除服务器与登录凭证</span>
+        <button class="primary" id="btn-pair">接入</button>
+        <span class="err" id="pair-err"></span>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="card">
-      <h2>运行日志</h2>
-      <div class="log" id="log"></div>
-    </section>
+  <!-- 已配对：电路与开关 -->
+  <section class="link hidden" id="card-status">
+    <div class="wire" id="wire">
+      <span class="term term-a">
+        <span class="lamp"></span>
+        <span class="term-label">agentbox</span>
+      </span>
+      <span class="leg leg-a"><i class="glint"></i></span>
+      <span class="node">
+        <span class="node-mark"></span>
+        <span class="term-label">本机</span>
+        <span class="node-rules" id="wire-rules"></span>
+      </span>
+      <span class="leg leg-b"></span>
+      <span class="term term-b">
+        <span class="lamp"></span>
+        <span class="term-label">内网</span>
+      </span>
+    </div>
+    <div class="link-foot">
+      <div class="link-read">
+        <div class="st-title" id="st-title">未连接</div>
+        <div class="st-sub" id="st-sub"></div>
+      </div>
+      <button class="primary" id="btn-toggle">启动</button>
+    </div>
+  </section>
 
+  <div id="panel-body" class="desk hidden">
+
+    <div class="col col-main">
+
+      <section class="card">
+        <div class="head">
+          <h2>放行规则</h2>
+          <span class="head-line"></span>
+        </div>
+        <p>
+          容器只能访问这里列出的目标，其余一律拒绝。
+          可填网段 <code>192.168.1.0/24</code>、主机名 <code>db.corp.local</code>
+          或带端口的 <code>db.corp.local:5432</code>。
+        </p>
+        <div id="allow-list" class="rules"
+             data-empty="还没有规则 — 容器现在到不了任何内网地址。"></div>
+        <button class="ghost add" id="btn-add-allow">添加规则</button>
+      </section>
+
+      <section class="card">
+        <div class="head">
+          <h2>端口映射</h2>
+          <span class="head-tag">可选</span>
+          <span class="head-line"></span>
+        </div>
+        <p>
+          给不会说 SOCKS 的客户端（psql、mysql、各类数据库驱动）用：
+          在服务端开一个固定端口，直通某个内网地址。映射的目标自动放行。
+        </p>
+        <div id="map-list" class="rules"
+             data-empty="没有映射 — 容器走 SOCKS 代理访问内网。"></div>
+        <button class="ghost add" id="btn-add-map">添加映射</button>
+      </section>
+
+    </div>
+
+    <div class="col col-side">
+
+      <section class="card card-log">
+        <div class="head">
+          <h2>运行日志</h2>
+          <span class="head-line"></span>
+        </div>
+        <div class="log" id="log"></div>
+      </section>
+
+      <section class="card">
+        <div class="head">
+          <h2>选项</h2>
+          <span class="head-line"></span>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="opt-auto">
+          <span>启动本程序时自动连接隧道</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="opt-boot">
+          <span>开机自启 <span class="hint" id="boot-detail"></span></span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="opt-insecure">
+          <span>跳过 TLS 证书校验（服务器用自签名证书时才勾）</span>
+        </label>
+        <div class="unpair">
+          <button class="ghost danger" id="btn-unpair">解除绑定</button>
+          <span class="hint">保留放行规则，只清除服务器与登录凭证</span>
+        </div>
+      </section>
+
+    </div>
   </div>
 </main>
 
 <!-- 有未保存改动时浮出 -->
 <div class="savebar hidden" id="savebar">
-  <span id="save-msg">有未保存的改动</span>
+  <span id="save-msg">改动还没生效</span>
   <div class="row">
     <button class="ghost" id="btn-revert">放弃</button>
     <button class="primary" id="btn-save">保存并应用</button>
