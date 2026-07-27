@@ -19,6 +19,7 @@ async function api(path, body) {
 let state = null;   // 服务端权威状态
 let draft = null;   // 用户正在编辑的副本；null 表示无未保存改动
 let logSeq = 0;
+let rulesKey = null; // 当前画出来的规则行签名，值没变就不重建
 
 /* ---- 渲染 ---- */
 
@@ -76,21 +77,39 @@ function view() {
   };
 }
 
-/* 开始编辑：把当前值快照成 draft */
+/* 开始编辑：把当前值快照成 draft，并重画（增删行需要） */
 function edit(mutate) {
   draft = draft || view();
   mutate(draft);
   render();
 }
 
+/* 输入框里的改动：只更新 draft，不重画行——重画会毁掉正在输入的那个输入框 */
+function editValue(mutate) {
+  draft = draft || view();
+  mutate(draft);
+  rulesKey = keyOf(draft); // 画面已经是最新值了，别让下一轮轮询把行重建掉
+  $("savebar").classList.remove("hidden");
+}
+
+function keyOf(v) {
+  return JSON.stringify([v.allow, v.maps]);
+}
+
 function renderRules() {
   const v = view();
+
+  // 轮询每 2 秒调一次 render()，这里必须只在规则真的变了时才重建 DOM，
+  // 否则正在编辑的输入框会被换掉，焦点和光标位置跟着丢。
+  const key = keyOf(v);
+  if (key === rulesKey) return;
+  rulesKey = key;
 
   const allowBox = $("allow-list");
   allowBox.replaceChildren();
   v.allow.forEach((rule, i) => {
     allowBox.appendChild(ruleRow(rule, "192.168.1.0/24", (val) => {
-      edit((d) => { d.allow[i] = val; });
+      editValue((d) => { d.allow[i] = val; });
     }, () => {
       edit((d) => { d.allow.splice(i, 1); });
     }));
@@ -101,21 +120,21 @@ function renderRules() {
   v.maps.forEach((spec, i) => {
     const [port, target] = splitMap(spec);
     mapBox.appendChild(mapRow(port, target, (p, t) => {
-      edit((d) => { d.maps[i] = p + "=" + t; });
+      editValue((d) => { d.maps[i] = p + "=" + t; });
     }, () => {
       edit((d) => { d.maps.splice(i, 1); });
     }));
   });
 }
 
-/* 输入框只在失焦时提交，避免每敲一个字符就重绘、光标乱跳 */
+/* 每敲一个字符就同步进 draft（不重绘），这样轮询刷新不会吞掉还没失焦的输入 */
 function input(value, placeholder, onCommit) {
   const el = document.createElement("input");
   el.type = "text";
   el.value = value;
   el.placeholder = placeholder;
   el.spellcheck = false;
-  el.addEventListener("change", () => onCommit(el.value.trim()));
+  el.addEventListener("input", () => onCommit(el.value.trim()));
   el.addEventListener("keydown", (e) => { if (e.key === "Enter") el.blur(); });
   return el;
 }
