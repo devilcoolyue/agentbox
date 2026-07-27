@@ -156,6 +156,17 @@
       <div id="session-list" class="session-list"></div>
 
       <div class="side-foot">
+        <div id="my-quota" class="my-quota hidden" title="剩余额度">
+          <span class="glyph">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M14.5 9.2a3 3 0 0 0-2.5-1.2c-1.4 0-2.5.8-2.5 1.9 0 2.4 5 1.3 5 3.9 0 1.2-1.1 2-2.5 2a3 3 0 0 1-2.6-1.3"/>
+              <path d="M12 6.2v11.6"/>
+            </svg>
+          </span>
+          <span class="mq-label">剩余额度</span>
+          <span id="my-quota-num" class="mq-num mono">—</span>
+        </div>
         <div id="conn-latency" class="conn-latency" title="到服务器的连接延迟">
           <span id="conn-dot" class="t-dot"></span>
           <span id="conn-text" class="conn-text mono">连接中…</span>
@@ -883,6 +894,54 @@
   <div class="dlg-actions">
     <button type="button" id="ask-input-cancel" class="btn">取消</button>
     <button type="button" id="ask-input-ok" class="btn btn-primary">确定</button>
+  </div>
+</dialog>
+
+<!-- 额度管理（管理员） -->
+<dialog id="dlg-quota" class="dlg-quota">
+  <div class="dlg-head">
+    <h2>额度 · <span id="q-user" class="mono"></span></h2>
+    <button type="button" id="q-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+
+  <div id="q-body" class="q-body">
+    <div class="q-balance">
+      <div class="q-bal-main">
+        <span class="q-bal-label">余额</span>
+        <span id="q-balance" class="q-bal-num mono">—</span>
+      </div>
+      <div id="q-totals" class="q-bal-sub mono"></div>
+    </div>
+
+    <div class="q-block">
+      <div class="q-block-title">计费模式</div>
+      <div class="q-modes">
+        <label class="q-mode"><input type="radio" name="q-mode" value="off">
+          <span class="q-mode-name">不限额</span>
+          <span class="q-mode-desc">不计额度，用量照记</span></label>
+        <label class="q-mode"><input type="radio" name="q-mode" value="track">
+          <span class="q-mode-name">只计不拦</span>
+          <span class="q-mode-desc">照常扣减，见底也不阻止</span></label>
+        <label class="q-mode"><input type="radio" name="q-mode" value="block">
+          <span class="q-mode-name">超支拦截</span>
+          <span class="q-mode-desc">余额 ≤ 0 时禁止发起新对话</span></label>
+      </div>
+      <p class="field-hint">切换模式不会改变余额。零余额下直接开「超支拦截」会立刻挡住该用户，建议先充值。</p>
+    </div>
+
+    <div class="q-block">
+      <div class="q-block-title">充值</div>
+      <div class="q-grant">
+        <input id="q-amount" type="text" class="mono" inputmode="decimal" placeholder="金额（美元，可为负数冲正）" autocomplete="off">
+        <input id="q-note" type="text" placeholder="备注（可选）" autocomplete="off">
+        <button type="button" id="q-grant-btn" class="btn btn-primary btn-sm">充值</button>
+      </div>
+    </div>
+
+    <div class="q-block">
+      <div class="q-block-title">最近流水</div>
+      <div id="q-ledger" class="q-ledger"></div>
+    </div>
   </div>
 </dialog>
 

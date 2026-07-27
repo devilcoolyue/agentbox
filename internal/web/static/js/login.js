@@ -8,6 +8,7 @@ import { $, btnBusy, btnDone } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll, startPolling } from "./data.js";
 import { startPing } from "./ping.js";
+import { renderMyQuota } from "./quota.js";
 
 export function showLogin(err) {
   $("app").classList.add("hidden");
@@ -29,6 +30,8 @@ export async function tryEnter() {
   S.role = me.role;
   S.models = me.models || null;
   S.termTips = me.terminal_tips || null;
+  S.quota = me.quota || null;
+  renderMyQuota();
   emit("tips-updated"); // 让 term.js 用下发的提示语初始化顶栏轮播
   $("btn-settings").classList.toggle("hidden", me.role !== "admin");
   $("login").classList.add("hidden");

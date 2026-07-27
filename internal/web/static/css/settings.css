@@ -262,3 +262,14 @@
   .kv { grid-template-columns: 1fr; gap: 2px 0; }
   .kv dt { margin-top: 8px; }
 }
+
+/* ---- 用户行上的额度标签 ---- */
+.user-row .u-quota {
+  font-family: var(--mono); font-size: 11.5px;
+  border: 1px solid var(--line); border-radius: 4px;
+  padding: 1px 7px; flex: none;
+  color: var(--text);
+}
+.user-row .u-quota.off { color: var(--muted); opacity: 0.75; }
+.user-row .u-quota.track { color: var(--muted); border-style: dashed; }
+.user-row .u-quota.blocked { color: var(--red); border-color: var(--red-line); }

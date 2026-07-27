@@ -9,6 +9,7 @@ import { refreshAll } from "./data.js";
 import { showView } from "./shell.js";
 import { MODEL_ID_RE } from "./chat.js";
 import { agentKey, agentName, agentIcon, decorateAgentOpts } from "./brand.js";
+import { quotaChip, openQuota } from "./quota.js";
 
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
@@ -651,9 +652,15 @@ function userRow(u) {
   const meta = document.createElement("span");
   meta.className = "u-meta";
   meta.textContent = u.sessions > 0 ? u.sessions + " 个会话" : "暂无会话";
+  const quota = quotaChip(u.quota);
 
   const acts = document.createElement("div");
   acts.className = "u-actions";
+  const credit = document.createElement("button");
+  credit.className = "btn btn-sm btn-ghost";
+  credit.textContent = "额度";
+  credit.addEventListener("click", () => openQuota(u.name, loadUsers));
+  acts.appendChild(credit);
   const pw = document.createElement("button");
   pw.className = "btn btn-sm btn-ghost";
   pw.textContent = "重置密码";
@@ -701,7 +708,7 @@ function userRow(u) {
     acts.appendChild(del);
   }
 
-  row.append(name, role, meta, acts);
+  row.append(name, role, quota, meta, acts);
   return row;
 }
 

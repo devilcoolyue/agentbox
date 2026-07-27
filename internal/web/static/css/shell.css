@@ -367,3 +367,15 @@
 @media (prefers-reduced-motion: reduce) {
   .sidebar, .scrim, .theme-menu-side, .theme-chevron { transition: none; }
 }
+
+/* ---- 侧栏：自己的剩余额度（服务端没给额度就整条隐藏） ---- */
+.my-quota {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  font-size: 13.5px; color: var(--muted);
+}
+.my-quota .glyph { display: flex; flex: none; }
+.my-quota .mq-label { flex: 1; }
+.my-quota .mq-num { flex: none; font-size: 12.5px; color: var(--text); }
+/* 余额见底：这条是「为什么发不出消息」的答案，要一眼看见。 */
+.my-quota .mq-num.empty { color: var(--red); font-weight: 600; }

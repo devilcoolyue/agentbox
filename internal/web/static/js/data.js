@@ -7,9 +7,14 @@ import { api } from "./api.js";
 
 export async function refreshAll() {
   try {
-    const [sessions, accounts] = await Promise.all([api("/sessions"), api("/accounts")]);
+    // 顺带把 /me 拉一遍：余额只在回合结束时变，而 chat.js 正是在回合收尾
+    // 调 refreshAll，所以额度显示会紧跟着扣款更新。
+    const [sessions, accounts, me] = await Promise.all([
+      api("/sessions"), api("/accounts"), api("/me"),
+    ]);
     S.sessions = sessions;
     S.accounts = accounts;
+    S.quota = me.quota || null;
     if (S.current) {
       const cur = sessions.find((x) => x.id === S.current.id);
       if (cur) S.current = cur;
