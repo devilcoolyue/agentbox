@@ -26,7 +26,7 @@
 | `internal/agent` | Claude/Codex 适配层：headless 命令、标题生成、凭证播种、Claude HUD、Codex app-server 协议。 |
 | `internal/archivex` | 上传压缩包解压（防 zip-slip/符号链接/解压炸弹）与工作区 zip 下载。 |
 | `internal/tunnel` | yamux 隧道协议、白名单、端口映射。 |
-| `internal/linkapp` | abox-link 客户端实现：配置、面板、守护/自启、重连监督器。 |
+| `internal/linkapp` | abox-link 客户端实现：配置、面板、守护/自启、重连监督器；`static/` 是面板前端，随 `cmd/abox-link` 独立 `go:embed`。 |
 | `internal/web` | 嵌入前端静态资源；`AGENTBOX_WEB_DIR` 可改为磁盘热加载。 |
 | `images/agent` | 会话容器镜像 Dockerfile；内置 Claude Code、Codex CLI、tmux、claude-hud。 |
 | `scripts` | 镜像构建/自动升级、abox-link 交叉编译、域名与账号登录辅助脚本。 |
@@ -249,6 +249,16 @@ data/
 - 所有会话内文件/目录属主都要保持 `dockerx.AgentUID/AgentGID`（1000/1000），否则容器内 agent 用户可能写不了。
 - 容器安全边界：非 root、`no-new-privileges`、内存/CPU/PID 限额、固定挂载 `/workspace`、`/home/agent`、`/shared`。不要轻率改挂载路径或容器用户。
 - 前端无构建步骤：`internal/web/static` 原生 ES modules + 静态资源。服务端启动时算内容哈希，把 `index.html` 的 `{{BUILD}}` 替换为版本前缀；改前端不需要 npm build。
+- 两套前端互相独立：主控制台在 `internal/web/static`（进 `agentbox`），abox-link 面板在
+  `internal/linkapp/static`（进 `abox-link`）。改了面板要重跑 `scripts/build-clients.sh`
+  才能让下载按钮发新版；主控制台不受影响，服务端也不用重启。
+- 改 abox-link 面板前先读 `app.js`：它按 id 直接抓 DOM（`wire`、`wire-rules`、`st-title`、
+  `card-pair`、`allow-list`、`savebar` 等），并自己拼类名（`$("wire").className = "wire " + cls`）。
+  动 `index.html` 结构时这些 id 必须留着，样式也别挂在被 JS 覆写的类上，否则轮询下一轮就被抹掉。
+- 面板颜色一律走 `style.css` 顶部的令牌，别写死色值——浅色主题（`prefers-color-scheme`）
+  只覆盖会变的令牌。琥珀分两支：`--amber` 画线与文字（浅色下压深才有对比度），
+  `--accent` 是实心块底色（两个主题下都要够亮以托住 `--on-accent` 的深色文字），与
+  `internal/web/static/css/base.css` 的约定一致。
 - 会话镜像内禁用 CLI 自升级（`DISABLE_AUTOUPDATER=1`）；Claude/Codex 版本由 `images/agent/Dockerfile` 与 `scripts/auto-update-image.sh` 管理。
 - `config.json`、`accounts/`、`data/` 含密钥和运行时状态，已在 `.gitignore`；不要提交。
 - 若改动影响用户可见行为、部署步骤、API 或配置字段，同步更新 `README.md`（必要时也更新 `deploy/README.md`）。
