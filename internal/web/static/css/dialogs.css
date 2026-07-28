@@ -261,3 +261,12 @@ dialog label.check input { margin: 0; flex: none; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .q-empty { color: var(--muted); font-size: 12.5px; padding: 6px 2px; }
+
+/* 窄屏：流水行的时间/类型/金额/余额四项都是定宽，加起来约 283px，而 320px 手机上
+   弹窗里能用的宽度只有 264px 左右——四项自己就撑破了，备注再怎么省略也没用。
+   把备注放到第二行，金额靠右浮，其余三项挤在第一行。 */
+@media (max-width: 760px) {
+  .q-led-row { flex-wrap: wrap; gap: 6px 8px; }
+  .q-led-delta { min-width: 0; margin-left: auto; }
+  .q-led-note { flex-basis: 100%; text-align: left; }
+}

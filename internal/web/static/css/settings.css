@@ -257,6 +257,14 @@
 
   .acct-row { grid-template-columns: minmax(0, 1fr); }
   .acct-actions { grid-row: auto; grid-column: 1; padding-top: 4px; flex-wrap: wrap; }
+
+  /* 用户行加上额度标签和「额度」按钮之后一行就装不下了：名字 + 角色 + 会话数 +
+     额度 + 三个按钮，在 390px 上要 430px 左右，而按钮那一组是 flex:none，挤不动，
+     于是直接顶出框外。窄屏拆成两行——信息一行，按钮另起一行。 */
+  .user-row { flex-wrap: wrap; gap: 8px 10px; padding: 10px 2px; }
+  .user-row .u-name { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .user-row .u-meta { flex: 1 1 auto; }
+  .user-row .u-actions { flex-basis: 100%; margin-left: 0; flex-wrap: wrap; }
   .card-foot { flex-wrap: wrap; }
   .card-foot .note { flex-basis: 100%; }
   .kv { grid-template-columns: 1fr; gap: 2px 0; }
