@@ -1,0 +1,15 @@
+{
+  "name": "agentbox-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "主控制台前端（TypeScript 源码在 web/src，编译产物落到 internal/web/static/js 并随 go:embed 进二进制）",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~7.0.2"
+  }
+}

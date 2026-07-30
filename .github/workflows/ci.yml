@@ -6,6 +6,32 @@ on:
   pull_request:
 
 jobs:
+  # 前端产物 internal/web/static/js 提交进仓库（生产机只有 Go 工具链，deploy.sh
+  # 不跑 npm）。这里重新编译一次并要求 git 树干净，挡住「改了 .ts 忘记 build」
+  # 导致部署出去还是旧脚本的情况。
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: install
+        run: npm ci
+      - name: typecheck
+        run: npm run check
+      - name: build
+        run: npm run build
+      - name: 产物与源码一致性
+        run: |
+          if ! git diff --quiet -- internal/web/static/js; then
+            echo "::error::internal/web/static/js 与 web/src 不一致。请在本地执行 npm run build 并提交产物。"
+            git diff --stat -- internal/web/static/js
+            exit 1
+          fi
+          echo "前端产物与源码一致。"
+
   build-test:
     runs-on: ubuntu-latest
     steps:

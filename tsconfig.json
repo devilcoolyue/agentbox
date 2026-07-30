@@ -1,0 +1,36 @@
+{
+  /* 主控制台前端：web/src/*.ts 逐文件编译成 internal/web/static/js/*.js。
+   *
+   * 刻意不打包：服务端用「内容哈希版本化路径」发布资源（见 server.go 的
+   * staticHandler），index.html 只引入入口 main.js，其余模块靠 ES Module 的
+   * 相对 import 继承 /_v/<hash>/ 前缀。所以输出必须保持一个 .ts 对一个 .js、
+   * import 里带 .js 后缀的原生模块形态，bundler 反而会破坏这套缓存机制。
+   *
+   * 产物提交进 git：生产机只有 Go 工具链，deploy.sh 直接 go build，不跑 npm。
+   * 改完前端务必 npm run build 并把 internal/web/static/js 一起提交，CI 会校验
+   * 两者一致。 */
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+
+    "rootDir": "web/src",
+    "outDir": "internal/web/static/js",
+    "newLine": "lf",
+
+    /* import 一律写 "./xxx.js"（指向编译后的邻居文件），tsc 原样保留说明符；
+     * 类型专用导入必须写 import type，保证运行时不残留多余 import。 */
+    "verbatimModuleSyntax": true,
+
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    /* noUncheckedIndexedAccess / exactOptionalPropertyTypes 刻意不开：这套代码
+     * 大量按下标取 DOM 列表和配置数组，开了要么满屏非空断言、要么改写逻辑，
+     * 与「行为零变化」的移植目标冲突。 */
+
+    "skipLibCheck": true
+  },
+  "include": ["web/src"]
+}

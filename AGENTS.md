@@ -27,7 +27,8 @@
 | `internal/archivex` | 上传压缩包解压（防 zip-slip/符号链接/解压炸弹）与工作区 zip 下载。 |
 | `internal/tunnel` | yamux 隧道协议、白名单、端口映射。 |
 | `internal/linkapp` | abox-link 客户端实现：配置、面板、守护/自启、重连监督器；`static/` 是面板前端，随 `cmd/abox-link` 独立 `go:embed`。 |
-| `internal/web` | 嵌入前端静态资源；`AGENTBOX_WEB_DIR` 可改为磁盘热加载。 |
+| `internal/web` | 嵌入前端静态资源（`static/js` 是 TS 编译产物）；`AGENTBOX_WEB_DIR` 可改为磁盘热加载。 |
+| `web/src` | 主控制台前端 TypeScript 源码，`npm run build` 编译到 `internal/web/static/js`。 |
 | `images/agent` | 会话容器镜像 Dockerfile；内置 Claude Code、Codex CLI、tmux、claude-hud。 |
 | `scripts` | 镜像构建/自动升级、abox-link 交叉编译、域名与账号登录辅助脚本。 |
 | `deploy` | systemd 单元（服务、镜像更新、数据备份）、logrotate、安装/发布脚本、生产参数模板。 |
@@ -38,6 +39,11 @@
 # 基础校验
 go build ./...
 go test ./...
+npm run check          # 前端类型检查（tsc --noEmit）
+
+# 前端：改了 web/src/*.ts 必须重新构建，产物要一起提交
+npm ci                 # 首次或依赖变动时
+npm run build          # web/src/*.ts -> internal/web/static/js/*.js
 
 # 构建两个二进制
 go build -o agentbox ./cmd/agentbox
@@ -56,8 +62,9 @@ go build -o abox-link ./cmd/abox-link
 # 本地试跑（先 cp config.example.json config.json 并改 auth_token/accounts）
 ./agentbox -config config.json
 
-# 前端热改：不嵌入，直接吃磁盘文件
+# 前端热改：不嵌入，直接吃磁盘文件（配合 npm run watch 自动重新编译 TS）
 AGENTBOX_WEB_DIR=internal/web/static ./agentbox -config config.json
+npm run watch          # 另开一个终端；改完 .ts 刷新浏览器即可
 
 # 生产部署/日常发布（Linux，需要 root）
 sudo ./deploy/install.sh
@@ -136,6 +143,9 @@ rsync -azR \
   internal/web/static/js/theme.js \
   "$PROD_SSH:$PROD_DIR/"
 
+# 注意：同步的是 npm run build 的产物 internal/web/static/js/*.js，
+# 不是 web/src/*.ts —— 生产机没有 node，不会自己编译。先在本地构建好。
+
 ssh -o BatchMode=yes "$PROD_SSH" "git -C $PROD_DIR diff --check"
 ssh -o BatchMode=yes "$PROD_SSH" "$PROD_DIR/deploy/deploy.sh"
 ```
@@ -157,7 +167,8 @@ curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 10 --max-time 20 "$P
 
 四项均正常的最低标准是：systemd 返回 `active`、内外网 HTTP 都返回 `200`，且
 最近日志没有启动失败。前端静态资源嵌入二进制，部署重启后会生成新的内容哈希；
-不需要单独执行 npm 构建或复制静态目录。
+生产机只跑 `go build`，不会编译 TypeScript——前端改动必须在本地 `npm run build`
+并把 `internal/web/static/js/` 的产物一并提交，否则部署出去的还是旧脚本。
 
 ## 核心链路
 
@@ -326,7 +337,16 @@ data/
 - API 增加路由时明确鉴权层级：公开、`s.auth`、`s.admin`、会话资源还必须套 `s.withSession` 做属主校验。
 - 所有会话内文件/目录属主都要保持 `dockerx.AgentUID/AgentGID`（1000/1000），否则容器内 agent 用户可能写不了。
 - 容器安全边界：非 root、`no-new-privileges`、内存/CPU/PID 限额、固定挂载 `/workspace`、`/home/agent`、`/shared`。不要轻率改挂载路径或容器用户。
-- 前端无构建步骤：`internal/web/static` 原生 ES modules + 静态资源。服务端启动时算内容哈希，把 `index.html` 的 `{{BUILD}}` 替换为版本前缀；改前端不需要 npm build。
+- 主控制台前端是 TypeScript：源码在 `web/src/*.ts`，`npm run build`（tsc，无打包器）
+  逐文件编译成 `internal/web/static/js/*.js`，产物提交进 git 并被 `go:embed` 吃进二进制。
+  **改了 `.ts` 一定要重新 `npm run build` 并提交产物**，CI 会校验两者一致。
+  刻意不打包：服务端启动时算内容哈希，把 `index.html` 的 `{{BUILD}}` 替换成 `/_v/<hash>/`
+  前缀，其余模块靠原生 ES Module 的相对 import 继承该前缀（详见 `server.go` 的
+  `staticHandler`），一个 .ts 对一个 .js 才能维持这套长缓存。
+- 前端类型约定：`web/src/types.d.ts` 是 API/WS 报文的接口定义，每个接口对应 Go 侧一个
+  结构体，改服务端报文时两边一起改；`web/src/globals.d.ts` 声明 xterm/KaTeX 等
+  `<script>` 引入的全局。两个纯类型文件用 `.d.ts`，不产生多余的 js。
+  `util.ts` 的 `$()` 返回非空断言，需要具体元素接口时写 `$<HTMLInputElement>("id")`。
 - 两套前端互相独立：主控制台在 `internal/web/static`（进 `agentbox`），abox-link 面板在
   `internal/linkapp/static`（进 `abox-link`）。改了面板要重跑 `scripts/build-clients.sh`
   才能让下载按钮发新版；主控制台不受影响，服务端也不用重启。

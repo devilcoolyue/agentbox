@@ -3,6 +3,10 @@
 agentbox.bak-*
 bin-abox-link
 
+# 前端 TS 工具链(产物 internal/web/static/js 要提交,见 tsconfig.json)
+/node_modules/
+*.tsbuildinfo
+
 # 运行时配置与凭证(含密钥,勿提交)
 /config.json
 config.json.bak*

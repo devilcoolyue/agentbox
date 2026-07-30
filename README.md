@@ -33,6 +33,9 @@
 前置：Linux、Docker、git 与 sqlite3（变更审查与数据备份用）、python3（部署脚本用）；
 编译还需 Go 1.26+，或直接使用编译好的 `agentbox` 二进制。
 
+部署机不需要 Node：前端 TypeScript 的编译产物已提交进仓库并由 `go:embed` 打进二进制，
+`go build` 一步即可。只有改前端源码时才需要 Node（见下方「前端开发」）。
+
 ```bash
 # 1. 构建服务端与 agent 镜像
 go build -o agentbox ./cmd/agentbox
@@ -218,6 +221,32 @@ POST   /api/tunnel/pair/redeem      用配对码换会话令牌（无需登录�
 GET    /api/tunnel/clients          可下载的 abox-link 预编译客户端列表
 GET    /api/tunnel/clients/{name}   下载客户端二进制（data/abox-link/ 下的文件）
 ```
+
+## 前端开发
+
+主控制台前端是 TypeScript，源码在 `web/src/`，用 `tsc` 逐文件编译（无打包器）到
+`internal/web/static/js/`，产物提交进仓库并被 `go:embed` 打进二进制。
+
+```bash
+npm ci                 # 首次或依赖变动时
+npm run check          # 类型检查（tsc --noEmit）
+npm run build          # web/src/*.ts -> internal/web/static/js/*.js
+
+# 热改：服务端直接读磁盘，另开一个终端跑 watch，改完刷新浏览器
+AGENTBOX_WEB_DIR=internal/web/static ./agentbox -config config.json
+npm run watch
+```
+
+改完前端务必 `npm run build` 并把 `internal/web/static/js/` 一起提交——生产机只跑
+`go build`，不会编译 TypeScript；CI 会校验产物与源码一致。
+
+之所以不打包：服务端用内容哈希发布资源（`index.html` 里的 `{{BUILD}}` 在启动时被换成
+`/_v/<hash>/` 前缀，其余模块靠原生 ES Module 的相对 import 继承该前缀），一个 `.ts`
+对一个 `.js` 才能维持这套可长缓存、且能穿透 Cloudflare 的机制。
+
+`web/src/types.d.ts` 集中定义 API 与 WebSocket 报文类型，每个接口对应 Go 侧一个结构体；
+改服务端报文时两边一起改。`web/src/globals.d.ts` 声明 xterm / KaTeX 等由 `<script>`
+引入的全局。abox-link 面板（`internal/linkapp/static`）是另一套独立前端，仍是原生 JS。
 
 ## 安全模型
 

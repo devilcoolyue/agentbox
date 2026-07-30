@@ -5,40 +5,38 @@
  *   data-updated             — refreshAll 拉到新的 sessions/accounts
  *   open-session  {detail}   — 侧栏点击会话卡片
  *   open-settings            — 侧栏点击系统设置
- *   thread-changed           — 对话线程切换/新建/删除，chat.js 重载对话流
- *   tips-updated             — 终端提示语配置变化（登录下发 / 管理员保存），term.js 重排轮播 */
+ *   thread-changed           — 对话线程切换/新建/删除，chat.ts 重载对话流
+ *   tips-updated             — 终端提示语配置变化（登录下发 / 管理员保存），term.ts 重排轮播 */
 "use strict";
-
 export const bus = new EventTarget();
 export const emit = (type, detail) => bus.dispatchEvent(new CustomEvent(type, { detail }));
-
 export const S = {
-  token: localStorage.getItem("agentbox_token") || "",
-  user: "",            // 当前登录用户名
-  role: "",            // "admin" | "user"：admin 才能进系统设置
-  sessions: [],
-  accounts: [],
-  current: null,      // 当前会话对象
-  view: "work",       // "work" | "settings"：主区当前视图
-  sec: "accounts",    // 设置页当前分区
-  settings: null,     // GET /api/settings 的缓存
-  tab: "chat",
-  chatWS: null,
-  chatWSGen: 0,       // 防止旧连接的重连定时器复活
-  termWS: null,
-  termWSGen: 0,       // 终端连接代际：切换/收尾/手动重连时自增，作废旧连接的重连定时器
-  termTips: null,     // 终端提示语配置 { tips:[], interval_sec, animation }（/me 下发，全用户可见）
-  term: null,
-  fit: null,
-  filePath: "",
-  fileScope: "workspace", // "workspace" | "shared"（共享目录：同用户所有会话可见）
-  refreshTimer: null,
-  actionBusy: false,  // 启动/停止执行中，期间锁住生命周期按钮
-  chatState: "idle",  // "idle" | "running"，决定发送按钮是发送还是中断
-  thread: null,       // 当前对话线程元数据（/history 返回；空的新对话为 null）
-  pick: { model: "", effort: "" }, // 当前会话的模型/思考强度选择（"" = 默认）
-  models: null,       // 服务端下发的可选模型表 { claude: [{id,label}], codex: [...] }
-  histLoading: false, // 历史对话加载中：中央转圈，不闪新会话引导页
-  histError: "",      // 历史加载失败：保留错误态，禁止误在未知线程上发送消息
-  quota: null,        // 自己的额度 { metered, enforced, blocked, balance_micro_usd, ... }（/me 下发）
+    token: localStorage.getItem("agentbox_token") || "",
+    user: "",
+    role: "",
+    sessions: [],
+    accounts: [],
+    current: null,
+    view: "work",
+    sec: "accounts",
+    settings: null,
+    tab: "chat",
+    chatWS: null,
+    chatWSGen: 0,
+    termWS: null,
+    termWSGen: 0,
+    termTips: null,
+    term: null,
+    fit: null,
+    filePath: "",
+    fileScope: "workspace",
+    refreshTimer: null,
+    actionBusy: false,
+    chatState: "idle",
+    thread: null,
+    pick: { model: "", effort: "" },
+    models: null,
+    histLoading: false,
+    histError: "",
+    quota: null,
 };
