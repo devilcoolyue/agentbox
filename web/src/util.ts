@@ -111,6 +111,15 @@ export function insertAtCursor(t: HTMLTextAreaElement | HTMLInputElement, text: 
   t.focus();
 }
 
+/* 触发浏览器下载：临时 <a download> 点一下即可，不必真的把文件读进内存。
+ * 直链带 ?token=，所以只能用在 GET 接口上（见 AGENTS.md 的令牌约定）。 */
+export function startDownload(url: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  a.click();
+}
+
 /* ---- 操作反馈气泡 ---- */
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;

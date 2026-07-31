@@ -2,8 +2,8 @@
  * 单文件预览/编辑弹窗在 preview.ts。 */
 "use strict";
 import { S, emit } from "./state.js";
-import { $, spinEl, btnBusy, btnDone, fmtSize, isMobile, onMobileChange, toast } from "./util.js";
-import { api, scopeQS } from "./api.js";
+import { $, spinEl, btnBusy, btnDone, fmtSize, isMobile, onMobileChange, startDownload, toast } from "./util.js";
+import { api, archiveDownloadURL, fileDownloadURL, scopeQS } from "./api.js";
 import { openPreview } from "./preview.js";
 import { svgIcon } from "./chat-render.js";
 /* 树形状态：expanded=已展开的目录（相对当前根），cache=已拉取的目录列表（"" 为当前根），
@@ -212,6 +212,10 @@ function fileAction(label, icon, action, danger = false) {
 function fileActions(ent, fullPath) {
     const actions = document.createElement("span");
     actions.className = "factions";
+    // 目录没有单文件下载：整包下载走工具条的「下载 zip」
+    if (!ent.is_dir) {
+        actions.append(fileAction("下载", "download", () => startDownload(fileDownloadURL(fullPath))));
+    }
     actions.append(fileAction("重命名", "rename", () => openFileRename(ent, fullPath)), fileAction("移动", "move", () => openFileMove(ent, fullPath)), fileAction("删除", "trash", () => openFileDelete(ent, fullPath), true));
     return actions;
 }
@@ -768,8 +772,5 @@ filesTab.addEventListener("drop", (e) => {
 $("btn-download").addEventListener("click", () => {
     if (!S.current)
         return;
-    const a = document.createElement("a");
-    a.href = `/api/sessions/${S.current.id}/archive?token=${encodeURIComponent(S.token)}${scopeQS()}`;
-    a.download = "";
-    a.click();
+    startDownload(archiveDownloadURL());
 });

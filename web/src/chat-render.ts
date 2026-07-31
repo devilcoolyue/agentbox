@@ -34,6 +34,7 @@ const ICONS: Record<string, string | IconSpec> = {
   move: { d: "M3 7h6l2 2h10v11H3ZM8 14h8m-3-3 3 3-3 3", box: 24, width: 1.8 },
   folder: { d: "M3 7h6l2 2h10v11H3Z", box: 24, width: 1.8 },
   rename: { d: "M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17zM13.5 6.5l3 3", box: 24, width: 1.8 },
+  download: { d: "M12 3.5v11m0 0 4.5-4.5M12 14.5 7.5 10M4.5 16v3.5h15V16", box: 24, width: 1.8 },
   /* 历史对话入口：表盘 + 指针 */
   clock: { d: "M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18ZM12 7.2v5l3.4 2", box: 24, width: 1.8 },
 };

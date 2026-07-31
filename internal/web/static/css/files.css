@@ -65,7 +65,7 @@
 /* 文件列表：名称 | 权限 | 大小 | 修改时间 | 操作 */
 .files-head, .file-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px 88px 168px 108px;
+  grid-template-columns: minmax(0, 1fr) 110px 88px 168px 140px;
   gap: 14px; align-items: center;
   padding: 0 10px;
 }
@@ -120,7 +120,7 @@
 .file-row .ftime { color: var(--muted); font-size: 12px; }
 .file-row .factions {
   display: flex; align-items: center; justify-content: flex-end; gap: 4px;
-  min-width: 72px;
+  min-width: 100px;
 }
 .file-act {
   width: 28px; height: 28px; flex: none;
@@ -245,13 +245,13 @@
   .files-actions { justify-content: flex-end; }
   .files-actions .check { margin-right: auto; }
 
-  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) 66px 100px; gap: 8px; }
+  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) 66px 124px; gap: 8px; }
   .files-head span:nth-child(2), .files-head span:nth-child(4),
   .file-row .fperm, .file-row .ftime { display: none; }
   .files-head { margin: 4px 12px 0; }
   .files-list { padding: 0 12px 14px; }
   .file-row { padding-top: 10px; padding-bottom: 10px; } /* 触控行高 ≈40px */
-  .file-row .factions { min-width: 100px; gap: 2px; }
+  .file-row .factions { min-width: 124px; gap: 2px; }
 
   .dlg-file-move { width: 94vw; padding: 20px 18px; }
   .file-move-nav { align-items: stretch; flex-direction: column; gap: 10px; }

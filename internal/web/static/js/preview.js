@@ -1,8 +1,8 @@
 /* preview：文件预览 / 在线编辑弹窗（文本编辑、图片查看、二进制/超大文件提示）。 */
 "use strict";
 import { S } from "./state.js";
-import { $, withSpin, fmtSize, askConfirm } from "./util.js";
-import { scopeQS } from "./api.js";
+import { $, withSpin, fmtSize, askConfirm, startDownload } from "./util.js";
+import { fileDownloadURL, scopeQS } from "./api.js";
 import { loadFiles } from "./files.js";
 const FV = { path: "", dirty: false, blobURL: "" };
 const IMG_EXT = ["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp"];
@@ -115,10 +115,7 @@ $("fv-save").addEventListener("click", saveFile);
 $("fv-download").addEventListener("click", () => {
     if (!FV.path)
         return;
-    const a = document.createElement("a");
-    a.href = `/api/sessions/${S.current.id}/file?path=${encodeURIComponent(FV.path)}&dl=1&token=${encodeURIComponent(S.token)}${scopeQS()}`;
-    a.download = "";
-    a.click();
+    startDownload(fileDownloadURL(FV.path));
 });
 async function closePreview() {
     if (FV.dirty) {

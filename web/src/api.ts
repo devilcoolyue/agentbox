@@ -35,6 +35,18 @@ export function scopeQS() {
   return S.fileScope === "shared" ? "&scope=shared" : "";
 }
 
+/* 单个文件的下载直链（当前文件范围）。`dl=1` 让服务端加 Content-Disposition，
+ * 浏览器才会存盘而不是内联打开。 */
+export function fileDownloadURL(rel: string) {
+  return `/api/sessions/${S.current!.id}/file?path=${encodeURIComponent(rel)}` +
+    `&dl=1&token=${encodeURIComponent(S.token)}${scopeQS()}`;
+}
+
+/* 整个范围打包成 zip 的下载直链 */
+export function archiveDownloadURL() {
+  return `/api/sessions/${S.current!.id}/archive?token=${encodeURIComponent(S.token)}${scopeQS()}`;
+}
+
 /* /shared/ 下任意文件（.images 图片、.file 附件）转成可访问的 URL。
  * 这几个走会话资源的函数都只在有打开会话时才被调用（附件条、终端链接、
  * 上传按钮都挂在工作台里），故 S.current 直接断言非空。 */
