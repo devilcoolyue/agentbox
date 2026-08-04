@@ -20,7 +20,7 @@
 | `cmd/agentbox/main.go` | 服务端启动入口；`lockDataDir` 防止多个进程共用同一个 `data_dir`。 |
 | `cmd/abox-link/main.go` | 隧道客户端入口；面板模式与 `--server` 无头模式分流。 |
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
-| `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）。 |
+| `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）。 |
 | `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens/usage_events/quotas/credit_ledger；首次打开会导入旧版 `state.json`。 |
 | `internal/dockerx` | Docker Engine API 封装：容器生命周期、exec PTY/stream、stats、镜像/挂载检查。 |
 | `internal/agent` | Claude/Codex 适配层：headless 命令、标题生成、凭证播种、Claude HUD、Codex app-server 协议。 |
@@ -311,6 +311,35 @@ data/
 - reaper 停机时写 `stop_reason="idle"`；用户手动停止与再次启动都会清空该字段。
 - 前端据此把「休眠」与「已停止」分开展示，并在发消息时自动重连唤醒
   （chat WS 的 `startSession` 是幂等的）。
+
+### 账号出口 IP 代理
+
+`internal/config`（代理池 schema + 账号 `proxy_id`）+ `internal/server/proxydial.go`
+（socks5 / http CONNECT 拨号）+ `proxybridge.go`（容器侧桥接与 env 注入）+
+`proxies.go`（管理接口）。前端在 `web/src/proxies.ts`。
+
+- **为什么要有本地桥接，而不是把 socks5:// 直接塞给容器。** 代理池基本都是 SOCKS5，
+  但容器里的 claude 是 Node/undici，`HTTPS_PROXY` 只认 http(s)——给它 socks5:// 它
+  **不报错、直接忽略**，照原样打官方接口。表现是「配了代理但 IP 没换」，且没有任何
+  日志。codex 是 Rust reqwest 认 socks5，两个 CLI 行为不一致。所以服务端在网桥网关
+  上起一个普通 HTTP 代理（`proxy_bridge.bind`，默认 `172.17.0.1:1081`），容器只说
+  HTTP 代理协议，SOCKS5 那段由 `dialThrough` 走完。
+- **注入的是全局 `HTTP(S)_PROXY`，且大小写各一份。** curl 只认小写 `http_proxy`，
+  Node/Go 读大写；只给一半的后果是部分请求悄悄走了服务器自己的 IP，而不是报错。
+  变量名列在 `proxyEnvNames`，`tmuxEnvSync` 靠它在解绑后清除终端里的残留值——
+  加变量必须同步这个列表。这与隧道**刻意不设全局代理**的取向相反：隧道是「按需访问
+  内网」，这里是「这个账号的一切请求都必须从这个 IP 出去」。
+- **全链路 fail-closed。** 代理停用 / 悬空 / 桥接没起来时，`proxyEnvList` 照样注入、
+  `bridgeAuth` 返回 502、`acctClient` 直接报错。**不要改成回落直连**：直连等于把
+  服务器真实 IP 交给 provider，正是绑代理要防的事，而且是静默发生的。
+- 桥接的账号口令是 `auth_token` 对账号 ID 的 HMAC（`proxySecret`），不落盘。没有它，
+  同一台机器上任何容器都能白嫖别人账号的出口 IP。轮换 `auth_token` 会一起换掉。
+- 服务端自己发的官方请求（OAuth 换令牌、profile、Key 探测）走 `acctClient`，
+  与容器同一个出口。登录来源 IP 和推理请求 IP 对不上是订阅号被风控的典型形状。
+- 域名一律在代理侧解析（socks5h 语义 / CONNECT 请求行），不在服务端本地解析——
+  否则 DNS 查询会从服务器自己的解析器漏出去。
+- 删代理会连带解绑账号，且在**同一次 mutate 里**完成：留下悬空的 `proxy_id` 会让之后
+  任何一次配置写入都卡在校验上，那时已经看不出是哪一步埋的。
 
 ### 内网隧道
 

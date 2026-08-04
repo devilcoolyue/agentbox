@@ -9,6 +9,7 @@ import { showView } from "./shell.js";
 import { MODEL_ID_RE } from "./chat.js";
 import { agentKey, agentName, agentIcon, decorateAgentOpts } from "./brand.js";
 import { quotaChip, openQuota } from "./quota.js";
+import { loadProxies, mountProxyPicker, openProxiesSection } from "./proxies.js";
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
 for (const h of document.querySelectorAll("h3[data-agent]")) {
@@ -30,7 +31,7 @@ export async function openSettingsView() {
         toast("读取设置失败：" + e.message, true);
     }
 }
-const SET_SECS = ["accounts", "container", "models", "interface", "security", "monitor", "about"];
+const SET_SECS = ["accounts", "proxies", "container", "models", "interface", "security", "monitor", "about"];
 function setSec(name) {
     S.sec = name;
     for (const b of document.querySelectorAll("#set-nav button")) {
@@ -47,6 +48,8 @@ function setSec(name) {
         loadUsers();
     if (name === "monitor")
         startMonitor();
+    if (name === "proxies")
+        openProxiesSection();
 }
 $("set-nav").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-sec]");
@@ -119,6 +122,13 @@ function acctRow(a) {
     state.appendChild(Object.assign(document.createElement("span"), {
         textContent: a.sessions > 0 ? a.sessions + " 个会话在用" : "暂无会话使用",
     }));
+    // 出口 IP 直接标在账号行上：它决定官方那边看到的是谁，排查封号时第一眼要看的
+    // 就是这个，藏进编辑弹窗里等于没有。
+    const px = document.createElement("span");
+    px.className = "acct-proxy" + (a.proxy_id ? "" : " none");
+    px.textContent = a.proxy_id ? "⇄ " + (a.proxy_label || a.proxy_id) : "⇄ 直连";
+    px.title = a.proxy_id ? "该账号的请求经此代理出网" : "该账号的请求从服务器自身 IP 发出";
+    state.appendChild(px);
     const acts = document.createElement("div");
     acts.className = "acct-actions";
     const auth = document.createElement("button");
@@ -211,13 +221,24 @@ $("acct-form").addEventListener("submit", async (e) => {
 });
 /* ---- 编辑账号 ---- */
 let editAcct = null;
-function openAcctEdit(a) {
+let acctPicker = null;
+async function openAcctEdit(a) {
     editAcct = a;
     $("acct-edit-title").textContent = "编辑账号 · " + a.id;
     $("acct-edit-label").value = a.label;
     $("acct-edit-env").value = envToText(a.env);
     $("acct-edit-error").classList.add("hidden");
+    if (!acctPicker)
+        acctPicker = mountProxyPicker($("acct-edit-proxy"));
+    acctPicker.set(a.proxy_id || "");
     $("dlg-acct-edit").showModal();
+    // 代理列表后到也不挡开弹窗：选择器先用当前缓存画，拉到新列表再刷一遍选中项
+    // 的文案（否则刚在 IP 代理页加的代理，这里要等下次开弹窗才看得见）。
+    try {
+        await loadProxies();
+        acctPicker.set(a.proxy_id || "");
+    }
+    catch (_) { /* 列表拉不到就只能选「无代理」，不影响改名字/环境变量 */ }
 }
 $("acct-edit-cancel").addEventListener("click", () => $("dlg-acct-edit").close());
 $("acct-edit-form").addEventListener("submit", async (e) => {
@@ -239,7 +260,11 @@ $("acct-edit-form").addEventListener("submit", async (e) => {
     try {
         await api("/accounts/" + editAcct.id, {
             method: "PATCH",
-            body: JSON.stringify({ label: $("acct-edit-label").value, env }),
+            body: JSON.stringify({
+                label: $("acct-edit-label").value,
+                env,
+                proxy_id: acctPicker ? acctPicker.get() : "",
+            }),
         });
         $("dlg-acct-edit").close();
         toast("账号已更新");
@@ -498,6 +523,8 @@ function fillSettingsForms() {
     $("set-tunnel-on").checked = !!(st.tunnel && st.tunnel.enabled);
     $("set-tunnel-bind").value = (st.tunnel && st.tunnel.proxy_bind) || "";
     $("set-tunnel-host").value = (st.tunnel && st.tunnel.proxy_host) || "";
+    $("set-bridge-bind").value = (st.proxy_bridge && st.proxy_bridge.bind) || "";
+    $("set-bridge-host").value = (st.proxy_bridge && st.proxy_bridge.host) || "";
     $("tunnel-note").textContent = st.tunnel && st.tunnel.enabled
         ? (st.tunnel_active ? "隧道已启用，SOCKS5 代理监听中" : "隧道已启用，但代理未在监听（检查绑定地址）")
         : "默认绑定 docker 网桥网关 172.17.0.1，仅容器与本机可达";
@@ -568,6 +595,16 @@ $("btn-save-tunnel").addEventListener("click", async () => {
     if (ok && S.settings.tunnel_error) {
         toast("隧道启动失败：" + S.settings.tunnel_error, true);
     }
+});
+$("btn-save-bridge").addEventListener("click", async () => {
+    const ok = await putSettings({
+        proxy_bridge: {
+            bind: $("set-bridge-bind").value.trim(),
+            host: $("set-bridge-host").value.trim(),
+        },
+    }, $("btn-save-bridge"), "桥接地址已保存并重新绑定");
+    if (ok)
+        openProxiesSection(); // 重绑结果（成功/失败）由列表接口回报
 });
 $("btn-save-security").addEventListener("click", async () => {
     const ok = await putSettings({

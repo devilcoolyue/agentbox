@@ -139,6 +139,46 @@
 }
 .acct-empty { color: var(--muted); font-size: 13px; padding: 18px 4px; }
 
+/* 账号行上的出口 IP 标签 */
+.acct-proxy {
+  display: inline-flex; align-items: center;
+  max-width: 26em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--green);
+}
+.acct-proxy.none { color: var(--muted); opacity: 0.75; }
+
+/* IP 代理池 */
+.px-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.px-bridge {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--muted);
+  padding: 9px 12px;
+  border: 1px dashed var(--line); border-radius: 8px;
+}
+.px-bridge.bad { color: var(--red); border-color: var(--red-line); border-style: solid; }
+.px-table td { vertical-align: middle; }
+.px-name { display: flex; align-items: center; gap: 7px; font-weight: 500; }
+.px-scheme {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em;
+  border: 1px solid var(--line); border-radius: 4px;
+  color: var(--muted);
+  padding: 1px 6px;
+}
+.px-copy {
+  font-size: 12px; color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 5px;
+  padding: 2px 8px;
+}
+.px-copy:hover { border-color: var(--accent); color: var(--text-hi); }
+.px-auth { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.px-acct, .px-probe { font-family: var(--mono); font-size: 11.5px; }
+.px-acct.dim, .px-probe.dim { color: var(--muted); opacity: 0.7; }
+.px-probe.good { color: var(--green); }
+.px-probe.bad { color: var(--red); }
+.px-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
 /* 模型列表 */
 .model-rows { display: flex; flex-direction: column; }
 .model-row {
@@ -257,6 +297,10 @@
 
   .acct-row { grid-template-columns: minmax(0, 1fr); }
   .acct-actions { grid-row: auto; grid-column: 1; padding-top: 4px; flex-wrap: wrap; }
+  .acct-proxy { max-width: 100%; }
+  /* 代理表有 7 列，窄屏必然横向滚动；操作列的按钮别再被挤成两行 */
+  .px-actions { justify-content: flex-start; }
+  .px-head-actions { width: 100%; }
 
   /* 用户行加上额度标签和「额度」按钮之后一行就装不下了：名字 + 角色 + 会话数 +
      额度 + 三个按钮，在 390px 上要 430px 左右，而按钮那一组是 flex:none，挤不动，

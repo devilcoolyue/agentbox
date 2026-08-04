@@ -434,6 +434,7 @@
         <div class="set-body">
           <nav id="set-nav" class="set-nav">
             <button class="active" data-sec="accounts">账号池 <span id="set-acct-count" class="count">0</span></button>
+            <button data-sec="proxies">IP 代理 <span id="proxy-count" class="count">0</span></button>
             <button data-sec="container">容器与资源</button>
             <button data-sec="models">模型管理</button>
             <button data-sec="interface">界面与提示</button>
@@ -453,6 +454,56 @@
                 <button id="btn-acct-add" class="btn btn-primary btn-sm">＋ 添加账号</button>
               </div>
               <div id="acct-list-box" class="acct-list"></div>
+            </section>
+
+            <!-- IP 代理 -->
+            <section id="sec-proxies" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2>IP 代理</h2>
+                  <p>账号级别的出口代理池。账号绑定其中一个后，它的全部官方请求——容器里 agent 发的，以及服务端代发的登录与探测——都从这个 IP 出去。在「账号池 → 编辑」里绑定。</p>
+                </div>
+                <div class="px-head-actions">
+                  <button id="btn-proxy-reload" class="btn btn-sm btn-ghost">刷新</button>
+                  <button id="btn-proxy-import" class="btn btn-sm btn-ghost">导入</button>
+                  <button id="btn-proxy-export" class="btn btn-sm btn-ghost">导出</button>
+                  <button id="btn-proxy-add" class="btn btn-primary btn-sm">＋ 添加代理</button>
+                </div>
+              </div>
+              <div id="proxy-bridge-state" class="px-bridge"></div>
+              <p id="proxy-loading" class="acct-empty hidden">读取代理列表…</p>
+              <p id="proxy-empty" class="acct-empty hidden">代理池为空。点击右上角「添加代理」或「导入」添加第一个出口。</p>
+              <div id="proxy-table-wrap" class="card mon-card hidden">
+                <div class="mon-table-wrap">
+                  <table class="mon-table px-table">
+                    <thead>
+                      <tr>
+                        <th>名称</th><th>协议</th><th>地址</th><th>认证</th>
+                        <th>使用</th><th>延迟</th><th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody id="proxy-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="card">
+                <h3>桥接监听</h3>
+                <p class="card-desc">容器里的 claude 是 Node 客户端，只认 http(s) 代理、不认 socks5，所以 agentbox 在本机起一个 HTTP 代理替容器走完 SOCKS5 那一段。监听地址必须是容器能连到的宿主机地址，默认是 docker 网桥网关。改动即时生效。</p>
+                <div class="field-row">
+                  <label class="field">
+                    <span>监听地址 <span class="tag live">即时生效</span></span>
+                    <input id="set-bridge-bind" type="text" class="mono" placeholder="172.17.0.1:1081">
+                  </label>
+                  <label class="field">
+                    <span>容器访问地址（可选）</span>
+                    <input id="set-bridge-host" type="text" class="mono" placeholder="留空取监听地址的 host">
+                  </label>
+                </div>
+                <div class="card-foot">
+                  <span class="note">代理池非空时自动启动；绑定失败只影响代理功能，不影响服务</span>
+                  <button id="btn-save-bridge" class="btn btn-primary btn-sm">保存</button>
+                </div>
+              </div>
             </section>
 
             <!-- 容器与资源 -->
@@ -1107,6 +1158,10 @@
     <label>环境变量（每行一条 KEY=VALUE，留空清除）
       <textarea id="acct-edit-env" rows="2" class="mono" spellcheck="false"></textarea>
     </label>
+    <label>出口 IP 代理
+      <div id="acct-edit-proxy"></div>
+      <span class="field-hint">该账号的全部官方请求都会经此代理出网，对新对话和新开终端立即生效。代理在「系统设置 → IP 代理」里维护。</span>
+    </label>
     <p id="acct-edit-error" class="login-error hidden"></p>
     <div class="dlg-actions">
       <button type="submit" id="acct-edit-ok" class="btn btn-primary">保存</button>
@@ -1125,6 +1180,72 @@
     <p class="field-hint">凭证目录会保留在服务器磁盘上，不会随配置一起删除。</p>
     <div class="dlg-actions">
       <button type="submit" id="acct-del-ok" class="btn btn-danger">删除</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 添加 / 编辑 IP 代理 -->
+<dialog id="dlg-proxy">
+  <form id="proxy-form" method="dialog">
+    <div class="dlg-head">
+      <h2 id="proxy-dlg-title">添加代理</h2>
+      <button type="button" id="proxy-cancel" class="dlg-x" aria-label="关闭">✕</button>
+    </div>
+    <label>名称
+      <input id="proxy-name" type="text" maxlength="64" placeholder="留空则用主机名">
+    </label>
+    <label>协议
+      <select id="proxy-scheme">
+        <option value="socks5">SOCKS5</option>
+        <option value="http">HTTP</option>
+        <option value="https">HTTPS</option>
+      </select>
+    </label>
+    <div class="dlg-row">
+      <label>主机
+        <input id="proxy-host" type="text" class="mono" placeholder="1.2.3.4 或 gate.example.com" required>
+      </label>
+      <label class="dlg-narrow">端口
+        <input id="proxy-port" type="number" min="1" max="65535" class="mono" placeholder="1080" required>
+      </label>
+    </div>
+    <div class="dlg-row">
+      <label>用户名（可选）
+        <input id="proxy-user" type="text" class="mono" autocomplete="off">
+      </label>
+      <label>密码（可选）
+        <input id="proxy-pass" type="password" class="mono" autocomplete="new-password">
+      </label>
+    </div>
+    <label>状态
+      <select id="proxy-state">
+        <option value="on">正常</option>
+        <option value="off">停用（绑定它的账号会直接报错，不会退回直连）</option>
+      </select>
+    </label>
+    <p id="proxy-msg" class="auth-msg hidden"></p>
+    <div class="dlg-actions">
+      <button type="button" id="proxy-test" class="btn btn-ghost">测试连接</button>
+      <button type="submit" id="proxy-ok" class="btn btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 批量导入代理 -->
+<dialog id="dlg-proxy-import">
+  <form id="proxy-import-form" method="dialog">
+    <div class="dlg-head">
+      <h2>批量导入代理</h2>
+      <button type="button" id="proxy-import-cancel" class="dlg-x" aria-label="关闭">✕</button>
+    </div>
+    <label>每行一条，支持三种写法
+      <textarea id="proxy-import-text" rows="8" class="mono" spellcheck="false"
+        placeholder="socks5://user:pass@1.2.3.4:1080#香港节点&#10;1.2.3.4:1080:user:pass&#10;1.2.3.4:1080"></textarea>
+      <span class="field-hint">不写协议默认按 SOCKS5 处理；`#` 后面是名称。与已有条目主机端口重复的行会被跳过。</span>
+    </label>
+    <p id="proxy-import-msg" class="login-error hidden"></p>
+    <div class="dlg-actions">
+      <button type="submit" id="proxy-import-ok" class="btn btn-primary">导入</button>
     </div>
   </form>
 </dialog>

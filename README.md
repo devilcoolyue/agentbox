@@ -103,7 +103,33 @@ API Key 方式则直接在账号的 `env` 字段配置（见 `config.example.jso
 | `permission_mode` | headless 回合的权限模式，容器即沙箱，默认 `bypassPermissions` |
 | `container.*` | 每容器资源限制：内存、CPU、进程数、网络 |
 | `tunnel.*` | 反向内网隧道（见下）。`enabled` 开关；`proxy_bind` 服务端 SOCKS5 监听地址，须为容器可达，默认 docker 网桥网关 `172.17.0.1:1080`；`proxy_host` 注入容器时用的地址，缺省取 `proxy_bind` 的主机 |
-| `accounts[]` | 账号池；`credentials_dir` 放凭证文件，或用 `env` 注入 API Key |
+| `proxy_bridge.*` | 账号出口代理的本地 HTTP 桥接（见下）。`bind` 监听地址，须为容器可达，默认 `172.17.0.1:1081`；`host` 注入容器时用的地址，缺省取 `bind` 的主机 |
+| `proxies[]` | 出口 IP 代理池；`scheme` 为 `socks5`/`http`/`https`，另有 `host`、`port`、可选 `username`/`password`、`disabled` |
+| `accounts[]` | 账号池；`credentials_dir` 放凭证文件，或用 `env` 注入 API Key；`proxy_id` 绑定出口代理 |
+
+## 账号出口 IP 代理
+
+给账号绑一个出口 IP：绑定后，**这个账号的一切官方请求都从该 IP 出去**——容器里
+`claude`/`codex` 打的模型接口，以及服务端代发的 OAuth 换令牌、订阅查询、Key 连通性
+探测。多个订阅账号共用一台服务器时，这是把它们的来源 IP 分开的办法。
+
+在「系统设置 → IP 代理」里维护代理池（增删改、连通性探测、批量导入导出），再到
+「账号池 → 编辑 → 出口 IP 代理」为账号选一个。改动对新对话与新开的终端立即生效，
+不必重启容器。
+
+几个需要知道的行为：
+
+- **代理池里多是 SOCKS5，而容器里的 claude 是 Node 客户端，只认 http(s) 代理。**
+  所以 agentbox 在网桥网关上起一个本地 HTTP 代理（`proxy_bridge`），容器只跟它说
+  HTTP 代理协议，SOCKS5 那一段由服务端走完。代理池非空时自动启动。
+- **绑了代理就绝不退回直连。** 代理停用、配置坏掉或桥接没绑上时，请求会直接报错，
+  而不是悄悄改用服务器自己的 IP——后者正是绑定代理要避免的事。
+- **注入的是全局 `HTTP(S)_PROXY`**（大小写各一份，外加 `NO_PROXY` 放行本机与网桥）。
+  也就是说容器里的 `git clone`、`npm install` 同样走这个出口。
+- 每个账号在桥接上的口令由服务端 `auth_token` 派生，互不相同，同一台机器上的其他
+  容器借不到别人账号的出口 IP。改 `auth_token` 会让所有口令一起轮换。
+- 批量导入支持 `scheme://user:pass@host:port`、`host:port:user:pass`、`host:port`
+  三种写法，可用 `#名称` 结尾；不写协议按 SOCKS5 处理。导出的文本**含密码明文**。
 
 ## 内网反向隧道（abox-link）
 
@@ -214,6 +240,14 @@ DELETE /api/sessions/{id}/chat/threads/{tid}        删除线程（删当前线�
 WS     /api/sessions/{id}/chat      对话通道（JSON 事件）
 WS     /api/sessions/{id}/term      终端通道（二进制 PTY；?mode=shell|agent）
 GET    /api/accounts                账号池
+PATCH  /api/accounts/{id}           改账号 {label?, env?, proxy_id?}（proxy_id 空串=解绑）
+GET    /api/proxies                 IP 代理池 + 桥接状态
+POST   /api/proxies                 新增代理 {name,scheme,host,port,username?,password?,disabled?}
+PATCH  /api/proxies/{id}            改代理（password 留空=不改）
+DELETE /api/proxies/{id}?force=1    删代理（仍被账号绑定时需 force=1，会连带解绑）
+POST   /api/proxies/test            连通性探测 {id?} 或直接给字段；返回延迟与出口 IP
+POST   /api/proxies/import          批量导入 {text}，每行一条
+GET    /api/proxies/export          导出为可再导入的文本（含密码明文）
 WS     /api/tunnel                  内网反向隧道（abox-link 客户端拨入；yamux over WSS）
 GET    /api/tunnel/status           本用户隧道状态（在线/映射；管理员另见在线用户列表）
 POST   /api/tunnel/pair             生成配对码（一次性，10 分钟有效）

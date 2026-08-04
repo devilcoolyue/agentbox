@@ -15,6 +15,7 @@ import "./files.js";
 import "./changes.js";
 import "./preview.js";
 import "./settings.js";
+import "./proxies.js";
 import "./tunnel.js";
 import "./ping.js";
 /* 品牌图形：吉祥物「盒仔」与 logo 主形各留一份模板，盖章到各挂载点

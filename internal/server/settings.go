@@ -28,6 +28,7 @@ type settingsView struct {
 	Tunnel          config.TunnelConfig             `json:"tunnel"`
 	TunnelActive    bool                            `json:"tunnel_active"`          // SOCKS 代理是否真的监听中
 	TunnelError     string                          `json:"tunnel_error,omitempty"` // 最近一次启停失败的原因
+	ProxyBridge     config.ProxyBridgeConfig        `json:"proxy_bridge"`
 	RestartRequired bool                            `json:"restart_required"`
 }
 
@@ -43,6 +44,7 @@ func (s *Server) settingsView() settingsView {
 		TerminalTips:    s.cfg.GetTerminalTips(),
 		Tunnel:          s.cfg.GetTunnel(),
 		TunnelActive:    s.tunnels.proxyUp.Load(),
+		ProxyBridge:     s.cfg.GetProxyBridge(),
 		RestartRequired: s.cfg.GetListen() != s.bootListen,
 	}
 }
@@ -69,6 +71,10 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			view.TunnelError = err.Error()
 		}
 		view.TunnelActive = s.tunnels.proxyUp.Load()
+	}
+	if patch.ProxyBridge != nil {
+		// 换绑定地址同样热生效：重绑失败只记日志，代理列表接口里会显示当前状态。
+		s.refreshProxyBridge()
 	}
 	writeJSON(w, http.StatusOK, view)
 }
@@ -148,28 +154,34 @@ func (s *Server) handleAccountPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Label *string            `json:"label"`
-		Env   *map[string]string `json:"env"`
+		Label   *string            `json:"label"`
+		Env     *map[string]string `json:"env"`
+		ProxyID *string            `json:"proxy_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
-	label := acct.Label
+	var patch config.AccountPatch
 	if req.Label != nil {
-		label = strings.TrimSpace(*req.Label)
+		label := strings.TrimSpace(*req.Label)
 		if label == "" {
 			label = acct.ID
 		}
+		patch.Label = &label
 	}
-	env := acct.Env
 	if req.Env != nil {
-		env = *req.Env
+		env := *req.Env
 		if len(env) == 0 {
 			env = nil
 		}
+		patch.Env = &env
 	}
-	updated, err := s.cfg.UpdateAccount(acct.ID, label, env)
+	if req.ProxyID != nil {
+		pid := strings.TrimSpace(*req.ProxyID)
+		patch.ProxyID = &pid
+	}
+	updated, err := s.cfg.UpdateAccount(acct.ID, patch)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return

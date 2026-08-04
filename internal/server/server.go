@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -62,6 +63,11 @@ type Server struct {
 	tunnelMu   sync.Mutex   // guards the SOCKS listener lifecycle below
 	tunnelLn   net.Listener // nil when the tunnel proxy is not running
 	tunnelBind string       // bind address tunnelLn was created with
+
+	bridgeMu   sync.Mutex   // guards the account-proxy bridge lifecycle below
+	bridgeLn   net.Listener // nil when the bridge is not running
+	bridgeBind string       // bind address bridgeLn was created with
+	bridgeUp   atomic.Bool  // set while the bridge is actually bound
 
 	upgrader websocket.Upgrader
 
@@ -178,6 +184,13 @@ func (s *Server) Run() error {
 	mux.Handle("POST /api/accounts/{id}/apikey", s.admin(http.HandlerFunc(s.handleSetAPIKey)))
 	mux.Handle("DELETE /api/accounts/{id}/apikey", s.admin(http.HandlerFunc(s.handleClearAPIKey)))
 	mux.Handle("POST /api/accounts/{id}/apikey/test", s.admin(http.HandlerFunc(s.handleAPIKeyTest)))
+	mux.Handle("GET /api/proxies", s.admin(http.HandlerFunc(s.handleProxyList)))
+	mux.Handle("POST /api/proxies", s.admin(http.HandlerFunc(s.handleProxyCreate)))
+	mux.Handle("POST /api/proxies/test", s.admin(http.HandlerFunc(s.handleProxyTest)))
+	mux.Handle("POST /api/proxies/import", s.admin(http.HandlerFunc(s.handleProxyImport)))
+	mux.Handle("GET /api/proxies/export", s.admin(http.HandlerFunc(s.handleProxyExport)))
+	mux.Handle("PATCH /api/proxies/{id}", s.admin(http.HandlerFunc(s.handleProxyPatch)))
+	mux.Handle("DELETE /api/proxies/{id}", s.admin(http.HandlerFunc(s.handleProxyDelete)))
 	mux.Handle("GET /api/settings", s.admin(http.HandlerFunc(s.handleGetSettings)))
 	mux.Handle("PUT /api/settings", s.admin(http.HandlerFunc(s.handlePutSettings)))
 	mux.Handle("GET /api/system", s.admin(http.HandlerFunc(s.handleSystem)))
@@ -245,6 +258,12 @@ func (s *Server) Run() error {
 	// crash-loop agentbox on, say, a taken port).
 	if err := s.applyTunnel(); err != nil {
 		log.Printf("tunnel disabled: %v", err)
+	}
+	// Same deal for the account proxy bridge: a bad bind must not crash-loop the
+	// service. Accounts bound to a proxy will fail loudly instead of silently
+	// egressing from the server's own IP.
+	if err := s.applyProxyBridge(); err != nil {
+		log.Printf("account proxy bridge disabled: %v", err)
 	}
 	log.Printf("agentbox listening on http://%s", s.bootListen)
 
@@ -408,13 +427,18 @@ type acctView struct {
 	BaseURL    string            `json:"base_url,omitempty"`   // 中转站地址（codex 读 config.toml，claude 读 env）
 	WireAPI    string            `json:"wire_api,omitempty"`   // codex：responses | chat
 	Env        map[string]string `json:"env,omitempty"`
+	ProxyID    string            `json:"proxy_id,omitempty"` // 绑定的出口 IP 代理
+	ProxyLabel string            `json:"proxy_label,omitempty"`
 }
 
 func (s *Server) accountView(a config.Account, sessions int) acctView {
 	st, exp := credStatus(a)
 	v := acctView{
 		ID: a.ID, Type: a.Type, Label: a.Label, Sessions: sessions,
-		CredStatus: st, ExpiresAt: exp, Env: a.Env,
+		CredStatus: st, ExpiresAt: exp, Env: a.Env, ProxyID: a.ProxyID,
+	}
+	if p, bound := s.cfg.AccountProxy(a.ID); bound {
+		v.ProxyLabel = p.Name + " · " + p.DisplayURL()
 	}
 	switch a.Type {
 	case config.AgentCodex:
@@ -446,10 +470,12 @@ func (s *Server) acctEnvList(sess store.Session) []string {
 	return out
 }
 
-// execEnv is the full per-exec env for a session: account env plus, when the
-// owning user has a live reverse tunnel, the intranet proxy variable.
+// execEnv is the full per-exec env for a session: account env, the account's
+// outbound IP proxy when one is bound, plus the intranet proxy variable when
+// the owning user has a live reverse tunnel.
 func (s *Server) execEnv(sess store.Session) []string {
-	return append(s.acctEnvList(sess), s.tunnelEnvList(sess)...)
+	env := append(s.acctEnvList(sess), s.proxyEnvList(sess)...)
+	return append(env, s.tunnelEnvList(sess)...)
 }
 
 // accountSessionCounts counts sessions per account across all users (guards
@@ -469,8 +495,10 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	for _, a := range s.cfg.AccountList() {
 		v := s.accountView(a, counts[a.ID])
 		if !isAdmin {
-			// 普通用户建会话只需要账号列表本身，env/base_url 里可能有密钥
+			// 普通用户建会话只需要账号列表本身，env/base_url 里可能有密钥，
+			// 出口 IP 也属于运维信息，一并摘掉。
 			v.Env, v.BaseURL = nil, ""
+			v.ProxyID, v.ProxyLabel = "", ""
 		}
 		out = append(out, v)
 	}

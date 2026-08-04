@@ -78,9 +78,10 @@ func termCommand(env []string) string {
 }
 
 // tmuxEnvSync renders the `tmux set-environment` calls mirroring env into the
-// tmux global environment. Tunnel variables missing from env are unset rather
-// than left alone, so a dropped link stops advertising a dead proxy URL to
-// newly opened shells.
+// tmux global environment. Variables that come and go — the tunnel's, and the
+// account's outbound proxy — are unset when absent rather than left alone, so a
+// dropped link stops advertising a dead proxy URL to newly opened shells, and
+// an unbound account stops routing through a proxy it no longer has.
 func tmuxEnvSync(env []string) string {
 	var b strings.Builder
 	have := make(map[string]bool, len(env))
@@ -92,7 +93,7 @@ func tmuxEnvSync(env []string) string {
 		have[k] = true
 		fmt.Fprintf(&b, "tmux set-environment -g %s %s; ", k, shellQuote(v))
 	}
-	for _, k := range tunnelEnvNames {
+	for _, k := range append(append([]string{}, tunnelEnvNames...), proxyEnvNames...) {
 		if !have[k] {
 			fmt.Fprintf(&b, "tmux set-environment -gu %s; ", k)
 		}

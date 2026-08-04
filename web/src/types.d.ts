@@ -45,6 +45,60 @@ export interface Account {
   /** codex："responses" | "chat" */
   wire_api?: string;
   env?: Record<string, string>;
+  /** 绑定的出口 IP 代理 id；空 = 直连（仅管理员可见） */
+  proxy_id?: string;
+  /** 绑定代理的展示名，如 "香港节点 · socks5://1.2.3.4:1080" */
+  proxy_label?: string;
+}
+
+/** GET /api/proxies 的一行：IP 代理池里的一个出口。密码永不下发。 */
+export interface Proxy {
+  id: string;
+  name: string;
+  /** "socks5" | "http" | "https" */
+  scheme: string;
+  host: string;
+  port: number;
+  username?: string;
+  /** 是否设过密码（用于弹窗里显示掩码占位） */
+  has_pass: boolean;
+  disabled: boolean;
+  /** scheme://host:port，不含凭证 */
+  url: string;
+  /** 绑定该代理的账号数 */
+  accounts: number;
+}
+
+/** GET /api/proxies */
+export interface ProxyList {
+  proxies: Proxy[];
+  /** 桥接监听地址（host:port） */
+  bridge_bind: string;
+  /** 注入容器的地址（host:port） */
+  bridge_host: string;
+  /** 桥接是否真的在监听 */
+  bridge_up: boolean;
+  bridge_error?: string;
+}
+
+/** POST /api/proxies/test */
+export interface ProxyTest {
+  ok: boolean;
+  latency_ms: number;
+  /** 探测到的出口 IP */
+  exit_ip?: string;
+  /** 实际探通的回显地址 */
+  endpoint?: string;
+  error?: string;
+}
+
+/** POST /api/proxies/import */
+export interface ProxyImport {
+  added: number;
+  /** 与已有条目 host:port 重复、被跳过的行数 */
+  duplicates: number;
+  /** 解析失败的行（最多 10 条） */
+  errors: string[];
 }
 
 /** POST /api/accounts/{id}/oauth/start */
@@ -197,8 +251,17 @@ export interface Settings {
   tunnel_active: boolean;
   /** 最近一次隧道启停失败的原因 */
   tunnel_error?: string;
+  /** 账号出口代理的本地 HTTP 桥接监听配置 */
+  proxy_bridge: ProxyBridgeConfig;
   /** listen 改过但未重启 */
   restart_required: boolean;
+}
+
+export interface ProxyBridgeConfig {
+  /** 桥接监听地址 host:port，默认 172.17.0.1:1081 */
+  bind: string;
+  /** 注入容器时用的主机名，留空取 bind 的 host */
+  host?: string;
 }
 
 /** GET /api/system（关于页）。 */

@@ -15,6 +15,20 @@
     "enabled": false,
     "proxy_bind": "172.17.0.1:1080"
   },
+  "proxy_bridge": {
+    "bind": "172.17.0.1:1081"
+  },
+  "proxies": [
+    {
+      "id": "px-hk1",
+      "name": "香港 #1",
+      "scheme": "socks5",
+      "host": "1.2.3.4",
+      "port": 1080,
+      "username": "proxy-user",
+      "password": "proxy-pass"
+    }
+  ],
   "pricing": {
     "codex": {
       "input": 5.0, "cache_read": 0.5, "cache_write": 0.0, "output": 30.0,
@@ -30,7 +44,8 @@
       "id": "claude-1",
       "type": "claude",
       "label": "Claude 订阅 #1",
-      "credentials_dir": "accounts/claude-1"
+      "credentials_dir": "accounts/claude-1",
+      "proxy_id": "px-hk1"
     },
     {
       "id": "claude-apikey",

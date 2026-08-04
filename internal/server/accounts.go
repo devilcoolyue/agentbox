@@ -135,9 +135,16 @@ func (s *Server) handleOAuthFinish(w http.ResponseWriter, r *http.Request) {
 		"redirect_uri":  claudeOAuthRedirect,
 		"code_verifier": pend.verifier,
 	})
+	// 换令牌和随后的 profile 查询都必须走账号自己的出口 IP：登录来源与后续
+	// 推理请求的 IP 对不上，正是订阅账号被判风控的典型形状。
+	client, err := s.acctClient(acct, 30*time.Second)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
 	req, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, claudeOAuthToken, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, "请求令牌接口失败: "+err.Error())
 		return
@@ -172,7 +179,7 @@ func (s *Server) handleOAuthFinish(w http.ResponseWriter, r *http.Request) {
 	subType := firstNonEmpty(tok.SubscriptionType, tok.Account.SubscriptionType)
 	rateTier := firstNonEmpty(tok.RateLimitTier, tok.Account.RateLimitTier)
 	if subType == "" || rateTier == "" {
-		pSub, pTier := fetchOAuthProfile(r.Context(), tok.AccessToken)
+		pSub, pTier := fetchOAuthProfile(r.Context(), client, tok.AccessToken)
 		subType = firstNonEmpty(subType, pSub)
 		rateTier = firstNonEmpty(rateTier, pTier)
 	}
@@ -227,12 +234,13 @@ func (s *Server) handleOAuthFinish(w http.ResponseWriter, r *http.Request) {
 }
 
 // fetchOAuthProfile 用新令牌查订阅身份，返回 subscriptionType（pro/max/...）
-// 和 rateLimitTier。失败不致命，只影响容器内 /status 显示的登录方式。
-func fetchOAuthProfile(ctx context.Context, accessToken string) (subType, rateTier string) {
+// 和 rateLimitTier。client 由调用方按账号绑定的代理构造。失败不致命，只影响
+// 容器内 /status 显示的登录方式。
+func fetchOAuthProfile(ctx context.Context, client *http.Client, accessToken string) (subType, rateTier string) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, claudeOAuthProfile, nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", ""
 	}
@@ -297,7 +305,7 @@ func (s *Server) clearClaudeRelay(acct config.Account) error {
 			env[k] = v
 		}
 	}
-	_, err := s.cfg.UpdateAccount(acct.ID, acct.Label, env)
+	_, err := s.cfg.UpdateAccount(acct.ID, config.AccountPatch{Env: &env})
 	return err
 }
 
@@ -347,7 +355,7 @@ func (s *Server) handleSetAPIKey(w http.ResponseWriter, r *http.Request) {
 		} else {
 			delete(env, envAnthropicBaseURL) // 留空 = 官方 api.anthropic.com
 		}
-		if _, err := s.cfg.UpdateAccount(acct.ID, acct.Label, env); err != nil {
+		if _, err := s.cfg.UpdateAccount(acct.ID, config.AccountPatch{Env: &env}); err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -562,7 +570,13 @@ func (s *Server) handleAPIKeyTest(w http.ResponseWriter, r *http.Request) {
 		candidates = []string{baseURL + "/v1/models", baseURL + "/models"}
 	}
 
-	client := &http.Client{Timeout: 12 * time.Second}
+	// 探测也走账号绑定的出口 IP，否则「这里能通」跟容器里能不能通是两回事。
+	client, err := s.acctClient(acct, 20*time.Second)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	defer client.CloseIdleConnections()
 	var lastErr string
 	for _, u := range candidates {
 		start := time.Now()
