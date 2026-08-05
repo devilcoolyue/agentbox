@@ -1,0 +1,515 @@
+/* skills：技能（Claude Code Skill）页 —— 看清楚这个会话到底装了哪些技能、
+ * 它们是会话自己的还是模板铺下来的，并能安装、删除、在两个范围之间搬。
+ * 「我的模板」写的是 data/users/<user>/home-template，每次会话启动铺进该用户
+ * 的所有会话（服务端 agent.SeedHomeTemplate）。 */
+"use strict";
+import { S } from "./state.js";
+import { $, spinEl, toast, askConfirm, fmtBytes, fmtTime, btnBusy, btnDone } from "./util.js";
+import { api } from "./api.js";
+import { formatText } from "./chat-render.js";
+const SK = {
+    scope: "session",
+    items: [],
+    selected: "",
+    view: "preview", // 记住上次选的视图，切技能时不用反复点
+};
+/* 来源徽章：会话自装 / 用户模板 / 服务器模板。只有「本会话」范围才有意义，
+ * 因为模板范围里的东西按定义都来自模板。 */
+const SOURCE_LABEL = {
+    session: "会话自装",
+    template: "我的模板",
+    global: "服务器模板",
+};
+const SOURCE_HINT = {
+    session: "只装在这个会话里。想让所有会话都有，点「复制到我的模板」。",
+    template: "来自你的模板，每个新会话都会自动带上。",
+    global: "来自服务器模板，由管理员统一下发给所有用户。",
+};
+function listMsg(msg) {
+    const p = document.createElement("p");
+    p.className = "files-empty";
+    p.textContent = msg;
+    $("skills-list").replaceChildren(p);
+}
+function detailMsg(msg) {
+    const p = document.createElement("p");
+    p.className = "files-empty";
+    p.textContent = msg;
+    $("skills-detail").replaceChildren(p);
+}
+function loadingRow(text) {
+    const d = document.createElement("div");
+    d.className = "loading-block";
+    d.append(spinEl(), document.createTextNode(text));
+    return d;
+}
+export async function loadSkills() {
+    const sess = S.current;
+    if (!sess)
+        return;
+    $("skills-list").replaceChildren(loadingRow("读取技能中…"));
+    $("skills-detail").replaceChildren();
+    $("skills-count").textContent = "";
+    let data;
+    try {
+        data = await api(`/sessions/${sess.id}/skills?scope=${SK.scope}`);
+    }
+    catch (e) {
+        listMsg("读取技能失败：" + e.message);
+        return;
+    }
+    SK.items = data.skills || [];
+    renderList();
+}
+function renderList() {
+    const n = SK.items.length;
+    $("skills-count").textContent = n ? `${n} 个技能` : "";
+    if (!n) {
+        listMsg(SK.scope === "session"
+            ? "这个会话还没有技能。用右上角「安装技能」上传，或切到「我的模板」把常用技能一次性铺给所有会话。"
+            : "模板里还没有技能。装进这里的技能，你名下每个会话启动时都会自动带上。");
+        detailMsg("");
+        return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const sk of SK.items) {
+        const row = document.createElement("div");
+        row.className = "skill-row" + (sk.name === SK.selected ? " active" : "");
+        row.tabIndex = 0;
+        const main = document.createElement("div");
+        main.className = "skill-main";
+        const name = document.createElement("span");
+        name.className = "skill-name mono";
+        name.textContent = sk.name;
+        main.appendChild(name);
+        if (SK.scope === "session" && sk.source !== "session") {
+            const badge = document.createElement("span");
+            badge.className = "skill-badge s-" + sk.source;
+            badge.textContent = SOURCE_LABEL[sk.source] || sk.source;
+            main.appendChild(badge);
+        }
+        const desc = document.createElement("div");
+        desc.className = "skill-desc";
+        desc.textContent = sk.description || "（无描述）";
+        row.append(main, desc);
+        const open = () => selectSkill(sk.name);
+        row.addEventListener("click", open);
+        row.addEventListener("keydown", (e) => { if (e.key === "Enter")
+            open(); });
+        frag.appendChild(row);
+    }
+    $("skills-list").replaceChildren(frag);
+}
+async function selectSkill(name) {
+    const sess = S.current;
+    if (!sess)
+        return;
+    SK.selected = name;
+    renderList();
+    $("skills-detail").replaceChildren(loadingRow("读取 SKILL.md…"));
+    try {
+        const det = await api(`/sessions/${sess.id}/skills/${encodeURIComponent(name)}?scope=${SK.scope}`);
+        renderDetail(det);
+    }
+    catch (e) {
+        detailMsg("读取失败：" + e.message);
+    }
+}
+function renderDetail(det) {
+    const head = document.createElement("div");
+    head.className = "skill-head";
+    const title = document.createElement("h3");
+    title.className = "skill-title mono";
+    title.textContent = det.name;
+    head.appendChild(title);
+    if (det.description) {
+        const d = document.createElement("p");
+        d.className = "skill-head-desc";
+        d.textContent = det.description;
+        head.appendChild(d);
+    }
+    const meta = document.createElement("p");
+    meta.className = "skill-meta";
+    const bits = [`${det.files} 个文件`, fmtBytes(det.bytes)];
+    // 空目录没有任何文件时 updated_at 是零值时间，别拿它渲染出个 0001 年
+    if (det.files && det.updated_at)
+        bits.push("更新于 " + fmtTime(det.updated_at));
+    meta.textContent = bits.join(" · ");
+    head.appendChild(meta);
+    if (SK.scope === "session" && SOURCE_HINT[det.source]) {
+        const src = document.createElement("p");
+        src.className = "skill-source";
+        src.textContent = SOURCE_HINT[det.source];
+        head.appendChild(src);
+    }
+    const actions = document.createElement("div");
+    actions.className = "skill-head-actions";
+    const move = document.createElement("button");
+    move.className = "btn btn-sm";
+    move.textContent = SK.scope === "session" ? "复制到我的模板" : "装到本会话";
+    move.title = SK.scope === "session"
+        ? "复制进模板后，你名下每个会话启动时都会带上它"
+        : "把模板里的这个技能立刻装进当前会话，不必等下次启动";
+    move.addEventListener("click", () => copySkill(det.name, move));
+    const del = document.createElement("button");
+    del.className = "btn btn-sm btn-danger";
+    del.textContent = "删除";
+    del.addEventListener("click", () => removeSkill(det.name));
+    actions.append(move, del);
+    head.appendChild(actions);
+    const body = document.createElement("div");
+    body.className = "skill-doc";
+    if (det.content) {
+        body.append(...docView(det));
+    }
+    else {
+        const p = document.createElement("p");
+        p.className = "files-empty";
+        p.textContent = "这个技能目录里没有 SKILL.md —— Claude Code 不会加载它。";
+        body.appendChild(p);
+    }
+    if (det.extra.length) {
+        const wrap = document.createElement("div");
+        wrap.className = "skill-files";
+        const h = document.createElement("div");
+        h.className = "skill-files-head";
+        h.textContent = "附带文件";
+        wrap.appendChild(h);
+        for (const rel of det.extra) {
+            const li = document.createElement("div");
+            li.className = "skill-file mono";
+            li.textContent = rel;
+            wrap.appendChild(li);
+        }
+        body.appendChild(wrap);
+    }
+    $("skills-detail").replaceChildren(head, body);
+}
+/* SKILL.md 的正文区：一条「预览 / 源码」切换栏 + 内容。预览走对话那套轻量
+ * Markdown 渲染器，样式与消息气泡一致，不必再养第二套。 */
+function docView(det) {
+    const bar = document.createElement("div");
+    bar.className = "skill-doc-bar";
+    const label = document.createElement("span");
+    label.className = "skill-doc-label mono";
+    label.textContent = "SKILL.md";
+    const sw = document.createElement("div");
+    sw.className = "scope-switch";
+    const buttons = {};
+    for (const [mode, text] of [["preview", "预览"], ["source", "源码"]]) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "scope-btn" + (SK.view === mode ? " active" : "");
+        b.textContent = text;
+        b.addEventListener("click", () => {
+            if (SK.view === mode)
+                return;
+            SK.view = mode;
+            for (const [k, el] of Object.entries(buttons))
+                el.classList.toggle("active", k === mode);
+            paint();
+        });
+        buttons[mode] = b;
+        sw.appendChild(b);
+    }
+    bar.append(label, sw);
+    const view = document.createElement("div");
+    const tail = det.truncated ? "\n…（内容过长，已截断）" : "";
+    const paint = () => {
+        if (SK.view === "source") {
+            view.className = "skill-view";
+            const pre = document.createElement("pre");
+            pre.className = "skill-md mono";
+            pre.textContent = det.content + tail;
+            view.replaceChildren(pre);
+            return;
+        }
+        // 预览：front matter 里除 name/description（上方已显示）之外的键单独列出来，
+        // 免得渲染时被当成一条分隔线加一段文字，也免得直接丢掉丢了信息。
+        const { meta, body } = splitFrontMatter(det.content);
+        view.className = "skill-view msg agent";
+        const parts = [];
+        const rest = meta.filter(([k]) => k !== "name" && k !== "description");
+        if (rest.length) {
+            const fm = document.createElement("div");
+            fm.className = "skill-fm";
+            for (const [k, v] of rest) {
+                const item = document.createElement("span");
+                item.className = "skill-fm-item mono";
+                item.textContent = `${k}: ${v}`;
+                fm.appendChild(item);
+            }
+            parts.push(fm);
+        }
+        parts.push(formatText(body + tail));
+        view.replaceChildren(...parts);
+    };
+    paint();
+    return [bar, view];
+}
+/* 拆 YAML front matter：只认最简单的 key: value 单行形式，与服务端取
+ * description 的口径一致。没有 front matter 时原样返回正文。 */
+function splitFrontMatter(text) {
+    const norm = text.replace(/\r\n/g, "\n");
+    if (!norm.startsWith("---\n"))
+        return { meta: [], body: norm };
+    const end = norm.indexOf("\n---", 3);
+    if (end < 0)
+        return { meta: [], body: norm };
+    const head = norm.slice(4, end);
+    const body = norm.slice(end + 4).replace(/^\n+/, "");
+    const meta = [];
+    for (const line of head.split("\n")) {
+        const i = line.indexOf(":");
+        if (i <= 0 || /^\s/.test(line))
+            continue; // 缩进行是上一个键的续行，跳过
+        meta.push([line.slice(0, i).trim(), line.slice(i + 1).trim().replace(/^["']|["']$/g, "")]);
+    }
+    return { meta, body };
+}
+async function copySkill(name, btn) {
+    const sess = S.current;
+    if (!sess)
+        return;
+    const to = SK.scope === "session" ? "template" : "session";
+    btnBusy(btn, "处理中…");
+    try {
+        await api(`/sessions/${sess.id}/skills/${encodeURIComponent(name)}/copy?scope=${SK.scope}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ to }),
+        });
+        toast(to === "template" ? "已复制到模板，新会话启动时自动带上" : "已装进本会话");
+        loadSkills();
+    }
+    catch (e) {
+        toast("操作失败：" + e.message, true);
+    }
+    finally {
+        btnDone(btn);
+    }
+}
+async function removeSkill(name) {
+    const sess = S.current;
+    if (!sess)
+        return;
+    const where = SK.scope === "session" ? "这个会话" : "你的模板";
+    const ok = await askConfirm(`确认从${where}删除技能「${name}」？`, {
+        title: "删除技能",
+        danger: true,
+        okLabel: "删除",
+        hint: SK.scope === "session"
+            ? "若它来自模板，下次会话启动还会被铺回来；要彻底去掉请到「我的模板」里删。"
+            : "已经铺进各个会话的副本不会跟着消失，需要各自删除。",
+    });
+    if (!ok)
+        return;
+    try {
+        await api(`/sessions/${sess.id}/skills/${encodeURIComponent(name)}?scope=${SK.scope}`, { method: "DELETE" });
+        toast("已删除");
+        SK.selected = "";
+        loadSkills();
+    }
+    catch (e) {
+        toast("删除失败：" + e.message, true);
+    }
+}
+/* ---- 范围切换与安装 ---- */
+function setSkillScope(scope) {
+    if (SK.scope === scope)
+        return;
+    SK.scope = scope;
+    SK.selected = "";
+    $("skill-scope-session").classList.toggle("active", scope === "session");
+    $("skill-scope-template").classList.toggle("active", scope === "template");
+    loadSkills();
+}
+$("skill-scope-session").addEventListener("click", () => setSkillScope("session"));
+$("skill-scope-template").addEventListener("click", () => setSkillScope("template"));
+$("btn-skills-refresh").addEventListener("click", loadSkills);
+/* ---- 安装弹窗：本地上传 / 官方市场 ---- */
+const dlgInstall = () => $("dlg-skill-install");
+function scopeLabel() {
+    return SK.scope === "session" ? "本会话" : "我的模板";
+}
+$("btn-skill-install").addEventListener("click", () => {
+    $("skill-install-target").textContent = scopeLabel();
+    setInstallSource("local");
+    dlgInstall().showModal();
+});
+$("skill-install-close").addEventListener("click", () => dlgInstall().close());
+function setInstallSource(src) {
+    $("skill-src-local").classList.toggle("active", src === "local");
+    $("skill-src-market").classList.toggle("active", src === "market");
+    $("skill-src-local-pane").classList.toggle("hidden", src !== "local");
+    $("skill-src-market-pane").classList.toggle("hidden", src !== "market");
+    if (src === "market")
+        loadMarket(false);
+}
+$("skill-src-local").addEventListener("click", () => setInstallSource("local"));
+$("skill-src-market").addEventListener("click", () => setInstallSource("market"));
+/* 装完统一收尾：关弹窗、刷新列表、选中新装的那个 */
+async function afterInstall(name, msg) {
+    dlgInstall().close();
+    toast(msg);
+    SK.selected = name;
+    await loadSkills();
+    if (name)
+        selectSkill(name);
+}
+async function installFile(file) {
+    const sess = S.current;
+    if (!sess)
+        return;
+    const drop = $("skill-drop");
+    drop.classList.add("over");
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    try {
+        const res = await api(`/sessions/${sess.id}/skills?scope=${SK.scope}`, { method: "POST", body: fd });
+        await afterInstall(res.name, `已安装技能「${res.name}」`);
+    }
+    catch (err) {
+        toast("安装失败：" + err.message, true);
+    }
+    finally {
+        drop.classList.remove("over");
+    }
+}
+$("skill-drop").addEventListener("click", () => $("skill-install-input").click());
+$("skill-install-input").addEventListener("change", (e) => {
+    const input = e.target;
+    const file = input.files && input.files[0];
+    input.value = ""; // 同一个文件连续选两次也要触发
+    if (file)
+        installFile(file);
+});
+for (const ev of ["dragenter", "dragover"]) {
+    $("skill-drop").addEventListener(ev, (e) => {
+        e.preventDefault();
+        $("skill-drop").classList.add("over");
+    });
+}
+$("skill-drop").addEventListener("dragleave", () => $("skill-drop").classList.remove("over"));
+$("skill-drop").addEventListener("drop", (e) => {
+    e.preventDefault();
+    $("skill-drop").classList.remove("over");
+    const file = e.dataTransfer?.files?.[0];
+    if (file)
+        installFile(file);
+});
+/* ---- 官方市场 ---- */
+/* 整份目录一次拉完（不到 200KB）缓存在内存里，搜索和分类筛选纯前端做，
+ * 敲字不打服务端。 */
+const MK = { plugins: [], loaded: false };
+function marketMsg(msg) {
+    const p = document.createElement("p");
+    p.className = "market-empty";
+    p.textContent = msg;
+    $("market-list").replaceChildren(p);
+}
+async function loadMarket(force) {
+    if (MK.loaded && !force) {
+        renderMarket();
+        return;
+    }
+    $("market-list").replaceChildren(loadingRow("拉取官方目录中…"));
+    try {
+        const data = await api("/marketplace" + (force ? "?refresh=1" : ""));
+        MK.plugins = data.plugins || [];
+        MK.loaded = true;
+        const sel = $("market-cat");
+        const cur = sel.value;
+        const opts = [{ v: "", t: "全部分类" }, ...(data.categories || []).map((c) => ({ v: c, t: c }))];
+        sel.replaceChildren(...opts.map(({ v, t }) => {
+            const o = document.createElement("option");
+            o.value = v;
+            o.textContent = t;
+            return o;
+        }));
+        sel.value = cur;
+        renderMarket();
+    }
+    catch (e) {
+        marketMsg("拉取失败：" + e.message);
+    }
+}
+function renderMarket() {
+    const q = $("market-q").value.trim().toLowerCase();
+    const cat = $("market-cat").value;
+    const hit = MK.plugins.filter((p) => {
+        if (cat && p.category !== cat)
+            return false;
+        if (!q)
+            return true;
+        return [p.name, p.display_name, p.description, p.author, ...(p.keywords || [])]
+            .some((s) => (s || "").toLowerCase().includes(q));
+    });
+    if (!hit.length) {
+        marketMsg(MK.plugins.length ? "没有匹配的插件。" : "目录是空的。");
+        return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const p of hit.slice(0, 300)) {
+        const row = document.createElement("div");
+        row.className = "market-row";
+        const info = document.createElement("div");
+        info.className = "market-info";
+        const line = document.createElement("div");
+        line.className = "market-name";
+        const nm = document.createElement("b");
+        nm.textContent = p.display_name || p.name;
+        line.appendChild(nm);
+        for (const [text, cls] of [
+            [p.author, ""],
+            [p.category, ""],
+            [p.skills ? `含 ${p.skills} 个技能` : "", "has-skills"],
+        ]) {
+            if (!text)
+                continue;
+            const tag = document.createElement("span");
+            tag.className = "market-tag" + (cls ? " " + cls : "");
+            tag.textContent = text;
+            line.appendChild(tag);
+        }
+        const desc = document.createElement("div");
+        desc.className = "market-desc";
+        desc.textContent = p.description || "";
+        info.append(line, desc);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn btn-sm";
+        btn.textContent = "安装";
+        btn.addEventListener("click", () => installFromMarket(p.name, btn));
+        row.append(info, btn);
+        frag.appendChild(row);
+    }
+    $("market-list").replaceChildren(frag);
+}
+async function installFromMarket(name, btn) {
+    const sess = S.current;
+    if (!sess)
+        return;
+    btnBusy(btn, "安装中…");
+    try {
+        const res = await api(`/sessions/${sess.id}/skills/market?scope=${SK.scope}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+        });
+        const list = res.installed || [];
+        await afterInstall(list[0] || "", list.length > 1
+            ? `已装 ${list.length} 个技能：${list.join("、")}`
+            : `已安装技能「${list[0]}」`);
+    }
+    catch (e) {
+        // 纯命令/MCP 插件会走到这里，服务端给的文案已经说明该怎么办
+        toast(e.message, true);
+    }
+    finally {
+        btnDone(btn);
+    }
+}
+$("market-q").addEventListener("input", renderMarket);
+$("market-cat").addEventListener("change", renderMarket);
+$("btn-market-refresh").addEventListener("click", () => loadMarket(true));

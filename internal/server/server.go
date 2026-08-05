@@ -77,6 +77,8 @@ type Server struct {
 	startMu sync.Mutex
 	starts  map[string]*sync.Mutex // per-session start locks
 
+	marketMu sync.Mutex // 串行化官方市场的 git 抓取（拉仓库、装技能）
+
 	logins *loginGuard // per-IP failed-login throttle
 
 	idle *activity // per-session liveness for the idle reaper
@@ -86,6 +88,10 @@ type Server struct {
 
 func New(cfg *config.Config) (*Server, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return nil, err
+	}
+	// Created empty so operators can discover it; an empty template is a no-op.
+	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "home-template"), 0o755); err != nil {
 		return nil, err
 	}
 	st, err := store.Open(filepath.Join(cfg.DataDir, "state.db"))
@@ -212,6 +218,13 @@ func (s *Server) Run() error {
 	mux.Handle("GET /api/sessions/{id}/file", s.auth(s.withSession(s.handleFileGet)))
 	mux.Handle("PUT /api/sessions/{id}/file", s.auth(s.withSession(s.handleFilePut)))
 	mux.Handle("POST /api/sessions/{id}/images", s.auth(s.withSession(s.handleImageUpload)))
+	mux.Handle("GET /api/marketplace", s.auth(http.HandlerFunc(s.handleMarketList)))
+	mux.Handle("POST /api/sessions/{id}/skills/market", s.auth(s.withSession(s.handleSkillMarketInstall)))
+	mux.Handle("GET /api/sessions/{id}/skills", s.auth(s.withSession(s.handleSkillList)))
+	mux.Handle("POST /api/sessions/{id}/skills", s.auth(s.withSession(s.handleSkillInstall)))
+	mux.Handle("GET /api/sessions/{id}/skills/{name}", s.auth(s.withSession(s.handleSkillGet)))
+	mux.Handle("DELETE /api/sessions/{id}/skills/{name}", s.auth(s.withSession(s.handleSkillDelete)))
+	mux.Handle("POST /api/sessions/{id}/skills/{name}/copy", s.auth(s.withSession(s.handleSkillCopy)))
 	mux.Handle("GET /api/sessions/{id}/git/status", s.auth(s.withSession(s.handleGitStatus)))
 	mux.Handle("GET /api/sessions/{id}/git/diff", s.auth(s.withSession(s.handleGitDiff)))
 	mux.Handle("POST /api/sessions/{id}/git/commit", s.auth(s.withSession(s.handleGitCommit)))

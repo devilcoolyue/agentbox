@@ -247,6 +247,10 @@
               <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7"/><circle cx="18" cy="7" r="2.5"/><path d="M18 9.5c0 5-6 3-6 6.5"/>
               </svg><span class="t">变更</span></button>
+            <button class="tab" data-tab="skills" id="tab-btn-skills">
+              <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M11 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/>
+              </svg><span class="t">技能</span></button>
           </nav>
 
           <!-- 对话 -->
@@ -410,6 +414,36 @@
             <div class="changes-body">
               <div id="changes-list" class="changes-list"></div>
               <div id="changes-diff" class="changes-diff"></div>
+            </div>
+          </section>
+
+          <!-- 技能（Claude Code Skill） -->
+          <section id="tab-skills" class="pane hidden">
+            <div class="skills-bar">
+              <div class="skills-left">
+                <div class="scope-switch" role="tablist">
+                  <button id="skill-scope-session" class="scope-btn active">本会话</button>
+                  <button id="skill-scope-template" class="scope-btn">我的模板</button>
+                  <span class="help" tabindex="0" aria-label="技能范围说明">?
+                    <span class="help-tip" role="tooltip">
+                      <b>本会话</b>的技能装在这个会话的 <code>~/.claude/skills</code>，只有它自己能用。<br>
+                      <b>我的模板</b>会在<b>每次会话启动时</b>铺进你名下的所有会话，适合长期要用的技能：
+                      模板里更新过的技能会推送到已有会话，而你在会话里改过的文件不会被覆盖。
+                      正在运行的会话不会中途生效，用「装到本会话」可以立刻装上。
+                    </span>
+                  </span>
+                </div>
+                <div id="skills-count" class="skills-count"></div>
+              </div>
+              <div class="skills-actions">
+                <button id="btn-skills-refresh" class="btn btn-sm">刷新</button>
+                <button id="btn-skill-install" class="btn btn-sm btn-primary">安装技能</button>
+                <input id="skill-install-input" type="file" class="hidden" accept=".md,.zip,.tar,.tgz,.gz">
+              </div>
+            </div>
+            <div class="skills-body">
+              <div id="skills-list" class="skills-list"></div>
+              <div id="skills-detail" class="skills-detail"></div>
             </div>
           </section>
 
@@ -884,6 +918,44 @@
   <div class="dlg-actions">
     <button type="button" id="git-commit-cancel" class="btn">取消</button>
     <button type="button" id="git-commit-ok" class="btn btn-primary">提交</button>
+  </div>
+</dialog>
+
+<!-- 安装技能：本地上传 / 官方市场 -->
+<dialog id="dlg-skill-install" class="dlg-skill">
+  <div class="dlg-head">
+    <h2>安装技能</h2>
+    <button type="button" id="skill-install-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+
+  <div class="skill-src-bar">
+    <div class="scope-switch" role="tablist">
+      <button type="button" id="skill-src-local" class="scope-btn active">本地上传</button>
+      <button type="button" id="skill-src-market" class="scope-btn">官方市场</button>
+    </div>
+    <span class="skill-target">装到：<b id="skill-install-target">本会话</b></span>
+  </div>
+
+  <div id="skill-src-local-pane">
+    <button type="button" id="skill-drop" class="skill-drop">
+      <span class="skill-drop-main">拖拽文件到这里，或点击选择</span>
+      <span class="skill-drop-hint"><code>.md</code> = 单文件技能　·　<code>.zip</code> / <code>.tar.gz</code> = 技能目录打包（可以外面套一层同名目录）</span>
+    </button>
+    <input id="skill-install-input" type="file" class="hidden" accept=".md,.zip,.tar,.tgz,.gz">
+  </div>
+
+  <div id="skill-src-market-pane" class="hidden">
+    <div class="market-bar">
+      <input type="search" id="market-q" placeholder="搜索插件名、描述、作者…">
+      <select id="market-cat" aria-label="分类"></select>
+      <button type="button" id="btn-market-refresh" class="btn btn-sm" title="重新拉取官方目录">刷新目录</button>
+    </div>
+    <div id="market-list" class="market-list"></div>
+    <p class="market-foot">
+      目录来自 <code>anthropics/claude-plugins-official</code>。市场里的条目是<b>插件</b>——
+      只提供斜杠命令或 MCP 服务器的条目没有技能可装，点安装会明确告诉你，整包安装请在终端里跑
+      <code>claude plugin install</code>。
+    </p>
   </div>
 </dialog>
 

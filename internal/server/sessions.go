@@ -32,6 +32,20 @@ func (s *Server) chatLogPath(sess store.Session) string {
 	return filepath.Join(s.sessionDir(sess), "chat.jsonl")
 }
 
+// homeTemplateDir is the server-wide skeleton overlaid onto every session home
+// on start (skills, user-scope MCP servers, rc files). Empty or absent =
+// feature off; see agent.SeedHomeTemplate for the merge rules.
+func (s *Server) homeTemplateDir() string {
+	return filepath.Join(s.cfg.DataDir, "home-template")
+}
+
+// userTemplateDir is the same idea scoped to one user, layered on top of the
+// server-wide template. It is what the 技能 tab writes to, so a user can push
+// something to all of their own sessions without touching everyone else's.
+func (s *Server) userTemplateDir(user string) string {
+	return filepath.Join(s.cfg.DataDir, "users", user, "home-template")
+}
+
 // ensureSharedDir creates (idempotently) the per-user shared directory that is
 // bind-mounted into every session container at /shared.
 func (s *Server) ensureSharedDir(user string) (string, error) {
@@ -150,6 +164,13 @@ func (s *Server) startSession(ctx context.Context, sess store.Session) (store.Se
 		return cur, nil
 	}
 
+	// Before credentials: a stray credential file in the template must never
+	// outrank the account pool. A broken template shouldn't block the session
+	// from coming up either, so failures are logged and the start continues.
+	if err := agent.SeedHomeTemplate(s.homeDir(cur), dockerx.AgentUID, dockerx.AgentGID,
+		s.homeTemplateDir(), s.userTemplateDir(cur.User)); err != nil {
+		log.Printf("seed home template %s: %v", cur.ID, err)
+	}
 	if err := agent.SeedCredentials(cur.Agent, s.homeDir(cur), acct.CredentialsDir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
 		return store.Session{}, err
 	}

@@ -373,6 +373,52 @@ export interface GitCommitResult {
   output: string;
 }
 
+/** 技能页的两个范围：这个会话的 ~/.claude/skills，或用户模板。 */
+export type SkillScope = "session" | "template";
+
+/** GET /api/sessions/{id}/skills 里的一项。 */
+export interface SkillInfo {
+  name: string;
+  /** SKILL.md front matter 里的 description，取不到为空串 */
+  description: string;
+  files: number;
+  bytes: number;
+  updated_at: string;
+  /** session=会话自装，template=用户模板，global=服务器模板；只在 session 范围有意义 */
+  source: string;
+}
+
+/** GET /api/marketplace 里的一条：官方市场的单位是插件，不一定含技能。 */
+export interface MarketPlugin {
+  name: string;
+  display_name?: string;
+  description: string;
+  author?: string;
+  category?: string;
+  homepage?: string;
+  keywords?: string[];
+  /** 目录里显式声明的技能数；0/缺省表示没声明，装了才知道有没有 */
+  skills?: number;
+}
+
+/** GET /api/marketplace */
+export interface MarketCatalog {
+  plugins: MarketPlugin[];
+  categories: string[];
+  updated_at: string;
+  source: string;
+}
+
+/** GET /api/sessions/{id}/skills/{name} */
+export interface SkillDetail extends SkillInfo {
+  /** SKILL.md 正文 */
+  content: string;
+  /** 正文超长被截断 */
+  truncated: boolean;
+  /** SKILL.md 之外的文件，相对技能目录 */
+  extra: string[];
+}
+
 /** POST /api/sessions/{id}/upload：压缩包会被解开，mode 区分两种处理。 */
 export interface UploadSummary {
   /** "file" | "archive" */

@@ -19,6 +19,7 @@
 - **主题**：登录页与侧栏主题钮支持跟随系统（默认）、浅色、深色三种模式；桌面端悬停展开另外两个选项，触屏端点按展开。abox-link 本机控制台只跟随系统深浅色，没有切换钮。
 - **粘贴图片**：对话输入框和终端里都可以直接 Ctrl+V 粘贴截图。图片自动上传到 `/shared/.images/`，对话里以 `[Image #N]` 占位（发送时替换为容器内路径，Agent 用 Read 工具查看），消息里显示可点击缩略图；终端里直接注入路径文本，路径可点击弹出预览。图片保留 48 小时后由服务端自动清理；**仍被对话记录引用的附件不会被清掉**，历史里的缩略图不会随时间变成失效占位。
 - **账号池（Accounts）**：配置多个订阅账号或 API Key，新建会话时选择。凭证在每次启动时从池目录同步进会话 home。
+- **技能与 MCP**：容器里是原版 CLI，skill / MCP 按官方方式装即可；每个会话 home 相互独立，要让所有会话都预置，把文件放进 `data/home-template/`（见「技能（Skill）与 MCP」一节）。
 - **两种交互**：
   - **对话**：服务端用 `claude -p --output-format stream-json`（或 `codex exec --json`）跑无头回合，事件流经 WebSocket 推给浏览器。一个会话可以开多条**对话线程**（各自独立上下文，可随时切回继续），每条线程落盘为 `chats/<线程id>.jsonl` 并记录自己的 provider 会话 id 供 `--resume` 续聊；旧版单文件 `chat.jsonl` 首次访问时自动迁移。历史加载超时或失败时页面会显示重试入口，并在恢复前暂停发送，避免把消息发进尚未确认的线程。
   - **终端**：浏览器 xterm.js ⇄ WebSocket ⇄ `docker exec` PTY，可选进 Shell 或直接进 Agent 交互界面。
@@ -91,6 +92,75 @@ sudo ./deploy/deploy.sh    # 构建 + 启动；日常发布也是这一条
 API Key 方式则直接在账号的 `env` 字段配置（见 `config.example.json`）。
 
 > ⚠️ 合规提示：把消费级订阅账号共享给多个真实用户使用可能违反 Anthropic/OpenAI 的服务条款；多用户服务的合规做法是使用 API Key 计费。自用请自行评估。
+
+## 技能（Skill）与 MCP：home 模板
+
+agentbox 不代管 skill / MCP，容器里就是原版 CLI，按官方方式装即可（`claude mcp add -s user …`、
+`~/.claude/skills/<名字>/SKILL.md`、`/plugin` 等）。但**每个会话的 home 都是全新空目录**，
+装在会话里的东西只属于那个会话。要预置给多个会话，用 home 模板 —— 它在每次会话启动时
+叠加到 `/home/agent`，分两层，后者盖前者：
+
+| 模板 | 位置 | 影响范围 | 谁维护 |
+|---|---|---|---|
+| 服务器模板 | `data/home-template/` | **所有用户的所有会话** | 管理员，宿主机上改 |
+| 用户模板 | `data/users/<user>/home-template/` | 该用户的所有会话 | 用户自己，网页「技能」页签或宿主机 |
+
+```text
+data/home-template/
+  .claude/
+    skills/my-skill/SKILL.md     # 所有 claude 会话都带这个技能
+    settings.json                # 例如 enableAllProjectMcpServers
+  .codex/AGENTS.md
+  .bashrc
+```
+
+规则：
+
+- **逐文件按 mtime「谁新用谁」**：容器里改过的文件保留；模板里更新过的文件推送到已存在的会话。
+  反过来说，在会话里删掉模板文件不会持久——下次启动又回来。
+- **符号链接原样重建、不跟随**，所以大块内容可以指向 `/shared` 而不必每个会话复制一份。
+- 可执行位保留（hook 脚本能直接跑）；`.claude/` 只对 claude 会话有意义、`.codex/` 只对 codex
+  有意义，放在同一份模板里互不干扰。
+- 模板在凭证播种**之前**执行，所以模板里误放的凭证文件压不过账号池；模板出错只记日志，
+  不会挡住会话启动。
+- 两层模板在写盘**之前**先合并（用户层覆盖服务器层），所以用户模板里较旧的同名文件
+  照样能盖住服务器模板 —— mtime 比较只发生在合并结果与会话副本之间。
+
+### 「技能」页签
+
+工作台的**技能**页签（仅 claude 会话）把上面这套东西做成了界面：列出当前会话
+`~/.claude/skills` 里的技能（名字、描述、SKILL.md 正文、附带文件），并标出每个技能是
+**会话自装**、来自**我的模板**还是**服务器模板**。SKILL.md 默认按 Markdown 渲染（复用对话
+那套渲染器），右上角可切「预览 / 源码」；预览时 front matter 里 name/description 之外的键
+单独列成小标签，不会被吞掉。
+
+- 范围切到「我的模板」即直接管理 `data/users/<user>/home-template/.claude/skills`，
+  用户不用碰宿主机就能把技能铺给自己的所有会话；
+- 「安装技能」弹窗有两个来源：
+  - **本地上传**：`.md`（单文件技能，存成 `<名字>/SKILL.md`）或 `.zip`/`.tar.gz`
+    （技能目录打包，允许外面套一层同名目录），支持拖拽；
+  - **官方市场**：浏览 `anthropics/claude-plugins-official`（278 条，可搜索、按分类筛选），
+    安装时服务端拉取该条目的源码并把其中的技能装进当前范围。注意**市场的单位是插件**，
+    可能只含斜杠命令或 MCP 服务器——这类条目没有技能可装，会提示改用终端
+    `claude plugin install <名字>@claude-plugins-official` 装整包；
+- 目录仓库浅克隆缓存在 `data/marketplace/repo`，12 小时过期，可在弹窗里点「刷新目录」强制更新；
+  拉不动时沿用旧副本，浏览不会整个瘫掉；
+- 「复制到我的模板」把会话里调好的技能推给自己的所有会话，「装到本会话」反向把模板技能
+  立刻装进正在跑的会话（模板本身要下次启动才铺，这个按钮省掉一次重启）。
+
+服务器模板不在界面里开放：它对全体用户可见，仍由管理员在宿主机上维护。
+
+MCP 的两个注意点：
+
+- **Claude**：用户级 MCP 写在 `~/.claude.json`，服务端只在缺失时生成该文件，不会覆盖，
+  会话内 `claude mcp add -s user` 即可长期生效。项目级 `/workspace/.mcp.json` 在 headless
+  回合里默认不加载，需要在 `~/.claude/settings.json` 里加 `"enableAllProjectMcpServers": true`。
+- **Codex**：`~/.codex/config.toml` 每次启动都会被账号池目录里的同名文件覆盖（凭证播种会把
+  `accounts/<id>/` 下所有普通文件拷进去），所以 `[mcp_servers.*]` 要写在
+  `accounts/<id>/config.toml` 里，写在会话内或 home 模板里都会被冲掉。控制台改中转站地址
+  是行级替换，不会破坏该文件里的其它段落。
+- 对话模式每回合都新起一次 CLI 进程，stdio 型 MCP server 每回合都会重新拉起；依赖
+  `npx -y` 现拉包的 server 会让每条消息都多等几秒，建议预装到 home 里。
 
 ## 配置项
 
@@ -227,6 +297,13 @@ PUT    /api/sessions/{id}/file      保存文件内容（body 即内容，上限
 POST   /api/sessions/{id}/images    粘贴图片上传（multipart file，上限 20MB），
                                     存入 /shared/.images/，48 小时后自动清理
 （以上文件类接口均支持 ?scope=shared 操作共享目录，默认工作区）
+GET    /api/marketplace            官方插件目录（?refresh=1 强制重拉；含分类列表）
+POST   /api/sessions/{id}/skills/market  从市场装技能 {name} ?scope=（插件不含技能时 422）
+GET    /api/sessions/{id}/skills    技能列表 ?scope=session|template（source 标明来自会话/模板）
+POST   /api/sessions/{id}/skills    安装技能 multipart(file=.md|.zip|.tar.gz, name?) ?scope=
+GET    /api/sessions/{id}/skills/{name}         技能详情（SKILL.md 正文 + 附带文件）?scope=
+DELETE /api/sessions/{id}/skills/{name}         删除技能 ?scope=
+POST   /api/sessions/{id}/skills/{name}/copy    在范围间复制 {to:"session"|"template"} ?scope=
 GET    /api/sessions/{id}/git/status  变更列表（分支 + 文件状态；非 git 仓库时 is_repo=false）
 GET    /api/sessions/{id}/git/diff    unified diff（?path= 查看单文件）
 POST   /api/sessions/{id}/git/commit  git add -A 后提交 {message}

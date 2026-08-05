@@ -29,6 +29,56 @@ dialog textarea { resize: vertical; }
   .dlg-row > label.dlg-narrow { flex: 1; }
 }
 
+/* ---- 安装技能弹窗：本地上传 / 官方市场两个来源 ---- */
+.dlg-skill { width: min(760px, 94vw); }
+.skill-src-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.skill-target { color: var(--muted); font-size: 12px; }
+.skill-target b { color: var(--text); font-weight: 600; }
+
+.skill-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; width: 100%; min-height: 168px; padding: 20px; text-align: center;
+  border: 1px dashed var(--line); border-radius: 10px;
+  background: transparent; color: var(--text); cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.skill-drop:hover, .skill-drop.over { border-color: var(--accent); background: var(--panel-2); }
+.skill-drop-main { font-size: 14px; }
+.skill-drop-hint { color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+.market-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.market-bar input[type="search"] { flex: 1; min-width: 0; }
+.market-bar select { flex: 0 0 132px; }
+.market-list {
+  height: min(48vh, 420px); overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.market-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 10px 12px; border-bottom: 1px solid var(--line);
+}
+.market-row:last-child { border-bottom: none; }
+.market-row:hover { background: var(--panel-2); }
+.market-info { flex: 1; min-width: 0; }
+.market-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.market-name b { font-size: 13px; }
+.market-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+.market-tag.has-skills { color: #3fb950; border-color: color-mix(in srgb, #3fb950 45%, transparent); }
+.market-desc {
+  margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.market-foot { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.market-empty { padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 560px) {
+  .market-bar { flex-wrap: wrap; }
+  .market-bar select { flex: 1; }
+}
+
 /* ---- 弹窗统一头部：标题居左，✕ 关闭钮固定右上角（全部弹窗共用） ---- */
 .dlg-head {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;

@@ -20,7 +20,7 @@ export const emit = (type: string, detail?: unknown) =>
 /** 主区当前视图 */
 export type View = "work" | "settings";
 /** 工作台当前标签页 */
-export type Tab = "chat" | "term" | "files" | "changes";
+export type Tab = "chat" | "term" | "files" | "changes" | "skills";
 /** 文件浏览范围（shared = 共享目录，同用户所有会话可见） */
 export type FileScope = "workspace" | "shared";
 /** 对话回合状态，决定发送按钮是「发送」还是「中断」 */

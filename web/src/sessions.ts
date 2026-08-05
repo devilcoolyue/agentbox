@@ -15,6 +15,7 @@ import { svgIcon } from "./chat-render.js";
 import { termTeardown, termDisconnect, openTerm } from "./term.js";
 import { resetTree, loadFiles } from "./files.js";
 import { loadChanges } from "./changes.js";
+import { loadSkills } from "./skills.js";
 import { agentKey, agentName, agentIcon, agentAvatar, decorateAgentOpts } from "./brand.js";
 
 /* ---------------- 打开 / 切换 ---------------- */
@@ -56,6 +57,10 @@ export function renderHead() {
   an.className = "agent-text agent-" + agentKey(sess.agent);
   an.textContent = agentName(sess.agent);
   meta.append(an, document.createTextNode(` · ${sess.account_label} · #${sess.id}`));
+  // 技能是 Claude Code 的机制，codex 会话没有对应目录，页签直接藏掉
+  const claude = agentKey(sess.agent) === "claude";
+  $("tab-btn-skills").classList.toggle("hidden", !claude);
+  if (!claude && S.tab === "skills") setTab("chat");
   if (sess.stop_reason === "idle" && sess.status !== "running") {
     const zzz = document.createElement("span");
     zzz.className = "sc-sleep";
@@ -92,8 +97,10 @@ export function setTab(name: Tab) {
   $("tab-term").classList.toggle("hidden", name !== "term");
   $("tab-files").classList.toggle("hidden", name !== "files");
   $("tab-changes").classList.toggle("hidden", name !== "changes");
+  $("tab-skills").classList.toggle("hidden", name !== "skills");
   if (name === "files") loadFiles();
   if (name === "changes") loadChanges();
+  if (name === "skills") loadSkills();
   if (name === "term") openTerm(); // 进入即自动拉起 shell；已连上则只重排尺寸
 }
 
