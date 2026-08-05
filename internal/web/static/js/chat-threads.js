@@ -14,14 +14,21 @@ function previewText(s) {
     return String(s || "").replace(USER_ATTACH_RE, "[$1]") || "（无文字消息）";
 }
 /* ---- 顶部切换栏 ---- */
+/* 切换栏上挂的是不是正式标题（模型总结好的 / 用户重命名的）。新线程是服务端
+ * 在首条消息时静默建的、不广播，前端要等下一次历史加载才登记 S.thread，在那
+ * 之前 S.thread 一直为 null，单看它分不清「还没标题」和「标题已经来了」——
+ * 于是单独记一笔，置上之后 noteThreadTitle 就不再拿后续消息覆盖它。 */
+let titled = false;
 /* 由 chat.ts 的 loadHistory 用服务端返回的线程元数据刷新（空对话传 null） */
 export function setThreadBar(thread) {
     S.thread = thread && thread.id ? thread : null;
+    titled = false; // 已登记 S.thread 后改由下面的 id 比对把关
     $("thread-title").textContent = S.thread ? previewText(S.thread.title) : "新对话";
 }
-/* 空的新对话发出首条消息后，标题立即跟上，不必等下一次历史加载 */
+/* 空的新对话发出首条消息后，标题立即跟上，不必等下一次历史加载。标题只由开场
+ * 消息决定，之后每轮消息都不该再动它 —— 已有正式标题时让位。 */
 export function noteThreadTitle(text) {
-    if (!S.thread)
+    if (!S.thread && !titled)
         $("thread-title").textContent = previewText(text);
 }
 /* 服务端异步生成好线程标题后广播过来，即时替换切换栏标题。
@@ -34,6 +41,7 @@ export function applyThreadTitle(id, title) {
         return;
     if (S.thread)
         S.thread.title = title;
+    titled = true;
     $("thread-title").textContent = previewText(title);
 }
 /* ---- 面板开合 ---- */
