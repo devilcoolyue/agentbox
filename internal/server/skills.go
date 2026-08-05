@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"agentbox/internal/archivex"
 	"agentbox/internal/dockerx"
@@ -28,10 +30,10 @@ import (
 // 服务器级模板（data/home-template）刻意不在这里开放：那是全体用户可见的，
 // 归管理员在宿主机上维护。
 const (
-	skillsSubPath  = ".claude/skills"
-	skillManifest  = "SKILL.md"
-	skillMaxRead   = 256 << 10 // SKILL.md 正文的读取上限，超出截断
-	skillMaxDetail = 500       // 详情里最多列出多少个附属文件
+	skillsSubPath   = ".claude/skills"
+	skillManifest   = "SKILL.md"
+	skillMaxRead    = 256 << 10 // 单个文件的文本读取上限，超出截断
+	skillMaxEntries = 2000      // 文件树里最多列出多少个条目（含子目录）
 )
 
 // 技能名同时是目录名：限定为文件名安全的字符，杜绝路径穿越。
@@ -63,9 +65,34 @@ type skillInfo struct {
 
 type skillDetail struct {
 	skillInfo
-	Content   string   `json:"content"`
-	Truncated bool     `json:"truncated"`
-	Extra     []string `json:"extra"` // SKILL.md 之外的文件，相对技能目录
+	Content   string `json:"content"`
+	Truncated bool   `json:"truncated"`
+	// Entries 是整个技能目录的扁平清单（含子目录、含 SKILL.md 自己），
+	// 前端据此拼出左侧文件树。父目录一定排在自己的子项之前。
+	Entries []skillEntry `json:"entries"`
+	More    bool         `json:"more"` // 条目太多，清单被截断
+}
+
+// skillEntry 是技能目录里的一个文件或子目录，路径相对技能目录。
+type skillEntry struct {
+	Path  string    `json:"path"`
+	Dir   bool      `json:"dir,omitempty"`
+	Link  bool      `json:"link,omitempty"` // 符号链接：装技能时不会产生，会话里可能自己造
+	Exec  bool      `json:"exec,omitempty"` // scripts/ 下的脚本有没有可执行位
+	Size  int64     `json:"size"`
+	MTime time.Time `json:"mtime"`
+}
+
+// skillFile 是技能目录里某一个文件的内容，供文件树的右侧预览。
+type skillFile struct {
+	Path      string    `json:"path"`
+	Size      int64     `json:"size"`
+	Mode      string    `json:"mode"`
+	Exec      bool      `json:"exec"`
+	MTime     time.Time `json:"mtime"`
+	Content   string    `json:"content"`
+	Truncated bool      `json:"truncated"`
+	Binary    bool      `json:"binary"` // 图标、字体之类：只报大小，内容留给 ?raw=1
 }
 
 func (s *Server) handleSkillList(w http.ResponseWriter, r *http.Request, sess store.Session) {
@@ -174,7 +201,7 @@ func (s *Server) handleSkillGet(w http.ResponseWriter, r *http.Request, sess sto
 		writeErr(w, http.StatusNotFound, "技能不存在")
 		return
 	}
-	det := skillDetail{skillInfo: s.describeSkill(dir, name), Extra: []string{}}
+	det := skillDetail{skillInfo: s.describeSkill(dir, name), Entries: []skillEntry{}}
 	if r.URL.Query().Get("scope") == "template" {
 		det.Source = "template"
 	} else {
@@ -195,19 +222,108 @@ func (s *Server) handleSkillGet(w http.ResponseWriter, r *http.Request, sess sto
 		det.Content = string(raw)
 	}
 
+	// 整棵树一次给全：技能是几个到几十个文件的量级，逐层懒加载不值当，
+	// 前端拿到扁平清单自己拼树即可。WalkDir 的顺序保证父在子前。
 	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || len(det.Extra) >= skillMaxDetail {
+		if err != nil || p == dir {
 			return nil
+		}
+		if len(det.Entries) >= skillMaxEntries {
+			det.More = true
+			return fs.SkipAll
 		}
 		rel, rerr := filepath.Rel(dir, p)
-		if rerr != nil || rel == skillManifest {
+		if rerr != nil {
 			return nil
 		}
-		det.Extra = append(det.Extra, filepath.ToSlash(rel))
+		e := skillEntry{Path: filepath.ToSlash(rel), Dir: d.IsDir(), Link: d.Type()&fs.ModeSymlink != 0}
+		if !e.Dir && !e.Link && !d.Type().IsRegular() {
+			return nil // 设备、管道之类：技能目录里不该有，列出来也没用
+		}
+		if fi, ierr := d.Info(); ierr == nil { // 链接看的是链接自身，WalkDir 不跟随
+			e.Size, e.MTime = fi.Size(), fi.ModTime()
+			e.Exec = !e.Dir && fi.Mode().Perm()&0o111 != 0
+		}
+		det.Entries = append(det.Entries, e)
 		return nil
 	})
-	sort.Strings(det.Extra)
 	writeJSON(w, http.StatusOK, det)
+}
+
+// handleSkillFile 读技能目录里的任意一个文件——文件树点开 scripts/、references/
+// 里的东西走这里。默认回 JSON（文本超限截断，二进制只报大小），?raw=1 直出原始
+// 字节，给图片预览和下载用。
+func (s *Server) handleSkillFile(w http.ResponseWriter, r *http.Request, sess store.Session) {
+	dir, _, ok := s.skillDir(w, r, sess)
+	if !ok {
+		return
+	}
+	// resolveFileEntry 逐段 Lstat 并拒绝符号链接：技能目录在会话 home 里，容器
+	// 内随手就能造一个指向 /etc 的链接，跟着走就把宿主机文件读出来了。
+	p, err := resolveFileEntry(dir, r.URL.Query().Get("path"))
+	if err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	info, err := os.Lstat(p)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "文件不存在")
+		return
+	}
+	if !info.Mode().IsRegular() {
+		writeErr(w, http.StatusBadRequest, "不是普通文件")
+		return
+	}
+	f, err := os.Open(p)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer f.Close()
+
+	if r.URL.Query().Get("raw") == "1" {
+		if r.URL.Query().Get("dl") == "1" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(p)))
+		}
+		http.ServeContent(w, r, filepath.Base(p), info.ModTime(), f)
+		return
+	}
+
+	buf := make([]byte, skillMaxRead+1)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := skillFile{
+		Path:  filepath.ToSlash(filepath.Clean(r.URL.Query().Get("path"))),
+		Size:  info.Size(),
+		Mode:  info.Mode().String(),
+		Exec:  info.Mode().Perm()&0o111 != 0,
+		MTime: info.ModTime(),
+	}
+	body := buf[:n]
+	if n > skillMaxRead {
+		body, out.Truncated = trimPartialRune(body[:skillMaxRead]), true
+	}
+	if bytes.IndexByte(body, 0) >= 0 || !utf8.Valid(body) {
+		out.Binary = true
+	} else {
+		out.Content = string(body)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// trimPartialRune 砍掉截断处残留的半个多字节字符，否则一个正常的中文文件会因为
+// 结尾非法 UTF-8 被判成二进制。
+func trimPartialRune(b []byte) []byte {
+	for i := 0; i < utf8.UTFMax-1 && len(b) > 0; i++ {
+		if r, size := utf8.DecodeLastRune(b); r != utf8.RuneError || size > 1 {
+			break // size > 1 是文件里真有一个 U+FFFD，不是截断残渣
+		}
+		b = b[:len(b)-1]
+	}
+	return b
 }
 
 // skillDir 解析 {name} 路径参数并拼出技能目录，顺带把范围和名字校验掉。

@@ -128,11 +128,15 @@ data/home-template/
 
 ### 「技能」页签
 
-工作台的**技能**页签（仅 claude 会话）把上面这套东西做成了界面：列出当前会话
-`~/.claude/skills` 里的技能（名字、描述、SKILL.md 正文、附带文件），并标出每个技能是
-**会话自装**、来自**我的模板**还是**服务器模板**。SKILL.md 默认按 Markdown 渲染（复用对话
-那套渲染器），右上角可切「预览 / 源码」；预览时 front matter 里 name/description 之外的键
-单独列成小标签，不会被吞掉。
+工作台的**技能**页签（仅 claude 会话）把上面这套东西做成了界面：左侧是当前会话
+`~/.claude/skills` 的**文件树** —— 技能行展开就是这个技能目录的全部内容
+（`SKILL.md`、`scripts/`、`references/`、`assets/` 以及任意层级的子目录，脚本带可执行位的
+标 `+x`），并标出每个技能是**会话自装**、来自**我的模板**还是**服务器模板**。
+
+右侧看内容：`.md` 默认按 Markdown 渲染（复用对话那套渲染器），右上角可切「预览 / 源码」，
+预览时 front matter 里的键单独列成小标签，不会被吞掉；脚本和其它文本原样显示；
+`assets/` 里的图片内联预览；二进制文件只报大小并给「下载」。单个文件的文本预览上限
+256KB，超出截断。
 
 - 范围切到「我的模板」即直接管理 `data/users/<user>/home-template/.claude/skills`，
   用户不用碰宿主机就能把技能铺给自己的所有会话；
@@ -301,7 +305,10 @@ GET    /api/marketplace            官方插件目录（?refresh=1 强制重拉�
 POST   /api/sessions/{id}/skills/market  从市场装技能 {name} ?scope=（插件不含技能时 422）
 GET    /api/sessions/{id}/skills    技能列表 ?scope=session|template（source 标明来自会话/模板）
 POST   /api/sessions/{id}/skills    安装技能 multipart(file=.md|.zip|.tar.gz, name?) ?scope=
-GET    /api/sessions/{id}/skills/{name}         技能详情（SKILL.md 正文 + 附带文件）?scope=
+GET    /api/sessions/{id}/skills/{name}         技能详情（SKILL.md 正文 + 整个目录的文件清单）?scope=
+GET    /api/sessions/{id}/skills/{name}/file    读技能目录里的文件 ?path=&scope=
+                                                （默认 JSON，文本超 256KB 截断、二进制只报大小；
+                                                 ?raw=1 直出原始字节，加 &dl=1 下载）
 DELETE /api/sessions/{id}/skills/{name}         删除技能 ?scope=
 POST   /api/sessions/{id}/skills/{name}/copy    在范围间复制 {to:"session"|"template"} ?scope=
 GET    /api/sessions/{id}/git/status  变更列表（分支 + 文件状态；非 git 仓库时 is_repo=false）

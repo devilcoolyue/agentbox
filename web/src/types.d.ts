@@ -415,8 +415,36 @@ export interface SkillDetail extends SkillInfo {
   content: string;
   /** 正文超长被截断 */
   truncated: boolean;
-  /** SKILL.md 之外的文件，相对技能目录 */
-  extra: string[];
+  /** 技能目录的扁平清单（含子目录与 SKILL.md 自己），父目录排在子项之前 */
+  entries: SkillEntry[];
+  /** 条目太多，清单被截断 */
+  more: boolean;
+}
+
+/** SkillDetail.entries 里的一项，path 相对技能目录。 */
+export interface SkillEntry {
+  path: string;
+  dir?: boolean;
+  /** 符号链接：装技能时不会产生，会话里可能自己造；不支持预览 */
+  link?: boolean;
+  /** 有可执行位（scripts/ 下的脚本靠它才跑得起来） */
+  exec?: boolean;
+  size: number;
+  mtime: string;
+}
+
+/** GET /api/sessions/{id}/skills/{name}/file?path=… */
+export interface SkillFile {
+  path: string;
+  size: number;
+  /** 形如 -rwxr-xr-x */
+  mode: string;
+  exec: boolean;
+  mtime: string;
+  /** 文本内容；binary 时为空 */
+  content: string;
+  truncated: boolean;
+  binary: boolean;
 }
 
 /** POST /api/sessions/{id}/upload：压缩包会被解开，mode 区分两种处理。 */

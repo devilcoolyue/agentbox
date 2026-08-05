@@ -1,18 +1,28 @@
-/* skills：技能（Claude Code Skill）页 —— 看清楚这个会话到底装了哪些技能、
- * 它们是会话自己的还是模板铺下来的，并能安装、删除、在两个范围之间搬。
+/* skills：技能（Claude Code Skill）页 —— 左侧是技能目录的文件树（SKILL.md、
+ * scripts/、references/、assets/ 全部列出来），右侧看内容：.md 可切预览/源码，
+ * 脚本和文本直接显示，图片内联，二进制只给下载。另外能安装、删除、在「本会话」
+ * 与「我的模板」两个范围之间搬。
  * 「我的模板」写的是 data/users/<user>/home-template，每次会话启动铺进该用户
  * 的所有会话（服务端 agent.SeedHomeTemplate）。 */
 "use strict";
 import { S } from "./state.js";
-import { $, spinEl, toast, askConfirm, fmtBytes, fmtTime, btnBusy, btnDone } from "./util.js";
-import { api } from "./api.js";
+import { $, spinEl, toast, askConfirm, fmtBytes, fmtSize, fmtTime, btnBusy, btnDone, startDownload, } from "./util.js";
+import { api, skillFileURL } from "./api.js";
 import { formatText } from "./chat-render.js";
+/* sel 是右侧显示什么：path 为空表示技能本身（SKILL.md 概览 + 操作按钮），
+ * 否则是技能目录里的某个文件。open 装展开的节点键：技能名，或「技能名/子目录」。
+ * cache 按技能存整棵树，刷新时清空、展开状态留着。 */
 const SK = {
     scope: "session",
     items: [],
-    selected: "",
-    view: "preview", // 记住上次选的视图，切技能时不用反复点
+    sel: { skill: "", path: "" },
+    view: "preview", // 记住上次选的视图，切文件时不用反复点
+    open: new Set(),
+    cache: new Map(),
+    loading: new Set(),
 };
+/* 右侧内容的竞态防护：连点几个文件时只让最后一次的结果上屏 */
+let paneGen = 0;
 /* 来源徽章：会话自装 / 用户模板 / 服务器模板。只有「本会话」范围才有意义，
  * 因为模板范围里的东西按定义都来自模板。 */
 const SOURCE_LABEL = {
@@ -59,7 +69,51 @@ export async function loadSkills() {
         return;
     }
     SK.items = data.skills || [];
+    SK.cache.clear(); // 刷新就是要看最新的目录内容
     renderList();
+    // 选中的技能还在就把右侧恢复出来，没了就回到空白
+    if (!SK.items.some((sk) => sk.name === SK.sel.skill)) {
+        SK.sel = { skill: "", path: "" };
+        detailMsg("");
+        return;
+    }
+    if (SK.sel.path)
+        openFile(SK.sel.skill, SK.sel.path);
+    else
+        selectSkill(SK.sel.skill);
+}
+/* 扁平清单拼成树。服务端保证父目录排在子项之前；万一没有（清单被截断），
+ * 缺的父目录就地补一个占位，免得整条子树看不见。 */
+function buildTree(entries) {
+    const roots = [];
+    const byPath = new Map();
+    const add = (path, entry) => {
+        const cut = path.lastIndexOf("/");
+        const node = { name: cut < 0 ? path : path.slice(cut + 1), path, entry, kids: [] };
+        byPath.set(path, node);
+        const parentPath = cut < 0 ? "" : path.slice(0, cut);
+        const parent = parentPath
+            ? byPath.get(parentPath) || add(parentPath, { path: parentPath, dir: true, size: 0, mtime: "" })
+            : null;
+        (parent ? parent.kids : roots).push(node);
+        return node;
+    };
+    for (const e of entries) {
+        const hit = byPath.get(e.path);
+        if (hit)
+            hit.entry = e; // 占位目录被真正的条目补全
+        else
+            add(e.path, e);
+    }
+    // SKILL.md 置顶（它才是技能的入口），然后目录，最后其它文件
+    const rank = (n) => (n.path === "SKILL.md" ? 0 : n.entry.dir ? 1 : 2);
+    const sortKids = (nodes) => {
+        nodes.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+        for (const n of nodes)
+            sortKids(n.kids);
+    };
+    sortKids(roots);
+    return roots;
 }
 function renderList() {
     const n = SK.items.length;
@@ -73,46 +127,229 @@ function renderList() {
     }
     const frag = document.createDocumentFragment();
     for (const sk of SK.items) {
-        const row = document.createElement("div");
-        row.className = "skill-row" + (sk.name === SK.selected ? " active" : "");
-        row.tabIndex = 0;
-        const main = document.createElement("div");
-        main.className = "skill-main";
-        const name = document.createElement("span");
-        name.className = "skill-name mono";
-        name.textContent = sk.name;
-        main.appendChild(name);
-        if (SK.scope === "session" && sk.source !== "session") {
-            const badge = document.createElement("span");
-            badge.className = "skill-badge s-" + sk.source;
-            badge.textContent = SOURCE_LABEL[sk.source] || sk.source;
-            main.appendChild(badge);
+        frag.appendChild(skillRow(sk));
+        if (!SK.open.has(sk.name))
+            continue;
+        const det = SK.cache.get(sk.name);
+        if (!det)
+            continue; // 还在拉，箭头上已经在转圈
+        const roots = buildTree(det.entries || []);
+        if (!roots.length) {
+            frag.appendChild(hintRow("（空目录，Claude Code 不会加载它）", 1));
+            continue;
         }
-        const desc = document.createElement("div");
-        desc.className = "skill-desc";
-        desc.textContent = sk.description || "（无描述）";
-        row.append(main, desc);
-        const open = () => selectSkill(sk.name);
-        row.addEventListener("click", open);
-        row.addEventListener("keydown", (e) => { if (e.key === "Enter")
-            open(); });
-        frag.appendChild(row);
+        appendNodes(frag, sk.name, roots, 1);
+        if (det.more)
+            frag.appendChild(hintRow("……文件太多，只列出了前面一部分", 1));
     }
     $("skills-list").replaceChildren(frag);
 }
+function baseRow(depth, active) {
+    const row = document.createElement("div");
+    row.className = "skill-row" + (active ? " active" : "");
+    row.style.setProperty("--depth", String(depth));
+    row.tabIndex = 0;
+    return row;
+}
+/* 行主体的点击/回车都走同一个动作；箭头自己 stopPropagation，不牵连选中 */
+function bindOpen(row, action) {
+    row.addEventListener("click", action);
+    row.addEventListener("keydown", (e) => { if (e.key === "Enter")
+        action(); });
+}
+function arrowEl(open, busy, toggle) {
+    const a = document.createElement("span");
+    a.className = "skill-arrow" + (open ? " open" : "") + (busy ? " busy" : "");
+    if (busy)
+        a.replaceChildren(spinEl());
+    else
+        a.textContent = "▸";
+    a.title = open ? "收起" : "展开目录";
+    a.setAttribute("role", "button");
+    a.tabIndex = -1; // 行本身可聚焦就够了，别让 Tab 在树里走两遍
+    a.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
+    return a;
+}
+function tagEl(text, title) {
+    const s = document.createElement("span");
+    s.className = "skill-flag";
+    s.textContent = text;
+    s.title = title;
+    return s;
+}
+function hintRow(text, depth) {
+    const row = baseRow(depth, false);
+    row.classList.add("skill-hint");
+    row.tabIndex = -1;
+    row.textContent = text;
+    return row;
+}
+function skillRow(sk) {
+    const row = baseRow(0, SK.sel.skill === sk.name && !SK.sel.path);
+    const line = document.createElement("div");
+    line.className = "skill-main";
+    line.appendChild(arrowEl(SK.open.has(sk.name), SK.loading.has(sk.name), () => toggleSkill(sk.name)));
+    const name = document.createElement("span");
+    name.className = "skill-name mono";
+    name.textContent = sk.name;
+    line.appendChild(name);
+    if (SK.scope === "session" && sk.source !== "session") {
+        const badge = document.createElement("span");
+        badge.className = "skill-badge s-" + sk.source;
+        badge.textContent = SOURCE_LABEL[sk.source] || sk.source;
+        line.appendChild(badge);
+    }
+    const desc = document.createElement("div");
+    desc.className = "skill-desc";
+    desc.textContent = sk.description || "（无描述）";
+    row.append(line, desc);
+    bindOpen(row, () => selectSkill(sk.name));
+    return row;
+}
+function appendNodes(frag, skill, nodes, depth) {
+    for (const node of nodes) {
+        frag.appendChild(nodeRow(skill, node, depth));
+        if (!node.entry.dir || !SK.open.has(skill + "/" + node.path))
+            continue;
+        if (node.kids.length)
+            appendNodes(frag, skill, node.kids, depth + 1);
+        else
+            frag.appendChild(hintRow("（空目录）", depth + 1));
+    }
+}
+function nodeRow(skill, node, depth) {
+    const key = skill + "/" + node.path;
+    const isDir = !!node.entry.dir;
+    const row = baseRow(depth, SK.sel.skill === skill && SK.sel.path === node.path);
+    row.classList.add(isDir ? "is-dir" : "is-file");
+    const line = document.createElement("div");
+    line.className = "skill-main";
+    if (isDir) {
+        line.appendChild(arrowEl(SK.open.has(key), false, () => toggleDir(key)));
+    }
+    else {
+        const glyph = document.createElement("span");
+        glyph.className = "skill-glyph";
+        glyph.textContent = fileGlyph(node.name);
+        line.appendChild(glyph);
+    }
+    const name = document.createElement("span");
+    name.className = "skill-name mono";
+    name.textContent = node.name;
+    line.appendChild(name);
+    if (node.entry.link)
+        line.appendChild(tagEl("链接", "符号链接：装技能时不会产生，也不支持预览"));
+    else if (node.entry.exec)
+        line.appendChild(tagEl("+x", "有可执行位，脚本能直接跑"));
+    if (!isDir) {
+        const size = document.createElement("span");
+        size.className = "skill-size";
+        size.textContent = fmtSize(node.entry.size);
+        line.appendChild(size);
+    }
+    row.appendChild(line);
+    bindOpen(row, () => {
+        if (isDir)
+            toggleDir(key);
+        else if (node.entry.link)
+            toast("符号链接不支持预览", true);
+        else
+            openFile(skill, node.path);
+    });
+    return row;
+}
+function fileGlyph(name) {
+    const ext = (name.split(".").pop() || "").toLowerCase();
+    if (name === "SKILL.md")
+        return "★";
+    if (["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp"].includes(ext))
+        return "◨";
+    if (["sh", "bash", "py", "js", "ts", "rb", "pl", "go", "rs"].includes(ext))
+        return "⌘";
+    if (["md", "txt", "json", "yaml", "yml", "toml", "csv"].includes(ext))
+        return "▤";
+    return "·";
+}
+function isImage(path) {
+    return /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i.test(path);
+}
+/* ---- 拉取与选中 ---- */
+/* 技能详情连整棵文件树一起回来（技能就几十个文件的量级），拉一次缓存住，
+ * 展开子目录不再打服务端。 */
+async function ensureDetail(name) {
+    const hit = SK.cache.get(name);
+    if (hit)
+        return hit;
+    const sess = S.current;
+    if (!sess)
+        return null;
+    SK.loading.add(name);
+    renderList(); // 箭头原地转圈
+    try {
+        const det = await api(`/sessions/${sess.id}/skills/${encodeURIComponent(name)}?scope=${SK.scope}`);
+        SK.cache.set(name, det);
+        return det;
+    }
+    catch (e) {
+        toast("读取技能失败：" + e.message, true);
+        SK.open.delete(name);
+        return null;
+    }
+    finally {
+        SK.loading.delete(name);
+    }
+}
+async function toggleSkill(name) {
+    if (SK.open.has(name)) {
+        SK.open.delete(name);
+        renderList();
+        return;
+    }
+    SK.open.add(name);
+    await ensureDetail(name);
+    renderList();
+}
+function toggleDir(key) {
+    if (SK.open.has(key))
+        SK.open.delete(key);
+    else
+        SK.open.add(key);
+    renderList();
+}
 async function selectSkill(name) {
+    SK.sel = { skill: name, path: "" };
+    SK.open.add(name);
+    const gen = ++paneGen;
+    renderList();
+    $("skills-detail").replaceChildren(loadingRow("读取 SKILL.md…"));
+    const det = await ensureDetail(name);
+    renderList();
+    if (gen !== paneGen)
+        return; // 期间点了别的
+    if (!det) {
+        detailMsg("读取失败");
+        return;
+    }
+    renderDetail(det);
+}
+async function openFile(skill, path) {
     const sess = S.current;
     if (!sess)
         return;
-    SK.selected = name;
+    SK.sel = { skill, path };
+    const gen = ++paneGen;
     renderList();
-    $("skills-detail").replaceChildren(loadingRow("读取 SKILL.md…"));
+    $("skills-detail").replaceChildren(loadingRow("读取 " + path + "…"));
     try {
-        const det = await api(`/sessions/${sess.id}/skills/${encodeURIComponent(name)}?scope=${SK.scope}`);
-        renderDetail(det);
+        const f = await api(`/sessions/${sess.id}/skills/${encodeURIComponent(skill)}/file` +
+            `?scope=${SK.scope}&path=${encodeURIComponent(path)}`);
+        if (gen !== paneGen)
+            return;
+        renderFile(skill, f);
     }
     catch (e) {
-        detailMsg("读取失败：" + e.message);
+        if (gen === paneGen)
+            detailMsg("读取失败：" + e.message);
     }
 }
 function renderDetail(det) {
@@ -160,7 +397,7 @@ function renderDetail(det) {
     const body = document.createElement("div");
     body.className = "skill-doc";
     if (det.content) {
-        body.append(...docView(det));
+        body.append(...docView("SKILL.md", det.content, det.truncated, true));
     }
     else {
         const p = document.createElement("p");
@@ -168,31 +405,76 @@ function renderDetail(det) {
         p.textContent = "这个技能目录里没有 SKILL.md —— Claude Code 不会加载它。";
         body.appendChild(p);
     }
-    if (det.extra.length) {
-        const wrap = document.createElement("div");
-        wrap.className = "skill-files";
-        const h = document.createElement("div");
-        h.className = "skill-files-head";
-        h.textContent = "附带文件";
-        wrap.appendChild(h);
-        for (const rel of det.extra) {
-            const li = document.createElement("div");
-            li.className = "skill-file mono";
-            li.textContent = rel;
-            wrap.appendChild(li);
-        }
-        body.appendChild(wrap);
+    $("skills-detail").replaceChildren(head, body);
+}
+/* 文件树里点开的单个文件：.md 走预览/源码，图片内联，二进制只给下载，
+ * 其它一律当文本原样显示（scripts/ 下的脚本就是这一支）。 */
+function renderFile(skill, f) {
+    const head = document.createElement("div");
+    head.className = "skill-head";
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "skill-back";
+    back.textContent = "← " + skill;
+    back.title = "回到技能概览";
+    back.addEventListener("click", () => selectSkill(skill));
+    head.appendChild(back);
+    const title = document.createElement("h3");
+    title.className = "skill-title mono";
+    title.textContent = f.path;
+    head.appendChild(title);
+    const meta = document.createElement("p");
+    meta.className = "skill-meta";
+    meta.textContent = [
+        fmtSize(f.size),
+        f.mode,
+        f.exec ? "可执行" : "",
+        f.mtime ? "更新于 " + fmtTime(f.mtime) : "",
+    ].filter(Boolean).join(" · ");
+    head.appendChild(meta);
+    const actions = document.createElement("div");
+    actions.className = "skill-head-actions";
+    const dl = document.createElement("button");
+    dl.className = "btn btn-sm";
+    dl.textContent = "下载";
+    dl.addEventListener("click", () => startDownload(skillFileURL(skill, f.path, SK.scope, true)));
+    actions.appendChild(dl);
+    head.appendChild(actions);
+    const body = document.createElement("div");
+    body.className = "skill-doc";
+    if (isImage(f.path)) {
+        const img = document.createElement("img");
+        img.className = "skill-img";
+        img.src = skillFileURL(skill, f.path, SK.scope);
+        img.alt = f.path;
+        body.appendChild(img);
+    }
+    else if (f.binary) {
+        const p = document.createElement("p");
+        p.className = "files-empty";
+        p.textContent = `二进制文件（${fmtSize(f.size)}），没法在页面里看，点上面的「下载」拿到本地。`;
+        body.appendChild(p);
+    }
+    else if (/\.md$/i.test(f.path)) {
+        body.append(...docView(f.path, f.content, f.truncated, false));
+    }
+    else {
+        const pre = document.createElement("pre");
+        pre.className = "skill-md mono";
+        pre.textContent = f.content + (f.truncated ? "\n…（内容过长，已截断）" : "");
+        body.appendChild(pre);
     }
     $("skills-detail").replaceChildren(head, body);
 }
-/* SKILL.md 的正文区：一条「预览 / 源码」切换栏 + 内容。预览走对话那套轻量
- * Markdown 渲染器，样式与消息气泡一致，不必再养第二套。 */
-function docView(det) {
+/* Markdown 正文区：一条「预览 / 源码」切换栏 + 内容。预览走对话那套轻量
+ * Markdown 渲染器，样式与消息气泡一致，不必再养第二套。
+ * skipMeta 用于技能概览：name/description 上方已经显示过，不再重复列出来。 */
+function docView(label, content, truncated, skipMeta) {
     const bar = document.createElement("div");
     bar.className = "skill-doc-bar";
-    const label = document.createElement("span");
-    label.className = "skill-doc-label mono";
-    label.textContent = "SKILL.md";
+    const labelEl = document.createElement("span");
+    labelEl.className = "skill-doc-label mono";
+    labelEl.textContent = label;
     const sw = document.createElement("div");
     sw.className = "scope-switch";
     const buttons = {};
@@ -212,24 +494,24 @@ function docView(det) {
         buttons[mode] = b;
         sw.appendChild(b);
     }
-    bar.append(label, sw);
+    bar.append(labelEl, sw);
     const view = document.createElement("div");
-    const tail = det.truncated ? "\n…（内容过长，已截断）" : "";
+    const tail = truncated ? "\n…（内容过长，已截断）" : "";
     const paint = () => {
         if (SK.view === "source") {
             view.className = "skill-view";
             const pre = document.createElement("pre");
             pre.className = "skill-md mono";
-            pre.textContent = det.content + tail;
+            pre.textContent = content + tail;
             view.replaceChildren(pre);
             return;
         }
-        // 预览：front matter 里除 name/description（上方已显示）之外的键单独列出来，
-        // 免得渲染时被当成一条分隔线加一段文字，也免得直接丢掉丢了信息。
-        const { meta, body } = splitFrontMatter(det.content);
+        // 预览：front matter 里的键单独列出来，免得渲染时被当成一条分隔线加一段
+        // 文字，也免得直接丢掉丢了信息。
+        const { meta, body } = splitFrontMatter(content);
         view.className = "skill-view msg agent";
         const parts = [];
-        const rest = meta.filter(([k]) => k !== "name" && k !== "description");
+        const rest = skipMeta ? meta.filter(([k]) => k !== "name" && k !== "description") : meta;
         if (rest.length) {
             const fm = document.createElement("div");
             fm.className = "skill-fm";
@@ -307,7 +589,8 @@ async function removeSkill(name) {
     try {
         await api(`/sessions/${sess.id}/skills/${encodeURIComponent(name)}?scope=${SK.scope}`, { method: "DELETE" });
         toast("已删除");
-        SK.selected = "";
+        SK.sel = { skill: "", path: "" };
+        SK.open.delete(name);
         loadSkills();
     }
     catch (e) {
@@ -319,7 +602,8 @@ function setSkillScope(scope) {
     if (SK.scope === scope)
         return;
     SK.scope = scope;
-    SK.selected = "";
+    SK.sel = { skill: "", path: "" };
+    SK.open.clear(); // 两个范围的目录内容不是一回事，展开状态不跟着走
     $("skill-scope-session").classList.toggle("active", scope === "session");
     $("skill-scope-template").classList.toggle("active", scope === "template");
     loadSkills();
@@ -348,14 +632,15 @@ function setInstallSource(src) {
 }
 $("skill-src-local").addEventListener("click", () => setInstallSource("local"));
 $("skill-src-market").addEventListener("click", () => setInstallSource("market"));
-/* 装完统一收尾：关弹窗、刷新列表、选中新装的那个 */
+/* 装完统一收尾：关弹窗、刷新列表、选中并展开新装的那个（loadSkills 会按 sel
+ * 把右侧恢复出来） */
 async function afterInstall(name, msg) {
     dlgInstall().close();
     toast(msg);
-    SK.selected = name;
-    await loadSkills();
+    SK.sel = { skill: name, path: "" };
     if (name)
-        selectSkill(name);
+        SK.open.add(name);
+    await loadSkills();
 }
 async function installFile(file) {
     const sess = S.current;

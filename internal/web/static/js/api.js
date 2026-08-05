@@ -38,6 +38,13 @@ export function fileDownloadURL(rel) {
     return `/api/sessions/${S.current.id}/file?path=${encodeURIComponent(rel)}` +
         `&dl=1&token=${encodeURIComponent(S.token)}${scopeQS()}`;
 }
+/* 技能目录里某个文件的直链（`raw=1` 直出原始字节）：图片预览用它当 img.src，
+ * `dl=1` 则让浏览器存盘。技能页的文本预览走 JSON 接口，不用这个。 */
+export function skillFileURL(skill, path, scope, dl = false) {
+    return `/api/sessions/${S.current.id}/skills/${encodeURIComponent(skill)}/file` +
+        `?path=${encodeURIComponent(path)}&scope=${encodeURIComponent(scope)}&raw=1` +
+        (dl ? "&dl=1" : "") + `&token=${encodeURIComponent(S.token)}`;
+}
 /* 整个范围打包成 zip 的下载直链 */
 export function archiveDownloadURL() {
     return `/api/sessions/${S.current.id}/archive?token=${encodeURIComponent(S.token)}${scopeQS()}`;

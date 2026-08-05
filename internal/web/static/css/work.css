@@ -206,14 +206,40 @@
 }
 .skills-detail { flex: 1; min-width: 0; overflow: auto; padding: 14px 18px; }
 
-.skill-row { padding: 8px; border-radius: 7px; cursor: pointer; }
+/* 左侧是一棵树：技能行（带描述）在 depth 0，下面是技能目录里的子目录与文件 */
+.skill-row {
+  padding: 8px; padding-left: calc(8px + var(--depth, 0) * 14px);
+  border-radius: 7px; cursor: pointer;
+}
 .skill-row:hover { background: var(--panel-2); }
 .skill-row.active { background: var(--panel-2); outline: 1px solid var(--line); }
+.skill-row.is-dir, .skill-row.is-file { padding-top: 4px; padding-bottom: 4px; }
+.skill-row.is-dir .skill-name { color: var(--amber); }
 .skill-main { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .skill-name {
   font-size: 13px; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.skill-arrow {
+  flex: none; width: 14px; text-align: center; color: var(--muted);
+  user-select: none; transition: transform 0.15s ease, color 0.15s ease;
+}
+.skill-arrow:hover { color: var(--amber); }
+.skill-arrow.open { transform: rotate(90deg); color: var(--amber); }
+/* 展开加载中：箭头原地换成小转圈 */
+.skill-arrow.busy {
+  transform: none; cursor: progress;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.skill-arrow .spin { width: 9px; height: 9px; border-width: 2px; }
+.skill-glyph { flex: none; width: 14px; text-align: center; color: var(--muted); font-size: 12px; }
+.skill-size { flex: none; margin-left: auto; color: var(--muted); font-size: 11px; }
+.skill-flag {
+  flex: none; font-size: 10px; padding: 0 4px; border-radius: 4px;
+  border: 1px solid var(--line); color: var(--muted);
+}
+.skill-hint { cursor: default; color: var(--muted); font-size: 12px; }
+.skill-hint:hover { background: none; }
 .skill-badge {
   flex-shrink: 0; font-size: 11px; padding: 1px 6px; border-radius: 5px;
   border: 1px solid var(--line); color: var(--muted);
@@ -226,6 +252,13 @@
 }
 
 .skill-head { border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 12px; }
+/* 看单个文件时的返回链接：回到技能概览（那儿才有复制/删除按钮） */
+.skill-back {
+  display: inline-block; margin-bottom: 8px; padding: 0;
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 12px;
+}
+.skill-back:hover { color: var(--amber); }
 .skill-title { margin: 0; font-size: 15px; }
 .skill-head-desc { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
 .skill-meta { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
@@ -247,9 +280,11 @@
   font-size: 11px; color: var(--muted);
   border: 1px solid var(--line); border-radius: 5px; padding: 1.5px 7px;
 }
-.skill-files { margin-top: 16px; }
-.skill-files-head { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
-.skill-file { font-size: 12px; color: var(--muted); padding: 2px 0; }
+/* assets/ 里的图标之类：直接内联出来，别让用户为了看一眼去下载 */
+.skill-img {
+  max-width: 100%; border-radius: 8px;
+  background: repeating-conic-gradient(var(--panel-2) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
 
 @media (max-width: 760px) {
   .skills-body { flex-direction: column; }
