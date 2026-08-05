@@ -423,14 +423,15 @@ func archiveBaseName(filename string) string {
 // ensureSkillsRoot 建出 <base>/.claude/skills。两级都可能是第一次创建，都要
 // 归容器用户：服务端跑在 root 下，留个 root 属主的 ~/.claude 会让会话里的 CLI
 // 写不进自己的配置目录。
+//
+// chown 与 files.go 一样是 best-effort：只有 root 才改得动属主，而非 root 环境
+// （CI、开发机）本来就没有容器要伺候，为这个把整个操作判失败没有意义。
 func ensureSkillsRoot(root string) error {
 	for _, dir := range []string{filepath.Dir(root), root} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
-		if err := os.Chown(dir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
-			return err
-		}
+		_ = os.Chown(dir, dockerx.AgentUID, dockerx.AgentGID)
 	}
 	return nil
 }
@@ -460,7 +461,8 @@ func replaceSkillDir(src, dst string) error {
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
 			}
-			return os.Chown(target, dockerx.AgentUID, dockerx.AgentGID)
+			_ = os.Chown(target, dockerx.AgentUID, dockerx.AgentGID) // best-effort，见 ensureSkillsRoot
+			return nil
 		case d.Type().IsRegular():
 			if err := copyRegular(p, target); err != nil {
 				return err
@@ -495,5 +497,6 @@ func copyRegular(src, dst string) error {
 	if err := os.Chmod(dst, fi.Mode().Perm()); err != nil {
 		return err
 	}
-	return os.Chown(dst, dockerx.AgentUID, dockerx.AgentGID)
+	_ = os.Chown(dst, dockerx.AgentUID, dockerx.AgentGID) // best-effort，见 ensureSkillsRoot
+	return nil
 }
