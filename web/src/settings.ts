@@ -14,7 +14,7 @@ import { showView } from "./shell.js";
 import { MODEL_ID_RE } from "./chat.js";
 import { agentKey, agentName, agentIcon, decorateAgentOpts } from "./brand.js";
 import { quotaChip, openQuota } from "./quota.js";
-import { loadProxies, mountProxyPicker, openProxiesSection } from "./proxies.js";
+import { loadProxies, mountProxyPicker, openProxiesSection, refreshProxyCount } from "./proxies.js";
 import type { ProxyPicker } from "./proxies.js";
 
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
@@ -31,6 +31,9 @@ export async function openSettingsView() {
   showView("settings");
   setSec(S.sec || "accounts");
   renderSettingsAccounts();
+  // 停在别的分区时也要把 IP 代理的条数拉出来：左侧计数是给管理员扫一眼用的，
+  // 停在 0 上等人点开就是假信息。分区本身进来时自己会拉。
+  if (S.sec !== "proxies") refreshProxyCount();
   try {
     S.settings = await api<Settings>("/settings");
     fillSettingsForms();

@@ -19,16 +19,35 @@ export async function loadProxies() {
     const res = await api("/proxies");
     cache = res.proxies;
     bridge = res;
+    paintCount();
     return cache;
+}
+/* 左侧导航上的条数。进设置页就得是真数，不能等点开 IP 代理才从 0 变过来——
+ * 管理员会把那个 0 当成「池子是空的」。 */
+function paintCount() {
+    $("proxy-count").textContent = String(cache.length);
+}
+/* 只为点亮计数拉一次列表，表格留到真正点进来时再渲染。 */
+export async function refreshProxyCount() {
+    try {
+        await loadProxies();
+    }
+    catch (_) { /* 计数不值得为它弹错误提示，点进分区时会再报一次 */ }
 }
 /* ---------------- 列表 ---------------- */
 export async function openProxiesSection() {
+    // 转圈块是居中的一整块，旧表格留在下面会把它顶成「加载中 + 一屏数据」的怪样子，
+    // 先收起来（监控页也是这个套路）。
+    $("proxy-table-wrap").classList.add("hidden");
+    $("proxy-empty").classList.add("hidden");
     $("proxy-loading").classList.remove("hidden");
     try {
         await loadProxies();
     }
     catch (e) {
         toast("读取代理列表失败：" + e.message, true);
+        if (cache.length)
+            renderProxies(); // 有上一份就还原回去，别让刷新失败清空视野
         return;
     }
     finally {
@@ -51,7 +70,6 @@ function renderBridgeState() {
             : "桥接未监听，绑定了代理的账号会请求失败" + (bridge.bridge_error ? "：" + bridge.bridge_error : "");
     el.append(dot, document.createTextNode(text));
     el.classList.toggle("bad", !!cache.length && !on);
-    $("proxy-count").textContent = String(cache.length);
 }
 export function renderProxies() {
     renderBridgeState();
