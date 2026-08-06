@@ -26,7 +26,7 @@ const (
 var (
 	accountIDRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,31}$`)
 	proxyIDRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,31}$`)
-	modelIDRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+	modelIDRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[1m\])?$`)
 	envKeyRe    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
 

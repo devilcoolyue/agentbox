@@ -20,7 +20,11 @@ import (
 // server can deliver SIGINT for user-initiated interrupts.
 const PidFile = "/tmp/.agentbox-chat.pid"
 
-var modelRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+// 尾部可选的 [1m] 是 Claude Code 自己的上下文窗口后缀（如 opus[1m]、
+// claude-opus-5[1m]），不是 API 的 model id，只有 claude 认。方括号只在这个
+// 位置放行，别的地方仍然拒掉。model 是独立 argv 且 sh 里用 "$@" 展开，不会
+// 被当成 glob。
+var modelRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[1m\])?$`)
 
 // claudeThinking maps the abstract effort level chosen in the UI to a
 // MAX_THINKING_TOKENS budget; Claude Code has no CLI flag for this.

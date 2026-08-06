@@ -700,7 +700,8 @@ const EFFORT_OPTS = [
     { v: "high", l: "高" },
     { v: "xhigh", l: "极高", sub: "更快消耗使用额度" },
 ];
-export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+/* 尾部 [1m] 是 Claude Code 的 1M 上下文后缀（opus[1m] 等），与后端 modelRe 保持一致 */
+export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[1m\])?$/;
 function modelOpts() {
     const agent = (S.current && S.current.agent);
     const fromSrv = S.models && S.models[agent];
