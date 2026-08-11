@@ -200,6 +200,21 @@
 .chip .name svg { vertical-align: -1.5px; margin-right: 5px; }
 .chip .sum { color: var(--muted); }
 .chip.result { font-size: 11.5px; color: var(--green); opacity: 0.75; padding-top: 3px; }
+/* 「预览」入口：Agent 刚写出的 HTML 直接在这里点开渲染 */
+.chip.has-open { display: flex; align-items: center; }
+.chip.has-open .name { flex: none; }
+.chip.has-open .sum { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.chip.has-open .chip-open { flex: none; }
+.chip-open {
+  margin-left: 9px; padding: 0 8px; height: 18px;
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+  border-radius: 9px; background: transparent;
+  color: var(--amber); font: inherit; font-size: 11px; line-height: 16px;
+  vertical-align: 1px; cursor: pointer;
+}
+.chip-open:hover, .chip-open:focus-visible {
+  background: color-mix(in srgb, var(--amber) 12%, transparent); outline: none;
+}
 .chip.err, .chip.warn {
   border-radius: 10px;
   padding: 8px 13px;

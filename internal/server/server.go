@@ -57,8 +57,9 @@ type Server struct {
 	dock    *dockerx.Manager
 	chat    *chatManager
 	tunnels *tunnelHub
-	pairs   *pairStore    // outstanding abox-link pairing codes
-	mapAuth mapSourceAuth // source-IP cache for tunnel port-map listeners
+	pairs    *pairStore    // outstanding abox-link pairing codes
+	previews *previewStore // 短时只读的 HTML 预览通行证
+	mapAuth  mapSourceAuth // source-IP cache for tunnel port-map listeners
 
 	tunnelMu   sync.Mutex   // guards the SOCKS listener lifecycle below
 	tunnelLn   net.Listener // nil when the tunnel proxy is not running
@@ -108,6 +109,7 @@ func New(cfg *config.Config) (*Server, error) {
 		dock:       dock,
 		tunnels:    newTunnelHub(),
 		pairs:      newPairStore(),
+		previews:   newPreviewStore(),
 		startedAt:  time.Now(),
 		bootListen: cfg.GetListen(),
 		starts:     map[string]*sync.Mutex{},
@@ -218,6 +220,7 @@ func (s *Server) Run() error {
 	mux.Handle("POST /api/sessions/{id}/files/rename", s.auth(s.withSession(s.handleFileRename)))
 	mux.Handle("GET /api/sessions/{id}/file", s.auth(s.withSession(s.handleFileGet)))
 	mux.Handle("PUT /api/sessions/{id}/file", s.auth(s.withSession(s.handleFilePut)))
+	mux.Handle("GET /api/sessions/{id}/preview", s.auth(s.withSession(s.handlePreviewGrant)))
 	mux.Handle("POST /api/sessions/{id}/images", s.auth(s.withSession(s.handleImageUpload)))
 	mux.Handle("GET /api/marketplace", s.auth(http.HandlerFunc(s.handleMarketList)))
 	mux.Handle("POST /api/sessions/{id}/skills/market", s.auth(s.withSession(s.handleSkillMarketInstall)))
@@ -248,6 +251,9 @@ func (s *Server) Run() error {
 	mux.HandleFunc("POST /api/tunnel/pair/redeem", s.handleTunnelPairRedeem)
 	mux.Handle("GET /api/tunnel/clients", s.auth(http.HandlerFunc(s.handleTunnelClients)))
 	mux.Handle("GET /api/tunnel/clients/{name}", s.auth(http.HandlerFunc(s.handleTunnelClientGet)))
+
+	// 预览直链自带通行证（见 preview.go），不走 s.auth
+	mux.HandleFunc("GET /preview/", s.handlePreviewServe)
 
 	mux.Handle("/", staticHandler())
 

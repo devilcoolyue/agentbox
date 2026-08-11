@@ -26,6 +26,8 @@ const ICONS = {
     /* 账号额度：仪表盘弧 + 指针。弧要占满 2–22 / 4–19，否则挤在下半格，
      * 和同排的 play/stop/trash（都撑到 3–21）摆一起会明显小一号。 */
     gauge: { d: "M3.34 19a10 10 0 1 1 17.32 0M12 14l4-4", box: 24, width: 1.8 },
+    /* HTML 渲染预览：眼睛 */
+    eye: { d: "M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Zm10 2.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z", box: 24, width: 1.8 },
 };
 export function svgIcon(name, size = 13) {
     const ico = ICONS[name];
@@ -70,7 +72,10 @@ export function chip(text, extra) {
     c.textContent = text;
     return c;
 }
-export function toolChip(name, summary) {
+/* 工具 chip；带 htmlPath 时在末尾挂一个「预览」按钮，产品改原型不用再切到文件页
+ * 翻目录。真正的打开逻辑在 preview.ts 用事件委托接管（此处保持纯渲染，也避开
+ * chat-render ↔ preview ↔ files 的环形依赖）。 */
+export function toolChip(name, summary, htmlPath = "") {
     const c = document.createElement("div");
     c.className = "chip tool";
     const n = document.createElement("span");
@@ -82,6 +87,17 @@ export function toolChip(name, summary) {
         s.className = "sum";
         s.textContent = summary;
         c.appendChild(s);
+    }
+    if (htmlPath) {
+        // 改成 flex 行：路径再长也只压缩 .sum，「预览」按钮不会被 ellipsis 裁掉
+        c.classList.add("has-open");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "chip-open";
+        b.dataset.htmlPreview = htmlPath;
+        b.textContent = "预览";
+        b.title = "在预览窗口渲染 " + htmlPath;
+        c.appendChild(b);
     }
     c.title = summary || name;
     return c;
@@ -479,6 +495,15 @@ export function renderEntry(raw) {
         return [chip(raw.error, "err")];
     return [];
 }
+/* 工具入参里指向 HTML 的落盘路径 —— 有它才给 chip 挂「预览」。只认写文件类的
+ * 入参名，Read/Grep 命中的 .html 不算「刚做出来的东西」，不必给入口。 */
+function htmlOutputPath(input) {
+    if (!input || typeof input !== "object")
+        return "";
+    const o = input;
+    const p = String(o.file_path || o.path || o.notebook_path || "");
+    return /\.html?$/i.test(p) ? p : "";
+}
 function summarizeInput(input) {
     if (!input || typeof input !== "object")
         return "";
@@ -559,8 +584,9 @@ export function renderEvent(ev) {
         for (const block of ev.message.content) {
             if (block.type === "text" && block.text)
                 out.push(agentText(block.text));
-            else if (block.type === "tool_use")
-                out.push(toolChip(block.name, summarizeInput(block.input)));
+            else if (block.type === "tool_use") {
+                out.push(toolChip(block.name, summarizeInput(block.input), htmlOutputPath(block.input)));
+            }
             else if (block.type === "thinking" && block.thinking)
                 out.push(thinkBlock(block.thinking));
         }
@@ -604,7 +630,9 @@ export function renderEvent(ev) {
             else if (it.type === "reasoning" && it.text)
                 out.push(thinkBlock(it.text));
             else if (it.type === "file_change" && Array.isArray(it.changes)) {
-                out.push(toolChip("edit", it.changes.map((c) => c.path).join(" ").slice(0, 100)));
+                // 一次改了好几个文件时不猜要预览哪个，只有单个 HTML 才给入口
+                const only = it.changes.length === 1 ? htmlOutputPath(it.changes[0]) : "";
+                out.push(toolChip("edit", it.changes.map((c) => c.path).join(" ").slice(0, 100), only));
             }
             else if (it.type === "web_search" && it.query)
                 out.push(toolChip("search", it.query));

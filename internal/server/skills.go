@@ -284,8 +284,10 @@ func (s *Server) handleSkillFile(w http.ResponseWriter, r *http.Request, sess st
 	if r.URL.Query().Get("raw") == "1" {
 		if r.URL.Query().Get("dl") == "1" {
 			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(p)))
+			http.ServeContent(w, r, filepath.Base(p), info.ModTime(), f)
+			return
 		}
-		http.ServeContent(w, r, filepath.Base(p), info.ModTime(), f)
+		serveRawInline(w, r, f, info)
 		return
 	}
 

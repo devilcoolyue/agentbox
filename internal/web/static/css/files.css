@@ -231,6 +231,37 @@
 }
 .fv-notice .spin { width: 30px; height: 30px; border-width: 3px; }
 .fv-actions .dlg-x { margin: 0; }
+/* HTML 预览把这排撑得很满；宽度不够时让动作区自己折行，别把标题挤没 */
+.fv-actions { flex-wrap: wrap; justify-content: flex-end; }
+.fv-actions .scope-btn { height: 26px; padding: 0 10px; font-size: 12px; }
+.fv-auto { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+/* HTML 渲染预览：iframe 居中，视口档位靠 max-width 收窄模拟平板/手机 */
+.fv-framewrap {
+  flex: 1; min-width: 0;
+  display: flex; justify-content: center;
+  overflow: auto;
+  background: var(--panel-2);
+}
+.fv-frame {
+  flex: 1; min-width: 0; width: 100%; height: 100%;
+  border: 0; background: #fff; /* 原型自己不画底色时，白底才是它在浏览器里的样子 */
+}
+.fv-framewrap[data-vp="tablet"], .fv-framewrap[data-vp="phone"] { padding: 12px 0; }
+.fv-framewrap[data-vp="tablet"] .fv-frame,
+.fv-framewrap[data-vp="phone"] .fv-frame {
+  flex: none; height: 100%;
+  border-radius: 10px; box-shadow: var(--shadow-sm);
+}
+.fv-framewrap[data-vp="tablet"] .fv-frame { width: min(834px, 100%); }
+.fv-framewrap[data-vp="phone"] .fv-frame { width: min(390px, 100%); }
+
+/* 全屏：铺满窗口看整页布局 */
+.dlg-file.fv-max {
+  width: 100vw; height: 100dvh;
+  max-width: 100vw; max-height: 100dvh;
+  margin: 0; border: none; border-radius: 0;
+}
 
 /* ---- 窄屏：工具条两行化、面包屑横滚、行高加大、列只留名称+大小、预览全屏 ---- */
 @media (max-width: 760px) {
@@ -263,6 +294,10 @@
     max-width: 100vw; max-height: 100dvh;
     margin: 0; border: none; border-radius: 0;
   }
+  /* 窄屏本来就满屏了，视口模拟和全屏按钮都没有意义，腾出位置给模式切换 */
+  .fv-vps, #fv-full { display: none !important; }
+  .fv-head { padding: 10px 12px; }
+  .fv-actions { gap: 6px; }
 }
 
 /* 上传进度条 */

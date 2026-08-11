@@ -32,11 +32,12 @@ export function wsURL(path) {
 export function scopeQS() {
     return S.fileScope === "shared" ? "&scope=shared" : "";
 }
-/* 单个文件的下载直链（当前文件范围）。`dl=1` 让服务端加 Content-Disposition，
- * 浏览器才会存盘而不是内联打开。 */
-export function fileDownloadURL(rel) {
+/* 单个文件的下载直链（默认当前文件范围；预览弹窗可能停在另一个范围，故可显式
+ * 指定）。`dl=1` 让服务端加 Content-Disposition，浏览器才会存盘而不是内联打开。 */
+export function fileDownloadURL(rel, scope) {
+    const sq = scope ? (scope === "shared" ? "&scope=shared" : "") : scopeQS();
     return `/api/sessions/${S.current.id}/file?path=${encodeURIComponent(rel)}` +
-        `&dl=1&token=${encodeURIComponent(S.token)}${scopeQS()}`;
+        `&dl=1&token=${encodeURIComponent(S.token)}${sq}`;
 }
 /* 技能目录里某个文件的直链（`raw=1` 直出原始字节）：图片预览用它当 img.src，
  * `dl=1` 则让浏览器存盘。技能页的文本预览走 JSON 接口，不用这个。 */

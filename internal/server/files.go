@@ -554,8 +554,10 @@ func (s *Server) handleFileGet(w http.ResponseWriter, r *http.Request, sess stor
 	defer f.Close()
 	if r.URL.Query().Get("dl") == "1" {
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(p)))
+		http.ServeContent(w, r, filepath.Base(p), info.ModTime(), f)
+		return
 	}
-	http.ServeContent(w, r, filepath.Base(p), info.ModTime(), f)
+	serveRawInline(w, r, f, info)
 }
 
 // handleFilePut writes the request body as the file's new content (creating

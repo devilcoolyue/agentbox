@@ -848,6 +848,21 @@
         <span id="fv-meta" class="fv-meta mono"></span>
       </div>
       <div class="fv-actions">
+        <div id="fv-modes" class="scope-switch hidden" role="tablist" aria-label="查看方式">
+          <button type="button" id="fv-mode-view" class="scope-btn active">预览</button>
+          <button type="button" id="fv-mode-src" class="scope-btn">源码</button>
+        </div>
+        <div id="fv-vps" class="scope-switch fv-vps hidden" role="tablist" aria-label="模拟宽度">
+          <button type="button" class="scope-btn active" data-vp="desktop" title="桌面宽度（自适应）">桌面</button>
+          <button type="button" class="scope-btn" data-vp="tablet" title="平板宽度 834px">平板</button>
+          <button type="button" class="scope-btn" data-vp="phone" title="手机宽度 390px">手机</button>
+        </div>
+        <label id="fv-auto-wrap" class="check fv-auto hidden" title="文件被 Agent 改动后自动重新渲染">
+          <input type="checkbox" id="fv-auto" checked> <span>自动刷新</span>
+        </label>
+        <button id="fv-reload" class="btn btn-sm hidden">刷新</button>
+        <button id="fv-newtab" class="btn btn-sm hidden" title="在新标签页打开预览">新标签页</button>
+        <button id="fv-full" class="btn btn-sm hidden" title="铺满窗口">全屏</button>
         <span id="fv-state" class="fv-state mono"></span>
         <button id="fv-save" class="btn btn-sm btn-primary" disabled>保存</button>
         <button id="fv-download" class="btn btn-sm">下载</button>
@@ -856,6 +871,11 @@
     </header>
     <div class="fv-body">
       <textarea id="fv-editor" class="fv-editor mono hidden" spellcheck="false" wrap="off"></textarea>
+      <div id="fv-framewrap" class="fv-framewrap hidden">
+        <!-- sandbox 不含 allow-same-origin：原型脚本照跑，但读不到控制台的令牌 -->
+        <iframe id="fv-frame" class="fv-frame" title="HTML 预览" referrerpolicy="no-referrer"
+                sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock"></iframe>
+      </div>
       <div id="fv-imgwrap" class="fv-imgwrap hidden"><img id="fv-img" alt=""></div>
       <div id="fv-notice" class="fv-notice hidden"></div>
     </div>

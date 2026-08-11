@@ -3,6 +3,7 @@
 "use strict";
 
 import { S, emit } from "./state.js";
+import type { FileScope } from "./state.js";
 import type { UploadResult } from "./types.js";
 
 /* api 的返回类型由调用点用类型参数指定，例如 api<Session[]>("/sessions")。
@@ -35,11 +36,12 @@ export function scopeQS() {
   return S.fileScope === "shared" ? "&scope=shared" : "";
 }
 
-/* 单个文件的下载直链（当前文件范围）。`dl=1` 让服务端加 Content-Disposition，
- * 浏览器才会存盘而不是内联打开。 */
-export function fileDownloadURL(rel: string) {
+/* 单个文件的下载直链（默认当前文件范围；预览弹窗可能停在另一个范围，故可显式
+ * 指定）。`dl=1` 让服务端加 Content-Disposition，浏览器才会存盘而不是内联打开。 */
+export function fileDownloadURL(rel: string, scope?: FileScope) {
+  const sq = scope ? (scope === "shared" ? "&scope=shared" : "") : scopeQS();
   return `/api/sessions/${S.current!.id}/file?path=${encodeURIComponent(rel)}` +
-    `&dl=1&token=${encodeURIComponent(S.token)}${scopeQS()}`;
+    `&dl=1&token=${encodeURIComponent(S.token)}${sq}`;
 }
 
 /* 技能目录里某个文件的直链（`raw=1` 直出原始字节）：图片预览用它当 img.src，
