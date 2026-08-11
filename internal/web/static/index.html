@@ -137,6 +137,7 @@
       <div id="kebab-menu" class="kebab-menu hidden">
         <button id="kb-start"><span class="glyph"></span>启动</button>
         <button id="kb-stop"><span class="glyph"></span>停止</button>
+        <button id="kb-usage" class="hidden"><span class="glyph"></span>账号额度</button>
         <div class="sep"></div>
         <button id="kb-rename"><span class="glyph"></span>重命名会话</button>
         <button id="kb-delete" class="danger"><span class="glyph"></span>删除会话</button>
@@ -226,6 +227,7 @@
             <div class="wb-actions">
               <button id="btn-start" class="btn btn-sm btn-ico">启动</button>
               <button id="btn-stop" class="btn btn-sm btn-ico">停止</button>
+              <button id="btn-usage" class="btn btn-sm btn-ico hidden" title="查看该账号的订阅额度">额度</button>
               <button id="btn-delete" class="btn btn-sm btn-ico btn-danger">删除</button>
             </div>
           </header>
@@ -1067,6 +1069,26 @@
       <div class="q-block-title">最近流水</div>
       <div id="q-ledger" class="q-ledger"></div>
     </div>
+  </div>
+</dialog>
+
+<!-- Claude 订阅额度 -->
+<dialog id="dlg-ausage" class="dlg-ausage">
+  <div class="dlg-head">
+    <h2>账号额度</h2>
+    <button type="button" id="au-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+
+  <div class="au-acct">
+    <span id="au-label" class="au-name"></span>
+    <span id="au-plan" class="au-plan mono hidden"></span>
+  </div>
+
+  <div id="au-body" class="au-body"></div>
+
+  <div class="au-foot">
+    <span id="au-fetched" class="au-fetched mono"></span>
+    <button type="button" id="au-refresh" class="btn btn-sm">刷新</button>
   </div>
 </dialog>
 

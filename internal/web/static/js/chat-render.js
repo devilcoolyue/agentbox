@@ -23,6 +23,9 @@ const ICONS = {
     download: { d: "M12 3.5v11m0 0 4.5-4.5M12 14.5 7.5 10M4.5 16v3.5h15V16", box: 24, width: 1.8 },
     /* 历史对话入口：表盘 + 指针 */
     clock: { d: "M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18ZM12 7.2v5l3.4 2", box: 24, width: 1.8 },
+    /* 账号额度：仪表盘弧 + 指针。弧要占满 2–22 / 4–19，否则挤在下半格，
+     * 和同排的 play/stop/trash（都撑到 3–21）摆一起会明显小一号。 */
+    gauge: { d: "M3.34 19a10 10 0 1 1 17.32 0M12 14l4-4", box: 24, width: 1.8 },
 };
 export function svgIcon(name, size = 13) {
     const ico = ICONS[name];

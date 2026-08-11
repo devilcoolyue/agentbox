@@ -179,6 +179,37 @@ export interface UsageRow {
   cost_micro_usd: number;
 }
 
+/* ---------------- Claude 订阅额度 ---------------- */
+
+/** 一条限额窗口（5 小时 / 本周 / 本周 Opus…）。percent 是 0-100 的使用率。 */
+export interface UsageWindow {
+  key: string;
+  label: string;
+  percent: number;
+  /** RFC3339；部分窗口上游不下发 */
+  resets_at?: string;
+}
+
+/** 订阅额度用尽后继续走的「额外用量」信用金，金额已换算成货币单位。 */
+export interface UsageExtra {
+  enabled: boolean;
+  percent: number;
+  used: number;
+  limit: number;
+  currency?: string;
+}
+
+/** GET /api/sessions/{id}/account/usage */
+export interface AccountUsage {
+  account_id: string;
+  account_label: string;
+  /** 订阅档位："pro" | "max" | ... */
+  plan?: string;
+  windows: UsageWindow[];
+  extra?: UsageExtra;
+  fetched_at: string;
+}
+
 /* ---------------- 用户 ---------------- */
 
 /** server.userView：管理端用户列表条目。 */

@@ -208,6 +208,7 @@ func (s *Server) Run() error {
 	mux.Handle("POST /api/sessions/{id}/stop", s.auth(s.withSession(s.handleStopSession)))
 	mux.Handle("PATCH /api/sessions/{id}", s.auth(s.withSession(s.handleRenameSession)))
 	mux.Handle("DELETE /api/sessions/{id}", s.auth(s.withSession(s.handleDeleteSession)))
+	mux.Handle("GET /api/sessions/{id}/account/usage", s.auth(s.withSession(s.handleAccountUsage)))
 	mux.Handle("POST /api/sessions/{id}/upload", s.auth(s.withSession(s.handleUpload)))
 	mux.Handle("GET /api/sessions/{id}/archive", s.auth(s.withSession(s.handleArchive)))
 	mux.Handle("GET /api/sessions/{id}/files", s.auth(s.withSession(s.handleFiles)))

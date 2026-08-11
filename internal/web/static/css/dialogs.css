@@ -396,3 +396,52 @@ dialog label.check input { margin: 0; flex: none; }
 }
 .pp-test:hover { color: var(--text); border-color: var(--accent); }
 .pp-check { flex: none; color: var(--accent); font-size: 13px; }
+
+/* ---- 账号额度弹窗（Claude 订阅的 5 小时 / 周窗口） ---- */
+.dlg-ausage { width: min(400px, 94vw); }
+
+.au-acct {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-bottom: 16px;
+}
+.au-name { font-size: 13.5px; color: var(--text); }
+.au-plan {
+  flex: none;
+  font-size: 11px; color: var(--amber);
+  border: 1px solid var(--amber-dim); border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.au-body { display: flex; flex-direction: column; gap: 14px; }
+
+.au-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.au-row-label { font-size: 13px; color: var(--text); }
+.au-row-pct { font-size: 13px; font-weight: 600; color: var(--text); }
+/* 八成起转琥珀、满格转红：颜色是这个弹窗唯一要传达的判断。 */
+.au-row-pct.warn { color: var(--amber); }
+.au-row-pct.full { color: var(--red); }
+
+.au-track {
+  height: 6px; margin-top: 6px;
+  background: var(--panel-2);
+  border-radius: 3px; overflow: hidden;
+}
+.au-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 3px;
+  transition: width 0.25s ease;
+}
+.au-fill.warn { background: var(--amber); }
+.au-fill.full { background: var(--red); }
+
+.au-row-sub { margin-top: 5px; font-size: 11.5px; color: var(--muted); }
+
+.au-msg { font-size: 12.5px; color: var(--muted); padding: 8px 0; }
+.au-msg.err { color: var(--red); }
+
+.au-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 18px;
+}
+.au-fetched { font-size: 11px; color: var(--muted); }

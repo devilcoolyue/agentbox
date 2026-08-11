@@ -14,6 +14,7 @@ import { resetTree, loadFiles } from "./files.js";
 import { loadChanges } from "./changes.js";
 import { loadSkills } from "./skills.js";
 import { agentKey, agentName, agentIcon, agentAvatar, decorateAgentOpts } from "./brand.js";
+import { openAcctUsage, syncUsageBtn } from "./acct-usage.js";
 /* ---------------- 打开 / 切换 ---------------- */
 export async function openSession(sess) {
     if (S.current && S.current.id === sess.id) {
@@ -61,6 +62,7 @@ export function renderHead() {
     $("tab-btn-skills").classList.toggle("hidden", !claude);
     if (!claude && S.tab === "skills")
         setTab("chat");
+    syncUsageBtn(sess.agent);
     if (sess.stop_reason === "idle" && sess.status !== "running") {
         const zzz = document.createElement("span");
         zzz.className = "sc-sleep";
@@ -169,13 +171,16 @@ function openDeleteDlg() {
     $("dlg-del").showModal();
 }
 /* 静态装饰：工作台按钮与 ⋯ 菜单共用同一组图标。工作台直接前置（btnBusy 换成转圈后
- * 仍能原样还原）；菜单放进 .glyph 定宽槽位，保证三行文字左边缘对齐。 */
-for (const [act, ico] of [["start", "play"], ["stop", "stop"], ["delete", "trash"]]) {
+ * 仍能原样还原）；菜单放进 .glyph 定宽槽位，保证各行文字左边缘对齐。 */
+for (const [act, ico] of [["start", "play"], ["stop", "stop"], ["usage", "gauge"], ["delete", "trash"]]) {
     $("btn-" + act).prepend(svgIcon(ico, 17));
     $("kb-" + act).querySelector(".glyph").appendChild(svgIcon(ico, 17));
 }
+/* 重命名只在 ⋯ 菜单里有，工作台头部没有对应按钮，所以不能并进上面那轮。 */
+$("kb-rename").querySelector(".glyph").appendChild(svgIcon("rename", 17));
 $("btn-start").addEventListener("click", doStart);
 $("btn-stop").addEventListener("click", doStop);
+$("btn-usage").addEventListener("click", openAcctUsage);
 $("btn-delete").addEventListener("click", openDeleteDlg);
 /* 窄屏顶栏 ⋯ 菜单：与工作台头部按钮共用同一套动作 */
 $("btn-kebab").addEventListener("click", (e) => {
@@ -231,6 +236,7 @@ async function renameSession() {
 const kebabDo = (fn) => () => { $("kebab-menu").classList.add("hidden"); fn(); };
 $("kb-start").addEventListener("click", kebabDo(doStart));
 $("kb-stop").addEventListener("click", kebabDo(doStop));
+$("kb-usage").addEventListener("click", kebabDo(openAcctUsage));
 $("kb-rename").addEventListener("click", kebabDo(renameSession));
 $("kb-delete").addEventListener("click", kebabDo(openDeleteDlg));
 $("del-cancel").addEventListener("click", () => $("dlg-del").close());
