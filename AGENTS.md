@@ -297,8 +297,38 @@ data/
 
 ### 变更审查（Git）
 
-- `internal/server/git.go` 用**宿主机的 git** 直接操作会话 workspace（不进容器），
-  统一带 `-c safe.directory=<ws>`：仓库属主是 uid 1000，服务端是 root。
+- `internal/server/git.go` 用**宿主机的 git** 直接操作会话工作区里的仓库（不进容器），
+  统一带 `-c safe.directory=<repo>`：仓库属主是 uid 1000，服务端是 root。
+- **必须挡住 git 的向上仓库发现**：`data_dir` 通常就在服务端自己的 checkout 里
+  （默认相对路径 `data`），workspace 自己没有 `.git` 时 `git -C <ws>` 会一路向上找到
+  **服务端仓库**——曾经的表现是每个会话的「变更」页都显示 agentbox 自己的改动，
+  而「提交」会把服务端仓库整棵工作树 `add -A` 进去。`.gitignore` 里的 `/data/` 挡不住，
+  ignore 只管文件跟不跟踪，不管仓库发现。两道防线：`repoRoots` 只认真实存在 `.git`
+  的目录，`runGit` 再用 `GIT_CEILING_DIRECTORIES`（**必须绝对路径**，git 忽略相对项）
+  把发现范围钉死在目标目录。
+- **工作区根几乎从来不是仓库**，项目一般 clone/解压在子目录里，所以 `repoRoots` 往下
+  找两层（跳过隐藏目录与 `node_modules`/`__MACOSX`/`vendor`，符号链接目录不跟随），
+  返回相对 workspace 的斜杠路径列表（`""` = workspace 本身），多个时前端下拉切换。
+  接口的 `repo` 参数只接受这个列表里的值：**写操作（commit/discard）遇到不认识的
+  `repo` 一律报错，不能回落到别的仓库**——用户选的是 A，别把 B 给提交了。
+  status 是读操作，可以回落到第一个并把权威列表带回去让前端重新对齐。
+- 变更列表与 `?path=` 都是**相对仓库根**，不是相对 workspace。
+- 右侧支持「差异 / 完整内容」两种视图：新文件（`??`）相对 HEAD 根本没有 diff，
+  只能走 `git/file` 读工作树里的内容，所以选中新文件时默认就是完整内容视图，
+  「差异」按钮置灰；删除的文件反过来（没内容可读，只有 diff）。`git/file` 复用
+  `resolveUnderRoot` 做逐段 Lstat 的符号链接校验，并按 `maxFileViewBytes` 拒绝大文件、
+  按 NUL/非 UTF-8 拒绝二进制——它渲染成一个个 DOM 行，不能由着文件大小来。
+- `status` 必须带 `--untracked-files=all`：默认口径会把整个未跟踪目录折叠成一条
+  `dir/`，用户看到的是「.claude/」而不是里面那个新文件，单文件的 diff 和丢弃都无从下手。
+  代价是未跟踪的大目录（没 gitignore 的 node_modules）会撑爆列表，所以服务端按
+  `maxStatusFiles` 截断并回 `truncated`。
+- **宿主机 root 的 git 配置不能漏进来**：`GIT_CONFIG_GLOBAL=/dev/null` +
+  `GIT_CONFIG_NOSYSTEM=1`，另外 `-c core.excludesFile=/dev/null` —— 全局排除文件
+  走的是自己的默认路径（`~/.config/git/ignore`），**`GIT_CONFIG_GLOBAL` 管不着它**，
+  必须单独指空。不这么做的话 Claude Code 给 root 写的那条
+  `**/.claude/settings.local.json` 会把用户的文件从审查列表里悄悄抹掉，而且这事只在
+  `HOME` 有值时发生（systemd 起的服务没有 HOME，手工在 shell 里跑就有），
+  两种跑法结论不一样最难查。仓库自己的 `.gitignore` 和 `.git/info/exclude` 照常生效。
 - 写操作（commit / discard）后必须 `chownWorkspace` 把属主修回 1000:1000，
   否则 root 写下的 `.git` 对象会让容器内 agent 后续 git 操作失权。
 - `discard` 是 `checkout HEAD -- <path>` + `clean -fd -- <path>`，破坏性操作，

@@ -11,7 +11,7 @@ import { setThreadBar, closeThreadPanel } from "./chat-threads.js";
 import { svgIcon } from "./chat-render.js";
 import { termTeardown, termDisconnect, openTerm } from "./term.js";
 import { resetTree, loadFiles } from "./files.js";
-import { loadChanges } from "./changes.js";
+import { loadChanges, resetChangesRepo } from "./changes.js";
 import { loadSkills } from "./skills.js";
 import { agentKey, agentName, agentIcon, agentAvatar, decorateAgentOpts } from "./brand.js";
 import { openAcctUsage, syncUsageBtn } from "./acct-usage.js";
@@ -26,6 +26,7 @@ export async function openSession(sess) {
     S.current = sess;
     S.filePath = "";
     resetTree();
+    resetChangesRepo();
     resetChatImgs();
     loadPick();
     $("empty").classList.add("hidden");

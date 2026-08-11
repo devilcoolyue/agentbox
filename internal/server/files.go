@@ -499,16 +499,21 @@ func (s *Server) handleFileRename(w http.ResponseWriter, r *http.Request, sess s
 }
 
 // resolveFile validates ?path= and returns the absolute path of a file inside
-// the request's files root (workspace or shared). Every path component is
-// checked with Lstat so a workspace symlink can't lead the web API outside the
-// mounted directory; the final component may be absent (a new file created via
-// the editor's save path).
+// the request's files root (workspace or shared).
 func (s *Server) resolveFile(r *http.Request, sess store.Session) (string, error) {
 	root, err := s.filesRoot(r, sess)
 	if err != nil {
 		return "", err
 	}
-	rel := filepath.Clean(filepath.FromSlash(r.URL.Query().Get("path")))
+	return resolveUnderRoot(root, r.URL.Query().Get("path"))
+}
+
+// resolveUnderRoot joins a client-supplied relative path onto root. Every path
+// component is checked with Lstat so a workspace symlink can't lead the web API
+// outside the mounted directory; the final component may be absent (a new file
+// created via the editor's save path).
+func resolveUnderRoot(root, want string) (string, error) {
+	rel := filepath.Clean(filepath.FromSlash(want))
 	if rel == "." || rel == "" || !filepath.IsLocal(rel) {
 		return "", fmt.Errorf("%w: invalid path", errFileOpInvalid)
 	}

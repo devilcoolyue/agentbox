@@ -392,11 +392,17 @@ export interface ChangeEntry {
   untracked: boolean;
 }
 
-/** GET /api/sessions/{id}/git/status：非 Git 仓库时只返回 is_repo:false。 */
+/** GET /api/sessions/{id}/git/status：工作区里没有仓库时只返回 is_repo:false。 */
 export interface GitStatus {
   is_repo: boolean;
+  /** 当前查看的仓库，相对 workspace 的斜杠路径；"" 表示 workspace 本身 */
+  repo?: string;
+  /** 工作区里发现的全部仓库（含 repo 自己） */
+  repos?: string[];
   branch?: string;
   files?: ChangeEntry[];
+  /** 变更太多被截断（未跟踪的大目录会撑爆列表），files 只是前一部分 */
+  truncated?: boolean;
 }
 
 /** POST /api/sessions/{id}/git/commit */

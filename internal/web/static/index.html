@@ -406,6 +406,7 @@
           <!-- 变更（Git 审查） -->
           <section id="tab-changes" class="pane hidden">
             <div class="changes-bar">
+              <select id="changes-repo" class="changes-repo mono hidden" aria-label="仓库"></select>
               <div id="changes-branch" class="changes-branch mono"></div>
               <div class="changes-actions">
                 <button id="btn-changes-refresh" class="btn btn-sm">刷新</button>
@@ -415,7 +416,16 @@
             </div>
             <div class="changes-body">
               <div id="changes-list" class="changes-list"></div>
-              <div id="changes-diff" class="changes-diff"></div>
+              <div class="changes-view">
+                <div id="changes-view-bar" class="changes-view-bar hidden">
+                  <span id="changes-view-path" class="mono"></span>
+                  <div class="changes-view-tabs">
+                    <button type="button" id="btn-view-diff" class="seg">差异</button>
+                    <button type="button" id="btn-view-full" class="seg">完整内容</button>
+                  </div>
+                </div>
+                <div id="changes-diff" class="changes-diff"></div>
+              </div>
             </div>
           </section>
 

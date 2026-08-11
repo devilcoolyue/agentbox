@@ -24,7 +24,7 @@
   - **对话**：服务端用 `claude -p --output-format stream-json`（或 `codex exec --json`）跑无头回合，事件流经 WebSocket 推给浏览器。一个会话可以开多条**对话线程**（各自独立上下文，可随时切回继续），每条线程落盘为 `chats/<线程id>.jsonl` 并记录自己的 provider 会话 id 供 `--resume` 续聊；旧版单文件 `chat.jsonl` 首次访问时自动迁移。历史加载超时或失败时页面会显示重试入口，并在恢复前暂停发送，避免把消息发进尚未确认的线程。
   - **终端**：浏览器 xterm.js ⇄ WebSocket ⇄ `docker exec` PTY，可选进 Shell 或直接进 Agent 交互界面。
 - **长对话定位**：上滚离开底部后，输入框上方会浮出返回最新消息按钮，接近底部时自动收起。
-- **变更审查**：工作台「变更」页签直接看 workspace 相对上次提交的改动（文件列表 + 彩色 diff），可一键提交或丢弃（单文件/全部）。默认 `bypassPermissions` 下，这是审查 Agent 改动的主入口，不必切到终端敲 `git diff`。
+- **变更审查**：工作台「变更」页签直接看会话工作区里 Git 仓库相对上次提交的改动（文件列表 + 彩色 diff），右侧可在「差异 / 完整内容」之间切换——新增的文件本来就没有 diff，选中时直接显示文件内容——并可一键提交或丢弃（单文件/全部）。工作区根不是仓库时会往下找两层（项目一般 clone/解压在子目录里），发现多个仓库时顶部下拉切换。默认 `bypassPermissions` 下，这是审查 Agent 改动的主入口，不必切到终端敲 `git diff`。
 - **断线与休眠**：对话通道断开时页面顶部出现状态条并指数退避重连，重连后自动补拉断线期间错过的消息；与服务器彻底失联会常驻离线横幅。会话被空闲自动停机后标记为「休眠」（区别于手动停止），直接发消息即自动唤醒并把这条消息发出去。
 - **文件管理**：除上传/下载/移动/删除外，还可新建文件夹、重命名、多选与拖拽上传（带进度条）。
 - **重命名与检索**：会话可在 ⋯ 菜单里改名；对话线程可改名，历史面板支持按标题搜索。
@@ -311,10 +311,14 @@ GET    /api/sessions/{id}/skills/{name}/file    读技能目录里的文件 ?pat
                                                  ?raw=1 直出原始字节，加 &dl=1 下载）
 DELETE /api/sessions/{id}/skills/{name}         删除技能 ?scope=
 POST   /api/sessions/{id}/skills/{name}/copy    在范围间复制 {to:"session"|"template"} ?scope=
-GET    /api/sessions/{id}/git/status  变更列表（分支 + 文件状态；非 git 仓库时 is_repo=false）
-GET    /api/sessions/{id}/git/diff    unified diff（?path= 查看单文件）
-POST   /api/sessions/{id}/git/commit  git add -A 后提交 {message}
-POST   /api/sessions/{id}/git/discard 丢弃改动 {path?}（省略=全部，恢复到 HEAD）
+GET    /api/sessions/{id}/git/status  变更列表（repos=工作区里发现的仓库、repo=当前那个、
+                                      分支 + 文件状态，未跟踪目录逐个文件列出、超 2000 条
+                                      truncated=true；一个仓库都没有时 is_repo=false）?repo=
+GET    /api/sessions/{id}/git/diff    unified diff（?path= 查看单文件，相对仓库根）?repo=
+GET    /api/sessions/{id}/git/file    ?path= 文件当前完整内容（新文件没有 diff，看的就是它；
+                                      纯文本，超 512KB 或二进制拒绝）?repo=
+POST   /api/sessions/{id}/git/commit  git add -A 后提交 {message, repo?}
+POST   /api/sessions/{id}/git/discard 丢弃改动 {path?, repo?}（省略 path=全部，恢复到 HEAD）
 GET    /api/sessions/{id}/history   当前对话线程的历史（含线程元数据）
 GET    /api/sessions/{id}/chat/threads              对话线程列表（标题/时间/轮数/是否可续聊）
 POST   /api/sessions/{id}/chat/threads              开启新对话线程（旧线程保留可切回）

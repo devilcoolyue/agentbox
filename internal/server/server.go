@@ -232,6 +232,7 @@ func (s *Server) Run() error {
 	mux.Handle("POST /api/sessions/{id}/skills/{name}/copy", s.auth(s.withSession(s.handleSkillCopy)))
 	mux.Handle("GET /api/sessions/{id}/git/status", s.auth(s.withSession(s.handleGitStatus)))
 	mux.Handle("GET /api/sessions/{id}/git/diff", s.auth(s.withSession(s.handleGitDiff)))
+	mux.Handle("GET /api/sessions/{id}/git/file", s.auth(s.withSession(s.handleGitFile)))
 	mux.Handle("POST /api/sessions/{id}/git/commit", s.auth(s.withSession(s.handleGitCommit)))
 	mux.Handle("POST /api/sessions/{id}/git/discard", s.auth(s.withSession(s.handleGitDiscard)))
 	mux.Handle("GET /api/sessions/{id}/history", s.auth(s.withSession(s.handleHistory)))
