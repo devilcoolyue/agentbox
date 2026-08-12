@@ -97,6 +97,12 @@
 }
 .md-link { color: var(--amber); text-decoration: none; border-bottom: 1px solid var(--amber-dim); }
 .md-link:hover { border-bottom-color: var(--amber); }
+/* 文档里的图片：没写尺寸时不许撑破正文；透明 PNG/SVG 铺棋盘格才看得清边界 */
+.md-img {
+  max-width: 100%; height: auto;
+  vertical-align: middle; border-radius: 6px;
+  background: repeating-conic-gradient(var(--panel-2) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+}
 .md-tablewrap {
   max-width: 100%; overflow-x: auto;
   margin: 2px 0 10px;

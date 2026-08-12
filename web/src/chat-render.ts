@@ -187,19 +187,65 @@ function agentText(text: string) {
  * ```math 围栏承载公式（Claude 惯用 $$…$$），不特判就会渲染成代码块而非公式。 */
 const MATH_FENCE = new Set(["math", "latex", "tex"]);
 
-export function formatText(text: string) {
-  const frag = document.createDocumentFragment();
-  // split 产物：[文本, 语言, 段, 语言, 段, ...]——奇数下标是围栏行的语言捕获，
-  // 偶数下标的段在 文本/代码体 之间交替（开栏后是代码体，闭栏后回到文本）
-  const parts = String(text).split(/```([\w+-]*)[ \t]*\n?/);
-  for (let i = 0; i < parts.length; i += 2) {
-    const isCode = (i / 2) % 2 === 1;
-    if (!isCode) renderBlocks(frag, parts[i]);
-    else if (MATH_FENCE.has((parts[i - 1] || "").toLowerCase()))
-      frag.appendChild(renderMath(parts[i].replace(/\n$/, "").trim(), true));
-    else frag.appendChild(codeBlock(parts[i - 1] || "", parts[i].replace(/\n$/, "")));
+/* 拆 YAML front matter：只认最简单的 key: value 单行形式，与服务端取技能
+ * description 的口径一致。没有 front matter 时原样返回正文。
+ * 渲染 .md 的地方（技能文档、文件预览）都得先剥掉它，否则开头的 --- 会被当成
+ * 一条分隔线加几行文字。 */
+export function splitFrontMatter(text: string): { meta: [string, string][]; body: string } {
+  const norm = text.replace(/\r\n/g, "\n");
+  if (!norm.startsWith("---\n")) return { meta: [], body: norm };
+  const end = norm.indexOf("\n---", 3);
+  if (end < 0) return { meta: [], body: norm };
+  const head = norm.slice(4, end);
+  const body = norm.slice(end + 4).replace(/^\n+/, "");
+  const meta: [string, string][] = [];
+  for (const line of head.split("\n")) {
+    const i = line.indexOf(":");
+    if (i <= 0 || /^\s/.test(line)) continue; // 缩进行是上一个键的续行，跳过
+    meta.push([line.slice(0, i).trim(), line.slice(i + 1).trim().replace(/^["']|["']$/g, "")]);
   }
-  return frag;
+  return { meta, body };
+}
+
+/* front matter 渲染成一排灰色小标签，信息不丢又不占正文位置 */
+export function frontMatterChips(meta: [string, string][]) {
+  const fm = document.createElement("div");
+  fm.className = "skill-fm";
+  for (const [k, v] of meta) {
+    const item = document.createElement("span");
+    item.className = "skill-fm-item mono";
+    item.textContent = `${k}: ${v}`;
+    fm.appendChild(item);
+  }
+  return fm;
+}
+
+/* 图片地址解析器：把 md 里写的 src 换成真能取到的 URL，取不到就返回空串。
+ * 只有传了它的调用方（文件预览）才会把 ![]() / <img> 画成图片——对话流不传，
+ * 模型文本里的远程图片不该被悄悄拉取。 */
+export type MdImgResolver = (src: string) => string;
+
+/* 渲染全程同步，用一个模块级变量就够，不必把 opts 一路穿到行内解析里 */
+let imgResolver: MdImgResolver | null = null;
+
+export function formatText(text: string, opts: { img?: MdImgResolver } = {}) {
+  imgResolver = opts.img || null;
+  try {
+    const frag = document.createDocumentFragment();
+    // split 产物：[文本, 语言, 段, 语言, 段, ...]——奇数下标是围栏行的语言捕获，
+    // 偶数下标的段在 文本/代码体 之间交替（开栏后是代码体，闭栏后回到文本）
+    const parts = String(text).split(/```([\w+-]*)[ \t]*\n?/);
+    for (let i = 0; i < parts.length; i += 2) {
+      const isCode = (i / 2) % 2 === 1;
+      if (!isCode) renderBlocks(frag, parts[i]);
+      else if (MATH_FENCE.has((parts[i - 1] || "").toLowerCase()))
+        frag.appendChild(renderMath(parts[i].replace(/\n$/, "").trim(), true));
+      else frag.appendChild(codeBlock(parts[i - 1] || "", parts[i].replace(/\n$/, "")));
+    }
+    return frag;
+  } finally {
+    imgResolver = null;
+  }
 }
 
 function codeBlock(lang: string, body: string) {
@@ -419,8 +465,48 @@ function renderTable(parent: Node, lines: string[], i: number) {
   return i;
 }
 
-/* 行内：`code`、**粗**、*斜*、~~删除~~、[文字](http://…)、裸链接 */
-const INLINE_RE = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|~~([^~\n]+)~~|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()"']+)/g;
+/* 行内：`code`、**粗**、*斜*、~~删除~~、[文字](http://…)、裸链接、
+ * ![alt](src) 与裸 <img …>（README 里常拿它控制 logo 尺寸，纯 md 语法做不到）。
+ * 图片两支只在有 imgResolver 时成图，否则退回原样文字。 */
+const INLINE_RE = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|~~([^~\n]+)~~|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()"']+)|!\[([^\]\n]*)\]\(\s*([^\s)]+)[^)\n]*\)|<img\s([^<>]*?)\/?>/g;
+
+function mdLink(text: string, href: string) {
+  const a = document.createElement("a");
+  a.className = "md-link";
+  a.textContent = text;
+  a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener";
+  return a;
+}
+
+/* 裸 <img> 标签的属性表：只按名取值，标签本身永远不进 innerHTML，
+ * 所以 onerror 之类的事件属性天然被丢在门外。 */
+function htmlAttrs(raw: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of raw.matchAll(/([a-zA-Z-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
+    out[m[1].toLowerCase()] = m[2] ?? m[3] ?? m[4] ?? "";
+  }
+  return out;
+}
+
+/* 只认 src / alt / width / height / title 这几个属性，尺寸还得是纯数字或百分比。
+ * 解析器拿不出 URL（没传解析器、或路径落在够不着的地方）时返回 null，
+ * 由调用方退回成原样文字。 */
+function mdImage(src: string, at: { alt?: string; width?: string; height?: string; title?: string }) {
+  const url = imgResolver ? imgResolver(src) : "";
+  if (!url) return null;
+  const img = document.createElement("img");
+  img.className = "md-img";
+  img.src = url;
+  img.alt = at.alt || "";
+  if (at.title) img.title = at.title;
+  for (const k of ["width", "height"] as const) {
+    const v = (at[k] || "").trim();
+    if (/^\d+(px|%)?$/.test(v)) img.style[k] = /^\d+$/.test(v) ? v + "px" : v;
+  }
+  return img;
+}
 
 /* 行内数学：\(…\)、$…$ 是行内式；\[…\]、$$…$$ 本是展示式，但只有「独占一行」
  * 时才由 renderBlocks/tryDisplayMath 成段渲染——Codex/GPT 常把 \[…\] 写在句中或
@@ -464,14 +550,17 @@ function appendInlineFmt(parent: Node, text: string) {
       const del = document.createElement("del");
       del.textContent = m[5];
       parent.appendChild(del);
+    } else if (m[10] != null) {
+      // 成不了图时（对话流没有解析器）：远程图退成链接，本地路径退成原样文字
+      parent.appendChild(
+        mdImage(m[10], { alt: m[9] || "" }) ||
+        (/^https?:\/\//i.test(m[10]) ? mdLink(m[9] || m[10], m[10]) : document.createTextNode(m[0])),
+      );
+    } else if (m[11] != null) {
+      const at = htmlAttrs(m[11]);
+      parent.appendChild(mdImage(at.src || "", at) || document.createTextNode(m[0]));
     } else {
-      const a = document.createElement("a");
-      a.className = "md-link";
-      a.textContent = m[6] || m[8];
-      a.href = m[7] || m[8];
-      a.target = "_blank";
-      a.rel = "noopener";
-      parent.appendChild(a);
+      parent.appendChild(mdLink(m[6] || m[8], m[7] || m[8]));
     }
     last = m.index + m[0].length;
   }

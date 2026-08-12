@@ -256,6 +256,15 @@
 .fv-framewrap[data-vp="tablet"] .fv-frame { width: min(834px, 100%); }
 .fv-framewrap[data-vp="phone"] .fv-frame { width: min(390px, 100%); }
 
+/* Markdown 渲染预览：正文限宽居中，排版直接借用对话流的 .msg.agent */
+.fv-mdwrap {
+  flex: 1; min-width: 0;
+  overflow: auto;
+  background: var(--bg);
+  padding: 20px 24px 40px;
+}
+.fv-md { max-width: 780px; margin: 0 auto; font-size: 14px; }
+
 /* 全屏：铺满窗口看整页布局 */
 .dlg-file.fv-max {
   width: 100vw; height: 100dvh;
@@ -298,6 +307,7 @@
   .fv-vps, #fv-full { display: none !important; }
   .fv-head { padding: 10px 12px; }
   .fv-actions { gap: 6px; }
+  .fv-mdwrap { padding: 14px 14px 30px; }
 }
 
 /* 上传进度条 */

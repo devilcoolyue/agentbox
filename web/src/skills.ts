@@ -14,7 +14,7 @@ import {
   $, spinEl, toast, askConfirm, fmtBytes, fmtSize, fmtTime, btnBusy, btnDone, startDownload,
 } from "./util.js";
 import { api, skillFileURL } from "./api.js";
-import { formatText } from "./chat-render.js";
+import { formatText, splitFrontMatter, frontMatterChips } from "./chat-render.js";
 
 /* sel 是右侧显示什么：path 为空表示技能本身（SKILL.md 概览 + 操作按钮），
  * 否则是技能目录里的某个文件。open 装展开的节点键：技能名，或「技能名/子目录」。
@@ -546,40 +546,12 @@ function docView(label: string, content: string, truncated: boolean, skipMeta: b
     view.className = "skill-view msg agent";
     const parts: Node[] = [];
     const rest = skipMeta ? meta.filter(([k]) => k !== "name" && k !== "description") : meta;
-    if (rest.length) {
-      const fm = document.createElement("div");
-      fm.className = "skill-fm";
-      for (const [k, v] of rest) {
-        const item = document.createElement("span");
-        item.className = "skill-fm-item mono";
-        item.textContent = `${k}: ${v}`;
-        fm.appendChild(item);
-      }
-      parts.push(fm);
-    }
+    if (rest.length) parts.push(frontMatterChips(rest));
     parts.push(formatText(body + tail));
     view.replaceChildren(...parts);
   };
   paint();
   return [bar, view];
-}
-
-/* 拆 YAML front matter：只认最简单的 key: value 单行形式，与服务端取
- * description 的口径一致。没有 front matter 时原样返回正文。 */
-function splitFrontMatter(text: string): { meta: [string, string][]; body: string } {
-  const norm = text.replace(/\r\n/g, "\n");
-  if (!norm.startsWith("---\n")) return { meta: [], body: norm };
-  const end = norm.indexOf("\n---", 3);
-  if (end < 0) return { meta: [], body: norm };
-  const head = norm.slice(4, end);
-  const body = norm.slice(end + 4).replace(/^\n+/, "");
-  const meta: [string, string][] = [];
-  for (const line of head.split("\n")) {
-    const i = line.indexOf(":");
-    if (i <= 0 || /^\s/.test(line)) continue; // 缩进行是上一个键的续行，跳过
-    meta.push([line.slice(0, i).trim(), line.slice(i + 1).trim().replace(/^["']|["']$/g, "")]);
-  }
-  return { meta, body };
 }
 
 async function copySkill(name: string, btn: HTMLButtonElement) {

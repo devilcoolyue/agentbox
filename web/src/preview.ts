@@ -1,9 +1,13 @@
-/* preview：文件预览 / 在线编辑弹窗（HTML 实时渲染、文本编辑、图片查看、
- * 二进制/超大文件提示）。
+/* preview：文件预览 / 在线编辑弹窗（HTML 实时渲染、Markdown 渲染、文本编辑、
+ * 图片查看、二进制/超大文件提示）。
  *
  * HTML 走 iframe 真实渲染而不是贴源码：产品改原型时要看的是页面本身。渲染用的
  * 直链由服务端另发一张限权通行证（见 internal/server/preview.go），iframe 再叠一层
- * sandbox —— 原型里的脚本能跑，但拿不到控制台的登录令牌。 */
+ * sandbox —— 原型里的脚本能跑，但拿不到控制台的登录令牌。
+ *
+ * Markdown 不用 iframe：源码本来就要拉下来编辑，直接用对话流那套轻量渲染
+ * （chat-render.formatText）画在弹窗里，画的是编辑器里的当前内容，所以改一行
+ * 切过去就能看到，不必先保存。 */
 "use strict";
 
 import { S } from "./state.js";
@@ -12,8 +16,11 @@ import type { FileEntry } from "./types.js";
 import { $, withSpin, fmtSize, askConfirm, startDownload } from "./util.js";
 import { api, fileDownloadURL } from "./api.js";
 import { loadFiles } from "./files.js";
+import { formatText, splitFrontMatter, frontMatterChips } from "./chat-render.js";
 
 type FvMode = "preview" | "source";
+/** html / md 有「预览 · 源码」两态，plain 只有源码 */
+type FvKind = "html" | "md" | "plain";
 type Viewport = "desktop" | "tablet" | "phone";
 
 const FV = {
@@ -22,8 +29,7 @@ const FV = {
   name: "",
   dirty: false,
   blobURL: "",
-  /** HTML 才有「预览 / 源码」两态；其余文件恒为 source */
-  html: false,
+  kind: "plain" as FvKind,
   mode: "preview" as FvMode,
   /** 服务端签发的预览直链，刷新时加 cache-buster 重新载入 */
   url: "",
@@ -37,6 +43,7 @@ const FV = {
 
 const IMG_EXT = ["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp"];
 const HTML_EXT = ["html", "htm"];
+const MD_EXT = ["md", "markdown", "mdx"];
 const EDIT_MAX = 2 << 20; // 编辑器最大 2MB
 const POLL_MS = 2500;
 
@@ -46,9 +53,10 @@ const qs = () => (FV.scope === "shared" ? "&scope=shared" : "");
 const fileAPI = (extra = "") =>
   `/api/sessions/${S.current!.id}/file?path=${encodeURIComponent(FV.path)}${qs()}${extra}`;
 
-function fvShow(which: "editor" | "frame" | "img" | "notice") {
+function fvShow(which: "editor" | "frame" | "md" | "img" | "notice") {
   $("fv-editor").classList.toggle("hidden", which !== "editor");
   $("fv-framewrap").classList.toggle("hidden", which !== "frame");
+  $("fv-mdwrap").classList.toggle("hidden", which !== "md");
   $("fv-imgwrap").classList.toggle("hidden", which !== "img");
   $("fv-notice").classList.toggle("hidden", which !== "notice");
 }
@@ -58,19 +66,23 @@ function notice(text: string) {
   fvShow("notice");
 }
 
-/* 头部按钮的显隐：只有 HTML 才有模式切换、视口模拟、刷新、全屏这一排 */
+/* 头部按钮的显隐：能渲染的（HTML / Markdown）才有模式切换、刷新、全屏；
+ * 视口模拟和「新标签页」是 iframe 独有的。 */
 function syncChrome() {
-  const preview = FV.html && FV.mode === "preview";
-  $("fv-modes").classList.toggle("hidden", !FV.html);
-  $("fv-vps").classList.toggle("hidden", !preview);
+  const dual = FV.kind !== "plain";
+  const preview = dual && FV.mode === "preview";
+  const frame = FV.kind === "html" && preview;
+  $("fv-modes").classList.toggle("hidden", !dual);
+  $("fv-vps").classList.toggle("hidden", !frame);
   $("fv-auto-wrap").classList.toggle("hidden", !preview);
   $("fv-reload").classList.toggle("hidden", !preview);
-  $("fv-newtab").classList.toggle("hidden", !preview);
-  $("fv-full").classList.toggle("hidden", !FV.html);
+  $("fv-newtab").classList.toggle("hidden", !frame);
+  $("fv-full").classList.toggle("hidden", !dual);
   $("fv-mode-view").classList.toggle("active", FV.mode === "preview");
   $("fv-mode-src").classList.toggle("active", FV.mode === "source");
-  // 预览态没有「保存」可言，避免和 fv-state 的提示打架
-  $("fv-save").classList.toggle("hidden", preview);
+  // iframe 预览态没有「保存」可言，避免和 fv-state 的提示打架；Markdown 预览
+  // 画的就是编辑器内容，留着保存键才能改完直接存。
+  $("fv-save").classList.toggle("hidden", frame);
 }
 
 /* ---------------- 打开 ---------------- */
@@ -86,8 +98,8 @@ export async function openPreview(fullRel: string, ent?: FileEntry, scope: FileS
   if (FV.blobURL) { URL.revokeObjectURL(FV.blobURL); FV.blobURL = ""; }
 
   const ext = (FV.name.split(".").pop() || "").toLowerCase();
-  FV.html = HTML_EXT.includes(ext);
-  FV.mode = FV.html ? "preview" : "source";
+  FV.kind = HTML_EXT.includes(ext) ? "html" : MD_EXT.includes(ext) ? "md" : "plain";
+  FV.mode = FV.kind === "plain" ? "source" : "preview";
 
   $("fv-name").textContent = FV.name;
   setMeta(ent);
@@ -98,11 +110,39 @@ export async function openPreview(fullRel: string, ent?: FileEntry, scope: FileS
   syncChrome();
   $<HTMLDialogElement>("dlg-file").showModal();
 
-  if (FV.html) {
+  // 从对话点进来时没有 ent，补一次 stat 把大小/权限填上
+  const fillMeta = () => {
+    if (ent) return;
+    statFile().then((e) => { if (e && FV.path === fullRel) { setMeta(e); FV.mtime = e.mtime; } });
+  };
+
+  if (FV.kind === "html") {
     await mountFrame();
     startPoll();
-    // 从对话点进来时没有 ent，补一次 stat 把大小/权限填上
-    if (!ent) statFile().then((e) => { if (e && FV.path === fullRel) { setMeta(e); FV.mtime = e.mtime; } });
+    fillMeta();
+    return;
+  }
+  if (FV.kind === "md") {
+    // 源码本来就要拉：预览和编辑共用同一份文本。没有 ent 时先 stat 一次拿大小，
+    // 顺手把元信息也补了，不用再发第二次列目录。
+    let info: FileEntry | null = ent || null;
+    if (!info) {
+      info = await statFile();
+      if (FV.path !== fullRel) return; // 期间又点开了别的文件
+      if (info) { setMeta(info); FV.mtime = info.mtime; }
+    }
+    await loadSource(info?.size ?? 0);
+    if (FV.path !== fullRel) return;
+    if (FV.srcLoaded) {
+      renderMD();
+      $("fv-state").textContent = ""; // loadSource 留下的「可编辑」是源码态的说明
+      startPoll();
+    } else {
+      // 太大 / 是二进制：loadSource 已经把原因写在提示区了，别再留一个点不开的「预览」
+      FV.kind = "plain";
+      FV.mode = "source";
+    }
+    syncChrome();
     return;
   }
   if (IMG_EXT.includes(ext)) {
@@ -171,6 +211,67 @@ async function loadSource(size: number) {
   }
 }
 
+/* ---------------- Markdown 渲染态 ---------------- */
+
+/* 画的是编辑器里的当前文本（含未保存的改动），改一行切过来就能看到效果。
+ * front matter 单独列成小标签，免得开头的 --- 被当成分隔线加几行碎文字。
+ * 重画保留滚动位置：Agent 正在往长文档里追加时，自动刷新不该把人踢回开头。 */
+function renderMD() {
+  const wrap = $("fv-mdwrap");
+  const top = wrap.scrollTop;
+  const { meta, body } = splitFrontMatter($<HTMLTextAreaElement>("fv-editor").value);
+  const parts: Node[] = [];
+  if (meta.length) parts.push(frontMatterChips(meta));
+  parts.push(formatText(body, { img: resolveMDImg }));
+  $("fv-md").replaceChildren(...parts);
+  fvShow("md");
+  wrap.scrollTop = top;
+}
+
+/* md 里的图片地址 → 能取到的 URL。相对路径按 md 文件所在目录解析成文件接口
+ * 直链（token 走查询串：<img> 发不了 Authorization 头）；http(s)、data:image
+ * 原样放行；javascript: 之类的伪协议和够不着的容器绝对路径一律返回空串，
+ * 由渲染层退回成原样文字。 */
+function resolveMDImg(src: string): string {
+  const raw = src.trim();
+  if (!raw || !S.current) return "";
+  if (/^(https?:\/\/|data:image\/)/i.test(raw)) return raw;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return "";
+  let scope = FV.scope;
+  let rel = "";
+  if (raw.startsWith("/workspace/")) { scope = "workspace"; rel = raw.slice("/workspace/".length); }
+  else if (raw.startsWith("/shared/")) { scope = "shared"; rel = raw.slice("/shared/".length); }
+  else if (raw.startsWith("/")) return ""; // 容器里的其它绝对路径，文件接口够不着
+  else rel = joinFrom(FV.path, raw);
+  if (!rel) return "";
+  const sq = scope === "shared" ? "&scope=shared" : "";
+  return `/api/sessions/${S.current.id}/file?path=${encodeURIComponent(rel)}` +
+    `&token=${encodeURIComponent(S.token)}${sq}`;
+}
+
+/* 相对 base 文件所在目录解析 src，顺手把 . / .. 折掉；爬出根目录返回空串 */
+function joinFrom(base: string, src: string) {
+  const dir = base.split("/").slice(0, -1);
+  const out: string[] = [];
+  for (const seg of dir.concat(src.split(/[/\\]/))) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") { if (!out.length) return ""; out.pop(); continue; }
+    out.push(seg);
+  }
+  return out.join("/");
+}
+
+/* 重新从磁盘拉一遍源码再画（「刷新」按钮和自动刷新都走这里） */
+async function reloadMD(known?: FileEntry | null) {
+  const ent = known === undefined ? await statFile() : known;
+  if (ent) { FV.mtime = ent.mtime; setMeta(ent); }
+  await loadSource(ent?.size ?? 0);
+  if (!FV.srcLoaded) return; // 读失败/被换成二进制：提示区已经说明原因
+  FV.dirty = false;
+  $<HTMLButtonElement>("fv-save").disabled = true;
+  if (FV.mode === "preview") renderMD();
+}
+
 /* ---------------- 预览态 ---------------- */
 
 async function mountFrame() {
@@ -203,20 +304,27 @@ function setViewport(vp: Viewport) {
 }
 
 /* Agent 写完文件 → mtime 变 → 自动重渲染。勾掉自动刷新就只提示不动画面，
- * 免得正在里面点着看的时候被踹回首屏。 */
+ * 免得正在里面点着看的时候被踹回首屏；本地有未保存的改动时同样只提示，
+ * 重新拉源码会把人正在写的内容冲掉。 */
 function startPoll() {
   stopPoll();
   FV.poll = setInterval(async () => {
-    if (!FV.html || FV.mode !== "preview") return;
+    if (FV.kind === "plain" || FV.mode !== "preview") return;
     const ent = await statFile();
     if (!ent || !ent.mtime || ent.mtime === FV.mtime) return;
     FV.mtime = ent.mtime;
     setMeta(ent);
-    if ($<HTMLInputElement>("fv-auto").checked) {
-      reloadFrame();
+    // md 自动刷新要重拉源码，本地有未保存改动时只提示不覆盖；iframe 重渲染不碰
+    // 编辑器，照刷不误
+    const keep = FV.kind === "md" && FV.dirty;
+    if ($<HTMLInputElement>("fv-auto").checked && !keep) {
+      if (FV.kind === "md") await reloadMD(ent);
+      else reloadFrame();
       $("fv-state").textContent = "已更新 " + new Date().toLocaleTimeString();
     } else {
-      $("fv-state").textContent = "文件已更新，点「刷新」查看";
+      $("fv-state").textContent = keep
+        ? "文件已在外部更新，保存会覆盖"
+        : "文件已更新，点「刷新」查看";
     }
   }, POLL_MS);
 }
@@ -227,10 +335,15 @@ function stopPoll() {
 }
 
 async function setMode(mode: FvMode) {
-  if (!FV.html || FV.mode === mode) return;
+  if (FV.kind === "plain" || FV.mode === mode) return;
   FV.mode = mode;
   syncChrome();
   if (mode === "preview") {
+    if (FV.kind === "md") {
+      renderMD();
+      $("fv-state").textContent = FV.dirty ? "未保存" : "";
+      return;
+    }
     if (FV.url) { fvShow("frame"); reloadFrame(); } else await mountFrame();
     $("fv-state").textContent = "";
     return;
@@ -302,8 +415,20 @@ async function saveFile() {
 $("fv-save").addEventListener("click", saveFile);
 $("fv-mode-view").addEventListener("click", () => setMode("preview"));
 $("fv-mode-src").addEventListener("click", () => setMode("source"));
-$("fv-reload").addEventListener("click", () => {
-  reloadFrame();
+$("fv-reload").addEventListener("click", async () => {
+  if (FV.kind === "md") {
+    // Markdown 刷新 = 重新拉源码，会盖掉编辑器里没保存的东西，先问一句
+    if (FV.dirty) {
+      const ok = await askConfirm("重新载入会丢弃未保存的修改，确定继续？", {
+        title: "重新载入", hint: "弹窗里改的内容会被磁盘上的版本覆盖。",
+        okLabel: "丢弃并重载", danger: true,
+      });
+      if (!ok) return;
+    }
+    await reloadMD();
+  } else {
+    reloadFrame();
+  }
   $("fv-state").textContent = "已刷新 " + new Date().toLocaleTimeString();
 });
 $("fv-newtab").addEventListener("click", () => {
@@ -336,6 +461,7 @@ async function closePreview() {
   FV.url = "";
   if (FV.blobURL) { URL.revokeObjectURL(FV.blobURL); FV.blobURL = ""; }
   $<HTMLTextAreaElement>("fv-editor").value = "";
+  $("fv-md").replaceChildren();
   $<HTMLIFrameElement>("fv-frame").src = "about:blank"; // 别让原型在后台继续跑
   $("dlg-file").classList.remove("fv-max");
   $("fv-full").textContent = "全屏";

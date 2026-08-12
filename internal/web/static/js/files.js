@@ -212,10 +212,11 @@ function fileAction(label, icon, action, danger = false) {
 function fileActions(ent, fullPath) {
     const actions = document.createElement("span");
     actions.className = "factions";
-    // HTML 直接给一个渲染入口：点名字进的也是同一个弹窗，但列表里一眼能看出
-    // 哪些文件是能「看效果」的
-    if (!ent.is_dir && /\.html?$/i.test(ent.name)) {
-        actions.append(fileAction("预览页面", "eye", () => openPreview(fullPath, ent)));
+    // HTML / Markdown 直接给一个渲染入口：点名字进的也是同一个弹窗，但列表里
+    // 一眼能看出哪些文件是能「看效果」的
+    if (!ent.is_dir && /\.(html?|md|markdown|mdx)$/i.test(ent.name)) {
+        const label = /\.html?$/i.test(ent.name) ? "预览页面" : "预览渲染";
+        actions.append(fileAction(label, "eye", () => openPreview(fullPath, ent)));
     }
     // 目录没有单文件下载：整包下载走工具条的「下载 zip」
     if (!ent.is_dir) {
