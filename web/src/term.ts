@@ -3,9 +3,10 @@
 "use strict";
 
 import { S, bus } from "./state.js";
-import type { TerminalTips } from "./types.js";
+import type { TerminalTips, UsageEvents, UsageTotals } from "./types.js";
 import { $, isMobile, openLightbox } from "./util.js";
-import { wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
+import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
+import { fmtUSD } from "./quota.js";
 import { refreshAll } from "./data.js";
 import { pastedImages } from "./chat.js";
 
@@ -318,6 +319,65 @@ function initTermTips() {
 }
 
 bus.addEventListener("tips-updated", initTermTips);
+
+/* ---------------- 顶栏「本会话已花」 ----------------
+ * 会话内的全部消耗：网页对话 + 终端手敲 + 起标题，也就是使用记录里按会话筛出来的
+ * 那份合计。数据走 /usage/events 的 total（服务端按筛选条件算，与翻页无关），
+ * 顺带触发一次终端消耗补记，所以在终端里刚花完的量这里也是最新的。
+ *
+ * 订阅账号下这个金额是「按 API 价折算的等价金额」而非真实支出；终端行还可能因为
+ * 价目表里没配 claude 而算不出钱——所以 token 也一并显示，金额为 0 时它才是唯一
+ * 有信息量的那个数。 */
+const SPEND_POLL_MS = 15000;
+let spendTimer: ReturnType<typeof setInterval> | null = null;
+let spendFor = ""; // 当前显示的是哪个会话的数，切会话时先清空免得串台
+
+function fmtTok(n: number) {
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "K";
+  return String(n);
+}
+
+async function loadSpend() {
+  const sess = S.current;
+  const box = $("term-spend");
+  if (!sess) { box.classList.add("hidden"); return; }
+  if (spendFor !== sess.id) { box.replaceChildren(); spendFor = sess.id; }
+  let total: UsageTotals;
+  try {
+    const data = await api<UsageEvents>(
+      "/usage/events?limit=1&session=" + encodeURIComponent(sess.id));
+    total = data.total;
+  } catch (_) {
+    return; // 拉不到就保持上一次的数，顶栏不该因为这个闪
+  }
+  if (S.current?.id !== sess.id) return; // 请求在途时用户切走了
+  const tokens = total.input_tokens + total.output_tokens
+    + total.cache_read_tokens + total.cache_write_tokens;
+  if (!total.rows) { box.classList.add("hidden"); return; }
+
+  const label = Object.assign(document.createElement("span"), {
+    className: "ts-label", textContent: "本会话已花",
+  });
+  const cost = Object.assign(document.createElement("span"), {
+    className: "ts-cost", textContent: fmtUSD(total.cost_micro_usd, 2),
+  });
+  const tok = Object.assign(document.createElement("span"), {
+    className: "ts-tok", textContent: fmtTok(tokens) + " tok",
+  });
+  box.replaceChildren(label, cost, tok);
+  box.title = `${total.turns} 个回合 / ${total.rows} 条记录，含网页对话、终端和起标题。`
+    + "金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗计入这里但不扣额度。";
+  box.classList.remove("hidden");
+}
+
+/** 进出终端页时开关轮询：不在终端页就没必要一直问。 */
+export function termSpendPolling(on: boolean) {
+  if (spendTimer) { clearInterval(spendTimer); spendTimer = null; }
+  if (!on) return;
+  void loadSpend();
+  spendTimer = setInterval(() => void loadSpend(), SPEND_POLL_MS);
+}
 
 /* 终端粘贴图片：上传后把容器内路径写入 PTY（capture 阶段拦截，避免 xterm 处理）。
  * 上传期间整个终端页盖遮罩转圈，并通过 disableStdin 禁止键入，防止用户不知道发生了什么。 */

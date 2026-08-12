@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	github.com/docker/docker v28.5.2+incompatible
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/yamux v0.1.2
 	github.com/things-go/go-socks5 v0.1.1

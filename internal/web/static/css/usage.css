@@ -1,0 +1,110 @@
+/* usage：使用记录（消耗流水明细）视图。
+ *
+ * 比设置页宽：这是一张九列的表，套 .set-body 的 1040px 会把 token 那几列挤成
+ * 换行。表格本身允许横向滚动，窄屏下不去压缩列宽——数字列被压到折行就没法扫读了。 */
+
+.usage-body {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column; gap: 14px;
+  max-width: 1360px; width: 100%;
+  margin: 0 auto;
+  padding: 18px 28px 24px;
+  overflow-y: auto;
+}
+
+/* ---- 筛选条 ---- */
+
+.usage-filters {
+  flex-direction: row; flex-wrap: wrap; align-items: flex-end;
+  gap: 12px 16px;
+  padding: 14px 16px;
+}
+.uf-item { display: flex; flex-direction: column; gap: 5px; min-width: 128px; }
+.uf-item > span { font-size: 12px; color: var(--muted); }
+.uf-item select, .uf-item input { width: 100%; }
+.uf-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+/* ---- 合计条 ---- */
+
+.usage-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+}
+.us-item {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 10px 12px;
+}
+.us-label { font-size: 12px; color: var(--muted); }
+.us-value { font-size: 16px; margin-top: 2px; }
+/* 第一格是总花费，用琥珀托住——一屏数字里它是唯一要先看到的那个 */
+.us-item:first-child .us-value { color: var(--amber); }
+
+/* ---- 明细表 ---- */
+
+.usage-table-wrap { padding: 0; overflow-x: auto; }
+.usage-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.usage-table th {
+  text-align: left; font-weight: 500; font-size: 12px; color: var(--muted);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  position: sticky; top: 0;
+  background: var(--panel);
+}
+.usage-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+}
+.usage-table tr:last-child td { border-bottom: none; }
+.usage-table tbody tr:hover { background: var(--panel-2); }
+.usage-table .num { text-align: right; white-space: nowrap; }
+.usage-table th.num { text-align: right; }
+
+/* 次要信息（账号、provider、总耗时）压一号，主行才是扫读的那一行 */
+.u-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.u-sess { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.u-model { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.u-time, .u-lat, .u-tok { font-family: var(--mono); font-size: 12px; }
+.u-cost { font-family: var(--mono); font-size: 13px; color: var(--green); }
+.u-cost.zero { color: var(--muted); }
+
+/* token：输入/输出一行，缓存另起一行。箭头只是方向记号，别抢数字的注意力 */
+.u-io { display: inline-flex; align-items: baseline; gap: 3px; }
+.u-arrow { font-style: normal; color: var(--muted); margin-left: 6px; }
+.u-io .u-arrow:first-child { margin-left: 0; }
+.u-cache { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+/* 类型 / 计费的小标签 */
+.u-chip {
+  display: inline-block;
+  font-size: 11.5px; line-height: 1.6;
+  padding: 0 7px; border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.u-chip.title { border-color: var(--amber-dim); color: var(--amber); background: transparent; }
+/* 终端行要和对话行区分开，但这一列旁边就是计费列（绿/红），再加一种色相会
+ * 让两列串味。所以只提墨色不换色相：对话最安静，终端比它重一档。 */
+.u-chip.term { border-color: var(--muted); color: var(--text); }
+.u-chip.bill-provider { border-color: var(--green-line); color: var(--green); background: transparent; }
+.u-chip.bill-none { border-color: var(--red-line); color: var(--red); background: transparent; }
+
+/* ---- 翻页 ---- */
+
+.usage-pager {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  font-size: 12.5px; color: var(--muted);
+  padding-bottom: 8px;
+}
+.usage-pager button:disabled { opacity: 0.4; cursor: default; }
+
+@media (max-width: 720px) {
+  .usage-body { padding: 14px 12px 20px; }
+  .uf-actions { margin-left: 0; width: 100%; }
+}

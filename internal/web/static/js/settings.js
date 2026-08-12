@@ -10,6 +10,7 @@ import { MODEL_ID_RE } from "./chat.js";
 import { agentKey, agentName, agentIcon, decorateAgentOpts } from "./brand.js";
 import { quotaChip, openQuota } from "./quota.js";
 import { loadProxies, mountProxyPicker, openProxiesSection, refreshProxyCount } from "./proxies.js";
+import { openPricingSection, refreshPriceCount } from "./pricing.js";
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
 for (const h of document.querySelectorAll("h3[data-agent]")) {
@@ -35,7 +36,7 @@ export async function openSettingsView() {
         toast("读取设置失败：" + e.message, true);
     }
 }
-const SET_SECS = ["accounts", "proxies", "container", "models", "interface", "security", "monitor", "about"];
+const SET_SECS = ["accounts", "proxies", "container", "models", "pricing", "interface", "security", "monitor", "about"];
 function setSec(name) {
     S.sec = name;
     for (const b of document.querySelectorAll("#set-nav button")) {
@@ -54,6 +55,8 @@ function setSec(name) {
         startMonitor();
     if (name === "proxies")
         openProxiesSection();
+    if (name === "pricing")
+        openPricingSection();
 }
 $("set-nav").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-sec]");
@@ -537,8 +540,9 @@ function fillSettingsForms() {
     $("set-tips-interval").value = String(tips.interval_sec != null ? tips.interval_sec : 4);
     $("set-tips-anim").value = tips.animation || "scroll";
     renderModels();
+    refreshPriceCount();
 }
-async function putSettings(patch, btn, okMsg) {
+export async function putSettings(patch, btn, okMsg) {
     if (btn)
         btnBusy(btn, "保存中…");
     try {

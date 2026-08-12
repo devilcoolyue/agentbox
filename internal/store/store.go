@@ -19,10 +19,15 @@ import (
 )
 
 const (
-	// UsageKindChat is spend from a turn the user asked for; UsageKindTitle is
-	// spend from the thread-title summary the server runs on its own.
-	UsageKindChat  = "chat"
-	UsageKindTitle = "title"
+	// UsageKindChat is spend from a turn the user asked for in the web chat;
+	// UsageKindTitle is spend from the thread-title summary the server runs on
+	// its own. UsageKindTerminal is spend from the CLI the user drove by hand in
+	// the terminal tab — it never passes through the server, so those rows are
+	// backfilled from the CLI's own transcript files and, unlike the other two,
+	// never move the user's balance (see UpsertTerminalUsage).
+	UsageKindChat     = "chat"
+	UsageKindTitle    = "title"
+	UsageKindTerminal = "terminal"
 
 	StatusStopped = "stopped"
 	StatusRunning = "running"
@@ -102,8 +107,16 @@ CREATE TABLE IF NOT EXISTS usage_events (
 	cache_write_tokens INTEGER NOT NULL DEFAULT 0,
 	cost_micro_usd     INTEGER NOT NULL DEFAULT 0,
 	duration_ms        INTEGER NOT NULL DEFAULT 0,
+	wall_ms            INTEGER NOT NULL DEFAULT 0,
+	ttft_ms            INTEGER NOT NULL DEFAULT 0,
+	provider           TEXT    NOT NULL DEFAULT '',
+	req_id             TEXT    NOT NULL DEFAULT '',
 	raw                TEXT    NOT NULL DEFAULT ''
 );
+-- 注意：req_id 上的唯一索引只能建在 migrate() 里，不能放这儿。已有的库对
+-- CREATE TABLE IF NOT EXISTS 是空操作，此刻 req_id 这一列还没被 ALTER 加上，
+-- 在这里建索引会让整段 schema 执行失败、服务起不来。
+CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts);
 CREATE INDEX IF NOT EXISTS idx_usage_user_ts ON usage_events(user, ts);
 CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_usage_turn ON usage_events(turn_id);
@@ -167,6 +180,13 @@ func migrate(db *sql.DB) error {
 	stmts := []string{
 		`ALTER TABLE sessions ADD COLUMN stop_reason TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE usage_events ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'`,
+		`ALTER TABLE usage_events ADD COLUMN ttft_ms INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE usage_events ADD COLUMN provider TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE usage_events ADD COLUMN wall_ms INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE usage_events ADD COLUMN req_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_req ON usage_events(req_id) WHERE req_id != ''`,
+		// 使用记录页默认按时间倒序翻页，没有这条索引时全表扫描加排序。
+		`CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
@@ -536,9 +556,29 @@ type UsageEvent struct {
 	// is kept off float64 so summing a report stays exact. Codex reports no
 	// cost at all: those rows carry 0 and have to be priced from tokens.
 	CostMicroUSD int64 `json:"cost_micro_usd"`
-	// DurationMS is a turn-level measure repeated on every row of the turn.
-	// Aggregating it across rows means MAX per turn_id, never SUM.
+	// DurationMS is what the provider says the turn took — model-side time
+	// only, excluding the CLI's own startup. Turn-level: repeated on every row
+	// of the turn, so aggregating it means MAX per turn_id, never SUM.
 	DurationMS int64 `json:"duration_ms"`
+	// WallMS is the same turn measured on our clock: from the container being
+	// ready to the process exiting, so it includes the CLI startup (~2s for
+	// Claude Code) that DurationMS leaves out. TTFTMs is measured on this same
+	// clock, which is why the two are comparable and WallMS >= TTFTMs while
+	// DurationMS may be smaller than either. Turn-level, same caveat as above.
+	WallMS int64 `json:"wall_ms"`
+	// TTFTMs is time-to-first-token, measured by us rather than reported by the
+	// provider: from the container being ready to the turn's first model output
+	// event. Turn-level like WallMS — same aggregation caveat. 0 means not
+	// measured (title turns, or a turn that produced no output event).
+	TTFTMs int64 `json:"ttft_ms"`
+	// Provider is what the provider says served the turn ("firstParty" from
+	// Claude's modelUsage). Empty when the event does not say — Codex never
+	// does, so an empty value is not evidence of anything.
+	Provider string `json:"provider,omitempty"`
+	// ReqID is the dedup key of a backfilled terminal row: the first API
+	// requestId of that terminal turn. Empty on chat/title rows, which are
+	// written once by the turn itself and need no key.
+	ReqID string `json:"req_id,omitempty"`
 	// Raw is the provider event verbatim, stored on the turn's first row only.
 	Raw string `json:"-"`
 }
@@ -577,12 +617,12 @@ func (s *Store) InsertUsage(evs ...UsageEvent) error {
 		res, err := tx.Exec(`INSERT INTO usage_events
 			(ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-			 cost_micro_usd, duration_ms, raw)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			e.TS.Format(time.RFC3339Nano), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, e.Kind,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
-			e.CostMicroUSD, e.DurationMS, e.Raw)
+			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw)
 		if err != nil {
 			return fmt.Errorf("insert usage %s/%s: %w", e.SessionID, e.TurnID, err)
 		}
@@ -613,48 +653,121 @@ func (s *Store) InsertUsage(evs ...UsageEvent) error {
 	return tx.Commit()
 }
 
+// UpsertTerminalUsage records spend the user drove by hand in the terminal,
+// backfilled from the CLI's own transcript. It is deliberately NOT InsertUsage:
+//
+//   - It never charges. The rows land minutes after the fact, in a batch, with a
+//     price we derived ourselves rather than one the provider quoted — silently
+//     draining a balance on that basis would be unexplainable to the user. The
+//     guard against terminal spend is the balance check that blocks opening a
+//     terminal at all (see the quota section in AGENTS.md), not a debit here.
+//   - It upserts on ReqID. The scanner re-reads whole transcript files, and a
+//     turn that was still in flight last sweep comes back with more tokens on
+//     it, so the same key has to update in place rather than pile up.
+//
+// ReqID must be non-empty; a row without one would fall out of the partial
+// unique index and duplicate on the next sweep.
+func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
+	if len(evs) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, e := range evs {
+		if e.ReqID == "" {
+			return fmt.Errorf("terminal usage %s: 缺 req_id", e.SessionID)
+		}
+		if e.TS.IsZero() {
+			e.TS = time.Now()
+		}
+		if _, err := tx.Exec(`INSERT INTO usage_events
+			(ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
+			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			-- 冲突目标必须把部分索引的 WHERE 原样带上，否则 SQLite 认不出
+			-- 这条唯一约束，直接报 "does not match any PRIMARY KEY or UNIQUE"。
+			ON CONFLICT(req_id) WHERE req_id != '' DO UPDATE SET
+				ts = excluded.ts, model = excluded.model,
+				input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
+				cache_read_tokens = excluded.cache_read_tokens,
+				cache_write_tokens = excluded.cache_write_tokens,
+				cost_micro_usd = excluded.cost_micro_usd`,
+			e.TS.Format(time.RFC3339Nano), e.User, e.SessionID, e.ThreadID, e.TurnID,
+			e.Agent, e.AccountID, e.Model, UsageKindTerminal,
+			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
+			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw); err != nil {
+			return fmt.Errorf("upsert terminal usage %s/%s: %w", e.SessionID, e.ReqID, err)
+		}
+	}
+	return tx.Commit()
+}
+
 const usageCols = `id, ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 	input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-	cost_micro_usd, duration_ms, raw`
+	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw`
 
 // UsageFilter narrows a usage query. The zero value matches everything.
 type UsageFilter struct {
 	User      string    // empty: every user
 	SessionID string    // empty: every session
 	Kind      string    // empty: every kind
+	Agent     string    // empty: every agent
+	Model     string    // empty: every model
 	Since     time.Time // zero: no lower bound (inclusive)
 	Until     time.Time // zero: no upper bound (exclusive)
 	Limit     int       // <= 0: no limit
+	Offset    int       // rows to skip; only meaningful with Limit
+}
+
+// where renders the filter as a SQL predicate plus its arguments. Every usage
+// query goes through it so a paged list, its total and its sums can never
+// disagree about what the filter meant.
+func (f UsageFilter) where() (string, []any) {
+	q := " WHERE 1=1"
+	var args []any
+	add := func(clause string, v any) {
+		q += clause
+		args = append(args, v)
+	}
+	if f.User != "" {
+		add(" AND user = ?", f.User)
+	}
+	if f.SessionID != "" {
+		add(" AND session_id = ?", f.SessionID)
+	}
+	if f.Kind != "" {
+		add(" AND kind = ?", f.Kind)
+	}
+	if f.Agent != "" {
+		add(" AND agent = ?", f.Agent)
+	}
+	if f.Model != "" {
+		add(" AND model = ?", f.Model)
+	}
+	if !f.Since.IsZero() {
+		add(" AND ts >= ?", f.Since.Format(time.RFC3339Nano))
+	}
+	if !f.Until.IsZero() {
+		add(" AND ts < ?", f.Until.Format(time.RFC3339Nano))
+	}
+	return q, args
 }
 
 // ListUsage returns matching usage rows, newest first.
 func (s *Store) ListUsage(f UsageFilter) []UsageEvent {
-	q := "SELECT " + usageCols + " FROM usage_events WHERE 1=1"
-	var args []any
-	if f.User != "" {
-		q += " AND user = ?"
-		args = append(args, f.User)
-	}
-	if f.SessionID != "" {
-		q += " AND session_id = ?"
-		args = append(args, f.SessionID)
-	}
-	if f.Kind != "" {
-		q += " AND kind = ?"
-		args = append(args, f.Kind)
-	}
-	if !f.Since.IsZero() {
-		q += " AND ts >= ?"
-		args = append(args, f.Since.Format(time.RFC3339Nano))
-	}
-	if !f.Until.IsZero() {
-		q += " AND ts < ?"
-		args = append(args, f.Until.Format(time.RFC3339Nano))
-	}
-	q += " ORDER BY ts DESC, id DESC"
+	where, args := f.where()
+	q := "SELECT " + usageCols + " FROM usage_events" + where + " ORDER BY ts DESC, id DESC"
 	if f.Limit > 0 {
 		q += " LIMIT ?"
 		args = append(args, f.Limit)
+		if f.Offset > 0 {
+			q += " OFFSET ?"
+			args = append(args, f.Offset)
+		}
 	}
 	rows, err := s.db.Query(q, args...)
 	if err != nil {
@@ -668,11 +781,96 @@ func (s *Store) ListUsage(f UsageFilter) []UsageEvent {
 		if err := rows.Scan(&e.ID, &ts, &e.User, &e.SessionID, &e.ThreadID, &e.TurnID,
 			&e.Agent, &e.AccountID, &e.Model, &e.Kind,
 			&e.InputTokens, &e.OutputTokens, &e.CacheReadTokens, &e.CacheWriteTokens,
-			&e.CostMicroUSD, &e.DurationMS, &e.Raw); err != nil {
+			&e.CostMicroUSD, &e.DurationMS, &e.WallMS, &e.TTFTMs, &e.Provider,
+			&e.ReqID, &e.Raw); err != nil {
 			continue
 		}
 		e.TS, _ = time.Parse(time.RFC3339Nano, ts)
 		out = append(out, e)
 	}
+	return out
+}
+
+// UsageTotals is the whole filtered set summed up, independent of paging —
+// the numbers a detail page shows above a single page of rows.
+//
+// Turns counts distinct turn_id, because one turn lands as several rows when
+// Claude splits it per model. DurationMS/TTFTMs are turn-level and repeated on
+// every row of the turn, so they are deliberately absent: summing them here
+// would multiply by the number of models the turn touched.
+type UsageTotals struct {
+	Rows             int   `json:"rows"`
+	Turns            int   `json:"turns"`
+	InputTokens      int64 `json:"input_tokens"`
+	OutputTokens     int64 `json:"output_tokens"`
+	CacheReadTokens  int64 `json:"cache_read_tokens"`
+	CacheWriteTokens int64 `json:"cache_write_tokens"`
+	CostMicroUSD     int64 `json:"cost_micro_usd"`
+}
+
+// SumUsage totals every row the filter matches. Limit/Offset are ignored: the
+// summary describes the filter, not the page.
+func (s *Store) SumUsage(f UsageFilter) UsageTotals {
+	where, args := f.where()
+	var t UsageTotals
+	row := s.db.QueryRow(`SELECT COUNT(*), COUNT(DISTINCT turn_id),
+		COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0),
+		COALESCE(SUM(cache_read_tokens),0), COALESCE(SUM(cache_write_tokens),0),
+		COALESCE(SUM(cost_micro_usd),0) FROM usage_events`+where, args...)
+	if err := row.Scan(&t.Rows, &t.Turns, &t.InputTokens, &t.OutputTokens,
+		&t.CacheReadTokens, &t.CacheWriteTokens, &t.CostMicroUSD); err != nil {
+		return UsageTotals{}
+	}
+	return t
+}
+
+// UsageFacets are the distinct values present in the filtered set, for
+// populating the detail page's filter dropdowns with what actually occurred
+// rather than a hardcoded list that drifts as models come and go.
+type UsageFacets struct {
+	Users  []string `json:"users"`
+	Agents []string `json:"agents"`
+	Models []string `json:"models"`
+}
+
+// FacetsUsage collects those distinct values.
+//
+// scopeUser is the hard visibility boundary and is re-applied to every column:
+// pass a regular user's own name so their dropdowns can never list other
+// users, and "" for an admin who may see everyone. It is deliberately separate
+// from f.User, which is the selectable filter and gets relaxed below.
+func (s *Store) FacetsUsage(f UsageFilter, scopeUser string) UsageFacets {
+	// Facets describe the axes you can still filter by, so each column ignores
+	// its own filter — otherwise picking one model collapses the model list to
+	// that one value and there is no way back without a reset.
+	out := UsageFacets{Users: []string{}, Agents: []string{}, Models: []string{}}
+	distinct := func(col string, f UsageFilter) []string {
+		where, args := f.where()
+		rows, err := s.db.Query("SELECT DISTINCT "+col+" FROM usage_events"+where+
+			" AND "+col+" != '' ORDER BY "+col, args...)
+		if err != nil {
+			return nil
+		}
+		defer rows.Close()
+		var vals []string
+		for rows.Next() {
+			var v string
+			if rows.Scan(&v) == nil {
+				vals = append(vals, v)
+			}
+		}
+		return vals
+	}
+	relax := func(clear func(*UsageFilter)) UsageFilter {
+		g := f
+		clear(&g)
+		if scopeUser != "" {
+			g.User = scopeUser
+		}
+		return g
+	}
+	out.Users = append(out.Users, distinct("user", relax(func(g *UsageFilter) { g.User = "" }))...)
+	out.Agents = append(out.Agents, distinct("agent", relax(func(g *UsageFilter) { g.Agent = "" }))...)
+	out.Models = append(out.Models, distinct("model", relax(func(g *UsageFilter) { g.Model = "" }))...)
 	return out
 }

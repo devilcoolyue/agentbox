@@ -15,6 +15,7 @@ import "./files.js";
 import "./changes.js";
 import "./preview.js";
 import "./settings.js";
+import "./usage.js";
 import "./proxies.js";
 import "./tunnel.js";
 import "./ping.js";

@@ -5,6 +5,7 @@
  *   data-updated             — refreshAll 拉到新的 sessions/accounts
  *   open-session  {detail}   — 侧栏点击会话卡片
  *   open-settings            — 侧栏点击系统设置
+ *   open-usage               — 侧栏点击使用记录
  *   thread-changed           — 对话线程切换/新建/删除，chat.ts 重载对话流
  *   tips-updated             — 终端提示语配置变化（登录下发 / 管理员保存），term.ts 重排轮播 */
 "use strict";
@@ -18,7 +19,7 @@ export const emit = (type: string, detail?: unknown) =>
   bus.dispatchEvent(new CustomEvent(type, { detail }));
 
 /** 主区当前视图 */
-export type View = "work" | "settings";
+export type View = "work" | "settings" | "usage";
 /** 工作台当前标签页 */
 export type Tab = "chat" | "term" | "files" | "changes" | "skills";
 /** 文件浏览范围（shared = 共享目录，同用户所有会话可见） */

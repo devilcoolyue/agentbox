@@ -16,6 +16,9 @@ package server
 // claude 的 modelUsage 按模型分列，且包含子 agent 用掉的模型（起标题的 haiku
 // 等），实测 total_cost_usd 恰好等于各模型 costUSD 之和，而顶层 usage 只覆盖
 // 主模型。计费必须以 modelUsage 为准，拿顶层 usage 会漏记。
+//
+// 一个回合不保证只有一个收尾事件，而 claude 的 result 报的是累计值——两件事
+// 撞在一起就是重复扣款，见 usageTally。
 
 import (
 	"encoding/json"
@@ -43,6 +46,9 @@ type claudeResult struct {
 		CacheRead  int64   `json:"cacheReadInputTokens"`
 		CacheWrite int64   `json:"cacheCreationInputTokens"`
 		CostUSD    float64 `json:"costUSD"`
+		// Provider 是 claude 自己说这一段谁服务的（实测 "firstParty"）。存下来
+		// 是为了在使用记录里一眼分清官方直连与中转站，别的地方不依赖它。
+		Provider string `json:"provider"`
 	} `json:"modelUsage"`
 }
 
@@ -68,19 +74,23 @@ func microUSD(usd float64) int64 { return int64(math.Round(usd * 1e6)) }
 // parseUsage 把一行回合收尾事件翻成用量流水；不是用量事件时返回 nil。
 // base 提供归属信息（用户/会话/线程/回合/agent/账号，以及回合请求的模型）,
 // 其余字段由事件本身填。纯函数，便于直接对着真实事件样本测试。
-func parseUsage(line []byte, base store.UsageEvent) []store.UsageEvent {
+//
+// cumulative 说明这些数是「本次进程运行至今的累计值」（claude）还是「本回合
+// 自己的增量」（codex）——同一回合收到多个收尾事件时，前者只能取最后一个，
+// 后者才该相加。见 usageTally。
+func parseUsage(line []byte, base store.UsageEvent) (evs []store.UsageEvent, cumulative bool) {
 	var probe struct {
 		Type string `json:"type"`
 	}
 	if json.Unmarshal(line, &probe) != nil {
-		return nil
+		return nil, false
 	}
 
 	switch probe.Type {
 	case "result":
 		var r claudeResult
 		if json.Unmarshal(line, &r) != nil {
-			return nil
+			return nil, false
 		}
 		base.DurationMS = r.DurationMS
 
@@ -89,14 +99,14 @@ func parseUsage(line []byte, base store.UsageEvent) []store.UsageEvent {
 		if len(r.ModelUsage) == 0 {
 			u := r.Usage
 			if u.Input == 0 && u.Output == 0 && u.CacheRead == 0 && u.CacheWrite == 0 {
-				return nil
+				return nil, false
 			}
 			ev := base
 			ev.InputTokens, ev.OutputTokens = u.Input, u.Output
 			ev.CacheReadTokens, ev.CacheWriteTokens = u.CacheRead, u.CacheWrite
 			ev.CostMicroUSD = microUSD(r.CostUSD)
 			ev.Raw = string(line)
-			return []store.UsageEvent{ev}
+			return []store.UsageEvent{ev}, true
 		}
 
 		// 按模型名排序，保证同一回合的行顺序稳定（测试与人工核对都靠这个）。
@@ -114,21 +124,22 @@ func parseUsage(line []byte, base store.UsageEvent) []store.UsageEvent {
 			ev.InputTokens, ev.OutputTokens = u.Input, u.Output
 			ev.CacheReadTokens, ev.CacheWriteTokens = u.CacheRead, u.CacheWrite
 			ev.CostMicroUSD = microUSD(u.CostUSD)
+			ev.Provider = u.Provider
 			if i == 0 { // 原始事件整回合存一份就够，避免每行重复几 KB
 				ev.Raw = string(line)
 			}
 			out = append(out, ev)
 		}
-		return out
+		return out, true
 
 	case "turn.completed":
 		var t codexTurn
 		if json.Unmarshal(line, &t) != nil {
-			return nil
+			return nil, false
 		}
 		u := t.Usage
 		if u.Input == 0 && u.Output == 0 && u.Cached == 0 {
-			return nil
+			return nil, false
 		}
 		// codex 的 cached_input_tokens 是 input_tokens 的子集，减掉才能和 claude
 		// 那侧的「未命中缓存的输入」对齐。实测确认：同一账号连跑两回合，第二回合
@@ -144,29 +155,92 @@ func parseUsage(line []byte, base store.UsageEvent) []store.UsageEvent {
 		ev.OutputTokens = u.Output // 已含 reasoning，勿再加
 		// codex 不报费用，留 0，等定价表就位后按 token 折算。
 		ev.Raw = string(line)
-		return []store.UsageEvent{ev}
+		return []store.UsageEvent{ev}, false
 	}
-	return nil
+	return nil, false
 }
 
-// recordUsage 从一行完整事件里提取用量、按需定价并落库，返回写进去的行数。
-// 落库同时会从用户额度里扣掉这笔钱（store.InsertUsage 同事务完成）。尽力而为：
-// 解析或写库失败只记日志，绝不影响正在进行的对话。
-func (r *chatRoom) recordUsage(base store.UsageEvent, line []byte) int {
-	evs := parseUsage(line, base)
+// isOutputEvent 判断一行事件是不是「模型开始出东西了」，用来量首字延迟。
+//
+// provider 不报这个指标，只能自己掐表。起点取容器就绪之后（见 runTurn），所以
+// 量到的是 CLI 启动 + 组上下文 + 模型首个 token 的总和，不是纯粹的模型延迟；
+// 对「这回合卡不卡」这个问题来说这才是用户感觉到的那个数。
+//
+// 各家最早的输出事件形状不同：claude 是增量 stream_event、随后完整 assistant；
+// codex（app-server 与 exec 两条路径）是 stream_event 与 item.*。会话初始化事件
+// （claude 的 system/init、codex 的 thread.started）不算——它们在模型被调用之前
+// 就发出来了，认了就会把首字延迟量成一个恒定的小数字。
+func isOutputEvent(line []byte) bool {
+	var ev struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(line, &ev) != nil {
+		return false
+	}
+	switch ev.Type {
+	case "stream_event", "assistant", "item.started", "item.completed":
+		return true
+	}
+	return false
+}
+
+// usageTally 把一个回合里的所有收尾事件收敛成一份账，回合结束时一次落库。
+//
+// 一次 claude 进程运行会吐出不止一个 result：每个子代理跑完补一个完成通知
+// （origin.kind = task-notification），撞上 429 每次重试也补一个报错的。而
+// 它们带的 modelUsage 是本次运行至今的累计值，不是各自的增量——线上抓到过
+// 同一回合 14 个 result，modelUsage 一模一样（fable $25.8674），只有
+// total_cost_usd 从 $12.6 递增到 $25.9。当时逐个记账，同一笔钱扣了 14 遍。
+//
+// 所以累计式事件（claude result）后一个覆盖前一个，只认最后那个总数；增量式
+// 事件（codex turn.completed）才相加。
+type usageTally struct {
+	evs []store.UsageEvent
+}
+
+// observe 把一行事件并进汇总；不是用量事件就什么也不做。
+func (t *usageTally) observe(base store.UsageEvent, line []byte) {
+	evs, cumulative := parseUsage(line, base)
 	if len(evs) == 0 {
+		return
+	}
+	if cumulative {
+		t.evs = evs
+		return
+	}
+	t.evs = append(t.evs, evs...)
+}
+
+// flush 把汇总好的用量定价后落库，返回写进去的行数。落库同时会从用户额度里扣
+// 掉这笔钱（store.InsertUsage 同事务完成）。尽力而为：写库失败只记日志，绝不
+// 影响正在进行的对话。汇总为空（没认出用量事件）时返回 0。
+//
+// wall 是本回合在我们这边的墙钟耗时，只有到这里回合才真的结束、才量得到，所以
+// 由调用方在 flush 的时刻算好传进来（见 chat.go 的 defer）。0 表示没量。
+func (r *chatRoom) flushUsage(t *usageTally, wall time.Duration) int {
+	if len(t.evs) == 0 {
 		return 0
 	}
+	evs := t.evs
+	t.evs = nil // 防重复落库：同一个 tally 再 flush 一次不该再扣钱
 	now := time.Now()
 	for i := range evs {
 		evs[i].TS = now
+		evs[i].WallMS = wall.Milliseconds()
 		// provider 不报价的行（codex）在这里按配置的价目表折算，落库前定好价，
 		// 扣减才有依据。查不到价就是 0，只记不扣。
 		evs[i].CostMicroUSD = r.srv.priceEvent(evs[i])
 	}
 	if err := r.srv.store.InsertUsage(evs...); err != nil {
-		log.Printf("record usage %s: %v", base.SessionID, err)
+		log.Printf("record usage %s: %v", evs[0].SessionID, err)
 		return 0
 	}
 	return len(evs)
+}
+
+// recordUsage 记一趟自成一体的消耗（起标题）：只有一行收尾事件，收下就落库。
+func (r *chatRoom) recordUsage(base store.UsageEvent, line []byte, wall time.Duration) int {
+	var t usageTally
+	t.observe(base, line)
+	return r.flushUsage(&t, wall)
 }

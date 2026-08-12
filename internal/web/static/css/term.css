@@ -41,6 +41,22 @@
   72%, 100% { background-position: 0 0; }
 }
 
+/* ---- 本会话已花：贴着连接状态左边，margin-left:auto 把这一组顶到右侧 ----
+ * 金额用琥珀，token 压成次要——扫一眼要先看到钱。提示轮播可能很长，这一块
+ * flex:none 保证它不被挤掉。 */
+.term-spend {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  margin-left: auto; flex: none;
+  font-family: var(--mono); font-size: 12px;
+  white-space: nowrap;
+  cursor: default;
+}
+.term-spend .ts-label { color: var(--muted); }
+.term-spend .ts-cost { color: var(--amber); }
+.term-spend .ts-tok { color: var(--muted); }
+/* 已花之后，连接状态那组就不该再抢 auto 边距了 */
+.term-spend:not(.hidden) + .term-conn { margin-left: 0; }
+
 /* ---- 右侧连接状态：状态点 + 文案 + 手动重连按钮 ---- */
 .term-conn {
   display: inline-flex; align-items: center; gap: 8px;

@@ -196,6 +196,43 @@
 .model-add { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
 .model-add input { flex: 1; min-width: 120px; }
 
+/* 价目表：八列，比其他设置分区宽得多，单独放开 max-width 并允许横向滚动。
+ * 单价输入框定宽等宽字体，数字上下对齐才好核对；超阈值那四个挤在一格里。 */
+#sec-pricing { max-width: 1080px; }
+.sec-hint { font-size: 12px; }
+.sec-actions { display: flex; gap: 8px; flex: none; }
+
+.price-table-wrap { margin: -4px -4px 0; overflow-x: auto; }
+.price-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.price-table th {
+  text-align: left; font-weight: 500; font-size: 12px; color: var(--muted);
+  padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.price-table th.num { text-align: right; }
+.price-table .th-sub { font-size: 10.5px; opacity: .75; font-weight: 400; }
+.price-table td { padding: 5px 8px; border-bottom: 1px solid var(--line-soft); }
+.price-table tr:last-child td { border-bottom: none; }
+.price-table .pt-key {
+  font-family: var(--mono); font-size: 12px;
+  white-space: nowrap; max-width: 230px; overflow: hidden; text-overflow: ellipsis;
+}
+/* agent 兜底价（claude / codex）与具体模型行区分开：它管的是一整类 */
+.price-table .pt-key.fallback { color: var(--amber); }
+.price-table input.rate {
+  width: 78px; text-align: right;
+  font-family: var(--mono); font-size: 12px;
+  padding: 3px 6px;
+}
+.price-table input.rate.wide { width: 96px; }
+.price-table .pt-long { display: flex; gap: 4px; justify-content: flex-end; }
+.price-table .pt-del {
+  border: 0; background: none; color: var(--muted); cursor: pointer;
+  padding: 2px 6px; font-size: 15px; line-height: 1;
+}
+.price-table .pt-del:hover { color: var(--red); }
+.price-add { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
+.price-add input { flex: 1; min-width: 160px; }
+
 /* 用户管理 */
 .user-list { display: flex; flex-direction: column; }
 .user-row {

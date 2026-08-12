@@ -35,7 +35,7 @@ func baseEvent() store.UsageEvent {
 }
 
 func TestParseUsageClaudePerModel(t *testing.T) {
-	evs := parseUsage([]byte(claudeResultSample), baseEvent())
+	evs, _ := parseUsage([]byte(claudeResultSample), baseEvent())
 	if len(evs) != 2 {
 		t.Fatalf("每个用到的模型应各出一行，得到 %d 行", len(evs))
 	}
@@ -94,7 +94,7 @@ func TestParseUsageClaudePerModel(t *testing.T) {
 func TestParseUsageClaudeNoModelUsage(t *testing.T) {
 	const legacy = `{"type":"result","duration_ms":1000,"total_cost_usd":0.5,` +
 		`"usage":{"input_tokens":10,"cache_creation_input_tokens":20,"cache_read_input_tokens":30,"output_tokens":40}}`
-	evs := parseUsage([]byte(legacy), baseEvent())
+	evs, _ := parseUsage([]byte(legacy), baseEvent())
 	if len(evs) != 1 {
 		t.Fatalf("应回退成单行，得到 %d 行", len(evs))
 	}
@@ -114,7 +114,7 @@ func TestParseUsageCodex(t *testing.T) {
 	base := baseEvent()
 	base.Agent = "codex"
 	base.Model = "" // codex 常走 provider 默认模型，事件里也不带模型名
-	evs := parseUsage([]byte(codexTurnSample), base)
+	evs, _ := parseUsage([]byte(codexTurnSample), base)
 	if len(evs) != 1 {
 		t.Fatalf("应出 1 行，得到 %d 行", len(evs))
 	}
@@ -140,7 +140,7 @@ func TestParseUsageCodexExec(t *testing.T) {
 	base := baseEvent()
 	base.Agent = "codex"
 	base.Model = ""
-	evs := parseUsage([]byte(codexExecSample), base)
+	evs, _ := parseUsage([]byte(codexExecSample), base)
 	if len(evs) != 1 {
 		t.Fatalf("应出 1 行，得到 %d 行", len(evs))
 	}
@@ -170,7 +170,7 @@ func TestParseUsageIgnoresOtherEvents(t *testing.T) {
 		`not json at all`,
 		``,
 	} {
-		if evs := parseUsage([]byte(line), baseEvent()); len(evs) != 0 {
+		if evs, _ := parseUsage([]byte(line), baseEvent()); len(evs) != 0 {
 			t.Errorf("不该产生流水: %s -> %+v", line, evs)
 		}
 	}
@@ -188,7 +188,7 @@ func TestParseUsageTitleTurn(t *testing.T) {
 	base := baseEvent()
 	base.Model = ""
 	base.Kind = store.UsageKindTitle
-	evs := parseUsage([]byte(titleJSON), base)
+	evs, _ := parseUsage([]byte(titleJSON), base)
 	if len(evs) != 1 {
 		t.Fatalf("应出 1 行，得到 %d 行", len(evs))
 	}
@@ -201,5 +201,71 @@ func TestParseUsageTitleTurn(t *testing.T) {
 	}
 	if e.InputTokens != 531 || e.OutputTokens != 18 || e.CostMicroUSD != 621 {
 		t.Errorf("标题回合用量不对: %+v", e)
+	}
+}
+
+// 同一回合里 claude 补报的后续 result：子代理跑完一个补一条完成通知，撞上 429
+// 每次重试也补一条报错的。形状取自线上那次重复扣款的现场（会话 2902935ecc8f）：
+// 三条的 modelUsage 完全一致（就是本次运行的累计值），只有 total_cost_usd 在涨。
+const claudeTaskNotifySample = `{"type":"result","subtype":"success","duration_ms":749,` +
+	`"origin":{"kind":"task-notification"},"total_cost_usd":14.957196,` +
+	`"usage":{"input_tokens":2,"cache_creation_input_tokens":1044,"cache_read_input_tokens":68152,"output_tokens":72},` +
+	`"modelUsage":{` +
+	`"claude-haiku-4-5-20251001":{"inputTokens":531,"outputTokens":18,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"costUSD":0.000621},` +
+	`"claude-opus-4-8":{"inputTokens":2,"outputTokens":1870,"cacheReadInputTokens":7342,"cacheCreationInputTokens":5265,"costUSD":0.103081}}}`
+
+const claudeRateLimitSample = `{"type":"result","subtype":"success","is_error":true,"duration_ms":517,` +
+	`"api_error_status":429,"total_cost_usd":25.868015,` +
+	`"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0},` +
+	`"modelUsage":{` +
+	`"claude-haiku-4-5-20251001":{"inputTokens":531,"outputTokens":18,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"costUSD":0.000621},` +
+	`"claude-opus-4-8":{"inputTokens":2,"outputTokens":1870,"cacheReadInputTokens":7342,"cacheCreationInputTokens":5265,"costUSD":0.103081}}}`
+
+// 一个回合收到多个 claude result 时只能认最后一个：它们报的是本次运行的累计
+// 值，相加就是把同一笔钱扣好几遍（线上真扣了 14 遍，$25.87 变成 $362）。
+func TestUsageTallyClaudeResultsDoNotAccumulate(t *testing.T) {
+	var tally usageTally
+	tally.observe(baseEvent(), []byte(claudeResultSample))
+	tally.observe(baseEvent(), []byte(claudeTaskNotifySample))
+	tally.observe(baseEvent(), []byte(claudeRateLimitSample))
+
+	if len(tally.evs) != 2 {
+		t.Fatalf("三个 result 只该留下最后一个的两行，得到 %d 行", len(tally.evs))
+	}
+	var total int64
+	for _, e := range tally.evs {
+		total += e.CostMicroUSD
+	}
+	if want := int64(621 + 103081); total != want {
+		t.Errorf("合计 %d 微美元，想要 %d——重复的 result 被算了不止一遍", total, want)
+	}
+	// 最后一条是 429 报错事件，顶层 usage 全 0，但 modelUsage 仍是累计值，
+	// 记的必须是 modelUsage 那份，不能被清零。
+	if tally.evs[1].OutputTokens != 1870 {
+		t.Errorf("末条 result 的 token 数应取自 modelUsage: %+v", tally.evs[1])
+	}
+}
+
+// 不认识的事件不该动汇总：一条真用量后面跟一串杂事件，账还是那份账。
+func TestUsageTallyIgnoresNonUsageLines(t *testing.T) {
+	var tally usageTally
+	tally.observe(baseEvent(), []byte(claudeResultSample))
+	tally.observe(baseEvent(), []byte(`{"type":"assistant","message":{"content":[]}}`))
+	tally.observe(baseEvent(), []byte(`not json`))
+	if len(tally.evs) != 2 {
+		t.Fatalf("汇总应保持 2 行，得到 %d 行", len(tally.evs))
+	}
+}
+
+// codex 的 turn.completed 报的是本回合自己的增量，多条就该累加——和 claude 的
+// 累计式 result 相反，别把这两种语义混成一种。
+func TestUsageTallyCodexTurnsAccumulate(t *testing.T) {
+	base := baseEvent()
+	base.Agent = "codex"
+	var tally usageTally
+	tally.observe(base, []byte(codexTurnSample))
+	tally.observe(base, []byte(codexExecSample))
+	if len(tally.evs) != 2 {
+		t.Fatalf("两个 turn.completed 该各记一行，得到 %d 行", len(tally.evs))
 	}
 }

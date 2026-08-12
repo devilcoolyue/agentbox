@@ -20,7 +20,7 @@
 | `cmd/agentbox/main.go` | 服务端启动入口；`lockDataDir` 防止多个进程共用同一个 `data_dir`。 |
 | `cmd/abox-link/main.go` | 隧道客户端入口；面板模式与 `--server` 无头模式分流。 |
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
-| `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）。 |
+| `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）、用量计量与额度（`usage.go`/`quota.go`/`usagelog.go`）。 |
 | `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens/usage_events/quotas/credit_ledger；首次打开会导入旧版 `state.json`。 |
 | `internal/dockerx` | Docker Engine API 封装：容器生命周期、exec PTY/stream、stats、镜像/挂载检查。 |
 | `internal/agent` | Claude/Codex 适配层：headless 命令、标题生成、凭证播种、Claude HUD、Codex app-server 协议。 |
@@ -179,6 +179,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 10 --max-time 20 "$P
 - home 模板：会话 home 每次都是全新空目录，skill / 用户级 MCP / rc 文件本来每开一个会话就得重装一遍，模板就是补这个。两层，后者盖前者：服务器级 `data/home-template/`（全体用户）、用户级 `data/users/<user>/home-template/`（该用户所有会话，「技能」页签写的就是它）。**两层先合并再落盘**，否则用户层里较旧的文件会输给服务器层。合并结果与会话副本之间逐文件按 mtime「谁新用谁」（同 credsync 的收敛规则）：容器里改过的留着，模板更新的推下去；符号链接原样重建、不跟随，可以把大块内容指向 `/shared`。必须排在 `SeedCredentials` 之前，模板里万一混进凭证文件也压不过账号池。模板失败只记日志，不挡会话启动。
 - 官方市场（`internal/server/market.go`）：`anthropics/claude-plugins-official` 浅克隆到 `data/marketplace/repo`（12h 过期，整仓重克隆而非增量；拉不动就沿用旧副本），它既是目录数据源也直接提供一方插件的内容。目录条目的 `source` 有四种写法（仓库内相对路径 / git-subdir / url / github），`parsePluginSource` 归一化，路径与协议都当不可信输入校验。**市场的单位是插件不是技能**：`discoverSkillDirs` 按「显式 skills 声明 → skills/<名字>/ → 插件根就是技能」三级找，一个都没有就回 422 并让用户改用终端装整包。git 抓取由 `marketMu` 串行化，`GIT_TERMINAL_PROMPT=0` 防私有仓库卡在密码提示上。
 - 技能页（`internal/server/skills.go` + `web/src/skills.ts`）：管理 `.claude/skills`，范围 `session`（会话 home）与 `template`（用户模板）。列表里的 `source` 靠探测两层模板里有没有同名目录得出，顺序与 SeedHomeTemplate 的分层一致。装／复制统一走 `replaceSkillDir`：整目录替换并把 mtime 戳成当下，保证刚进模板的技能一定比各会话里的旧副本新，下次启动推得下去。技能名同时是目录名，`skillNameRe` 卡死路径穿越。详情接口连整个技能目录的扁平清单（`entries`，含子目录，父在子前，上限 2000 条）一起返回，前端 `buildTree` 拼成左侧文件树；点开单个文件走 `GET …/skills/{name}/file?path=`，路径用 `resolveFileEntry` 逐段 Lstat 拒绝符号链接（技能目录在会话 home 里，容器内随手就能造一个指向宿主机文件的链接）。
+- **账号 env 绝不烘进容器**（`dockerx.baseContainerEnv`）：容器 `Config.Env` 在 create 那一刻定死，之后只能靠 exec 往上加、减不掉。账号从中转站切回订阅登录时 `clearClaudeRelay` 只改得动 `config.json`，旧容器里那份 `ANTHROPIC_AUTH_TOKEN` 还在，而 claude CLI 认 env 里的 Bearer 令牌优先于 OAuth 凭证——订阅登录形同虚设，CLI 卡在重试里直到被杀（回合报「进程退出码 137」，stderr 只剩一句 connectors are disabled 的告警）。所以账号 env 一律走 `server.execEnv` 每次 exec 注入，加和减都即时生效。`EnsureRunning` 里的 `hasBakedEnv` 负责认出老版本烘过 env 的容器并重建（比键不比值，镜像升级改 `NODE_VERSION` 的值不算脏）。
 - 停止/删除：只停/删容器；工作区、home、聊天线程仍在宿主机。`DELETE ?purge=1` 才删除会话目录。
 - 重启服务端后：`Server.reconcile` 以 Docker 实际运行状态修正 session status。
 
@@ -233,6 +234,21 @@ data/
   **改这两处的输出格式会直接让标题消耗重新变成漏账。**
 - 回合跑完一行用量都没记到时会打 `usage: … 未记到用量` 警告。见到它说明有 agent
   版本报用量的形状没被认出来，别忽略。
+- `ttft_ms` 是**我们自己掐的表**，provider 不报：`runTurn` 在 `startSession` 之后开表，
+  第一个模型输出事件（`isOutputEvent`）停表。判定必须排除会话初始化事件（claude 的
+  `system`/init、codex 的 `thread.started`）——它们在模型被调用前就发出来了，认了会把
+  首字延迟量成一个恒定的小数字。掐表要在 `IsPartialEvent` 的早返回**之前**，最早的
+  输出往往就是个增量事件，放后面量到的是「整段话说完」。
+- `provider` 取自 claude `modelUsage` 里的同名字段（实测 `firstParty`），只用于在使用
+  记录里区分官方直连与中转，别让别的逻辑依赖它——codex 根本不报这个字段。
+- **耗时有两块表，别混用**：`wall_ms` 是我们量的（`turnStart` → 回合收尾，与 `ttft_ms`
+  同源，含 CLI 启动），`duration_ms` 是 provider 自报的模型侧耗时（**不含** CLI 启动）。
+  实测容器里跑一趟 haiku：墙钟 4534ms，claude 自报 `duration_ms` 2335ms，差的 2.2 秒
+  全是 Claude Code 自己的启动。所以页面上「总耗时」必须用 `wall_ms`——早先拿
+  `duration_ms` 当总耗时，出过「首字 3.1s / 总耗时 2.3s」这种看着不可能的记录。
+  `wall_ms` 由 `flushUsage` 在回合真结束的那一刻统一盖到各行上（回合中途量不到）。
+- `duration_ms` / `wall_ms` / `ttft_ms` 都是**回合级**指标，在同回合拆出的各行上重复；
+  聚合时只能按 `turn_id` 取一份，绝不能 SUM。`store.UsageTotals` 因此故意不含这几项。
 
 ### 额度与扣减
 
@@ -249,11 +265,26 @@ data/
   没有可靠累计值，所以拦截只发生在**回合开始前**（`handleChatWS` 的 `user_message`
   分支），余额见底的那个回合允许超支。宁可多花一个回合，也不把用户跑到一半的任务
   腰斩。起标题这趟服务端自发的消耗在余额见底时直接跳过。
-- **claude 的价以 provider 报的为准**；只有不报价的 codex 用 `config.json` 的
-  `pricing` 按 token 折算。价目表单位是「每百万 token 多少美元」，微美元成本正好
-  等于 `tokens × rate`（两个 1e6 约掉）。查表顺序：精确模型名 → agent 名兜底
-  （codex 事件不报模型名，兜底那条要配成账号 `config.toml` 里的默认模型）。
-  **没配价目表的模型按 0 计**，只记不扣。
+- **claude 对话行的价以 provider 报的为准**；不报价的走 `config.json` 的 `pricing`
+  按 token 折算——codex 的全部回合，以及从 transcript 补记的**终端行**（那里只有
+  token 没有美元，claude 也一样要查表）。价目表单位是「每百万 token 多少美元」，
+  微美元成本正好等于 `tokens × rate`（两个 1e6 约掉）。查表顺序：**精确模型名 →
+  去掉 `-YYYYMMDD` 日期后缀再查 → agent 名兜底**（codex 事件不报模型名，兜底那条要
+  配成账号 `config.toml` 里的默认模型）。日期回退是必须的：provider 会报
+  `claude-haiku-4-5-20251001`，而价目表里配的是系列名。**没配价目表的模型按 0 计**，
+  只记不扣。
+- 价目表在「系统设置 → 价目表」里编辑（`web/src/pricing.ts` + `SettingsPatch.Pricing`），
+  **整表提交**而不是逐键合并——删行没法用增量表达。`sanitizePricing` 卡住负数、NaN、
+  离谱大的单价（手滑多打几个零会一次扣穿余额）、非法键，以及「配了长上下文单价却
+  没有阈值」这种安静失效的组合。
+- **Claude 的 `cache_write` 取 1 小时档**（= 2× 输入价）而不是 5 分钟档（1.25×）：
+  Claude Code 实际用的就是 1h 缓存，实测 transcript 里
+  `cache_creation.ephemeral_1h_input_tokens` 有值、`ephemeral_5m_input_tokens` 是 0。
+  我们的用量只有一个「缓存写入」桶，两档合不了，只能取实际用的那档。
+- Claude 4.6 及之后的模型 1M 上下文按标准价计费，所以 claude 各行**都不配长上下文档**。
+- 已知小瑕疵：claude 对话行里 provider 偶尔报 0（子 agent），配了 claude 价之后这类行
+  会被 `priceEvent` 按表折算，但 `billingMode` 仍标成「官方报价」——因为我们没有存
+  「这个价是哪来的」。数更准了，标签略糙。
 - **长上下文是「过线整轮翻倍」，不是对超出部分加价。** 提示词超过
   `long_context_over`（OpenAI 现为 272000 input token）后，整个回合的四个桶都按
   `long` 那一档算。判定用的是「这轮喂进去多少」= 未命中缓存的输入 + 命中缓存的
@@ -267,12 +298,63 @@ data/
   的剩余额度。**金额在前后端之间一律传微美元整数**，前端只在显示的最后一步除 1e6；
   别把美元浮点传回服务端，绕一圈会把分账算歪。充值按钮每次点击生成一个 `ref`
   幂等键，连点或重试不会重复入账。
-- 报表页（按用户/模型/时段的消耗统计）还没做，`GET /api/usage` 已经能出汇总。
-- **已知缺口：终端页不计费。** 用户在终端里直接敲 `claude`/`codex` 走的是容器内进程，
-  输出直接进 PTY，不经过 `runTurn`，既不记用量也不扣额度。折中办法是**余额见底就
-  不让用终端**（见下节），拦住入口而不是按量收费。要真按量算准，唯一能同时覆盖对话
-  和终端的位置是中转站侧（账号池给容器注入 `base_url`，agent 流量必经那里），不是
-  这一层能解决的。
+
+### 使用记录（流水明细）
+
+`internal/server/usagelog.go` + `web/src/usage.ts`，侧栏「使用记录」，管理员与普通
+用户都有入口。`GET /api/usage` 出的是聚合，这里 `GET /api/usage/events` 出的是一行行
+明细，带筛选、翻页、合计与筛选可选值。
+
+- **一行 = 一个回合 × 一个模型，不是一次 API 调用。** 容器里的 CLI 直连 provider，
+  我们不在链路上，看不见单次 HTTP 请求。中转站面板上的「端点 / API 密钥 / 分组 / IP」
+  我们没有对应物，别为了凑齐列去编。想要单请求粒度只能自己做反代，那是另一件事。
+  （顺带：claude 的 `assistant` 事件确实带每次调用的 usage，但其中 `output_tokens`
+  是流式开始时的占位值、永远不更新，**算不了钱**——所以粒度只能停在回合。）
+- **合计与筛选可选值都按「筛选条件」算，不按「当前这一页」算。** 否则翻页时表头的
+  总花费跟着变，没法用。三者共用 `UsageFilter.where()`，不会各算各的。
+- **可见范围与筛选项是两回事。** `scopeUser` 是硬边界（普通用户只能是自己），`f.User`
+  是用户自己选的筛选项。`FacetsUsage` 会为了「选了还能改回来」把每列自己的过滤放宽，
+  放宽时必须重新按 `scopeUser` 收口——否则普通用户能从用户下拉里读到全部用户名。
+- 一页上限 `usageRowsMax`，这个接口没有游标、全靠 OFFSET 翻页，放开上限等于允许一次
+  拖走整张表。CSV 导出走的也是这个上限，超出会提示用户缩小时间范围分批导。
+- **终端消耗靠事后扫 transcript 补记**（`internal/server/termusage.go`，`kind=terminal`）。
+  终端里的 CLI 是容器内进程、输出直接进 PTY，`runTurn` 看不见；但 Claude Code 把完整
+  记录落在 `<会话home>/.claude/projects/<cwd目录>/<provider会话id>.jsonl`，而会话 home
+  是宿主机 bind mount，所以读文件就够，不用 hook、不用反代、不用进容器。要点：
+  - **`entrypoint` 是分水岭**：`cli` = 用户手敲的 TUI（要补），`sdk-cli` = 我们自己发的
+    `claude -p`（已记账，漏掉这个过滤就是对话消耗记两遍）。
+  - transcript 里的 `usage` 是**最终值**，不是流式 `assistant` 事件里那个恒为 2 的
+    `output_tokens` 占位——所以这条路其实看得见单次 API 调用，但仍按回合聚合落库，
+    好让两种来源的行粒度一致。回合边界用最近一条 `user` 记录的 `uuid`（老版本 CLI 的
+    `promptId` 是 null，不能用）。
+  - 同一个 `requestId` 会在文件里出现多次（流式中途一遍、收尾一遍）：**用量取最后一份，
+    时间取最早一份**，累加会把一次调用算两遍。
+  - 去重靠 `usage_events.req_id`（回合首个 requestId）上的**部分唯一索引**
+    （`WHERE req_id != ''`，对话行的空串必须排除）。`UpsertTerminalUsage` 的
+    `ON CONFLICT` 必须把这个 WHERE 原样带上，否则 SQLite 认不出这条约束。upsert 而非
+    insert 是因为扫描时回合可能还没结束，下一轮要把新调用更新到同一行上。
+  - **只记账不扣额度**：补记是异步的、价还是我们查表折的，拿它动余额用户没法对账。
+    拦终端仍然靠余额见底不让开终端（见下节）。`billingMode` 因此对 `terminal` 特判——
+    哪怕是 claude 也只能标「价目表 / 未定价」，不能标「官方报价」。
+  - 扫描按 (size, mtime) 跳过没动过的文件；只遍历库里存在的会话，磁盘上已删除会话的
+    残留目录不补（补了也是归不到人头上的孤儿行）。
+  - 触发有三条路，都汇到 `Server.termScan`（扫描进度上锁，同一时刻只有一趟在跑）：
+    **inotify**（`termWatchLoop`，主力，实测写入到落库 ~700ms）、`termUsageLoop`
+    每分钟的全量兜底、以及 `handleUsageEvents` 进来时先补一趟。
+  - **inotify 能收到容器里的写入**：会话 home 是 bind mount，容器与宿主机是同一个
+    inode，写操作走同一个内核 VFS（实测 CREATE/WRITE/REMOVE 都到）。监听的是
+    `projects/` 及其各 cwd 子目录，`syncTermWatches` 每 30 秒与库里的会话对齐一次；
+    watch 加不上（`fs.inotify.max_user_watches` 有上限）只记日志，定时那趟仍然覆盖。
+  - 写入攒 `termWatchSettle` 再扫，而且只在一波的**第一下**开表——每次事件都重置的话，
+    一个持续写文件的长回合会把补记无限推迟。
+  - **延迟压得小但消不掉**：终端流量不经过服务端，我们永远是在读 CLI 事后写的文件。
+    回合进行中扫到的是半截，upsert 保证下一轮补齐同一行。
+- 终端页顶栏的「本会话已花」（`term.ts` 的 `termSpendPolling`）直接复用
+  `GET /api/usage/events?session=<id>&limit=1` 的 `total`，没有单独的接口——那个 total
+  本来就是「按筛选条件算、与翻页无关」，正好是这个数。只在终端页轮询（15 秒）。
+- **codex 的终端消耗还没补。** rollout 在 `<会话home>/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`，
+  `token_count` 事件带 `last_token_usage`，`session_meta.originator` 是 `codex-tui`（终端）
+  还是 exec，判据齐全，只是格式另写一套解析。
 
 ### 终端
 

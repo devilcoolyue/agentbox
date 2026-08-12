@@ -16,6 +16,7 @@ import { agentKey, agentName, agentIcon, decorateAgentOpts } from "./brand.js";
 import { quotaChip, openQuota } from "./quota.js";
 import { loadProxies, mountProxyPicker, openProxiesSection, refreshProxyCount } from "./proxies.js";
 import type { ProxyPicker } from "./proxies.js";
+import { openPricingSection, refreshPriceCount } from "./pricing.js";
 
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
@@ -42,7 +43,7 @@ export async function openSettingsView() {
   }
 }
 
-const SET_SECS = ["accounts", "proxies", "container", "models", "interface", "security", "monitor", "about"];
+const SET_SECS = ["accounts", "proxies", "container", "models", "pricing", "interface", "security", "monitor", "about"];
 
 function setSec(name: string) {
   S.sec = name;
@@ -58,6 +59,7 @@ function setSec(name: string) {
   if (name === "security") loadUsers();
   if (name === "monitor") startMonitor();
   if (name === "proxies") openProxiesSection();
+  if (name === "pricing") openPricingSection();
 }
 
 $("set-nav").addEventListener("click", (e) => {
@@ -530,9 +532,10 @@ function fillSettingsForms() {
   $<HTMLInputElement>("set-tips-interval").value = String(tips.interval_sec != null ? tips.interval_sec : 4);
   $<HTMLSelectElement>("set-tips-anim").value = tips.animation || "scroll";
   renderModels();
+  refreshPriceCount();
 }
 
-async function putSettings(
+export async function putSettings(
   patch: Partial<Settings>, btn: HTMLButtonElement | null, okMsg?: string,
 ) {
   if (btn) btnBusy(btn, "保存中…");

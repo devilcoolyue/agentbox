@@ -12,7 +12,7 @@ import { showView, renderSidebar, updateTopbarTitle } from "./shell.js";
 import { chatTeardown, resetChatImgs, loadPick, updateHero, loadHistory, connectChat } from "./chat.js";
 import { setThreadBar, closeThreadPanel } from "./chat-threads.js";
 import { svgIcon } from "./chat-render.js";
-import { termTeardown, termDisconnect, openTerm } from "./term.js";
+import { termTeardown, termDisconnect, openTerm, termSpendPolling } from "./term.js";
 import { resetTree, loadFiles } from "./files.js";
 import { loadChanges, resetChangesRepo } from "./changes.js";
 import { loadSkills } from "./skills.js";
@@ -105,6 +105,8 @@ export function setTab(name: Tab) {
   if (name === "changes") loadChanges();
   if (name === "skills") loadSkills();
   if (name === "term") openTerm(); // 进入即自动拉起 shell；已连上则只重排尺寸
+  // 「本会话已花」只在终端页轮询：切走了没人看，没必要一直问服务端。
+  termSpendPolling(name === "term");
 }
 
 for (const t of document.querySelectorAll<HTMLElement>(".tab")) {

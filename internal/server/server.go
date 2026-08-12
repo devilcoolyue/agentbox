@@ -52,11 +52,11 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
-	cfg     *config.Config
-	store   *store.Store
-	dock    *dockerx.Manager
-	chat    *chatManager
-	tunnels *tunnelHub
+	cfg      *config.Config
+	store    *store.Store
+	dock     *dockerx.Manager
+	chat     *chatManager
+	tunnels  *tunnelHub
 	pairs    *pairStore    // outstanding abox-link pairing codes
 	previews *previewStore // 短时只读的 HTML 预览通行证
 	mapAuth  mapSourceAuth // source-IP cache for tunnel port-map listeners
@@ -85,6 +85,8 @@ type Server struct {
 	idle *activity // per-session liveness for the idle reaper
 
 	mon *monState // 上一帧计数器快照，供监控页按轮询间隔算 CPU 速率
+
+	termScan *termScanner // 终端消耗补记的扫描进度（定时器与使用记录页共用）
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -116,6 +118,7 @@ func New(cfg *config.Config) (*Server, error) {
 		logins:     newLoginGuard(),
 		idle:       newActivity(),
 		mon:        newMonState(),
+		termScan:   &termScanner{seen: map[string]termFileState{}},
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  32 << 10,
 			WriteBufferSize: 32 << 10,
@@ -183,6 +186,7 @@ func (s *Server) Run() error {
 	mux.Handle("PUT /api/users/{name}/quota", s.admin(http.HandlerFunc(s.handleQuotaSet)))
 	mux.Handle("POST /api/users/{name}/credits", s.admin(http.HandlerFunc(s.handleCreditGrant)))
 	mux.Handle("GET /api/usage", s.auth(http.HandlerFunc(s.handleUsageReport)))
+	mux.Handle("GET /api/usage/events", s.auth(http.HandlerFunc(s.handleUsageEvents)))
 	mux.Handle("GET /api/accounts", s.auth(http.HandlerFunc(s.handleAccounts)))
 	mux.Handle("POST /api/accounts", s.admin(http.HandlerFunc(s.handleAccountCreate)))
 	mux.Handle("PATCH /api/accounts/{id}", s.admin(http.HandlerFunc(s.handleAccountPatch)))
@@ -271,10 +275,12 @@ func (s *Server) Run() error {
 		return err
 	}
 
-	go s.imageJanitor() // 粘贴图片 48 小时自动清理
-	go s.credSyncLoop() // OAuth 凭证与账号池双向收敛（刷新令牌轮换制）
-	go s.idleReaper()   // 空闲会话容器自动停机（30 分钟无活动）
-	go s.tokenJanitor() // 过期登录令牌定期清理
+	go s.imageJanitor()  // 粘贴图片 48 小时自动清理
+	go s.credSyncLoop()  // OAuth 凭证与账号池双向收敛（刷新令牌轮换制）
+	go s.idleReaper()    // 空闲会话容器自动停机（30 分钟无活动）
+	go s.termUsageLoop() // 终端里手敲 CLI 的消耗补记进流水（只记账不扣额度）
+	go s.termWatchLoop() // 同上，inotify 盯着 transcript，写完就补，不等定时那趟
+	go s.tokenJanitor()  // 过期登录令牌定期清理
 	// A tunnel misconfiguration must not take down the whole server: log and
 	// keep serving without it (systemd Restart=always would otherwise
 	// crash-loop agentbox on, say, a taken port).

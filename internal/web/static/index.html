@@ -33,6 +33,7 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/term.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/files.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/settings.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/usage.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/dialogs.css">
 </head>
 <body>
@@ -191,6 +192,14 @@
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
           </svg>
         </span>内网隧道<span id="tunnel-state" class="tunnel-state mono"><span id="tunnel-dot" class="t-dot"></span><span id="tunnel-text">离线</span></span></button>
+        <!-- id 不能叫 btn-usage：那是工作台头部「额度」（Claude 订阅额度）按钮占着的，
+             重名会让 getElementById 全指到这里来——侧栏菜单会被塞进额度图标、点一下弹额度框。 -->
+        <button id="btn-usagelog" class="side-item"><span class="glyph">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 3v16a2 2 0 0 0 2 2h16"/>
+            <path d="M7 15l3.5-4 3 2.5L20 7"/>
+          </svg>
+        </span>使用记录</button>
         <button id="btn-settings" class="side-item"><span class="glyph">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3.2"/>
@@ -344,6 +353,8 @@
                 </svg>
                 <div id="term-tips" class="term-tips" aria-live="off"></div>
               </div>
+              <!-- 本会话已花：对话 + 终端 + 起标题的总和，term.js 轮询 -->
+              <div id="term-spend" class="term-spend hidden" role="status"></div>
               <!-- 右侧连接状态：状态点 + 文案 + 手动重连 -->
               <div class="term-conn">
                 <span id="term-conn-dot" class="t-dot"></span>
@@ -483,6 +494,7 @@
             <button data-sec="proxies">IP 代理 <span id="proxy-count" class="count">0</span></button>
             <button data-sec="container">容器与资源</button>
             <button data-sec="models">模型管理</button>
+            <button data-sec="pricing">价目表 <span id="price-count" class="count">0</span></button>
             <button data-sec="interface">界面与提示</button>
             <button data-sec="security">安全与访问</button>
             <button data-sec="monitor">运维监控</button>
@@ -636,6 +648,46 @@
                   <input id="mdl-codex-label" type="text" placeholder="显示名称">
                   <input id="mdl-codex-id" type="text" placeholder="模型 ID" class="mono">
                   <button class="btn btn-sm mdl-add" data-agent="codex">添加</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- 价目表 -->
+            <section id="sec-pricing" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2>价目表</h2>
+                  <p>按 token 折算费用的单价，美元 / 百万 token。<b>只用于 provider 不自报价格的消耗</b>：Codex 的全部回合，以及从 CLI 记录里补记的终端消耗。网页对话里 Claude 自报价格的行不查这张表。查不到价的行记为「未定价」，只记用量、不扣额度。</p>
+                  <p class="sec-hint">键可以是<b>模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b>agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p>
+                </div>
+                <div class="sec-actions">
+                  <button id="price-fill" class="btn btn-sm" title="把官方公布的 Claude 价格填进表里；已有的行不会被覆盖">填入 Claude 官方价</button>
+                  <button id="price-fill-oai" class="btn btn-sm" title="把官方公布的 OpenAI 价格填进表里；已有的行不会被覆盖">填入 OpenAI 官方价</button>
+                  <button id="price-save" class="btn btn-sm btn-primary">保存价目表</button>
+                </div>
+              </div>
+              <div class="card">
+                <div class="price-table-wrap">
+                  <table class="price-table">
+                    <thead>
+                      <tr>
+                        <th>模型 ID / agent</th>
+                        <th class="num">输入</th>
+                        <th class="num">输出</th>
+                        <th class="num">缓存读取</th>
+                        <th class="num">缓存写入</th>
+                        <th class="num">长上下文阈值</th>
+                        <th class="num">超阈值单价<br><span class="th-sub">输入 / 输出 / 缓存读 / 缓存写</span></th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="price-rows"></tbody>
+                  </table>
+                </div>
+                <p id="price-empty" class="files-empty hidden">价目表是空的。所有按 token 折算的消耗都会记为「未定价」。</p>
+                <div class="price-add">
+                  <input id="price-new-key" type="text" placeholder="模型 ID 或 agent 名，如 claude-opus-5" class="mono">
+                  <button id="price-add" class="btn btn-sm">添加一行</button>
                 </div>
               </div>
             </section>
@@ -819,6 +871,84 @@
           </div>
         </div>
       </div>
+
+      <!-- 使用记录视图：一行 = 一个回合 × 一个模型（不是一次 API 调用） -->
+      <div id="view-usage" class="view hidden">
+        <header class="set-head">
+          <h1>使用记录</h1>
+          <p id="usage-sub">每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。</p>
+        </header>
+
+        <div class="usage-body">
+          <div class="usage-filters card">
+            <label class="uf-item" id="uf-user-wrap">
+              <span>用户</span>
+              <select id="uf-user"><option value="">全部</option></select>
+            </label>
+            <label class="uf-item">
+              <span>Agent</span>
+              <select id="uf-agent"><option value="">全部</option></select>
+            </label>
+            <label class="uf-item">
+              <span>模型</span>
+              <select id="uf-model"><option value="">全部</option></select>
+            </label>
+            <label class="uf-item">
+              <span>类型</span>
+              <select id="uf-kind">
+                <option value="">全部</option>
+                <option value="chat">对话</option>
+                <option value="terminal">终端</option>
+                <option value="title">起标题</option>
+              </select>
+            </label>
+            <label class="uf-item">
+              <span>起始</span>
+              <input type="date" id="uf-since">
+            </label>
+            <label class="uf-item">
+              <span>截止</span>
+              <input type="date" id="uf-until">
+            </label>
+            <div class="uf-actions">
+              <button id="uf-reset" class="btn btn-ghost btn-sm">重置</button>
+              <button id="uf-refresh" class="btn btn-sm">刷新</button>
+              <button id="uf-export" class="btn btn-primary btn-sm">导出 CSV</button>
+            </div>
+          </div>
+
+          <div id="usage-summary" class="usage-summary"></div>
+
+          <div class="usage-table-wrap card">
+            <table class="usage-table">
+              <thead>
+                <tr>
+                  <th class="col-user">用户</th>
+                  <th>会话 / 账号</th>
+                  <th>模型</th>
+                  <th>类型</th>
+                  <th>计费</th>
+                  <th class="num">Token</th>
+                  <th class="num">费用</th>
+                  <th class="num">延迟</th>
+                  <th class="num">时间</th>
+                </tr>
+              </thead>
+              <tbody id="usage-rows"></tbody>
+            </table>
+            <div id="usage-empty" class="files-empty hidden">这个筛选条件下还没有消耗记录。</div>
+            <div id="usage-loading" class="loading-block hidden">
+              <span class="spin"></span><span>读取中…</span>
+            </div>
+          </div>
+
+          <div class="usage-pager">
+            <button id="usage-prev" class="btn btn-ghost btn-sm">← 上一页</button>
+            <span id="usage-page" class="mono"></span>
+            <button id="usage-next" class="btn btn-ghost btn-sm">下一页 →</button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -886,6 +1016,8 @@
         <iframe id="fv-frame" class="fv-frame" title="HTML 预览" referrerpolicy="no-referrer"
                 sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock"></iframe>
       </div>
+      <!-- Markdown 渲染：样式借用对话流的 .msg.agent -->
+      <div id="fv-mdwrap" class="fv-mdwrap hidden"><div id="fv-md" class="fv-md msg agent"></div></div>
       <div id="fv-imgwrap" class="fv-imgwrap hidden"><img id="fv-img" alt=""></div>
       <div id="fv-notice" class="fv-notice hidden"></div>
     </div>

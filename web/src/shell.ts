@@ -24,9 +24,11 @@ window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(
 
 /* ---- 顶栏：设置视图显示标题，工作台视图显示 状态灯+会话名+⋯菜单 ---- */
 
+const VIEW_TITLE: Record<string, string> = { settings: "系统设置", usage: "使用记录" };
+
 export function updateTopbarTitle() {
   const inWork = S.view === "work" && !!S.current;
-  $("topbar-title").textContent = S.view === "settings" ? "系统设置" : (S.current ? S.current.name : "");
+  $("topbar-title").textContent = VIEW_TITLE[S.view] || (S.current ? S.current.name : "");
   const led = $("tb-led");
   led.classList.toggle("hidden", !inWork);
   led.classList.toggle("on", inWork && S.current!.status === "running");
@@ -44,13 +46,17 @@ export function showView(name: View) {
   S.view = name;
   $("view-work").classList.toggle("hidden", name !== "work");
   $("view-settings").classList.toggle("hidden", name !== "settings");
+  $("view-usage").classList.toggle("hidden", name !== "usage");
   $("btn-settings").classList.toggle("active", name === "settings");
+  $("btn-usagelog").classList.toggle("active", name === "usage");
   updateTopbarTitle();
   closeDrawer();
   renderSidebar();
 }
 
 $("btn-settings").addEventListener("click", () => emit("open-settings"));
+/* btn-usagelog 而非 btn-usage：后者是工作台头部的「额度」按钮，见 index.html 注释。 */
+$("btn-usagelog").addEventListener("click", () => emit("open-usage"));
 
 /* ---- 侧栏：会话列表 ---- */
 

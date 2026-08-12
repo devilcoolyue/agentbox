@@ -7,6 +7,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -245,6 +246,62 @@ func sanitizeTips(tt TerminalTips) TerminalTips {
 		tt.Animation = "scroll"
 	}
 	return tt
+}
+
+const (
+	maxPricingRows = 200   // 价目表条数上限
+	maxRatePerMTok = 10000 // 单价上限（美元/百万 token）：真实价目最高才两位数，
+	// 这个上限只为挡住手滑多打几个零——那会把用户余额一次扣穿
+)
+
+// pricingKeyRe 卡住价目表的键：模型 id 或 agent 名，都是 ASCII 短标识。
+// 收紧到这个集合是为了别让配置文件里出现意外的键（空串、带空格、超长）。
+var pricingKeyRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+// sanitizePricing 校验管理端提交的整张价目表。价目直接决定扣多少钱，宁可整表
+// 拒掉也不要放一个畸形值进去：单价是负数会变成「用得越多余额越多」，长上下文
+// 档位缺了阈值则永远命中不到。
+func sanitizePricing(in map[string]ModelPrice) (map[string]ModelPrice, error) {
+	if len(in) > maxPricingRows {
+		return nil, fmt.Errorf("价目表最多 %d 条", maxPricingRows)
+	}
+	out := make(map[string]ModelPrice, len(in))
+	for k, p := range in {
+		key := strings.TrimSpace(k)
+		if !pricingKeyRe.MatchString(key) {
+			return nil, fmt.Errorf("价目表的键 %q 不是合法的模型 id / agent 名", k)
+		}
+		if err := checkRates(key, p.TokenRates); err != nil {
+			return nil, err
+		}
+		if p.Long != nil {
+			if err := checkRates(key+" 的长上下文档", *p.Long); err != nil {
+				return nil, err
+			}
+			if p.LongContextOver <= 0 {
+				return nil, fmt.Errorf("%s 配了长上下文价格却没有阈值", key)
+			}
+		}
+		if p.LongContextOver < 0 {
+			return nil, fmt.Errorf("%s 的长上下文阈值不能为负", key)
+		}
+		out[key] = p
+	}
+	return out, nil
+}
+
+func checkRates(who string, r TokenRates) error {
+	for name, v := range map[string]float64{
+		"输入": r.Input, "输出": r.Output, "缓存读取": r.CacheRead, "缓存写入": r.CacheWrite,
+	} {
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+			return fmt.Errorf("%s 的%s单价不是合法的非负数", who, name)
+		}
+		if v > maxRatePerMTok {
+			return fmt.Errorf("%s 的%s单价 %g 超出上限 %d（美元/百万 token）", who, name, v, maxRatePerMTok)
+		}
+	}
+	return nil
 }
 
 type Config struct {
@@ -716,6 +773,21 @@ func (c *Config) GetModels() map[string][]ModelOption {
 
 // GetTerminalTips returns a copy of the terminal-page hint ticker config; the
 // slice is copied so callers can't mutate the shared config.
+// GetPricing 返回价目表的副本；map 本身要拷，否则调用方能绕过锁改到内存里那份。
+func (c *Config) GetPricing() map[string]ModelPrice {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]ModelPrice, len(c.Pricing))
+	for k, v := range c.Pricing {
+		if v.Long != nil {
+			long := *v.Long
+			v.Long = &long
+		}
+		out[k] = v
+	}
+	return out
+}
+
 func (c *Config) GetTerminalTips() TerminalTips {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -733,10 +805,25 @@ func (c *Config) Price(agent, model string) (ModelPrice, bool) {
 	if p, ok := c.Pricing[model]; ok && model != "" {
 		return p, true
 	}
+	// provider 有时给带日期的模型 id（claude-haiku-4-5-20251001），价目表里配的
+	// 通常是不带日期的那个。价按模型系列走，日期只是快照，所以退一步再查一次。
+	if base := stripModelDate(model); base != model {
+		if p, ok := c.Pricing[base]; ok {
+			return p, true
+		}
+	}
 	if p, ok := c.Pricing[agent]; ok && agent != "" {
 		return p, true
 	}
 	return ModelPrice{}, false
+}
+
+// modelDateSuffix 匹配模型 id 末尾的 -YYYYMMDD 快照日期。
+var modelDateSuffix = regexp.MustCompile(`-\d{8}$`)
+
+// stripModelDate 去掉模型 id 末尾的日期快照；没有就原样返回。
+func stripModelDate(model string) string {
+	return modelDateSuffix.ReplaceAllString(model, "")
 }
 
 // --- 写访问：全部先在副本上验证，通过后才落盘并生效 ---
@@ -805,6 +892,9 @@ type SettingsPatch struct {
 	Tunnel         *TunnelConfig            `json:"tunnel"`
 	ProxyBridge    *ProxyBridgeConfig       `json:"proxy_bridge"`
 	TerminalTips   *TerminalTips            `json:"terminal_tips"`
+	// Pricing 整表替换（不是逐键合并）：价目表是一张要整体校对的表，
+	// 前端改完把完整的表发回来，删行才有办法表达。
+	Pricing map[string]ModelPrice `json:"pricing"`
 }
 
 func (c *Config) ApplySettings(p SettingsPatch) error {
@@ -844,6 +934,13 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.TerminalTips != nil {
 			w.TerminalTips = sanitizeTips(*p.TerminalTips)
+		}
+		if p.Pricing != nil {
+			clean, err := sanitizePricing(p.Pricing)
+			if err != nil {
+				return err
+			}
+			w.Pricing = clean
 		}
 		return nil
 	})

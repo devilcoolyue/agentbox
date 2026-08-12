@@ -179,6 +179,65 @@ export interface UsageRow {
   cost_micro_usd: number;
 }
 
+/** GET /api/usage/events 的一行明细。
+ *
+ * 一行 = 一个回合 × 一个模型，**不是一次 API 调用**：容器里的 CLI 直接打
+ * provider，我们不在链路上，只拿得到 CLI 在回合收尾汇总报的那份账。 */
+export interface UsageEventRow {
+  id: number;
+  /** Unix 毫秒 */
+  ts: number;
+  user: string;
+  session_name?: string;
+  session_id: string;
+  thread_id?: string;
+  turn_id: string;
+  agent: string;
+  account_id?: string;
+  account_label?: string;
+  model?: string;
+  /** "chat" 用户的对话 | "title" 服务端自动起标题 */
+  kind: string;
+  /** provider 自报的服务方（claude 的 "firstParty"）；codex 不报 */
+  provider?: string;
+  /** "provider" provider 报价 | "table" 价目表折算 | "none" 未定价 */
+  billing: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  total_tokens: number;
+  cost_micro_usd: number;
+  /** provider 自报的模型侧耗时，不含 CLI 启动；回合级指标（同回合各行重复，跨行求和无意义） */
+  duration_ms: number;
+  /** 我们自己量的回合墙钟（容器就绪→进程退出，含 CLI 启动），与 ttft 同一块表；0 = 老数据没量过 */
+  wall_ms: number;
+  /** 首字延迟，同上；0 = 没量到 */
+  ttft_ms: number;
+}
+
+/** 整个筛选范围的合计，不随翻页变化。turns 按 turn_id 去重。 */
+export interface UsageTotals {
+  rows: number;
+  turns: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  cost_micro_usd: number;
+}
+
+/** GET /api/usage/events。facets 是筛选下拉的可选值（服务端按可见范围裁过）。 */
+export interface UsageEvents {
+  rows: UsageEventRow[];
+  total: UsageTotals;
+  facets: { users: string[]; agents: string[]; models: string[] };
+  limit: number;
+  offset: number;
+  /** "self" 只看得到自己（隐藏用户列）| "all" 管理员看全部 */
+  scope: string;
+}
+
 /* ---------------- Claude 订阅额度 ---------------- */
 
 /** 一条限额窗口（5 小时 / 本周 / 本周 Opus…）。percent 是 0-100 的使用率。 */
@@ -284,8 +343,25 @@ export interface Settings {
   tunnel_error?: string;
   /** 账号出口代理的本地 HTTP 桥接监听配置 */
   proxy_bridge: ProxyBridgeConfig;
+  /** 按 token 折算费用的价目表，键是模型 ID 或 agent 名 */
+  pricing: Record<string, ModelPrice>;
   /** listen 改过但未重启 */
   restart_required: boolean;
+}
+
+/** 一档单价，美元 / 百万 token。0 表示这一桶免费。 */
+export interface TokenRates {
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_write: number;
+}
+
+/** 一个模型（或一个 agent 兜底）的价。long 是长上下文档：
+ * 提示词超过 long_context_over 个 token 时，**整个回合**按 long 计价——是台阶不是加价。 */
+export interface ModelPrice extends TokenRates {
+  long_context_over?: number;
+  long?: TokenRates;
 }
 
 export interface ProxyBridgeConfig {

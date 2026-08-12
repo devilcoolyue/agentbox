@@ -274,11 +274,17 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 	// 用量流水也挂在它上面。
 	tid, firstTurn := r.preTurnTitleState(sess)
 
-	// 本回合的用量归属。turnID 把一个回合里按模型拆出的多行流水串起来；
-	// usageRows 数落库行数，收尾时为 0 说明这趟消耗没进账（见下方告警）。
+	// 本回合的用量归属。turnID 把一个回合里按模型拆出的多行流水串起来；一个
+	// 回合可能报好几次用量，tally 负责收敛成一份账（见 usage.go）。
 	// onLine 由回合的读循环串行调用，普通变量即可。
 	turnID := store.NewID()
-	usageRows := 0
+	var tally usageTally
+	// 回合计时的起点，首字延迟与墙钟总耗时共用一块表：容器就绪之后开表（别把
+	// 拉容器的几秒算进去），第一个模型输出事件量首字（见 isOutputEvent），回合
+	// 收尾时量总耗时。两个数同源才可比——provider 自报的 duration_ms 不含 CLI
+	// 自身启动的那两秒，单独拿它当总耗时会比首字还小。
+	var turnStart time.Time
+	var ttftMS int64
 
 	r.appendLog(logEntry{Kind: "user", Text: text})
 	r.broadcast(map[string]any{"type": "user_message", "text": text})
@@ -289,6 +295,16 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		fail("启动容器失败: " + err.Error())
 		return
 	}
+	turnStart = time.Now()
+
+	// 容器起来之后才可能产生消耗，之后无论回合正常收尾、报错还是被中断，已经
+	// 报上来的用量都要落库——钱花了就得记。一行都没记到说明这个 agent/版本报
+	// 用量的形状我们没认出来：消耗真实发生了却不会进报表，宁可吵一句。
+	defer func() {
+		if r.flushUsage(&tally, time.Since(turnStart)) == 0 {
+			log.Printf("usage: 会话 %s 回合结束但未记到用量（agent=%s），该回合消耗不会进报表", r.sessID, sess.Agent)
+		}
+	}()
 
 	// 两条路径共用的行处理：JSON 事件落盘并广播（增量只广播），
 	// 顺带提取 provider 会话 id 供续聊；非 JSON 行按原文透传。
@@ -300,6 +316,11 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		if line[0] == '{' && json.Valid(line) {
 			ev := make(json.RawMessage, len(line))
 			copy(ev, line)
+			// 掐表要在增量分支之前：最早的模型输出往往就是个增量事件，放到
+			// 后面量到的是第一个完整事件，那已经是整段话说完了。
+			if ttftMS == 0 && isOutputEvent(line) {
+				ttftMS = time.Since(turnStart).Milliseconds()
+			}
 			if agent.IsPartialEvent(line) {
 				// 增量 delta 只广播不落盘：随后的完整事件会带全文再来一份
 				r.broadcast(map[string]any{"type": "agent_event", "event": ev})
@@ -307,11 +328,11 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 			}
 			r.appendLog(logEntry{Kind: "event", Event: ev})
 			r.broadcast(map[string]any{"type": "agent_event", "event": ev})
-			// 回合收尾事件带 token/费用，落进 usage_events（见 usage.go）。
-			usageRows += r.recordUsage(store.UsageEvent{
+			// 回合收尾事件带 token/费用，先并进 tally，回合结束统一落库。
+			tally.observe(store.UsageEvent{
 				User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: turnID,
 				Agent: sess.Agent, AccountID: sess.AccountID, Model: model,
-				Kind: store.UsageKindChat,
+				Kind: store.UsageKindChat, TTFTMs: ttftMS,
 			}, line)
 			if id := agent.ExtractSessionID(line); id != "" && id != chatID {
 				chatID = id
@@ -352,12 +373,6 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 			return
 		}
 	}
-	// 回合正常跑完却一行用量都没记到，说明这个 agent/版本报用量的形状我们没
-	// 认出来——消耗真实发生了但不会进报表。宁可吵一句，也别让漏账无声无息。
-	if usageRows == 0 {
-		log.Printf("usage: 会话 %s 回合结束但未记到用量（agent=%s），该回合消耗不会进报表", r.sessID, sess.Agent)
-	}
-
 	r.appendLog(logEntry{Kind: "status", State: "idle"})
 	r.broadcast(map[string]any{"type": "status", "state": "idle"})
 
@@ -504,6 +519,7 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), titleTimeout)
 	defer cancel()
+	titleStart := time.Now()
 	out, err := s.dock.ExecCapture(ctx, sess.ContainerID, cmd, s.execEnv(sess), titlePrompt(firstMsg))
 	if err != nil {
 		log.Printf("gen title %s: %v", r.sessID, err)
@@ -515,7 +531,7 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 		r.recordUsage(store.UsageEvent{
 			User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: store.NewID(),
 			Agent: sess.Agent, AccountID: sess.AccountID, Kind: store.UsageKindTitle,
-		}, usage)
+		}, usage, time.Since(titleStart))
 	}
 	title := sanitizeTitle(raw)
 	if title == "" {
