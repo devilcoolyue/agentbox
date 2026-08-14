@@ -14,7 +14,7 @@
 
 import { S, bus } from "./state.js";
 import type { UsageEventRow, UsageEvents } from "./types.js";
-import { $, toast, fmtTime, startDownload } from "./util.js";
+import { $, toast, fmtTime, startDownload, isMobile } from "./util.js";
 import { api } from "./api.js";
 import { showView } from "./shell.js";
 import { fmtUSD } from "./quota.js";
@@ -34,7 +34,7 @@ interface Filters {
   agent: string;
   model: string;
   kind: string;
-  since: string; // <input type=date> 的 YYYY-MM-DD
+  since: string; // 本地时刻 YYYY-MM-DDTHH:MM（由日期 + 时 + 分三个框拼出）
   until: string;
 }
 
@@ -44,14 +44,79 @@ function readFilters(): Filters {
     agent: $<HTMLSelectElement>("uf-agent").value,
     model: $<HTMLSelectElement>("uf-model").value,
     kind: $<HTMLSelectElement>("uf-kind").value,
-    since: $<HTMLInputElement>("uf-since").value,
-    until: $<HTMLInputElement>("uf-until").value,
+    since: readBound("since"),
+    until: readBound("until"),
   };
 }
 
-/* 日期框给的是本地日历日，服务端要 RFC3339 时间点。since 取当天 00:00，
- * until 取次日 00:00——服务端的上界是开区间，不加这一天会把当天整个排除掉，
- * 「今天到今天」查出来是空的。 */
+/* ---------------- 时间区间 ---------------- */
+
+/* 时分故意不用 datetime-local / type=time：原生时间控件往上翻到 0 会绕回 23，
+ * 看着像还能继续往下走。number 框带 min/max，翻到头就停住。 */
+const BOUND_DEFAULT = { since: [0, 0], until: [23, 59] } as const;
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/* 三个框 → 本地时刻串。没选日期就是没筛；时分留空按边界补：起始补 00:00、
+ * 截止补 23:59，这样「只选一天」还是整天，跟从前只有日期框时的行为一致。 */
+function readBound(which: "since" | "until"): string {
+  const day = $<HTMLInputElement>("uf-" + which).value;
+  if (!day) return "";
+  const [dh, dm] = BOUND_DEFAULT[which];
+  const h = $<HTMLInputElement>("uf-" + which + "-h").value;
+  const m = $<HTMLInputElement>("uf-" + which + "-m").value;
+  return day + "T" + pad(clamp(h === "" ? dh : Number(h), 0, 23)) +
+    ":" + pad(clamp(m === "" ? dm : Number(m), 0, 59));
+}
+
+function writeBound(which: "since" | "until", v: string) {
+  const [day, time] = v ? v.split("T") : ["", ""];
+  $<HTMLInputElement>("uf-" + which).value = day!;
+  // 补零的两位数在 number 框里是合法值，写回去时保持「00」而不是「0」，
+  // 两个时间项上下对齐才好扫读
+  $<HTMLInputElement>("uf-" + which + "-h").value = time ? time.slice(0, 2) : "";
+  $<HTMLInputElement>("uf-" + which + "-m").value = time ? time.slice(3, 5) : "";
+}
+
+const localStamp = (d: Date) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+/* 快捷区间。「今日 / 昨日」是自然日整天，「24 小时」是从此刻往回数 24 小时，
+ * 两种口径都有人要：前者用来对账，后者用来看「刚才烧了多少」。 */
+const RANGES: Record<string, () => [string, string]> = {
+  "uf-r-today": () => {
+    const d = new Date();
+    return [localStamp(dayAt(d, 0, 0)), localStamp(dayAt(d, 23, 59))];
+  },
+  "uf-r-24h": () => {
+    const now = new Date();
+    return [localStamp(new Date(now.getTime() - 24 * 3600 * 1000)), localStamp(now)];
+  },
+  "uf-r-yday": () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return [localStamp(dayAt(d, 0, 0)), localStamp(dayAt(d, 23, 59))];
+  },
+};
+
+function dayAt(d: Date, h: number, m: number) {
+  const x = new Date(d);
+  x.setHours(h, m, 0, 0);
+  return x;
+}
+
+/* 高亮只跟着「刚点过哪个」走：24 小时是滑动窗口，拿当前值反推的话过一分钟
+ * 就对不上了，反而闪来闪去。手改任何筛选项就取消高亮。 */
+let activeRange = "";
+
+function syncRanges() {
+  for (const id of Object.keys(RANGES)) $(id).classList.toggle("on", id === activeRange);
+}
+
+/* 时间框给的是本地时刻（精确到分），服务端要 RFC3339。since 原样取那一分钟的开头；
+ * until 要往后推一分钟——服务端的上界是开区间，不推的话选中的那一分钟里发生的
+ * 消耗会被整个排除掉，「9:00 到 9:00」查出来是空的。 */
 function query(f: Filters, extra: Record<string, string> = {}) {
   const q = new URLSearchParams();
   const put = (k: string, v: string) => { if (v) q.set(k, v); };
@@ -59,14 +124,20 @@ function query(f: Filters, extra: Record<string, string> = {}) {
   put("agent", f.agent);
   put("model", f.model);
   put("kind", f.kind);
-  if (f.since) q.set("since", new Date(f.since + "T00:00:00").toISOString());
-  if (f.until) {
-    const d = new Date(f.until + "T00:00:00");
-    d.setDate(d.getDate() + 1);
-    q.set("until", d.toISOString());
-  }
+  put("since", iso(f.since));
+  put("until", iso(f.until, 1));
   for (const [k, v] of Object.entries(extra)) q.set(k, v);
   return q.toString();
+}
+
+/* 本地时刻 → RFC3339。半截输入（用户只填了日期还没填时分）在浏览器里就是空串，
+ * 但真拿到不可解析的值也只当没填——不能让一个坏值把整页查询打断。 */
+function iso(v: string, plusMin = 0) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return "";
+  if (plusMin) d.setMinutes(d.getMinutes() + plusMin, 0, 0);
+  return d.toISOString();
 }
 
 /* 下拉选项：服务端每次都把可选值算好带回来（且按可见范围裁过），这里只负责
@@ -87,6 +158,41 @@ function fillSelect(id: string, values: string[], label?: (v: string) => string)
     sel.appendChild(o);
   }
   sel.value = values.includes(cur) ? cur : "";
+}
+
+/* ---------------- 筛选条折叠 ---------------- */
+
+/* 六个筛选项在手机上要占掉大半屏，明细表被挤到屏外——所以整条可以收起来，
+ * 窄屏默认就是收起的。用户手动开合一次之后以他的选择为准（按浏览器记）。 */
+const COLLAPSE_KEY = "agentbox_usage_filters";
+
+function setFiltersOpen(open: boolean, remember = true) {
+  $("usage-filters").classList.toggle("collapsed", !open);
+  $("uf-toggle").setAttribute("aria-expanded", String(open));
+  // 隐私模式下 localStorage 可能不可写：本次会话仍生效，只是记不住
+  if (remember) try { localStorage.setItem(COLLAPSE_KEY, open ? "open" : "closed"); } catch (_) {}
+}
+
+function initFiltersOpen() {
+  let saved: string | null = null;
+  try { saved = localStorage.getItem(COLLAPSE_KEY); } catch (_) {}
+  setFiltersOpen(saved ? saved === "open" : !isMobile(), false);
+}
+
+/* 收起后光看一个「筛选」字样，认不出当前到底筛没筛——把生效的条件摘要挂在标题行上。 */
+function renderFilterChip(f: Filters) {
+  const parts: string[] = [];
+  if (f.user) parts.push(f.user);
+  if (f.agent) parts.push(agentName(f.agent));
+  if (f.model) parts.push(f.model);
+  if (f.kind) parts.push(KIND_LABEL[f.kind] || f.kind);
+  const t = (v: string) => v.replace("T", " ");
+  // 点了快捷区间就报快捷区间的名字，比两个时刻好认
+  if (activeRange) parts.push($(activeRange).textContent || "");
+  else if (f.since && f.until) parts.push(t(f.since) + " → " + t(f.until));
+  else if (f.since) parts.push(t(f.since) + " 起");
+  else if (f.until) parts.push("截至 " + t(f.until));
+  $("uf-active").textContent = parts.length ? parts.join(" · ") : "全部记录";
 }
 
 /* ---------------- 渲染 ---------------- */
@@ -113,16 +219,27 @@ function fmtDur(ms: number) {
   return (ms / 1000).toFixed(1) + " s";
 }
 
-function cell(text: string, cls = "") {
+/* 每个格子都带上表头名（data-l）并把内容裹进 .u-v：窄屏下表格会拆成一行一张卡片，
+ * 标签由 data-l 生成在左边，.u-v 负责把整格内容（可能有两行）作为一块推到右边。
+ * 没有这层包裹，格子一变 flex，两行内容就会被拆成并排的两列。 */
+function cellEl(label: string, cls = "") {
   const td = document.createElement("td");
   if (cls) td.className = cls;
-  td.textContent = text;
+  td.dataset.l = label;
+  const v = document.createElement("div");
+  v.className = "u-v";
+  td.appendChild(v);
+  return { td, v };
+}
+
+function cell(label: string, text: string, cls = "") {
+  const { td, v } = cellEl(label, cls);
+  v.textContent = text;
   return td;
 }
 
 function tokenCell(r: UsageEventRow) {
-  const td = document.createElement("td");
-  td.className = "num u-tok";
+  const { td, v } = cellEl("Token", "num u-tok");
   // 主行给「输入 ↓ / 输出 ↑」，缓存读单独一行——缓存读经常是输入的十几倍，
   // 混在一起看不出这个回合到底喂了多少新内容。
   const main = document.createElement("div");
@@ -139,7 +256,7 @@ function tokenCell(r: UsageEventRow) {
   cache.className = "u-cache";
   cache.textContent = "缓存 " + num(r.cache_read_tokens) +
     (r.cache_write_tokens ? " / 写 " + num(r.cache_write_tokens) : "");
-  td.append(main, cache);
+  v.append(main, cache);
   td.title =
     `输入 ${num(r.input_tokens)}\n输出 ${num(r.output_tokens)}\n` +
     `缓存读取 ${num(r.cache_read_tokens)}\n缓存写入 ${num(r.cache_write_tokens)}\n` +
@@ -159,13 +276,13 @@ function renderRows(data: UsageEvents) {
   for (const r of data.rows) {
     const tr = document.createElement("tr");
 
-    const u = cell(r.user, "col-user");
+    const u = cell("用户", r.user, "col-user");
     u.classList.toggle("hidden", self);
     tr.appendChild(u);
 
     // 会话名 + 账号。会话被删掉后名字为空，退回显示 id：这行消耗真实发生过，
     // 不能因为会话没了就不显示。
-    const sess = document.createElement("td");
+    const { td: sess, v: sessv } = cellEl("会话", "u-cell-sess");
     const name = document.createElement("div");
     name.className = "u-sess";
     name.textContent = r.session_name || r.session_id;
@@ -173,72 +290,185 @@ function renderRows(data: UsageEvents) {
     const acct = document.createElement("div");
     acct.className = "u-sub";
     acct.textContent = r.account_label || r.account_id || "—";
-    sess.append(name, acct);
+    sessv.append(name, acct);
     tr.appendChild(sess);
 
-    const model = document.createElement("td");
+    const { td: model, v: modelv } = cellEl("模型");
     const mline = document.createElement("div");
     mline.className = "u-model";
     mline.append(agentIcon(r.agent, 13), document.createTextNode(r.model || agentName(r.agent) + "（默认模型）"));
-    model.appendChild(mline);
+    modelv.appendChild(mline);
     if (r.provider) {
       const p = document.createElement("div");
       p.className = "u-sub";
       p.textContent = r.provider === "firstParty" ? "官方直连" : r.provider;
-      model.appendChild(p);
+      modelv.appendChild(p);
     }
     tr.appendChild(model);
 
-    const kind = document.createElement("td");
+    const { td: kind, v: kindv } = cellEl("类型");
     const chip = document.createElement("span");
     // 终端和起标题各有各的颜色：这一列的用处就是一眼看出「这笔钱是谁按下去的」。
     chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : "");
     chip.textContent = KIND_LABEL[r.kind] || r.kind;
     if (KIND_HINT[r.kind]) chip.title = KIND_HINT[r.kind];
-    kind.appendChild(chip);
+    kindv.appendChild(chip);
     tr.appendChild(kind);
 
-    const bill = document.createElement("td");
+    const { td: bill, v: billv } = cellEl("计费");
     const b = BILLING[r.billing] || { text: r.billing, title: "" };
     const bchip = document.createElement("span");
     bchip.className = "u-chip bill-" + r.billing;
     bchip.textContent = b.text;
     bchip.title = b.title;
-    bill.appendChild(bchip);
+    billv.appendChild(bchip);
     tr.appendChild(bill);
 
     tr.appendChild(tokenCell(r));
 
-    const cost = cell(fmtUSD(r.cost_micro_usd), "num u-cost");
+    // 金额后面挂一个「?」：点开是这一行的分项算式（输入/输出/缓存各花了多少）。
+    // 金额本身看不出为什么是这个数，尤其是缓存读取常常比输入贵不了几分钱、
+    // 却占了大头。
+    const { td: cost, v: costv } = cellEl("费用", "num u-cost");
     if (!r.cost_micro_usd) cost.classList.add("zero");
+    const why = document.createElement("button");
+    why.type = "button";
+    why.className = "u-why";
+    why.textContent = "?";
+    why.title = "这笔钱是怎么算出来的";
+    why.setAttribute("aria-label", "费用明细");
+    why.addEventListener("click", () => openCost(r));
+    costv.append(document.createTextNode(fmtUSD(r.cost_micro_usd)), why);
     tr.appendChild(cost);
 
-    // 首字 / 总耗时都是回合级的，同回合各行重复——所以标题里点明，免得有人
-    // 把一列加起来当总时长。
+    // 首字 + 总耗时，两个数同源（都走我们自己的表：容器就绪 → 首个输出 / 进程退出），
+    // 所以首字必然 ≤ 总耗时。provider 自报的模型侧耗时不上表——它不含 CLI 启动那两秒，
+    // 跟首字不是一个口径，摆在一起会出现「首字 3.1s / 耗时 2.3s」这种看着不可能的行。
     //
-    // 主行的两个数都走我们自己的表（容器就绪 → 首个输出 / 进程退出），所以
-    // 首字必然 ≤ 总耗时。provider 自报的耗时只算模型侧、不含 CLI 启动那两秒，
-    // 拿它当总耗时会比首字还小，所以降到副行单独标「模型」。
-    const lat = document.createElement("td");
-    lat.className = "num u-lat";
+    // 两个数都是回合级的，同回合拆成多行时每行重复——所以标题里点明，免得有人
+    // 把一列加起来当总时长。
+    const { td: lat, v: latv } = cellEl("延迟", "num u-lat");
     const ttft = document.createElement("div");
     ttft.textContent = "首字 " + fmtDur(r.ttft_ms);
     const dur = document.createElement("div");
     dur.className = "u-sub";
-    dur.textContent = r.wall_ms
-      ? "总耗时 " + fmtDur(r.wall_ms) + "（模型 " + fmtDur(r.duration_ms) + "）"
-      : "模型 " + fmtDur(r.duration_ms); // 老数据没量过墙钟
-    lat.append(ttft, dur);
-    lat.title = "首字与总耗时都从容器就绪开始算，含 CLI 启动；括号里是 provider 自报的模型侧耗时，不含启动。"
-      + "三个都是回合级指标：同一回合拆成多行时每行都是这个值，不要跨行求和";
+    // 老数据没量过墙钟，那种行退回 provider 报的模型侧耗时，并把标签换掉——
+    // 宁可标明这是另一个口径，也不要把它冒充成总耗时。
+    dur.textContent = r.wall_ms ? "总耗时 " + fmtDur(r.wall_ms) : "模型 " + fmtDur(r.duration_ms);
+    latv.append(ttft, dur);
+    lat.title = "首字与总耗时都从容器就绪开始算，含 CLI 启动，两个数同源。"
+      + "老数据没量过总耗时，退回显示 provider 自报的模型侧耗时（标「模型」，不含启动）。"
+      + "都是回合级指标：同一回合拆成多行时每行都是这个值，不要跨行求和";
     tr.appendChild(lat);
 
-    tr.appendChild(cell(fmtTime(r.ts), "num u-time"));
+    tr.appendChild(cell("时间", fmtTime(r.ts), "num u-time"));
     body.appendChild(tr);
   }
 
   $("usage-empty").classList.toggle("hidden", data.rows.length > 0);
 }
+
+/* ---------------- 费用明细 ---------------- */
+
+/* 「这一行为什么是这个数」：四个 token 桶各自 × 单价摊开，末尾对上实收金额。
+ *
+ * 拆得出分项的只有按价目表折算的行。provider 自报价的行（网页对话里的 claude）
+ * 只给一个总额，我们手里没有它的分项——这种行拿价目表推一份参考拆分，并在脚注
+ * 里说清「上面是推算、最后一行才是实收」，不能让人当成账单原文。
+ *
+ * 单价是**当前**价目表里的值，而实收是入账当时算的：改过价的历史行两边对不上，
+ * 差出来就直说，不硬凑。 */
+
+const costDlg = () => $<HTMLDialogElement>("dlg-cost");
+
+/* 单价按需给小数位：$5 就写 $5，$0.075 也不能被抹成 $0.08。 */
+const fmtRate = (v: number) => "$" + v.toLocaleString("en-US", { maximumFractionDigits: 6 });
+
+function costRow(cells: [string, string, string, string], cls = "") {
+  const tr = document.createElement("tr");
+  if (cls) tr.className = cls;
+  cells.forEach((text, i) => {
+    const td = document.createElement("td");
+    if (i) td.className = "num";
+    td.textContent = text;
+    tr.appendChild(td);
+  });
+  return tr;
+}
+
+function openCost(r: UsageEventRow) {
+  const rate = r.rate;
+
+  const head = $("cost-head");
+  head.replaceChildren();
+  const top = document.createElement("div");
+  top.className = "cost-model";
+  top.append(agentIcon(r.agent, 14),
+    document.createTextNode(r.model || agentName(r.agent) + "（默认模型）"));
+  const b = BILLING[r.billing] || { text: r.billing, title: "" };
+  const chip = document.createElement("span");
+  chip.className = "u-chip bill-" + r.billing;
+  chip.textContent = b.text;
+  top.appendChild(chip);
+  const sub = document.createElement("div");
+  sub.className = "cost-sub";
+  sub.textContent = [r.session_name || r.session_id, KIND_LABEL[r.kind] || r.kind, fmtTime(r.ts)]
+    .join(" · ");
+  head.append(top, sub);
+
+  const body = $("cost-rows");
+  body.replaceChildren();
+  // 单价的单位是「美元 / 百万 token」，要的结果是微美元，两个 1e6 正好约掉：
+  // micro = token × 单价（同 quota.go 的 priceEvent）。
+  let sum = 0;
+  for (const [label, tok, rt] of [
+    ["输入", r.input_tokens, rate?.input],
+    ["输出", r.output_tokens, rate?.output],
+    ["缓存读取", r.cache_read_tokens, rate?.cache_read],
+    ["缓存写入", r.cache_write_tokens, rate?.cache_write],
+  ] as [string, number, number | undefined][]) {
+    const micro = rt === undefined ? 0 : Math.round(tok * rt);
+    sum += micro;
+    body.appendChild(costRow([label, num(tok),
+      rt === undefined ? "—" : fmtRate(rt),
+      rt === undefined ? "—" : fmtUSD(micro)]));
+  }
+
+  // 逐桶四舍五入与服务端整笔四舍五入能差出一两个微美元，不算「对不上」。
+  const off = !rate || rate.basis !== "table" || Math.abs(sum - r.cost_micro_usd) > 2;
+  if (rate && off) body.appendChild(costRow(["按单价合计", num(r.total_tokens), "", fmtUSD(sum)], "cost-sum"));
+  body.appendChild(costRow([off ? "实收费用" : "合计",
+    rate && off ? "" : num(r.total_tokens), "", fmtUSD(r.cost_micro_usd)], "cost-total"));
+
+  const note = $("cost-note");
+  note.replaceChildren();
+  const lines: string[] = [];
+  if (!rate) {
+    lines.push(r.billing === "provider"
+      ? "这一行的钱由 provider 在回合收尾时自报，只给总额不给分项；价目表里也没有这个模型的价，推不出拆分。"
+      : "价目表里查不到这个模型的价，所以只记用量、不扣额度。到系统设置的「价目表」里配上单价，之后的消耗就会按 token 折算。");
+  } else if (rate.basis === "reference") {
+    lines.push(`这一行的钱由 provider 自报总额，拆不出分项：上表是照当前价目表「${rate.key}」推的参考值，与实收有出入很正常。`);
+  } else {
+    lines.push(`按价目表「${rate.key}」${rate.key === r.model ? "" : "（兜底价）"}折算。`);
+    if (off) lines.push("实收金额是入账当时按那会儿的单价算的，跟现在表里的价对不上说明价目表改过——以实收为准。");
+  }
+  if (rate?.long) {
+    lines.push(`输入 + 缓存读取超过 ${num(rate.long_context_over || 0)} token，整个回合走的是长上下文档单价。`);
+  }
+  lines.push("计价算法：查价顺序为 模型 ID → 去掉 -20251001 这类日期后缀再查 → agent 名兜底；" +
+    "费用 = 各桶 token × 该桶单价 ÷ 100 万（单价单位是美元 / 百万 token），四舍五入到微美元；" +
+    "配了长上下文档时，输入 + 缓存读取超过阈值的回合整体改用超阈值那档单价。");
+  for (const t of lines) {
+    const p = document.createElement("p");
+    p.textContent = t;
+    note.appendChild(p);
+  }
+
+  costDlg().showModal();
+}
+
+$("cost-close").addEventListener("click", () => costDlg().close());
 
 function renderSummary(data: UsageEvents) {
   const box = $("usage-summary");
@@ -283,6 +513,7 @@ async function load() {
   $("usage-loading").classList.remove("hidden");
   try {
     const f = readFilters();
+    renderFilterChip(f);
     const data = await api<UsageEvents>(
       "/usage/events?" + query(f, { limit: String(PAGE), offset: String(offset) }));
     last = data;
@@ -363,13 +594,47 @@ function csvCell(v: string | number) {
 
 /* ---------------- 事件挂载 ---------------- */
 
-for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind", "uf-since", "uf-until"]) {
-  $(id).addEventListener("change", reload);
+/* 时/分的上下翻不出范围，但键盘能敲出 99：收口放在 reload 之前，免得表单上
+ * 留着一个越界的数字。 */
+for (const id of ["uf-since-h", "uf-since-m", "uf-until-h", "uf-until-m"]) {
+  const el = $<HTMLInputElement>(id);
+  el.addEventListener("change", () => {
+    if (el.value === "") return;
+    el.value = pad(clamp(Math.trunc(Number(el.value)) || 0, 0, Number(el.max)));
+  });
 }
+
+for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind",
+  "uf-since", "uf-since-h", "uf-since-m", "uf-until", "uf-until-h", "uf-until-m"]) {
+  $(id).addEventListener("change", () => {
+    activeRange = "";
+    syncRanges();
+    reload();
+  });
+}
+
+for (const id of Object.keys(RANGES)) {
+  $(id).addEventListener("click", () => {
+    const [since, until] = RANGES[id]!();
+    writeBound("since", since);
+    writeBound("until", until);
+    activeRange = id;
+    syncRanges();
+    reload();
+  });
+}
+
+initFiltersOpen();
+$("uf-toggle").addEventListener("click", () => {
+  setFiltersOpen($("usage-filters").classList.contains("collapsed"));
+});
 $("uf-refresh").addEventListener("click", reload);
 $("uf-reset").addEventListener("click", () => {
   for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind"]) $<HTMLSelectElement>(id).value = "";
-  for (const id of ["uf-since", "uf-until"]) $<HTMLInputElement>(id).value = "";
+  writeBound("since", "");
+  writeBound("until", "");
+  activeRange = "";
+  syncRanges();
   reload();
 });
 $("uf-export").addEventListener("click", () => void exportCSV());

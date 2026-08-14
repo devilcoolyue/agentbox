@@ -880,40 +880,72 @@
         </header>
 
         <div class="usage-body">
-          <div class="usage-filters card">
-            <label class="uf-item" id="uf-user-wrap">
-              <span>用户</span>
-              <select id="uf-user"><option value="">全部</option></select>
-            </label>
-            <label class="uf-item">
-              <span>Agent</span>
-              <select id="uf-agent"><option value="">全部</option></select>
-            </label>
-            <label class="uf-item">
-              <span>模型</span>
-              <select id="uf-model"><option value="">全部</option></select>
-            </label>
-            <label class="uf-item">
-              <span>类型</span>
-              <select id="uf-kind">
-                <option value="">全部</option>
-                <option value="chat">对话</option>
-                <option value="terminal">终端</option>
-                <option value="title">起标题</option>
-              </select>
-            </label>
-            <label class="uf-item">
-              <span>起始</span>
-              <input type="date" id="uf-since">
-            </label>
-            <label class="uf-item">
-              <span>截止</span>
-              <input type="date" id="uf-until">
-            </label>
-            <div class="uf-actions">
-              <button id="uf-reset" class="btn btn-ghost btn-sm">重置</button>
-              <button id="uf-refresh" class="btn btn-sm">刷新</button>
-              <button id="uf-export" class="btn btn-primary btn-sm">导出 CSV</button>
+          <!-- 筛选条可折叠：窄屏上六个筛选项能吃掉大半屏，收起来才看得见下面的明细 -->
+          <div id="usage-filters" class="usage-filters card">
+            <button id="uf-toggle" class="uf-toggle" aria-expanded="true" aria-controls="uf-fields">
+              <span class="uf-caret"></span>
+              <span>筛选</span>
+              <span id="uf-active" class="uf-active"></span>
+            </button>
+            <div id="uf-fields" class="uf-fields">
+              <label class="uf-item" id="uf-user-wrap">
+                <span>用户</span>
+                <select id="uf-user"><option value="">全部</option></select>
+              </label>
+              <label class="uf-item">
+                <span>Agent</span>
+                <select id="uf-agent"><option value="">全部</option></select>
+              </label>
+              <label class="uf-item">
+                <span>模型</span>
+                <select id="uf-model"><option value="">全部</option></select>
+              </label>
+              <label class="uf-item">
+                <span>类型</span>
+                <select id="uf-kind">
+                  <option value="">全部</option>
+                  <option value="chat">对话</option>
+                  <option value="terminal">终端</option>
+                  <option value="title">起标题</option>
+                </select>
+              </label>
+              <!-- 时分用 number 而不是 datetime-local：原生时间控件翻到 0 会绕回 23，
+                   number 有 min/max，到头就停。留空按边界算（起始 00:00 / 截止 23:59） -->
+              <div class="uf-item wide">
+                <span>起始</span>
+                <div class="uf-time">
+                  <input type="date" id="uf-since">
+                  <input type="number" id="uf-since-h" min="0" max="23" step="1" placeholder="00"
+                         inputmode="numeric" aria-label="起始时">
+                  <i>:</i>
+                  <input type="number" id="uf-since-m" min="0" max="59" step="1" placeholder="00"
+                         inputmode="numeric" aria-label="起始分">
+                </div>
+              </div>
+              <div class="uf-item wide">
+                <span>截止</span>
+                <div class="uf-time">
+                  <input type="date" id="uf-until">
+                  <input type="number" id="uf-until-h" min="0" max="23" step="1" placeholder="23"
+                         inputmode="numeric" aria-label="截止时">
+                  <i>:</i>
+                  <input type="number" id="uf-until-m" min="0" max="59" step="1" placeholder="59"
+                         inputmode="numeric" aria-label="截止分">
+                </div>
+              </div>
+              <div class="uf-item uf-quick">
+                <span>快捷</span>
+                <div class="uf-range">
+                  <button type="button" id="uf-r-today" class="uf-r">今日</button>
+                  <button type="button" id="uf-r-24h" class="uf-r">24 小时</button>
+                  <button type="button" id="uf-r-yday" class="uf-r">昨日</button>
+                </div>
+              </div>
+              <div class="uf-actions">
+                <button id="uf-reset" class="btn btn-ghost btn-sm">重置</button>
+                <button id="uf-refresh" class="btn btn-sm">刷新</button>
+                <button id="uf-export" class="btn btn-primary btn-sm">导出 CSV</button>
+              </div>
             </div>
           </div>
 
@@ -1252,6 +1284,32 @@
     <span id="au-fetched" class="au-fetched mono"></span>
     <button type="button" id="au-refresh" class="btn btn-sm">刷新</button>
   </div>
+</dialog>
+
+<!-- 费用明细：使用记录里点「费用」旁的 ?，摊开这一行的钱是怎么算出来的 -->
+<dialog id="dlg-cost" class="dlg-cost">
+  <div class="dlg-head">
+    <h2>费用明细</h2>
+    <button type="button" id="cost-close" class="dlg-x" aria-label="关闭">✕</button>
+  </div>
+
+  <div id="cost-head" class="cost-head"></div>
+
+  <div class="cost-wrap">
+    <table class="cost-table">
+      <thead>
+        <tr>
+          <th>项目</th>
+          <th class="num">Token</th>
+          <th class="num">单价 $/M</th>
+          <th class="num">金额</th>
+        </tr>
+      </thead>
+      <tbody id="cost-rows"></tbody>
+    </table>
+  </div>
+
+  <div id="cost-note" class="cost-note"></div>
 </dialog>
 
 <!-- 图片灯箱 -->

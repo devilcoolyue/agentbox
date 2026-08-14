@@ -72,26 +72,76 @@ type usageRowView struct {
 	DurationMS       int64 `json:"duration_ms"`
 	WallMS           int64 `json:"wall_ms"`
 	TTFTMs           int64 `json:"ttft_ms"`
+	// Rate 让前端能把「输入 × 单价 + 输出 × 单价 + …」逐项摊开给用户看。
+	// 查不到价时为 nil（那一行就是「未定价」）。
+	Rate *usageRateView `json:"rate,omitempty"`
 }
 
-// billingMode 说明这一行的 cost 是哪来的。claude 永远以 provider 报的为准，
-// 哪怕报的是 0（子 agent 偶尔如此）；其余 agent 有价就是查表来的。
+// usageRateView 交代一行的钱是按价目表里的哪一条、哪一档算的。
+type usageRateView struct {
+	// Key 是命中的价目表键：模型 ID，或作为兜底的 agent 名。
+	Key string `json:"key"`
+	// Basis 区分这份单价的分量：
+	//   table     —— 这一行的钱就是它算出来的；
+	//   reference —— provider 自报了总额，这份单价只是照价目表推的参考拆分，
+	//                逐项加起来不一定等于实收金额。
+	Basis string `json:"basis"`
+	// Long 为真表示这个回合的输入超过阈值、整体走了长上下文档的单价。
+	Long bool  `json:"long,omitempty"`
+	Over int64 `json:"long_context_over,omitempty"`
+	// 四个桶的单价，美元 / 百万 token（已按上面的档位选好）。
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cache_read"`
+	CacheWrite float64 `json:"cache_write"`
+}
+
+const (
+	rateBasisTable     = "table"
+	rateBasisReference = "reference"
+)
+
+// tableBilled 说明这一行的钱该不该由价目表算。claude 的对话行以 provider 自报
+// 的为准；终端行是从 transcript 补记的，那里只有 token 没有美元——哪怕是
+// claude，价也只能查表。
+func tableBilled(e store.UsageEvent) bool {
+	return e.Kind == store.UsageKindTerminal || e.Agent != config.AgentClaude
+}
+
+// billingMode 说明这一行的 cost 是哪来的。claude 的对话行永远以 provider 报的
+// 为准，哪怕报的是 0（子 agent 偶尔如此）；查表的那些有价就是查表来的。
 func billingMode(e store.UsageEvent) string {
-	// 终端行是从 transcript 补记的，那里只有 token 没有美元——哪怕是 claude，
-	// 价也只能查表，不能跟对话行一样说成「官方报价」。
-	if e.Kind == store.UsageKindTerminal {
-		if e.CostMicroUSD != 0 {
-			return billingTable
-		}
-		return billingNone
-	}
-	if e.Agent == config.AgentClaude {
+	if !tableBilled(e) {
 		return billingProvider
 	}
 	if e.CostMicroUSD != 0 {
 		return billingTable
 	}
 	return billingNone
+}
+
+// rateFor 取这一行在**当前**价目表下的单价。历史行的实收金额是记账当时算的，
+// 中途改过价就对不上——差多少由前端自己比对后提示，这里不猜。
+func (s *Server) rateFor(e store.UsageEvent) *usageRateView {
+	p, key, ok := s.cfg.PriceLookup(e.Agent, e.Model)
+	if !ok {
+		return nil
+	}
+	// 档位判定必须跟 priceEvent 用同一个口径：未命中缓存的输入 + 命中缓存的输入。
+	prompt := e.InputTokens + e.CacheReadTokens
+	r := p.Rates(prompt)
+	v := &usageRateView{
+		Key: key, Basis: rateBasisReference,
+		Input: r.Input, Output: r.Output, CacheRead: r.CacheRead, CacheWrite: r.CacheWrite,
+	}
+	if tableBilled(e) {
+		v.Basis = rateBasisTable
+	}
+	if p.Long != nil && p.LongContextOver > 0 && prompt > p.LongContextOver {
+		v.Long = true
+		v.Over = p.LongContextOver
+	}
+	return v
 }
 
 // usageFilterFrom 从查询串解析过滤条件，并把可见范围钉死。
@@ -185,6 +235,7 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 			DurationMS:       e.DurationMS,
 			WallMS:           e.WallMS,
 			TTFTMs:           e.TTFTMs,
+			Rate:             s.rateFor(e),
 		})
 	}
 

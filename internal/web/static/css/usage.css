@@ -1,7 +1,8 @@
 /* usage：使用记录（消耗流水明细）视图。
  *
  * 比设置页宽：这是一张九列的表，套 .set-body 的 1040px 会把 token 那几列挤成
- * 换行。表格本身允许横向滚动，窄屏下不去压缩列宽——数字列被压到折行就没法扫读了。 */
+ * 换行。桌面端表格自己横向滚动，不压缩列宽——数字列被压到折行就没法扫读了；
+ * 手机上九列横滚等于看不见后半张表，所以窄屏改成一行一张卡片（见文件末尾）。 */
 
 .usage-body {
   flex: 1; min-height: 0;
@@ -14,14 +15,60 @@
 
 /* ---- 筛选条 ---- */
 
-.usage-filters {
-  flex-direction: row; flex-wrap: wrap; align-items: flex-end;
-  gap: 12px 16px;
-  padding: 14px 16px;
+/* 整条可折叠：标题行常驻，收起时只留下当前生效条件的摘要。窄屏上这六个筛选项
+ * 能吃掉大半屏，不收起来就看不见下面的明细表。 */
+.usage-filters { gap: 10px; padding: 12px 16px; }
+.uf-toggle {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 0; text-align: left;
+  background: none; border: 0;
+  color: var(--muted); font-size: 12.5px;
 }
+.uf-toggle:hover { color: var(--text); }
+.uf-caret {
+  flex: none;
+  width: 0; height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+.usage-filters.collapsed .uf-caret { transform: none; }
+.uf-active {
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text);
+}
+/* 展开时字段本身就写着条件，摘要只会重复一遍 */
+.usage-filters:not(.collapsed) .uf-active { display: none; }
+
+.uf-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
+.usage-filters.collapsed .uf-fields { display: none; }
 .uf-item { display: flex; flex-direction: column; gap: 5px; min-width: 128px; }
 .uf-item > span { font-size: 12px; color: var(--muted); }
 .uf-item select, .uf-item input { width: 100%; }
+/* 时间项是「日期 + 时 : 分」三个框，比下拉宽一截 */
+.uf-item.wide { min-width: 244px; }
+.uf-time { display: flex; align-items: center; gap: 4px; }
+.uf-time input[type="date"] { flex: 1; min-width: 0; }
+.uf-time input[type="number"] {
+  flex: none; width: 52px;
+  padding: 8px 4px 8px 8px;
+  font-family: var(--mono); text-align: center;
+}
+.uf-time i { font-style: normal; color: var(--muted); }
+
+/* 快捷区间：胶囊按钮，选中的那个点上琥珀 */
+.uf-quick { min-width: 0; }
+.uf-range { display: flex; gap: 6px; }
+.uf-r {
+  padding: 7px 11px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--panel-2); color: var(--muted);
+  font-size: 12.5px; white-space: nowrap;
+}
+.uf-r:hover { color: var(--text); border-color: var(--muted); }
+.uf-r.on { border-color: var(--amber-dim); color: var(--amber); background: transparent; }
 .uf-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 
 /* ---- 合计条 ---- */
@@ -54,10 +101,12 @@
   position: sticky; top: 0;
   background: var(--panel);
 }
+/* 一行里最高的是会话/模型/Token 这类两行格，单行格（类型、费用、时间）跟着居中，
+ * 整行读起来才在一条视觉线上 */
 .usage-table td {
   padding: 9px 12px;
   border-bottom: 1px solid var(--line-soft);
-  vertical-align: top;
+  vertical-align: middle;
 }
 .usage-table tr:last-child td { border-bottom: none; }
 .usage-table tbody tr:hover { background: var(--panel-2); }
@@ -95,6 +144,49 @@
 .u-chip.bill-provider { border-color: var(--green-line); color: var(--green); background: transparent; }
 .u-chip.bill-none { border-color: var(--red-line); color: var(--red); background: transparent; }
 
+/* ---- 费用旁的「?」与费用明细弹窗（弹窗底座在 dialogs.css） ---- */
+
+/* 一屏 50 行就有 50 个问号，全亮会盖过金额本身：平时压淡，指到这一行才浮出来。 */
+.u-why {
+  margin-left: 6px; padding: 0;
+  width: 15px; height: 15px;
+  border: 1px solid var(--line); border-radius: 50%;
+  background: none; color: var(--muted);
+  font-family: var(--mono); font-size: 10px; line-height: 1;
+  vertical-align: middle;
+  opacity: 0.45;
+}
+.usage-table tbody tr:hover .u-why, .u-why:focus-visible { opacity: 1; }
+.u-why:hover { color: var(--amber); border-color: var(--amber); opacity: 1; }
+
+.dlg-cost { width: min(520px, 94vw); }
+.cost-model { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+.cost-sub { margin-top: 4px; font-size: 11.5px; color: var(--muted); }
+
+.cost-wrap { margin-top: 14px; overflow-x: auto; }
+.cost-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.cost-table th {
+  text-align: left; font-weight: 500; font-size: 11.5px; color: var(--muted);
+  padding: 0 0 6px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.cost-table td {
+  padding: 6px 0; border-bottom: 1px solid var(--line-soft);
+  white-space: nowrap; font-family: var(--mono);
+}
+.cost-table th + th, .cost-table td + td { padding-left: 12px; }
+.cost-table th.num, .cost-table td.num { text-align: right; }
+/* 项目名是文字不是数字，跟着正文字体走 */
+.cost-table td:first-child { font-family: var(--sans); color: var(--muted); }
+/* 推算出来的合计只是过程，实收/合计才是落进账本的那个数 */
+.cost-sum td { color: var(--muted); }
+.cost-total td { border-bottom: none; }
+.cost-total td:first-child { color: var(--text); }
+.cost-total td:last-child { color: var(--green); font-size: 13.5px; }
+
+.cost-note { margin-top: 12px; font-size: 11.5px; line-height: 1.7; color: var(--muted); }
+.cost-note p { margin: 0 0 6px; }
+.cost-note p:last-child { margin-bottom: 0; }
+
 /* ---- 翻页 ---- */
 
 .usage-pager {
@@ -104,7 +196,48 @@
 }
 .usage-pager button:disabled { opacity: 0.4; cursor: default; }
 
-@media (max-width: 720px) {
-  .usage-body { padding: 14px 12px 20px; }
+/* ---- 窄屏：筛选默认收起，合计压缩成小格，明细表拆成一行一张卡片 ---- */
+
+@media (max-width: 760px) {
+  .usage-body { padding: 14px 12px 20px; gap: 10px; }
+
+  .uf-item { flex: 1 1 calc(50% - 8px); min-width: 0; }
+  .uf-item.wide, .uf-quick { flex-basis: 100%; min-width: 0; }
+  .uf-range .uf-r { flex: 1; }
   .uf-actions { margin-left: 0; width: 100%; }
+  .uf-actions .btn { flex: 1; }
+
+  .usage-summary { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+  .us-item { padding: 8px 10px; }
+  .us-value { font-size: 14px; }
+
+  /* 九列的表在手机上只能横向滚动，等于看不见明细：改成每行一张卡片，
+   * 表头名由 td[data-l] 补在每格左边，值统一靠右。 */
+  .usage-table-wrap { overflow-x: visible; }
+  .usage-table, .usage-table tbody, .usage-table tr, .usage-table td { display: block; }
+  .usage-table thead { display: none; }
+  .usage-table tr { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .usage-table tbody tr:last-child { border-bottom: none; }
+  .usage-table td {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 2px 0; border-bottom: none;
+    text-align: left; white-space: normal;
+  }
+  .usage-table td::before {
+    content: attr(data-l);
+    flex: none; min-width: 44px;
+    font-family: var(--sans); font-size: 11.5px; color: var(--muted);
+  }
+  .usage-table td .u-v { flex: 1; min-width: 0; text-align: right; }
+
+  /* 触屏没有 hover，问号得一直看得见，也得点得着 */
+  .u-why { opacity: 1; width: 19px; height: 19px; margin-left: 8px; font-size: 11px; }
+
+  /* 会话名当卡片标题：占满一行、不要标签，账号仍旧压在下面当副行 */
+  .usage-table td.u-cell-sess { padding-bottom: 6px; }
+  .usage-table td.u-cell-sess::before { display: none; }
+  .usage-table td.u-cell-sess .u-v { text-align: left; }
+  .u-cell-sess .u-sess { max-width: 100%; font-weight: 500; font-size: 13.5px; }
+
+  .u-model { justify-content: flex-end; white-space: normal; }
 }

@@ -244,9 +244,12 @@ data/
 - **耗时有两块表，别混用**：`wall_ms` 是我们量的（`turnStart` → 回合收尾，与 `ttft_ms`
   同源，含 CLI 启动），`duration_ms` 是 provider 自报的模型侧耗时（**不含** CLI 启动）。
   实测容器里跑一趟 haiku：墙钟 4534ms，claude 自报 `duration_ms` 2335ms，差的 2.2 秒
-  全是 Claude Code 自己的启动。所以页面上「总耗时」必须用 `wall_ms`——早先拿
-  `duration_ms` 当总耗时，出过「首字 3.1s / 总耗时 2.3s」这种看着不可能的记录。
-  `wall_ms` 由 `flushUsage` 在回合真结束的那一刻统一盖到各行上（回合中途量不到）。
+  全是 Claude Code 自己的启动。`wall_ms` 由 `flushUsage` 在回合真结束的那一刻统一盖到
+  各行上（回合中途量不到）。使用记录页的「延迟」列显示**首字 + 总耗时**，两个数同源
+  （都是我们量的），所以首字必然 ≤ 总耗时；「总耗时」必须用 `wall_ms`——早先拿
+  `duration_ms` 当总耗时，出过「首字 3.1s / 总耗时 2.3s」这种看着不可能的记录。老数据
+  没量过墙钟（`wall_ms == 0`），那种行退回显示 `duration_ms` 并把标签换成「模型」，
+  不能顶着「总耗时」的名字混口径。`duration_ms` 平时不上表，但仍在记、仍进 CSV 导出。
 - `duration_ms` / `wall_ms` / `ttft_ms` 都是**回合级**指标，在同回合拆出的各行上重复；
   聚合时只能按 `turn_id` 取一份，绝不能 SUM。`store.UsageTotals` 因此故意不含这几项。
 
@@ -317,6 +320,18 @@ data/
   放宽时必须重新按 `scopeUser` 收口——否则普通用户能从用户下拉里读到全部用户名。
 - 一页上限 `usageRowsMax`，这个接口没有游标、全靠 OFFSET 翻页，放开上限等于允许一次
   拖走整张表。CSV 导出走的也是这个上限，超出会提示用户缩小时间范围分批导。
+- 前端筛选条有三个刻意的选择，别顺手「简化」回去：整条可折叠（窄屏默认收起，六个
+  筛选项展开时手机上看不见下面的表）；时间区间是**日期框 + 时/分 number 框**而不是
+  `datetime-local`——原生时间控件往上翻到 0 会绕回 23，number 有 min/max，到头就停；
+  时分留空按边界补齐（起始 00:00、截止 23:59），所以「只选一天」仍是整天。窄屏下
+  九列表拆成一行一张卡片，字段名来自每个 `<td>` 上的 `data-l`。
+- **每行「费用」旁的 `?` 是费用明细弹窗**（`usage.ts` 的 `openCost` + `dlg-cost`）：把
+  四个 token 桶各自的 `token × 单价` 摊开，末尾对上实收金额，脚注写清计价算法。单价
+  由服务端随行下发（`usageRowView.Rate` ← `rateFor` ← `config.PriceLookup`，顺带给出
+  命中的键与档位），**别改成前端自己查价目表**——普通用户根本拿不到 `settings`。两件事
+  不能含糊：① 单价取自**当前**价目表，实收却是入账当时算的，中途改过价就对不上，
+  弹窗按差额自己提示「以实收为准」；② claude 对话行的钱是 provider 自报的一个总额、
+  拆不出分项，这类行的 `basis` 是 `reference`，表里那份只是照价目表推的参考值。
 - **终端消耗靠事后扫 transcript 补记**（`internal/server/termusage.go`，`kind=terminal`）。
   终端里的 CLI 是容器内进程、输出直接进 PTY，`runTurn` 看不见；但 Claude Code 把完整
   记录落在 `<会话home>/.claude/projects/<cwd目录>/<provider会话id>.jsonl`，而会话 home

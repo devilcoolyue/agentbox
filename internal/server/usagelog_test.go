@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"agentbox/internal/config"
 	"agentbox/internal/store"
 )
 
@@ -216,5 +217,55 @@ func TestUsageEventsLimitCapped(t *testing.T) {
 	}
 	if len(got.Rows) != 3 {
 		t.Errorf("行数 = %d，想要 3", len(got.Rows))
+	}
+}
+
+// 费用明细要能说清「这一行按哪条价、哪一档算的」：查表的行给 table，provider
+// 自报价的行只能给照表推的参考拆分（reference），两者不能混为一谈。
+func TestRateForBasisAndTier(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.cfg.Pricing = map[string]config.ModelPrice{
+		"codex": {
+			TokenRates:      config.TokenRates{Input: 1.25, Output: 10, CacheRead: 0.125},
+			LongContextOver: 272000,
+			Long:            &config.TokenRates{Input: 2.5, Output: 20, CacheRead: 0.25},
+		},
+		"claude-opus-5": {TokenRates: config.TokenRates{Input: 5, Output: 25}},
+	}
+
+	// 没有精确的模型行就按 agent 兜底；输入没过阈值，走短上下文档。
+	got := s.rateFor(store.UsageEvent{Agent: "codex", Model: "gpt-5.5-codex",
+		InputTokens: 1000, CacheReadTokens: 8000, CostMicroUSD: 3250})
+	if got == nil || got.Key != "codex" || got.Basis != rateBasisTable || got.Long {
+		t.Fatalf("codex 行 = %+v，想要 codex 兜底 / table / 短上下文档", got)
+	}
+	if got.Input != 1.25 {
+		t.Errorf("输入单价 = %v，想要 1.25", got.Input)
+	}
+
+	// 档位按「输入 + 缓存读取」判定，与 priceEvent 同口径。
+	long := s.rateFor(store.UsageEvent{Agent: "codex", Model: "gpt-5.5-codex",
+		InputTokens: 100000, CacheReadTokens: 200000})
+	if long == nil || !long.Long || long.Input != 2.5 || long.Over != 272000 {
+		t.Fatalf("过阈值的行 = %+v，想要长上下文档单价", long)
+	}
+
+	// claude 的对话行以 provider 自报的总额为准，价目表只能当参考。
+	ref := s.rateFor(store.UsageEvent{Agent: "claude", Model: "claude-opus-5",
+		Kind: store.UsageKindChat, CostMicroUSD: 147633})
+	if ref == nil || ref.Basis != rateBasisReference {
+		t.Fatalf("claude 对话行 = %+v，想要 reference", ref)
+	}
+
+	// 终端行是事后从 transcript 补记的，那里只有 token，claude 也只能查表。
+	term := s.rateFor(store.UsageEvent{Agent: "claude", Model: "claude-opus-5",
+		Kind: store.UsageKindTerminal})
+	if term == nil || term.Basis != rateBasisTable {
+		t.Fatalf("终端行 = %+v，想要 table", term)
+	}
+
+	// 表里没有的模型不给单价，前端据此显示「未定价」。
+	if v := s.rateFor(store.UsageEvent{Agent: "gemini", Model: "x"}); v != nil {
+		t.Errorf("查不到价时 = %+v，想要 nil", v)
 	}
 }

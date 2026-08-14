@@ -800,22 +800,30 @@ func (c *Config) GetTerminalTips() TerminalTips {
 // the agent name as the catch-all. The bool is false when nothing matches, so
 // callers can tell "no price configured" from "configured as free".
 func (c *Config) Price(agent, model string) (ModelPrice, bool) {
+	p, _, ok := c.PriceLookup(agent, model)
+	return p, ok
+}
+
+// PriceLookup 同 Price，额外给出命中的那个键。使用记录里要跟用户交代「这一行的
+// 钱是按哪一条算的」，只给单价不够——同一份单价既可能来自精确的模型行，也可能
+// 来自 agent 兜底行，两者的含义差很远。
+func (c *Config) PriceLookup(agent, model string) (ModelPrice, string, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if p, ok := c.Pricing[model]; ok && model != "" {
-		return p, true
+		return p, model, true
 	}
 	// provider 有时给带日期的模型 id（claude-haiku-4-5-20251001），价目表里配的
 	// 通常是不带日期的那个。价按模型系列走，日期只是快照，所以退一步再查一次。
 	if base := stripModelDate(model); base != model {
 		if p, ok := c.Pricing[base]; ok {
-			return p, true
+			return p, base, true
 		}
 	}
 	if p, ok := c.Pricing[agent]; ok && agent != "" {
-		return p, true
+		return p, agent, true
 	}
-	return ModelPrice{}, false
+	return ModelPrice{}, "", false
 }
 
 // modelDateSuffix 匹配模型 id 末尾的 -YYYYMMDD 快照日期。
