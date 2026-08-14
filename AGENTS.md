@@ -486,7 +486,12 @@ data/
 
 ## 代码约定与注意事项
 
-- Go 版本见 `go.mod`：当前 `go 1.26.5`。提交前至少跑 `go build ./...` 与 `go test ./...`。
+- Go 版本见 `go.mod`：当前 `go 1.26.6`。提交前至少跑 `go build ./...` 与 `go test ./...`。
+  这个补丁号不是随手写的：CI 的 govulncheck 用 `go-version-file: go.mod` 决定用哪个
+  工具链，stdlib 漏洞（`crypto/tls`、`net/http`、`net/url`、`encoding/asn1` 那批）只能靠
+  抬这一行修——它们没法进豁免清单。宿主上的 go 比这行旧时，`go build` 会按
+  `GOTOOLCHAIN=auto` 自动下载对应工具链，所以生产机上不必手动升级 `/usr/local/go`，
+  但机器得能连 proxy.golang.org。
 - 现有测试集中在 `internal/agent`、`internal/linkapp`、`internal/server`、`internal/store`、`internal/tunnel`；`dockerx`、`archivex`、`config` 等目前没有测试。改动这些包时优先补针对性测试。
 - 配置变更是“副本上修改 → 校验 → 原子写盘 → 替换内存状态”的模式；不要绕过 `Config.mutate` 直接改字段。
 - SQLite 加列走 `store.migrate()` 里的幂等 `ALTER TABLE`（重复执行时忽略
