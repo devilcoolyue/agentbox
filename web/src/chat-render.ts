@@ -8,6 +8,7 @@ import { imgURLFromPath } from "./api.js";
 import type {
   AgentEvent, ContentBlock, HistoryEntry, LiveNode, RateLimitInfo,
 } from "./types.js";
+import { setTip } from "./tip.js";
 
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
 
@@ -110,10 +111,10 @@ export function toolChip(name: string, summary: string, htmlPath = "") {
     b.className = "chip-open";
     b.dataset.htmlPreview = htmlPath;
     b.textContent = "预览";
-    b.title = "在预览窗口渲染 " + htmlPath;
+    setTip(b, "在预览窗口渲染 " + htmlPath);
     c.appendChild(b);
   }
-  c.title = summary || name;
+  setTip(c, summary || name);
   return c;
 }
 
@@ -148,7 +149,7 @@ export function chatThumb(containerPath: string, title: string) {
   img.className = "chat-thumb";
   img.src = imgURLFromPath(containerPath);
   img.alt = title;
-  img.title = title + "（点击查看大图）";
+  setTip(img, title + "（点击查看大图）");
   img.addEventListener("click", () => openLightbox(imgURLFromPath(containerPath), title + " · " + containerPath));
   img.addEventListener("error", () => {
     const gone = document.createElement("span");
@@ -164,7 +165,7 @@ function fileLink(containerPath: string, title: string) {
   const a = document.createElement("a");
   a.className = "file-link mono";
   a.textContent = "📄 " + containerPath.split("/").pop();
-  a.title = title + " · " + containerPath;
+  setTip(a, title + " · " + containerPath);
   a.href = imgURLFromPath(containerPath);
   a.target = "_blank";
   return a;
@@ -259,7 +260,7 @@ function codeBlock(lang: string, body: string) {
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "cb-toggle";
-  toggle.title = "折叠 / 展开代码";
+  setTip(toggle, "折叠 / 展开代码");
   toggle.setAttribute("aria-expanded", "true");
   const caret = document.createElement("span");
   caret.className = "cb-caret";
@@ -500,7 +501,7 @@ function mdImage(src: string, at: { alt?: string; width?: string; height?: strin
   img.className = "md-img";
   img.src = url;
   img.alt = at.alt || "";
-  if (at.title) img.title = at.title;
+  if (at.title) setTip(img, at.title);
   for (const k of ["width", "height"] as const) {
     const v = (at[k] || "").trim();
     if (/^\d+(px|%)?$/.test(v)) img.style[k] = /^\d+$/.test(v) ? v + "px" : v;

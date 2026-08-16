@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -114,23 +115,33 @@ func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request, sess
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, claudeOAuthUsage, nil)
-	req.Header.Set("Authorization", "Bearer "+cred.AccessToken)
-	req.Header.Set("anthropic-beta", claudeOAuthBeta)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
+	// 令牌过期就自己续，不把用户推回「先发一轮对话」的手动流程。
+	if cred.expiring() {
+		if cred, err = s.ensureClaudeCred(r.Context(), acct, false); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	raw, code, err := fetchOAuthUsage(r.Context(), client, cred.AccessToken)
+	// 凭证里的 expiresAt 不是唯一真相：令牌可能被上游提前作废，也可能这份文件
+	// 本身就落后于容器里那份。撞上 401 就强制续一次再打一遍。
+	if code == http.StatusUnauthorized {
+		if fresh, ferr := s.ensureClaudeCred(r.Context(), acct, true); ferr == nil {
+			cred = fresh
+			raw, code, err = fetchOAuthUsage(r.Context(), client, cred.AccessToken)
+		}
+	}
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, "请求额度接口失败: "+err.Error())
 		return
 	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode == http.StatusUnauthorized {
+	if code == http.StatusUnauthorized {
 		writeErr(w, http.StatusBadGateway, "凭证已失效，请到「系统设置 → 账号」重新登录该账号")
 		return
 	}
-	if resp.StatusCode != http.StatusOK {
-		writeErr(w, http.StatusBadGateway, fmt.Sprintf("额度接口返回 HTTP %d: %s", resp.StatusCode, truncate(string(raw), 200)))
+	if code != http.StatusOK {
+		writeErr(w, http.StatusBadGateway, fmt.Sprintf("额度接口返回 HTTP %d: %s", code, truncate(string(raw), 200)))
 		return
 	}
 
@@ -183,18 +194,41 @@ func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request, sess
 	writeJSON(w, http.StatusOK, out)
 }
 
+// fetchOAuthUsage 打一次额度接口，返回响应体与状态码。拆出来是因为 401 之后
+// 要用续期出来的新令牌原样重打一遍。
+func fetchOAuthUsage(ctx context.Context, client *http.Client, accessToken string) ([]byte, int, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, claudeOAuthUsage, nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("anthropic-beta", claudeOAuthBeta)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	return raw, resp.StatusCode, nil
+}
+
 // claudeCred 是账号池 .credentials.json 里 claudeAiOauth 的可用字段。
 type claudeCred struct {
 	AccessToken      string `json:"accessToken"`
+	RefreshToken     string `json:"refreshToken"`
 	ExpiresAt        int64  `json:"expiresAt"`
 	SubscriptionType string `json:"subscriptionType"`
 }
 
-// readClaudeCred 从账号池取当前访问令牌与订阅档位。
+// expiring 报告令牌是否已过期或即将过期。expiresAt 缺失（老凭证）时按「还能用」
+// 处理：真失效了上游会回 401，那条路上有强制续期兜底。
+func (c claudeCred) expiring() bool {
+	return c.ExpiresAt > 0 && time.Now().Add(credRefreshSkew).UnixMilli() >= c.ExpiresAt
+}
+
+// readClaudeCred 从账号池读出当前 OAuth 凭证。
 //
-// 只读不刷新：OAuth 刷新令牌是轮换制（见 credsync.go），服务端擅自刷新会作废
-// 容器里 CLI 手上的那一份。令牌过期时如实报错，让用户跑一轮对话（CLI 会自己
-// 刷新并由 credSync 回收）或重新登录。
+// 只管文件读不读得出来、字段齐不齐；到期与否交给 ensureClaudeCred 判断并自动
+// 续期（见 credrefresh.go）。这里返回错误的三种情况都得人来管：账号没配
+// credentials_dir、从没登录过、凭证被清空。
 func readClaudeCred(a config.Account) (claudeCred, error) {
 	var c struct {
 		ClaudeAiOauth claudeCred `json:"claudeAiOauth"`
@@ -208,9 +242,6 @@ func readClaudeCred(a config.Account) (claudeCred, error) {
 	}
 	if json.Unmarshal(raw, &c) != nil || c.ClaudeAiOauth.AccessToken == "" {
 		return c.ClaudeAiOauth, fmt.Errorf("凭证文件里没有访问令牌，请重新登录该账号")
-	}
-	if exp := c.ClaudeAiOauth.ExpiresAt; exp > 0 && time.Now().UnixMilli() >= exp {
-		return c.ClaudeAiOauth, fmt.Errorf("访问令牌已过期，发一轮对话让 CLI 自动续期后再查")
 	}
 	return c.ClaudeAiOauth, nil
 }

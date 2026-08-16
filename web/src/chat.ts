@@ -13,6 +13,7 @@ import { refreshAll } from "./data.js";
 import { chip, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon } from "./chat-render.js";
 import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
+import { setTip } from "./tip.js";
 
 /* ---------------- 对话通道 ----------------
  * 断线在移动端切网、挂后台时很常见，而一个回合可以跑上半小时，所以断开必须
@@ -446,12 +447,14 @@ export function setChatStatus(state: string, error?: string) {
     ensureWorking();
     if (stick) log.scrollTop = log.scrollHeight;
     send.classList.add("stop");
-    send.title = "中断";
+    setTip(send, "中断");
+    send.ariaLabel = "中断"; // 纯图标按钮，可访问名称得跟着状态走
     send.disabled = false;
   } else {
     clearWorking();
     send.classList.remove("stop");
-    send.title = "发送";
+    setTip(send, "发送");
+    send.ariaLabel = "发送";
     send.disabled = chatImgs.uploading > 0;
     if (state === "error" && error) appendChat(chip(error, "err"));
   }
@@ -578,7 +581,7 @@ function renderAttach() {
       name.textContent = info.orig || info.name || "附件";
       if (info.path) {
         box.append(document.createTextNode("📄"), name);
-        box.title = `附件 #${n} · ${info.path}`;
+        setTip(box, `附件 #${n} · ${info.path}`);
       } else {
         box.append(spinEl(), name);
       }

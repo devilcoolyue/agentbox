@@ -4,6 +4,7 @@
 
 import { S } from "./state.js";
 import "./util.js";
+import "./tip.js";
 import "./theme.js";
 import "./shell.js";
 import "./data.js";

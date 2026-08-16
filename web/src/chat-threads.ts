@@ -13,6 +13,7 @@ import type {
 import { $, fmtTime, toast, withSpin, askConfirm, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { svgIcon, USER_ATTACH_RE } from "./chat-render.js";
+import { setTip } from "./tip.js";
 
 /* 预览文案：附件占位符只留类别名，不展示容器内路径 */
 function previewText(s: string | undefined) {
@@ -131,7 +132,7 @@ function threadItem(t: Thread, on: boolean) {
   const open = document.createElement("button");
   open.type = "button";
   open.className = "tp-open";
-  open.title = on ? "当前对话" : "切换到这条对话继续";
+  setTip(open, on ? "当前对话" : "切换到这条对话继续");
   const title = document.createElement("span");
   title.className = "tp-title";
   title.textContent = previewText(t.title);
@@ -145,14 +146,14 @@ function threadItem(t: Thread, on: boolean) {
   const ren = document.createElement("button");
   ren.type = "button";
   ren.className = "tp-del"; // 与删除同一套图标按钮样式
-  ren.title = "重命名这条对话";
+  setTip(ren, "重命名这条对话");
   ren.appendChild(svgIcon("rename", 15));
   ren.addEventListener("click", (e) => { e.stopPropagation(); renameThread(t); });
 
   const del = document.createElement("button");
   del.type = "button";
   del.className = "tp-del";
-  del.title = "删除这条对话";
+  setTip(del, "删除这条对话");
   del.appendChild(svgIcon("trash", 15));
   del.addEventListener("click", (e) => { e.stopPropagation(); delThread(t); });
 

@@ -172,6 +172,11 @@ func (s *Server) usageFilterFrom(r *http.Request) (f store.UsageFilter, scopeUse
 			f.Until = ts
 		}
 	}
+	// 排序只认时间一列（前端表头那对上下箭头），默认最新在最前——看消耗基本都是
+	// 先看刚花掉的那笔；order=asc 翻过来，用来从头核对一段时间的账。
+	// 别的列不开放排序：offset 翻页要求排序键在两次请求之间稳定，而金额/token
+	// 这些列会随「补记终端消耗」这类后台写入变动。
+	f.Asc = q.Get("order") == "asc"
 	return f, scopeUser
 }
 
@@ -245,6 +250,9 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 		"facets": s.store.FacetsUsage(f, scopeUser),
 		"limit":  f.Limit,
 		"offset": f.Offset,
+		// 回声一份当前排序方向，前端据此点亮表头上那个箭头——刷新或从别处跳
+		// 回来时，箭头显示的方向不会和实际拿到的顺序对不上。
+		"order": map[bool]string{true: "asc", false: "desc"}[f.Asc],
 		// 前端据此决定要不要显示「用户」列和用户筛选框：只看得到自己的时候
 		// 那一列每行都一样，纯占地方。
 		"scope": map[bool]string{true: "self", false: "all"}[scopeUser != ""],

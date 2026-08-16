@@ -8,6 +8,7 @@
 import { $, btnBusy, btnDone, toast, askConfirm, fmtLatency } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
+import { setTip } from "./tip.js";
 /* 代理池缓存：列表页与账号弹窗的下拉共用一份，避免每次开弹窗都打一次接口。 */
 let cache = [];
 let bridge = null;
@@ -95,7 +96,7 @@ function proxyRow(p) {
     name.className = "px-name";
     const dot = document.createElement("span");
     dot.className = "mon-dot" + (p.disabled ? "" : " on");
-    dot.title = p.disabled ? "已停用" : "正常";
+    setTip(dot, p.disabled ? "已停用" : "正常");
     name.append(dot, document.createTextNode(p.name || p.host));
     const scheme = document.createElement("td");
     const chip = document.createElement("span");
@@ -108,7 +109,7 @@ function proxyRow(p) {
     addrBtn.type = "button";
     addrBtn.className = "px-copy mono";
     addrBtn.textContent = p.host + ":" + p.port;
-    addrBtn.title = "点击复制";
+    setTip(addrBtn, "点击复制");
     addrBtn.addEventListener("click", async () => {
         try {
             await navigator.clipboard.writeText(p.host + ":" + p.port);
@@ -133,12 +134,12 @@ function proxyRow(p) {
     else if (res.ok) {
         probe.textContent = fmtLatency(res.latency_ms);
         probe.classList.add("good");
-        probe.title = "出口 IP " + res.exit_ip + "（" + res.endpoint + "）";
+        setTip(probe, "出口 IP " + res.exit_ip + "（" + res.endpoint + "）");
     }
     else {
         probe.textContent = "不通";
         probe.classList.add("bad");
-        probe.title = res.error || "";
+        setTip(probe, res.error || "");
     }
     const acts = document.createElement("td");
     acts.className = "px-actions";
@@ -428,14 +429,14 @@ export function mountProxyPicker(root) {
                 badge.className = "pp-probe " + (probe.ok ? "good" : "bad");
                 badge.textContent = probe.ok ? fmtLatency(probe.latency_ms) : "不通";
                 if (probe.ok)
-                    badge.title = "出口 IP " + probe.exit_ip;
+                    setTip(badge, "出口 IP " + probe.exit_ip);
                 row.appendChild(badge);
             }
             const test = document.createElement("button");
             test.type = "button";
             test.className = "pp-test";
             test.textContent = "测试";
-            test.title = "测试该代理连通性";
+            setTip(test, "测试该代理连通性");
             test.addEventListener("click", (e) => {
                 e.stopPropagation(); // 别顺手把这一行选中了
                 runProbe(p, test).then(renderList);

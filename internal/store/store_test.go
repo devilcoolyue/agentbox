@@ -291,6 +291,23 @@ func TestUsageRoundTrip(t *testing.T) {
 		t.Fatalf("Until 过滤后 = %d 行, want 2", len(early))
 	}
 
+	// Asc 翻转整个结果集，不是只翻当前这一页：带 Limit 时取的必须是最早的那几行，
+	// 否则前端切到正序后翻页会在同一批「最新的行」里打转。
+	ids := func(evs []UsageEvent) []int64 {
+		out := make([]int64, len(evs))
+		for i, e := range evs {
+			out[i] = e.ID
+		}
+		return out
+	}
+	asc := s.ListUsage(UsageFilter{Asc: true})
+	if len(asc) != 3 || asc[0].ID != all[2].ID || asc[2].ID != all[0].ID {
+		t.Fatalf("Asc 没把顺序翻过来: %v", ids(asc))
+	}
+	if first := s.ListUsage(UsageFilter{Asc: true, Limit: 1}); len(first) != 1 || first[0].ID != asc[0].ID {
+		t.Errorf("Asc + Limit 取到 %v, want 最早的那行 id=%d", ids(first), asc[0].ID)
+	}
+
 	// 字段完整往返（含 raw 与缓存分桶）。
 	one := s.ListUsage(UsageFilter{User: "alice", Limit: 1})
 	if len(one) != 1 {

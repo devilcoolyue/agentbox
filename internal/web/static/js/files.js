@@ -6,6 +6,7 @@ import { $, spinEl, btnBusy, btnDone, fmtSize, isMobile, onMobileChange, startDo
 import { api, archiveDownloadURL, fileDownloadURL, scopeQS } from "./api.js";
 import { openPreview } from "./preview.js";
 import { svgIcon } from "./chat-render.js";
+import { setTip } from "./tip.js";
 /* 树形状态：expanded=已展开的目录（相对当前根），cache=已拉取的目录列表（"" 为当前根），
  * gen=竞态防护——快速连续导航时只让最后一次请求的结果上屏 */
 const tree = {
@@ -144,7 +145,7 @@ function fileRow(ent, rel, depth) {
         const arrow = document.createElement("span");
         arrow.className = "farrow" + (tree.expanded.has(rel) ? " open" : "");
         arrow.textContent = "▸";
-        arrow.title = tree.expanded.has(rel) ? "收起" : "展开下级";
+        setTip(arrow, tree.expanded.has(rel) ? "收起" : "展开下级");
         arrow.setAttribute("role", "button");
         arrow.tabIndex = 0;
         const toggle = async () => {
@@ -190,7 +191,7 @@ function fileRow(ent, rel, depth) {
             loadFiles();
         }
         : () => openPreview(joinRel(S.filePath, rel), ent);
-    label.title = ent.is_dir ? "进入目录" : "预览 / 编辑";
+    setTip(label, ent.is_dir ? "进入目录" : "预览 / 编辑");
     label.addEventListener("click", open);
     label.addEventListener("keydown", (e) => { if (e.key === "Enter")
         open(); });
@@ -203,7 +204,7 @@ function fileAction(label, icon, action, danger = false) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "file-act" + (danger ? " danger" : "");
-    btn.title = label;
+    setTip(btn, label);
     btn.setAttribute("aria-label", label);
     btn.appendChild(svgIcon(icon, 17));
     btn.addEventListener("click", action);
@@ -290,7 +291,7 @@ function moveIsNoop() {
 function updateMoveTarget() {
     $("file-move-target").textContent = fullScopePath(fileOp.moveScope, fileOp.movePath);
     $("file-move-ok").disabled = fileOp.moveBusy || moveIsNoop();
-    $("file-move-ok").title = moveIsNoop() ? "当前项目已在此目录" : "";
+    setTip($("file-move-ok"), moveIsNoop() ? "当前项目已在此目录" : "");
 }
 function renderMoveCrumb() {
     const crumb = $("file-move-crumb");
@@ -347,7 +348,7 @@ async function loadMoveDirs() {
         btn.type = "button";
         btn.className = "file-move-dir mono";
         btn.disabled = moveDirDisabled(path);
-        btn.title = btn.disabled ? "不能移动到自身或其子目录" : "进入目录";
+        setTip(btn, btn.disabled ? "不能移动到自身或其子目录" : "进入目录");
         const name = document.createElement("span");
         name.className = "dir-name";
         name.textContent = dir.name;

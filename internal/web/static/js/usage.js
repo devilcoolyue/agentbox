@@ -17,11 +17,17 @@ import { api } from "./api.js";
 import { showView } from "./shell.js";
 import { fmtUSD } from "./quota.js";
 import { agentIcon, agentName } from "./brand.js";
+import { setTip } from "./tip.js";
 const PAGE = 50;
 /* 当前视图状态。offset 单独放：改筛选要归零，翻页只动它。 */
 let offset = 0;
 let last = null;
 let loading = false;
+/* 排序方向。只排时间一列：这张表是流水，除了「先看哪头」没别的排法有意义。
+ * 默认倒序（最新在最前）——看消耗十有八九是想知道刚才烧了多少；正序留给
+ * 从头核账的场合。服务端的默认值也是倒序，两边别各说各的。 */
+let asc = false;
+const orderParam = () => (asc ? "asc" : "desc");
 function readFilters() {
     return {
         user: $("uf-user").value,
@@ -181,6 +187,24 @@ function renderFilterChip(f) {
         parts.push("截至 " + t(f.until));
     $("uf-active").textContent = parts.length ? parts.join(" · ") : "全部记录";
 }
+/* ---------------- 排序 ---------------- */
+/* 表头「时间」旁边是上下两个三角，不是一个来回切的按钮：点哪个就是哪个方向，
+ * 当前方向一直亮着。来回切的按钮得先猜「现在是哪种、点下去会变成哪种」。 */
+function syncSort() {
+    for (const [id, on] of [["usage-sort-asc", asc], ["usage-sort-desc", !asc]]) {
+        $(id).classList.toggle("on", on);
+        $(id).setAttribute("aria-pressed", String(on));
+    }
+}
+function setSort(next) {
+    if (next === asc)
+        return; // 点已经亮着的那个箭头不该白跑一趟请求
+    asc = next;
+    syncSort();
+    // 换方向必须回第一页：offset 是按当前顺序数出来的，翻到第 3 页再倒过来，
+    // 落到的是「从另一头数第 101 行」，看着像随机跳走了。
+    reload();
+}
 /* ---------------- 渲染 ---------------- */
 const KIND_LABEL = { chat: "对话", terminal: "终端", title: "起标题" };
 const KIND_HINT = {
@@ -261,7 +285,7 @@ function renderRows(data) {
         name.className = "u-sess";
         name.textContent = r.session_name || r.session_id;
         if (!r.session_name)
-            name.title = "会话已删除";
+            setTip(name, "会话已删除");
         const acct = document.createElement("div");
         acct.className = "u-sub";
         acct.textContent = r.account_label || r.account_id || "—";
@@ -285,7 +309,7 @@ function renderRows(data) {
         chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : "");
         chip.textContent = KIND_LABEL[r.kind] || r.kind;
         if (KIND_HINT[r.kind])
-            chip.title = KIND_HINT[r.kind];
+            setTip(chip, KIND_HINT[r.kind]);
         kindv.appendChild(chip);
         tr.appendChild(kind);
         const { td: bill, v: billv } = cellEl("计费");
@@ -293,7 +317,7 @@ function renderRows(data) {
         const bchip = document.createElement("span");
         bchip.className = "u-chip bill-" + r.billing;
         bchip.textContent = b.text;
-        bchip.title = b.title;
+        setTip(bchip, b.title);
         billv.appendChild(bchip);
         tr.appendChild(bill);
         tr.appendChild(tokenCell(r));
@@ -307,7 +331,7 @@ function renderRows(data) {
         why.type = "button";
         why.className = "u-why";
         why.textContent = "?";
-        why.title = "这笔钱是怎么算出来的";
+        setTip(why, "这笔钱是怎么算出来的");
         why.setAttribute("aria-label", "费用明细");
         why.addEventListener("click", () => openCost(r));
         costv.append(document.createTextNode(fmtUSD(r.cost_micro_usd)), why);
@@ -327,9 +351,9 @@ function renderRows(data) {
         // 宁可标明这是另一个口径，也不要把它冒充成总耗时。
         dur.textContent = r.wall_ms ? "总耗时 " + fmtDur(r.wall_ms) : "模型 " + fmtDur(r.duration_ms);
         latv.append(ttft, dur);
-        lat.title = "首字与总耗时都从容器就绪开始算，含 CLI 启动，两个数同源。"
+        setTip(lat, "首字与总耗时都从容器就绪开始算，含 CLI 启动，两个数同源。"
             + "老数据没量过总耗时，退回显示 provider 自报的模型侧耗时（标「模型」，不含启动）。"
-            + "都是回合级指标：同一回合拆成多行时每行都是这个值，不要跨行求和";
+            + "都是回合级指标：同一回合拆成多行时每行都是这个值，不要跨行求和");
         tr.appendChild(lat);
         tr.appendChild(cell("时间", fmtTime(r.ts), "num u-time"));
         body.appendChild(tr);
@@ -447,7 +471,7 @@ function renderSummary(data) {
         const card = document.createElement("div");
         card.className = "us-item";
         if (tip)
-            card.title = tip;
+            setTip(card, tip);
         const l = document.createElement("div");
         l.className = "us-label";
         l.textContent = label;
@@ -474,8 +498,12 @@ async function load() {
     try {
         const f = readFilters();
         renderFilterChip(f);
-        const data = await api("/usage/events?" + query(f, { limit: String(PAGE), offset: String(offset) }));
+        const data = await api("/usage/events?" + query(f, { limit: String(PAGE), offset: String(offset), order: orderParam() }));
         last = data;
+        // 服务端回声一份它实际用的顺序：万一这趟请求被丢掉了（上一趟还在跑），
+        // 箭头跟着真拿到的顺序回正，不会出现「箭头指着正序、表还是倒序」。
+        asc = data.order === "asc";
+        syncSort();
         fillSelect("uf-user", data.facets.users);
         fillSelect("uf-agent", data.facets.agents, agentName);
         fillSelect("uf-model", data.facets.models);
@@ -505,15 +533,18 @@ export async function openUsageView() {
 }
 /* ---------------- 导出 ---------------- */
 /* CSV 导出的是**当前筛选的全部行**，不是当前这一页——导出用来做离线核对，
- * 给一页 50 行没有意义。上限就是服务端的单页上限，超了会提示缩小范围。 */
+ * 给一页 50 行没有意义。上限就是服务端的单页上限，超了会提示缩小范围。
+ * 行序跟着页面上的排序走：导出的顺序和刚才看到的一致，才对得上。 */
 async function exportCSV() {
     const btn = $("uf-export");
     btn.disabled = true;
     try {
         const f = readFilters();
-        const data = await api("/usage/events?" + query(f, { limit: "500", offset: "0" }));
+        const data = await api("/usage/events?" + query(f, { limit: "500", offset: "0", order: orderParam() }));
         if (data.total.rows > data.rows.length) {
-            toast(`只导出了最近 ${data.rows.length} 行（共 ${data.total.rows} 行），请缩小时间范围后分批导出`, true);
+            // 截断是从哪头截的，得跟着排序方向说，否则「最近 500 行」是句假话
+            toast(`只导出了${asc ? "最早" : "最近"}的 ${data.rows.length} 行（共 ${data.total.rows} 行），` +
+                "请缩小时间范围后分批导出", true);
         }
         const head = ["时间", "用户", "会话", "会话ID", "账号", "Agent", "模型", "类型", "计费",
             "输入", "输出", "缓存读取", "缓存写入", "合计Token", "费用USD",
@@ -578,6 +609,9 @@ for (const id of Object.keys(RANGES)) {
     });
 }
 initFiltersOpen();
+syncSort();
+$("usage-sort-asc").addEventListener("click", () => setSort(true));
+$("usage-sort-desc").addEventListener("click", () => setSort(false));
 $("uf-toggle").addEventListener("click", () => {
     setFiltersOpen($("usage-filters").classList.contains("collapsed"));
 });

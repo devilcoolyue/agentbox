@@ -182,6 +182,19 @@ curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 10 --max-time 20 "$P
 - **账号 env 绝不烘进容器**（`dockerx.baseContainerEnv`）：容器 `Config.Env` 在 create 那一刻定死，之后只能靠 exec 往上加、减不掉。账号从中转站切回订阅登录时 `clearClaudeRelay` 只改得动 `config.json`，旧容器里那份 `ANTHROPIC_AUTH_TOKEN` 还在，而 claude CLI 认 env 里的 Bearer 令牌优先于 OAuth 凭证——订阅登录形同虚设，CLI 卡在重试里直到被杀（回合报「进程退出码 137」，stderr 只剩一句 connectors are disabled 的告警）。所以账号 env 一律走 `server.execEnv` 每次 exec 注入，加和减都即时生效。`EnsureRunning` 里的 `hasBakedEnv` 负责认出老版本烘过 env 的容器并重建（比键不比值，镜像升级改 `NODE_VERSION` 的值不算脏）。
 - 停止/删除：只停/删容器；工作区、home、聊天线程仍在宿主机。`DELETE ?purge=1` 才删除会话目录。
 - 重启服务端后：`Server.reconcile` 以 Docker 实际运行状态修正 session status。
+- **OAuth 令牌服务端自动续期**（`internal/server/credrefresh.go`）：访问令牌只有几小时
+  寿命，账号池那份新不新鲜取决于容器里的 CLI 最近跑没跑过——挂一夜的账号第二天点
+  「查额度」必然过期。服务端自己拿刷新令牌续，不再让用户「先发一轮对话」。刷新令牌
+  是轮换制（一份用掉另一份作废），所以 `ensureClaudeCred` 里的三步顺序不能动：
+  ① **先跑一遍 credSync 把各会话 home 里可能更新的凭证收回池子**——CLI 刚续过的话池子
+  那份已经是废纸，拿它去换只会白挨一个 `invalid_grant`，而正确答案就躺在会话 home 里；
+  ② 收敛完再判断要不要续；③ **续完立刻反向播发**，不等 credSyncLoop 那趟 45 秒的兜底
+  ——空窗期里 CLI 手上还是老链条，一发对话就掉登录。同一账号全程一把锁串行，提前量
+  （`credRefreshSkew`）刻意只有一分钟：提前得越多越容易和正在跑的 CLI 抢同一个刷新
+  令牌。写回凭证走「读旧的 → 改字段 → 写回」而不是整份重建，`subscriptionType` /
+  `rateLimitTier` / `scopes` 这些刷新响应里不回的字段必须留着，冲掉会让容器里的
+  Claude Code 把订阅号当成 API 账号。查额度撞上 401 时还会强制续一次重打——凭证里的
+  `expiresAt` 不是唯一真相。
 
 关键目录：
 

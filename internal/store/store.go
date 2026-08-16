@@ -721,6 +721,7 @@ type UsageFilter struct {
 	Until     time.Time // zero: no upper bound (exclusive)
 	Limit     int       // <= 0: no limit
 	Offset    int       // rows to skip; only meaningful with Limit
+	Asc       bool      // oldest first; the zero value keeps the newest-first default
 }
 
 // where renders the filter as a SQL predicate plus its arguments. Every usage
@@ -757,10 +758,17 @@ func (f UsageFilter) where() (string, []any) {
 	return q, args
 }
 
-// ListUsage returns matching usage rows, newest first.
+// ListUsage returns matching usage rows, newest first — or oldest first when
+// f.Asc is set. id breaks ties in the same direction as ts, so two rows written
+// in the same millisecond keep a stable relative order and OFFSET paging can
+// never show one of them twice or skip it.
 func (s *Store) ListUsage(f UsageFilter) []UsageEvent {
 	where, args := f.where()
-	q := "SELECT " + usageCols + " FROM usage_events" + where + " ORDER BY ts DESC, id DESC"
+	dir := "DESC"
+	if f.Asc {
+		dir = "ASC"
+	}
+	q := "SELECT " + usageCols + " FROM usage_events" + where + " ORDER BY ts " + dir + ", id " + dir
 	if f.Limit > 0 {
 		q += " LIMIT ?"
 		args = append(args, f.Limit)

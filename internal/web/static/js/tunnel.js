@@ -1,12 +1,15 @@
-/* tunnel：内网反向隧道 —— 侧栏状态入口 + 状态/接入指引弹窗。
- * 状态随 data-updated 节流刷新（≥15s 一次），弹窗打开时立即刷新一次。
+/* tunnel：内网反向隧道 —— 侧栏状态入口 + 状态/接入指引页。
+ * 状态随 data-updated 节流刷新（≥15s 一次），进入本页时立即刷新一次。
  * 普通用户在功能未启用时看不到入口；管理员始终可见（含「前往设置」引导）。 */
 "use strict";
 import { S, bus, emit } from "./state.js";
 import { $, toast, fmtUptime } from "./util.js";
 import { api } from "./api.js";
+import { showView } from "./shell.js";
+import { setTip } from "./tip.js";
 let st = null; // GET /api/tunnel/status 缓存
 let lastFetch = 0;
+const onPage = () => S.view === "tunnel";
 async function refreshStatus(force) {
     if (!force && Date.now() - lastFetch < 15000)
         return;
@@ -18,8 +21,8 @@ async function refreshStatus(force) {
         return; // 网络抖动保持现状
     }
     renderSideItem();
-    if ($("dlg-tunnel").open)
-        renderDialog();
+    if (onPage())
+        renderPage();
 }
 /* ---- 侧栏入口 ---- */
 function renderSideItem() {
@@ -33,8 +36,8 @@ function renderSideItem() {
     dot.classList.toggle("on", !!st.connected);
     $("tunnel-text").textContent = !st.enabled ? "未启用" : (st.connected ? "在线" : "离线");
 }
-/* ---- 弹窗 ---- */
-function renderDialog() {
+/* ---- 页面 ---- */
+function renderPage() {
     if (!st)
         return;
     const conn = !!st.connected;
@@ -92,30 +95,30 @@ async function loadClients() {
         const a = document.createElement("a");
         a.className = "btn btn-sm tun-dl-btn";
         a.textContent = platformLabel(c.name);
-        a.title = c.name + " · " + (c.size / 1048576).toFixed(1) + " MB";
+        setTip(a, c.name + " · " + (c.size / 1048576).toFixed(1) + " MB");
         a.href = "/api/tunnel/clients/" + encodeURIComponent(c.name) +
             "?token=" + encodeURIComponent(S.token);
         a.setAttribute("download", c.name);
         box.appendChild(a);
     }
 }
-$("btn-tunnel").addEventListener("click", () => {
-    $("dlg-tunnel").showModal();
-    renderDialog();
-    refreshStatus(true);
-    loadClients();
-});
 let pairTimer = 0; // 配对码有效期倒计时
-/* 关闭时清掉配对码，免得下次打开还挂着一个多半已失效的码 */
-$("dlg-tunnel").addEventListener("close", () => {
+/* 进页面先清掉上次的配对码：码是一次性短时效的，隔一会儿回来那个多半已失效，
+ * 留在页面上只会让人以为还能用。 */
+function resetPair() {
     clearInterval(pairTimer);
     $("tun-pair-code").classList.add("hidden");
     $("tun-pair-code").textContent = "";
     $("tun-pair-hint").textContent = "10 分钟内有效，只能用一次";
-});
-$("tun-close").addEventListener("click", () => $("dlg-tunnel").close());
+}
+export function openTunnelView() {
+    showView("tunnel");
+    resetPair();
+    renderPage();
+    refreshStatus(true);
+    loadClients();
+}
 $("tun-goto-settings").addEventListener("click", () => {
-    $("dlg-tunnel").close();
     S.sec = "security";
     emit("open-settings");
 });
@@ -166,9 +169,10 @@ function startPairCountdown(seconds) {
     tick();
     pairTimer = setInterval(tick, 1000);
 }
-/* 弹窗打开期间 5s 一刷，让「等待接入 → 在线」立刻可见 */
+/* 停留在本页期间 5s 一刷，让「等待接入 → 在线」立刻可见 */
 setInterval(() => {
-    if ($("dlg-tunnel").open)
+    if (onPage())
         refreshStatus(true);
 }, 5000);
 bus.addEventListener("data-updated", () => refreshStatus(false));
+bus.addEventListener("open-tunnel", openTunnelView);

@@ -15,6 +15,7 @@ import { loadChanges, resetChangesRepo } from "./changes.js";
 import { loadSkills } from "./skills.js";
 import { agentKey, agentName, agentIcon, agentAvatar, decorateAgentOpts } from "./brand.js";
 import { openAcctUsage, syncUsageBtn } from "./acct-usage.js";
+import { setTip } from "./tip.js";
 /* ---------------- 打开 / 切换 ---------------- */
 export async function openSession(sess) {
     if (S.current && S.current.id === sess.id) {
@@ -48,7 +49,7 @@ export function renderHead() {
     updateTopbarTitle();
     $("wb-name").textContent = sess.name;
     const av = agentAvatar(sess.agent, { size: 32, icon: 17, led: true });
-    av.title = agentName(sess.agent);
+    setTip(av, agentName(sess.agent));
     if (sess.status === "running")
         av.querySelector(".led").classList.add("on");
     $("wb-avatar").replaceChildren(av);
@@ -68,7 +69,7 @@ export function renderHead() {
         const zzz = document.createElement("span");
         zzz.className = "sc-sleep";
         zzz.textContent = "休眠中";
-        zzz.title = "空闲自动停机，发消息或打开终端会自动唤醒";
+        setTip(zzz, "空闲自动停机，发消息或打开终端会自动唤醒");
         meta.append(document.createTextNode(" · "), zzz);
     }
     if (!S.actionBusy) { // 启动/停止执行中由按钮自己管理禁用态，轮询刷新不得复活

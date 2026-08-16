@@ -5,6 +5,7 @@
 import { S } from "./state.js";
 import { $, toast } from "./util.js";
 import { sendChat, autoGrow } from "./chat.js";
+import { setTip } from "./tip.js";
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const btn = $("btn-voice");
 const input = $("chat-input");
@@ -96,7 +97,8 @@ function stopAndSend() {
 }
 function setRecUI(on) {
     btn.classList.toggle("rec", on);
-    btn.title = on ? "停止录音并发送" : IDLE_TITLE;
+    setTip(btn, on ? "停止录音并发送" : IDLE_TITLE);
+    btn.ariaLabel = on ? "停止录音" : "语音输入"; // 纯图标按钮，可访问名称得跟着状态走
 }
 /* 录音途中手动发送（Enter / 发送键）：先掐掉识别，
  * 免得迟到的识别结果把已发送的旧文字又写回输入框 */

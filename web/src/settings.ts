@@ -17,6 +17,7 @@ import { quotaChip, openQuota } from "./quota.js";
 import { loadProxies, mountProxyPicker, openProxiesSection, refreshProxyCount } from "./proxies.js";
 import type { ProxyPicker } from "./proxies.js";
 import { openPricingSection, refreshPriceCount } from "./pricing.js";
+import { setTip } from "./tip.js";
 
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
@@ -138,7 +139,7 @@ function acctRow(a: Account) {
   const px = document.createElement("span");
   px.className = "acct-proxy" + (a.proxy_id ? "" : " none");
   px.textContent = a.proxy_id ? "⇄ " + (a.proxy_label || a.proxy_id) : "⇄ 直连";
-  px.title = a.proxy_id ? "该账号的请求经此代理出网" : "该账号的请求从服务器自身 IP 发出";
+  setTip(px, a.proxy_id ? "该账号的请求经此代理出网" : "该账号的请求从服务器自身 IP 发出");
   state.appendChild(px);
 
   const acts = document.createElement("div");
@@ -159,7 +160,7 @@ function acctRow(a: Account) {
   del.textContent = "删除";
   if (a.sessions > 0) {
     del.disabled = true;
-    del.title = "有会话在用，请先删除对应会话";
+    setTip(del, "有会话在用，请先删除对应会话");
   } else {
     del.addEventListener("click", () => openAcctDel(a));
   }
@@ -463,7 +464,7 @@ function renderAuthModels(models: string[] | null) {
     chip.type = "button";
     chip.className = "auth-model-chip mono" + (have.has(id) ? " in" : "");
     chip.textContent = id;
-    chip.title = have.has(id) ? "已在模型列表中" : "点击加入模型列表";
+    setTip(chip, have.has(id) ? "已在模型列表中" : "点击加入模型列表");
     chip.addEventListener("click", () => {
       const models = (S.settings && S.settings.models) || {};
       if ((models[agent] || []).some((x) => x.id === id)) {
@@ -472,7 +473,7 @@ function renderAuthModels(models: string[] | null) {
       }
       const next = { ...models, [agent]: [...(models[agent] || []), { id, label: id }] };
       putSettings({ models: next }, chip, "已添加 " + id).then((ok) => {
-        if (ok) { chip.classList.add("in"); chip.title = "已在模型列表中"; }
+        if (ok) { chip.classList.add("in"); setTip(chip, "已在模型列表中"); }
       });
     });
     box.appendChild(chip);
@@ -968,7 +969,7 @@ function monRow(c: ContainerStat, now: number, rate: boolean) {
   status.append(dot, document.createTextNode(c.running ? "运行中" : "已停止"));
 
   const mem = monCell(c.running ? fmtBytes(c.mem_usage) : "—", "num");
-  if (c.running && c.mem_limit) mem.title = fmtBytes(c.mem_usage) + " / " + fmtBytes(c.mem_limit) + " 上限";
+  if (c.running && c.mem_limit) setTip(mem, fmtBytes(c.mem_usage) + " / " + fmtBytes(c.mem_limit) + " 上限");
 
   tr.append(
     name,

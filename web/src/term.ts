@@ -9,6 +9,7 @@ import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { fmtUSD } from "./quota.js";
 import { refreshAll } from "./data.js";
 import { pastedImages } from "./chat.js";
+import { setTip } from "./tip.js";
 
 const TerminalClass = window.Terminal && (window.Terminal.Terminal || window.Terminal);
 const FitAddonClass = window.FitAddon && (window.FitAddon.FitAddon || window.FitAddon);
@@ -366,8 +367,8 @@ async function loadSpend() {
     className: "ts-tok", textContent: fmtTok(tokens) + " tok",
   });
   box.replaceChildren(label, cost, tok);
-  box.title = `${total.turns} 个回合 / ${total.rows} 条记录，含网页对话、终端和起标题。`
-    + "金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗计入这里但不扣额度。";
+  setTip(box, `${total.turns} 个回合 / ${total.rows} 条记录，含网页对话、终端和起标题。`
+    + "金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗计入这里但不扣额度。");
   box.classList.remove("hidden");
 }
 

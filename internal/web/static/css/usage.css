@@ -113,6 +113,27 @@
 .usage-table .num { text-align: right; white-space: nowrap; }
 .usage-table th.num { text-align: right; }
 
+/* 时间列的排序控件：上下两个三角，各自代表一个方向，选中的那个点上琥珀
+ * （跟快捷区间的 .uf-r.on 一个路子）。用 CSS 三角而不是 ▲▼ 字形——后者在不同
+ * 字体里大小差得离谱，两个叠起来会一大一小。 */
+.u-sort { display: inline-flex; align-items: center; gap: 7px; }
+.u-sort-btns { display: inline-flex; flex-direction: column; gap: 3px; }
+.u-sort-b {
+  display: block; padding: 1px 2px;
+  border: 0; background: none; line-height: 0;
+  color: var(--muted); opacity: 0.45;
+}
+.u-sort-b::before {
+  content: "";
+  display: block;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+}
+.u-sort-b.asc::before { border-bottom: 5px solid currentColor; }
+.u-sort-b.desc::before { border-top: 5px solid currentColor; }
+.u-sort-b:hover { color: var(--text); opacity: 1; }
+.u-sort-b.on { color: var(--amber); opacity: 1; }
+.u-sort-b:focus-visible { opacity: 1; }
+
 /* 次要信息（账号、provider、总耗时）压一号，主行才是扫读的那一行 */
 .u-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
 .u-sess { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -215,7 +236,18 @@
    * 表头名由 td[data-l] 补在每格左边，值统一靠右。 */
   .usage-table-wrap { overflow-x: visible; }
   .usage-table, .usage-table tbody, .usage-table tr, .usage-table td { display: block; }
-  .usage-table thead { display: none; }
+  /* 表头本身在卡片布局里没用了，但排序箭头得留着——整条表头压成一行，只显示
+   * 时间那一格，当卡片列表的排序条 */
+  .usage-table thead { display: block; }
+  .usage-table thead th { display: none; }
+  .usage-table thead tr { display: flex; justify-content: flex-end; padding: 8px 12px; }
+  .usage-table th.col-time {
+    display: block;
+    position: static;
+    padding: 0; border: 0;
+  }
+  /* 触屏没有 hover，两个箭头都得看得清、点得着 */
+  .u-sort-b { padding: 4px 7px; opacity: 0.6; }
   .usage-table tr { padding: 10px 12px; border-bottom: 1px solid var(--line); }
   .usage-table tbody tr:last-child { border-bottom: none; }
   .usage-table td {

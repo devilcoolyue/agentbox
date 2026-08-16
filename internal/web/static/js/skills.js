@@ -9,6 +9,7 @@ import { S } from "./state.js";
 import { $, spinEl, toast, askConfirm, fmtBytes, fmtSize, fmtTime, btnBusy, btnDone, startDownload, } from "./util.js";
 import { api, skillFileURL } from "./api.js";
 import { formatText, splitFrontMatter, frontMatterChips } from "./chat-render.js";
+import { setTip } from "./tip.js";
 /* sel 是右侧显示什么：path 为空表示技能本身（SKILL.md 概览 + 操作按钮），
  * 否则是技能目录里的某个文件。open 装展开的节点键：技能名，或「技能名/子目录」。
  * cache 按技能存整棵树，刷新时清空、展开状态留着。 */
@@ -164,7 +165,7 @@ function arrowEl(open, busy, toggle) {
         a.replaceChildren(spinEl());
     else
         a.textContent = "▸";
-    a.title = open ? "收起" : "展开目录";
+    setTip(a, open ? "收起" : "展开目录");
     a.setAttribute("role", "button");
     a.tabIndex = -1; // 行本身可聚焦就够了，别让 Tab 在树里走两遍
     a.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
@@ -174,7 +175,7 @@ function tagEl(text, title) {
     const s = document.createElement("span");
     s.className = "skill-flag";
     s.textContent = text;
-    s.title = title;
+    setTip(s, title);
     return s;
 }
 function hintRow(text, depth) {
@@ -384,9 +385,9 @@ function renderDetail(det) {
     const move = document.createElement("button");
     move.className = "btn btn-sm";
     move.textContent = SK.scope === "session" ? "复制到我的模板" : "装到本会话";
-    move.title = SK.scope === "session"
+    setTip(move, SK.scope === "session"
         ? "复制进模板后，你名下每个会话启动时都会带上它"
-        : "把模板里的这个技能立刻装进当前会话，不必等下次启动";
+        : "把模板里的这个技能立刻装进当前会话，不必等下次启动");
     move.addEventListener("click", () => copySkill(det.name, move));
     const del = document.createElement("button");
     del.className = "btn btn-sm btn-danger";
@@ -416,7 +417,7 @@ function renderFile(skill, f) {
     back.type = "button";
     back.className = "skill-back";
     back.textContent = "← " + skill;
-    back.title = "回到技能概览";
+    setTip(back, "回到技能概览");
     back.addEventListener("click", () => selectSkill(skill));
     head.appendChild(back);
     const title = document.createElement("h3");

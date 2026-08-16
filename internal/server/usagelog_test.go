@@ -22,6 +22,7 @@ type usageEventsResp struct {
 	} `json:"facets"`
 	Scope string `json:"scope"`
 	Limit int    `json:"limit"`
+	Order string `json:"order"`
 }
 
 // seedUsage 铺一批流水：alice 一个 claude 回合拆成两行（主模型 + 起标题的
@@ -145,6 +146,49 @@ func TestUsageEventsPagingKeepsTotals(t *testing.T) {
 	}
 	if first.Total.CostMicroUSD != second.Total.CostMicroUSD || first.Total.Rows != 3 {
 		t.Errorf("合计随翻页变了：%d vs %d", first.Total.CostMicroUSD, second.Total.CostMicroUSD)
+	}
+}
+
+// 默认最新在最前；order=asc 整个翻过来。两头的第一行必须是对方的最后一行，
+// 否则「正序」只是把当前这一页倒过来排，跨页看仍是乱的。
+func TestUsageEventsOrder(t *testing.T) {
+	s, _ := newTestServer(t)
+	seedUsage(t, s)
+
+	desc := getUsageEvents(t, s, "/api/usage/events", "root", store.RoleAdmin)
+	if desc.Order != "desc" {
+		t.Errorf("默认 order = %q，想要 desc", desc.Order)
+	}
+	for i := 1; i < len(desc.Rows); i++ {
+		if desc.Rows[i-1].TS < desc.Rows[i].TS {
+			t.Fatalf("默认没按时间倒排：第 %d 行 %d 早于上一行 %d", i, desc.Rows[i].TS, desc.Rows[i-1].TS)
+		}
+	}
+
+	asc := getUsageEvents(t, s, "/api/usage/events?order=asc", "root", store.RoleAdmin)
+	if asc.Order != "asc" {
+		t.Errorf("order = %q，想要 asc", asc.Order)
+	}
+	if len(asc.Rows) != len(desc.Rows) {
+		t.Fatalf("换个顺序行数就变了：%d vs %d", len(asc.Rows), len(desc.Rows))
+	}
+	for i := 1; i < len(asc.Rows); i++ {
+		if asc.Rows[i-1].TS > asc.Rows[i].TS {
+			t.Fatalf("order=asc 没按时间正排：第 %d 行 %d 晚于上一行 %d", i, asc.Rows[i].TS, asc.Rows[i-1].TS)
+		}
+	}
+	if asc.Rows[0].ID != desc.Rows[len(desc.Rows)-1].ID {
+		t.Errorf("正序第一行 id=%d，想要倒序的最后一行 id=%d",
+			asc.Rows[0].ID, desc.Rows[len(desc.Rows)-1].ID)
+	}
+	// 合计只跟筛选条件有关，排序不该动它。
+	if asc.Total.CostMicroUSD != desc.Total.CostMicroUSD || asc.Total.Rows != desc.Total.Rows {
+		t.Errorf("合计随排序变了：%+v vs %+v", asc.Total, desc.Total)
+	}
+
+	// 只认小写的 asc，别的值一律走默认倒序——前端只会发小写，这里不做花式解析。
+	if got := getUsageEvents(t, s, "/api/usage/events?order=ASC", "root", store.RoleAdmin); got.Order != "desc" {
+		t.Errorf("order=ASC 时 = %q，无法识别的值应该退回 desc", got.Order)
 	}
 }
 

@@ -5,6 +5,7 @@
 import { S, bus, emit } from "./state.js";
 import { $ } from "./util.js";
 import { agentIcon, agentAvatar, agentName } from "./brand.js";
+import { setTip } from "./tip.js";
 /* ---- 抽屉（仅窄屏可见） ---- */
 export function openDrawer() {
     $("sidebar").classList.add("open");
@@ -19,7 +20,9 @@ $("scrim").addEventListener("click", closeDrawer);
 window.addEventListener("keydown", (e) => { if (e.key === "Escape")
     closeDrawer(); });
 /* ---- 顶栏：设置视图显示标题，工作台视图显示 状态灯+会话名+⋯菜单 ---- */
-const VIEW_TITLE = { settings: "系统设置", usage: "使用记录" };
+const VIEW_TITLE = {
+    settings: "系统设置", usage: "使用记录", tunnel: "内网隧道",
+};
 export function updateTopbarTitle() {
     const inWork = S.view === "work" && !!S.current;
     $("topbar-title").textContent = VIEW_TITLE[S.view] || (S.current ? S.current.name : "");
@@ -44,8 +47,10 @@ export function showView(name) {
     $("view-work").classList.toggle("hidden", name !== "work");
     $("view-settings").classList.toggle("hidden", name !== "settings");
     $("view-usage").classList.toggle("hidden", name !== "usage");
+    $("view-tunnel").classList.toggle("hidden", name !== "tunnel");
     $("btn-settings").classList.toggle("active", name === "settings");
     $("btn-usagelog").classList.toggle("active", name === "usage");
+    $("btn-tunnel").classList.toggle("active", name === "tunnel");
     updateTopbarTitle();
     closeDrawer();
     renderSidebar();
@@ -53,6 +58,7 @@ export function showView(name) {
 $("btn-settings").addEventListener("click", () => emit("open-settings"));
 /* btn-usagelog 而非 btn-usage：后者是工作台头部的「额度」按钮，见 index.html 注释。 */
 $("btn-usagelog").addEventListener("click", () => emit("open-usage"));
+$("btn-tunnel").addEventListener("click", () => emit("open-tunnel"));
 /* ---- 侧栏：会话列表 ---- */
 export function renderSidebar() {
     const list = $("session-list");
@@ -71,7 +77,7 @@ export function renderSidebar() {
         card.tabIndex = 0;
         card.setAttribute("aria-label", `${sess.name}（${agentName(sess.agent)}）`);
         const av = agentAvatar(sess.agent, { led: true });
-        av.title = agentName(sess.agent);
+        setTip(av, agentName(sess.agent));
         if (sess.status === "running")
             av.querySelector(".led").classList.add("on");
         const body = document.createElement("div");
@@ -88,7 +94,7 @@ export function renderSidebar() {
             const zzz = document.createElement("span");
             zzz.className = "sc-sleep";
             zzz.textContent = "休眠";
-            zzz.title = "空闲自动停机，发消息或打开终端会自动唤醒";
+            setTip(zzz, "空闲自动停机，发消息或打开终端会自动唤醒");
             meta.append(document.createTextNode(" · "), zzz);
         }
         card.append(av, body);

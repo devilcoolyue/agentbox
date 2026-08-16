@@ -12,6 +12,7 @@ import { S, bus } from "./state.js";
 import type { CreditResult, LedgerEntry, Quota, QuotaDetail } from "./types.js";
 import { $, toast, btnBusy, btnDone, askConfirm } from "./util.js";
 import { api } from "./api.js";
+import { setTip } from "./tip.js";
 
 /* 微美元 → 给人看的金额。默认四位小数：一个便宜回合只有几百微美元，
  * 两位小数会全部显示成 $0.00，看不出扣没扣。负号放 $ 前面。 */
@@ -45,10 +46,10 @@ export function quotaChip(q: Quota | null | undefined) {
   el.textContent = fmtUSD(q.balance_micro_usd, 2);
   if (q.blocked) {
     el.classList.add("blocked");
-    el.title = "余额已用完，该用户无法发起新对话";
+    setTip(el, "余额已用完，该用户无法发起新对话");
   } else if (!q.enforced) {
     el.classList.add("track");
-    el.title = "只计不拦：照常扣减，见底也不阻止";
+    setTip(el, "只计不拦：照常扣减，见底也不阻止");
   }
   return el;
 }
@@ -66,9 +67,9 @@ export function renderMyQuota() {
   const num = $("my-quota-num");
   num.textContent = fmtUSD(q.balance_micro_usd, 2);
   num.classList.toggle("empty", !!q.blocked);
-  box.title = q.blocked
+  setTip(box, q.blocked
     ? "额度已用完，无法发起新对话，请联系管理员充值"
-    : "剩余额度 " + fmtUSD(q.balance_micro_usd);
+    : "剩余额度 " + fmtUSD(q.balance_micro_usd));
 }
 
 // refreshAll 每轮都会带回自己的额度（回合收尾也会调它），这里跟着重画。
@@ -164,7 +165,7 @@ function ledgerRow(e: LedgerEntry) {
   // 消耗流水的 note 存的是模型名；充值存管理员填的备注，后面带上操作人。
   note.textContent = e.note || "";
   if (e.actor) note.textContent += (e.note ? " · " : "") + e.actor;
-  note.title = note.textContent;
+  setTip(note, note.textContent);
 
   row.append(ts, reason, delta, after, note);
   return row;

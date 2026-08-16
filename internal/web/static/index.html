@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/files.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/settings.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/usage.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/tunnel.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/dialogs.css">
 </head>
 <body>
@@ -150,7 +151,7 @@
     <div id="scrim" class="scrim"></div>
 
     <aside id="sidebar" class="sidebar">
-      <button id="btn-home" type="button" class="wordmark wordmark-sm side-brand" title="回到工作台首页"><span data-mark></span>AGENTBOX<span class="cursor">▊</span></button>
+      <button id="btn-home" type="button" class="wordmark wordmark-sm side-brand" data-tip="回到工作台首页"><span data-mark></span>AGENTBOX<span class="cursor">▊</span></button>
 
       <button id="btn-new" class="btn btn-primary btn-block">＋ 新建会话</button>
 
@@ -158,7 +159,7 @@
       <div id="session-list" class="session-list"></div>
 
       <div class="side-foot">
-        <div id="my-quota" class="my-quota hidden" title="剩余额度">
+        <div id="my-quota" class="my-quota hidden" data-tip="剩余额度">
           <span class="glyph">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="9"/>
@@ -169,7 +170,7 @@
           <span class="mq-label">剩余额度</span>
           <span id="my-quota-num" class="mq-num mono">—</span>
         </div>
-        <div id="conn-latency" class="conn-latency" title="到服务器的连接延迟">
+        <div id="conn-latency" class="conn-latency" data-tip="到服务器的连接延迟">
           <span id="conn-dot" class="t-dot"></span>
           <span id="conn-text" class="conn-text mono">连接中…</span>
         </div>
@@ -236,7 +237,7 @@
             <div class="wb-actions">
               <button id="btn-start" class="btn btn-sm btn-ico">启动</button>
               <button id="btn-stop" class="btn btn-sm btn-ico">停止</button>
-              <button id="btn-usage" class="btn btn-sm btn-ico hidden" title="查看该账号的订阅额度">额度</button>
+              <button id="btn-usage" class="btn btn-sm btn-ico hidden" data-tip="查看该账号的订阅额度">额度</button>
               <button id="btn-delete" class="btn btn-sm btn-ico btn-danger">删除</button>
             </div>
           </header>
@@ -268,10 +269,10 @@
           <section id="tab-chat" class="pane">
             <!-- 对话切换栏：当前对话标题（点击打开历史面板）+ 新对话入口 -->
             <div class="thread-bar">
-              <button id="btn-threads" class="thread-cur" title="历史对话：查看、切换并继续之前的对话">
+              <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话">
                 <span id="thread-title" class="t">新对话</span>
               </button>
-              <button id="btn-thread-new" class="thread-new" title="开启新对话（当前对话保留在历史中，可随时切回）">＋ 新对话</button>
+              <button id="btn-thread-new" class="thread-new" data-tip="开启新对话（当前对话保留在历史中，可随时切回）">＋ 新对话</button>
             </div>
             <!-- 对话通道连接状态：仅在非正常连接时出现，避免占用常态空间 -->
             <div id="chat-conn" class="chat-conn hidden">
@@ -305,7 +306,7 @@
             </div>
             <div class="composer-wrap">
               <button id="chat-scroll-bottom" class="chat-scroll-bottom" type="button"
-                title="滚动到最新消息" aria-label="滚动到最新消息" aria-hidden="true">
+                data-tip="滚动到最新消息" aria-label="滚动到最新消息" aria-hidden="true">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
                   <path d="M9 3.75v10.5m-4-4 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
@@ -314,12 +315,12 @@
                 <div id="chat-attach" class="chat-attach hidden"></div>
                 <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）"></textarea>
                 <div class="composer-bar">
-                  <button id="btn-attach" class="icon-btn" title="添加附件（图片或文件，48 小时后过期）">
+                  <button id="btn-attach" class="icon-btn" aria-label="添加附件" data-tip="添加附件（图片或文件，48 小时后过期）">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
                       <path d="M9 3.75v10.5M3.75 9h10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
                     </svg>
                   </button>
-                  <button id="btn-voice" class="icon-btn" title="语音输入：点击说话，再点一次停止并发送">
+                  <button id="btn-voice" class="icon-btn" aria-label="语音输入" data-tip="语音输入：点击说话，再点一次停止并发送">
                     <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
                       <path d="M6.75 4.5a2.25 2.25 0 0 1 4.5 0v3.75a2.25 2.25 0 0 1-4.5 0ZM3.75 8.25a5.25 5.25 0 0 0 10.5 0M9 13.5v2.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
@@ -330,7 +331,7 @@
                     <div id="pick-menu" class="pick-menu hidden"></div>
                     <div id="pick-fly" class="pick-fly hidden"></div>
                   </div>
-                  <button id="chat-send" class="send-btn" title="发送">
+                  <button id="chat-send" class="send-btn" aria-label="发送" data-tip="发送">
                     <svg class="ic-send" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                       <path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
@@ -359,7 +360,7 @@
               <div class="term-conn">
                 <span id="term-conn-dot" class="t-dot"></span>
                 <span id="term-state" class="term-state mono"></span>
-                <button id="term-reconnect" class="term-reconnect" type="button" title="重新连接" aria-label="重新连接">
+                <button id="term-reconnect" class="term-reconnect" type="button" data-tip="重新连接" aria-label="重新连接">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
                     <polyline points="21 3 21 8 16 8"/>
@@ -661,8 +662,8 @@
                   <p class="sec-hint">键可以是<b>模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b>agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p>
                 </div>
                 <div class="sec-actions">
-                  <button id="price-fill" class="btn btn-sm" title="把官方公布的 Claude 价格填进表里；已有的行不会被覆盖">填入 Claude 官方价</button>
-                  <button id="price-fill-oai" class="btn btn-sm" title="把官方公布的 OpenAI 价格填进表里；已有的行不会被覆盖">填入 OpenAI 官方价</button>
+                  <button id="price-fill" class="btn btn-sm" data-tip="把官方公布的 Claude 价格填进表里；已有的行不会被覆盖">填入 Claude 官方价</button>
+                  <button id="price-fill-oai" class="btn btn-sm" data-tip="把官方公布的 OpenAI 价格填进表里；已有的行不会被覆盖">填入 OpenAI 官方价</button>
                   <button id="price-save" class="btn btn-sm btn-primary">保存价目表</button>
                 </div>
               </div>
@@ -963,7 +964,21 @@
                   <th class="num">Token</th>
                   <th class="num">费用</th>
                   <th class="num">延迟</th>
-                  <th class="num">时间</th>
+                  <!-- 时间列可排序：上下箭头分别选正序/倒序，默认倒序（最新在最前）。
+                       窄屏下表头整体隐藏，只留这一格当排序条用（见 usage.css） -->
+                  <th class="num col-time">
+                    <span class="u-sort">
+                      <span>时间</span>
+                      <span class="u-sort-btns">
+                        <button type="button" id="usage-sort-asc" class="u-sort-b asc"
+                                aria-pressed="false" data-tip="正序：最早的在最前"
+                                aria-label="按时间正序排列"></button>
+                        <button type="button" id="usage-sort-desc" class="u-sort-b desc on"
+                                aria-pressed="true" data-tip="倒序：最新的在最前"
+                                aria-label="按时间倒序排列"></button>
+                      </span>
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody id="usage-rows"></tbody>
@@ -978,6 +993,63 @@
             <button id="usage-prev" class="btn btn-ghost btn-sm">← 上一页</button>
             <span id="usage-page" class="mono"></span>
             <button id="usage-next" class="btn btn-ghost btn-sm">下一页 →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 内网隧道视图 -->
+      <div id="view-tunnel" class="view hidden">
+        <header class="set-head">
+          <h1>内网隧道</h1>
+          <p>在自己的电脑上跑 abox-link 客户端，把「只有你本机能连」的内网借给云端会话里的智能体。</p>
+        </header>
+
+        <div class="tun-body">
+          <div id="tun-status" class="tun-status">
+            <span id="tun-st-dot" class="t-dot big"></span>
+            <div class="tun-st-text">
+              <b id="tun-st-title">离线</b>
+              <span id="tun-st-sub" class="tun-st-sub mono"></span>
+            </div>
+          </div>
+          <div id="tun-maps" class="tun-maps hidden"></div>
+          <p id="tun-admin-online" class="field-hint hidden"></p>
+
+          <div id="tun-off-admin" class="card tun-hint hidden">
+            <p>隧道功能未启用。启用后，你可以在自己的电脑上运行 abox-link 客户端，
+            让云端容器里的智能体访问「只有你本机能连」的内网（公司内网、局域网设备、本地数据库）。</p>
+            <div>
+              <button id="tun-goto-settings" class="btn btn-primary btn-sm">前往设置启用</button>
+            </div>
+          </div>
+
+          <div id="tun-guide" class="card tun-guide hidden">
+            <h3>接入步骤</h3>
+            <ol>
+              <li>
+                <b>下载 abox-link 客户端</b>（放到你自己的电脑上）
+                <div id="tun-dl" class="tun-dl"></div>
+                <span id="tun-dl-empty" class="field-hint hidden">服务器上未放置预编译客户端，可在仓库中执行
+                <code>go build ./cmd/abox-link</code> 自行构建。</span>
+              </li>
+              <li>
+                <b>双击运行</b>，它会自动打开本机控制台 <code>http://127.0.0.1:7801</code>
+              </li>
+              <li>
+                <b>粘贴配对码完成接入</b>——不用输服务器地址和密码。
+                之后在控制台里点选放行规则、点「启动」即可，还能勾选开机自启。
+                <div class="tun-cmd-foot">
+                  <button id="tun-pair" class="btn btn-primary btn-sm">生成配对码</button>
+                  <span id="tun-pair-hint" class="field-hint">10 分钟内有效，只能用一次</span>
+                </div>
+                <pre id="tun-pair-code" class="tun-cmd mono hidden"></pre>
+              </li>
+              <li>
+                <b>完成。</b>连接成功后此处状态变为「在线」，会话容器内自动注入
+                <code>$AGENTBOX_INTRANET_PROXY</code>（及 <code>$AGENTBOX_INTRANET_MAPS</code>），
+                智能体即可按需访问你本机可达的内网；断开后自动失效。
+              </li>
+            </ol>
           </div>
         </div>
       </div>
@@ -1025,20 +1097,20 @@
           <button type="button" id="fv-mode-src" class="scope-btn">源码</button>
         </div>
         <div id="fv-vps" class="scope-switch fv-vps hidden" role="tablist" aria-label="模拟宽度">
-          <button type="button" class="scope-btn active" data-vp="desktop" title="桌面宽度（自适应）">桌面</button>
-          <button type="button" class="scope-btn" data-vp="tablet" title="平板宽度 834px">平板</button>
-          <button type="button" class="scope-btn" data-vp="phone" title="手机宽度 390px">手机</button>
+          <button type="button" class="scope-btn active" data-vp="desktop" data-tip="桌面宽度（自适应）">桌面</button>
+          <button type="button" class="scope-btn" data-vp="tablet" data-tip="平板宽度 834px">平板</button>
+          <button type="button" class="scope-btn" data-vp="phone" data-tip="手机宽度 390px">手机</button>
         </div>
-        <label id="fv-auto-wrap" class="check fv-auto hidden" title="文件被 Agent 改动后自动重新渲染">
+        <label id="fv-auto-wrap" class="check fv-auto hidden" data-tip="文件被 Agent 改动后自动重新渲染">
           <input type="checkbox" id="fv-auto" checked> <span>自动刷新</span>
         </label>
         <button id="fv-reload" class="btn btn-sm hidden">刷新</button>
-        <button id="fv-newtab" class="btn btn-sm hidden" title="在新标签页打开预览">新标签页</button>
-        <button id="fv-full" class="btn btn-sm hidden" title="铺满窗口">全屏</button>
+        <button id="fv-newtab" class="btn btn-sm hidden" data-tip="在新标签页打开预览">新标签页</button>
+        <button id="fv-full" class="btn btn-sm hidden" data-tip="铺满窗口">全屏</button>
         <span id="fv-state" class="fv-state mono"></span>
         <button id="fv-save" class="btn btn-sm btn-primary" disabled>保存</button>
         <button id="fv-download" class="btn btn-sm">下载</button>
-        <button id="fv-close" class="dlg-x" aria-label="关闭" title="关闭">✕</button>
+        <button id="fv-close" class="dlg-x" aria-label="关闭" data-tip="关闭">✕</button>
       </div>
     </header>
     <div class="fv-body">
@@ -1144,7 +1216,7 @@
     <div class="market-bar">
       <input type="search" id="market-q" placeholder="搜索插件名、描述、作者…">
       <select id="market-cat" aria-label="分类"></select>
-      <button type="button" id="btn-market-refresh" class="btn btn-sm" title="重新拉取官方目录">刷新目录</button>
+      <button type="button" id="btn-market-refresh" class="btn btn-sm" data-tip="重新拉取官方目录">刷新目录</button>
     </div>
     <div id="market-list" class="market-list"></div>
     <p class="market-foot">
@@ -1350,7 +1422,7 @@
     <input id="auth-apikey" type="password" placeholder="API Key（sk-...，已保存过的话测试时可留空）" autocomplete="off">
     <input id="auth-baseurl" type="text" class="mono" placeholder="Base URL，如 https://api.1024gate.com" autocomplete="off" spellcheck="false">
     <div class="auth-keyrow">
-      <select id="auth-wire" title="中转站接口协议">
+      <select id="auth-wire" data-tip="中转站接口协议">
         <option value="responses">Responses API</option>
         <option value="chat">Chat Completions</option>
       </select>
@@ -1364,58 +1436,6 @@
 </dialog>
 
 <!-- 内网隧道：状态 + 接入指引 -->
-<dialog id="dlg-tunnel" class="dlg-tunnel">
-  <div class="dlg-head">
-    <h2>内网隧道</h2>
-    <button type="button" id="tun-close" class="dlg-x" aria-label="关闭">✕</button>
-  </div>
-
-  <div id="tun-status" class="tun-status">
-    <span id="tun-st-dot" class="t-dot big"></span>
-    <div class="tun-st-text">
-      <b id="tun-st-title">离线</b>
-      <span id="tun-st-sub" class="tun-st-sub mono"></span>
-    </div>
-  </div>
-  <div id="tun-maps" class="tun-maps hidden"></div>
-  <p id="tun-admin-online" class="field-hint hidden"></p>
-
-  <div id="tun-off-admin" class="tun-hint hidden">
-    <p>隧道功能未启用。启用后，你可以在自己的电脑上运行 abox-link 客户端，
-    让云端容器里的智能体访问「只有你本机能连」的内网（公司内网、局域网设备、本地数据库）。</p>
-    <button id="tun-goto-settings" class="btn btn-primary btn-sm">前往设置启用</button>
-  </div>
-
-  <div id="tun-guide" class="tun-guide hidden">
-    <h3>接入步骤</h3>
-    <ol>
-      <li>
-        <b>下载 abox-link 客户端</b>（放到你自己的电脑上）
-        <div id="tun-dl" class="tun-dl"></div>
-        <span id="tun-dl-empty" class="field-hint hidden">服务器上未放置预编译客户端，可在仓库中执行
-        <code>go build ./cmd/abox-link</code> 自行构建。</span>
-      </li>
-      <li>
-        <b>双击运行</b>，它会自动打开本机控制台 <code>http://127.0.0.1:7801</code>
-      </li>
-      <li>
-        <b>粘贴配对码完成接入</b>——不用输服务器地址和密码。
-        之后在控制台里点选放行规则、点「启动」即可，还能勾选开机自启。
-        <div class="tun-cmd-foot">
-          <button id="tun-pair" class="btn btn-primary btn-sm">生成配对码</button>
-          <span id="tun-pair-hint" class="field-hint">10 分钟内有效，只能用一次</span>
-        </div>
-        <pre id="tun-pair-code" class="tun-cmd mono hidden"></pre>
-      </li>
-      <li>
-        <b>完成。</b>连接成功后此处状态变为「在线」，会话容器内自动注入
-        <code>$AGENTBOX_INTRANET_PROXY</code>（及 <code>$AGENTBOX_INTRANET_MAPS</code>），
-        智能体即可按需访问你本机可达的内网；断开后自动失效。
-      </li>
-    </ol>
-  </div>
-</dialog>
-
 <!-- 删除会话确认 -->
 <dialog id="dlg-del">
   <form id="del-form" method="dialog">
@@ -1587,6 +1607,9 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+<!-- 全站悬浮提示的单例气泡，由 js/tip.js 驱动；popover 让它能浮在原生 <dialog> 之上 -->
+<div id="tip" class="tip" role="tooltip" popover="manual"></div>
 
 <script src="/_v/{{BUILD}}/vendor/xterm.js"></script>
 <script src="/_v/{{BUILD}}/vendor/addon-fit.js"></script>

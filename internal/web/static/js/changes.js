@@ -4,6 +4,7 @@
 import { S } from "./state.js";
 import { $, spinEl, toast, btnBusy, btnDone } from "./util.js";
 import { api } from "./api.js";
+import { setTip } from "./tip.js";
 /* repo 是相对 workspace 的仓库路径（""=workspace 本身）。工作区根通常不是仓库，
  * 项目多半躺在子目录里，所以服务端会给出候选列表，这里记住当前选的那个。
  * view 是右侧看哪一种：diff（相对 HEAD 的差异）还是 full（当前完整文件）。 */
@@ -135,7 +136,7 @@ function renderList() {
         const disc = document.createElement("button");
         disc.type = "button";
         disc.className = "change-discard";
-        disc.title = "丢弃此文件的改动";
+        setTip(disc, "丢弃此文件的改动");
         disc.setAttribute("aria-label", "丢弃此文件的改动");
         disc.textContent = "⟲";
         disc.addEventListener("click", (e) => { e.stopPropagation(); openDiscard(f.path); });
@@ -180,8 +181,8 @@ function renderViewBar() {
     fullBtn.classList.toggle("active", CH.view === "full");
     diffBtn.disabled = f.untracked; // 未跟踪的文件相对 HEAD 没有差异
     fullBtn.disabled = isDeleted(f); // 删掉的文件没有内容可读
-    diffBtn.title = f.untracked ? "新文件没有可比对的版本" : "";
-    fullBtn.title = isDeleted(f) ? "文件已删除" : "";
+    setTip(diffBtn, f.untracked ? "新文件没有可比对的版本" : "");
+    setTip(fullBtn, isDeleted(f) ? "文件已删除" : "");
 }
 async function renderView() {
     const f = currentFile();

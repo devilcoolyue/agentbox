@@ -247,6 +247,8 @@ export interface UsageEvents {
   facets: { users: string[]; agents: string[]; models: string[] };
   limit: number;
   offset: number;
+  /** 这一页实际用的时间排序方向："desc" 最新在前（默认）| "asc" 最早在前 */
+  order: string;
   /** "self" 只看得到自己（隐藏用户列）| "all" 管理员看全部 */
   scope: string;
 }

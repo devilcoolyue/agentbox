@@ -6,6 +6,7 @@
 "use strict";
 
 import { $ } from "./util.js";
+import { setTip } from "./tip.js";
 
 /* 改这个键名时记得同步 index.html 头部那段内联脚本 */
 const THEME_KEY = "agentbox_theme";
@@ -62,7 +63,7 @@ function syncUI(mode: ThemeMode, effective: Theme) {
   if (themeLabel) themeLabel.textContent = label;
 
   for (const b of document.querySelectorAll<HTMLElement>("[data-theme-toggle]")) {
-    b.title = "主题：" + current;
+    setTip(b, "主题：" + current);
     b.setAttribute("aria-label", "主题：" + current + "，展开主题选项");
   }
   for (const opt of document.querySelectorAll<HTMLElement>("[data-theme-option]")) {
@@ -70,7 +71,7 @@ function syncUI(mode: ThemeMode, effective: Theme) {
     opt.classList.toggle("active", active);
     opt.setAttribute("aria-current", active ? "true" : "false");
     opt.setAttribute("aria-label", "切换到" + MODE_LABEL[opt.dataset.themeOption as ThemeMode]);
-    opt.title = "切换到" + MODE_LABEL[opt.dataset.themeOption as ThemeMode];
+    setTip(opt, "切换到" + MODE_LABEL[opt.dataset.themeOption as ThemeMode]);
   }
 
   // 移动端浏览器地址栏跟着页面底色走

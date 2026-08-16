@@ -18,6 +18,7 @@ import { $, toast } from "./util.js";
 // 这里只在点击回调里用 putSettings，而它是函数声明（提升），环里取到的绑定
 // 一定已经就位；两个模块的顶层代码都不碰对方，所以这个环是安全的。
 import { putSettings } from "./settings.js";
+import { setTip } from "./tip.js";
 
 /* Claude 官方价目快照，抄自 platform.claude.com/docs/en/about-claude/pricing
  * （2026-08-11）。四个数依次是 输入 / 输出 / 缓存读取 / 缓存写入，美元每百万 token。
@@ -77,7 +78,7 @@ function rateInput(cls: string, value: number | undefined, title: string) {
   el.className = cls;
   el.value = num(value);
   el.placeholder = "0";
-  el.title = title;
+  setTip(el, title);
   el.inputMode = "decimal";
   return el;
 }
@@ -94,9 +95,9 @@ function renderRows() {
     const k = document.createElement("td");
     k.className = "pt-key" + (FALLBACK_KEYS.has(key) ? " fallback" : "");
     k.textContent = key;
-    k.title = FALLBACK_KEYS.has(key)
+    setTip(k, FALLBACK_KEYS.has(key)
       ? `${key} 的兜底价：这个 agent 下没有单独配价的模型都按它算`
-      : key;
+      : key);
     tr.appendChild(k);
 
     for (const [field, label] of [
@@ -134,7 +135,7 @@ function renderRows() {
     btn.className = "pt-del";
     btn.type = "button";
     btn.textContent = "✕";
-    btn.title = "删掉这一行";
+    setTip(btn, "删掉这一行");
     btn.addEventListener("click", () => {
       readDraft();          // 先把别的行的改动收进来，别让删除顺手回滚它们
       delete draft[key];

@@ -287,10 +287,50 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.err { border-color: var(--red-line); color: var(--red); }
 
+/* ---- 悬浮提示 ---- */
+/* 全站单例气泡，js/tip.js 负责定位与显隐；页面里只写 data-tip="文本"。
+ * [popover] 的 UA 样式会强塞 inset/margin/padding/border/overflow，这里逐条盖掉——
+ * 尤其 overflow: auto 会把箭头裁没。 */
+.tip {
+  position: fixed; inset: auto; z-index: 200;
+  display: none;
+  margin: 0;
+  width: max-content; max-width: min(300px, 78vw);
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--amber-dim); border-radius: 7px;
+  color: var(--text);
+  font-size: 12px; line-height: 1.5;
+  white-space: pre-line; /* 让文案里的 \n 生效，与原生 title 的行为一致 */
+  overflow: visible;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;  /* 永远不吃鼠标，免得气泡自己遮住锚点来回抖 */
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.tip.show { display: block; }
+.tip.in { opacity: 1; transform: none; }
+
+/* 箭头：旋转 45° 的小方块，画在气泡边框之上，底色正好把那截边框盖住。
+ * --tip-ax / --tip-ay 由 tip.js 写，跟着锚点中心走，气泡被夹到视口边缘也指得对。 */
+.tip::after {
+  content: ""; position: absolute;
+  width: 8px; height: 8px;
+  background: var(--panel);
+  border: 1px solid var(--amber-dim);
+  transform: rotate(45deg);
+}
+.tip[data-side="top"]::after    { bottom: -4px; left: var(--tip-ax); margin-left: -4px; border-top: 0; border-left: 0; }
+.tip[data-side="bottom"]::after { top: -4px;    left: var(--tip-ax); margin-left: -4px; border-bottom: 0; border-right: 0; }
+.tip[data-side="left"]::after   { right: -4px;  top: var(--tip-ay);  margin-top: -4px;  border-bottom: 0; border-left: 0; }
+.tip[data-side="right"]::after  { left: -4px;   top: var(--tip-ay);  margin-top: -4px;  border-top: 0; border-right: 0; }
+
 @media (prefers-reduced-motion: reduce) {
   .wordmark .cursor { animation: none; }
   .boxi-bob, .boxi-eye, .boxi-glow { animation: none; }
   .led.on { animation: none; }
   .spin { animation: none; }
   .toast { transition: none; }
+  .tip { transition: none; }
 }

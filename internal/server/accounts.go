@@ -28,12 +28,15 @@ import (
 const (
 	claudeOAuthClientID  = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 	claudeOAuthAuthorize = "https://claude.com/cai/oauth/authorize"
-	claudeOAuthToken     = "https://platform.claude.com/v1/oauth/token"
 	claudeOAuthRedirect  = "https://platform.claude.com/oauth/code/callback"
 	claudeOAuthProfile   = "https://api.anthropic.com/api/oauth/profile"
 	claudeOAuthScope     = "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
 	oauthPendingTTL      = 15 * time.Minute
 )
+
+// 变量而非常量：测试里指向 httptest 假上游。授权码换令牌和刷新令牌续期
+// （credrefresh.go）打的是同一个端点。
+var claudeOAuthToken = "https://platform.claude.com/v1/oauth/token"
 
 // oauthPending 是一次进行中的授权（start 已发、等待用户贴回授权码）。
 type oauthPending struct {
@@ -156,19 +159,7 @@ func (s *Server) handleOAuthFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tok struct {
-		AccessToken           string `json:"access_token"`
-		RefreshToken          string `json:"refresh_token"`
-		ExpiresIn             int64  `json:"expires_in"`
-		RefreshTokenExpiresIn int64  `json:"refresh_token_expires_in"`
-		Scope                 string `json:"scope"`
-		SubscriptionType      string `json:"subscription_type"`
-		RateLimitTier         string `json:"rate_limit_tier"`
-		Account               struct {
-			SubscriptionType string `json:"subscription_type"`
-			RateLimitTier    string `json:"rate_limit_tier"`
-		} `json:"account"`
-	}
+	var tok oauthTokenResp
 	if err := json.Unmarshal(raw, &tok); err != nil || tok.AccessToken == "" {
 		writeErr(w, http.StatusBadGateway, "令牌响应解析失败")
 		return
