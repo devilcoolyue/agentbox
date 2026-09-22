@@ -268,9 +268,10 @@ export function openTerm() {
 
 $("term-reconnect").addEventListener("click", termReconnect);
 
-window.addEventListener("resize", () => {
-  if (S.fit && S.tab === "term") S.fit.fit();
-});
+// 侧栏收起也会改变终端宽度，但不会触发 window.resize。
+new ResizeObserver(([entry]) => {
+  if (S.fit && S.tab === "term" && entry.contentRect.width && entry.contentRect.height) S.fit.fit();
+}).observe($("term-mount"));
 
 /* ---------------- 顶栏提示轮播 ----------------
  * 提示语与频率/动画在系统设置「界面与提示」里配置，经 /me 下发给所有用户（S.termTips）。

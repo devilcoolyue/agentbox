@@ -107,6 +107,8 @@ function closeAll(except = null) {
             closeSwitch(sw);
     }
 }
+/** 外壳收起/抽屉关闭时同步清除浮层状态。 */
+export function closeThemeMenus() { closeAll(); }
 function openSwitch(sw) {
     closeAll(sw);
     sw.classList.add("open");
@@ -164,6 +166,13 @@ function repositionOpenMenus() {
 }
 window.addEventListener("resize", repositionOpenMenus);
 window.addEventListener("scroll", repositionOpenMenus, true);
+// 桌面菜单有内联坐标；切成抽屉时即使菜单已关闭，也必须清掉，
+// 否则这些坐标会撑大侧栏的滚动范围。
+narrowMQ.addEventListener("change", () => {
+    closeAll();
+    for (const sw of switches)
+        positionMenu(sw);
+});
 // 系统深浅色变化时，跟随系统模式即时换实际主题；不改变用户已保存的选择。
 const onDarkChange = (fn) => {
     if (darkMQ.addEventListener)

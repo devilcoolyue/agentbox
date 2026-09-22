@@ -35,6 +35,9 @@ function renderSideItem() {
     const dot = $("tunnel-dot");
     dot.classList.toggle("on", !!st.connected);
     $("tunnel-text").textContent = !st.enabled ? "未启用" : (st.connected ? "在线" : "离线");
+    const label = "内网隧道：" + $("tunnel-text").textContent;
+    setTip(btn, label);
+    btn.setAttribute("aria-label", label);
 }
 /* ---- 页面 ---- */
 function renderPage() {

@@ -61,6 +61,7 @@ export function renderMyQuota() {
     setTip(box, q.blocked
         ? "额度已用完，无法发起新对话，请联系管理员充值"
         : "剩余额度 " + fmtUSD(q.balance_micro_usd));
+    box.setAttribute("aria-label", box.dataset.tip);
 }
 // refreshAll 每轮都会带回自己的额度（回合收尾也会调它），这里跟着重画。
 bus.addEventListener("data-updated", renderMyQuota);

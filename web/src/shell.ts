@@ -7,21 +7,72 @@ import { S, bus, emit } from "./state.js";
 import type { View } from "./state.js";
 import { $ } from "./util.js";
 import { agentIcon, agentAvatar, agentName } from "./brand.js";
-import { setTip } from "./tip.js";
+import { hideTip, setTip } from "./tip.js";
+import { closeThemeMenus } from "./theme.js";
 
-/* ---- 抽屉（仅窄屏可见） ---- */
+/* ---- 侧栏：桌面收起偏好与移动抽屉各自独立 ---- */
+
+const narrowMQ = window.matchMedia("(max-width: 760px)");
+const sidebar = $("sidebar");
+const main = document.querySelector<HTMLElement>(".main")!;
+const topbar = document.querySelector<HTMLElement>(".topbar")!;
+const toggle = $("btn-sidebar-toggle");
+// index.html 在首屏恢复同一个键，避免刷新时宽度跳动。
+const SIDEBAR_KEY = "agentbox_sidebar_collapsed";
+
+function syncSidebar() {
+  const open = narrowMQ.matches && sidebar.classList.contains("open");
+  sidebar.inert = narrowMQ.matches && !open;
+  main.inert = topbar.inert = open;
+  $("btn-menu").setAttribute("aria-expanded", String(open));
+  const collapsed = !narrowMQ.matches && document.documentElement.dataset.sidebarCollapsed === "true";
+  const label = narrowMQ.matches ? "关闭菜单" : collapsed ? "展开侧栏" : "收起侧栏";
+  toggle.setAttribute("aria-expanded", String(narrowMQ.matches ? open : !collapsed));
+  toggle.setAttribute("aria-label", label);
+  $("sidebar-toggle-label").textContent = label;
+  setTip(toggle, label);
+}
 
 export function openDrawer() {
-  $("sidebar").classList.add("open");
+  if (!narrowMQ.matches) return;
+  sidebar.classList.add("open");
   $("scrim").classList.add("show");
+  syncSidebar();
+  $("btn-sidebar-close").focus();
 }
 export function closeDrawer() {
-  $("sidebar").classList.remove("open");
+  const restoreFocus = narrowMQ.matches && sidebar.classList.contains("open") && !document.querySelector("dialog[open]");
+  sidebar.classList.remove("open");
   $("scrim").classList.remove("show");
+  closeThemeMenus();
+  hideTip();
+  syncSidebar();
+  if (restoreFocus) $("btn-menu").focus();
 }
 $("btn-menu").addEventListener("click", openDrawer);
+$("btn-sidebar-close").addEventListener("click", closeDrawer);
 $("scrim").addEventListener("click", closeDrawer);
-window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+toggle.addEventListener("click", () => {
+  if (narrowMQ.matches) { closeDrawer(); return; }
+  closeThemeMenus();
+  hideTip();
+  const collapsed = document.documentElement.dataset.sidebarCollapsed !== "true";
+  document.documentElement.dataset.sidebarCollapsed = String(collapsed);
+  try { localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0"); } catch { /* 本次仍生效 */ }
+  syncSidebar();
+});
+narrowMQ.addEventListener("change", closeDrawer);
+window.addEventListener("keydown", (e) => {
+  if (!sidebar.classList.contains("open") || document.querySelector("dialog[open]")) return;
+  if (e.key === "Escape") { e.preventDefault(); closeDrawer(); }
+  if (e.key !== "Tab") return;
+  const targets = [...sidebar.querySelectorAll<HTMLElement>("button:not(:disabled), [tabindex='0']")]
+    .filter(el => el.getClientRects().length && getComputedStyle(el).visibility !== "hidden");
+  const first = targets[0], last = targets[targets.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+});
+syncSidebar();
 
 /* ---- 顶栏：设置视图显示标题，工作台视图显示 状态灯+会话名+⋯菜单 ---- */
 
@@ -51,9 +102,11 @@ export function showView(name: View) {
   $("view-settings").classList.toggle("hidden", name !== "settings");
   $("view-usage").classList.toggle("hidden", name !== "usage");
   $("view-tunnel").classList.toggle("hidden", name !== "tunnel");
-  $("btn-settings").classList.toggle("active", name === "settings");
-  $("btn-usagelog").classList.toggle("active", name === "usage");
-  $("btn-tunnel").classList.toggle("active", name === "tunnel");
+  for (const [id, view] of [["btn-settings", "settings"], ["btn-usagelog", "usage"], ["btn-tunnel", "tunnel"]]) {
+    $(id).classList.toggle("active", name === view);
+    if (name === view) $(id).setAttribute("aria-current", "page");
+    else $(id).removeAttribute("aria-current");
+  }
   updateTopbarTitle();
   closeDrawer();
   renderSidebar();
@@ -68,30 +121,37 @@ $("btn-tunnel").addEventListener("click", () => emit("open-tunnel"));
 
 export function renderSidebar() {
   const list = $("session-list");
+  const scrollTop = list.scrollTop;
+  const focusedID = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".session-card")?.dataset.sessionId;
   list.replaceChildren();
+  $("session-count").textContent = String(S.sessions.length);
   if (!S.sessions.length) {
     const p = document.createElement("p");
-    p.className = "files-empty";
-    p.textContent = "还没有会话。";
+    p.className = "session-empty";
+    p.innerHTML = '<span class="session-empty-icon" aria-hidden="true">—</span><span class="session-empty-text">还没有会话，点击上方新建。</span>';
+    setTip(p, "还没有会话，点击上方新建");
     list.appendChild(p);
   }
   for (const sess of S.sessions) {
-    const card = document.createElement("div");
-    card.className = "session-card" +
-      (S.view === "work" && S.current && S.current.id === sess.id ? " active" : "");
-    card.setAttribute("role", "button");
-    card.tabIndex = 0;
-    card.setAttribute("aria-label", `${sess.name}（${agentName(sess.agent)}）`);
+    const card = document.createElement("button");
+    const active = S.view === "work" && S.current?.id === sess.id;
+    card.type = "button";
+    card.className = "session-card" + (active ? " active" : "");
+    card.dataset.sessionId = sess.id;
+    if (active) card.setAttribute("aria-current", "page");
+    const status = sess.status === "running" ? "运行中" : sess.stop_reason === "idle" ? "休眠" : "已停止";
+    card.setAttribute("aria-label", `${sess.name}（${agentName(sess.agent)}，${status}）`);
+    setTip(card, `${sess.name}\n${sess.account_label} · ${agentName(sess.agent)} · ${status}\n#${sess.id}`);
     const av = agentAvatar(sess.agent, { led: true });
-    setTip(av, agentName(sess.agent));
     if (sess.status === "running") av.querySelector(".led")!.classList.add("on");
-    const body = document.createElement("div");
+    const body = document.createElement("span");
     body.className = "sc-body";
-    const h = document.createElement("h3");
+    const h = document.createElement("span");
+    h.className = "sc-name";
     h.textContent = sess.name;
-    const meta = document.createElement("div");
+    const meta = document.createElement("span");
     meta.className = "meta";
-    meta.textContent = `${sess.account_label} · #${sess.id}`;
+    meta.textContent = sess.account_label || agentName(sess.agent);
     body.append(h, meta);
     // 休眠 = 空闲自动停机（数据都在，发消息/开终端即自动唤醒）。与用户手动
     // 停止区分开，否则回来发现会话没了会以为服务出了故障。
@@ -99,15 +159,15 @@ export function renderSidebar() {
       const zzz = document.createElement("span");
       zzz.className = "sc-sleep";
       zzz.textContent = "休眠";
-      setTip(zzz, "空闲自动停机，发消息或打开终端会自动唤醒");
       meta.append(document.createTextNode(" · "), zzz);
     }
     card.append(av, body);
     const open = () => emit("open-session", sess);
     card.addEventListener("click", open);
-    card.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
     list.appendChild(card);
+    if (focusedID === sess.id) card.focus({ preventScroll: true });
   }
+  list.scrollTop = scrollTop;
 }
 
 bus.addEventListener("data-updated", renderSidebar);
