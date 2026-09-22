@@ -1,0 +1,106 @@
+# 账号与模型
+
+[返回文档目录](README.md) · [项目首页](../README.md)
+
+## 接入方式
+
+在「系统设置 → 账号池」新增账号，选择类型并设置唯一 ID。ID 使用 2–32 位小写字母、数字、`-` 或 `_`，首位必须是字母或数字，创建后不修改。
+
+| 类型 | 推荐的配置入口 | 保存位置 |
+| --- | --- | --- |
+| Claude 订阅 | 网页 OAuth 授权码流程 | 账号凭证目录的 `.credentials.json` |
+| Claude API Key | 账号 `env.ANTHROPIC_API_KEY` | `config.json` |
+| Claude 中转 / Bearer Key | 网页「中转站 API Key」 | 账号 env 中的 `ANTHROPIC_AUTH_TOKEN` 与可选地址 |
+| Codex 订阅 | 已登录 CLI 的 `auth.json` | 账号凭证目录 |
+| Codex API / 中转 | 网页填写 Key、地址、接口协议 | 账号凭证目录的 `auth.json` 和 `config.toml` |
+
+网页创建账号时，凭证目录自动位于 `<data_dir>/creds/<id>/`。手工配置的账号可以使用 `accounts/<id>/` 或其他 `credentials_dir`；相对路径以 `config.json` 所在目录为基准。
+
+普通用户可以选择账号池中的账号创建空间，账号管理操作只对管理员开放。API 返回普通用户可见的账号概要时会隐藏环境密钥、地址和出口代理配置，但空间内的 CLI 运行需要实际凭证；这不是针对恶意终端用户的凭证托管隔离机制。
+
+## Claude 订阅授权
+
+1. 新增 Claude 账号，打开登录配置，选择「订阅 OAuth」。
+2. 点击「生成授权链接」，在浏览器打开链接并登录目标订阅账号。
+3. 将授权页给出的完整授权码粘贴回控制台，完成登录。
+4. 创建使用这个账号的空间，发送一条短消息验证。
+
+授权链接对应一次独立授权流程，15 分钟内有效；超时或 state 不匹配时重新生成。服务端会同步并在需要时刷新 Claude OAuth 凭证，再分发给使用同一账号的空间。若刷新链已失效，应重新授权。
+
+也可导入已登录环境中的 `.claude/.credentials.json`，但该文件必须来自 CLI 使用文件保存凭证的环境。不要假定每种系统的凭证存储位置都相同；网页独立授权通常更方便，也能减少与本机 CLI 争用同一刷新令牌的情况。
+
+## 手工配置账号
+
+下面是 `accounts` 数组中的条目示例，合并到现有配置时按需选择。占位密钥不能用于实际调用：
+
+```json
+{
+  "accounts": [
+    {
+      "id": "claude-sub",
+      "type": "claude",
+      "label": "Claude 订阅",
+      "credentials_dir": "accounts/claude-sub"
+    },
+    {
+      "id": "claude-api",
+      "type": "claude",
+      "label": "Claude API",
+      "env": { "ANTHROPIC_API_KEY": "REPLACE_WITH_YOUR_API_KEY" }
+    },
+    {
+      "id": "codex-sub",
+      "type": "codex",
+      "label": "Codex 订阅",
+      "credentials_dir": "accounts/codex-sub"
+    }
+  ]
+}
+```
+
+凭证目录内容：
+
+```text
+accounts/
+  claude-sub/
+    .credentials.json
+  codex-sub/
+    auth.json
+    config.toml          # 有自定义 provider、MCP 等配置时同时准备
+```
+
+Codex 订阅需先在可登录的环境完成 `codex login`，再把该环境实际使用的 `~/.codex/auth.json` 放入对应目录。网页暂不提供 Codex 订阅的 OAuth 授权码流程。
+
+## 中转与 API Key
+
+网页登录配置中可以填写 Key 与 Base URL，再用连通性探测检查结果。
+
+- Claude 网页 Key 入口使用 Bearer 令牌 `ANTHROPIC_AUTH_TOKEN`；如果供应商要求原生 `ANTHROPIC_API_KEY`，按上面的 env 示例配置。
+- Claude 切回订阅时，使用「清除中转站配置，切回订阅凭证」，并确认有效 OAuth 凭证已存在。
+- Codex 可以选择 `responses` 或 `chat` 接口协议。应匹配实际 provider 和已安装 CLI 支持的协议，保存成功不代表上游一定兼容。
+- Codex 的 Base URL 留空会保留已有 `config.toml`，**不会自动清除旧的自定义 provider**；切回官方配置时应检查账号目录中的配置。
+
+账号 env 随每次 CLI 执行注入，新网页回合能取得最新值。已运行进程不会追溯更新；终端应重连后新建 tmux 窗口。账号出口代理的绑定和验证见[网络配置](networking.md)。
+
+## 默认模型与候选列表
+
+在「系统设置 → 模型管理」维护 Claude / Codex 的模型 ID 与显示名称，并选择「新空间默认模型」。当前初始值：
+
+| Agent | 初始默认模型 |
+| --- | --- |
+| Claude | `claude-opus-5` |
+| Codex | `gpt-5.5` |
+
+模型名称来自当前仓库默认配置，不是动态查询上游能力的结果。使用其他 provider 时应改成它实际支持的模型 ID，并同步核对[价目表](usage-and-quotas.md)。
+
+默认模型必须存在于对应候选列表中。更换系统默认值只影响随后创建的空间；旧版尚未保存模型的空间，会在新版首次初始化时补齐当时的默认值。
+
+空间启动时将保存的默认模型写入 CLI 配置，Codex 同时处理启用的 profile，保留 provider、推理强度和 MCP。对话输入框单独选模型只作用于网页对话，不修改这个空间的终端默认值。
+
+## 凭证同步与账号删除
+
+空间启动时从账号池播种凭证，运行期间也会收敛 CLI 更新后的凭证。不要在服务运行中反复覆盖账号文件来“固定”旧令牌，旧刷新令牌可能已经作废。
+
+一个账号仍被任何空间引用时不能删除，包括已经停止的空间。先处理这些空间，再删除账号条目。删除账号默认保留其凭证目录，管理员可在确认不再需要后自行归档。
+
+备份应覆盖**每个账号实际的 `credentials_dir`**。内置备份脚本仅打包仓库根目录的 `accounts/`，网页创建的 `<data_dir>/creds/` 不在其中，详见[备份与恢复](../deploy/README.md#备份与恢复)。
