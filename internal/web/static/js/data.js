@@ -13,6 +13,10 @@ export async function refreshAll() {
         S.sessions = sessions;
         S.accounts = accounts;
         S.quota = me.quota || null;
+        if (me.timezone && me.timezone !== S.timeZone) {
+            S.timeZone = me.timezone;
+            emit("timezone-updated");
+        }
         if (S.current) {
             const cur = sessions.find((x) => x.id === S.current.id);
             if (cur)

@@ -8,7 +8,8 @@
  *   open-usage               — 侧栏点击使用记录
  *   open-tunnel              — 侧栏点击内网隧道
  *   thread-changed           — 对话线程切换/新建/删除，chat.ts 重载对话流
- *   tips-updated             — 终端提示语配置变化（登录下发 / 管理员保存），term.ts 重排轮播 */
+ *   tips-updated             — 终端提示语配置变化（登录下发 / 管理员保存），term.ts 重排轮播
+ *   timezone-updated         — 系统界面时区变化，使用记录重绘时间 */
 "use strict";
 export const bus = new EventTarget();
 export const emit = (type, detail) => bus.dispatchEvent(new CustomEvent(type, { detail }));
@@ -28,6 +29,7 @@ export const S = {
     termWS: null,
     termWSGen: 0,
     termTips: null,
+    timeZone: "Asia/Shanghai",
     term: null,
     fit: null,
     filePath: "",

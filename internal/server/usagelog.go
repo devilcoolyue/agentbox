@@ -33,6 +33,7 @@ import (
 const (
 	usageRowsDefault = 50
 	usageRowsMax     = 500
+	usageLocalLayout = "2006-01-02T15:04"
 )
 
 // 计费模式：这笔钱是怎么算出来的。对着一行说不清「为什么是这个数」的时候，
@@ -162,13 +163,14 @@ func (s *Server) usageFilterFrom(r *http.Request) (f store.UsageFilter, scopeUse
 		scopeUser = u.Name
 		f.User = u.Name // 无视传进来的 user 参数，别人的流水一行都不给
 	}
+	loc := s.cfg.GetLocation()
 	if v := q.Get("since"); v != "" {
-		if ts, err := time.Parse(time.RFC3339, v); err == nil {
+		if ts, err := parseUsageTime(v, loc); err == nil {
 			f.Since = ts
 		}
 	}
 	if v := q.Get("until"); v != "" {
-		if ts, err := time.Parse(time.RFC3339, v); err == nil {
+		if ts, err := parseUsageTime(v, loc); err == nil {
 			f.Until = ts
 		}
 	}
@@ -178,6 +180,16 @@ func (s *Server) usageFilterFrom(r *http.Request) (f store.UsageFilter, scopeUse
 	// 这些列会随「补记终端消耗」这类后台写入变动。
 	f.Asc = q.Get("order") == "asc"
 	return f, scopeUser
+}
+
+// parseUsageTime accepts RFC3339 for compatibility with older clients and a
+// timezone-less wall-clock value for the current UI. The latter is interpreted
+// in the system timezone, so a filter means the same thing on every browser.
+func parseUsageTime(v string, loc *time.Location) (time.Time, error) {
+	if ts, err := time.Parse(time.RFC3339, v); err == nil {
+		return ts, nil
+	}
+	return time.ParseInLocation(usageLocalLayout, v, loc)
 }
 
 // handleUsageEvents 返回一页用量明细，外加整个筛选范围的合计与可选项。
@@ -255,6 +267,7 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 		"order": map[bool]string{true: "asc", false: "desc"}[f.Asc],
 		// 前端据此决定要不要显示「用户」列和用户筛选框：只看得到自己的时候
 		// 那一列每行都一样，纯占地方。
-		"scope": map[bool]string{true: "self", false: "all"}[scopeUser != ""],
+		"scope":    map[bool]string{true: "self", false: "all"}[scopeUser != ""],
+		"timezone": s.cfg.GetTimeZone(),
 	})
 }

@@ -23,6 +23,7 @@ type usageEventsResp struct {
 	Scope string `json:"scope"`
 	Limit int    `json:"limit"`
 	Order string `json:"order"`
+	Zone  string `json:"timezone"`
 }
 
 // seedUsage 铺一批流水：alice 一个 claude 回合拆成两行（主模型 + 起标题的
@@ -73,12 +74,45 @@ func TestUsageEventsAdminSeesEveryone(t *testing.T) {
 	if got.Scope != "all" {
 		t.Errorf("scope = %q，管理员应该是 all", got.Scope)
 	}
+	if got.Zone != config.DefaultTimeZone {
+		t.Errorf("timezone = %q，想要默认值 %q", got.Zone, config.DefaultTimeZone)
+	}
 	// 三行分属两个回合：claude 那两行共享 turn_id。
 	if got.Total.Rows != 3 || got.Total.Turns != 2 {
 		t.Errorf("合计 = %d 行 / %d 回合，想要 3 / 2", got.Total.Rows, got.Total.Turns)
 	}
 	if want := int64(147633 + 622 + 3250); got.Total.CostMicroUSD != want {
 		t.Errorf("合计费用 = %d，想要 %d", got.Total.CostMicroUSD, want)
+	}
+}
+
+func TestUsageFilterWallClockUsesConfiguredTimeZone(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.cfg.TimeZone = "Asia/Shanghai"
+	r := asUser(httptest.NewRequest(http.MethodGet,
+		"/api/usage/events?since=2026-09-19T08:30&until=2026-09-19T09:01", nil),
+		"root", store.RoleAdmin)
+
+	f, _ := s.usageFilterFrom(r)
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSince := time.Date(2026, 9, 19, 8, 30, 0, 0, loc)
+	wantUntil := time.Date(2026, 9, 19, 9, 1, 0, 0, loc)
+	if !f.Since.Equal(wantSince) || !f.Until.Equal(wantUntil) {
+		t.Fatalf("墙上时间解析错误: since=%s until=%s, want %s / %s",
+			f.Since, f.Until, wantSince, wantUntil)
+	}
+
+	// 带偏移的旧客户端参数仍按它自己的绝对时间解释。
+	r = asUser(httptest.NewRequest(http.MethodGet,
+		"/api/usage/events?since=2026-09-19T08:30:00-07:00", nil),
+		"root", store.RoleAdmin)
+	f, _ = s.usageFilterFrom(r)
+	wantRFC3339 := time.Date(2026, 9, 19, 15, 30, 0, 0, time.UTC)
+	if !f.Since.Equal(wantRFC3339) {
+		t.Fatalf("RFC3339 兼容解析错误: got %s want %s", f.Since, wantRFC3339)
 	}
 }
 

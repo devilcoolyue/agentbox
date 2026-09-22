@@ -175,6 +175,7 @@ MCP 的两个注意点：
 | `data_dir` | 用户数据根目录（工作区、home、对话历史、state.json） |
 | `agent_image` | 会话容器镜像 |
 | `permission_mode` | headless 回合的权限模式，容器即沙箱，默认 `bypassPermissions` |
+| `timezone` | 控制台显示与使用记录筛选采用的 IANA 时区，默认 `Asia/Shanghai` |
 | `container.*` | 每容器资源限制：内存、CPU、进程数、网络 |
 | `tunnel.*` | 反向内网隧道（见下）。`enabled` 开关；`proxy_bind` 服务端 SOCKS5 监听地址，须为容器可达，默认 docker 网桥网关 `172.17.0.1:1080`；`proxy_host` 注入容器时用的地址，缺省取 `proxy_bind` 的主机 |
 | `proxy_bridge.*` | 账号出口代理的本地 HTTP 桥接（见下）。`bind` 监听地址，须为容器可达，默认 `172.17.0.1:1081`；`host` 注入容器时用的地址，缺省取 `bind` 的主机 |

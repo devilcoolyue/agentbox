@@ -5,6 +5,7 @@
   "agent_image": "agentbox-agent:latest",
   "permission_mode": "bypassPermissions",
   "max_upload_mb": 512,
+  "timezone": "Asia/Shanghai",
   "container": {
     "memory_mb": 2048,
     "cpus": 2,

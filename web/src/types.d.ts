@@ -251,6 +251,8 @@ export interface UsageEvents {
   order: string;
   /** "self" 只看得到自己（隐藏用户列）| "all" 管理员看全部 */
   scope: string;
+  /** 服务端实际用于解析本次时间筛选的 IANA 时区 */
+  timezone: string;
 }
 
 /* ---------------- Claude 订阅额度 ---------------- */
@@ -304,6 +306,8 @@ export interface Me {
   role: string;
   models: Record<string, ModelOption[]> | null;
   terminal_tips: TerminalTips | null;
+  /** 控制台显示与使用记录筛选使用的 IANA 时区 */
+  timezone: string;
   quota: Quota | null;
 }
 
@@ -348,6 +352,8 @@ export interface Settings {
   max_upload_mb: number;
   /** 会话空闲自动停机的分钟数；0 = 关闭 */
   idle_timeout_min: number;
+  /** 控制台显示与使用记录筛选使用的 IANA 时区 */
+  timezone: string;
   container: ContainerLimits;
   models: Record<string, ModelOption[]>;
   terminal_tips: TerminalTips;

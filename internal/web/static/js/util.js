@@ -1,5 +1,6 @@
 /* util：DOM / 格式化 / 加载态 / 气泡 / 灯箱等无业务依赖的小工具。 */
 "use strict";
+import { S } from "./state.js";
 /* $ 按 id 取元素，返回类型断言成非空：这些 id 全部写死在 index.html 里，取不到
  * 就是模板被改坏了，属于开发期错误，不值得让每个调用点都写一遍空值判断。需要
  * input/dialog 等具体接口时用类型参数收窄，例如 $<HTMLInputElement>("login-user")。
@@ -53,10 +54,24 @@ export function wbIdle() {
     $("wb-busy")?.classList.remove("show");
 }
 /* ---- 格式化 ---- */
+const timeFormatters = new Map();
 export function fmtTime(ms) {
-    const d = new Date(ms);
-    const p = (n) => String(n).padStart(2, "0");
-    return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    const zone = S.timeZone || "Asia/Shanghai";
+    let fmt = timeFormatters.get(zone);
+    if (!fmt) {
+        fmt = new Intl.DateTimeFormat("en-CA", {
+            timeZone: zone,
+            month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+            hourCycle: "h23",
+        });
+        timeFormatters.set(zone, fmt);
+    }
+    const p = {};
+    for (const part of fmt.formatToParts(new Date(ms))) {
+        if (part.type !== "literal")
+            p[part.type] = part.value;
+    }
+    return `${p.month}-${p.day} ${p.hour}:${p.minute}`;
 }
 /* n 允许 undefined：目录项没有 size，原来靠 typeof 守卫返回空串 */
 export function fmtSize(n) {

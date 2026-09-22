@@ -22,6 +22,7 @@ type settingsView struct {
 	PermissionMode string                          `json:"permission_mode"`
 	MaxUploadMB    int64                           `json:"max_upload_mb"`
 	IdleTimeoutMin int64                           `json:"idle_timeout_min"`
+	TimeZone       string                          `json:"timezone"`
 	Container      config.ContainerLimits          `json:"container"`
 	Models         map[string][]config.ModelOption `json:"models"`
 	TerminalTips   config.TerminalTips             `json:"terminal_tips"`
@@ -42,6 +43,7 @@ func (s *Server) settingsView() settingsView {
 		PermissionMode:  s.cfg.GetPermissionMode(),
 		MaxUploadMB:     s.cfg.GetMaxUploadMB(),
 		IdleTimeoutMin:  s.cfg.GetIdleTimeoutMin(),
+		TimeZone:        s.cfg.GetTimeZone(),
 		Container:       s.cfg.GetContainer(),
 		Models:          s.cfg.GetModels(),
 		TerminalTips:    s.cfg.GetTerminalTips(),

@@ -121,6 +121,29 @@ func TestSettingsSaveKeepsPricing(t *testing.T) {
 	}
 }
 
+func TestTimeZoneDefaultAndValidation(t *testing.T) {
+	c := writeConfig(t, minimalConfig)
+	if got := c.GetTimeZone(); got != DefaultTimeZone {
+		t.Fatalf("默认时区 = %q, want %q", got, DefaultTimeZone)
+	}
+
+	tz := "Europe/London"
+	if err := c.ApplySettings(SettingsPatch{TimeZone: &tz}); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.GetTimeZone(); got != tz {
+		t.Fatalf("保存后的时区 = %q, want %q", got, tz)
+	}
+
+	bad := "China/Not-A-Timezone"
+	if err := c.ApplySettings(SettingsPatch{TimeZone: &bad}); err == nil {
+		t.Fatal("非法 IANA 时区应该被拒绝")
+	}
+	if got := c.GetTimeZone(); got != tz {
+		t.Fatalf("非法更新改变了当前时区: %q", got)
+	}
+}
+
 /* ---- IP 代理池 ---- */
 
 const proxyConfig = `{

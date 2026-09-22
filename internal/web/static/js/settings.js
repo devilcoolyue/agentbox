@@ -522,6 +522,11 @@ function fillSettingsForms() {
     }
     net.value = st.container.network;
     $("set-idle").value = String(st.idle_timeout_min);
+    const tz = $("set-timezone");
+    if (![...tz.options].some((o) => o.value === st.timezone)) {
+        tz.appendChild(new Option(st.timezone + "（自定义）", st.timezone));
+    }
+    tz.value = st.timezone;
     $("set-perm").value = st.permission_mode;
     $("set-upload").value = String(st.max_upload_mb);
     $("set-listen").value = st.listen;
@@ -555,6 +560,10 @@ export async function putSettings(patch, btn, okMsg) {
             S.termTips = S.settings.terminal_tips;
             emit("tips-updated");
         }
+        if (S.settings.timezone && S.settings.timezone !== S.timeZone) {
+            S.timeZone = S.settings.timezone;
+            emit("timezone-updated");
+        }
         toast(okMsg || "已保存");
         return true;
     }
@@ -582,6 +591,11 @@ $("btn-save-idle").addEventListener("click", () => {
     putSettings({
         idle_timeout_min: Number($("set-idle").value),
     }, $("btn-save-idle"), "空闲停机设置已保存并即时生效");
+});
+$("btn-save-timezone").addEventListener("click", () => {
+    putSettings({
+        timezone: $("set-timezone").value,
+    }, $("btn-save-timezone"), "界面时区已保存并即时生效");
 });
 $("btn-save-tips").addEventListener("click", () => {
     const tips = $("set-tips").value.split("\n").map((t) => t.trim()).filter(Boolean);

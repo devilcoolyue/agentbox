@@ -14,7 +14,7 @@
 
 import { S, bus } from "./state.js";
 import type { UsageEventRow, UsageEvents } from "./types.js";
-import { $, toast, fmtTime, startDownload, isMobile } from "./util.js";
+import { $, toast, startDownload, isMobile } from "./util.js";
 import { api } from "./api.js";
 import { showView } from "./shell.js";
 import { fmtUSD } from "./quota.js";
@@ -27,6 +27,7 @@ const PAGE = 50;
 let offset = 0;
 let last: UsageEvents | null = null;
 let loading = false;
+let usageTimeZone = S.timeZone || "Asia/Shanghai";
 
 /* 排序方向。只排时间一列：这张表是流水，除了「先看哪头」没别的排法有意义。
  * 默认倒序（最新在最前）——看消耗十有八九是想知道刚才烧了多少；正序留给
@@ -86,32 +87,80 @@ function writeBound(which: "since" | "until", v: string) {
   $<HTMLInputElement>("uf-" + which + "-m").value = time ? time.slice(3, 5) : "";
 }
 
-const localStamp = (d: Date) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+interface ClockParts { year: number; month: number; day: number; hour: number; minute: number }
+
+const zoneFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/* Intl 负责把一个绝对时刻投影到系统配置的 IANA 时区。formatToParts 避免依赖
+ * 不同浏览器的日期字符串顺序；h23 保证午夜是 00:xx 而不是 24:xx。 */
+function clockParts(d: Date): ClockParts {
+  let fmt = zoneFormatters.get(usageTimeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: usageTimeZone,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    });
+    zoneFormatters.set(usageTimeZone, fmt);
+  }
+  const values: Record<string, number> = {};
+  for (const p of fmt.formatToParts(d)) {
+    if (p.type !== "literal") values[p.type] = Number(p.value);
+  }
+  return {
+    year: values.year!, month: values.month!, day: values.day!,
+    hour: values.hour!, minute: values.minute!,
+  };
+}
+
+function wallStamp(d: Date) {
+  const p = clockParts(d);
+  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+function shiftDay(day: string, delta: number) {
+  const [y, m, d] = day.split("-").map(Number);
+  const x = new Date(Date.UTC(y!, m! - 1, d! + delta));
+  return `${x.getUTCFullYear()}-${pad(x.getUTCMonth() + 1)}-${pad(x.getUTCDate())}`;
+}
+
+function fmtUsageTime(ms: number | string, withYear = false) {
+  const p = clockParts(new Date(ms));
+  const core = `${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}`;
+  return withYear ? `${p.year}-${core}` : core;
+}
+
+const ZONE_NAMES: Record<string, string> = {
+  "Asia/Shanghai": "中国标准时间",
+  "Asia/Hong_Kong": "香港时间",
+  "Asia/Tokyo": "日本时间",
+  UTC: "协调世界时",
+  "America/Los_Angeles": "美国太平洋时间",
+  "America/New_York": "美国东部时间",
+  "Europe/London": "英国时间",
+};
+
+function syncTimeZone() {
+  $("usage-zone-name").textContent = ZONE_NAMES[usageTimeZone] || "系统时区";
+  $("usage-zone-id").textContent = usageTimeZone;
+}
 
 /* 快捷区间。「今日 / 昨日」是自然日整天，「24 小时」是从此刻往回数 24 小时，
  * 两种口径都有人要：前者用来对账，后者用来看「刚才烧了多少」。 */
 const RANGES: Record<string, () => [string, string]> = {
   "uf-r-today": () => {
-    const d = new Date();
-    return [localStamp(dayAt(d, 0, 0)), localStamp(dayAt(d, 23, 59))];
+    const day = wallStamp(new Date()).slice(0, 10);
+    return [day + "T00:00", day + "T23:59"];
   },
   "uf-r-24h": () => {
     const now = new Date();
-    return [localStamp(new Date(now.getTime() - 24 * 3600 * 1000)), localStamp(now)];
+    return [wallStamp(new Date(now.getTime() - 24 * 3600 * 1000)), wallStamp(now)];
   },
   "uf-r-yday": () => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return [localStamp(dayAt(d, 0, 0)), localStamp(dayAt(d, 23, 59))];
+    const day = shiftDay(wallStamp(new Date()).slice(0, 10), -1);
+    return [day + "T00:00", day + "T23:59"];
   },
 };
-
-function dayAt(d: Date, h: number, m: number) {
-  const x = new Date(d);
-  x.setHours(h, m, 0, 0);
-  return x;
-}
 
 /* 高亮只跟着「刚点过哪个」走：24 小时是滑动窗口，拿当前值反推的话过一分钟
  * 就对不上了，反而闪来闪去。手改任何筛选项就取消高亮。 */
@@ -121,9 +170,9 @@ function syncRanges() {
   for (const id of Object.keys(RANGES)) $(id).classList.toggle("on", id === activeRange);
 }
 
-/* 时间框给的是本地时刻（精确到分），服务端要 RFC3339。since 原样取那一分钟的开头；
- * until 要往后推一分钟——服务端的上界是开区间，不推的话选中的那一分钟里发生的
- * 消耗会被整个排除掉，「9:00 到 9:00」查出来是空的。 */
+/* 时间框给的是系统时区下的墙上时间，不在浏览器里转 ISO：服务端会用配置的 IANA
+ * 时区解析。until 往后推一分钟，因为服务端上界是开区间；这里用 UTC getter 只做
+ * 日历加法，不把输入误当浏览器本地时区。 */
 function query(f: Filters, extra: Record<string, string> = {}) {
   const q = new URLSearchParams();
   const put = (k: string, v: string) => { if (v) q.set(k, v); };
@@ -131,20 +180,19 @@ function query(f: Filters, extra: Record<string, string> = {}) {
   put("agent", f.agent);
   put("model", f.model);
   put("kind", f.kind);
-  put("since", iso(f.since));
-  put("until", iso(f.until, 1));
+  put("since", f.since);
+  put("until", addWallMinutes(f.until, 1));
   for (const [k, v] of Object.entries(extra)) q.set(k, v);
   return q.toString();
 }
 
-/* 本地时刻 → RFC3339。半截输入（用户只填了日期还没填时分）在浏览器里就是空串，
- * 但真拿到不可解析的值也只当没填——不能让一个坏值把整页查询打断。 */
-function iso(v: string, plusMin = 0) {
+function addWallMinutes(v: string, minutes: number) {
   if (!v) return "";
-  const d = new Date(v);
+  const d = new Date(v + ":00Z");
   if (isNaN(d.getTime())) return "";
-  if (plusMin) d.setMinutes(d.getMinutes() + plusMin, 0, 0);
-  return d.toISOString();
+  d.setUTCMinutes(d.getUTCMinutes() + minutes);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +
+    `T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
 /* 下拉选项：服务端每次都把可选值算好带回来（且按可见范围裁过），这里只负责
@@ -169,9 +217,9 @@ function fillSelect(id: string, values: string[], label?: (v: string) => string)
 
 /* ---------------- 筛选条折叠 ---------------- */
 
-/* 六个筛选项在手机上要占掉大半屏，明细表被挤到屏外——所以整条可以收起来，
- * 窄屏默认就是收起的。用户手动开合一次之后以他的选择为准（按浏览器记）。 */
-const COLLAPSE_KEY = "agentbox_usage_filters";
+/* 整条可以收起来，但首次进入一律展开，避免用户把“只剩一条标题栏”误认为控件
+ * 渲染失败。v2 刻意不继承旧版默认收起时留下的 closed 状态。 */
+const COLLAPSE_KEY = "agentbox_usage_filters_v2";
 
 function setFiltersOpen(open: boolean, remember = true) {
   $("usage-filters").classList.toggle("collapsed", !open);
@@ -183,7 +231,7 @@ function setFiltersOpen(open: boolean, remember = true) {
 function initFiltersOpen() {
   let saved: string | null = null;
   try { saved = localStorage.getItem(COLLAPSE_KEY); } catch (_) {}
-  setFiltersOpen(saved ? saved === "open" : !isMobile(), false);
+  setFiltersOpen(saved ? saved === "open" : true, false);
 }
 
 /* 收起后光看一个「筛选」字样，认不出当前到底筛没筛——把生效的条件摘要挂在标题行上。 */
@@ -389,7 +437,7 @@ function renderRows(data: UsageEvents) {
       + "都是回合级指标：同一回合拆成多行时每行都是这个值，不要跨行求和");
     tr.appendChild(lat);
 
-    tr.appendChild(cell("时间", fmtTime(r.ts), "num u-time"));
+    tr.appendChild(cell("时间", fmtUsageTime(r.ts), "num u-time"));
     body.appendChild(tr);
   }
 
@@ -440,7 +488,7 @@ function openCost(r: UsageEventRow) {
   top.appendChild(chip);
   const sub = document.createElement("div");
   sub.className = "cost-sub";
-  sub.textContent = [r.session_name || r.session_id, KIND_LABEL[r.kind] || r.kind, fmtTime(r.ts)]
+  sub.textContent = [r.session_name || r.session_id, KIND_LABEL[r.kind] || r.kind, fmtUsageTime(r.ts)]
     .join(" · ");
   head.append(top, sub);
 
@@ -545,6 +593,9 @@ async function load() {
     const data = await api<UsageEvents>(
       "/usage/events?" + query(f, { limit: String(PAGE), offset: String(offset), order: orderParam() }));
     last = data;
+    usageTimeZone = data.timezone || S.timeZone || "Asia/Shanghai";
+    S.timeZone = usageTimeZone;
+    syncTimeZone();
     // 服务端回声一份它实际用的顺序：万一这趟请求被丢掉了（上一趟还在跑），
     // 箭头跟着真拿到的顺序回正，不会出现「箭头指着正序、表还是倒序」。
     asc = data.order === "asc";
@@ -571,6 +622,8 @@ function reload() {
 
 export async function openUsageView() {
   showView("usage");
+  usageTimeZone = S.timeZone || "Asia/Shanghai";
+  syncTimeZone();
   $("usage-sub").textContent = S.role === "admin"
     ? "所有用户的消耗流水。每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。"
     : "你自己的消耗流水。每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。";
@@ -589,18 +642,20 @@ async function exportCSV() {
     const f = readFilters();
     const data = await api<UsageEvents>(
       "/usage/events?" + query(f, { limit: "500", offset: "0", order: orderParam() }));
+    usageTimeZone = data.timezone || usageTimeZone;
+    syncTimeZone();
     if (data.total.rows > data.rows.length) {
       // 截断是从哪头截的，得跟着排序方向说，否则「最近 500 行」是句假话
       toast(`只导出了${asc ? "最早" : "最近"}的 ${data.rows.length} 行（共 ${data.total.rows} 行），` +
         "请缩小时间范围后分批导出", true);
     }
-    const head = ["时间", "用户", "会话", "会话ID", "账号", "Agent", "模型", "类型", "计费",
+    const head = [`时间（${usageTimeZone}）`, "用户", "会话", "会话ID", "账号", "Agent", "模型", "类型", "计费",
       "输入", "输出", "缓存读取", "缓存写入", "合计Token", "费用USD",
       "首字ms", "总耗时ms", "模型耗时ms", "回合ID"];
     const lines = [head.join(",")];
     for (const r of data.rows) {
       lines.push([
-        new Date(r.ts).toLocaleString("zh-CN"),
+        fmtUsageTime(r.ts, true),
         r.user, r.session_name || "", r.session_id, r.account_label || "",
         r.agent, r.model || "", KIND_LABEL[r.kind] || r.kind, (BILLING[r.billing] || { text: r.billing }).text,
         r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_tokens, r.total_tokens,
@@ -688,3 +743,8 @@ $("usage-next").addEventListener("click", () => {
 });
 
 bus.addEventListener("open-usage", () => void openUsageView());
+bus.addEventListener("timezone-updated", () => {
+  usageTimeZone = S.timeZone || "Asia/Shanghai";
+  syncTimeZone();
+  if (last && S.view === "usage") renderRows(last);
+});

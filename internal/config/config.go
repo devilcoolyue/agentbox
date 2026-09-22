@@ -16,12 +16,17 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 )
 
 const (
 	AgentClaude = "claude"
 	AgentCodex  = "codex"
+	// DefaultTimeZone is used by existing installations whose config predates
+	// the timezone setting. Usage filters and timestamps therefore have one
+	// stable meaning regardless of the browser or server host timezone.
+	DefaultTimeZone = "Asia/Shanghai"
 )
 
 var (
@@ -312,6 +317,7 @@ type Config struct {
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
 	IdleTimeoutMin int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
+	TimeZone       string                   `json:"timezone"`         // IANA 时区；用于界面时间与用量筛选
 	Container      ContainerLimits          `json:"container"`
 	Tunnel         TunnelConfig             `json:"tunnel"`
 	ProxyBridge    ProxyBridgeConfig        `json:"proxy_bridge"`
@@ -337,6 +343,7 @@ func Load(path string) (*Config, error) {
 		PermissionMode: "bypassPermissions",
 		MaxUploadMB:    512,
 		IdleTimeoutMin: 30, // 缺省 30 分钟空闲即停机；config 里显式写 0 可关闭
+		TimeZone:       DefaultTimeZone,
 		Container: ContainerLimits{
 			MemoryMB:  2048,
 			CPUs:      2,
@@ -427,6 +434,9 @@ func (c *Config) validateLocked() error {
 	}
 	if c.IdleTimeoutMin < 0 {
 		return fmt.Errorf("idle_timeout_min must be >= 0 (0 关闭自动停机)")
+	}
+	if _, err := time.LoadLocation(c.TimeZone); err != nil {
+		return fmt.Errorf("timezone %q invalid: %w", c.TimeZone, err)
 	}
 	switch c.PermissionMode {
 	case "default", "acceptEdits", "plan", "bypassPermissions":
@@ -556,6 +566,7 @@ type persistConfig struct {
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
 	IdleTimeoutMin int64                    `json:"idle_timeout_min"`
+	TimeZone       string                   `json:"timezone"`
 	Container      ContainerLimits          `json:"container"`
 	Tunnel         TunnelConfig             `json:"tunnel"`
 	ProxyBridge    ProxyBridgeConfig        `json:"proxy_bridge"`
@@ -577,6 +588,7 @@ func (c *Config) saveLocked() error {
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
 		IdleTimeoutMin: c.IdleTimeoutMin,
+		TimeZone:       c.TimeZone,
 		Container:      c.Container,
 		Tunnel:         c.Tunnel,
 		ProxyBridge:    c.ProxyBridge,
@@ -664,6 +676,27 @@ func (c *Config) GetIdleTimeoutMin() int64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.IdleTimeoutMin
+}
+
+// GetTimeZone returns the configured IANA timezone. The fallback also covers
+// tests and callers that construct Config directly instead of going through Load.
+func (c *Config) GetTimeZone() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.TimeZone == "" {
+		return DefaultTimeZone
+	}
+	return c.TimeZone
+}
+
+// GetLocation returns the validated timezone as a time.Location. Config loaded
+// from disk is validated; UTC is only a defensive fallback for hand-built Configs.
+func (c *Config) GetLocation() *time.Location {
+	loc, err := time.LoadLocation(c.GetTimeZone())
+	if err != nil {
+		return time.UTC
+	}
+	return loc
 }
 
 func (c *Config) GetContainer() ContainerLimits {
@@ -849,6 +882,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
 		IdleTimeoutMin: c.IdleTimeoutMin,
+		TimeZone:       c.TimeZone,
 		Container:      c.Container,
 		Tunnel:         c.Tunnel,
 		ProxyBridge:    c.ProxyBridge,
@@ -877,6 +911,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.PermissionMode = work.PermissionMode
 	c.MaxUploadMB = work.MaxUploadMB
 	c.IdleTimeoutMin = work.IdleTimeoutMin
+	c.TimeZone = work.TimeZone
 	c.Container = work.Container
 	c.Tunnel = work.Tunnel
 	c.ProxyBridge = work.ProxyBridge
@@ -895,6 +930,7 @@ type SettingsPatch struct {
 	PermissionMode *string                  `json:"permission_mode"`
 	MaxUploadMB    *int64                   `json:"max_upload_mb"`
 	IdleTimeoutMin *int64                   `json:"idle_timeout_min"`
+	TimeZone       *string                  `json:"timezone"`
 	Container      *ContainerLimits         `json:"container"`
 	Models         map[string][]ModelOption `json:"models"`
 	Tunnel         *TunnelConfig            `json:"tunnel"`
@@ -921,6 +957,9 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.IdleTimeoutMin != nil {
 			w.IdleTimeoutMin = *p.IdleTimeoutMin
+		}
+		if p.TimeZone != nil {
+			w.TimeZone = strings.TrimSpace(*p.TimeZone)
 		}
 		if p.Container != nil {
 			w.Container = *p.Container

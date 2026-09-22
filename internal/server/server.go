@@ -430,6 +430,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"role":          u.Role,
 		"models":        s.cfg.GetModels(),
 		"terminal_tips": s.cfg.GetTerminalTips(),
+		"timezone":      s.cfg.GetTimeZone(),
 		// 自己的额度：metered 为 false 就是不限额，前端不必显示余额。
 		"quota": viewQuota(u.Name, q, metered),
 	})

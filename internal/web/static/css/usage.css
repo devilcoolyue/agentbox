@@ -4,27 +4,57 @@
  * 换行。桌面端表格自己横向滚动，不压缩列宽——数字列被压到折行就没法扫读了；
  * 手机上九列横滚等于看不见后半张表，所以窄屏改成一行一张卡片（见文件末尾）。 */
 
+.usage-head {
+  max-width: 1360px;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+}
+.usage-head > div:first-child { min-width: 0; }
+.usage-zone {
+  flex: none;
+  display: flex; align-items: center; gap: 9px;
+  min-width: 190px;
+  padding: 7px 10px;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--panel);
+}
+.usage-zone-dot {
+  width: 7px; height: 7px; flex: none;
+  border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 14%, transparent);
+}
+.usage-zone > span:last-child { display: flex; flex-direction: column; line-height: 1.35; }
+.usage-zone b { font-size: 11.5px; font-weight: 500; color: var(--text); }
+.usage-zone code { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
 .usage-body {
   flex: 1; min-height: 0;
-  display: flex; flex-direction: column; gap: 14px;
+  display: flex; flex-direction: column; gap: 12px;
   max-width: 1360px; width: 100%;
   margin: 0 auto;
-  padding: 18px 28px 24px;
+  padding: 16px 28px 24px;
   overflow-y: auto;
 }
+/* 明细随记录数增高时由 usage-body 滚动；不能让 flex 压缩各区块。
+ * 筛选卡片的 overflow:hidden 会把自动最小高度降为 0，挤压后只剩边框。 */
+.usage-body > * { flex-shrink: 0; }
 
 /* ---- 筛选条 ---- */
 
 /* 整条可折叠：标题行常驻，收起时只留下当前生效条件的摘要。窄屏上这六个筛选项
  * 能吃掉大半屏，不收起来就看不见下面的明细表。 */
-.usage-filters { gap: 10px; padding: 12px 16px; }
+.usage-filters {
+  gap: 0; padding: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
 .uf-toggle {
   display: flex; align-items: center; gap: 8px;
-  width: 100%; padding: 0; text-align: left;
+  width: 100%; padding: 10px 14px; text-align: left;
   background: none; border: 0;
   color: var(--muted); font-size: 12.5px;
 }
 .uf-toggle:hover { color: var(--text); }
+.uf-title { color: var(--text); font-weight: 500; }
 .uf-caret {
   flex: none;
   width: 0; height: 0;
@@ -42,13 +72,20 @@
 /* 展开时字段本身就写着条件，摘要只会重复一遍 */
 .usage-filters:not(.collapsed) .uf-active { display: none; }
 
-.uf-fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
+.uf-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end; gap: 12px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--panel-2) 20%, transparent);
+}
 .usage-filters.collapsed .uf-fields { display: none; }
-.uf-item { display: flex; flex-direction: column; gap: 5px; min-width: 128px; }
+.uf-item { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .uf-item > span { font-size: 12px; color: var(--muted); }
-.uf-item select, .uf-item input { width: 100%; }
+.uf-item select, .uf-item input { width: 100%; min-height: 38px; }
 /* 时间项是「日期 + 时 : 分」三个框，比下拉宽一截 */
-.uf-item.wide { min-width: 244px; }
+.uf-item.wide { min-width: 0; }
 .uf-time { display: flex; align-items: center; gap: 4px; }
 .uf-time input[type="date"] { flex: 1; min-width: 0; }
 .uf-time input[type="number"] {
@@ -58,58 +95,83 @@
 }
 .uf-time i { font-style: normal; color: var(--muted); }
 
-/* 快捷区间：胶囊按钮，选中的那个点上琥珀 */
+/* 桌面四列正好排成两行：四个分类筛选在上，时间、快捷和操作在下。 */
 .uf-quick { min-width: 0; }
 .uf-range { display: flex; gap: 6px; }
 .uf-r {
   padding: 7px 11px;
-  border: 1px solid var(--line); border-radius: 999px;
+  border: 1px solid var(--line); border-radius: 6px;
   background: var(--panel-2); color: var(--muted);
   font-size: 12.5px; white-space: nowrap;
 }
 .uf-r:hover { color: var(--text); border-color: var(--muted); }
-.uf-r.on { border-color: var(--amber-dim); color: var(--amber); background: transparent; }
-.uf-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.uf-r.on {
+  border-color: var(--amber-dim); color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+}
+.uf-actions {
+  display: flex; gap: 8px; align-items: center; justify-content: flex-end;
+}
 
 /* ---- 合计条 ---- */
 
 .usage-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(180px, 1.45fr) repeat(5, minmax(105px, 1fr));
+  gap: 8px;
 }
 .us-item {
+  min-height: 66px;
+  display: flex; flex-direction: column; justify-content: center;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 10px 12px;
+  border-radius: 8px;
+  padding: 10px 13px;
 }
-.us-label { font-size: 12px; color: var(--muted); }
-.us-value { font-size: 16px; margin-top: 2px; }
+.us-label { font-size: 11.5px; color: var(--muted); }
+.us-value { font-size: 16px; line-height: 1.35; margin-top: 3px; }
 /* 第一格是总花费，用琥珀托住——一屏数字里它是唯一要先看到的那个 */
-.us-item:first-child .us-value { color: var(--amber); }
+.us-item:first-child {
+  position: relative;
+  padding-left: 17px;
+  background: color-mix(in srgb, var(--amber) 7%, var(--panel));
+  border-color: var(--amber-dim);
+}
+.us-item:first-child::before {
+  content: "";
+  position: absolute; left: -1px; top: 10px; bottom: 10px;
+  width: 3px; border-radius: 0 3px 3px 0;
+  background: var(--amber);
+}
+.us-item:first-child .us-value { color: var(--amber); font-size: 19px; }
 
 /* ---- 明细表 ---- */
 
-.usage-table-wrap { padding: 0; overflow-x: auto; }
+.usage-table-wrap {
+  position: relative;
+  padding: 0; overflow-x: auto;
+  border-radius: 8px;
+}
 .usage-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .usage-table th {
-  text-align: left; font-weight: 500; font-size: 12px; color: var(--muted);
-  padding: 10px 12px;
+  text-align: left; font-weight: 600; font-size: 11.5px; color: var(--muted);
+  padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
   position: sticky; top: 0;
-  background: var(--panel);
+  background: var(--panel-2);
+  z-index: 1;
 }
 /* 一行里最高的是会话/模型/Token 这类两行格，单行格（类型、费用、时间）跟着居中，
  * 整行读起来才在一条视觉线上 */
 .usage-table td {
-  padding: 9px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--line-soft);
   vertical-align: middle;
 }
 .usage-table tr:last-child td { border-bottom: none; }
-.usage-table tbody tr:hover { background: var(--panel-2); }
+.usage-table tbody tr { transition: background-color 0.12s ease; }
+.usage-table tbody tr:hover { background: color-mix(in srgb, var(--panel-2) 72%, transparent); }
 .usage-table .num { text-align: right; white-space: nowrap; }
 .usage-table th.num { text-align: right; }
 
@@ -139,7 +201,7 @@
 .u-sess { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .u-model { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .u-time, .u-lat, .u-tok { font-family: var(--mono); font-size: 12px; }
-.u-cost { font-family: var(--mono); font-size: 13px; color: var(--green); }
+.u-cost { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--green); }
 .u-cost.zero { color: var(--muted); }
 
 /* token：输入/输出一行，缓存另起一行。箭头只是方向记号，别抢数字的注意力 */
@@ -152,7 +214,7 @@
 .u-chip {
   display: inline-block;
   font-size: 11.5px; line-height: 1.6;
-  padding: 0 7px; border-radius: 999px;
+  padding: 0 7px; border-radius: 4px;
   border: 1px solid var(--line);
   background: var(--panel-2);
   color: var(--muted);
@@ -217,15 +279,29 @@
 }
 .usage-pager button:disabled { opacity: 0.4; cursor: default; }
 
+@media (max-width: 1120px) and (min-width: 761px) {
+  .uf-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .uf-item.wide { grid-column: span 2; }
+  .uf-quick { grid-column: 1 / span 2; }
+  .uf-actions { grid-column: 3 / -1; }
+  .usage-summary { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+}
+
 /* ---- 窄屏：筛选默认收起，合计压缩成小格，明细表拆成一行一张卡片 ---- */
 
 @media (max-width: 760px) {
+  .usage-head { align-items: flex-start; }
+  .usage-head p { max-width: 42em; }
+  .usage-zone { min-width: 0; padding: 6px 8px; }
+  .usage-zone b { display: none; }
+  .usage-zone code { font-size: 10px; }
   .usage-body { padding: 14px 12px 20px; gap: 10px; }
 
-  .uf-item { flex: 1 1 calc(50% - 8px); min-width: 0; }
-  .uf-item.wide, .uf-quick { flex-basis: 100%; min-width: 0; }
+  .uf-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
+  .uf-item, .uf-item.wide { min-width: 0; grid-column: span 1; }
+  .uf-item.wide, .uf-quick { grid-column: 1 / -1; }
   .uf-range .uf-r { flex: 1; }
-  .uf-actions { margin-left: 0; width: 100%; }
+  .uf-actions { grid-column: 1 / -1; width: 100%; }
   .uf-actions .btn { flex: 1; }
 
   .usage-summary { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }

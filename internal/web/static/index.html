@@ -702,6 +702,25 @@
                 </div>
               </div>
               <div class="card">
+                <h3>日期与时间</h3>
+                <label class="field">
+                  <span>界面时区 <span class="tag live">即时生效</span></span>
+                  <select id="set-timezone">
+                    <option value="Asia/Shanghai">中国标准时间（Asia/Shanghai）</option>
+                    <option value="Asia/Hong_Kong">香港时间（Asia/Hong_Kong）</option>
+                    <option value="Asia/Tokyo">日本时间（Asia/Tokyo）</option>
+                    <option value="UTC">协调世界时（UTC）</option>
+                    <option value="America/Los_Angeles">美国太平洋时间（America/Los_Angeles）</option>
+                    <option value="America/New_York">美国东部时间（America/New_York）</option>
+                    <option value="Europe/London">英国时间（Europe/London）</option>
+                  </select>
+                </label>
+                <div class="card-foot">
+                  <span class="note">控制台时间、使用记录筛选与 CSV 导出采用此时区</span>
+                  <button id="btn-save-timezone" class="btn btn-primary btn-sm">保存</button>
+                </div>
+              </div>
+              <div class="card">
                 <h3>终端提示语</h3>
                 <p class="card-desc">终端页左上角轮播显示的提示。每行一条，可配置多条；设置轮播频率与切换动画。留空则不显示提示。</p>
                 <label class="field">
@@ -875,9 +894,15 @@
 
       <!-- 使用记录视图：一行 = 一个回合 × 一个模型（不是一次 API 调用） -->
       <div id="view-usage" class="view hidden">
-        <header class="set-head">
-          <h1>使用记录</h1>
-          <p id="usage-sub">每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。</p>
+        <header class="set-head usage-head">
+          <div>
+            <h1>使用记录</h1>
+            <p id="usage-sub">每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。</p>
+          </div>
+          <div class="usage-zone" aria-label="当前使用记录时区">
+            <span class="usage-zone-dot"></span>
+            <span><b id="usage-zone-name">中国标准时间</b><code id="usage-zone-id">Asia/Shanghai</code></span>
+          </div>
         </header>
 
         <div class="usage-body">
@@ -885,7 +910,7 @@
           <div id="usage-filters" class="usage-filters card">
             <button id="uf-toggle" class="uf-toggle" aria-expanded="true" aria-controls="uf-fields">
               <span class="uf-caret"></span>
-              <span>筛选</span>
+              <span class="uf-title">筛选条件</span>
               <span id="uf-active" class="uf-active"></span>
             </button>
             <div id="uf-fields" class="uf-fields">
