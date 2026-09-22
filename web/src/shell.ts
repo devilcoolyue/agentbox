@@ -19,6 +19,62 @@ const toggle = $("btn-sidebar-toggle");
 // index.html 在首屏恢复同一个键，避免刷新时宽度跳动。
 const SIDEBAR_KEY = "agentbox_sidebar_collapsed";
 
+/* 用户弹层：展开时向上贴齐头像，图标栏时在侧栏右侧展开。 */
+const userButton = $("btn-user-menu");
+const userMenu = $("sidebar-user-menu");
+
+function renderUserMenu() {
+  const role = S.role === "admin" ? "管理员" : "普通用户";
+  $("sidebar-user-name").textContent = S.user;
+  $("sidebar-user-role").textContent = role;
+  setTip(userButton, userMenu.inert ? `${S.user} · ${role}` : null);
+}
+
+function closeUserMenu(restoreFocus = false) {
+  userMenu.classList.remove("open");
+  userMenu.inert = true;
+  userButton.setAttribute("aria-expanded", "false");
+  renderUserMenu();
+  if (restoreFocus) userButton.focus();
+}
+
+function positionUserMenu() {
+  userMenu.style.removeProperty("left");
+  userMenu.style.removeProperty("top");
+  if (narrowMQ.matches) return; // 抽屉有 transform，改由 CSS 在底栏上方定位。
+  const anchor = userButton.getBoundingClientRect();
+  const collapsed = document.documentElement.dataset.sidebarCollapsed === "true";
+  const left = collapsed ? sidebar.getBoundingClientRect().right + 8 : anchor.right - userMenu.offsetWidth;
+  const top = (collapsed ? anchor.bottom : anchor.top - 8) - userMenu.offsetHeight;
+  userMenu.style.left = Math.max(8, Math.min(left, innerWidth - userMenu.offsetWidth - 8)) + "px";
+  userMenu.style.top = Math.max(8, Math.min(top, innerHeight - userMenu.offsetHeight - 8)) + "px";
+}
+
+userButton.addEventListener("click", () => {
+  if (!userMenu.inert) { closeUserMenu(); return; }
+  hideTip();
+  userMenu.inert = false;
+  renderUserMenu();
+  positionUserMenu();
+  userMenu.classList.add("open");
+  userButton.setAttribute("aria-expanded", "true");
+  userMenu.focus({ preventScroll: true });
+});
+for (const event of ["pointerdown", "focusin"]) {
+  document.addEventListener(event, e => {
+    if (userMenu.inert || userMenu.contains(e.target as Node) || userButton.contains(e.target as Node)) return;
+    closeUserMenu(event === "pointerdown" && userMenu.contains(document.activeElement));
+  });
+}
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || userMenu.inert) return;
+  e.preventDefault();
+  e.stopPropagation(); // 第一次 Esc 关闭用户弹层，第二次再关闭抽屉。
+  closeUserMenu(true);
+});
+window.addEventListener("resize", () => closeUserMenu(userMenu.contains(document.activeElement)));
+bus.addEventListener("unauthorized", () => closeUserMenu());
+
 function syncSidebar() {
   const open = narrowMQ.matches && sidebar.classList.contains("open");
   sidebar.inert = narrowMQ.matches && !open;
@@ -42,6 +98,7 @@ export function closeDrawer() {
   const restoreFocus = narrowMQ.matches && sidebar.classList.contains("open") && !document.querySelector("dialog[open]");
   sidebar.classList.remove("open");
   $("scrim").classList.remove("show");
+  closeUserMenu();
   hideTip();
   syncSidebar();
   if (restoreFocus) $("btn-menu").focus();
@@ -51,6 +108,7 @@ $("btn-sidebar-close").addEventListener("click", closeDrawer);
 $("scrim").addEventListener("click", closeDrawer);
 toggle.addEventListener("click", () => {
   if (narrowMQ.matches) { closeDrawer(); return; }
+  closeUserMenu();
   hideTip();
   const collapsed = document.documentElement.dataset.sidebarCollapsed !== "true";
   document.documentElement.dataset.sidebarCollapsed = String(collapsed);
@@ -116,6 +174,7 @@ $("btn-tunnel").addEventListener("click", () => emit("open-tunnel"));
 /* ---- 侧栏：会话列表 ---- */
 
 export function renderSidebar() {
+  renderUserMenu();
   const list = $("session-list");
   const scrollTop = list.scrollTop;
   const focusedID = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".session-card")?.dataset.sessionId;
