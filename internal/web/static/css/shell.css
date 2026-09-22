@@ -180,7 +180,6 @@
 .side-tool { flex: none; width: 34px; height: 34px; padding: 0; justify-content: center; }
 .side-tool .side-item-label, #tunnel-text { display: none; }
 .side-tool.active { box-shadow: none; }
-.side-tool[aria-expanded="true"] { background: var(--side-hover); color: var(--text); }
 .side-collapse {
   display: inline-flex; align-items: center; justify-content: center;
   flex: none; width: 28px; height: 32px; margin-left: auto;
@@ -196,41 +195,39 @@
 }
 .side-item .glyph svg { display: block; }
 
-/* 低频操作只在「更多」展开，避免嵌套菜单。 */
-.side-more-panel {
-  position: fixed; z-index: 90;
-  width: 232px; max-width: calc(100vw - 24px);
-  padding: 10px; border: 1px solid var(--line); border-radius: 10px;
-  background: var(--panel); box-shadow: var(--shadow-lg);
-  opacity: 0; visibility: hidden; pointer-events: none;
-  transform: translateY(4px);
-  transition: opacity 0.14s ease, transform 0.14s ease;
+/* 账户与主题常驻底部同一行，图标栏只保留退出与循环切换主题。 */
+.side-preferences {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 6px; padding: 6px 4px 0; border-top: 1px solid var(--line);
 }
-.side-more-panel.open { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0); }
-.side-menu-heading { padding: 2px 4px 8px; color: var(--muted); font-size: 11px; }
-.theme-options { display: flex; gap: 3px; padding: 3px; background: var(--panel-2); border-radius: 7px; }
+.side-logout {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1; min-width: 0; height: 34px; padding: 0 8px;
+  border: 0; border-radius: 6px; text-align: left;
+  background: transparent; color: var(--muted); font-size: 12px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.side-logout .glyph { display: flex; flex: none; }
+.side-logout:hover { color: var(--red); background: var(--side-hover); }
+.theme-options { display: flex; flex: none; gap: 2px; padding: 2px; background: var(--panel-2); border-radius: 7px; }
 .theme-options button {
-  flex: 1; min-width: 0; height: 34px;
-  display: flex; align-items: center; justify-content: center; gap: 5px;
+  flex: none; width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
   padding: 0; border: 0; border-radius: 5px; background: transparent;
-  font-size: 11px; color: var(--muted);
+  color: var(--muted);
   transition: color 0.15s ease, background 0.15s ease;
 }
 .theme-options button:hover { color: var(--text); }
 .theme-options button.active { background: var(--panel); color: var(--amber); box-shadow: var(--shadow-sm); }
 .theme-options .glyph { display: flex; }
-.theme-options svg.ic-theme { display: none; width: 15px; height: 15px; }
+.side-preferences svg.ic-theme { display: none; width: 15px; height: 15px; }
 .theme-options [data-theme-option="system"] svg.ic-system,
 .theme-options [data-theme-option="light"] svg.ic-sun,
-.theme-options [data-theme-option="dark"] svg.ic-moon { display: block; }
-.side-menu-divider { height: 1px; background: var(--line); margin: 10px 0 5px; }
-.side-menu-action {
-  display: flex; align-items: center; gap: 8px; width: 100%; height: 36px;
-  border: 0; border-radius: 6px; padding: 0 8px; text-align: left;
-  background: transparent; color: var(--muted); font-size: 12px;
-}
-.side-menu-action .glyph { display: flex; }
-.side-menu-action:hover { color: var(--red); background: var(--side-hover); }
+.theme-options [data-theme-option="dark"] svg.ic-moon,
+:root[data-theme-mode="system"] .side-theme-cycle svg.ic-system,
+:root[data-theme-mode="light"] .side-theme-cycle svg.ic-sun,
+:root[data-theme-mode="dark"] .side-theme-cycle svg.ic-moon { display: block; }
+.side-theme-cycle { display: none; }
 
 /* ---- 内网隧道入口：右侧状态灯 + 文案（在线时点亮） ---- */
 #btn-tunnel { position: relative; }
@@ -338,8 +335,8 @@
   .side-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
   .side-collapse { display: none; }
   .side-tool { width: 40px; height: 40px; }
-  .side-more-panel { position: absolute; width: auto; left: 12px; right: 12px; bottom: calc(100% + 4px); }
-  .theme-options button, .side-menu-action { min-height: 40px; }
+  .theme-options button { width: 36px; height: 40px; }
+  .side-logout { height: 44px; }
 
 }
 @media (min-width: 761px) {
@@ -362,6 +359,10 @@
   :root[data-sidebar-collapsed="true"] .side-collapse { margin: 0; width: 36px; height: 36px; }
   :root[data-sidebar-collapsed="true"] .side-collapse svg { transform: rotate(180deg); }
   :root[data-sidebar-collapsed="true"] .side-tool { width: 38px; }
+  :root[data-sidebar-collapsed="true"] .side-preferences { flex-direction: column; gap: 2px; padding: 4px 0 0; margin-top: 4px; }
+  :root[data-sidebar-collapsed="true"] .side-logout { flex: none; width: 38px; padding: 0; justify-content: center; }
+  :root[data-sidebar-collapsed="true"] .theme-options { display: none; }
+  :root[data-sidebar-collapsed="true"] .side-theme-cycle { display: flex; }
   :root[data-sidebar-collapsed="true"] .session-empty { margin: 12px auto; }
   :root[data-sidebar-collapsed="true"] .session-empty-icon { display: block; }
 }
@@ -376,5 +377,5 @@
   .side-item { height: 32px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sidebar, .scrim, .side-new, .side-item, .session-card, .side-collapse svg, .side-more-panel, .theme-options button { transition: none; }
+  .sidebar, .scrim, .side-new, .side-item, .session-card, .side-collapse svg, .side-logout, .theme-options button { transition: none; }
 }

@@ -14,62 +14,6 @@ const topbar = document.querySelector(".topbar");
 const toggle = $("btn-sidebar-toggle");
 // index.html 在首屏恢复同一个键，避免刷新时宽度跳动。
 const SIDEBAR_KEY = "agentbox_sidebar_collapsed";
-/* 主题与退出共用一个轻量弹层；桌面图标栏向右展开，完整侧栏向上展开。 */
-const moreButton = $("btn-sidebar-more");
-const morePanel = $("sidebar-more");
-function closeSidebarMore(restoreFocus = false) {
-    morePanel.classList.remove("open");
-    morePanel.inert = true;
-    moreButton.setAttribute("aria-expanded", "false");
-    setTip(moreButton, "更多选项");
-    if (restoreFocus)
-        moreButton.focus();
-}
-function positionSidebarMore() {
-    morePanel.style.removeProperty("left");
-    morePanel.style.removeProperty("top");
-    if (narrowMQ.matches)
-        return; // 抽屉内走绝对定位，不受侧栏 transform 的影响。
-    const foot = moreButton.closest("footer").getBoundingClientRect();
-    const collapsed = document.documentElement.dataset.sidebarCollapsed === "true";
-    const left = collapsed ? sidebar.getBoundingClientRect().right + 8 : foot.left + 12;
-    const top = (collapsed ? moreButton.getBoundingClientRect().bottom : foot.top - 4) - morePanel.offsetHeight;
-    morePanel.style.left = Math.max(8, Math.min(left, innerWidth - morePanel.offsetWidth - 8)) + "px";
-    morePanel.style.top = Math.max(8, Math.min(top, innerHeight - morePanel.offsetHeight - 8)) + "px";
-}
-moreButton.addEventListener("click", () => {
-    if (morePanel.classList.contains("open")) {
-        closeSidebarMore();
-        return;
-    }
-    hideTip();
-    setTip(moreButton, null);
-    positionSidebarMore();
-    morePanel.inert = false;
-    morePanel.classList.add("open");
-    moreButton.setAttribute("aria-expanded", "true");
-    requestAnimationFrame(() => {
-        if (!morePanel.inert)
-            morePanel.querySelector("[data-theme-option].active")?.focus();
-    });
-});
-for (const event of ["pointerdown", "focusin"]) {
-    document.addEventListener(event, e => {
-        if (!morePanel.contains(e.target) && !moreButton.contains(e.target))
-            closeSidebarMore();
-    });
-}
-document.addEventListener("keydown", e => {
-    if (e.key !== "Escape" || !morePanel.classList.contains("open"))
-        return;
-    e.preventDefault();
-    e.stopPropagation(); // 先关弹层，再按一次 Esc 才关移动抽屉。
-    closeSidebarMore(true);
-});
-window.addEventListener("resize", () => {
-    closeSidebarMore(morePanel.contains(document.activeElement));
-    positionSidebarMore();
-});
 function syncSidebar() {
     const open = narrowMQ.matches && sidebar.classList.contains("open");
     sidebar.inert = narrowMQ.matches && !open;
@@ -93,7 +37,6 @@ export function closeDrawer() {
     const restoreFocus = narrowMQ.matches && sidebar.classList.contains("open") && !document.querySelector("dialog[open]");
     sidebar.classList.remove("open");
     $("scrim").classList.remove("show");
-    closeSidebarMore();
     hideTip();
     syncSidebar();
     if (restoreFocus)
@@ -107,7 +50,6 @@ toggle.addEventListener("click", () => {
         closeDrawer();
         return;
     }
-    closeSidebarMore();
     hideTip();
     const collapsed = document.documentElement.dataset.sidebarCollapsed !== "true";
     document.documentElement.dataset.sidebarCollapsed = String(collapsed);

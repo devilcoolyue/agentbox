@@ -4,6 +4,7 @@
  * 抢在样式表之前落好属性，否则浅色/系统用户每次刷新都会闪一下深色底。
  * 默认跟随系统；用户切过一次就以 localStorage 里的选择为准。 */
 "use strict";
+import { setTip } from "./tip.js";
 /* 改这个键名时记得同步 index.html 头部那段内联脚本 */
 const THEME_KEY = "agentbox_theme";
 const MODES = ["system", "light", "dark"];
@@ -38,13 +39,19 @@ function apply(mode, persist = true) {
     }
     syncUI(mode);
 }
-/* 「更多」里的三态按钮直接反映已保存的选择。 */
+/* 底栏三态按钮反映已保存的选择，收起侧栏时用单个按钮循环切换。 */
 function syncUI(mode) {
     for (const opt of document.querySelectorAll("[data-theme-option]")) {
         const active = opt.dataset.themeOption === mode;
         opt.classList.toggle("active", active);
         opt.setAttribute("aria-pressed", String(active));
         opt.setAttribute("aria-label", "切换到" + MODE_LABEL[opt.dataset.themeOption]);
+    }
+    for (const button of document.querySelectorAll("[data-theme-cycle]")) {
+        const next = MODES[(MODES.indexOf(mode) + 1) % MODES.length];
+        const label = `主题：${MODE_LABEL[mode]}，切换到${MODE_LABEL[next]}`;
+        button.setAttribute("aria-label", label);
+        setTip(button, label);
     }
     // 移动端浏览器地址栏跟着页面底色走
     const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
@@ -53,6 +60,9 @@ function syncUI(mode) {
 }
 for (const opt of document.querySelectorAll("[data-theme-option]")) {
     opt.addEventListener("click", () => apply(opt.dataset.themeOption));
+}
+for (const button of document.querySelectorAll("[data-theme-cycle]")) {
+    button.addEventListener("click", () => apply(MODES[(MODES.indexOf(currentMode()) + 1) % MODES.length]));
 }
 // 系统深浅色变化时，跟随系统模式即时换实际主题；不改变用户已保存的选择。
 const onDarkChange = (fn) => {
