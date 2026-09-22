@@ -58,9 +58,13 @@ export function quotaChip(q: Quota | null | undefined) {
 
 export function renderMyQuota() {
   const box = $("my-quota");
+  const usage = $("btn-usagelog");
   const q = S.quota;
+  usage.classList.toggle("quota-blocked", !!q?.metered && !!q.blocked);
   if (!q || !q.metered) {
     box.classList.add("hidden");
+    setTip(usage, "使用记录");
+    usage.setAttribute("aria-label", "使用记录");
     return;
   }
   box.classList.remove("hidden");
@@ -71,6 +75,8 @@ export function renderMyQuota() {
     ? "额度已用完，无法发起新对话，请联系管理员充值"
     : "剩余额度 " + fmtUSD(q.balance_micro_usd));
   box.setAttribute("aria-label", box.dataset.tip!);
+  setTip(usage, "使用记录 · " + box.dataset.tip!);
+  usage.setAttribute("aria-label", "使用记录，" + box.dataset.tip!);
 }
 
 // refreshAll 每轮都会带回自己的额度（回合收尾也会调它），这里跟着重画。

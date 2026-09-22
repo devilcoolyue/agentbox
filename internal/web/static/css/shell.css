@@ -151,10 +151,10 @@
 }
 .side-label { font-size: 11px; letter-spacing: 0.06em; }
 .side-count { font-family: var(--mono); font-size: 10px; }
-.side-foot { flex: none; padding: 8px 12px 12px; }
+.side-foot { position: relative; flex: none; padding: 8px 12px 12px; }
 .side-nav {
   display: flex; flex-direction: column; gap: 2px;
-  padding: 8px 0; border-top: 1px solid var(--line);
+  padding: 6px 0 0; border-top: 1px solid var(--line);
 }
 .side-item {
   display: flex; align-items: center; gap: 10px;
@@ -169,104 +169,73 @@
   color: var(--amber); background: var(--side-active);
   box-shadow: inset 3px 0 var(--amber);
 }
-.side-status { padding: 7px 0; border-top: 1px solid var(--line); }
-.side-foot-end { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
-.side-collapse { flex: 1; }
-.side-collapse svg { transition: transform 0.2s ease; }
-#btn-logout { flex: 0 0 36px; width: 36px; padding: 0; justify-content: center; }
-#btn-logout .side-item-label { display: none; }
-#btn-logout:hover { color: var(--red); }
-.sidebar :is(button, [tabindex]):focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
-
-/* ---- 主题切换：桌面向右浮出，窄屏向上浮出，不挤占会话区域。 ---- */
-.theme-switch { position: relative; }
-.theme-switch-side { width: 100%; }
-.theme-switch-side > .side-item { width: 100%; }
-.theme-title { flex: 1; }
-.theme-current {
-  flex: none;
-  max-width: 80px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--muted); font-size: 11.5px;
-}
-.theme-chevron {
-  flex: none;
-  width: 0;
-  margin-left: -10px; /* 抵消 side-item 的 gap，让当前主题在静止时真正贴右 */
-  overflow: hidden;
-  opacity: 0;
-  transform: translateX(8px) rotate(-90deg);
-  transition: width 0.16s ease, margin-left 0.16s ease, opacity 0.12s ease, transform 0.16s ease;
-}
-.theme-switch.open .theme-chevron {
-  width: 14px;
-  margin-left: 0;
-  opacity: 1;
-  transform: translateX(0) rotate(-90deg);
-}
-.theme-menu {
-  position: fixed; z-index: 90;
-  min-width: 156px;
-  display: flex; flex-direction: column; align-items: stretch; gap: 2px;
-  padding: 5px;
-  background: var(--panel);
-  border: 1px solid var(--line); border-radius: 10px;
-  box-shadow: var(--shadow-lg);
-  opacity: 0; visibility: hidden; pointer-events: none;
-  transform: translateY(-50%) translateX(-4px);
-  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s;
-}
-/* 主钮与菜单之间留了间隙，补一条透明桥梁盖住它，指针横移不会掉 hover */
-.theme-menu::before {
-  content: ""; position: absolute;
-  top: 0; bottom: 0; left: -12px; width: 12px;
-}
-.theme-switch.open .theme-menu {
-  opacity: 1; visibility: visible; pointer-events: auto;
-  transform: translateY(-50%) translateX(0);
-}
-.theme-menu button {
-  display: flex; align-items: center; gap: 8px;
-  width: 100%; text-align: left;
-  background: none; border: 0; border-radius: 7px;
-  color: var(--muted);
-  padding: 8px 10px;
-  font-size: 12.5px; white-space: nowrap;
-}
-.theme-menu button:hover { background: var(--panel-2); color: var(--text); }
-.theme-menu .txt { flex: 1; }
-/* 当前选中项：常亮 + 右侧打勾（不再像旧版那样从列表里藏起） */
-.theme-menu button.active { color: var(--text); }
-.theme-menu button.active::after {
-  content: "✓"; margin-left: 4px;
-  color: var(--amber); font-weight: 700;
-}
-.theme-menu .glyph {
-  flex: none; width: 16px;
+/* 余额并入使用记录，工具收成一行。 */
+#btn-usagelog .side-item-label { flex: 1; }
+.my-quota { display: inline-flex; align-items: baseline; gap: 5px; margin-left: auto; flex: none; }
+.mq-label { font-size: 10px; color: var(--muted); }
+.mq-num { font-size: 11px; color: var(--muted); }
+.my-quota .mq-num.empty { color: var(--red); font-weight: 600; }
+#btn-usagelog.quota-blocked > .glyph { color: var(--red); }
+.side-tools { display: flex; align-items: center; gap: 2px; }
+.side-tool { flex: none; width: 34px; height: 34px; padding: 0; justify-content: center; }
+.side-tool .side-item-label, #tunnel-text { display: none; }
+.side-tool.active { box-shadow: none; }
+.side-tool[aria-expanded="true"] { background: var(--side-hover); color: var(--text); }
+.side-collapse {
   display: inline-flex; align-items: center; justify-content: center;
+  flex: none; width: 28px; height: 32px; margin-left: auto;
+  border: 0; border-radius: 6px; padding: 0;
+  background: transparent; color: var(--muted);
 }
-/* 三枚图标常驻 DOM：主钮按 data-theme-mode 露当前模式，选项钮按自身
- * data-theme-option 露对应图标。 */
-.theme-switch button svg.ic-theme { display: none; }
-:root[data-theme-mode="system"] [data-theme-toggle] .ic-system,
-:root[data-theme-mode="light"] [data-theme-toggle] .ic-sun,
-:root[data-theme-mode="dark"] [data-theme-toggle] .ic-moon,
-.theme-switch [data-theme-option="system"] svg.ic-system,
-.theme-switch [data-theme-option="light"] svg.ic-sun,
-.theme-switch [data-theme-option="dark"] svg.ic-moon { display: block; }
+.side-collapse:hover { background: var(--side-hover); color: var(--text); }
+.side-collapse svg { display: block; transition: transform 0.2s ease; }
+.sidebar :is(button, [tabindex]):focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
 .side-item .glyph {
-  font-family: var(--mono); font-size: 15px;
   flex: none; width: 18px;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .side-item .glyph svg { display: block; }
 
-/* ---- 内网隧道入口：右侧状态灯 + 文案（在线时点亮） ---- */
-.tunnel-state {
-  margin-left: auto;
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 11px; color: var(--muted);
+/* 低频操作只在「更多」展开，避免嵌套菜单。 */
+.side-more-panel {
+  position: fixed; z-index: 90;
+  width: 232px; max-width: calc(100vw - 24px);
+  padding: 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); box-shadow: var(--shadow-lg);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
 }
+.side-more-panel.open { opacity: 1; visibility: visible; pointer-events: auto; transform: translateY(0); }
+.side-menu-heading { padding: 2px 4px 8px; color: var(--muted); font-size: 11px; }
+.theme-options { display: flex; gap: 3px; padding: 3px; background: var(--panel-2); border-radius: 7px; }
+.theme-options button {
+  flex: 1; min-width: 0; height: 34px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 0; border: 0; border-radius: 5px; background: transparent;
+  font-size: 11px; color: var(--muted);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.theme-options button:hover { color: var(--text); }
+.theme-options button.active { background: var(--panel); color: var(--amber); box-shadow: var(--shadow-sm); }
+.theme-options .glyph { display: flex; }
+.theme-options svg.ic-theme { display: none; width: 15px; height: 15px; }
+.theme-options [data-theme-option="system"] svg.ic-system,
+.theme-options [data-theme-option="light"] svg.ic-sun,
+.theme-options [data-theme-option="dark"] svg.ic-moon { display: block; }
+.side-menu-divider { height: 1px; background: var(--line); margin: 10px 0 5px; }
+.side-menu-action {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: 36px;
+  border: 0; border-radius: 6px; padding: 0 8px; text-align: left;
+  background: transparent; color: var(--muted); font-size: 12px;
+}
+.side-menu-action .glyph { display: flex; }
+.side-menu-action:hover { color: var(--red); background: var(--side-hover); }
+
+/* ---- 内网隧道入口：右侧状态灯 + 文案（在线时点亮） ---- */
+#btn-tunnel { position: relative; }
+.tunnel-state { position: absolute; right: 5px; bottom: 5px; display: flex; }
+.tunnel-state .t-dot { width: 5px; height: 5px; box-shadow: 0 0 0 2px var(--panel); }
 .t-dot {
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--line);
@@ -289,10 +258,10 @@
 /* ---- 连接延迟：到服务器的往返延迟，绿/黄/红三档（状态灯 + 读数） ---- */
 .conn-latency {
   display: flex; align-items: center; gap: 8px;
-  height: 28px; padding: 0 12px;
-  font-size: 11.5px; color: var(--muted);
+  flex: 1; min-width: 0; height: 34px; padding: 0 10px;
+  font-size: 10px; color: var(--muted);
 }
-.conn-latency .t-dot { margin: 0 5.5px; }
+.conn-latency .t-dot { width: 6px; height: 6px; box-shadow: none; }
 .conn-latency .conn-text { color: var(--muted); white-space: nowrap; }
 
 /* ---- 会话列表：定高行，列表在剩余空间内独立滚动 ---- */
@@ -367,55 +336,32 @@
   .side-head { padding: 0 16px; }
   .side-item { height: 42px; }
   .side-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-  .theme-chevron { width: 14px; margin-left: 0; opacity: 1; transform: rotate(180deg); }
-  .theme-switch.open .theme-chevron { transform: none; }
-  .theme-menu-side {
-    position: absolute; inset: auto 0 calc(100% + 4px); min-width: 0;
-    transform: translateY(4px);
-  }
-  .theme-menu-side::before { display: none; }
-  .theme-switch.open .theme-menu-side { transform: translateY(0); }
-  .theme-menu-side button { min-height: 42px; }
+  .side-collapse { display: none; }
+  .side-tool { width: 40px; height: 40px; }
+  .side-more-panel { position: absolute; width: auto; left: 12px; right: 12px; bottom: calc(100% + 4px); }
+  .theme-options button, .side-menu-action { min-height: 40px; }
 
 }
 @media (min-width: 761px) {
   .kebab-wrap { display: none; } /* 桌面端会话操作在工作台头部 */
 }
-@media (prefers-reduced-motion: reduce) {
-  .sidebar, .scrim, .theme-menu-side, .theme-chevron { transition: none; }
-}
-
-/* ---- 侧栏：自己的剩余额度（服务端没给额度就整条隐藏） ---- */
-.my-quota {
-  display: flex; align-items: center; gap: 10px;
-  height: 34px; padding: 0 12px;
-  font-size: 12px; color: var(--muted);
-}
-.my-quota .glyph { display: flex; justify-content: center; width: 18px; flex: none; }
-.my-quota .mq-label { flex: 1; }
-.my-quota .mq-num { flex: none; font-size: 12.5px; color: var(--text); }
-/* 余额见底：这条是「为什么发不出消息」的答案，要一眼看见。 */
-.my-quota .mq-num.empty { color: var(--red); font-weight: 600; }
-.my-quota:has(.empty) > .glyph { color: var(--red); }
-
 /* 收起偏好在首屏脚本中恢复；窄屏始终展示完整抽屉。 */
 @media (min-width: 761px) {
   :root[data-sidebar-collapsed="true"] .sidebar { width: 68px; }
   :root[data-sidebar-collapsed="true"] .side-head { padding: 0; justify-content: center; }
-  :root[data-sidebar-collapsed="true"] :is(.side-brand-name, .side-item-label, .side-section-head, .sc-body, .theme-title, .theme-current, .theme-chevron, .mq-label, .mq-num, .conn-text, #tunnel-text, .session-empty-text) { display: none; }
+  :root[data-sidebar-collapsed="true"] :is(.side-brand, .side-item-label, .side-section-head, .sc-body, .my-quota, .conn-text, .session-empty-text) { display: none; }
   :root[data-sidebar-collapsed="true"] .side-create { padding: 16px 12px 12px; }
   :root[data-sidebar-collapsed="true"] .side-new { padding: 0; justify-content: center; }
   :root[data-sidebar-collapsed="true"] .side-sessions { padding: 0 4px; }
   :root[data-sidebar-collapsed="true"] .session-list { padding: 2px 4px 6px; }
   :root[data-sidebar-collapsed="true"] .session-card { height: 46px; padding: 0; justify-content: center; }
   :root[data-sidebar-collapsed="true"] .side-foot { padding-left: 8px; padding-right: 8px; }
-  :root[data-sidebar-collapsed="true"] :is(.side-item, .my-quota, .conn-latency) { padding: 0; justify-content: center; }
-  :root[data-sidebar-collapsed="true"] .side-foot-end { flex-direction: column; }
-  :root[data-sidebar-collapsed="true"] .side-collapse { flex: none; }
+  :root[data-sidebar-collapsed="true"] :is(.side-item, .conn-latency) { padding: 0; justify-content: center; }
+  :root[data-sidebar-collapsed="true"] .side-tools { flex-direction: column; }
+  :root[data-sidebar-collapsed="true"] .conn-latency { flex: none; width: 100%; height: 20px; }
+  :root[data-sidebar-collapsed="true"] .side-collapse { margin: 0; width: 36px; height: 36px; }
   :root[data-sidebar-collapsed="true"] .side-collapse svg { transform: rotate(180deg); }
-  :root[data-sidebar-collapsed="true"] #btn-logout { flex: none; width: 100%; }
-  :root[data-sidebar-collapsed="true"] #btn-tunnel { position: relative; }
-  :root[data-sidebar-collapsed="true"] .tunnel-state { position: absolute; right: 9px; bottom: 6px; }
+  :root[data-sidebar-collapsed="true"] .side-tool { width: 38px; }
   :root[data-sidebar-collapsed="true"] .session-empty { margin: 12px auto; }
   :root[data-sidebar-collapsed="true"] .session-empty-icon { display: block; }
 }
@@ -427,11 +373,8 @@
   .side-section-head { height: 26px; }
   .side-foot { padding-top: 4px; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
   .side-nav { padding: 4px 0; }
-  .side-status { padding: 3px 0; }
   .side-item { height: 32px; }
-  .my-quota { height: 30px; }
-  .conn-latency { height: 24px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .side-new, .side-item, .session-card, .side-collapse svg, .theme-menu { transition: none; }
+  .sidebar, .scrim, .side-new, .side-item, .session-card, .side-collapse svg, .side-more-panel, .theme-options button { transition: none; }
 }

@@ -46,9 +46,9 @@ function render(ms: number, ok: boolean) {
   const dot = $("conn-dot"), text = $("conn-text");
   if (!dot || !text) return;
   dot.className = "t-dot " + (!ok ? "bad" : ms < 120 ? "good" : ms < 350 ? "warn" : "bad");
-  text.textContent = ok ? "连接 " + fmtLatency(ms) : "连接 已断开";
+  text.textContent = ok ? fmtLatency(ms) : "已断开";
   setTip($("conn-latency"), ok ? "到服务器的连接延迟：" + fmtLatency(ms) : "与服务器的连接已断开");
-  $("conn-latency").setAttribute("aria-label", text.textContent);
+  $("conn-latency").setAttribute("aria-label", "连接 " + text.textContent);
 }
 
 /* 从后台切回前台：轮询这段时间是停摆的，立刻测一次并刷新数据，

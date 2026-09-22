@@ -8,7 +8,6 @@ import type { View } from "./state.js";
 import { $ } from "./util.js";
 import { agentIcon, agentAvatar, agentName } from "./brand.js";
 import { hideTip, setTip } from "./tip.js";
-import { closeThemeMenus } from "./theme.js";
 
 /* ---- 侧栏：桌面收起偏好与移动抽屉各自独立 ---- */
 
@@ -20,6 +19,58 @@ const toggle = $("btn-sidebar-toggle");
 // index.html 在首屏恢复同一个键，避免刷新时宽度跳动。
 const SIDEBAR_KEY = "agentbox_sidebar_collapsed";
 
+/* 主题与退出共用一个轻量弹层；桌面图标栏向右展开，完整侧栏向上展开。 */
+const moreButton = $("btn-sidebar-more");
+const morePanel = $("sidebar-more");
+
+function closeSidebarMore(restoreFocus = false) {
+  morePanel.classList.remove("open");
+  morePanel.inert = true;
+  moreButton.setAttribute("aria-expanded", "false");
+  setTip(moreButton, "更多选项");
+  if (restoreFocus) moreButton.focus();
+}
+
+function positionSidebarMore() {
+  morePanel.style.removeProperty("left");
+  morePanel.style.removeProperty("top");
+  if (narrowMQ.matches) return; // 抽屉内走绝对定位，不受侧栏 transform 的影响。
+  const foot = moreButton.closest("footer")!.getBoundingClientRect();
+  const collapsed = document.documentElement.dataset.sidebarCollapsed === "true";
+  const left = collapsed ? sidebar.getBoundingClientRect().right + 8 : foot.left + 12;
+  const top = (collapsed ? moreButton.getBoundingClientRect().bottom : foot.top - 4) - morePanel.offsetHeight;
+  morePanel.style.left = Math.max(8, Math.min(left, innerWidth - morePanel.offsetWidth - 8)) + "px";
+  morePanel.style.top = Math.max(8, Math.min(top, innerHeight - morePanel.offsetHeight - 8)) + "px";
+}
+
+moreButton.addEventListener("click", () => {
+  if (morePanel.classList.contains("open")) { closeSidebarMore(); return; }
+  hideTip();
+  setTip(moreButton, null);
+  positionSidebarMore();
+  morePanel.inert = false;
+  morePanel.classList.add("open");
+  moreButton.setAttribute("aria-expanded", "true");
+  requestAnimationFrame(() => {
+    if (!morePanel.inert) morePanel.querySelector<HTMLElement>("[data-theme-option].active")?.focus();
+  });
+});
+for (const event of ["pointerdown", "focusin"]) {
+  document.addEventListener(event, e => {
+    if (!morePanel.contains(e.target as Node) && !moreButton.contains(e.target as Node)) closeSidebarMore();
+  });
+}
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || !morePanel.classList.contains("open")) return;
+  e.preventDefault();
+  e.stopPropagation(); // 先关弹层，再按一次 Esc 才关移动抽屉。
+  closeSidebarMore(true);
+});
+window.addEventListener("resize", () => {
+  closeSidebarMore(morePanel.contains(document.activeElement));
+  positionSidebarMore();
+});
+
 function syncSidebar() {
   const open = narrowMQ.matches && sidebar.classList.contains("open");
   sidebar.inert = narrowMQ.matches && !open;
@@ -29,7 +80,6 @@ function syncSidebar() {
   const label = narrowMQ.matches ? "关闭菜单" : collapsed ? "展开侧栏" : "收起侧栏";
   toggle.setAttribute("aria-expanded", String(narrowMQ.matches ? open : !collapsed));
   toggle.setAttribute("aria-label", label);
-  $("sidebar-toggle-label").textContent = label;
   setTip(toggle, label);
 }
 
@@ -44,7 +94,7 @@ export function closeDrawer() {
   const restoreFocus = narrowMQ.matches && sidebar.classList.contains("open") && !document.querySelector("dialog[open]");
   sidebar.classList.remove("open");
   $("scrim").classList.remove("show");
-  closeThemeMenus();
+  closeSidebarMore();
   hideTip();
   syncSidebar();
   if (restoreFocus) $("btn-menu").focus();
@@ -54,7 +104,7 @@ $("btn-sidebar-close").addEventListener("click", closeDrawer);
 $("scrim").addEventListener("click", closeDrawer);
 toggle.addEventListener("click", () => {
   if (narrowMQ.matches) { closeDrawer(); return; }
-  closeThemeMenus();
+  closeSidebarMore();
   hideTip();
   const collapsed = document.documentElement.dataset.sidebarCollapsed !== "true";
   document.documentElement.dataset.sidebarCollapsed = String(collapsed);
@@ -67,7 +117,7 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { e.preventDefault(); closeDrawer(); }
   if (e.key !== "Tab") return;
   const targets = [...sidebar.querySelectorAll<HTMLElement>("button:not(:disabled), [tabindex='0']")]
-    .filter(el => el.getClientRects().length && getComputedStyle(el).visibility !== "hidden");
+    .filter(el => !el.closest("[inert]") && el.getClientRects().length && getComputedStyle(el).visibility !== "hidden");
   const first = targets[0], last = targets[targets.length - 1];
   if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
