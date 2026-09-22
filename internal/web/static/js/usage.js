@@ -20,12 +20,13 @@ import { showView } from "./shell.js";
 import { fmtUSD } from "./quota.js";
 import { agentIcon, agentName } from "./brand.js";
 import { setTip } from "./tip.js";
-const PAGE = 50;
+let pageSize = 20;
 /* 当前视图状态。offset 单独放：改筛选要归零，翻页只动它。 */
 let offset = 0;
 let last = null;
 let loading = false;
 let loadPending = false;
+let resetScroll = false;
 let usageTimeZone = S.timeZone || "Asia/Shanghai";
 /* 排序方向。只排时间一列：这张表是流水，除了「先看哪头」没别的排法有意义。
  * 默认倒序（最新在最前）——看消耗十有八九是想知道刚才烧了多少；正序留给
@@ -45,7 +46,7 @@ function readFilters() {
 }
 /* ---------------- 时间区间 ---------------- */
 const pad = (n) => String(n).padStart(2, "0");
-const dateRange = new DateRangePicker($("uf-date-range"), () => usageTimeZone, reload);
+const dateRange = new DateRangePicker($("uf-date-range"), () => usageTimeZone, reload, "today");
 const zoneFormatters = new Map();
 /* Intl 负责把一个绝对时刻投影到系统配置的 IANA 时区。formatToParts 避免依赖
  * 不同浏览器的日期字符串顺序；h23 保证午夜是 00:xx 而不是 24:xx。 */
@@ -135,8 +136,7 @@ function fillSelect(id, values, label) {
     setSelectValue(sel, values.includes(cur) ? cur : "");
 }
 /* ---------------- 筛选条折叠 ---------------- */
-/* 整条可以收起来，但首次进入一律展开，避免用户把“只剩一条标题栏”误认为控件
- * 渲染失败。v2 刻意不继承旧版默认收起时留下的 closed 状态。 */
+/* 桌面首次展开；窄屏先显示条件摘要，为明细留空间。用户主动切换后记住偏好。 */
 const COLLAPSE_KEY = "agentbox_usage_filters_v2";
 function setFiltersOpen(open, remember = true) {
     $("usage-filters").classList.toggle("collapsed", !open);
@@ -154,7 +154,7 @@ function initFiltersOpen() {
         saved = localStorage.getItem(COLLAPSE_KEY);
     }
     catch (_) { }
-    setFiltersOpen(saved ? saved === "open" : true, false);
+    setFiltersOpen(saved ? saved === "open" : !window.matchMedia("(max-width: 760px)").matches, false);
 }
 /* 收起后光看一个「筛选」字样，认不出当前到底筛没筛——把生效的条件摘要挂在标题行上。 */
 function renderFilterChip(f) {
@@ -478,11 +478,57 @@ function renderSummary(data) {
     }
 }
 function renderPager(data) {
-    const from = data.total.rows === 0 ? 0 : offset + 1;
+    const total = data.total.rows;
+    const from = total === 0 ? 0 : offset + 1;
     const to = offset + data.rows.length;
-    $("usage-page").textContent = `${from}–${to} / ${num(data.total.rows)}`;
-    $("usage-prev").disabled = offset <= 0;
-    $("usage-next").disabled = to >= data.total.rows;
+    $("usage-page").textContent = `显示 ${num(from)} 至 ${num(to)} 条，共 ${num(total)} 条`;
+    const current = Math.floor(offset / pageSize) + 1;
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const numbers = $("usage-pages");
+    const restoreFocus = numbers.contains(document.activeElement);
+    numbers.replaceChildren();
+    // 首尾页与当前页附近始终可达，大量记录也不会撑开分页栏。
+    const start = Math.max(1, Math.min(current - 1, pages - 2));
+    const end = Math.min(pages, start + 2);
+    let previous = 0;
+    for (const page of [...new Set([1, ...Array.from({ length: end - start + 1 }, (_, i) => start + i), pages])]) {
+        if (page - previous > 1) {
+            const gap = document.createElement("span");
+            gap.className = "usage-page-gap";
+            gap.textContent = "…";
+            numbers.append(gap);
+        }
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "usage-page-button";
+        button.textContent = String(page);
+        button.setAttribute("aria-label", `第 ${page} 页`);
+        if (page === current)
+            button.setAttribute("aria-current", "page");
+        button.addEventListener("click", () => goToPage(page));
+        numbers.append(button);
+        previous = page;
+    }
+    if (restoreFocus)
+        numbers.querySelector('[aria-current="page"]')?.focus();
+}
+function syncPagerBusy() {
+    $("usage-prev").disabled = loading || offset <= 0;
+    $("usage-next").disabled = loading || !last || offset + pageSize >= last.total.rows;
+    $("usage-page-size").disabled = loading;
+    for (const button of $("usage-pages").querySelectorAll("button"))
+        button.disabled = loading;
+    $("usage-table-scroll").setAttribute("aria-busy", String(loading));
+}
+function goToPage(page) {
+    if (loading || !last)
+        return;
+    const next = (Math.max(1, Math.min(page, Math.max(1, Math.ceil(last.total.rows / pageSize)))) - 1) * pageSize;
+    if (next === offset)
+        return;
+    offset = next;
+    resetScroll = true;
+    void load();
 }
 /* ---------------- 加载 ---------------- */
 async function load() {
@@ -491,14 +537,23 @@ async function load() {
         return;
     }
     loading = true;
+    syncPagerBusy();
     $("usage-loading").classList.remove("hidden");
     try {
         const f = readFilters();
         renderFilterChip(f);
-        const data = await api("/usage/events?" + query(f, { limit: String(PAGE), offset: String(offset), order: orderParam() }));
+        const data = await api("/usage/events?" + query(f, { limit: String(pageSize), offset: String(offset), order: orderParam() }));
         // 确认日期范围时上一趟可能仍在加载；不能让旧结果覆盖新筛选和排序。
         if (loadPending)
             return;
+        // 数据减少或相对时间窗口移动后，回到仍有记录的最后一页。
+        const maxOffset = Math.max(0, Math.ceil(data.total.rows / pageSize) - 1) * pageSize;
+        if (offset > maxOffset) {
+            offset = maxOffset;
+            resetScroll = true;
+            loadPending = true;
+            return;
+        }
         last = data;
         usageTimeZone = data.timezone || S.timeZone || "Asia/Shanghai";
         S.timeZone = usageTimeZone;
@@ -513,12 +568,17 @@ async function load() {
         renderSummary(data);
         renderRows(data);
         renderPager(data);
+        if (resetScroll) {
+            $("usage-table-scroll").scrollTop = 0;
+            resetScroll = false;
+        }
     }
     catch (e) {
         toast("读取使用记录失败：" + e.message, true);
     }
     finally {
         loading = false;
+        syncPagerBusy();
         $("usage-loading").classList.add("hidden");
         if (loadPending) {
             loadPending = false;
@@ -529,6 +589,7 @@ async function load() {
 /* 改筛选条件要回到第一页：留在第 5 页上换条件，多半直接落进空页。 */
 function reload() {
     offset = 0;
+    resetScroll = true;
     void load();
 }
 export async function openUsageView() {
@@ -542,7 +603,7 @@ export async function openUsageView() {
 }
 /* ---------------- 导出 ---------------- */
 /* CSV 导出的是**当前筛选的全部行**，不是当前这一页——导出用来做离线核对，
- * 给一页 50 行没有意义。上限就是服务端的单页上限，超了会提示缩小范围。
+ * 只给当前页没有意义。上限就是服务端的单页上限，超了会提示缩小范围。
  * 行序跟着页面上的排序走：导出的顺序和刚才看到的一致，才对得上。 */
 async function exportCSV() {
     const btn = $("uf-export");
@@ -608,15 +669,11 @@ $("uf-reset").addEventListener("click", () => {
     reload();
 });
 $("uf-export").addEventListener("click", () => void exportCSV());
-$("usage-prev").addEventListener("click", () => {
-    offset = Math.max(0, offset - PAGE);
-    void load();
-});
-$("usage-next").addEventListener("click", () => {
-    if (last && offset + PAGE < last.total.rows) {
-        offset += PAGE;
-        void load();
-    }
+$("usage-prev").addEventListener("click", () => goToPage(Math.floor(offset / pageSize)));
+$("usage-next").addEventListener("click", () => goToPage(Math.floor(offset / pageSize) + 2));
+$("usage-page-size").addEventListener("change", () => {
+    pageSize = Number($("usage-page-size").value);
+    reload();
 });
 bus.addEventListener("open-usage", () => void openUsageView());
 bus.addEventListener("timezone-updated", () => {

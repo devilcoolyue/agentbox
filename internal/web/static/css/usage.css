@@ -1,9 +1,13 @@
-/* 使用记录：紧凑工具栏、连续的汇总条和明细表。计费方式归到费用下方，
+/* 使用记录：上方筛选与汇总、中间独立滚动的明细、底部常驻分页。
  * 手机仍按记录展示，避免八列表横向滚动。 */
 
+#view-usage { overflow: hidden; }
+
 .usage-head {
-  max-width: 1520px;
-  display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+  max-width: none;
+  padding: 20px 28px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
 }
 .usage-head > div:first-child { min-width: 0; }
 .usage-zone {
@@ -21,23 +25,20 @@
 .usage-zone code { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
 
 .usage-body {
-  flex: 1; min-height: 0;
-  display: flex; flex-direction: column; gap: 20px;
-  max-width: 1520px; width: 100%;
-  margin: 0 auto;
-  padding: 20px 28px 24px;
-  overflow-y: auto;
+  flex: 1; min-height: 0; min-width: 0;
+  display: flex; flex-direction: column; gap: 16px;
+  width: 100%; padding: 20px 28px 16px;
+  overflow: hidden;
 }
-/* 明细随记录数增高时由 usage-body 滚动；不能让 flex 压缩各区块。
- * 筛选卡片的 overflow:hidden 会把自动最小高度降为 0，挤压后只剩边框。 */
-.usage-body > * { flex-shrink: 0; }
+/* 只有明细占用剩余高度；分页不进入滚动容器，也不覆盖末尾记录。 */
+.usage-filters, .usage-summary, .usage-pager { flex: none; }
 
 /* ---- 筛选条 ---- */
 
 /* 整条可折叠：标题行常驻，收起时只留下当前生效条件的摘要。窄屏上这六个筛选项
  * 能吃掉大半屏，不收起来就看不见下面的明细表。 */
 .usage-filters {
-  padding: 0 0 18px; border-bottom: 1px solid var(--line);
+  min-height: 0;
 }
 .uf-toggle {
   display: flex; align-items: center; gap: 8px;
@@ -56,6 +57,7 @@
   transition: transform 0.15s ease;
 }
 .usage-filters.collapsed .uf-caret { transform: none; }
+.usage-filters.collapsed .uf-toggle { padding-bottom: 0; }
 .uf-active {
   min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -68,6 +70,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(85px, 1fr)) minmax(210px, 1.7fr) auto;
   align-items: end; gap: 10px;
+  max-height: 30dvh; overflow-y: auto;
 }
 .usage-filters.collapsed .uf-fields { display: none; }
 .uf-item { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
@@ -85,26 +88,28 @@
 .usage-summary {
   display: grid;
   grid-template-columns: minmax(150px, 1.35fr) repeat(5, minmax(85px, 1fr));
-  padding: 4px 0 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
 }
 .us-item {
-  min-height: 60px;
+  min-width: 0; min-height: 48px;
   display: flex; flex-direction: column; justify-content: center;
   padding: 0 20px; border-left: 1px solid var(--line);
 }
 .us-label { font-size: 12px; color: var(--muted); }
-.us-value { font-size: 21px; line-height: 1.35; margin-top: 8px; letter-spacing: -0.6px; font-variant-numeric: tabular-nums; }
+.us-value { font-size: 20px; line-height: 1.35; margin-top: 4px; letter-spacing: -0.6px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .us-item:first-child { padding-left: 0; border-left: 0; }
-.us-item:first-child .us-value { color: var(--amber); font-size: 27px; margin-top: 3px; }
+.us-item:first-child .us-value { color: var(--amber); font-size: 25px; margin-top: 0; }
 
 /* ---- 明细表 ---- */
 
 .usage-table-wrap {
-  position: relative;
-  padding: 0; overflow-x: auto;
+  position: relative; flex: 1; min-height: 0; min-width: 0;
+  padding: 0; overflow: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-gutter: stable;
   border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
 }
-.usage-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.usage-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .usage-table th {
   text-align: left; font-weight: 600; font-size: 11.5px; color: var(--muted);
   padding: 12px 16px;
@@ -185,7 +190,7 @@
 
 /* ---- 费用旁的「?」与费用明细弹窗（弹窗底座在 dialogs.css） ---- */
 
-/* 一屏 50 行就有 50 个问号，全亮会盖过金额本身：平时压淡，指到这一行才浮出来。 */
+/* 问号全亮会盖过金额本身：平时压淡，指到这一行才浮出来。 */
 .u-why {
   margin-left: 6px; padding: 0;
   width: 15px; height: 15px;
@@ -229,10 +234,36 @@
 /* ---- 翻页 ---- */
 
 .usage-pager {
-  display: flex; align-items: center; justify-content: center; gap: 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
   font-size: 12.5px; color: var(--muted);
-  padding-bottom: 8px;
+  padding: 12px 16px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  font-variant-numeric: tabular-nums;
 }
+.usage-page-info, .usage-page-size, .usage-page-nav, .usage-page-numbers {
+  display: flex; align-items: center;
+}
+.usage-page-info { gap: 20px; flex-wrap: wrap; }
+.usage-page-size { gap: 8px; white-space: nowrap; }
+.usage-page-size :is(select, .select-trigger) {
+  width: 76px; min-height: 36px; padding: 6px 10px; background: var(--panel);
+}
+.usage-page-nav { flex: none; gap: 4px; }
+.usage-page-numbers { gap: 4px; }
+.usage-page-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 36px; height: 36px; padding: 0 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--muted); font-size: 13px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.usage-page-button svg { width: 14px; height: 14px; }
+.usage-page-button:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
+.usage-page-button[aria-current="page"] {
+  color: var(--amber); border-color: var(--amber-dim);
+  background: color-mix(in srgb, var(--amber) 9%, var(--panel));
+}
+.usage-page-gap { width: 20px; text-align: center; }
 .usage-pager button:disabled { opacity: 0.4; cursor: default; }
 
 @media (max-width: 1320px) and (min-width: 761px) {
@@ -245,38 +276,47 @@
 }
 
 @media (max-width: 1100px) and (min-width: 761px) {
-  .usage-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 18px; }
-  .us-item:nth-child(4) { border-left: 0; padding-left: 0; }
+  .usage-summary { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .us-item { padding: 0 10px; }
+  .us-value { font-size: 15px; }
+  .us-item:first-child .us-value { font-size: 20px; }
+  .usage-page-info { gap: 8px 14px; }
 }
 
 /* ---- 窄屏：筛选可折叠，汇总两行，明细逐条展示 ---- */
 
 @media (max-width: 760px) {
-  .usage-head { align-items: flex-start; }
-  .usage-head p { max-width: 42em; }
+  .usage-head { align-items: flex-start; gap: 12px; padding: 12px 16px; }
+  .usage-head p { font-size: 11px; }
   .usage-zone { min-width: 0; padding: 6px 0; }
   .usage-zone b { display: none; }
   .usage-zone code { font-size: 10px; }
-  .usage-body { padding: 16px 16px 20px; gap: 18px; }
+  .usage-body { padding: 12px 12px max(12px, env(safe-area-inset-bottom)); gap: 10px; }
 
   .uf-fields, .uf-fields:has(#uf-user-wrap.hidden) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .uf-date { grid-column: 1 / -1; }
   .uf-actions { grid-column: 1 / -1; width: 100%; }
   .uf-actions .btn { flex: 1; }
 
-  .usage-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 18px; }
-  .us-item { padding: 0 12px; min-height: 52px; }
+  .usage-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 0; padding: 10px 0; }
+  .us-item { padding: 0 10px; min-height: 40px; }
   .us-item:nth-child(4) { border-left: 0; padding-left: 0; }
-  .us-value { font-size: 17px; margin-top: 4px; }
-  .us-item:first-child .us-value { font-size: 22px; }
+  .us-label { font-size: 10.5px; }
+  .us-value { font-size: 15px; margin-top: 2px; }
+  .us-item:first-child .us-value { font-size: 19px; }
+
+  .usage-pager { flex-direction: column; gap: 10px; padding: 10px 12px; font-size: 11px; }
+  .usage-page-info { width: 100%; justify-content: space-between; gap: 8px; }
+  .usage-page-button { min-width: 32px; height: 36px; padding: 0 6px; }
+  .usage-page-size :is(select, .select-trigger) { width: 64px; min-height: 32px; padding: 4px 8px; }
+  .usage-page-gap { width: 14px; }
 
   /* 多列的表在手机上只能横向滚动，等于看不见明细：改成按记录纵向展示，
    * 表头名由 td[data-l] 补在每格左边，值统一靠右。 */
-  .usage-table-wrap { overflow-x: visible; }
   .usage-table, .usage-table tbody, .usage-table tr, .usage-table td { display: block; }
   /* 表头本身在卡片布局里没用了，但排序箭头得留着——整条表头压成一行，只显示
    * 时间那一格，当卡片列表的排序条 */
-  .usage-table thead { display: block; }
+  .usage-table thead { display: block; position: sticky; top: 0; z-index: 1; background: var(--panel); }
   .usage-table thead th { display: none; }
   .usage-table thead tr { display: flex; justify-content: flex-end; padding: 8px 12px; }
   .usage-table th.col-time {
@@ -314,6 +354,16 @@
   .u-model + .u-sub { padding-left: 0; }
 }
 
+/* 手机横屏和矮窗口为列表留空间，筛选仍可在自身区域滚动操作。 */
+@media (max-height: 700px) {
+  .usage-head { padding-top: 10px; padding-bottom: 10px; }
+  .usage-head p { display: none; }
+  .usage-body { gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+  .uf-fields { max-height: 22dvh; }
+  .usage-summary { padding: 8px 0; }
+  .us-item { min-height: 36px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .uf-caret, .usage-table tbody tr { transition: none; }
+  .uf-caret, .usage-table tbody tr, .usage-page-button { transition: none; }
 }

@@ -34,6 +34,7 @@ export class DateRangePicker {
     trigger;
     zone;
     onChange;
+    defaultPreset;
     applied = emptyRange();
     draft = emptyRange();
     active = "since";
@@ -41,10 +42,12 @@ export class DateRangePicker {
     focusDay = "";
     panel;
     field = (name) => this.panel.querySelector(`[data-dr="${name}"]`);
-    constructor(trigger, zone, onChange) {
+    constructor(trigger, zone, onChange, defaultPreset = "") {
         this.trigger = trigger;
         this.zone = zone;
         this.onChange = onChange;
+        this.defaultPreset = defaultPreset;
+        this.applied = defaultPreset ? this.rangeFor(defaultPreset) : emptyRange();
         this.panel = document.createElement("div");
         this.panel.className = "date-range-popover";
         this.panel.id = trigger.id + "-popover";
@@ -199,13 +202,16 @@ export class DateRangePicker {
         };
     }
     value() {
+        // 日历快捷范围跟随系统时区与日期，跨天后再次进入也仍是「当天」。
+        if (this.applied.preset === "today" || this.applied.preset === "yesterday")
+            return this.rangeFor(this.applied.preset);
         if (!this.applied.followNow)
             return { ...this.applied };
         if (/^(1|7|14|30)$/.test(this.applied.preset))
             return this.rangeFor(this.applied.preset);
         return { ...this.applied, until: this.now() };
     }
-    reset() { this.applied = emptyRange(); this.syncTrigger(); }
+    reset() { this.applied = this.defaultPreset ? this.rangeFor(this.defaultPreset) : emptyRange(); this.syncTrigger(); }
     refresh() {
         this.syncTrigger();
         if (this.panel.matches(":popover-open")) {
