@@ -1,6 +1,7 @@
 /* changes：Git 变更审查页 —— 列出 workspace 相对上次提交的改动，查看 diff，
  * 提交或丢弃。让「下发任务 → 审查改动 → 提交/回滚」的闭环不必切到终端。 */
 "use strict";
+import { setSelectValue } from "./select.js";
 import { S } from "./state.js";
 import { $, spinEl, toast, btnBusy, btnDone } from "./util.js";
 import { api } from "./api.js";
@@ -85,7 +86,7 @@ function renderRepoPick() {
         o.textContent = r || "（工作区根目录）";
         return o;
     }));
-    sel.value = CH.repo;
+    setSelectValue(sel, CH.repo);
 }
 function setActions(on) {
     $("btn-changes-commit").disabled = !on;

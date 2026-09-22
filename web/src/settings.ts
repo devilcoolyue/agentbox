@@ -2,6 +2,8 @@
  * 容器与资源、模型管理、安全与访问、关于。 */
 "use strict";
 
+import { setSelectValue } from "./select.js";
+
 import { S, bus, emit } from "./state.js";
 import type {
   Account, ApiKeyTest, ContainerStat, Monitor, OAuthFinish, OAuthStart, Settings,
@@ -334,7 +336,7 @@ export function openAuthDlg(a: Account) {
   $<HTMLInputElement>("auth-code").value = "";
   $<HTMLInputElement>("auth-apikey").value = "";
   $<HTMLInputElement>("auth-baseurl").value = a.base_url || "";
-  $<HTMLSelectElement>("auth-wire").value = a.wire_api === "chat" ? "chat" : "responses";
+  setSelectValue($<HTMLSelectElement>("auth-wire"), a.wire_api === "chat" ? "chat" : "responses");
   $("auth-wire").classList.toggle("hidden", isClaude); // wire_api 仅 codex 有意义
   $("auth-clearkey").classList.toggle("hidden", !(isClaude && a.auth_mode === "apikey"));
   $("auth-key-hint").textContent = isClaude
@@ -512,14 +514,14 @@ function fillSettingsForms() {
     // 配置里出现了自定义 docker 网络名，补一个选项而不是悄悄丢掉
     net.appendChild(new Option(st.container.network + " — 自定义网络", st.container.network));
   }
-  net.value = st.container.network;
+  setSelectValue(net, st.container.network);
   $<HTMLInputElement>("set-idle").value = String(st.idle_timeout_min);
   const tz = $<HTMLSelectElement>("set-timezone");
   if (![...tz.options].some((o) => o.value === st.timezone)) {
     tz.appendChild(new Option(st.timezone + "（自定义）", st.timezone));
   }
-  tz.value = st.timezone;
-  $<HTMLSelectElement>("set-perm").value = st.permission_mode;
+  setSelectValue(tz, st.timezone);
+  setSelectValue($<HTMLSelectElement>("set-perm"), st.permission_mode);
   $<HTMLInputElement>("set-upload").value = String(st.max_upload_mb);
   $<HTMLInputElement>("set-listen").value = st.listen;
   $("security-note").textContent = st.restart_required
@@ -536,7 +538,7 @@ function fillSettingsForms() {
   const tips: Partial<Settings["terminal_tips"]> = st.terminal_tips || {};
   $<HTMLTextAreaElement>("set-tips").value = (tips.tips || []).join("\n");
   $<HTMLInputElement>("set-tips-interval").value = String(tips.interval_sec != null ? tips.interval_sec : 4);
-  $<HTMLSelectElement>("set-tips-anim").value = tips.animation || "scroll";
+  setSelectValue($<HTMLSelectElement>("set-tips-anim"), tips.animation || "scroll");
   renderModels();
   refreshPriceCount();
 }

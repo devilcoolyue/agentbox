@@ -2,6 +2,7 @@
  * 的顶层执行语义一致），这里只负责聚合加载与启动。 */
 "use strict";
 import { S } from "./state.js";
+import { enhanceSelects } from "./select.js";
 import "./util.js";
 import "./tip.js";
 import "./theme.js";
@@ -32,6 +33,7 @@ for (const m of document.querySelectorAll("[data-mark]"))
 const themeIco = document.getElementById("tpl-theme-ico").content;
 for (const m of document.querySelectorAll("[data-theme-ico]"))
     m.append(themeIco.cloneNode(true));
+enhanceSelects();
 if (S.token)
     tryEnter();
 else

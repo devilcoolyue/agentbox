@@ -11,6 +11,7 @@
  * 金额一律以微美元整数在前后端之间传递，只在显示的最后一步除 1e6（同 quota.ts）。
  * 管理员看全部并多一列「用户」，普通用户只看得到自己的，服务端按 scope 下发。 */
 "use strict";
+import { setSelectValue } from "./select.js";
 import { S, bus } from "./state.js";
 import { $, toast, startDownload, isMobile } from "./util.js";
 import { api } from "./api.js";
@@ -182,7 +183,7 @@ function fillSelect(id, values, label) {
         o.textContent = label ? label(v) : v;
         sel.appendChild(o);
     }
-    sel.value = values.includes(cur) ? cur : "";
+    setSelectValue(sel, values.includes(cur) ? cur : "");
 }
 /* ---------------- 筛选条折叠 ---------------- */
 /* 整条可以收起来，但首次进入一律展开，避免用户把“只剩一条标题栏”误认为控件
@@ -667,7 +668,7 @@ $("uf-toggle").addEventListener("click", () => {
 $("uf-refresh").addEventListener("click", reload);
 $("uf-reset").addEventListener("click", () => {
     for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind"])
-        $(id).value = "";
+        setSelectValue($(id), "");
     writeBound("since", "");
     writeBound("until", "");
     activeRange = "";

@@ -6,6 +6,8 @@
  * 它走直连」——直连等于把服务器真实 IP 交出去，正是绑代理要避免的事。 */
 "use strict";
 
+import { setSelectValue } from "./select.js";
+
 import type { Proxy, ProxyImport, ProxyList, ProxyTest } from "./types.js";
 import { $, btnBusy, btnDone, toast, askConfirm, fmtLatency } from "./util.js";
 import { api } from "./api.js";
@@ -225,7 +227,7 @@ export function openProxyDlg(p: Proxy | null) {
   editProxy = p;
   $("proxy-dlg-title").textContent = p ? "编辑代理" : "添加代理";
   $<HTMLInputElement>("proxy-name").value = p ? p.name : "";
-  $<HTMLSelectElement>("proxy-scheme").value = p ? p.scheme : "socks5";
+  setSelectValue($<HTMLSelectElement>("proxy-scheme"), p ? p.scheme : "socks5");
   $<HTMLInputElement>("proxy-host").value = p ? p.host : "";
   $<HTMLInputElement>("proxy-port").value = p ? String(p.port) : "";
   $<HTMLInputElement>("proxy-user").value = p && p.username ? p.username : "";
@@ -234,7 +236,7 @@ export function openProxyDlg(p: Proxy | null) {
   // 密码不下发，编辑时留空即保持原样——占位符把这件事说清楚，免得管理员
   // 以为密码丢了又重敲一遍。
   pass.placeholder = p && p.has_pass ? "已保存，留空表示不修改" : "可选";
-  $<HTMLSelectElement>("proxy-state").value = p && p.disabled ? "off" : "on";
+  setSelectValue($<HTMLSelectElement>("proxy-state"), p && p.disabled ? "off" : "on");
   proxyDlgMsg("");
   $<HTMLDialogElement>("dlg-proxy").showModal();
 }

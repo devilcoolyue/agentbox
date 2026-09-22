@@ -17,7 +17,7 @@ dialog h2 { margin: 0 0 16px; font-size: 16px; }
 dialog form { display: flex; flex-direction: column; gap: 14px; }
 dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
 dialog input[type="text"], dialog input[type="number"], dialog input[type="password"],
-dialog select, dialog textarea { width: 100%; }
+dialog select, dialog .select-trigger, dialog textarea { width: 100%; }
 dialog textarea { resize: vertical; }
 
 /* 并排两列（主机+端口、用户名+密码）：窄屏落回单列 */
@@ -51,7 +51,7 @@ dialog textarea { resize: vertical; }
 
 .market-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
 .market-bar input[type="search"] { flex: 1; min-width: 0; }
-.market-bar select { flex: 0 0 132px; }
+.market-bar :is(select, .select-trigger) { flex: 0 0 132px; }
 .market-list {
   height: min(48vh, 420px); overflow-y: auto;
   border: 1px solid var(--line); border-radius: 8px;
@@ -76,7 +76,7 @@ dialog textarea { resize: vertical; }
 
 @media (max-width: 560px) {
   .market-bar { flex-wrap: wrap; }
-  .market-bar select { flex: 1; }
+  .market-bar :is(select, .select-trigger) { flex: 1; }
 }
 
 /* ---- 弹窗统一头部：标题居左，✕ 关闭钮固定右上角（全部弹窗共用） ---- */
@@ -198,7 +198,7 @@ dialog label.check input { margin: 0; flex: none; }
 .auth-modes .seg + .seg { border-left: 1px solid var(--line); }
 .auth-modes .seg.active { background: var(--panel-2); color: var(--text); font-weight: 600; }
 .auth-keyrow { display: flex; gap: 8px; align-items: center; }
-.auth-keyrow select { flex: 1; min-width: 0; }
+.auth-keyrow :is(select, .select-trigger) { flex: 1; min-width: 0; }
 .auth-models {
   display: flex; flex-wrap: wrap; gap: 6px;
   max-height: 180px; overflow-y: auto;

@@ -3,6 +3,7 @@
 "use strict";
 
 import { S } from "./state.js";
+import { enhanceSelects } from "./select.js";
 import "./util.js";
 import "./tip.js";
 import "./theme.js";
@@ -31,6 +32,8 @@ const mark = (document.getElementById("tpl-mark") as HTMLTemplateElement).conten
 for (const m of document.querySelectorAll("[data-mark]")) m.replaceWith((mark.cloneNode(true) as DocumentFragment).firstElementChild!);
 const themeIco = (document.getElementById("tpl-theme-ico") as HTMLTemplateElement).content;
 for (const m of document.querySelectorAll("[data-theme-ico]")) m.append(themeIco.cloneNode(true));
+
+enhanceSelects();
 
 if (S.token) tryEnter();
 else showLogin();

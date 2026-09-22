@@ -5,6 +5,7 @@
  * 「我的模板」写的是 data/users/<user>/home-template，每次会话启动铺进该用户
  * 的所有会话（服务端 agent.SeedHomeTemplate）。 */
 "use strict";
+import { setSelectValue } from "./select.js";
 import { S } from "./state.js";
 import { $, spinEl, toast, askConfirm, fmtBytes, fmtSize, fmtTime, btnBusy, btnDone, startDownload, } from "./util.js";
 import { api, skillFileURL } from "./api.js";
@@ -684,7 +685,7 @@ async function loadMarket(force) {
             o.textContent = t;
             return o;
         }));
-        sel.value = cur;
+        setSelectValue(sel, cur);
         renderMarket();
     }
     catch (e) {

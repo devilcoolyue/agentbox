@@ -12,6 +12,8 @@
  * 管理员看全部并多一列「用户」，普通用户只看得到自己的，服务端按 scope 下发。 */
 "use strict";
 
+import { setSelectValue } from "./select.js";
+
 import { S, bus } from "./state.js";
 import type { UsageEventRow, UsageEvents } from "./types.js";
 import { $, toast, startDownload, isMobile } from "./util.js";
@@ -212,7 +214,7 @@ function fillSelect(id: string, values: string[], label?: (v: string) => string)
     o.textContent = label ? label(v) : v;
     sel.appendChild(o);
   }
-  sel.value = values.includes(cur) ? cur : "";
+  setSelectValue(sel, values.includes(cur) ? cur : "");
 }
 
 /* ---------------- 筛选条折叠 ---------------- */
@@ -723,7 +725,7 @@ $("uf-toggle").addEventListener("click", () => {
 });
 $("uf-refresh").addEventListener("click", reload);
 $("uf-reset").addEventListener("click", () => {
-  for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind"]) $<HTMLSelectElement>(id).value = "";
+  for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind"]) setSelectValue($<HTMLSelectElement>(id), "");
   writeBound("since", "");
   writeBound("until", "");
   activeRange = "";

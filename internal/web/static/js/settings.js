@@ -1,6 +1,7 @@
 /* settings：系统设置视图 —— 账号池维护（含 OAuth / API Key 登录弹窗）、
  * 容器与资源、模型管理、安全与访问、关于。 */
 "use strict";
+import { setSelectValue } from "./select.js";
 import { S, bus, emit } from "./state.js";
 import { $, btnBusy, btnDone, toast, fmtTime, fmtUptime, fmtBytes, askConfirm, askPrompt } from "./util.js";
 import { api } from "./api.js";
@@ -331,7 +332,7 @@ export function openAuthDlg(a) {
     $("auth-code").value = "";
     $("auth-apikey").value = "";
     $("auth-baseurl").value = a.base_url || "";
-    $("auth-wire").value = a.wire_api === "chat" ? "chat" : "responses";
+    setSelectValue($("auth-wire"), a.wire_api === "chat" ? "chat" : "responses");
     $("auth-wire").classList.toggle("hidden", isClaude); // wire_api 仅 codex 有意义
     $("auth-clearkey").classList.toggle("hidden", !(isClaude && a.auth_mode === "apikey"));
     $("auth-key-hint").textContent = isClaude
@@ -520,14 +521,14 @@ function fillSettingsForms() {
         // 配置里出现了自定义 docker 网络名，补一个选项而不是悄悄丢掉
         net.appendChild(new Option(st.container.network + " — 自定义网络", st.container.network));
     }
-    net.value = st.container.network;
+    setSelectValue(net, st.container.network);
     $("set-idle").value = String(st.idle_timeout_min);
     const tz = $("set-timezone");
     if (![...tz.options].some((o) => o.value === st.timezone)) {
         tz.appendChild(new Option(st.timezone + "（自定义）", st.timezone));
     }
-    tz.value = st.timezone;
-    $("set-perm").value = st.permission_mode;
+    setSelectValue(tz, st.timezone);
+    setSelectValue($("set-perm"), st.permission_mode);
     $("set-upload").value = String(st.max_upload_mb);
     $("set-listen").value = st.listen;
     $("security-note").textContent = st.restart_required
@@ -544,7 +545,7 @@ function fillSettingsForms() {
     const tips = st.terminal_tips || {};
     $("set-tips").value = (tips.tips || []).join("\n");
     $("set-tips-interval").value = String(tips.interval_sec != null ? tips.interval_sec : 4);
-    $("set-tips-anim").value = tips.animation || "scroll";
+    setSelectValue($("set-tips-anim"), tips.animation || "scroll");
     renderModels();
     refreshPriceCount();
 }

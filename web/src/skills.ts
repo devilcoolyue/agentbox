@@ -6,6 +6,8 @@
  * 的所有会话（服务端 agent.SeedHomeTemplate）。 */
 "use strict";
 
+import { setSelectValue } from "./select.js";
+
 import { S } from "./state.js";
 import type {
   MarketCatalog, MarketPlugin, SkillDetail, SkillEntry, SkillFile, SkillInfo, SkillScope,
@@ -719,7 +721,7 @@ async function loadMarket(force: boolean) {
       o.textContent = t;
       return o;
     }));
-    sel.value = cur;
+    setSelectValue(sel, cur);
     renderMarket();
   } catch (e) {
     marketMsg("拉取失败：" + (e as Error).message);

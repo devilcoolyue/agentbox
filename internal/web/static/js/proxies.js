@@ -5,6 +5,7 @@
  * 和服务端自己发的 OAuth / Key 探测。所以这里的「停用」是硬开关，不是「绕过
  * 它走直连」——直连等于把服务器真实 IP 交出去，正是绑代理要避免的事。 */
 "use strict";
+import { setSelectValue } from "./select.js";
 import { $, btnBusy, btnDone, toast, askConfirm, fmtLatency } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
@@ -215,7 +216,7 @@ export function openProxyDlg(p) {
     editProxy = p;
     $("proxy-dlg-title").textContent = p ? "编辑代理" : "添加代理";
     $("proxy-name").value = p ? p.name : "";
-    $("proxy-scheme").value = p ? p.scheme : "socks5";
+    setSelectValue($("proxy-scheme"), p ? p.scheme : "socks5");
     $("proxy-host").value = p ? p.host : "";
     $("proxy-port").value = p ? String(p.port) : "";
     $("proxy-user").value = p && p.username ? p.username : "";
@@ -224,7 +225,7 @@ export function openProxyDlg(p) {
     // 密码不下发，编辑时留空即保持原样——占位符把这件事说清楚，免得管理员
     // 以为密码丢了又重敲一遍。
     pass.placeholder = p && p.has_pass ? "已保存，留空表示不修改" : "可选";
-    $("proxy-state").value = p && p.disabled ? "off" : "on";
+    setSelectValue($("proxy-state"), p && p.disabled ? "off" : "on");
     proxyDlgMsg("");
     $("dlg-proxy").showModal();
 }

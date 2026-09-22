@@ -83,7 +83,7 @@
 .usage-filters.collapsed .uf-fields { display: none; }
 .uf-item { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .uf-item > span { font-size: 12px; color: var(--muted); }
-.uf-item select, .uf-item input { width: 100%; min-height: 38px; }
+.uf-item :is(select, .select-trigger), .uf-item input { width: 100%; min-height: 38px; }
 /* 时间项是「日期 + 时 : 分」三个框，比下拉宽一截 */
 .uf-item.wide { min-width: 0; }
 .uf-time { display: flex; align-items: center; gap: 4px; }

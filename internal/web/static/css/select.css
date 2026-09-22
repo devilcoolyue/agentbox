@@ -1,0 +1,60 @@
+/* 单选组件：原生 select 只保存表单值；触发器和顶层面板共用全站主题令牌。 */
+.select-native { display: none !important; }
+.select-trigger {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-width: 0; min-height: 40px; padding: 8px 12px;
+  font: inherit; line-height: 1.5; text-align: left;
+  color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+.select-trigger:hover:not(:disabled) { border-color: var(--muted); background: var(--panel-2); }
+.select-trigger[aria-expanded="true"] { border-color: var(--amber-dim); box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber) 10%, transparent); }
+.select-trigger[aria-invalid="true"] { border-color: var(--red); }
+.select-trigger:disabled { cursor: not-allowed; opacity: .45; }
+.select-trigger.mono { font-family: var(--mono); }
+.select-trigger[hidden] { display: none; }
+.select-caption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-caret {
+  flex: none; width: 7px; height: 7px; margin: -3px 2px 0 0;
+  border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+  transform: rotate(45deg); transition: transform 140ms ease;
+}
+.select-trigger[aria-expanded="true"] .select-caret { transform: translateY(3px) rotate(225deg); border-color: var(--amber); }
+.select-panel {
+  position: fixed; inset: auto; margin: 0; padding: 5px;
+  width: 240px; max-width: calc(100vw - 16px); max-height: 320px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); color: var(--text); box-shadow: var(--shadow-md);
+  font-family: var(--sans); font-size: 13px; line-height: 1.5;
+  overflow: hidden;
+}
+.select-panel:popover-open { display: flex; flex-direction: column; animation: select-enter 120ms ease-out; }
+.select-panel::backdrop { background: transparent; }
+.select-panel .select-search {
+  flex: none; width: calc(100% - 8px); min-height: 36px; margin: 4px 4px 8px;
+  padding: 7px 10px; background: var(--bg); border-radius: 6px; font-size: 13px;
+}
+.select-search::placeholder { color: var(--muted); }
+.select-options { min-height: 0; max-height: 264px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.select-option {
+  position: relative; padding: 9px 34px 9px 11px; min-height: 36px;
+  border-radius: 6px; overflow-wrap: anywhere; cursor: pointer;
+}
+.select-option.active { background: var(--panel-2); }
+.select-option[aria-selected="true"] { color: var(--amber); background: color-mix(in srgb, var(--amber) 9%, transparent); }
+.select-option[aria-selected="true"].active { background: color-mix(in srgb, var(--amber) 15%, transparent); }
+.select-option[aria-selected="true"]::after {
+  content: ""; position: absolute; right: 13px; top: 14px;
+  width: 8px; height: 5px; border-left: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+.select-option[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+.select-group { padding: 9px 11px 5px; color: var(--muted); font-size: 11px; }
+.select-empty { padding: 20px 12px; color: var(--muted); text-align: center; }
+@keyframes select-enter { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+@media (pointer: coarse) { .select-option { min-height: 42px; padding-top: 12px; padding-bottom: 12px; } }
+@media (prefers-reduced-motion: reduce) {
+  .select-trigger, .select-caret { transition: none; }
+  .select-panel:popover-open { animation: none; }
+}

@@ -2,6 +2,8 @@
  * 提交或丢弃。让「下发任务 → 审查改动 → 提交/回滚」的闭环不必切到终端。 */
 "use strict";
 
+import { setSelectValue } from "./select.js";
+
 import { S } from "./state.js";
 import type { ChangeEntry, GitCommitResult, GitStatus } from "./types.js";
 import { $, spinEl, toast, btnBusy, btnDone } from "./util.js";
@@ -91,7 +93,7 @@ function renderRepoPick() {
     o.textContent = r || "（工作区根目录）";
     return o;
   }));
-  sel.value = CH.repo;
+  setSelectValue(sel, CH.repo);
 }
 
 function setActions(on: boolean) {
