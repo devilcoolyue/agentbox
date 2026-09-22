@@ -41,13 +41,15 @@ const (
 )
 
 type Session struct {
-	ID          string `json:"id"`
-	User        string `json:"user"`
-	Name        string `json:"name"`
-	Agent       string `json:"agent"` // "claude" | "codex"
-	AccountID   string `json:"account_id"`
-	ContainerID string `json:"container_id,omitempty"`
-	Status      string `json:"status"`
+	ID        string `json:"id"`
+	User      string `json:"user"`
+	Name      string `json:"name"`
+	Agent     string `json:"agent"` // "claude" | "codex"
+	AccountID string `json:"account_id"`
+	// DefaultModel snapshots the system default when this workspace is created.
+	DefaultModel string `json:"default_model"`
+	ContainerID  string `json:"container_id,omitempty"`
+	Status       string `json:"status"`
 	// ChatSession is the provider-side conversation id of the latest headless
 	// turn; each new turn resumes from it so the conversation survives
 	// container restarts.
@@ -178,6 +180,7 @@ func (s *Store) Close() error { return s.db.Close() }
 // with "duplicate column name", which is the already-applied case.
 func migrate(db *sql.DB) error {
 	stmts := []string{
+		`ALTER TABLE sessions ADD COLUMN default_model TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE sessions ADD COLUMN stop_reason TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE usage_events ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'`,
 		`ALTER TABLE usage_events ADD COLUMN ttft_ms INTEGER NOT NULL DEFAULT 0`,
@@ -220,10 +223,10 @@ func (s *Store) importLegacyJSON(jsonPath string) error {
 	defer tx.Rollback()
 	for _, sess := range legacy.Sessions {
 		if _, err := tx.Exec(`INSERT OR IGNORE INTO sessions
-			(id, user, name, agent, account_id, container_id, status, chat_session, stop_reason, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			(id, user, name, agent, account_id, container_id, status, chat_session, stop_reason, default_model, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			sess.ID, sess.User, sess.Name, sess.Agent, sess.AccountID, sess.ContainerID,
-			sess.Status, sess.ChatSession, sess.StopReason,
+			sess.Status, sess.ChatSession, sess.StopReason, sess.DefaultModel,
 			sess.CreatedAt.Format(time.RFC3339Nano), sess.UpdatedAt.Format(time.RFC3339Nano)); err != nil {
 			return fmt.Errorf("import legacy session %s: %w", sess.ID, err)
 		}
@@ -242,13 +245,13 @@ func NewID() string {
 	return hex.EncodeToString(b)
 }
 
-const sessionCols = "id, user, name, agent, account_id, container_id, status, chat_session, stop_reason, created_at, updated_at"
+const sessionCols = "id, user, name, agent, account_id, container_id, status, chat_session, stop_reason, default_model, created_at, updated_at"
 
 func scanSession(row interface{ Scan(...any) error }) (Session, error) {
 	var sess Session
 	var created, updated string
 	if err := row.Scan(&sess.ID, &sess.User, &sess.Name, &sess.Agent, &sess.AccountID,
-		&sess.ContainerID, &sess.Status, &sess.ChatSession, &sess.StopReason, &created, &updated); err != nil {
+		&sess.ContainerID, &sess.Status, &sess.ChatSession, &sess.StopReason, &sess.DefaultModel, &created, &updated); err != nil {
 		return Session{}, err
 	}
 	var err error
@@ -294,16 +297,16 @@ func (s *Store) put(exec interface {
 	Exec(string, ...any) (sql.Result, error)
 }, sess Session) error {
 	_, err := exec.Exec(`INSERT INTO sessions
-		(id, user, name, agent, account_id, container_id, status, chat_session, stop_reason, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, user, name, agent, account_id, container_id, status, chat_session, stop_reason, default_model, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			user=excluded.user, name=excluded.name, agent=excluded.agent,
 			account_id=excluded.account_id, container_id=excluded.container_id,
 			status=excluded.status, chat_session=excluded.chat_session,
-			stop_reason=excluded.stop_reason,
+			stop_reason=excluded.stop_reason, default_model=excluded.default_model,
 			created_at=excluded.created_at, updated_at=excluded.updated_at`,
 		sess.ID, sess.User, sess.Name, sess.Agent, sess.AccountID, sess.ContainerID,
-		sess.Status, sess.ChatSession, sess.StopReason,
+		sess.Status, sess.ChatSession, sess.StopReason, sess.DefaultModel,
 		sess.CreatedAt.Format(time.RFC3339Nano), sess.UpdatedAt.Format(time.RFC3339Nano))
 	return err
 }

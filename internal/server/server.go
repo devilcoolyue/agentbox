@@ -101,6 +101,10 @@ func New(cfg *config.Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := st.InitDefaultModels(cfg.GetDefaultModels()); err != nil {
+		st.Close()
+		return nil, err
+	}
 	dock, err := dockerx.New(cfg)
 	if err != nil {
 		return nil, err
@@ -504,6 +508,16 @@ func (s *Server) acctEnvList(sess store.Session) []string {
 // the owning user has a live reverse tunnel.
 func (s *Server) execEnv(sess store.Session) []string {
 	env := append(s.acctEnvList(sess), s.proxyEnvList(sess)...)
+	if sess.Agent == config.AgentClaude && sess.DefaultModel != "" {
+		// The workspace default takes precedence over an account model override.
+		filtered := env[:0]
+		for _, kv := range env {
+			if !strings.HasPrefix(kv, "ANTHROPIC_MODEL=") {
+				filtered = append(filtered, kv)
+			}
+		}
+		env = append(filtered, "ANTHROPIC_MODEL="+sess.DefaultModel)
+	}
 	return append(env, s.tunnelEnvList(sess)...)
 }
 

@@ -646,6 +646,10 @@ function renderModels() {
     const box = document.querySelector<HTMLElement>(`.model-rows[data-agent="${agent}"]`);
     if (!box) continue;
     box.replaceChildren();
+    const selected = S.settings?.default_models[agent] || "";
+    const picker = $<HTMLSelectElement>(`mdl-${agent}-default`);
+    picker.replaceChildren(...(models[agent] || []).map((m) => new Option(`${m.label} · ${m.id}`, m.id)));
+    setSelectValue(picker, selected);
     for (const m of models[agent] || []) {
       const row = document.createElement("div");
       row.className = "model-row";
@@ -657,7 +661,9 @@ function renderModels() {
       id.textContent = m.id;
       const rm = document.createElement("button");
       rm.className = "btn btn-sm btn-ghost";
-      rm.textContent = "移除";
+      rm.textContent = m.id === selected ? "默认" : "移除";
+      rm.disabled = m.id === selected;
+      rm.title = m.id === selected ? "移除前请先选择其他默认模型" : "";
       rm.addEventListener("click", () => {
         const next = { ...models, [agent]: (models[agent] || []).filter((x) => x.id !== m.id) };
         putSettings({ models: next }, rm, "已移除 " + m.label);
@@ -666,6 +672,16 @@ function renderModels() {
       box.appendChild(row);
     }
   }
+}
+
+for (const agent of ["claude", "codex"]) {
+  const picker = $<HTMLSelectElement>(`mdl-${agent}-default`);
+  picker.addEventListener("change", async () => {
+    picker.disabled = true;
+    const saved = await putSettings({ default_models: { [agent]: picker.value } }, null, "已设置，新建工作空间时生效");
+    if (!saved) setSelectValue(picker, S.settings?.default_models[agent] || "");
+    picker.disabled = false;
+  });
 }
 
 for (const btn of document.querySelectorAll<HTMLButtonElement>(".mdl-add")) {

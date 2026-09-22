@@ -113,13 +113,14 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess := store.Session{
-		ID:        store.NewID(),
-		User:      reqUser(r).Name,
-		Name:      req.Name,
-		Agent:     req.Agent,
-		AccountID: req.AccountID,
-		Status:    store.StatusStopped,
-		CreatedAt: time.Now(),
+		ID:           store.NewID(),
+		User:         reqUser(r).Name,
+		Name:         req.Name,
+		Agent:        req.Agent,
+		AccountID:    req.AccountID,
+		DefaultModel: s.cfg.GetDefaultModel(req.Agent),
+		Status:       store.StatusStopped,
+		CreatedAt:    time.Now(),
 	}
 	for _, dir := range []string{s.workspaceDir(sess), s.homeDir(sess)} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -172,6 +173,9 @@ func (s *Server) startSession(ctx context.Context, sess store.Session) (store.Se
 		log.Printf("seed home template %s: %v", cur.ID, err)
 	}
 	if err := agent.SeedCredentials(cur.Agent, s.homeDir(cur), acct.CredentialsDir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
+		return store.Session{}, err
+	}
+	if err := agent.SeedDefaultModel(cur.Agent, s.homeDir(cur), cur.DefaultModel, dockerx.AgentUID, dockerx.AgentGID); err != nil {
 		return store.Session{}, err
 	}
 	// Only advertise the intranet proxy to the agent when the feature is on;

@@ -168,6 +168,17 @@ MCP 的两个注意点：
 - 对话模式每回合都新起一次 CLI 进程，stdio 型 MCP server 每回合都会重新拉起；依赖
   `npx -y` 现拉包的 server 会让每条消息都多等几秒，建议预装到 home 里。
 
+## 默认模型
+
+在「系统设置 → 模型管理」分别选择 Claude Code 和 Codex 的「新空间默认模型」。
+初始值为 Claude **Opus 5**（`claude-opus-5`）和 Codex **GPT-5.5**（`gpt-5.5`）。
+保存后，下一次创建的工作空间使用新值；每个空间会保存创建时的模型，后续更改系统默认值
+不会改变已有空间。升级前未保存模型的空间会在首次启动新版服务时补上当时的系统默认值。
+
+对话输入框直接显示具体模型名称，仍可选择其他候选模型或输入自定义模型 ID；选择按空间
+在当前浏览器中记忆。空间启动时也会将其默认模型写入 CLI 配置，供终端使用；账号的
+provider、中转地址、推理强度和 MCP 配置保留。对话中单独切换模型只作用于对话。
+
 ## 配置项
 
 | 字段 | 说明 |
@@ -182,6 +193,8 @@ MCP 的两个注意点：
 | `tunnel.*` | 反向内网隧道（见下）。`enabled` 开关；`proxy_bind` 服务端 SOCKS5 监听地址，须为容器可达，默认 docker 网桥网关 `172.17.0.1:1080`；`proxy_host` 注入容器时用的地址，缺省取 `proxy_bind` 的主机 |
 | `proxy_bridge.*` | 账号出口代理的本地 HTTP 桥接（见下）。`bind` 监听地址，须为容器可达，默认 `172.17.0.1:1081`；`host` 注入容器时用的地址，缺省取 `bind` 的主机 |
 | `proxies[]` | 出口 IP 代理池；`scheme` 为 `socks5`/`http`/`https`，另有 `host`、`port`、可选 `username`/`password`、`disabled` |
+| `models` | Claude / Codex 对话中可选模型的 ID 与显示名称 |
+| `default_models` | 新空间默认模型，键为 `claude` / `codex`；必须在对应模型列表中 |
 | `accounts[]` | 账号池；`credentials_dir` 放凭证文件，或用 `env` 注入 API Key；`proxy_id` 绑定出口代理 |
 
 ## 用量与使用记录

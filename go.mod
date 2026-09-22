@@ -7,6 +7,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/yamux v0.1.2
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/things-go/go-socks5 v0.1.1
 	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.47.0

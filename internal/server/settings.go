@@ -25,6 +25,7 @@ type settingsView struct {
 	TimeZone       string                          `json:"timezone"`
 	Container      config.ContainerLimits          `json:"container"`
 	Models         map[string][]config.ModelOption `json:"models"`
+	DefaultModels  map[string]string               `json:"default_models"`
 	TerminalTips   config.TerminalTips             `json:"terminal_tips"`
 	Tunnel         config.TunnelConfig             `json:"tunnel"`
 	TunnelActive   bool                            `json:"tunnel_active"`          // SOCKS 代理是否真的监听中
@@ -46,6 +47,7 @@ func (s *Server) settingsView() settingsView {
 		TimeZone:        s.cfg.GetTimeZone(),
 		Container:       s.cfg.GetContainer(),
 		Models:          s.cfg.GetModels(),
+		DefaultModels:   s.cfg.GetDefaultModels(),
 		TerminalTips:    s.cfg.GetTerminalTips(),
 		Tunnel:          s.cfg.GetTunnel(),
 		TunnelActive:    s.tunnels.proxyUp.Load(),

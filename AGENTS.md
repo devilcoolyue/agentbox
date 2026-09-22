@@ -211,6 +211,15 @@ data/
       chats/<tid>.jsonl
 ```
 
+### 默认模型
+
+- `config.default_models` 按 `claude` / `codex` 配置，初始为 `claude-opus-5` / `gpt-5.5`。
+  `Config.mutate`、持久化结构、设置 API 必须一起保留此字段；更改默认模型不改已有空间。
+- 创建时将默认模型保存到 `sessions.default_model`；老空间在新版服务首次启动时补齐一次。
+  对话请求未指定模型时，服务端用空间保存的值，前端也用同一字段初始化并显示具体名称。
+- `SeedDefaultModel` 必须排在 `SeedCredentials` 后，把空间默认模型写进 CLI 配置（含 Codex
+  当前启用的 profile）；否则账号池的 config 会覆盖它。只改模型，保留 provider、推理强度、MCP。
+
 ### 聊天
 
 - `GET /api/sessions/{id}/chat` 是一个会话一个 room 的广播模型；同一房间同一时刻只跑一个回合。

@@ -638,11 +638,15 @@
               <div class="sec-intro">
                 <div>
                   <h2>模型管理</h2>
-                  <p>对话输入框「模型选择」菜单里的候选列表。新模型上线时在这里补一行即可，无需重新构建。</p>
+                  <p>分别设置两种 Agent 的默认模型，新建工作空间时生效。也可以维护对话中的可选模型。</p>
                 </div>
               </div>
               <div class="card">
                 <h3 data-agent="claude">Claude Code</h3>
+                <div class="model-default">
+                  <label for="mdl-claude-default">新空间默认模型</label>
+                  <select id="mdl-claude-default" aria-label="Claude Code 新空间默认模型"></select>
+                </div>
                 <div class="model-rows" data-agent="claude"></div>
                 <div class="model-add">
                   <input id="mdl-claude-label" type="text" placeholder="显示名称，如 Fable 5">
@@ -652,6 +656,10 @@
               </div>
               <div class="card">
                 <h3 data-agent="codex">Codex CLI</h3>
+                <div class="model-default">
+                  <label for="mdl-codex-default">新空间默认模型</label>
+                  <select id="mdl-codex-default" aria-label="Codex 新空间默认模型"></select>
+                </div>
                 <div class="model-rows" data-agent="codex"></div>
                 <div class="model-add">
                   <input id="mdl-codex-label" type="text" placeholder="显示名称">

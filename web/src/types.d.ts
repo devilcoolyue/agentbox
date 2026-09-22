@@ -16,6 +16,8 @@ export interface Session {
   /** "claude" | "codex"，服务端不保证只有这两个值，故留 string */
   agent: string;
   account_id: string;
+  /** 创建空间时保存的默认模型。 */
+  default_model: string;
   container_id?: string;
   status: string;
   chat_session?: string;
@@ -356,6 +358,7 @@ export interface Settings {
   timezone: string;
   container: ContainerLimits;
   models: Record<string, ModelOption[]>;
+  default_models: Record<string, string>;
   terminal_tips: TerminalTips;
   tunnel: TunnelConfig;
   /** SOCKS 代理是否真的在监听 */

@@ -180,6 +180,9 @@
 .px-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
 /* 模型列表 */
+.model-default { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.model-default label { font-size: 13px; color: var(--muted); }
+.model-default .select-trigger, .model-default select:not(.select-native) { flex: 1; min-width: 180px; }
 .model-rows { display: flex; flex-direction: column; }
 .model-row {
   display: flex; align-items: center; gap: 12px;

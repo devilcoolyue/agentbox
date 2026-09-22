@@ -686,6 +686,7 @@ $("attach-input").addEventListener("change", () => {
  * 另有「自定义模型…」可手输任意模型 ID，新模型无需改代码。 */
 const FALLBACK_MODELS = {
     claude: [
+        { id: "claude-opus-5", label: "Opus 5" },
         { id: "claude-fable-5", label: "Fable 5" },
         { id: "claude-opus-4-8", label: "Opus 4.8" },
         { id: "claude-sonnet-5", label: "Sonnet 5" },
@@ -708,18 +709,24 @@ export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[1m\])?$/;
 function modelOpts() {
     const agent = (S.current && S.current.agent);
     const fromSrv = S.models && S.models[agent];
-    if (fromSrv && fromSrv.length)
-        return fromSrv;
-    return FALLBACK_MODELS[agent] || FALLBACK_MODELS.claude;
+    const opts = [...(fromSrv?.length ? fromSrv : FALLBACK_MODELS[agent] || FALLBACK_MODELS.claude)];
+    const initial = S.current?.default_model;
+    if (initial && !opts.some((o) => o.id === initial)) {
+        opts.unshift({ id: initial, label: initial });
+    }
+    return opts;
 }
 function pickKey() { return "agentbox_pick_" + (S.current ? S.current.id : ""); }
 function modelLabel(v) {
     if (!v)
-        return "默认模型";
+        v = workspaceModel();
     const hit = modelOpts().find((o) => o.id === v);
     return hit ? hit.label : v; // 自定义 ID 直接展示
 }
 function effortLabel(v) { return (EFFORT_OPTS.find((o) => o.v === v) || EFFORT_OPTS[0]).l; }
+function workspaceModel() {
+    return S.current?.default_model || (S.current?.agent === "codex" ? "gpt-5.5" : "claude-opus-5");
+}
 export function loadPick() {
     let p = {};
     try {
@@ -727,7 +734,7 @@ export function loadPick() {
     }
     catch (_) { }
     S.pick = {
-        model: typeof p.model === "string" && (p.model === "" || MODEL_ID_RE.test(p.model)) ? p.model : "",
+        model: typeof p.model === "string" && MODEL_ID_RE.test(p.model) ? p.model : workspaceModel(),
         effort: EFFORT_OPTS.some((o) => o.v === p.effort) ? p.effort : "",
     };
     renderPickPill();
@@ -759,7 +766,7 @@ function customModel() {
 }
 function choose(kind, v) {
     if (kind === "model")
-        S.pick.model = v;
+        S.pick.model = v || workspaceModel();
     else
         S.pick.effort = v;
     savePick();
@@ -771,7 +778,7 @@ async function askCustomModel() {
         title: "自定义模型",
         label: "模型 ID",
         value: customModel(),
-        hint: "留空恢复默认模型。",
+        hint: `留空恢复为 ${modelLabel(workspaceModel())}。`,
         validate: (s) => (s.trim() && !MODEL_ID_RE.test(s.trim())
             ? "模型 ID 格式不合法（字母数字开头，可含 . _ -）" : ""),
     });
@@ -784,7 +791,7 @@ function optList(kind) {
     if (kind === "effort") {
         return EFFORT_OPTS.map((o) => pickOpt(o.l, o.sub || "", S.pick.effort === o.v, () => choose("effort", o.v)));
     }
-    const out = [pickOpt("默认模型", "跟随账号配置", S.pick.model === "", () => choose("model", ""))];
+    const out = [];
     for (const o of modelOpts()) {
         out.push(pickOpt(o.label, o.id, S.pick.model === o.id, () => choose("model", o.id)));
     }

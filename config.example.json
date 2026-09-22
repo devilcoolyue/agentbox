@@ -30,6 +30,10 @@
       "password": "proxy-pass"
     }
   ],
+  "default_models": {
+    "codex": "gpt-5.5",
+    "claude": "claude-opus-5"
+  },
   "pricing": {
     "codex": {
       "input": 5.0, "cache_read": 0.5, "cache_write": 0.0, "output": 30.0,

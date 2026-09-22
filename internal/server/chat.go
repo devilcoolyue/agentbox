@@ -269,6 +269,10 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		return
 	}
 
+	if model == "" {
+		model = sess.DefaultModel
+	}
+
 	// 记录发消息前该线程的状态：首条消息且尚无标题时，回合成功后据首条
 	// 消息让模型生成一个简洁标题。房间占用期间线程不会被切换，tid 稳定，
 	// 用量流水也挂在它上面。

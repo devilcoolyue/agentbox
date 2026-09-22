@@ -324,6 +324,7 @@ type Config struct {
 	Accounts       []Account                `json:"accounts"`
 	Proxies        []Proxy                  `json:"proxies,omitempty"`
 	Models         map[string][]ModelOption `json:"models,omitempty"`
+	DefaultModels  map[string]string        `json:"default_models"`
 	TerminalTips   TerminalTips             `json:"terminal_tips"`
 	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
 
@@ -364,6 +365,7 @@ func Load(path string) (*Config, error) {
 	}
 	if len(cfg.Models[AgentClaude]) == 0 {
 		cfg.Models[AgentClaude] = []ModelOption{
+			{ID: "claude-opus-5", Label: "Opus 5"},
 			{ID: "claude-fable-5", Label: "Fable 5"},
 			{ID: "claude-opus-4-8", Label: "Opus 4.8"},
 			{ID: "claude-sonnet-5", Label: "Sonnet 5"},
@@ -376,6 +378,8 @@ func Load(path string) (*Config, error) {
 			{ID: "gpt-5.5-codex", Label: "GPT-5.5 Codex"},
 		}
 	}
+
+	cfg.initDefaultModels()
 
 	// 未配置 terminal_tips（老配置文件里没这一块）时，补上原来的单条提示，
 	// 避免终端页顶栏空掉。已显式配置的（哪怕 interval 为 0）尊重原样。
@@ -534,6 +538,9 @@ func (c *Config) validateLocked() error {
 			}
 		}
 	}
+	if err := c.validateDefaultModels(); err != nil {
+		return err
+	}
 	if c.TerminalTips.IntervalSec < 0 || c.TerminalTips.IntervalSec > 3600 {
 		return fmt.Errorf("terminal_tips.interval_sec must be between 0 and 3600 (0 关闭轮播)")
 	}
@@ -573,6 +580,7 @@ type persistConfig struct {
 	Accounts       []persistAccount         `json:"accounts"`
 	Proxies        []Proxy                  `json:"proxies,omitempty"`
 	Models         map[string][]ModelOption `json:"models,omitempty"`
+	DefaultModels  map[string]string        `json:"default_models"`
 	TerminalTips   TerminalTips             `json:"terminal_tips"`
 	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
 }
@@ -595,6 +603,7 @@ func (c *Config) saveLocked() error {
 		Accounts:       make([]persistAccount, 0, len(c.Accounts)),
 		Proxies:        c.Proxies,
 		Models:         c.Models,
+		DefaultModels:  c.DefaultModels,
 		TerminalTips:   c.TerminalTips,
 		Pricing:        c.Pricing,
 	}
@@ -889,6 +898,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Accounts:       append([]Account(nil), c.Accounts...),
 		Proxies:        append([]Proxy(nil), c.Proxies...),
 		Models:         c.Models,
+		DefaultModels:  c.DefaultModels,
 		TerminalTips:   c.TerminalTips,
 		// 这份工作副本会被整体写回 config.json：**漏抄一个字段就等于从文件里
 		// 删掉它**。加字段时必须同时加到这里。
@@ -918,6 +928,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.Accounts = work.Accounts
 	c.Proxies = work.Proxies
 	c.Models = work.Models
+	c.DefaultModels = work.DefaultModels
 	c.TerminalTips = work.TerminalTips
 	c.Pricing = work.Pricing
 	return nil
@@ -933,6 +944,7 @@ type SettingsPatch struct {
 	TimeZone       *string                  `json:"timezone"`
 	Container      *ContainerLimits         `json:"container"`
 	Models         map[string][]ModelOption `json:"models"`
+	DefaultModels  map[string]string        `json:"default_models"`
 	Tunnel         *TunnelConfig            `json:"tunnel"`
 	ProxyBridge    *ProxyBridgeConfig       `json:"proxy_bridge"`
 	TerminalTips   *TerminalTips            `json:"terminal_tips"`
@@ -966,6 +978,12 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.Models != nil {
 			w.Models = p.Models
+		}
+		if p.DefaultModels != nil {
+			w.DefaultModels = w.defaultModels()
+			for agent, model := range p.DefaultModels {
+				w.DefaultModels[agent] = strings.TrimSpace(model)
+			}
 		}
 		if p.Tunnel != nil {
 			w.Tunnel = *p.Tunnel
