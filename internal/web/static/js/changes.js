@@ -58,7 +58,7 @@ export async function loadChanges() {
     CH.repos = data.repos || [];
     renderRepoPick();
     if (!data.is_repo) {
-        listMsg("工作区里没有 Git 仓库。可在终端里 git init，或把项目 clone 进来再回来审查改动。");
+        listMsg("当前空间没有 Git 仓库。在终端中初始化或克隆项目后，即可查看改动。");
         setActions(false);
         return;
     }
@@ -83,7 +83,7 @@ function renderRepoPick() {
     sel.replaceChildren(...CH.repos.map((r) => {
         const o = document.createElement("option");
         o.value = r;
-        o.textContent = r || "（工作区根目录）";
+        o.textContent = r || "（空间文件根目录）";
         return o;
     }));
     setSelectValue(sel, CH.repo);
@@ -326,7 +326,7 @@ let discardPath = "";
 function openDiscard(path) {
     discardPath = path || "";
     $("git-discard-title").textContent = path ? "丢弃文件改动" : "丢弃全部改动";
-    const where = CH.repo ? `仓库「${CH.repo}」` : "工作区";
+    const where = CH.repo ? `仓库「${CH.repo}」` : "空间文件根目录";
     $("git-discard-text").textContent = path
         ? `确认丢弃「${path}」的改动？`
         : `确认丢弃${where}里所有未提交的改动？`;

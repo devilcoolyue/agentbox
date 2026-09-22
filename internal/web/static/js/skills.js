@@ -28,13 +28,13 @@ let paneGen = 0;
 /* 来源徽章：会话自装 / 用户模板 / 服务器模板。只有「本会话」范围才有意义，
  * 因为模板范围里的东西按定义都来自模板。 */
 const SOURCE_LABEL = {
-    session: "会话自装",
+    session: "空间自装",
     template: "我的模板",
     global: "服务器模板",
 };
 const SOURCE_HINT = {
-    session: "只装在这个会话里。想让所有会话都有，点「复制到我的模板」。",
-    template: "来自你的模板，每个新会话都会自动带上。",
+    session: "仅在当前工作空间使用。复制到「我的模板」后，可供其他空间复用。",
+    template: "来自你的模板，工作空间启动时自动同步。",
     global: "来自服务器模板，由管理员统一下发给所有用户。",
 };
 function listMsg(msg) {
@@ -122,8 +122,8 @@ function renderList() {
     $("skills-count").textContent = n ? `${n} 个技能` : "";
     if (!n) {
         listMsg(SK.scope === "session"
-            ? "这个会话还没有技能。用右上角「安装技能」上传，或切到「我的模板」把常用技能一次性铺给所有会话。"
-            : "模板里还没有技能。装进这里的技能，你名下每个会话启动时都会自动带上。");
+            ? "当前空间还没有技能。点击「安装技能」，或从「我的模板」中选择技能安装。"
+            : "模板里还没有技能。安装到这里后，你的各个工作空间启动时都会自动同步。");
         detailMsg("");
         return;
     }
@@ -385,10 +385,10 @@ function renderDetail(det) {
     actions.className = "skill-head-actions";
     const move = document.createElement("button");
     move.className = "btn btn-sm";
-    move.textContent = SK.scope === "session" ? "复制到我的模板" : "装到本会话";
+    move.textContent = SK.scope === "session" ? "复制到我的模板" : "装到本空间";
     setTip(move, SK.scope === "session"
-        ? "复制进模板后，你名下每个会话启动时都会带上它"
-        : "把模板里的这个技能立刻装进当前会话，不必等下次启动");
+        ? "复制进模板后，你名下每个工作空间启动时都会带上它"
+        : "把模板里的这个技能立刻装进当前工作空间，不必等下次启动");
     move.addEventListener("click", () => copySkill(det.name, move));
     const del = document.createElement("button");
     del.className = "btn btn-sm btn-danger";
@@ -534,7 +534,7 @@ async function copySkill(name, btn) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ to }),
         });
-        toast(to === "template" ? "已复制到模板，新会话启动时自动带上" : "已装进本会话");
+        toast(to === "template" ? "已复制到模板，各工作空间下次启动时同步" : "已安装到本空间");
         loadSkills();
     }
     catch (e) {
@@ -548,14 +548,14 @@ async function removeSkill(name) {
     const sess = S.current;
     if (!sess)
         return;
-    const where = SK.scope === "session" ? "这个会话" : "你的模板";
+    const where = SK.scope === "session" ? "当前工作空间" : "你的模板";
     const ok = await askConfirm(`确认从${where}删除技能「${name}」？`, {
         title: "删除技能",
         danger: true,
         okLabel: "删除",
         hint: SK.scope === "session"
-            ? "若它来自模板，下次会话启动还会被铺回来；要彻底去掉请到「我的模板」里删。"
-            : "已经铺进各个会话的副本不会跟着消失，需要各自删除。",
+            ? "若它来自模板，下次工作空间启动还会被铺回来；要彻底去掉请到「我的模板」里删。"
+            : "已经铺进各个工作空间的副本不会跟着消失，需要各自删除。",
     });
     if (!ok)
         return;
@@ -587,7 +587,7 @@ $("btn-skills-refresh").addEventListener("click", loadSkills);
 /* ---- 安装弹窗：本地上传 / 官方市场 ---- */
 const dlgInstall = () => $("dlg-skill-install");
 function scopeLabel() {
-    return SK.scope === "session" ? "本会话" : "我的模板";
+    return SK.scope === "session" ? "本空间" : "我的模板";
 }
 $("btn-skill-install").addEventListener("click", () => {
     $("skill-install-target").textContent = scopeLabel();

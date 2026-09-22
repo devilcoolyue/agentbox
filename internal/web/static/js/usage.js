@@ -264,13 +264,13 @@ function renderRows(data) {
         tr.appendChild(u);
         // 会话名 + 账号。会话被删掉后名字为空，退回显示 id：这行消耗真实发生过，
         // 不能因为会话没了就不显示。
-        const { td: sess, v: sessv } = cellEl("会话", "u-cell-sess");
+        const { td: sess, v: sessv } = cellEl("工作空间", "u-cell-sess");
         const name = document.createElement("div");
         name.className = "u-sess";
         name.textContent = r.session_name || r.session_id;
         name.title = name.textContent;
         if (!r.session_name)
-            setTip(name, "会话已删除");
+            setTip(name, "工作空间已删除");
         const acct = document.createElement("div");
         acct.className = "u-sub";
         acct.textContent = r.account_label || r.account_id || "—";
@@ -618,7 +618,7 @@ async function exportCSV() {
             toast(`只导出了${asc ? "最早" : "最近"}的 ${data.rows.length} 行（共 ${data.total.rows} 行），` +
                 "请缩小时间范围后分批导出", true);
         }
-        const head = [`时间（${usageTimeZone}）`, "用户", "会话", "会话ID", "账号", "Agent", "模型", "类型", "计费",
+        const head = [`时间（${usageTimeZone}）`, "用户", "工作空间", "工作空间ID", "账号", "Agent", "模型", "类型", "计费",
             "输入", "输出", "缓存读取", "缓存写入", "合计Token", "费用USD",
             "首字ms", "总耗时ms", "模型耗时ms", "回合ID"];
         const lines = [head.join(",")];

@@ -91,7 +91,7 @@ var usageWindowLabels = []struct {
 func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	acct, ok := s.cfg.Account(sess.AccountID)
 	if !ok {
-		writeErr(w, http.StatusNotFound, "会话绑定的账号已不存在")
+		writeErr(w, http.StatusNotFound, "工作空间绑定的账号已不存在")
 		return
 	}
 	if acct.Type != config.AgentClaude {

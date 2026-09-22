@@ -194,8 +194,8 @@ export function renderSidebar() {
     if (!S.sessions.length) {
         const p = document.createElement("p");
         p.className = "session-empty";
-        p.innerHTML = '<span class="session-empty-icon" aria-hidden="true">—</span><span class="session-empty-text">还没有会话，点击上方新建。</span>';
-        setTip(p, "还没有会话，点击上方新建");
+        p.innerHTML = '<span class="session-empty-icon" aria-hidden="true">—</span><span class="session-empty-text">还没有工作空间，点击上方新建。</span>';
+        setTip(p, "还没有工作空间，点击上方新建");
         list.appendChild(p);
     }
     for (const sess of S.sessions) {

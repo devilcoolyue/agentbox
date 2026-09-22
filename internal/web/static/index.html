@@ -117,7 +117,7 @@
   <form id="login-form" class="login-card">
     <div class="mascot mascot-login" data-mascot aria-hidden="true"></div>
     <div class="wordmark"><span data-mark></span>AGENTBOX<span class="cursor">▊</span></div>
-    <p class="login-hint">开箱即用的编码智能体，跑在你自己的服务器上</p>
+    <p class="login-hint">在你的服务器上，使用独立的 Agent 工作空间</p>
     <input id="login-user" type="text" placeholder="账号" autocomplete="username" autocapitalize="none" spellcheck="false" required>
     <input id="login-pass" type="password" placeholder="密码" autocomplete="current-password" required>
     <button type="submit" id="login-btn" class="btn btn-primary">登录</button>
@@ -127,7 +127,7 @@
 
 <!-- 主界面 -->
 <div id="app" class="app hidden">
-  <!-- 顶栏：仅窄屏出现。☰ 抽屉 + 状态灯/会话名（工作台）或页面标题（设置）+ ⋯ 会话操作 -->
+  <!-- 顶栏：仅窄屏出现。☰ 抽屉 + 状态灯/工作空间名（工作台）或页面标题（设置）+ ⋯ 工作空间操作 -->
   <header class="topbar">
     <button id="btn-menu" class="menu-btn" aria-label="打开菜单" aria-expanded="false" aria-controls="sidebar">
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
@@ -140,14 +140,14 @@
       <span id="topbar-title" class="topbar-title"></span>
     </div>
     <div id="kebab-wrap" class="kebab-wrap hidden">
-      <button id="btn-kebab" class="menu-btn" aria-label="会话操作">⋯</button>
+      <button id="btn-kebab" class="menu-btn" aria-label="工作空间操作">⋯</button>
       <div id="kebab-menu" class="kebab-menu hidden">
-        <button id="kb-start"><span class="glyph"></span>启动</button>
-        <button id="kb-stop"><span class="glyph"></span>停止</button>
+        <button id="kb-start"><span class="glyph"></span>启动工作空间</button>
+        <button id="kb-stop"><span class="glyph"></span>停止工作空间</button>
         <button id="kb-usage" class="hidden"><span class="glyph"></span>账号额度</button>
         <div class="sep"></div>
-        <button id="kb-rename"><span class="glyph"></span>重命名会话</button>
-        <button id="kb-delete" class="danger"><span class="glyph"></span>删除会话</button>
+        <button id="kb-rename"><span class="glyph"></span>重命名工作空间</button>
+        <button id="kb-delete" class="danger"><span class="glyph"></span>删除工作空间</button>
       </div>
     </div>
   </header>
@@ -167,14 +167,14 @@
       </div>
 
       <div class="side-create">
-        <button id="btn-new" class="side-new" aria-label="新建会话" data-tip="新建会话">
+        <button id="btn-new" class="side-new" aria-label="新建工作空间" data-tip="新建工作空间">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-          <span class="side-item-label">新建会话</span>
+          <span class="side-item-label">新建工作空间</span>
         </button>
       </div>
 
-      <section class="side-sessions" aria-label="会话">
-        <div class="side-section-head"><span class="side-label">会话</span><span id="session-count" class="side-count">0</span></div>
+      <section class="side-sessions" aria-label="工作空间">
+        <div class="side-section-head"><span class="side-label">工作空间</span><span id="session-count" class="side-count">0</span></div>
         <div id="session-list" class="session-list"></div>
       </section>
 
@@ -228,13 +228,13 @@
     </aside>
 
     <main class="main">
-      <!-- 会话工作台视图 -->
+      <!-- 工作空间工作台视图 -->
       <div id="view-work" class="view">
         <div id="empty" class="empty">
           <div class="mascot mascot-empty" data-mascot aria-hidden="true"></div>
-          <h1 class="empty-title">开箱，即用。</h1>
-          <p class="empty-sub">每个会话都是一个独立容器里的编码智能体——工作区持久保存，随时停、随时续。<br>选择左侧会话继续，或现在拆一个新的。</p>
-          <button id="empty-new" class="btn btn-primary empty-cta">＋ 新建会话</button>
+          <h1 class="empty-title">从一个工作空间开始</h1>
+          <p class="empty-sub">独立运行 Agent，集中管理文件、终端和对话。<br>选择左侧工作空间继续，或新建一个；停止后，文件与对话仍会保留。</p>
+          <button id="empty-new" class="btn btn-primary empty-cta">＋ 新建工作空间</button>
           <div class="empty-ready mono">已就绪<span id="empty-brands" class="empty-brands"></span></div>
         </div>
 
@@ -246,10 +246,10 @@
               <span id="wb-meta" class="wb-meta mono"></span>
             </div>
             <div class="wb-actions">
-              <button id="btn-start" class="btn btn-sm btn-ico">启动</button>
-              <button id="btn-stop" class="btn btn-sm btn-ico">停止</button>
+              <button id="btn-start" class="btn btn-sm btn-ico" aria-label="启动工作空间" data-tip="启动工作空间">启动</button>
+              <button id="btn-stop" class="btn btn-sm btn-ico" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话">停止</button>
               <button id="btn-usage" class="btn btn-sm btn-ico hidden" data-tip="查看该账号的订阅额度">额度</button>
-              <button id="btn-delete" class="btn btn-sm btn-ico btn-danger">删除</button>
+              <button id="btn-delete" class="btn btn-sm btn-ico btn-danger" aria-label="删除工作空间" data-tip="删除工作空间">删除</button>
             </div>
           </header>
 
@@ -283,7 +283,7 @@
               <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话">
                 <span id="thread-title" class="t">新对话</span>
               </button>
-              <button id="btn-thread-new" class="thread-new" data-tip="开启新对话（当前对话保留在历史中，可随时切回）">＋ 新对话</button>
+              <button id="btn-thread-new" class="thread-new" data-tip="在当前工作空间中新建对话，原对话保留在历史中">＋ 新建对话</button>
             </div>
             <!-- 对话通道连接状态：仅在非正常连接时出现，避免占用常态空间 -->
             <div id="chat-conn" class="chat-conn hidden">
@@ -365,7 +365,7 @@
                 </svg>
                 <div id="term-tips" class="term-tips" aria-live="off"></div>
               </div>
-              <!-- 本会话已花：对话 + 终端 + 起标题的总和，term.js 轮询 -->
+              <!-- 本空间已花：对话 + 终端 + 起标题的总和，term.js 轮询 -->
               <div id="term-spend" class="term-spend hidden" role="status"></div>
               <!-- 右侧连接状态：状态点 + 文案 + 手动重连 -->
               <div class="term-conn">
@@ -395,25 +395,24 @@
             <div class="files-bar">
               <div class="files-left">
                 <div class="scope-switch" role="tablist">
-                  <button id="scope-ws" class="scope-btn active">工作区</button>
+                  <button id="scope-ws" class="scope-btn active">空间文件</button>
                   <button id="scope-shared" class="scope-btn">共享目录</button>
                   <span class="help" tabindex="0" aria-label="共享目录说明">?
                     <span class="help-tip" role="tooltip">
-                      <b>共享目录</b>是本账号下<b>所有会话共用</b>的存储空间：放在这里的文件，
-                      其他会话也能看到并读写，适合把代码、构建产物从一个会话传给另一个会话。
-                      容器内路径为 <code>/shared</code>（对话或终端里让 Agent 直接读写该路径即可）。
-                      而「工作区」<code>/workspace</code> 是每个会话独立的，互相看不到。
+                      <b>空间文件</b>（<code>/workspace</code>）仅属于当前工作空间。<br>
+                      <b>共享目录</b>（<code>/shared</code>）供你名下的所有工作空间读写，适合传递代码与构建产物。
+                      在对话或终端中，可让 Agent 直接访问这些路径。
                     </span>
                   </span>
                 </div>
                 <div id="files-crumb" class="files-crumb mono"></div>
               </div>
               <div class="files-actions">
-                <label class="check"><input type="checkbox" id="upload-clear"> <span id="upload-clear-label">上传前清空工作区</span></label>
+                <label class="check"><input type="checkbox" id="upload-clear"> <span id="upload-clear-label">上传前清空空间文件</span></label>
                 <button id="btn-mkdir" class="btn btn-sm">新建文件夹</button>
                 <button id="btn-upload" class="btn btn-sm">上传代码包</button>
                 <input id="upload-input" type="file" class="hidden" multiple accept=".zip,.tar,.tar.gz,.tgz,*/*">
-                <button id="btn-download" class="btn btn-sm">下载工作区 (zip)</button>
+                <button id="btn-download" class="btn btn-sm">下载空间文件 (zip)</button>
               </div>
             </div>
             <div id="upload-progress" class="upload-progress hidden">
@@ -457,14 +456,13 @@
             <div class="skills-bar">
               <div class="skills-left">
                 <div class="scope-switch" role="tablist">
-                  <button id="skill-scope-session" class="scope-btn active">本会话</button>
+                  <button id="skill-scope-session" class="scope-btn active">本空间</button>
                   <button id="skill-scope-template" class="scope-btn">我的模板</button>
                   <span class="help" tabindex="0" aria-label="技能范围说明">?
                     <span class="help-tip" role="tooltip">
-                      <b>本会话</b>的技能装在这个会话的 <code>~/.claude/skills</code>，只有它自己能用。<br>
-                      <b>我的模板</b>会在<b>每次会话启动时</b>铺进你名下的所有会话，适合长期要用的技能：
-                      模板里更新过的技能会推送到已有会话，而你在会话里改过的文件不会被覆盖。
-                      正在运行的会话不会中途生效，用「装到本会话」可以立刻装上。
+                      <b>本空间</b>的技能仅供当前工作空间使用。<br>
+                      <b>我的模板</b>用于复用技能，你的各个工作空间启动时都会同步，逐个文件保留较新的版本。
+                      要立即应用模板中的技能，选择「装到本空间」。
                     </span>
                   </span>
                 </div>
@@ -519,7 +517,7 @@
               <div class="sec-intro">
                 <div>
                   <h2>账号池</h2>
-                  <p>供会话选用的订阅账号与 API Key。凭证保存在服务器上，容器启动时注入，令牌刷新后自动播发到运行中的会话。</p>
+                  <p>创建工作空间时可选用的订阅账号与 API Key。多个空间可共用账号，登录凭证由服务器统一管理和同步。</p>
                 </div>
                 <button id="btn-acct-add" class="btn btn-primary btn-sm">＋ 添加账号</button>
               </div>
@@ -583,7 +581,7 @@
               <div class="sec-intro">
                 <div>
                   <h2>容器与资源</h2>
-                  <p>每个会话容器的镜像与资源限制。保存后对新启动的容器生效，运行中的会话重启后应用。</p>
+                  <p>设置工作空间使用的容器镜像与资源上限。保存后，新启动的空间会应用设置；运行中的空间需停止后再启动。</p>
                 </div>
               </div>
               <div class="card">
@@ -591,7 +589,7 @@
                 <label class="field">
                   <span>镜像名称 <span class="tag live">新容器生效</span></span>
                   <input id="set-image" type="text" class="mono">
-                  <span class="hint">重新构建镜像后无需改动此项，重启会话即可拉起新镜像。</span>
+                  <span class="hint">重新构建镜像后无需改动此项，重启工作空间即可拉起新镜像。</span>
                 </label>
               </div>
               <div class="card">
@@ -624,7 +622,7 @@
               </div>
               <div class="card">
                 <h3>空闲自动停机</h3>
-                <p class="card-desc">会话在无活动（没有对话进行、没有终端连接）达到设定时长后，自动停止其容器以释放内存与 CPU。工作区文件不受影响，下次对话或连终端时会自动重新拉起。设为 0 关闭自动停机。</p>
+                <p class="card-desc">工作空间没有进行中的对话或终端连接，达到设定时长后会自动休眠，释放内存与 CPU。文件和对话保留，发送消息或连接终端即可唤醒。设为 0 可关闭自动休眠。</p>
                 <label class="field">
                   <span>空闲超时（分钟）<span class="tag live">即时生效</span></span>
                   <input id="set-idle" type="number" min="0" step="1" class="mono">
@@ -767,7 +765,7 @@
               </div>
               <div class="card">
                 <h3>用户管理</h3>
-                <p class="card-desc">普通用户用账号密码登录控制台，各自拥有独立的会话与工作区，看不到系统设置。删除用户会一并删除其全部会话容器（工作区文件保留在磁盘上）。</p>
+                <p class="card-desc">普通用户只能访问自己的工作空间，无法查看系统设置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。</p>
                 <div id="user-list" class="user-list"></div>
                 <div class="user-add">
                   <input id="user-new-name" type="text" class="mono" placeholder="用户名（小写字母数字开头，可含 - _）" autocapitalize="none" spellcheck="false">
@@ -807,7 +805,7 @@
               </div>
               <div class="card">
                 <h3>内网反向隧道</h3>
-                <p class="card-desc">用户在自己电脑上运行 abox-link 客户端拨回服务器后，其会话容器可经
+                <p class="card-desc">用户在自己电脑上运行 abox-link 客户端拨回服务器后，其工作空间容器可经
                 SOCKS5 代理与端口映射访问该用户本机可达的内网。放行规则由用户在本机侧声明（默认拒绝），
                 各用户隧道相互隔离。</p>
                 <label class="check"><input type="checkbox" id="set-tunnel-on"> 启用隧道 <span class="tag live">即时生效</span></label>
@@ -850,7 +848,7 @@
               <div class="sec-intro">
                 <div>
                   <h2>运维监控</h2>
-                  <p>后端服务与主机的实时资源占用，以及每个会话容器的 CPU / 内存明细。开启自动刷新时每 5 秒采样一次。</p>
+                  <p>后端服务与主机的实时资源占用，以及每个工作空间容器的 CPU / 内存明细。开启自动刷新时每 5 秒采样一次。</p>
                 </div>
                 <label class="mon-auto"><input type="checkbox" id="mon-auto" checked> 自动刷新</label>
               </div>
@@ -860,14 +858,14 @@
               <div id="mon-tiles" class="mon-tiles"></div>
               <div class="card mon-card">
                 <div class="mon-card-head">
-                  <h3>会话容器</h3>
+                  <h3>工作空间容器</h3>
                   <span id="mon-sub" class="note"></span>
                 </div>
                 <div class="mon-table-wrap">
                   <table class="mon-table">
                     <thead>
                       <tr>
-                        <th>会话</th>
+                        <th>工作空间</th>
                         <th>用户</th>
                         <th>Agent</th>
                         <th>状态</th>
@@ -969,7 +967,7 @@
               <thead>
                 <tr>
                   <th class="col-user">用户</th>
-                  <th>会话 / 账号</th>
+                  <th>工作空间 / 账号</th>
                   <th>模型</th>
                   <th>类型</th>
                   <th class="num">Token</th>
@@ -1029,7 +1027,7 @@
       <div id="view-tunnel" class="view hidden">
         <header class="set-head">
           <h1>内网隧道</h1>
-          <p>在自己的电脑上跑 abox-link 客户端，把「只有你本机能连」的内网借给云端会话里的智能体。</p>
+          <p>在你的电脑上运行 abox-link，让云端工作空间中的 Agent 按需访问你授权的内网服务。</p>
         </header>
 
         <div class="tun-body">
@@ -1073,7 +1071,7 @@
                 <pre id="tun-pair-code" class="tun-cmd mono hidden"></pre>
               </li>
               <li>
-                <b>完成。</b>连接成功后此处状态变为「在线」，会话容器内自动注入
+                <b>完成。</b>连接成功后此处状态变为「在线」，工作空间容器内自动注入
                 <code>$AGENTBOX_INTRANET_PROXY</code>（及 <code>$AGENTBOX_INTRANET_MAPS</code>），
                 智能体即可按需访问你本机可达的内网；断开后自动失效。
               </li>
@@ -1085,14 +1083,15 @@
   </div>
 </div>
 
-<!-- 新建会话 -->
-<dialog id="dlg-new">
+<!-- 新建工作空间 -->
+<dialog id="dlg-new" aria-labelledby="new-title" aria-describedby="new-desc">
   <form id="new-form" method="dialog">
     <div class="dlg-head">
-      <h2>新建会话</h2>
+      <h2 id="new-title">创建 Agent 工作空间</h2>
       <button type="button" id="new-cancel" class="dlg-x" aria-label="关闭">✕</button>
     </div>
-    <label>会话名称
+    <p id="new-desc" class="field-hint">独立运行 Agent，拥有自己的文件、终端和对话。</p>
+    <label>工作空间名称
       <input id="new-name" type="text" maxlength="64" placeholder="例如：订单服务重构" required>
     </label>
     <label>Agent 类型
@@ -1106,7 +1105,7 @@
     </label>
     <p id="new-error" class="login-error hidden"></p>
     <div class="dlg-actions">
-      <button type="submit" id="new-ok" class="btn btn-primary">创建</button>
+      <button type="submit" id="new-ok" class="btn btn-primary">创建工作空间</button>
     </div>
   </form>
 </dialog>
@@ -1168,7 +1167,7 @@
   </div>
   <div class="file-move-nav">
     <div class="scope-switch" role="tablist" aria-label="目标范围">
-      <button type="button" id="file-move-ws" class="scope-btn">工作区</button>
+      <button type="button" id="file-move-ws" class="scope-btn">空间文件</button>
       <button type="button" id="file-move-shared" class="scope-btn">共享目录</button>
     </div>
     <div id="file-move-crumb" class="file-move-crumb mono"></div>
@@ -1229,7 +1228,7 @@
       <button type="button" id="skill-src-local" class="scope-btn active">本地上传</button>
       <button type="button" id="skill-src-market" class="scope-btn">官方市场</button>
     </div>
-    <span class="skill-target">装到：<b id="skill-install-target">本会话</b></span>
+    <span class="skill-target">装到：<b id="skill-install-target">本空间</b></span>
   </div>
 
   <div id="skill-src-local-pane">
@@ -1464,15 +1463,15 @@
 </dialog>
 
 <!-- 内网隧道：状态 + 接入指引 -->
-<!-- 删除会话确认 -->
+<!-- 删除工作空间确认 -->
 <dialog id="dlg-del">
   <form id="del-form" method="dialog">
     <div class="dlg-head">
-      <h2>删除会话</h2>
+      <h2>删除工作空间</h2>
       <button type="button" id="del-cancel" class="dlg-x" aria-label="关闭">✕</button>
     </div>
     <p id="del-text"></p>
-    <label class="check"><input type="checkbox" id="del-purge"> 同时删除工作区文件（不可恢复）</label>
+    <label class="check"><input type="checkbox" id="del-purge"> 同时清除文件、配置和对话记录（不可恢复）</label>
     <div class="dlg-actions">
       <button type="submit" id="del-ok" class="btn btn-danger">删除</button>
     </div>
@@ -1497,7 +1496,7 @@
     </label>
     <label>账号 ID
       <input id="acct-id" type="text" maxlength="32" placeholder="例如：claude-2" class="mono" required>
-      <span class="field-hint">小写字母/数字开头，可含 - 和 _。用于会话关联与凭证目录命名，创建后不可修改；凭证目录自动创建于 data/creds/&lt;ID&gt;。</span>
+      <span class="field-hint">小写字母/数字开头，可含 - 和 _。用于工作空间关联与凭证目录命名，创建后不可修改；凭证目录自动创建于 data/creds/&lt;ID&gt;。</span>
     </label>
     <label>环境变量（可选，每行一条 KEY=VALUE）
       <textarea id="acct-env" rows="2" class="mono" placeholder="ANTHROPIC_BASE_URL=https://…" spellcheck="false"></textarea>
@@ -1622,10 +1621,10 @@
     <span id="tp-count" class="tp-count mono"></span>
     <button id="tp-close" class="dlg-x" aria-label="关闭">✕</button>
   </header>
-  <button id="tp-new" class="btn btn-primary tp-new">＋ 开启新对话</button>
+  <button id="tp-new" class="btn btn-primary tp-new">＋ 新建对话</button>
   <input id="tp-search" class="tp-search" type="search" placeholder="搜索对话标题…" autocomplete="off">
   <div id="tp-list" class="tp-list"></div>
-  <p class="tp-hint">每条对话是独立的上下文，切换后接着聊，互不串扰。</p>
+  <p class="tp-hint">同一工作空间内的对话各自保留上下文，共用空间中的文件和终端。</p>
 </aside>
 
 <!-- 全局离线横幅：与服务器失联时常驻，避免页面看起来一切正常实则数据早已过期 -->

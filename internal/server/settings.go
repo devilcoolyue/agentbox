@@ -205,7 +205,7 @@ func (s *Server) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if n := s.accountSessionCounts()[acct.ID]; n > 0 {
-		writeErr(w, http.StatusConflict, "仍有 "+strconv.Itoa(n)+" 个会话在使用该账号，请先删除这些会话")
+		writeErr(w, http.StatusConflict, "仍有 "+strconv.Itoa(n)+" 个工作空间在使用该账号，请先删除这些工作空间")
 		return
 	}
 	if err := s.cfg.RemoveAccount(acct.ID); err != nil {

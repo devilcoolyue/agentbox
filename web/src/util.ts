@@ -54,7 +54,7 @@ export type WbBusyKind = "start" | "stop";
 
 /* 工作区生命周期遮罩：启动/停止时罩住头部按钮以下的整块工作区，
  * 毛玻璃 + 绿/红点缀，给窄屏（按钮藏在 ⋯ 菜单里）一个明确的进行中反馈。 */
-const WB_BUSY_LABEL: Record<WbBusyKind, string> = { start: "正在启动", stop: "正在停止" };
+const WB_BUSY_LABEL: Record<WbBusyKind, string> = { start: "正在启动工作空间", stop: "正在停止工作空间" };
 export function wbBusy(kind: WbBusyKind) {
   const el = $("wb-busy");
   if (!el) return;

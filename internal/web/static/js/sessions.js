@@ -170,7 +170,7 @@ async function doStop() {
 function openDeleteDlg() {
     if (!S.current)
         return;
-    $("del-text").textContent = `确认删除会话「${S.current.name}」？容器会被移除。`;
+    $("del-text").textContent = `确认删除工作空间「${S.current.name}」？空间将从列表移除，容器被删除。文件、配置和对话记录默认保留在服务器磁盘上。`;
     $("del-purge").checked = false;
     $("dlg-del").showModal();
 }
@@ -205,10 +205,10 @@ async function renameSession() {
     if (!sess)
         return;
     const name = await askPrompt({
-        title: "重命名会话",
-        label: "会话名称",
+        title: "重命名工作空间",
+        label: "工作空间名称",
         value: sess.name,
-        hint: "1-64 个字符。工作区、对话记录都不受影响。",
+        hint: "1–64 个字符，仅修改空间名称，文件与对话记录保留。",
         validate: (v) => {
             const t = v.trim();
             if (!t)
@@ -231,7 +231,7 @@ async function renameSession() {
         renderHead();
         renderSidebar();
         refreshAll();
-        toast("会话已重命名");
+        toast("工作空间已重命名");
     }
     catch (e) {
         toast("重命名失败：" + e.message, true);
@@ -311,7 +311,7 @@ function fillAccountSelect() {
     for (const a of S.accounts.filter((x) => x.type === agent)) {
         const o = document.createElement("option");
         o.value = a.id;
-        o.textContent = `${a.label}（${a.sessions} 个会话在用）`;
+        o.textContent = `${a.label}（${a.sessions} 个工作空间在用）`;
         sel.appendChild(o);
     }
     if (!sel.children.length) {

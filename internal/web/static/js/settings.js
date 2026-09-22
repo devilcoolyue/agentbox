@@ -129,7 +129,7 @@ function acctRow(a) {
     if (stExtra)
         state.appendChild(Object.assign(document.createElement("span"), { textContent: stExtra }));
     state.appendChild(Object.assign(document.createElement("span"), {
-        textContent: a.sessions > 0 ? a.sessions + " 个会话在用" : "暂无会话使用",
+        textContent: a.sessions > 0 ? a.sessions + " 个工作空间在用" : "暂无工作空间使用",
     }));
     // 出口 IP 直接标在账号行上：它决定官方那边看到的是谁，排查封号时第一眼要看的
     // 就是这个，藏进编辑弹窗里等于没有。
@@ -156,7 +156,7 @@ function acctRow(a) {
     del.textContent = "删除";
     if (a.sessions > 0) {
         del.disabled = true;
-        setTip(del, "有会话在用，请先删除对应会话");
+        setTip(del, "有工作空间在用，请先删除对应工作空间");
     }
     else {
         del.addEventListener("click", () => openAcctDel(a));
@@ -393,7 +393,7 @@ $("auth-finish").addEventListener("click", async () => {
         const res = await api(`/accounts/${authAcct.id}/oauth/finish`, {
             method: "POST", body: JSON.stringify({ code }),
         });
-        authMsg(`登录成功${res.subscription_type ? "（" + res.subscription_type + " 订阅）" : ""}，会话将在下次对话或拉起时使用新凭证`);
+        authMsg(`登录成功${res.subscription_type ? "（" + res.subscription_type + " 订阅）" : ""}，工作空间将在下次对话或拉起时使用新凭证`);
         refreshAll();
     }
     catch (e) {
@@ -718,7 +718,7 @@ function userRow(u) {
     role.textContent = u.role === "admin" ? "管理员" : "普通用户";
     const meta = document.createElement("span");
     meta.className = "u-meta";
-    meta.textContent = u.sessions > 0 ? u.sessions + " 个会话" : "暂无会话";
+    meta.textContent = u.sessions > 0 ? u.sessions + " 个工作空间" : "暂无工作空间";
     const quota = quotaChip(u.quota);
     const acts = document.createElement("div");
     acts.className = "u-actions";
@@ -758,7 +758,7 @@ function userRow(u) {
         del.addEventListener("click", async () => {
             const ok = await askConfirm("删除用户「" + u.name + "」？", {
                 title: "删除用户",
-                hint: "其全部会话容器将一并删除，工作区文件保留在磁盘上。",
+                hint: "该用户的全部工作空间和容器将一并移除，文件保留在服务器磁盘上。",
                 okLabel: "删除", danger: true,
             });
             if (!ok)
@@ -858,7 +858,7 @@ async function loadSystem() {
     add("运行时", "agentbox · " + sys.go_version);
     add("Docker", sys.docker_version ? sys.docker_version : "无法连接");
     add("监听地址", sys.listen);
-    add("会话", `${sys.sessions_running} 个运行中 / 共 ${sys.sessions_total} 个`);
+    add("工作空间", `${sys.sessions_running} 个运行中 / 共 ${sys.sessions_total} 个`);
     add("账号池", sys.accounts + " 个账号");
     add("用户", sys.users + " 个（含管理员）");
     add("数据目录", sys.data_dir);
@@ -946,7 +946,7 @@ function renderMonitorTiles(m) {
         const hint = diskPct >= 90 ? "数据盘将满，尽快清理" : "数据目录所在磁盘";
         tiles.push(monTile("磁盘水位", fmtBytes(h.disk_used) + " / " + fmtBytes(h.disk_total), diskPct.toFixed(0) + "% 已用 · " + hint, diskPct));
     }
-    tiles.push(monTile("运行容器", su.running + " / " + su.total, "个会话容器在运行"), monTile("容器合计", cpu(su.cpu_percent), "内存 " + fmtBytes(su.mem_usage)));
+    tiles.push(monTile("运行容器", su.running + " / " + su.total, "个工作空间容器在运行"), monTile("容器合计", cpu(su.cpu_percent), "内存 " + fmtBytes(su.mem_usage)));
     box.replaceChildren(...tiles);
 }
 function renderMonitorTable(m) {
@@ -954,7 +954,7 @@ function renderMonitorTable(m) {
         ? "采样窗口 " + (m.window_ms / 1000).toFixed(1) + " 秒"
         : "首次采样中";
     $("mon-sub").textContent =
-        `共 ${m.summary.total} 个会话 · ${m.summary.running} 个运行中 · ${win}`;
+        `共 ${m.summary.total} 个工作空间 · ${m.summary.running} 个运行中 · ${win}`;
     const tb = $("mon-tbody");
     tb.replaceChildren();
     if (!m.containers.length) {
@@ -962,7 +962,7 @@ function renderMonitorTable(m) {
         const td = document.createElement("td");
         td.colSpan = 9;
         td.className = "mon-empty";
-        td.textContent = "暂无会话容器";
+        td.textContent = "暂无工作空间容器";
         tr.appendChild(td);
         tb.appendChild(tr);
         return;

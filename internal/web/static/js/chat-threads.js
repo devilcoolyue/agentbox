@@ -210,14 +210,14 @@ export async function newThread() {
         closeThreadPanel();
         if (res.created) {
             emit("thread-changed");
-            toast("已开启新对话，之前的对话在历史列表里可随时切回");
+            toast("已新建对话，之前的对话可在历史列表中继续");
         }
         else {
             toast("当前已是新对话");
         }
     }
     catch (e) {
-        toast("开启新对话失败：" + e.message, true);
+        toast("新建对话失败：" + e.message, true);
     }
 }
 async function delThread(t) {

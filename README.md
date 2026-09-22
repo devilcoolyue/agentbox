@@ -3,33 +3,33 @@
 > 品牌资产：logo 与吉祥物「盒仔」的 SVG 在 `internal/web/static/img/`（页面内联的同源版本见 `index.html` 的 `<template>`）。
 > abox-link 是另一个二进制、各自 `go:embed`，所以 `internal/linkapp/static/img/` 存了一份副本——改了品牌资产记得两边都换。
 
-在自己的 Linux 服务器上，用 Docker 按需拉起 **Claude Code / Codex CLI** 编码实例，通过浏览器远程使用：聊天式下发任务、进入容器终端、上传代码包、下载工作区。会话关闭后工作区与对话历史持久保存，随时重新打开继续。
+在自己的 Linux 服务器上，用 Docker 按需拉起 **Claude Code / Codex CLI** 编码实例，通过浏览器远程使用：聊天式下发任务、进入容器终端、上传代码包、下载空间文件。工作空间停止后文件与对话历史持久保存，随时重新打开继续。
 
 ```
-浏览器客户端 ──(HTTPS/WSS)──> agentbox 服务端 ──(Docker API)──> 会话容器
+浏览器客户端 ──(HTTPS/WSS)──> agentbox 服务端 ──(Docker API)──> 工作空间容器
    · 对话（headless 流式）        · Go 单二进制               · claude / codex CLI
    · 终端（PTY 透传）            · 账号池调度                 · /workspace   ← 宿主机挂载
-   · 上传/下载代码包             · 会话/历史持久化            · /home/agent  ← 宿主机挂载
+   · 上传/下载代码包             · 空间/历史持久化            · /home/agent  ← 宿主机挂载
 ```
 
 ## 核心概念
 
-- **会话（Session）**：一个独立容器 + 一块宿主机持久目录（`data/users/<user>/sessions/<id>/`，含 `workspace` 与 `home`）。停止会话只是停容器，数据不丢；重新打开自动拉起容器并通过 `--resume` 续接对话。
-- **共享目录（Shared）**：每个用户一块跨会话共用的目录（`data/users/<user>/shared/`），挂载到该用户所有会话容器的 `/shared`。会话工作区互相隔离，需要在会话间传递代码/产物时放这里；文件页签可切换「工作区 / 共享目录」进行上传下载，也可删除文件/目录，或把它们移动到两个范围内的任意目录（API 加 `?scope=shared`）。
-- **侧栏导航**：桌面端可通过顶部「收起侧栏」图标切换为图标栏，浏览器会记住展开状态；收起后悬停或键盘聚焦可查看会话名称与菜单提示。会话列表占用剩余高度并独立滚动，底部将使用记录与剩余额度合为一行，连接状态、隧道、设置和「更多」合为工具栏；主题与退出登录收在「更多」中。窄屏使用完整抽屉菜单，支持 Esc 先关闭弹层、再关闭抽屉。
+- **工作空间（Workspace）**：一个独立容器 + 一块宿主机持久目录（`data/users/<user>/sessions/<id>/`，含 `workspace` 与 `home`）。每个空间独立运行 Agent，包含文件、终端和多条对话；停止只关闭容器，文件、配置与对话记录保留，再次启动可继续使用。页面统一称「工作空间」，内部数据模型与 API 仍使用 `session` / `/api/sessions`。删除空间默认移除容器和列表入口，数据留在服务器磁盘上；勾选清除数据会一并删除文件、home 配置与对话记录。
+- **共享目录（Shared）**：每个用户一块跨工作空间共用的目录（`data/users/<user>/shared/`），挂载到该用户所有工作空间容器的 `/shared`。各空间的工作目录相互隔离，需要跨空间传递代码/产物时放这里；文件页签可切换「空间文件 / 共享目录」进行上传下载，也可删除文件/目录，或把它们移动到两个范围内的任意目录（API 加 `?scope=shared`）。
+- **侧栏导航**：桌面端可通过顶部「收起侧栏」图标切换为图标栏，浏览器会记住展开状态；收起后悬停或键盘聚焦可查看工作空间名称与菜单提示。工作空间列表占用剩余高度并独立滚动，底部将使用记录与剩余额度合为一行，连接状态、隧道、设置和「更多」合为工具栏；主题与退出登录收在「更多」中。窄屏使用完整抽屉菜单，支持 Esc 先关闭弹层、再关闭抽屉。
 - **主题**：登录页默认跟随系统，登录后可在侧栏「更多 → 外观」中选择跟随系统、浅色、深色三种模式，选择即时生效并保存在浏览器中。abox-link 本机控制台只跟随系统深浅色，没有切换钮。
 - **下拉选择**：主控制台使用统一的下拉组件，跟随深浅主题；支持方向键、Enter 选择和 Esc 关闭，长列表（8 项起）可搜索，窄屏与弹窗内自动调整展开位置。
 - **粘贴图片**：对话输入框和终端里都可以直接 Ctrl+V 粘贴截图。图片自动上传到 `/shared/.images/`，对话里以 `[Image #N]` 占位（发送时替换为容器内路径，Agent 用 Read 工具查看），消息里显示可点击缩略图；终端里直接注入路径文本，路径可点击弹出预览。图片保留 48 小时后由服务端自动清理；**仍被对话记录引用的附件不会被清掉**，历史里的缩略图不会随时间变成失效占位。
-- **账号池（Accounts）**：配置多个订阅账号或 API Key，新建会话时选择。凭证在每次启动时从池目录同步进会话 home。
-- **技能与 MCP**：容器里是原版 CLI，skill / MCP 按官方方式装即可；每个会话 home 相互独立，要让所有会话都预置，把文件放进 `data/home-template/`（见「技能（Skill）与 MCP」一节）。
+- **账号池（Accounts）**：配置多个订阅账号或 API Key，新建工作空间时选择。凭证在每次启动时从池目录同步进工作空间 home。
+- **技能与 MCP**：容器里是原版 CLI，skill / MCP 按官方方式装即可；每个工作空间 home 相互独立，要让所有工作空间都预置，把文件放进 `data/home-template/`（见「技能（Skill）与 MCP」一节）。
 - **两种交互**：
-  - **对话**：服务端用 `claude -p --output-format stream-json`（或 `codex exec --json`）跑无头回合，事件流经 WebSocket 推给浏览器。一个会话可以开多条**对话线程**（各自独立上下文，可随时切回继续），每条线程落盘为 `chats/<线程id>.jsonl` 并记录自己的 provider 会话 id 供 `--resume` 续聊；旧版单文件 `chat.jsonl` 首次访问时自动迁移。历史加载超时或失败时页面会显示重试入口，并在恢复前暂停发送，避免把消息发进尚未确认的线程。
-  - **终端**：浏览器 xterm.js ⇄ WebSocket ⇄ `docker exec` PTY，可选进 Shell 或直接进 Agent 交互界面。顶栏右侧显示**本会话已花**（对话 + 终端 + 起标题的合计金额与 token），在终端里手敲 Agent 花掉的量通常一秒内就计入。
+  - **对话**：服务端用 `claude -p --output-format stream-json`（或 `codex exec --json`）跑无头回合，事件流经 WebSocket 推给浏览器。一个工作空间可以开多条**对话线程**（各自独立上下文，可随时切回继续），每条线程落盘为 `chats/<线程id>.jsonl` 并记录自己的 provider 会话 id 供 `--resume` 续聊；旧版单文件 `chat.jsonl` 首次访问时自动迁移。历史加载超时或失败时页面会显示重试入口，并在恢复前暂停发送，避免把消息发进尚未确认的线程。
+  - **终端**：浏览器 xterm.js ⇄ WebSocket ⇄ `docker exec` PTY，可选进 Shell 或直接进 Agent 交互界面。顶栏右侧显示**本空间已花**（对话 + 终端 + 起标题的合计金额与 token），在终端里手敲 Agent 花掉的量通常一秒内就计入。
 - **长对话定位**：上滚离开底部后，输入框上方会浮出返回最新消息按钮，接近底部时自动收起。
-- **变更审查**：工作台「变更」页签直接看会话工作区里 Git 仓库相对上次提交的改动（文件列表 + 彩色 diff），右侧可在「差异 / 完整内容」之间切换——新增的文件本来就没有 diff，选中时直接显示文件内容——并可一键提交或丢弃（单文件/全部）。工作区根不是仓库时会往下找两层（项目一般 clone/解压在子目录里），发现多个仓库时顶部下拉切换。默认 `bypassPermissions` 下，这是审查 Agent 改动的主入口，不必切到终端敲 `git diff`。
-- **断线与休眠**：对话通道断开时页面顶部出现状态条并指数退避重连，重连后自动补拉断线期间错过的消息；与服务器彻底失联会常驻离线横幅。会话被空闲自动停机后标记为「休眠」（区别于手动停止），直接发消息即自动唤醒并把这条消息发出去。
+- **变更审查**：工作台「变更」页签直接看当前空间的工作目录里 Git 仓库相对上次提交的改动（文件列表 + 彩色 diff），右侧可在「差异 / 完整内容」之间切换——新增的文件本来就没有 diff，选中时直接显示文件内容——并可一键提交或丢弃（单文件/全部）。工作区根不是仓库时会往下找两层（项目一般 clone/解压在子目录里），发现多个仓库时顶部下拉切换。默认 `bypassPermissions` 下，这是审查 Agent 改动的主入口，不必切到终端敲 `git diff`。
+- **断线与休眠**：对话通道断开时页面顶部出现状态条并指数退避重连，重连后自动补拉断线期间错过的消息；与服务器彻底失联会常驻离线横幅。工作空间被空闲自动停机后标记为「休眠」（区别于手动停止），直接发消息即自动唤醒并把这条消息发出去。
 - **文件管理**：除上传/下载/移动/删除外，还可新建文件夹、重命名、多选与拖拽上传（带进度条）。
-- **重命名与检索**：会话可在 ⋯ 菜单里改名；对话线程可改名，历史面板支持按标题搜索。
+- **重命名与检索**：工作空间可在 ⋯ 菜单里改名；对话线程可改名，历史面板支持按标题搜索。
 
 ## 部署
 
@@ -75,12 +75,12 @@ sudo ./deploy/deploy.sh    # 构建 + 启动；日常发布也是这一条
 ### 镜像内 CLI 的升级
 
 容器内禁用了 Claude Code / Codex 的自升级（CLI 装在镜像的 root 目录，
-会话用户无权限，且升级会随容器重建丢失），版本统一由镜像管理：
+容器内用户无权限，且升级会随容器重建丢失），版本统一由镜像管理：
 
 - `scripts/auto-update-image.sh` 对比 npm 最新版与镜像标签，有新版就重建镜像；
 - 配套 systemd 定时器每天跑一次（`agentbox-image-update.timer`，单元文件在
   `/etc/systemd/system/`，日志在 `/var/log/agentbox-image-update.log`）；
-- 运行中的会话容器不受打断，下次停止再启动时自动换用新镜像。
+- 运行中的工作空间容器不受打断，下次停止再启动时自动换用新镜像。
 
 ### 获取订阅账号凭证
 
@@ -98,19 +98,19 @@ API Key 方式则直接在账号的 `env` 字段配置（见 `config.example.jso
 ## 技能（Skill）与 MCP：home 模板
 
 agentbox 不代管 skill / MCP，容器里就是原版 CLI，按官方方式装即可（`claude mcp add -s user …`、
-`~/.claude/skills/<名字>/SKILL.md`、`/plugin` 等）。但**每个会话的 home 都是全新空目录**，
-装在会话里的东西只属于那个会话。要预置给多个会话，用 home 模板 —— 它在每次会话启动时
+`~/.claude/skills/<名字>/SKILL.md`、`/plugin` 等）。但**每个工作空间的 home 都是全新空目录**，
+装在工作空间里的东西只属于那个工作空间。要预置给多个工作空间，用 home 模板 —— 它在每次工作空间启动时
 叠加到 `/home/agent`，分两层，后者盖前者：
 
 | 模板 | 位置 | 影响范围 | 谁维护 |
 |---|---|---|---|
-| 服务器模板 | `data/home-template/` | **所有用户的所有会话** | 管理员，宿主机上改 |
-| 用户模板 | `data/users/<user>/home-template/` | 该用户的所有会话 | 用户自己，网页「技能」页签或宿主机 |
+| 服务器模板 | `data/home-template/` | **所有用户的所有工作空间** | 管理员，宿主机上改 |
+| 用户模板 | `data/users/<user>/home-template/` | 该用户的所有工作空间 | 用户自己，网页「技能」页签或宿主机 |
 
 ```text
 data/home-template/
   .claude/
-    skills/my-skill/SKILL.md     # 所有 claude 会话都带这个技能
+    skills/my-skill/SKILL.md     # 所有 claude 工作空间都带这个技能
     settings.json                # 例如 enableAllProjectMcpServers
   .codex/AGENTS.md
   .bashrc
@@ -118,22 +118,22 @@ data/home-template/
 
 规则：
 
-- **逐文件按 mtime「谁新用谁」**：容器里改过的文件保留；模板里更新过的文件推送到已存在的会话。
-  反过来说，在会话里删掉模板文件不会持久——下次启动又回来。
-- **符号链接原样重建、不跟随**，所以大块内容可以指向 `/shared` 而不必每个会话复制一份。
-- 可执行位保留（hook 脚本能直接跑）；`.claude/` 只对 claude 会话有意义、`.codex/` 只对 codex
+- **逐文件按 mtime「谁新用谁」**：容器里改过的文件保留；模板里更新过的文件推送到已存在的工作空间。
+  反过来说，在工作空间里删掉模板文件不会持久——下次启动又回来。
+- **符号链接原样重建、不跟随**，所以大块内容可以指向 `/shared` 而不必每个工作空间复制一份。
+- 可执行位保留（hook 脚本能直接跑）；`.claude/` 只对 claude 工作空间有意义、`.codex/` 只对 codex
   有意义，放在同一份模板里互不干扰。
 - 模板在凭证播种**之前**执行，所以模板里误放的凭证文件压不过账号池；模板出错只记日志，
-  不会挡住会话启动。
+  不会挡住工作空间启动。
 - 两层模板在写盘**之前**先合并（用户层覆盖服务器层），所以用户模板里较旧的同名文件
-  照样能盖住服务器模板 —— mtime 比较只发生在合并结果与会话副本之间。
+  照样能盖住服务器模板 —— mtime 比较只发生在合并结果与工作空间副本之间。
 
 ### 「技能」页签
 
-工作台的**技能**页签（仅 claude 会话）把上面这套东西做成了界面：左侧是当前会话
+工作台的**技能**页签（仅 claude 工作空间）把上面这套东西做成了界面：左侧是当前工作空间
 `~/.claude/skills` 的**文件树** —— 技能行展开就是这个技能目录的全部内容
 （`SKILL.md`、`scripts/`、`references/`、`assets/` 以及任意层级的子目录，脚本带可执行位的
-标 `+x`），并标出每个技能是**会话自装**、来自**我的模板**还是**服务器模板**。
+标 `+x`），并标出每个技能是**空间自装**、来自**我的模板**还是**服务器模板**。
 
 右侧看内容：`.md` 默认按 Markdown 渲染（复用对话那套渲染器），右上角可切「预览 / 源码」，
 预览时 front matter 里的键单独列成小标签，不会被吞掉；脚本和其它文本原样显示；
@@ -141,7 +141,7 @@ data/home-template/
 256KB，超出截断。
 
 - 范围切到「我的模板」即直接管理 `data/users/<user>/home-template/.claude/skills`，
-  用户不用碰宿主机就能把技能铺给自己的所有会话；
+  用户不用碰宿主机就能把技能铺给自己的所有工作空间；
 - 「安装技能」弹窗有两个来源：
   - **本地上传**：`.md`（单文件技能，存成 `<名字>/SKILL.md`）或 `.zip`/`.tar.gz`
     （技能目录打包，允许外面套一层同名目录），支持拖拽；
@@ -151,19 +151,19 @@ data/home-template/
     `claude plugin install <名字>@claude-plugins-official` 装整包；
 - 目录仓库浅克隆缓存在 `data/marketplace/repo`，12 小时过期，可在弹窗里点「刷新目录」强制更新；
   拉不动时沿用旧副本，浏览不会整个瘫掉；
-- 「复制到我的模板」把会话里调好的技能推给自己的所有会话，「装到本会话」反向把模板技能
-  立刻装进正在跑的会话（模板本身要下次启动才铺，这个按钮省掉一次重启）。
+- 「复制到我的模板」把工作空间里调好的技能推给自己的所有工作空间，「装到本空间」反向把模板技能
+  立刻装进正在跑的工作空间（模板本身要下次启动才铺，这个按钮省掉一次重启）。
 
 服务器模板不在界面里开放：它对全体用户可见，仍由管理员在宿主机上维护。
 
 MCP 的两个注意点：
 
 - **Claude**：用户级 MCP 写在 `~/.claude.json`，服务端只在缺失时生成该文件，不会覆盖，
-  会话内 `claude mcp add -s user` 即可长期生效。项目级 `/workspace/.mcp.json` 在 headless
+  工作空间内 `claude mcp add -s user` 即可长期生效。项目级 `/workspace/.mcp.json` 在 headless
   回合里默认不加载，需要在 `~/.claude/settings.json` 里加 `"enableAllProjectMcpServers": true`。
 - **Codex**：`~/.codex/config.toml` 每次启动都会被账号池目录里的同名文件覆盖（凭证播种会把
   `accounts/<id>/` 下所有普通文件拷进去），所以 `[mcp_servers.*]` 要写在
-  `accounts/<id>/config.toml` 里，写在会话内或 home 模板里都会被冲掉。控制台改中转站地址
+  `accounts/<id>/config.toml` 里，写在工作空间内或 home 模板里都会被冲掉。控制台改中转站地址
   是行级替换，不会破坏该文件里的其它段落。
 - 对话模式每回合都新起一次 CLI 进程，stdio 型 MCP server 每回合都会重新拉起；依赖
   `npx -y` 现拉包的 server 会让每条消息都多等几秒，建议预装到 home 里。
@@ -175,7 +175,7 @@ MCP 的两个注意点：
 | `listen` | 监听地址。默认只绑 `127.0.0.1`；对外请置于 TLS 反向代理之后 |
 | `auth_token` | 管理员 `boxadmin` 的初始密码（首次启动建号用；之后密码存数据库，改这里不生效） |
 | `data_dir` | 用户数据根目录（工作区、home、对话历史、state.json） |
-| `agent_image` | 会话容器镜像 |
+| `agent_image` | 工作空间容器镜像 |
 | `permission_mode` | headless 回合的权限模式，容器即沙箱，默认 `bypassPermissions` |
 | `timezone` | 控制台显示与使用记录筛选采用的 IANA 时区，默认 `Asia/Shanghai` |
 | `container.*` | 每容器资源限制：内存、CPU、进程数、网络 |
@@ -195,7 +195,7 @@ MCP 的两个注意点：
 报的那一份账；一个回合内部可能真的打了十几次接口，这里合成一行。Claude 会再按模型
 拆开（子 agent 起标题用的 haiku 就单独成行），同回合的各行共享一个回合 ID。
 
-页面上每行给出用户、会话与账号、模型、类型（对话 / 终端 / 起标题）、计费方式、token 四个
+页面上每行给出用户、工作空间与账号、模型、类型（对话 / 终端 / 起标题）、计费方式、token 四个
 桶（输入 / 输出 / 缓存读取 / 缓存写入）、费用、延迟和时间，可按用户、agent、模型、
 类型和时间区间筛选，并导出 CSV 做离线核对。默认查看系统时区的当天，重置筛选也会
 回到当天；查看历史可选择其他日期或「全部时间」。点击「时间范围」展开日历，左侧编辑
@@ -327,7 +327,7 @@ ABOX_PASSWORD=<你的密码> ./abox-link \
   它**不是**全局 `HTTP_PROXY`（避免模型 API 等全部流量绕行你的家宽），智能体按需使用，例如
   `curl --proxy "$AGENTBOX_INTRANET_PROXY" http://gitlab.corp.local/...`。
 - 变量随每次 exec 注入，对话每回合都取当前值；终端因为附着在常驻 tmux 上，**已经在跑的
-  窗格保持它启动那一刻的环境**（进程改不了自己的环境变量）。所以会话先开、隧道后连时，
+  窗格保持它启动那一刻的环境**（进程改不了自己的环境变量）。所以工作空间先开、隧道后连时，
   在旧窗格里会看不到该变量。重连终端会把最新值写进 tmux 全局环境，此时开一个新窗口
   （`Ctrl-b c`）或重启智能体即可拿到；隧道断开同理会被清除。
 - **端口映射（`--map`）**：psql / mysql / redis-cli 及各类数据库驱动不认 SOCKS，
@@ -347,15 +347,15 @@ ABOX_PASSWORD=<你的密码> ./abox-link \
 
 先 `POST /api/login`（`{"username","password"}`）换取会话令牌；其余接口需
 `Authorization: Bearer <token>`（WebSocket 用 `?token=`）。设置与用户管理类
-接口仅管理员角色可用，普通用户只能操作自己的会话。
+接口仅管理员角色可用，普通用户只能操作自己的工作空间。
 
 ```
-GET    /api/sessions                会话列表
+GET    /api/sessions                工作空间列表
 POST   /api/sessions                新建 {name, agent, account_id}
 POST   /api/sessions/{id}/start     启动容器（幂等）
 POST   /api/sessions/{id}/stop      停止容器（数据保留）
-PATCH  /api/sessions/{id}           重命名会话 {name}
-DELETE /api/sessions/{id}?purge=1   删除（purge 同时删工作区）
+PATCH  /api/sessions/{id}           重命名工作空间 {name}
+DELETE /api/sessions/{id}?purge=1   删除（purge 同时清除文件、配置和对话记录）
 POST   /api/sessions/{id}/upload    上传代码包 multipart(file)，zip/tar.gz；clear=1 先清空
 GET    /api/sessions/{id}/archive   打包下载 (zip)
 GET    /api/sessions/{id}/files     文件列表（含权限/大小/时间）?path=
@@ -371,7 +371,7 @@ POST   /api/sessions/{id}/images    粘贴图片上传（multipart file，上限
 （以上文件类接口均支持 ?scope=shared 操作共享目录，默认工作区）
 GET    /api/marketplace            官方插件目录（?refresh=1 强制重拉；含分类列表）
 POST   /api/sessions/{id}/skills/market  从市场装技能 {name} ?scope=（插件不含技能时 422）
-GET    /api/sessions/{id}/skills    技能列表 ?scope=session|template（source 标明来自会话/模板）
+GET    /api/sessions/{id}/skills    技能列表 ?scope=session|template（source 标明来自工作空间/模板）
 POST   /api/sessions/{id}/skills    安装技能 multipart(file=.md|.zip|.tar.gz, name?) ?scope=
 GET    /api/sessions/{id}/skills/{name}         技能详情（SKILL.md 正文 + 整个目录的文件清单）?scope=
 GET    /api/sessions/{id}/skills/{name}/file    读技能目录里的文件 ?path=&scope=
@@ -445,7 +445,7 @@ npm run watch
 
 ## 安全模型
 
-- 会话容器：非 root（uid 1000）、`no-new-privileges`、内存/CPU/PID 限额、仅挂载自己的 workspace 与 home。
+- 工作空间容器：非 root（uid 1000）、`no-new-privileges`、内存/CPU/PID 限额、仅挂载自己的 workspace 与 home。
 - headless 默认 `bypassPermissions`——容器本身就是沙箱，这是容器化跑编码 Agent 的通行做法；如需更保守可在配置改为 `acceptEdits`。
 - 上传解压有 zip-slip、符号链接、解压炸弹防护。
 - 服务端进程需要访问 Docker socket（等价 root），请勿暴露公网；远程访问用反向代理加 TLS。

@@ -320,7 +320,7 @@ func (s *Server) handleSkillMarketInstall(w http.ResponseWriter, r *http.Request
 	if len(dirs) == 0 {
 		writeErr(w, http.StatusUnprocessableEntity,
 			"「"+entry.Name+"」不含技能——它可能只提供斜杠命令或 MCP 服务器。"+
-				"整包安装请在会话终端里跑：claude plugin install "+entry.Name+"@"+"claude-plugins-official")
+				"整包安装请在工作空间终端里跑：claude plugin install "+entry.Name+"@"+"claude-plugins-official")
 		return
 	}
 	if err := ensureSkillsRoot(root); err != nil {

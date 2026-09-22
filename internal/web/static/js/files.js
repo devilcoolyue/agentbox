@@ -28,8 +28,8 @@ function filesEmptyRow() {
     const p = document.createElement("p");
     p.className = "files-empty";
     p.textContent = S.fileScope === "shared"
-        ? "共享目录为空。放到这里的文件对本账号所有会话可见（容器内路径 /shared）。"
-        : "工作区为空。上传代码包，或直接在对话里让 Agent 创建项目。";
+        ? "共享目录为空。这里的文件供你名下的所有工作空间读写（/shared）。"
+        : "当前空间还没有文件。上传代码包，或在对话中让 Agent 创建项目。";
     return p;
 }
 function joinRel(base, name) {
@@ -648,7 +648,7 @@ function renderCrumb() {
     }
 }
 export function scopeLabel() {
-    return S.fileScope === "shared" ? "共享目录" : "工作区";
+    return S.fileScope === "shared" ? "共享目录" : "空间文件";
 }
 /* 工具条按钮文案：窄屏用短词（上传 / 下载 zip / 上传前清空） */
 function updateFileLabels() {

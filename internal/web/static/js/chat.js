@@ -37,7 +37,7 @@ function setChatConn(state) {
     }
     else if (state === "waking") {
         dot.className = "t-dot warn";
-        text.textContent = "会话已休眠，正在唤醒…";
+        text.textContent = "工作空间已休眠，正在唤醒…";
         btn.classList.add("hidden");
     }
     else {
@@ -564,7 +564,7 @@ async function wakeAndSend() {
             }
             await new Promise((r) => setTimeout(r, 400));
         }
-        appendChat(chip("唤醒会话超时，请稍后重试或手动启动会话", "err"));
+        appendChat(chip("唤醒工作空间超时，请稍后重试或手动启动工作空间", "err"));
     }
     finally {
         waking = false;

@@ -231,7 +231,7 @@ func (s *Server) handleRenameSession(w http.ResponseWriter, r *http.Request, ses
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" || len([]rune(name)) > 64 {
-		writeErr(w, http.StatusBadRequest, "会话名称需为 1-64 个字符")
+		writeErr(w, http.StatusBadRequest, "工作空间名称需为 1-64 个字符")
 		return
 	}
 	updated, err := s.store.Update(sess.ID, func(x *store.Session) { x.Name = name })

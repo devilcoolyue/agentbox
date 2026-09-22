@@ -363,7 +363,7 @@ bus.addEventListener("tips-updated", initTermTips);
  * 有信息量的那个数。 */
 const SPEND_POLL_MS = 15000;
 let spendTimer = null;
-let spendFor = ""; // 当前显示的是哪个会话的数，切会话时先清空免得串台
+let spendFor = ""; // 当前显示的是哪个工作空间的数，切工作空间时先清空免得串台
 function fmtTok(n) {
     if (n >= 1e6)
         return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
@@ -399,7 +399,7 @@ async function loadSpend() {
         return;
     }
     const label = Object.assign(document.createElement("span"), {
-        className: "ts-label", textContent: "本会话已花",
+        className: "ts-label", textContent: "本空间已花",
     });
     const cost = Object.assign(document.createElement("span"), {
         className: "ts-cost", textContent: fmtUSD(total.cost_micro_usd, 2),
