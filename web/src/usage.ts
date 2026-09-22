@@ -16,7 +16,8 @@ import { setSelectValue } from "./select.js";
 
 import { S, bus } from "./state.js";
 import type { UsageEventRow, UsageEvents } from "./types.js";
-import { $, toast, startDownload, isMobile } from "./util.js";
+import { $, toast, startDownload } from "./util.js";
+import { DateRangePicker } from "./date-range.js";
 import { api } from "./api.js";
 import { showView } from "./shell.js";
 import { fmtUSD } from "./quota.js";
@@ -29,6 +30,7 @@ const PAGE = 50;
 let offset = 0;
 let last: UsageEvents | null = null;
 let loading = false;
+let loadPending = false;
 let usageTimeZone = S.timeZone || "Asia/Shanghai";
 
 /* 排序方向。只排时间一列：这张表是流水，除了「先看哪头」没别的排法有意义。
@@ -44,50 +46,26 @@ interface Filters {
   agent: string;
   model: string;
   kind: string;
-  since: string; // 本地时刻 YYYY-MM-DDTHH:MM（由日期 + 时 + 分三个框拼出）
+  since: string; // 系统时区下的墙上时间 YYYY-MM-DDTHH:MM
   until: string;
 }
 
 function readFilters(): Filters {
+  const range = dateRange.value();
   return {
     user: $<HTMLSelectElement>("uf-user").value,
     agent: $<HTMLSelectElement>("uf-agent").value,
     model: $<HTMLSelectElement>("uf-model").value,
     kind: $<HTMLSelectElement>("uf-kind").value,
-    since: readBound("since"),
-    until: readBound("until"),
+    since: range.since,
+    until: range.until,
   };
 }
 
 /* ---------------- 时间区间 ---------------- */
 
-/* 时分故意不用 datetime-local / type=time：原生时间控件往上翻到 0 会绕回 23，
- * 看着像还能继续往下走。number 框带 min/max，翻到头就停住。 */
-const BOUND_DEFAULT = { since: [0, 0], until: [23, 59] } as const;
-
 const pad = (n: number) => String(n).padStart(2, "0");
-const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
-
-/* 三个框 → 本地时刻串。没选日期就是没筛；时分留空按边界补：起始补 00:00、
- * 截止补 23:59，这样「只选一天」还是整天，跟从前只有日期框时的行为一致。 */
-function readBound(which: "since" | "until"): string {
-  const day = $<HTMLInputElement>("uf-" + which).value;
-  if (!day) return "";
-  const [dh, dm] = BOUND_DEFAULT[which];
-  const h = $<HTMLInputElement>("uf-" + which + "-h").value;
-  const m = $<HTMLInputElement>("uf-" + which + "-m").value;
-  return day + "T" + pad(clamp(h === "" ? dh : Number(h), 0, 23)) +
-    ":" + pad(clamp(m === "" ? dm : Number(m), 0, 59));
-}
-
-function writeBound(which: "since" | "until", v: string) {
-  const [day, time] = v ? v.split("T") : ["", ""];
-  $<HTMLInputElement>("uf-" + which).value = day!;
-  // 补零的两位数在 number 框里是合法值，写回去时保持「00」而不是「0」，
-  // 两个时间项上下对齐才好扫读
-  $<HTMLInputElement>("uf-" + which + "-h").value = time ? time.slice(0, 2) : "";
-  $<HTMLInputElement>("uf-" + which + "-m").value = time ? time.slice(3, 5) : "";
-}
+const dateRange = new DateRangePicker($<HTMLButtonElement>("uf-date-range"), () => usageTimeZone, reload);
 
 interface ClockParts { year: number; month: number; day: number; hour: number; minute: number }
 
@@ -115,17 +93,6 @@ function clockParts(d: Date): ClockParts {
   };
 }
 
-function wallStamp(d: Date) {
-  const p = clockParts(d);
-  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
-}
-
-function shiftDay(day: string, delta: number) {
-  const [y, m, d] = day.split("-").map(Number);
-  const x = new Date(Date.UTC(y!, m! - 1, d! + delta));
-  return `${x.getUTCFullYear()}-${pad(x.getUTCMonth() + 1)}-${pad(x.getUTCDate())}`;
-}
-
 function fmtUsageTime(ms: number | string, withYear = false) {
   const p = clockParts(new Date(ms));
   const core = `${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}`;
@@ -145,31 +112,7 @@ const ZONE_NAMES: Record<string, string> = {
 function syncTimeZone() {
   $("usage-zone-name").textContent = ZONE_NAMES[usageTimeZone] || "系统时区";
   $("usage-zone-id").textContent = usageTimeZone;
-}
-
-/* 快捷区间。「今日 / 昨日」是自然日整天，「24 小时」是从此刻往回数 24 小时，
- * 两种口径都有人要：前者用来对账，后者用来看「刚才烧了多少」。 */
-const RANGES: Record<string, () => [string, string]> = {
-  "uf-r-today": () => {
-    const day = wallStamp(new Date()).slice(0, 10);
-    return [day + "T00:00", day + "T23:59"];
-  },
-  "uf-r-24h": () => {
-    const now = new Date();
-    return [wallStamp(new Date(now.getTime() - 24 * 3600 * 1000)), wallStamp(now)];
-  },
-  "uf-r-yday": () => {
-    const day = shiftDay(wallStamp(new Date()).slice(0, 10), -1);
-    return [day + "T00:00", day + "T23:59"];
-  },
-};
-
-/* 高亮只跟着「刚点过哪个」走：24 小时是滑动窗口，拿当前值反推的话过一分钟
- * 就对不上了，反而闪来闪去。手改任何筛选项就取消高亮。 */
-let activeRange = "";
-
-function syncRanges() {
-  for (const id of Object.keys(RANGES)) $(id).classList.toggle("on", id === activeRange);
+  dateRange.refresh();
 }
 
 /* 时间框给的是系统时区下的墙上时间，不在浏览器里转 ISO：服务端会用配置的 IANA
@@ -243,12 +186,7 @@ function renderFilterChip(f: Filters) {
   if (f.agent) parts.push(agentName(f.agent));
   if (f.model) parts.push(f.model);
   if (f.kind) parts.push(KIND_LABEL[f.kind] || f.kind);
-  const t = (v: string) => v.replace("T", " ");
-  // 点了快捷区间就报快捷区间的名字，比两个时刻好认
-  if (activeRange) parts.push($(activeRange).textContent || "");
-  else if (f.since && f.until) parts.push(t(f.since) + " → " + t(f.until));
-  else if (f.since) parts.push(t(f.since) + " 起");
-  else if (f.until) parts.push("截至 " + t(f.until));
+  if (f.since || f.until) parts.push(dateRange.label());
   $("uf-active").textContent = parts.length ? parts.join(" · ") : "全部记录";
 }
 
@@ -364,6 +302,7 @@ function renderRows(data: UsageEvents) {
     const name = document.createElement("div");
     name.className = "u-sess";
     name.textContent = r.session_name || r.session_id;
+    name.title = name.textContent;
     if (!r.session_name) setTip(name, "会话已删除");
     const acct = document.createElement("div");
     acct.className = "u-sub";
@@ -374,7 +313,10 @@ function renderRows(data: UsageEvents) {
     const { td: model, v: modelv } = cellEl("模型");
     const mline = document.createElement("div");
     mline.className = "u-model";
-    mline.append(agentIcon(r.agent, 13), document.createTextNode(r.model || agentName(r.agent) + "（默认模型）"));
+    const modelName = document.createElement("span");
+    modelName.textContent = r.model || agentName(r.agent) + "（默认模型）";
+    modelName.title = modelName.textContent;
+    mline.append(agentIcon(r.agent, 15), modelName);
     modelv.appendChild(mline);
     if (r.provider) {
       const p = document.createElement("div");
@@ -393,14 +335,11 @@ function renderRows(data: UsageEvents) {
     kindv.appendChild(chip);
     tr.appendChild(kind);
 
-    const { td: bill, v: billv } = cellEl("计费");
     const b = BILLING[r.billing] || { text: r.billing, title: "" };
     const bchip = document.createElement("span");
     bchip.className = "u-chip bill-" + r.billing;
     bchip.textContent = b.text;
     setTip(bchip, b.title);
-    billv.appendChild(bchip);
-    tr.appendChild(bill);
 
     tr.appendChild(tokenCell(r));
 
@@ -417,6 +356,10 @@ function renderRows(data: UsageEvents) {
     why.setAttribute("aria-label", "费用明细");
     why.addEventListener("click", () => openCost(r));
     costv.append(document.createTextNode(fmtUSD(r.cost_micro_usd)), why);
+    const billing = document.createElement("div");
+    billing.className = "u-billing";
+    billing.appendChild(bchip);
+    costv.appendChild(billing);
     tr.appendChild(cost);
 
     // 首字 + 总耗时，两个数同源（都走我们自己的表：容器就绪 → 首个输出 / 进程退出），
@@ -439,7 +382,13 @@ function renderRows(data: UsageEvents) {
       + "都是回合级指标：同一回合拆成多行时每行都是这个值，不要跨行求和");
     tr.appendChild(lat);
 
-    tr.appendChild(cell("时间", fmtUsageTime(r.ts), "num u-time"));
+    const { td: time, v: timev } = cellEl("时间", "num u-time");
+    const stamp = fmtUsageTime(r.ts, true);
+    const day = document.createElement("div");
+    day.className = "u-sub";
+    day.textContent = stamp.slice(0, 10).replaceAll("-", "/");
+    timev.append(document.createTextNode(stamp.slice(11)), day);
+    tr.appendChild(time);
     body.appendChild(tr);
   }
 
@@ -586,7 +535,7 @@ function renderPager(data: UsageEvents) {
 /* ---------------- 加载 ---------------- */
 
 async function load() {
-  if (loading) return;
+  if (loading) { loadPending = true; return; }
   loading = true;
   $("usage-loading").classList.remove("hidden");
   try {
@@ -594,6 +543,8 @@ async function load() {
     renderFilterChip(f);
     const data = await api<UsageEvents>(
       "/usage/events?" + query(f, { limit: String(PAGE), offset: String(offset), order: orderParam() }));
+    // 确认日期范围时上一趟可能仍在加载；不能让旧结果覆盖新筛选和排序。
+    if (loadPending) return;
     last = data;
     usageTimeZone = data.timezone || S.timeZone || "Asia/Shanghai";
     S.timeZone = usageTimeZone;
@@ -613,6 +564,7 @@ async function load() {
   } finally {
     loading = false;
     $("usage-loading").classList.add("hidden");
+    if (loadPending) { loadPending = false; void load(); }
   }
 }
 
@@ -627,8 +579,8 @@ export async function openUsageView() {
   usageTimeZone = S.timeZone || "Asia/Shanghai";
   syncTimeZone();
   $("usage-sub").textContent = S.role === "admin"
-    ? "所有用户的消耗流水。每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。"
-    : "你自己的消耗流水。每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。";
+    ? "查看所有用户的用量与费用，每行对应一个回合中的一个模型。"
+    : "查看你的用量与费用，每行对应一个回合中的一个模型。";
   await load();
 }
 
@@ -686,35 +638,7 @@ function csvCell(v: string | number) {
 
 /* ---------------- 事件挂载 ---------------- */
 
-/* 时/分的上下翻不出范围，但键盘能敲出 99：收口放在 reload 之前，免得表单上
- * 留着一个越界的数字。 */
-for (const id of ["uf-since-h", "uf-since-m", "uf-until-h", "uf-until-m"]) {
-  const el = $<HTMLInputElement>(id);
-  el.addEventListener("change", () => {
-    if (el.value === "") return;
-    el.value = pad(clamp(Math.trunc(Number(el.value)) || 0, 0, Number(el.max)));
-  });
-}
-
-for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind",
-  "uf-since", "uf-since-h", "uf-since-m", "uf-until", "uf-until-h", "uf-until-m"]) {
-  $(id).addEventListener("change", () => {
-    activeRange = "";
-    syncRanges();
-    reload();
-  });
-}
-
-for (const id of Object.keys(RANGES)) {
-  $(id).addEventListener("click", () => {
-    const [since, until] = RANGES[id]!();
-    writeBound("since", since);
-    writeBound("until", until);
-    activeRange = id;
-    syncRanges();
-    reload();
-  });
-}
+for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind"]) $(id).addEventListener("change", reload);
 
 initFiltersOpen();
 syncSort();
@@ -726,10 +650,7 @@ $("uf-toggle").addEventListener("click", () => {
 $("uf-refresh").addEventListener("click", reload);
 $("uf-reset").addEventListener("click", () => {
   for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind"]) setSelectValue($<HTMLSelectElement>(id), "");
-  writeBound("since", "");
-  writeBound("until", "");
-  activeRange = "";
-  syncRanges();
+  dateRange.reset();
   reload();
 });
 $("uf-export").addEventListener("click", () => void exportCSV());
@@ -748,5 +669,10 @@ bus.addEventListener("open-usage", () => void openUsageView());
 bus.addEventListener("timezone-updated", () => {
   usageTimeZone = S.timeZone || "Asia/Shanghai";
   syncTimeZone();
-  if (last && S.view === "usage") renderRows(last);
+  if (S.view === "usage") reload();
 });
+
+// 「跟随当前时刻」在使用记录页每 30 秒重新取值；固定历史区间不轮询。
+setInterval(() => {
+  if (S.view === "usage" && !document.hidden && dateRange.value().followNow) void load();
+}, 30000);
