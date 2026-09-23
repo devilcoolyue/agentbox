@@ -348,11 +348,19 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 
 func (m *Manager) Stop(ctx context.Context, containerID string) error {
 	timeout := 10
-	return m.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
+	err := m.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
+	if client.IsErrNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 func (m *Manager) Remove(ctx context.Context, containerID string) error {
-	return m.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true, RemoveVolumes: true})
+	err := m.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true, RemoveVolumes: true})
+	if client.IsErrNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 // PTY is an attached interactive exec (Tty=true).

@@ -612,3 +612,9 @@ data/
 - 后台任务走 `spawn` 和 `workContext`，长连接走 `track`；不能新增无法停止的 sleep 循环或脱离生命周期的模型任务。Docker hijack 必须显式随 context 关闭。
 - 退出先拒绝新工作，尝试中断在途聊天并最多等 2 秒收尾，然后取消上下文、关闭连接、等待任务和已有用量事务，最后关闭依赖。超时返回错误，不提前关库或解数据锁；CLI 将退出，嵌入调用者的清理仍继续。
 - 不杀会话容器/tmux，不承诺强制终止已脱离输出连接的 CLI 子进程或收到未发回的用量。关闭测试不使用真实凭证；`scripts/test-release-server.py --binary <Linux binary> --restart --image <image>` 验证 SIGTERM、WS 关闭、原卷重启、容器与 tmux 保留。
+
+### 工作区服务
+
+- `internal/workspace.Service` 持有会话锁、活动引用、创建/启动/停止/删除和回收。HTTP 层保留属主鉴权、参数校验和响应转换，业务包不能反向依赖 server。
+- 同一会话的启停删都必须经过服务的可取消锁，不能单独调用 Docker 后更新 SQLite。Stop/Remove 失败时保留记录和状态；Docker 404 是幂等成功。模板→凭证→默认模型的顺序保持。
+- 活动引用仍由聊天/终端/Git 执行持有，删除后迟到的 release 不重新创建活动记录。目录挂载/UID 保持原约定；Linux 测试覆盖需要 root chown 的并发创建/删除。

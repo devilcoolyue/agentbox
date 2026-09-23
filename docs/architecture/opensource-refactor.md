@@ -118,7 +118,7 @@ third_party/
 ### C：后端模块化
 
 - [x] C1：新增 app 管理数据锁/启动清理；后台任务、WS、代理/隧道和在途回合统一关闭，等待已观察到的用量落库。
-- [ ] C2：提取 workspace，集中会话锁、活动引用和容器状态协调。
+- [x] C2：提取 workspace，集中创建/启停/删除/播种/回收、可取消会话锁和活动引用；运行时失败不写假成功状态。
 - [ ] C3：提取 credentials，保留凭证刷新与同步的收敛规则。
 - [ ] C4：提取 usage；保留事务边界，保存入账价格快照与来源。
 - [ ] C5：引入版本化数据库迁移；检测不支持的新 schema，明确二进制回退限制。
@@ -168,3 +168,6 @@ third_party/
 
 - 2026-09-23：完成 C1。信号下沉到入口、组装和数据锁迁入 `internal/app`，`Server.Close` 统一任务准入、取消、连接关闭及依赖释放。初始化失败关闭已创建资源；Docker attach 随 context 取消关闭。聊天中断最多等待 2 秒，随后取消并等待结算；现有容器/tmux 保留，不保证强杀所有 CLI 子进程。
 - C1 验证：Go 全量 build/test/vet、前端 check、server/dockerx/app race，Linux arm64 无网络容器七包回归；HTTP WS/TCP/CONNECT/yamux 关闭、延迟结算/额度同事务、超时不早关库、新任务拒绝与初始化锁释放测试通过。真实 Linux Docker 合成服务验证 SIGTERM 退出码 0、WS 断开、同卷重启取得锁、会话容器和 tmux 存活。未调用模型、未部署生产。C2–C6 继续实施。
+
+- 2026-09-23：完成 C2。`internal/workspace` 使用消费者定义的 Store/Runtime 窄接口，集中会话创建、模板→凭证→默认模型播种、幂等启动、停止/删除及空闲回收；授权与凭证同步暂通过注入函数保持边界，C3 再提取凭证服务。停止/删除与启动共用锁，等待锁支持 context 取消；Docker 失败保留会话，已不存在容器按幂等成功处理；清理目录使用受限句柄。
+- C2 验证：全量 Go build/test/vet，workspace/server/app race，合成 Linux Docker 会话+SIGTERM 重启验证通过。并发启动/删除与 UID 播种测试在 Linux 容器运行；发现旧 Docker mock 未读完请求体即关闭会引起 TCP reset，已修正测试夹具并重跑 Linux 八包回归。无真实凭证和模型调用。

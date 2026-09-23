@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -44,7 +43,6 @@ func accessTestServer(t *testing.T) (*Server, store.Session) {
 	if err := s.store.Put(sess); err != nil {
 		t.Fatal(err)
 	}
-	s.starts = map[string]*sync.Mutex{}
 	s.chat = newChatManager(s)
 	return s, sess
 }

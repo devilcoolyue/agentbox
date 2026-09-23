@@ -28,6 +28,7 @@ import (
 	"agentbox/internal/gitx"
 	"agentbox/internal/store"
 	"agentbox/internal/web"
+	"agentbox/internal/workspace"
 )
 
 // legacyUser is the single-user era placeholder; seedUsers migrates its
@@ -79,14 +80,12 @@ type Server struct {
 	startedAt  time.Time
 	bootListen string // 启动时的监听地址；与配置不一致说明改动需重启
 
-	startMu sync.Mutex
-	starts  map[string]*sync.Mutex // per-session start locks
+	workspaceOnce sync.Once
+	workspace     *workspace.Service
 
 	marketMu sync.Mutex // 串行化官方市场的 git 抓取（拉仓库、装技能）
 
 	logins *loginGuard // per-IP failed-login throttle
-
-	idle *activity // per-session liveness for the idle reaper
 
 	mon *monState // 上一帧计数器快照，供监控页按轮询间隔算 CPU 速率
 
@@ -128,9 +127,7 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 		previews:   newPreviewStore(),
 		startedAt:  time.Now(),
 		bootListen: cfg.GetListen(),
-		starts:     map[string]*sync.Mutex{},
 		logins:     newLoginGuard(),
-		idle:       newActivity(),
 		mon:        newMonState(),
 		termScan:   &termScanner{seen: map[string]termFileState{}},
 		upgrader: websocket.Upgrader{
@@ -170,7 +167,7 @@ func (s *Server) reconcile(parent context.Context) {
 			status = store.StatusRunning
 			// Give a container that survived the restart a fresh idle window
 			// instead of letting the first sweep stop it out from under a user.
-			s.idle.touch(sess.ID)
+			s.workspaces().Activity().Touch(sess.ID)
 		}
 		if sess.Status != status {
 			if _, err := s.store.Update(sess.ID, func(x *store.Session) {
@@ -582,15 +579,7 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// startLock returns a mutex dedicated to one session's start path so
-// concurrent chat/terminal opens don't race to create two containers.
-func (s *Server) startLock(id string) *sync.Mutex {
-	s.startMu.Lock()
-	defer s.startMu.Unlock()
-	if m, ok := s.starts[id]; ok {
-		return m
-	}
-	m := &sync.Mutex{}
-	s.starts[id] = m
-	return m
+func (s *Server) workspaces() *workspace.Service {
+	s.workspaceOnce.Do(func() { s.workspace = workspace.New(s.cfg, s.store, s.dock, s.sessionAccount, s.syncRotatingCred) })
+	return s.workspace
 }

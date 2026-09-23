@@ -37,8 +37,8 @@ func (s *Server) prepareGitSession(ctx context.Context, id string) (string, func
 	if _, err := s.sessionAccount(sess); err != nil {
 		return "", nil, err
 	}
-	s.idle.hold(id)
-	release := func() { s.idle.release(id) }
+	s.workspaces().Activity().Hold(id)
+	release := func() { s.workspaces().Activity().Release(id) }
 	sess, err := s.startSession(ctx, sess)
 	if err != nil {
 		release()

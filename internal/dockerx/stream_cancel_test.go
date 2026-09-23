@@ -22,6 +22,7 @@ func TestExecConnectionsCloseOnCancellation(t *testing.T) {
 					io.WriteString(w, `{"Id":"id"}`)
 					return
 				}
+				_, _ = io.Copy(io.Discard, r.Body)
 				conn, rw, err := w.(http.Hijacker).Hijack()
 				if err != nil {
 					t.Error(err)

@@ -38,6 +38,9 @@ func commandTestManager(t *testing.T, stdout, stderr string, code int, attached 
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = io.WriteString(w, `{"Id":"exec-1"}`)
 		case strings.HasSuffix(r.URL.Path, "/exec/exec-1/start"):
+			// Drain the HTTP start body before hijacking; closing a TCP socket
+			// with unread request bytes can reset it and discard our final output.
+			_, _ = io.Copy(io.Discard, r.Body)
 			conn, rw, err := w.(http.Hijacker).Hijack()
 			if err != nil {
 				t.Error(err)

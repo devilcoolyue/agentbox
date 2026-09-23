@@ -136,7 +136,6 @@ func TestShutdownClosesUpgradedChatAndIdleTCP(t *testing.T) {
 
 func TestShutdownStopsPeriodicWorkersImmediately(t *testing.T) {
 	s, _ := newTestServer(t)
-	s.idle = newActivity()
 	for _, fn := range []func(){s.imageJanitor, s.credSyncLoop, s.idleReaper, s.termUsageLoop, s.termWatchLoop, s.tokenJanitor} {
 		s.spawn(fn)
 	}
