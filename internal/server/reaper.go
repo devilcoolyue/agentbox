@@ -104,8 +104,7 @@ func (a *activity) reapable(id string, d time.Duration) bool {
 // idleReaper stops containers of sessions that have gone idle, freeing their
 // memory/CPU reservation. Runs for the life of the process.
 func (s *Server) idleReaper() {
-	for {
-		time.Sleep(reaperInterval)
+	for waitInterval(s.workContext(), reaperInterval) {
 		s.reapIdle()
 	}
 }
@@ -144,7 +143,7 @@ func (s *Server) stopIdle(id string, d time.Duration) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.workContext(), 30*time.Second)
 	defer cancel()
 	if err := s.dock.Stop(ctx, sess.ContainerID); err != nil {
 		log.Printf("idle reaper stop %s: %v", id, err)

@@ -69,10 +69,11 @@ type chatRoom struct {
 	srv    *Server
 	sessID string
 
-	mu      sync.Mutex
-	conns   map[*connWriter]bool
-	running bool
-	stop    func() // 当前回合的优雅中断（app-server 回合设置）；nil 时走 SIGINT
+	mu       sync.Mutex
+	conns    map[*connWriter]bool
+	running  bool
+	turnDone chan struct{}
+	stop     func() // 当前回合的优雅中断（app-server 回合设置）；nil 时走 SIGINT
 
 	// fileMu guards the session's on-disk chat state: thread transcripts,
 	// the active-thread pointer and the one-time legacy migration.
@@ -122,6 +123,7 @@ func (r *chatRoom) tryBegin() bool {
 		return false
 	}
 	r.running = true
+	r.turnDone = make(chan struct{})
 	return true
 }
 
@@ -129,6 +131,10 @@ func (r *chatRoom) end() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.running = false
+	if r.turnDone != nil {
+		close(r.turnDone)
+		r.turnDone = nil
+	}
 }
 
 // --- persistence: every chat event is appended to the active thread's
@@ -181,6 +187,11 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 	if err != nil {
 		return
 	}
+	release, ok := s.track(func() { _ = conn.Close() })
+	if !ok {
+		return
+	}
+	defer release()
 	room := s.chat.room(sess.ID)
 	cw := &connWriter{c: conn}
 	room.attach(cw)
@@ -197,8 +208,10 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 		return nil
 	})
 	stop := make(chan struct{})
-	defer close(stop)
+	pingDone := make(chan struct{})
+	defer func() { close(stop); <-pingDone }()
 	go func() {
+		defer close(pingDone)
 		t := time.NewTicker(wsPingPeriod)
 		defer t.Stop()
 		for {
@@ -240,7 +253,10 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 				_ = cw.send(map[string]any{"type": "error", "error": "上一条消息仍在处理中，请等待或先中断"})
 				continue
 			}
-			go room.runTurn(msg.Text, msg.Model, msg.Effort)
+			if !s.spawn(func() { room.runTurn(msg.Text, msg.Model, msg.Effort) }) {
+				room.end()
+				return
+			}
 		case "interrupt":
 			room.interrupt()
 		}
@@ -264,7 +280,7 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		r.broadcast(map[string]any{"type": "status", "state": "error", "error": msg})
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), turnTimeout)
+	ctx, cancel := context.WithTimeout(s.workContext(), turnTimeout)
 	defer cancel()
 
 	sess, ok := s.store.Get(r.sessID)
@@ -386,7 +402,7 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 
 	// 首条消息的对话：异步用模型总结出一个标题，不阻塞对话流。
 	if firstTurn && tid != "" {
-		go r.generateTitle(tid, text)
+		s.spawn(func() { r.generateTitle(tid, text) })
 	}
 }
 
@@ -414,10 +430,14 @@ func (r *chatRoom) execTurn(ctx context.Context, sess store.Session, cmd []strin
 	pr, pw := io.Pipe()
 	defer pr.Close() // 提前返回时解开 demux 的阻塞写
 	stderr := &tailBuffer{max: 8 << 10}
+	demuxDone := make(chan struct{})
 	go func() {
+		defer close(demuxDone)
 		err := stream.Demux(pw, stderr)
 		pw.CloseWithError(err)
 	}()
+	finishOutput := func() { stream.Close(); _ = pr.Close(); <-demuxDone }
+	defer finishOutput()
 
 	scanner := bufio.NewScanner(pr)
 	scanner.Buffer(make([]byte, 1<<20), 32<<20) // single events can be large
@@ -453,10 +473,14 @@ func (r *chatRoom) appServerTurn(ctx context.Context, sess store.Session, text, 
 	pr, pw := io.Pipe()
 	defer pr.Close() // 提前返回时解开 demux 的阻塞写
 	stderr := &tailBuffer{max: 8 << 10}
+	demuxDone := make(chan struct{})
 	go func() {
+		defer close(demuxDone)
 		err := stream.Demux(pw, stderr)
 		pw.CloseWithError(err)
 	}()
+	finishOutput := func() { stream.Close(); _ = pr.Close(); <-demuxDone }
+	defer finishOutput()
 
 	// 中断优先走协议内的 turn/interrupt（回合优雅收尾、不惊动进程），
 	// SIGINT 仅在协议没接管时兜底（见 interrupt）。
@@ -474,17 +498,21 @@ func (r *chatRoom) appServerTurn(ctx context.Context, sess store.Session, text, 
 		if errors.Is(err, agent.ErrAppServerUnavailable) {
 			return true, err
 		}
+		finishOutput()
 		if tail := stderr.String(); tail != "" {
 			return false, fmt.Errorf("%v: %s", err, tail)
 		}
 		return false, err
 	}
 
-	_ = stream.CloseWrite()    // 正常收尾：关 stdin 让 app-server 退出
-	go io.Copy(io.Discard, pr) //nolint:errcheck // 放空尾部输出，让 demux 收尾
+	_ = stream.CloseWrite() // 正常收尾：关 stdin 让 app-server 退出
+	drainDone := make(chan struct{})
+	go func() { defer close(drainDone); _, _ = io.Copy(io.Discard, pr) }()
+	defer func() { finishOutput(); <-drainDone }()
 	if code, err := s.dock.ExitCode(ctx, stream.ExecID); err != nil {
 		log.Printf("codex app-server 等退出码 %s: %v", r.sessID, err)
 	} else if code != 0 {
+		finishOutput()
 		// 回合已完整走完，退出码异常只记日志不打扰用户
 		log.Printf("codex app-server 退出码 %d (%s): %s", code, r.sessID, stderr.String())
 	}
@@ -536,7 +564,7 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	if err != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), titleTimeout)
+	ctx, cancel := context.WithTimeout(s.workContext(), titleTimeout)
 	defer cancel()
 	titleStart := time.Now()
 	env, err := s.execEnv(sess)
@@ -603,6 +631,12 @@ func sanitizeTitle(s string) string {
 }
 
 func (r *chatRoom) interrupt() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	r.interruptContext(ctx)
+}
+
+func (r *chatRoom) interruptContext(ctx context.Context) {
 	// app-server 回合注册了协议内的优雅中断，优先用它
 	r.mu.Lock()
 	stop := r.stop
@@ -615,8 +649,6 @@ func (r *chatRoom) interrupt() {
 	if !ok || sess.ContainerID == "" {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	if err := r.srv.dock.ExecFireAndForget(ctx, sess.ContainerID, agent.InterruptCommand()); err != nil {
 		log.Printf("interrupt %s: %v", r.sessID, err)
 	}
@@ -665,4 +697,34 @@ func itoa(n int) string {
 		b[i] = '-'
 	}
 	return string(b[i:])
+}
+
+func (m *chatManager) interruptAll(ctx context.Context) {
+	type activeTurn struct {
+		room *chatRoom
+		done <-chan struct{}
+	}
+	m.mu.Lock()
+	var turns []activeTurn
+	for _, room := range m.rooms {
+		room.mu.Lock()
+		if room.running {
+			turns = append(turns, activeTurn{room, room.turnDone})
+		}
+		room.mu.Unlock()
+	}
+	m.mu.Unlock()
+	var wg sync.WaitGroup
+	for _, turn := range turns {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			turn.room.interruptContext(ctx)
+			select {
+			case <-turn.done:
+			case <-ctx.Done():
+			}
+		}()
+	}
+	wg.Wait()
 }

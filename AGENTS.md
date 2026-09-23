@@ -17,7 +17,7 @@
 
 | 路径 | 作用 |
 |---|---|
-| `cmd/agentbox/main.go` | 服务端启动入口；`lockDataDir` 防止多个进程共用同一个 `data_dir`。 |
+| `cmd/agentbox/main.go` | 服务端入口与信号；`internal/app` 管理数据锁、启动与依赖清理。 |
 | `cmd/abox-link/main.go` | 隧道客户端入口；面板模式与 `--server` 无头模式分流。 |
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
 | `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）、用量计量与额度（`usage.go`/`quota.go`/`usagelog.go`）。 |
@@ -604,3 +604,11 @@ data/
 - `scripts/scan-secrets.py` 扫描全部已获取 refs、当前跟踪文件和解包产物（含二进制 printable strings）；报告必须保存在仓库外，内容脱敏。扫描前先 fetch 分支和标签；扫描通过不是不存在敏感信息的证明，生产域名等仍需人工审查。
 - CLI/基础镜像默认版本在 versions.env 与 Dockerfile；构建覆盖参数使用 `AGENTBOX_CLAUDE_VERSION` / `AGENTBOX_CODEX_VERSION` / `AGENTBOX_BASE_IMAGE`，避免运行环境同名变量污染。`scripts/test-image-policy.py` 验证缺省无追新且版本固定。
 - 自动追新仅 `AGENTBOX_AUTO_UPDATE=1` 启用；install.sh 默认禁用更新 timer，显式 `AGENTBOX_ENABLE_AUTO_UPDATE=1` 才启用。保留旧镜像，禁止自动全局 prune。
+
+### 生命周期
+
+- `cmd/agentbox` 接收信号并调用 `internal/app.Run(ctx,cfg)`，数据目录锁最后释放；初始化失败需释放已打开的 SQLite/Docker 客户端。维护命令仍先于服务初始化分流。
+- `server.Handler` 只组装路由；`Serve/Run` 绑定运行生命周期，`Close(ctx)` 幂等。请求和后台任务的准入与 WaitGroup.Add 同锁，退出后拒绝新任务。
+- 后台任务走 `spawn` 和 `workContext`，长连接走 `track`；不能新增无法停止的 sleep 循环或脱离生命周期的模型任务。Docker hijack 必须显式随 context 关闭。
+- 退出先拒绝新工作，尝试中断在途聊天并最多等 2 秒收尾，然后取消上下文、关闭连接、等待任务和已有用量事务，最后关闭依赖。超时返回错误，不提前关库或解数据锁；CLI 将退出，嵌入调用者的清理仍继续。
+- 不杀会话容器/tmux，不承诺强制终止已脱离输出连接的 CLI 子进程或收到未发回的用量。关闭测试不使用真实凭证；`scripts/test-release-server.py --binary <Linux binary> --restart --image <image>` 验证 SIGTERM、WS 关闭、原卷重启、容器与 tmux 保留。

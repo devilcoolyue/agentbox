@@ -8,18 +8,17 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -53,15 +52,18 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
-	cfg      *config.Config
-	store    *store.Store
-	dock     *dockerx.Manager
-	git      *gitx.Runner
-	chat     *chatManager
-	tunnels  *tunnelHub
-	pairs    *pairStore    // outstanding abox-link pairing codes
-	previews *previewStore // 短时只读的 HTML 预览通行证
-	mapAuth  mapSourceAuth // source-IP cache for tunnel port-map listeners
+	runtimeOnce sync.Once
+	serving     atomic.Bool
+	life        *runtimeState
+	cfg         *config.Config
+	store       *store.Store
+	dock        *dockerx.Manager
+	git         *gitx.Runner
+	chat        *chatManager
+	tunnels     *tunnelHub
+	pairs       *pairStore    // outstanding abox-link pairing codes
+	previews    *previewStore // 短时只读的 HTML 预览通行证
+	mapAuth     mapSourceAuth // source-IP cache for tunnel port-map listeners
 
 	tunnelMu   sync.Mutex   // guards the SOCKS listener lifecycle below
 	tunnelLn   net.Listener // nil when the tunnel proxy is not running
@@ -91,7 +93,12 @@ type Server struct {
 	termScan *termScanner // 终端消耗补记的扫描进度（定时器与使用记录页共用）
 }
 
-func New(cfg *config.Config) (*Server, error) {
+func New(cfg *config.Config) (*Server, error) { return NewContext(context.Background(), cfg) }
+
+func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -107,8 +114,9 @@ func New(cfg *config.Config) (*Server, error) {
 		st.Close()
 		return nil, err
 	}
-	dock, err := dockerx.New(cfg)
+	dock, err := dockerx.NewContext(ctx, cfg)
 	if err != nil {
+		st.Close()
 		return nil, err
 	}
 	s := &Server{
@@ -134,19 +142,29 @@ func New(cfg *config.Config) (*Server, error) {
 	s.chat = newChatManager(s)
 	s.git = gitx.New(dock, s.prepareGitSession)
 	if err := s.seedUsers(); err != nil {
+		dock.Close()
+		st.Close()
 		return nil, err
 	}
-	s.reconcile()
+	s.reconcile(ctx)
+	if err := ctx.Err(); err != nil {
+		dock.Close()
+		st.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
 // reconcile fixes session status after a server restart: a session is running
 // iff its container is actually running.
-func (s *Server) reconcile() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (s *Server) reconcile(parent context.Context) {
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	for _, sess := range s.store.All() {
 		running := s.dock.IsRunning(ctx, sess.ContainerID)
+		if ctx.Err() != nil {
+			return
+		}
 		status := store.StatusStopped
 		if running {
 			status = store.StatusRunning
@@ -177,7 +195,7 @@ func sameHostOrigin(r *http.Request) bool {
 	return strings.EqualFold(trimmed, r.Host)
 }
 
-func (s *Server) Run() error {
+func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/login", s.handleLogin)
@@ -269,58 +287,65 @@ func (s *Server) Run() error {
 
 	mux.Handle("/", staticHandler())
 
-	srv := &http.Server{
-		Addr:              s.bootListen,
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	// Bind before announcing: ListenAndServe would let us log "listening" and
-	// only then fail on a taken port, which reads as a healthy start in the
-	// log right up until the process dies.
-	ln, err := net.Listen("tcp", srv.Addr)
+	return s.admit(mux)
+}
+
+func (s *Server) Run(ctx context.Context) error {
+	ln, err := net.Listen("tcp", s.bootListen)
 	if err != nil {
 		return err
 	}
+	return s.Serve(ctx, ln)
+}
 
-	go s.imageJanitor()  // 粘贴图片 48 小时自动清理
-	go s.credSyncLoop()  // OAuth 凭证与账号池双向收敛（刷新令牌轮换制）
-	go s.idleReaper()    // 空闲会话容器自动停机（30 分钟无活动）
-	go s.termUsageLoop() // 终端里手敲 CLI 的消耗补记进流水（只记账不扣额度）
-	go s.termWatchLoop() // 同上，inotify 盯着 transcript，写完就补，不等定时那趟
-	go s.tokenJanitor()  // 过期登录令牌定期清理
-	// A tunnel misconfiguration must not take down the whole server: log and
-	// keep serving without it (systemd Restart=always would otherwise
-	// crash-loop agentbox on, say, a taken port).
+// Serve consumes the listener and starts background work once. Close owns
+// shutdown; the application supplies cancellation instead of package signals.
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	if !s.serving.CompareAndSwap(false, true) {
+		_ = ln.Close()
+		return errors.New("server already served")
+	}
+	if err := ctx.Err(); err != nil {
+		_ = ln.Close()
+		return err
+	}
+	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	release, ok := s.track(func() { _ = srv.Close(); _ = ln.Close() })
+	if !ok {
+		_ = ln.Close()
+		return errors.New("server is closed")
+	}
+	defer release()
+	defer srv.Close()
+	s.spawn(s.imageJanitor)
+	s.spawn(s.credSyncLoop)
+	s.spawn(s.idleReaper)
+	s.spawn(s.termUsageLoop)
+	s.spawn(s.termWatchLoop)
+	s.spawn(s.tokenJanitor)
 	if err := s.applyTunnel(); err != nil {
 		log.Printf("tunnel disabled: %v", err)
 	}
-	// Same deal for the account proxy bridge: a bad bind must not crash-loop the
-	// service. Accounts bound to a proxy will fail loudly instead of silently
-	// egressing from the server's own IP.
 	if err := s.applyProxyBridge(); err != nil {
 		log.Printf("account proxy bridge disabled: %v", err)
 	}
-	log.Printf("agentbox listening on http://%s", s.bootListen)
-
+	log.Printf("agentbox listening on http://%s", ln.Addr())
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
-
-	// The Go runtime kills the process outright on SIGTERM, which leaves an
-	// operator-initiated stop indistinguishable from a crash in the log.
-	// Handling it ourselves makes every shutdown attributable.
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(stop)
-
+	var err error
 	select {
-	case err := <-serveErr:
-		return err
-	case sig := <-stop:
-		log.Printf("received %s, shutting down", sig)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return srv.Shutdown(ctx)
+	case err = <-serveErr:
+	case <-ctx.Done():
+		log.Printf("shutdown requested: %v", ctx.Err())
+	case <-s.workContext().Done():
 	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	closeErr := s.Close(shutdownCtx)
+	if errors.Is(err, http.ErrServerClosed) {
+		err = nil
+	}
+	return errors.Join(err, closeErr)
 }
 
 // staticHandler 用「内容哈希版本化路径」发布前端资源：index.html 里的资源

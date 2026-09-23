@@ -235,3 +235,5 @@ npm run build
 ## 许可证
 
 Agentbox 采用 [Apache-2.0](LICENSE)，版权声明见 [NOTICE](NOTICE)。第三方组件保留各自许可；模型服务和运行时 CLI 的使用与再分发遵循其上游条款，详见 [第三方说明](third_party/README.md)。
+
+服务收到 SIGINT/SIGTERM 后停止接收新任务，给在途聊天回合最多 2 秒请求中断并收尾，然后取消后台任务、断开 WebSocket/代理/隧道连接，等待已接收用量落库后释放数据库和数据目录锁。重启不会停止会话容器或终端 tmux；不能将服务退出等同于容器内进程全部终止。

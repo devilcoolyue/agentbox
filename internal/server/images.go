@@ -84,9 +84,11 @@ func (s *Server) handleImageUpload(w http.ResponseWriter, r *http.Request, sess 
 
 // imageJanitor periodically deletes pasted images older than imageTTL.
 func (s *Server) imageJanitor() {
-	for {
+	for s.workContext().Err() == nil {
 		s.cleanExpiredImages()
-		time.Sleep(time.Hour)
+		if !waitInterval(s.workContext(), time.Hour) {
+			return
+		}
 	}
 }
 

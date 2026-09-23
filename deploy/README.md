@@ -285,3 +285,5 @@ sudo systemctl start agentbox
 ```
 
 journald 是否跨重启持久化取决于宿主机配置，不能默认存在历史 boot 日志；需长期追踪时保留文件日志并核对 logrotate。更多症状见[常见问题](../docs/troubleshooting.md)。
+
+服务停止会中断正在处理的网页回合并等待本地收尾，断开 WebSocket、隧道和代理连接；会话容器与终端 tmux 保留。后台退出超时会报错，不能将服务停止当作完整备份所需的“容器已停”条件。

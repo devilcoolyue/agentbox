@@ -39,16 +39,23 @@ type Manager struct {
 	cfg *config.Config
 }
 
-func New(cfg *config.Config) (*Manager, error) {
+func New(cfg *config.Config) (*Manager, error) { return NewContext(context.Background(), cfg) }
+
+func NewContext(parent context.Context, cfg *config.Config) (*Manager, error) {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	defer cancel()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
 	}
-	if _, err := cli.Ping(context.Background()); err != nil {
+	if _, err := cli.Ping(ctx); err != nil {
+		cli.Close()
 		return nil, fmt.Errorf("docker daemon unreachable: %w", err)
 	}
 	return &Manager{cli: cli, cfg: cfg}, nil
 }
+
+func (m *Manager) Close() error { return m.cli.Close() }
 
 // NetworkGateway returns the gateway IP of a docker network (the address a
 // container reaches the host at). Used to sanity-check the tunnel proxy bind.
@@ -382,7 +389,7 @@ func (m *Manager) ExecPTY(ctx context.Context, containerID string, cmd []string,
 	if err != nil {
 		return nil, err
 	}
-	return &PTY{ExecID: idResp.ID, Conn: hj.Conn, Reader: hj.Reader, closer: hj.Close}, nil
+	return &PTY{ExecID: idResp.ID, Conn: hj.Conn, Reader: hj.Reader, closer: closeOnCancel(ctx, hj.Close)}, nil
 }
 
 func (m *Manager) ResizePTY(ctx context.Context, execID string, cols, rows uint) error {
@@ -415,7 +422,7 @@ func (m *Manager) ExecStream(ctx context.Context, containerID string, cmd []stri
 	if err != nil {
 		return nil, err
 	}
-	return &Stream{ExecID: idResp.ID, conn: hj.Conn, reader: hj.Reader, closer: hj.Close}, nil
+	return &Stream{ExecID: idResp.ID, conn: hj.Conn, reader: hj.Reader, closer: closeOnCancel(ctx, hj.Close)}, nil
 }
 
 func (s *Stream) Write(p []byte) (int, error) { return s.conn.Write(p) }
@@ -522,4 +529,13 @@ func (m *Manager) ExecFireAndForget(ctx context.Context, containerID string, cmd
 		return err
 	}
 	return m.cli.ContainerExecStart(ctx, idResp.ID, container.ExecStartOptions{Detach: true})
+}
+
+// Docker hijacks outlive HTTP request cancellation. Close the stream explicitly
+// so blocked PTY reads, stdin writes and demux calls can finish on shutdown.
+func closeOnCancel(ctx context.Context, close func()) func() {
+	var once sync.Once
+	closeOnce := func() { once.Do(close) }
+	stop := context.AfterFunc(ctx, closeOnce)
+	return func() { stop(); closeOnce() }
 }

@@ -98,9 +98,11 @@ type termFileState struct {
 // termUsageLoop 常驻补记终端消耗。用户不看页面时也得记——终端消耗要能在报表里
 // 回溯，不能只在有人打开页面的那一刻才存在。
 func (s *Server) termUsageLoop() {
-	for {
+	for s.workContext().Err() == nil {
 		s.scanTerminalUsage(s.termScan)
-		time.Sleep(termScanInterval)
+		if !waitInterval(s.workContext(), termScanInterval) {
+			return
+		}
 	}
 }
 
@@ -110,6 +112,9 @@ func (s *Server) termUsageLoop() {
 // 补了也只是往报表里塞孤儿行。
 func (s *Server) scanTerminalUsage(sc *termScanner) {
 	for _, sess := range s.store.All() {
+		if s.workContext().Err() != nil {
+			return
+		}
 		s.scanSessionUsage(sc, sess)
 	}
 }
@@ -209,6 +214,8 @@ func (s *Server) termWatchLoop() {
 
 	for {
 		select {
+		case <-s.workContext().Done():
+			return
 		case ev, ok := <-w.Events:
 			if !ok {
 				return

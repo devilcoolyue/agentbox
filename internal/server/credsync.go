@@ -24,9 +24,11 @@ import (
 const credSyncInterval = 45 * time.Second
 
 func (s *Server) credSyncLoop() {
-	for {
-		time.Sleep(credSyncInterval)
+	for waitInterval(s.workContext(), credSyncInterval) {
 		for _, sess := range s.store.All() {
+			if s.workContext().Err() != nil {
+				return
+			}
 			acct, ok := s.cfg.Account(sess.AccountID)
 			if !ok || acct.CredentialsDir == "" {
 				continue

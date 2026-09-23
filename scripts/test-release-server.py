@@ -9,6 +9,8 @@ import argparse
 import json
 from pathlib import Path
 import secrets
+import socket
+import base64
 import subprocess
 import tarfile
 import tempfile
@@ -18,13 +20,16 @@ import urllib.request
 import uuid
 
 p=argparse.ArgumentParser(description=__doc__)
-p.add_argument('artifacts', type=Path)
+p.add_argument('artifacts', type=Path, nargs='?')
+p.add_argument('--binary', type=Path, help='test an already cross-compiled Linux binary')
+p.add_argument('--restart', action='store_true', help='verify shutdown with an open chat WebSocket and restart against the same data')
 p.add_argument('--image', required=True)
 a=p.parse_args()
 def docker(*args):
     return subprocess.check_output(['docker',*args],text=True).strip()
 arch={'aarch64':'arm64','arm64':'arm64','x86_64':'amd64'}[docker('info','--format','{{.Architecture}}')]
-archive=next(a.artifacts.glob('agentbox_*_linux_'+arch+'.tar.gz'))
+if not a.artifacts and not a.binary:p.error('provide artifacts or --binary')
+archive=next(a.artifacts.glob('agentbox_*_linux_'+arch+'.tar.gz')) if a.artifacts else None
 volume='agentbox-release-test-'+uuid.uuid4().hex
 server=None
 sessions=[]
@@ -34,8 +39,11 @@ try:
     data=docker('volume','inspect','--format','{{.Mountpoint}}',volume)
     with tempfile.TemporaryDirectory(prefix='agentbox-server-smoke-') as tmp:
         tmp=Path(tmp)
-        with tarfile.open(archive) as tar:tar.extractall(tmp,filter='data')
-        binary=next(tmp.glob('*/agentbox'))
+        if a.binary:
+            binary=a.binary.resolve()
+        else:
+            with tarfile.open(archive) as tar:tar.extractall(tmp,filter='data')
+            binary=next(tmp.glob('*/agentbox'))
         config=tmp/'fixture.json'
         config.write_text(json.dumps({'listen':'0.0.0.0:8180','auth_token':password,
             'data_dir':data,'timezone':'UTC','agent_image':a.image,
@@ -84,6 +92,32 @@ try:
         status=request('/api/sessions/'+sess['id']+'/git/status')
         assert 'smoke.txt' in json.dumps(status),status
         assert 'packaged server works' in docker('exec','--user','1000:1000',cid,'cat','/workspace/smoke.txt')
+        if a.restart:
+            docker('exec','--user','1000:1000',cid,'tmux','new-session','-d','-s','lifecycle-smoke','sleep 120')
+            ws=socket.create_connection(('127.0.0.1',int(bindings[0]['HostPort'])),timeout=3)
+            key=base64.b64encode(secrets.token_bytes(16)).decode()
+            ws.sendall((f"GET /api/sessions/{sess['id']}/chat HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {token}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
+            header=b''
+            while b'\r\n\r\n' not in header:header+=ws.recv(4096)
+            assert header.startswith(b'HTTP/1.1 101'),header[:100]
+            docker('stop','--time','12',server)
+            state=json.loads(docker('inspect',server))[0]['State']
+            assert state['ExitCode']==0, state
+            while ws.recv(4096):pass
+            ws.close()
+            assert json.loads(docker('inspect',cid))[0]['State']['Running']
+            docker('start',server)
+            bindings=json.loads(docker('inspect',server))[0]['NetworkSettings']['Ports']['8180/tcp']
+            base='http://127.0.0.1:'+bindings[0]['HostPort']
+            deadline=time.monotonic()+15
+            while True:
+                try:request('/api/ping');break
+                except (urllib.error.URLError,ConnectionError):
+                    if time.monotonic()>deadline:raise
+                    time.sleep(.2)
+            assert request('/api/sessions/'+sess['id'])['status']=='running'
+            docker('exec','--user','1000:1000',cid,'tmux','has-session','-t','lifecycle-smoke')
+            print('SIGTERM: open WebSocket closed, exit=0, lock reacquired on restart, session/tmux preserved')
         request('/api/sessions/'+sess['id']+'/stop',{},'POST')
         assert json.loads(docker('inspect',cid))[0]['State']['Running'] is False
         request('/api/sessions/'+sess['id']+'?purge=1',method='DELETE')

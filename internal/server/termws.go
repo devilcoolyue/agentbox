@@ -179,7 +179,7 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 		}
 		return
 	}
-	pty, err := s.dock.ExecPTY(context.Background(), sess.ContainerID, []string{"/bin/bash", "-c", termCommand(env)}, env)
+	pty, err := s.dock.ExecPTY(r.Context(), sess.ContainerID, []string{"/bin/bash", "-c", termCommand(env)}, env)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "exec: "+err.Error())
 		return
@@ -192,6 +192,11 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 	}
 	defer conn.Close()
 	defer pty.Close()
+	release, ok := s.track(func() { _ = conn.Close(); pty.Close() })
+	if !ok {
+		return
+	}
+	defer release()
 
 	// An attached terminal runs a live PTY exec inside the container; hold it
 	// so the idle reaper can't stop the container out from under the shell.
@@ -205,6 +210,8 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 	})
 
 	done := make(chan struct{})
+	pingDone := make(chan struct{})
+	defer func() { _ = conn.Close(); pty.Close(); <-done; <-pingDone }()
 
 	// container -> browser
 	go func() {
@@ -230,6 +237,7 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 
 	// keepalive pings，顺带巡一遍额度
 	go func() {
+		defer close(pingDone)
 		t := time.NewTicker(wsPingPeriod)
 		defer t.Stop()
 		for {
