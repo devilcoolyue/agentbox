@@ -51,6 +51,7 @@ type Account struct {
 	CredentialsDir string            `json:"credentials_dir,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	ProxyID        string            `json:"proxy_id,omitempty"`
+	Access         *AccountAccess    `json:"access,omitempty"`
 
 	// credentials_dir 在配置文件里的原文（可能是相对路径），写回时保留原样。
 	rawCredDir string
@@ -522,6 +523,9 @@ func (c *Config) validateLocked() error {
 		if a.ProxyID != "" && !proxySeen[a.ProxyID] {
 			return fmt.Errorf("account %q: proxy_id %q 不存在", a.ID, a.ProxyID)
 		}
+		if err := a.Access.Validate(); err != nil {
+			return fmt.Errorf("account %q: %w", a.ID, err)
+		}
 		for k := range a.Env {
 			if !envKeyRe.MatchString(k) {
 				return fmt.Errorf("account %q: env key %q invalid", a.ID, k)
@@ -563,6 +567,7 @@ type persistAccount struct {
 	CredentialsDir string            `json:"credentials_dir,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	ProxyID        string            `json:"proxy_id,omitempty"`
+	Access         *AccountAccess    `json:"access,omitempty"`
 }
 
 type persistConfig struct {
@@ -614,7 +619,7 @@ func (c *Config) saveLocked() error {
 		}
 		out.Accounts = append(out.Accounts, persistAccount{
 			ID: a.ID, Type: a.Type, Label: a.Label, CredentialsDir: dir,
-			Env: a.Env, ProxyID: a.ProxyID,
+			Env: a.Env, ProxyID: a.ProxyID, Access: a.Access,
 		})
 	}
 	raw, err := json.MarshalIndent(out, "", "  ")
@@ -635,7 +640,7 @@ func (c *Config) Account(id string) (Account, bool) {
 	defer c.mu.RUnlock()
 	for _, a := range c.Accounts {
 		if a.ID == id {
-			return a, true
+			return cloneAccount(a), true
 		}
 	}
 	return Account{}, false
@@ -645,7 +650,9 @@ func (c *Config) AccountList() []Account {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	out := make([]Account, len(c.Accounts))
-	copy(out, c.Accounts)
+	for i, a := range c.Accounts {
+		out[i] = cloneAccount(a)
+	}
 	return out
 }
 
@@ -1025,7 +1032,7 @@ func (c *Config) AddAccount(a Account) error {
 				return fmt.Errorf("账号 ID %q 已存在", a.ID)
 			}
 		}
-		w.Accounts = append(w.Accounts, a)
+		w.Accounts = append(w.Accounts, cloneAccount(a))
 		return nil
 	})
 }
@@ -1038,6 +1045,7 @@ type AccountPatch struct {
 	Label   *string
 	Env     *map[string]string
 	ProxyID *string
+	Access  *AccountAccess
 }
 
 func (c *Config) UpdateAccount(id string, p AccountPatch) (Account, error) {
@@ -1051,12 +1059,15 @@ func (c *Config) UpdateAccount(id string, p AccountPatch) (Account, error) {
 				w.Accounts[i].Label = *p.Label
 			}
 			if p.Env != nil {
-				w.Accounts[i].Env = *p.Env
+				w.Accounts[i].Env = cloneAccount(Account{Env: *p.Env}).Env
 			}
 			if p.ProxyID != nil {
 				w.Accounts[i].ProxyID = *p.ProxyID
 			}
-			out = w.Accounts[i]
+			if p.Access != nil {
+				w.Accounts[i].Access = cloneAccess(p.Access)
+			}
+			out = cloneAccount(w.Accounts[i])
 			return nil
 		}
 		return fmt.Errorf("account %q not found", id)

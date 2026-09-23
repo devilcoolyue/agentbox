@@ -38,6 +38,12 @@ func (s *Server) credSyncLoop() {
 
 // syncRotatingCred 让池子与该会话 home 的轮换凭证文件收敛到较新的一份。
 func (s *Server) syncRotatingCred(acct config.Account, sess store.Session) {
+	// Re-read policy: callers may hold a snapshot taken before an admin edit.
+	current, ok := s.cfg.Account(acct.ID)
+	if !ok || !s.canUseAccount(current, sess.User) {
+		return
+	}
+	acct = current
 	poolName, homeRel := agent.RotatingCredFile(sess.Agent)
 	pool, err := safefs.Open(acct.CredentialsDir)
 	if err != nil {

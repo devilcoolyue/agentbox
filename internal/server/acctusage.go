@@ -94,6 +94,10 @@ func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request, sess
 		writeErr(w, http.StatusNotFound, "工作空间绑定的账号已不存在")
 		return
 	}
+	if !s.canUseAccount(acct, sess.User) {
+		writeErr(w, http.StatusForbidden, errAccountAccess.Error())
+		return
+	}
 	if acct.Type != config.AgentClaude {
 		writeErr(w, http.StatusBadRequest, "只有 Claude 订阅账号能查额度")
 		return

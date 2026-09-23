@@ -20,6 +20,7 @@ import { loadProxies, mountProxyPicker, openProxiesSection, refreshProxyCount } 
 import type { ProxyPicker } from "./proxies.js";
 import { openPricingSection, refreshPriceCount } from "./pricing.js";
 import { setTip } from "./tip.js";
+import { accountAccessButton } from "./account-access.js";
 
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
@@ -166,7 +167,7 @@ function acctRow(a: Account) {
   } else {
     del.addEventListener("click", () => openAcctDel(a));
   }
-  acts.append(auth, edit, del);
+  acts.append(auth, edit, accountAccessButton(a), del);
 
   row.append(idBox, state, acts);
   return row;

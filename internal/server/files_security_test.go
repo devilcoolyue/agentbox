@@ -180,7 +180,9 @@ func TestCredentialSyncRejectsLinkedHomeAndPredictableTemp(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(home, name+".tmp")); err != nil {
 		t.Fatal(err)
 	}
-	acct := config.Account{CredentialsDir: pool, Type: config.AgentClaude}
+	acct := config.Account{ID: "claude-1", CredentialsDir: pool, Type: config.AgentClaude}
+	s.cfg.Accounts = []config.Account{acct}
+	sess.AccountID = acct.ID
 	s.syncRotatingCred(acct, sess)
 	if raw, _ := os.ReadFile(filepath.Join(home, name)); string(raw) != fresh {
 		t.Fatalf("not synchronized: %q", raw)

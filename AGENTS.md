@@ -214,6 +214,14 @@ data/
       chats/<tid>.jsonl
 ```
 
+### 账号使用授权
+
+- `config.Account.Access` 缺省兼容全体共享；`mode=all/users/admin`，管理员始终可用。指定用户按用户名匹配，HTTP 编辑校验用户存在。
+- `sessionAccount` 按空间属主的当前角色判断；创建/启动/聊天/终端/Git/额度查询都需校验。`execEnv` 返回错误时必须停止执行，不能丢掉账号 env 后继续调用 Docker。
+- `syncRotatingCred` 重新读取当前账号授权，撤权空间不得再参与双向凭证同步；保持同步→刷新→立即播发的原顺序。
+- 授权名单仅发给管理员；普通用户的账号列表过滤范围，空间计数只含本人。文件/历史/停止/删除仍按空间属主授权。
+- 撤权是准入控制，不能撤回已交付凭证或杀死 tmux；终端输入/30 秒心跳复查，关闭码 4004。旧二进制忽略授权字段，不能无条件回退。详见 `docs/accounts-and-models.md`。
+
 ### 默认模型
 
 - `config.default_models` 按 `claude` / `codex` 配置，初始为 `claude-opus-5` / `gpt-5.5`。

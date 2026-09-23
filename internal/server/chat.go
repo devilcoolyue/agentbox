@@ -232,6 +232,10 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 				_ = cw.send(map[string]any{"type": "error", "error": why})
 				continue
 			}
+			if _, err := s.sessionAccount(sess); err != nil {
+				_ = cw.send(map[string]any{"type": "error", "error": err.Error()})
+				continue
+			}
 			if !room.tryBegin() {
 				_ = cw.send(map[string]any{"type": "error", "error": "上一条消息仍在处理中，请等待或先中断"})
 				continue
@@ -390,7 +394,11 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 // 事件直到进程退出。claude 一直走这里；codex 仅在 app-server 不可用时回退。
 func (r *chatRoom) execTurn(ctx context.Context, sess store.Session, cmd []string, text string, onLine func([]byte)) error {
 	s := r.srv
-	stream, err := s.dock.ExecStream(ctx, sess.ContainerID, cmd, s.execEnv(sess))
+	env, err := s.execEnv(sess)
+	if err != nil {
+		return err
+	}
+	stream, err := s.dock.ExecStream(ctx, sess.ContainerID, cmd, env)
 	if err != nil {
 		return errors.New("exec失败: " + err.Error())
 	}
@@ -432,7 +440,11 @@ func (r *chatRoom) execTurn(ctx context.Context, sess store.Session, cmd []strin
 // （握手/开线程失败），可安全改走传统 exec 路径。
 func (r *chatRoom) appServerTurn(ctx context.Context, sess store.Session, text, model, effort string, onLine func([]byte)) (fallback bool, err error) {
 	s := r.srv
-	stream, err := s.dock.ExecStream(ctx, sess.ContainerID, agent.AppServerCommand(), s.execEnv(sess))
+	env, err := s.execEnv(sess)
+	if err != nil {
+		return false, err
+	}
+	stream, err := s.dock.ExecStream(ctx, sess.ContainerID, agent.AppServerCommand(), env)
 	if err != nil {
 		return false, errors.New("exec失败: " + err.Error())
 	}
@@ -517,6 +529,9 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	if s.quotaBlock(sess.User) != "" {
 		return
 	}
+	if _, err := s.sessionAccount(sess); err != nil {
+		return
+	}
 	cmd, err := agent.TitleCommand(sess.Agent)
 	if err != nil {
 		return
@@ -524,7 +539,11 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	ctx, cancel := context.WithTimeout(context.Background(), titleTimeout)
 	defer cancel()
 	titleStart := time.Now()
-	out, err := s.dock.ExecCapture(ctx, sess.ContainerID, cmd, s.execEnv(sess), titlePrompt(firstMsg))
+	env, err := s.execEnv(sess)
+	if err != nil {
+		return
+	}
+	out, err := s.dock.ExecCapture(ctx, sess.ContainerID, cmd, env, titlePrompt(firstMsg))
 	if err != nil {
 		log.Printf("gen title %s: %v", r.sessID, err)
 		return

@@ -29,8 +29,15 @@ export interface Session {
   account_label: string;
 }
 
+export interface AccountAccess {
+  mode: "all" | "users" | "admin";
+  users?: string[];
+}
+
 /** GET /api/accounts 的账号池条目（server.acctView）。 */
 export interface Account {
+  /** 仅管理员可见；缺省表示全体用户共享。 */
+  access?: AccountAccess;
   id: string;
   /** "claude" | "codex" */
   type: string;

@@ -34,6 +34,9 @@ func (s *Server) prepareGitSession(ctx context.Context, id string) (string, func
 	if s.quotaBlock(sess.User) != "" {
 		return "", nil, errGitQuota
 	}
+	if _, err := s.sessionAccount(sess); err != nil {
+		return "", nil, err
+	}
 	s.idle.hold(id)
 	release := func() { s.idle.release(id) }
 	sess, err := s.startSession(ctx, sess)
@@ -54,7 +57,7 @@ func (s *Server) runGit(ctx context.Context, sess store.Session, dir string, arg
 
 func writeGitErr(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
-	if errors.Is(err, errGitQuota) {
+	if errors.Is(err, errGitQuota) || errors.Is(err, errAccountAccess) {
 		status = http.StatusForbidden
 	} else if errors.Is(err, gitx.ErrUnavailable) {
 		status = http.StatusServiceUnavailable
@@ -351,7 +354,7 @@ func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request, sess st
 		"-c", "user.name=agentbox", "-c", "user.email=agentbox@localhost",
 		"commit", "-m", msg)
 	if err != nil {
-		if errors.Is(err, errGitQuota) || errors.Is(err, gitx.ErrUnavailable) {
+		if errors.Is(err, errGitQuota) || errors.Is(err, errAccountAccess) || errors.Is(err, gitx.ErrUnavailable) {
 			writeGitErr(w, err)
 			return
 		}

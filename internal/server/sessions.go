@@ -115,6 +115,10 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "unknown account_id")
 		return
 	}
+	if !acct.CanUse(reqUser(r).Name, reqUser(r).Role == store.RoleAdmin) {
+		writeErr(w, http.StatusForbidden, errAccountAccess.Error())
+		return
+	}
 	if acct.Type != req.Agent {
 		writeErr(w, http.StatusBadRequest, "account type does not match agent type")
 		return
@@ -159,9 +163,9 @@ func (s *Server) startSession(ctx context.Context, sess store.Session) (store.Se
 	if !ok {
 		return store.Session{}, errSessionGone
 	}
-	acct, ok := s.cfg.Account(cur.AccountID)
-	if !ok {
-		return store.Session{}, errAccountGone
+	acct, err := s.sessionAccount(cur)
+	if err != nil {
+		return store.Session{}, err
 	}
 	// 每次拉起（含每轮对话、终端连接）前先与账号池对齐 OAuth 令牌链，
 	// 会话里刷新出的新令牌得以写回，池子的新令牌也播发进会话。
@@ -224,7 +228,11 @@ func (s *Server) handleStartSession(w http.ResponseWriter, r *http.Request, sess
 	defer cancel()
 	updated, err := s.startSession(ctx, sess)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		status := http.StatusInternalServerError
+		if err == errAccountAccess {
+			status = http.StatusForbidden
+		}
+		writeErr(w, status, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, s.view(updated))

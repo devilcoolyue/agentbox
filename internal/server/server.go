@@ -453,25 +453,26 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 }
 
 type acctView struct {
-	ID         string            `json:"id"`
-	Type       string            `json:"type"`
-	Label      string            `json:"label"`
-	Sessions   int               `json:"sessions"`
-	CredStatus string            `json:"cred_status"`          // ok | norefresh | missing
-	ExpiresAt  int64             `json:"expires_at,omitempty"` // claude access token 到期(ms)
-	AuthMode   string            `json:"auth_mode,omitempty"`  // claude：oauth | apikey（中转站）
-	BaseURL    string            `json:"base_url,omitempty"`   // 中转站地址（codex 读 config.toml，claude 读 env）
-	WireAPI    string            `json:"wire_api,omitempty"`   // codex：responses | chat
-	Env        map[string]string `json:"env,omitempty"`
-	ProxyID    string            `json:"proxy_id,omitempty"` // 绑定的出口 IP 代理
-	ProxyLabel string            `json:"proxy_label,omitempty"`
+	Access     *config.AccountAccess `json:"access,omitempty"`
+	ID         string                `json:"id"`
+	Type       string                `json:"type"`
+	Label      string                `json:"label"`
+	Sessions   int                   `json:"sessions"`
+	CredStatus string                `json:"cred_status"`          // ok | norefresh | missing
+	ExpiresAt  int64                 `json:"expires_at,omitempty"` // claude access token 到期(ms)
+	AuthMode   string                `json:"auth_mode,omitempty"`  // claude：oauth | apikey（中转站）
+	BaseURL    string                `json:"base_url,omitempty"`   // 中转站地址（codex 读 config.toml，claude 读 env）
+	WireAPI    string                `json:"wire_api,omitempty"`   // codex：responses | chat
+	Env        map[string]string     `json:"env,omitempty"`
+	ProxyID    string                `json:"proxy_id,omitempty"` // 绑定的出口 IP 代理
+	ProxyLabel string                `json:"proxy_label,omitempty"`
 }
 
 func (s *Server) accountView(a config.Account, sessions int) acctView {
 	st, exp := credStatus(a)
 	v := acctView{
 		ID: a.ID, Type: a.Type, Label: a.Label, Sessions: sessions,
-		CredStatus: st, ExpiresAt: exp, Env: a.Env, ProxyID: a.ProxyID,
+		CredStatus: st, ExpiresAt: exp, Env: a.Env, ProxyID: a.ProxyID, Access: a.Access,
 	}
 	if p, bound := s.cfg.AccountProxy(a.ID); bound {
 		v.ProxyLabel = p.Name + " · " + p.DisplayURL()
@@ -491,26 +492,20 @@ func (s *Server) accountView(a config.Account, sessions int) acctView {
 	return v
 }
 
-// acctEnvList 返回会话所属账号的 env（k=v 列表），随 exec 注入容器：容器
-// 自身的 env 建容器时就冻结了，exec 注入才能让改动对既有容器生效。
-func (s *Server) acctEnvList(sess store.Session) []string {
-	acct, ok := s.cfg.Account(sess.AccountID)
-	if !ok || len(acct.Env) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(acct.Env))
-	for k, v := range acct.Env {
-		out = append(out, k+"="+v)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // execEnv is the full per-exec env for a session: account env, the account's
 // outbound IP proxy when one is bound, plus the intranet proxy variable when
 // the owning user has a live reverse tunnel.
-func (s *Server) execEnv(sess store.Session) []string {
-	env := append(s.acctEnvList(sess), s.proxyEnvList(sess)...)
+func (s *Server) execEnv(sess store.Session) ([]string, error) {
+	acct, err := s.sessionAccount(sess)
+	if err != nil {
+		return nil, err
+	}
+	env := make([]string, 0, len(acct.Env))
+	for k, v := range acct.Env {
+		env = append(env, k+"="+v)
+	}
+	sort.Strings(env)
+	env = append(env, s.proxyEnvList(sess)...)
 	if sess.Agent == config.AgentClaude && sess.DefaultModel != "" {
 		// The workspace default takes precedence over an account model override.
 		filtered := env[:0]
@@ -521,7 +516,7 @@ func (s *Server) execEnv(sess store.Session) []string {
 		}
 		env = append(filtered, "ANTHROPIC_MODEL="+sess.DefaultModel)
 	}
-	return append(env, s.tunnelEnvList(sess)...)
+	return append(env, s.tunnelEnvList(sess)...), nil
 }
 
 // accountSessionCounts counts sessions per account across all users (guards
@@ -535,14 +530,25 @@ func (s *Server) accountSessionCounts() map[string]int {
 }
 
 func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
-	counts := s.accountSessionCounts()
 	isAdmin := reqUser(r).Role == store.RoleAdmin
+	counts := map[string]int{}
+	if isAdmin {
+		counts = s.accountSessionCounts()
+	} else {
+		for _, sess := range s.store.List(reqUser(r).Name) {
+			counts[sess.AccountID]++
+		}
+	}
 	out := []acctView{}
 	for _, a := range s.cfg.AccountList() {
+		if !a.CanUse(reqUser(r).Name, isAdmin) {
+			continue
+		}
 		v := s.accountView(a, counts[a.ID])
 		if !isAdmin {
 			// 普通用户建会话只需要账号列表本身，env/base_url 里可能有密钥，
 			// 出口 IP 也属于运维信息，一并摘掉。
+			v.Access = nil
 			v.Env, v.BaseURL = nil, ""
 			v.ProxyID, v.ProxyLabel = "", ""
 		}

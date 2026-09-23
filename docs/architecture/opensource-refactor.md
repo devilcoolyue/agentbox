@@ -101,7 +101,7 @@ third_party/
 - [x] A2：新增 `safefs` 目录句柄封装，迁移文件、归档、技能、预览、模板/凭证和终端 transcript 读取；并发链接替换及 Linux 回归通过。
 - [x] A3：系统/完整备份内置到 Go 二进制，覆盖全部配置凭证根与模板；完整备份含 users，输出格式版本、清单与 SHA-256。
 - [x] A4：恢复仅发布到新目录，验证清单/哈希与 SQLite 完整性；完整备份需持有服务 flock 并检查 Docker 挂载；系统/完整合成数据恢复演练通过。
-- [ ] A5：明确可信团队边界，增加账号可用范围；兼容既有管理员账号池。
+- [x] A5：账号按全体/指定用户/仅管理员授权；管理界面、执行入口与凭证同步校验，兼容既有共享池。
 
 验收：安全回归通过；在 Linux 上完成容器内 Git 验证；在隔离环境完成一次备份恢复。真实凭证不进入测试夹具。
 
@@ -146,7 +146,7 @@ third_party/
 - 2026-09-23：创建重构分支与设计文档；完成 A1 的实现及本地验证。新增容器命令执行适配器、`gitx`、额度入口检查、Git hook/环境隔离、首次提交 diff 与丢弃失败回归，并接入 CI 容器冒烟步骤。
 - 验证通过：`go build ./...`、`go test ./...`、`go vet ./...`、`npm run check`、`go test -race ./internal/gitx ./internal/dockerx`。
 - 本机 Docker 的 Linux arm64 最小 Alpine Git 容器实测通过：uid=1000、提交/diff、hook 禁用、过滤器不继承测试密钥环境变量。临时容器已清理，测试镜像保留用于复用。未调用模型、未挂载真实账号或工作区。
-- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。A5–D4 尚未实现。下一实施单元为 A5 的账号使用授权。
+- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。B1–D4 尚未实现。下一阶段为 B 的开源发布基础；许可证仍由项目负责人选择。
 
 - 2026-09-23：完成 A2。新增 `internal/safefs`，移除检查后返回绝对路径的文件助手与旧 rename 降级实现；普通文件读、原子保存、移动/删除、归档、预览、技能与凭证统一使用固定目录句柄。详见 [文件系统边界](filesystem-boundaries.md)。
 - A2 验证通过：Go build/test/vet、前端类型检查、safefs/archivex/agent/server 的 race 检查；`scripts/test-filesystem-linux.sh` 在无宿主挂载、无外网的 Linux arm64 容器运行四个包的完整测试通过。最小镜像补齐 tzdata 后解决了时区测试环境缺失；未连接生产或调用模型。
@@ -154,3 +154,8 @@ third_party/
 - 2026-09-23：完成 A3/A4。新增 `internal/backup`、`agentbox backup` / `backup-verify` / `restore --to`；定时脚本改为编排内置命令，支持独立配置/二进制路径，分别轮转系统与完整备份。SQLite 使用在线 Backup API，临时快照转独立 DELETE journal 模式，保留源库 WAL。
 - A3/A4 验证通过：Go 全量构建/测试/vet，backup/safefs/cmd 的 race；`scripts/test-backup.sh` 实际命令演练覆盖 WAL、外部凭证、模板、哈希验证、恢复、拒绝覆盖与轮转；启用 Docker 检查的完整工作区恢复通过。`scripts/test-filesystem-linux.sh` 在 Linux arm64 最小镜像运行五个包（含 backup）的全量测试通过。
 - 备份恢复验证使用合成数据和隔离临时目录，未读取真实凭证、未停止生产服务；实际生产数据的恢复演练、systemd 配置切换和新 CI 远端运行仍待验证。恢复不自动接管原容器，同一 daemon 上的会话 ID 冲突须按部署手册处理。开源许可证、历史扫描、发布流水线与 C/D 阶段仍未完成。
+
+- 2026-09-23：完成 A5。`Account.access` 支持 `all/users/admin`，缺省保持共享，管理员始终可用；账号列表过滤并隐藏授权名单，普通用户空间计数限本人。创建/启动/聊天/标题/终端/Git/订阅额度及 exec 环境生成统一检查账号使用权，凭证同步重新读取当前策略。文件和历史继续按空间属主访问。
+- A5 界面：账号行新增「使用范围」，独立 `web/src/account-access.ts` 负责编辑；设置页仅增加入口，TS 与 JS 一同提交，原有未提交 UI 改动保持独立。非法用户提示、名单去重、保存回显、取消及 390px 窄屏布局通过本地 Playwright 合成 API 页面验证；截图保存在本机 `output/playwright/`，不进版本库。
+- A5 验证通过：Go 全量 build/test/vet，config/server race，前端 check/build；仅暂存源码在临时目录编译后与全部暂存 JS 一致。Linux arm64 隔离容器的 safefs/archivex/agent/server/backup 回归通过。HTTP/WS 测试覆盖撤权后的既有连接拒绝、授权持久化、普通用户越权、撤权后的双向凭证同步禁止及文件属主边界。
+- 撤权按操作准入生效，已通过检查的在途操作、容器 CLI/tmux、已交付凭证和既有代理连接不自动撤回；彻底撤销须停容器并轮换上游凭证。旧二进制不识别授权字段，不能直接回退后继续共享服务。未部署生产、未调用真实模型；浏览器使用合成 API，未验证生产 Debian 镜像完整会话链路或远端 CI。
