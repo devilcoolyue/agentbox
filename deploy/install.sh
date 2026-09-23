@@ -28,8 +28,13 @@ install -m 0644 deploy/agentbox.logrotate /etc/logrotate.d/agentbox
 echo "  -> /etc/logrotate.d/agentbox"
 
 systemctl daemon-reload
-systemctl enable agentbox.service agentbox-image-update.timer agentbox-backup.timer >/dev/null
-systemctl start agentbox-image-update.timer agentbox-backup.timer
+systemctl enable agentbox.service agentbox-backup.timer >/dev/null
+systemctl start agentbox-backup.timer
+if [[ "${AGENTBOX_ENABLE_AUTO_UPDATE:-0}" == 1 ]]; then
+  systemctl enable --now agentbox-image-update.timer
+else
+  systemctl disable --now agentbox-image-update.timer
+fi
 
 echo
 echo "单元已安装并设为开机自启。接着跑 ./deploy/deploy.sh 构建并启动。"

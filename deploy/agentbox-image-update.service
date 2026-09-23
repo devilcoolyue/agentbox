@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=__APP_DIR__
+Environment=AGENTBOX_AUTO_UPDATE=1
 ExecStart=__APP_DIR__/scripts/auto-update-image.sh
 StandardOutput=append:/var/log/agentbox-image-update.log
 StandardError=append:/var/log/agentbox-image-update.log

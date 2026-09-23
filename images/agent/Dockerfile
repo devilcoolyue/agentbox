@@ -1,6 +1,7 @@
 # agentbox agent 镜像：内置 Claude Code 与 Codex CLI 的最小开发环境。
 # 会话容器统一以 uid 1000 (agent) 运行，宿主机挂载目录也按此属主。
-FROM node:22-bookworm-slim
+ARG BASE_IMAGE=node:22.23.2-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9
+FROM ${BASE_IMAGE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git curl wget ca-certificates procps ripgrep jq unzip zip less \
@@ -11,10 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # claude/codex 原样还在。配置追求"隐形"，用户无感知（无状态栏、无前缀键）。
 COPY tmux.conf /etc/tmux.conf
 
-# 版本由 scripts/auto-update-image.sh 探测后经 build-arg 钉死：版本一变
-# 只有这一层缓存失效；手动 docker build 不带参数则装 latest
-ARG CLAUDE_VERSION=latest
-ARG CODEX_VERSION=latest
+# 默认版本与 versions.env 保持一致；追新需显式启用。
+ARG CLAUDE_VERSION=2.1.280
+ARG CODEX_VERSION=0.145.0
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} @openai/codex@${CODEX_VERSION} \
     && npm cache clean --force
 

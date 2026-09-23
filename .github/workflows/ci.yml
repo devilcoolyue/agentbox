@@ -88,3 +88,21 @@ jobs:
             exit 1
           fi
           echo "没有未豁免的漏洞。"
+
+  source-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify stable image policy
+        run: python3 scripts/test-image-policy.py
+      - name: Verify bundled sources and licenses
+        run: python3 scripts/verify-third-party.py
+      - name: Scan fetched history and tracked files
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.24.3
+          python3 scripts/scan-secrets.py --output "$RUNNER_TEMP/secret-audit"

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"agentbox/internal/buildinfo"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -15,6 +17,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-version" || os.Args[1] == "version") {
+		fmt.Println(buildinfo.String("agentbox"))
+		return
+	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "backup", "backup-verify", "restore":

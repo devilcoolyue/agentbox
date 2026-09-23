@@ -1,0 +1,389 @@
+[
+  {
+    "module": "github.com/cespare/xxhash/v2",
+    "version": "v2.3.0",
+    "source": "https://github.com/cespare/xxhash/v2",
+    "files": [
+      {
+        "path": "third_party/go/github.com_cespare_xxhash_v2@v2.3.0/LICENSE.txt",
+        "sha256": "f566a9f97bacdaf00d9f21dd991e81dc11201c4e016c86b470799429a1c9a79c"
+      }
+    ]
+  },
+  {
+    "module": "github.com/containerd/errdefs",
+    "version": "v1.0.0",
+    "source": "https://github.com/containerd/errdefs",
+    "files": [
+      {
+        "path": "third_party/go/github.com_containerd_errdefs@v1.0.0/LICENSE",
+        "sha256": "4bbe3b885e8cd1907ab4cf9a41e862e74e24b5422297a4f2fe524e6a30ada2b4"
+      }
+    ]
+  },
+  {
+    "module": "github.com/containerd/errdefs/pkg",
+    "version": "v0.3.0",
+    "source": "https://github.com/containerd/errdefs/pkg",
+    "files": [
+      {
+        "path": "third_party/go/github.com_containerd_errdefs_pkg@v0.3.0/LICENSE",
+        "sha256": "4bbe3b885e8cd1907ab4cf9a41e862e74e24b5422297a4f2fe524e6a30ada2b4"
+      }
+    ]
+  },
+  {
+    "module": "github.com/distribution/reference",
+    "version": "v0.6.0",
+    "source": "https://github.com/distribution/reference",
+    "files": [
+      {
+        "path": "third_party/go/github.com_distribution_reference@v0.6.0/LICENSE",
+        "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+      }
+    ]
+  },
+  {
+    "module": "github.com/docker/docker",
+    "version": "v28.5.2+incompatible",
+    "source": "https://github.com/docker/docker",
+    "files": [
+      {
+        "path": "third_party/go/github.com_docker_docker@v28.5.2+incompatible/LICENSE",
+        "sha256": "7c87873291f289713ac5df48b1f2010eb6963752bbd6b530416ab99fc37914a8"
+      },
+      {
+        "path": "third_party/go/github.com_docker_docker@v28.5.2+incompatible/NOTICE",
+        "sha256": "b40ec5b16182103ef1cd69d42a21c98369e35bd483b3973902da4807c0755446"
+      },
+      {
+        "path": "third_party/go/github.com_docker_docker@v28.5.2+incompatible/contrib/busybox/LICENSE",
+        "sha256": "86f0bb11c1ad915869d7fa2ef594a173e195af4538417542f22b51d615b38130"
+      }
+    ]
+  },
+  {
+    "module": "github.com/docker/go-connections",
+    "version": "v0.7.0",
+    "source": "https://github.com/docker/go-connections",
+    "files": [
+      {
+        "path": "third_party/go/github.com_docker_go-connections@v0.7.0/LICENSE",
+        "sha256": "ba3065d2f4b11bb42a0f7b708b021d1c28fa45d097b3eab3e7db9ab4745040d1"
+      }
+    ]
+  },
+  {
+    "module": "github.com/docker/go-units",
+    "version": "v0.5.0",
+    "source": "https://github.com/docker/go-units",
+    "files": [
+      {
+        "path": "third_party/go/github.com_docker_go-units@v0.5.0/LICENSE",
+        "sha256": "ba3065d2f4b11bb42a0f7b708b021d1c28fa45d097b3eab3e7db9ab4745040d1"
+      }
+    ]
+  },
+  {
+    "module": "github.com/dustin/go-humanize",
+    "version": "v1.0.1",
+    "source": "https://github.com/dustin/go-humanize",
+    "files": [
+      {
+        "path": "third_party/go/github.com_dustin_go-humanize@v1.0.1/LICENSE",
+        "sha256": "a973b4498c13eb74baa2a8e5c351426a6826f2fcdd909916dbe53ee2e755fd71"
+      }
+    ]
+  },
+  {
+    "module": "github.com/felixge/httpsnoop",
+    "version": "v1.0.4",
+    "source": "https://github.com/felixge/httpsnoop",
+    "files": [
+      {
+        "path": "third_party/go/github.com_felixge_httpsnoop@v1.0.4/LICENSE.txt",
+        "sha256": "8108e14b5cb2b6bcd51583d3849ef0c2b5c4de61758256c20308bc70d1775dbb"
+      }
+    ]
+  },
+  {
+    "module": "github.com/fsnotify/fsnotify",
+    "version": "v1.10.1",
+    "source": "https://github.com/fsnotify/fsnotify",
+    "files": [
+      {
+        "path": "third_party/go/github.com_fsnotify_fsnotify@v1.10.1/LICENSE",
+        "sha256": "2dfbe6d2b5eb18b55148f3805d88648a09e0d17e38428123259afb08c8996e37"
+      }
+    ]
+  },
+  {
+    "module": "github.com/go-logr/logr",
+    "version": "v1.4.3",
+    "source": "https://github.com/go-logr/logr",
+    "files": [
+      {
+        "path": "third_party/go/github.com_go-logr_logr@v1.4.3/LICENSE",
+        "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+      }
+    ]
+  },
+  {
+    "module": "github.com/go-logr/stdr",
+    "version": "v1.2.2",
+    "source": "https://github.com/go-logr/stdr",
+    "files": [
+      {
+        "path": "third_party/go/github.com_go-logr_stdr@v1.2.2/LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ]
+  },
+  {
+    "module": "github.com/google/uuid",
+    "version": "v1.6.0",
+    "source": "https://github.com/google/uuid",
+    "files": [
+      {
+        "path": "third_party/go/github.com_google_uuid@v1.6.0/LICENSE",
+        "sha256": "0a8d61ed3cbfd5312326e8126c31ce9c627a283adc99131b56896d29ada04b2d"
+      }
+    ]
+  },
+  {
+    "module": "github.com/gorilla/websocket",
+    "version": "v1.5.3",
+    "source": "https://github.com/gorilla/websocket",
+    "files": [
+      {
+        "path": "third_party/go/github.com_gorilla_websocket@v1.5.3/LICENSE",
+        "sha256": "2be1b548b0387ca8948e1bb9434e709126904d15f622cc2d0d8e7f186e4d122d"
+      }
+    ]
+  },
+  {
+    "module": "github.com/hashicorp/yamux",
+    "version": "v0.1.2",
+    "source": "https://github.com/hashicorp/yamux",
+    "files": [
+      {
+        "path": "third_party/go/github.com_hashicorp_yamux@v0.1.2/LICENSE",
+        "sha256": "ba36895caa0717b51eacc64ad50ef0b399482e1b82b93cfcdd065307409b3d9d"
+      }
+    ]
+  },
+  {
+    "module": "github.com/moby/docker-image-spec",
+    "version": "v1.3.1",
+    "source": "https://github.com/moby/docker-image-spec",
+    "files": [
+      {
+        "path": "third_party/go/github.com_moby_docker-image-spec@v1.3.1/LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ]
+  },
+  {
+    "module": "github.com/opencontainers/go-digest",
+    "version": "v1.0.0",
+    "source": "https://github.com/opencontainers/go-digest",
+    "files": [
+      {
+        "path": "third_party/go/github.com_opencontainers_go-digest@v1.0.0/LICENSE",
+        "sha256": "aceb55133c41c50c2e170c5918e301fe74f592d0f28724bf2f7a7bfdcff1fc5f"
+      },
+      {
+        "path": "third_party/go/github.com_opencontainers_go-digest@v1.0.0/LICENSE.docs",
+        "sha256": "a1d1adec3ba691ef6e377a78bbe9e9e2501f2f4a1723d08857da1ac6564e4fed"
+      }
+    ]
+  },
+  {
+    "module": "github.com/opencontainers/image-spec",
+    "version": "v1.1.1",
+    "source": "https://github.com/opencontainers/image-spec",
+    "files": [
+      {
+        "path": "third_party/go/github.com_opencontainers_image-spec@v1.1.1/LICENSE",
+        "sha256": "b0a3f39513927db306adabea11d14c23f079d4febcea241d123a68d1a0d45418"
+      }
+    ]
+  },
+  {
+    "module": "github.com/pelletier/go-toml/v2",
+    "version": "v2.2.4",
+    "source": "https://github.com/pelletier/go-toml/v2",
+    "files": [
+      {
+        "path": "third_party/go/github.com_pelletier_go-toml_v2@v2.2.4/LICENSE",
+        "sha256": "26844e4b53c5adec04e557fd7dfef281cc0205a7d355626b1c68b778b99e9e7b"
+      }
+    ]
+  },
+  {
+    "module": "github.com/pkg/errors",
+    "version": "v0.9.1",
+    "source": "https://github.com/pkg/errors",
+    "files": [
+      {
+        "path": "third_party/go/github.com_pkg_errors@v0.9.1/LICENSE",
+        "sha256": "8d427fd87bc9579ea368fde3d49f9ca22eac857f91a9dec7e3004bdfab7dee86"
+      }
+    ]
+  },
+  {
+    "module": "github.com/remyoudompheng/bigfft",
+    "version": "v0.0.0-20230129092748-24d4a6f8daec",
+    "source": "https://github.com/remyoudompheng/bigfft",
+    "files": [
+      {
+        "path": "third_party/go/github.com_remyoudompheng_bigfft@v0.0.0-20230129092748-24d4a6f8daec/LICENSE",
+        "sha256": "dd26a7abddd02e2d0aba97805b31f248ef7835d9e10da289b22e3b8ab78b324d"
+      }
+    ]
+  },
+  {
+    "module": "github.com/things-go/go-socks5",
+    "version": "v0.1.1",
+    "source": "https://github.com/things-go/go-socks5",
+    "files": [
+      {
+        "path": "third_party/go/github.com_things-go_go-socks5@v0.1.1/LICENSE",
+        "sha256": "831892cd31b9eef0311bb1de9014527ef5d3592eed7add1f9f829510d2065e62"
+      }
+    ]
+  },
+  {
+    "module": "go.opentelemetry.io/auto/sdk",
+    "version": "v1.2.1",
+    "source": "https://go.opentelemetry.io/auto/sdk",
+    "files": [
+      {
+        "path": "third_party/go/go.opentelemetry.io_auto_sdk@v1.2.1/LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ]
+  },
+  {
+    "module": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+    "version": "v0.69.0",
+    "source": "https://go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+    "files": [
+      {
+        "path": "third_party/go/go.opentelemetry.io_contrib_instrumentation_net_http_otelhttp@v0.69.0/LICENSE",
+        "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+      }
+    ]
+  },
+  {
+    "module": "go.opentelemetry.io/otel",
+    "version": "v1.44.0",
+    "source": "https://go.opentelemetry.io/otel",
+    "files": [
+      {
+        "path": "third_party/go/go.opentelemetry.io_otel@v1.44.0/LICENSE",
+        "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+      }
+    ]
+  },
+  {
+    "module": "go.opentelemetry.io/otel/metric",
+    "version": "v1.44.0",
+    "source": "https://go.opentelemetry.io/otel/metric",
+    "files": [
+      {
+        "path": "third_party/go/go.opentelemetry.io_otel_metric@v1.44.0/LICENSE",
+        "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+      }
+    ]
+  },
+  {
+    "module": "go.opentelemetry.io/otel/trace",
+    "version": "v1.44.0",
+    "source": "https://go.opentelemetry.io/otel/trace",
+    "files": [
+      {
+        "path": "third_party/go/go.opentelemetry.io_otel_trace@v1.44.0/LICENSE",
+        "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+      }
+    ]
+  },
+  {
+    "module": "golang.org/x/net",
+    "version": "v0.57.0",
+    "source": "https://golang.org/x/net",
+    "files": [
+      {
+        "path": "third_party/go/golang.org_x_net@v0.57.0/LICENSE",
+        "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+      }
+    ]
+  },
+  {
+    "module": "golang.org/x/sys",
+    "version": "v0.47.0",
+    "source": "https://golang.org/x/sys",
+    "files": [
+      {
+        "path": "third_party/go/golang.org_x_sys@v0.47.0/LICENSE",
+        "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+      }
+    ]
+  },
+  {
+    "module": "modernc.org/libc",
+    "version": "v1.74.1",
+    "source": "https://modernc.org/libc",
+    "files": [
+      {
+        "path": "third_party/go/modernc.org_libc@v1.74.1/LICENSE",
+        "sha256": "95ff867eb55a56935fa7492406cfa953fb7c13ca73f4c0a86ae05756b4605600"
+      },
+      {
+        "path": "third_party/go/modernc.org_libc@v1.74.1/testdata/nsz.repo.hu/libc-test/COPYRIGHT",
+        "sha256": "41b8f2e2706012eb534f89e72ff547308cb81dcb9acf077c40a9058a7c06088d"
+      },
+      {
+        "path": "third_party/go/modernc.org_libc@v1.74.1/testdata/nsz.repo.hu/libc-test/src/math/crlibm/COPYING",
+        "sha256": "dcc100d4161cc0b7177545ab6e47216f84857cda3843847c792a25289852dcaa"
+      }
+    ]
+  },
+  {
+    "module": "modernc.org/mathutil",
+    "version": "v1.7.1",
+    "source": "https://modernc.org/mathutil",
+    "files": [
+      {
+        "path": "third_party/go/modernc.org_mathutil@v1.7.1/LICENSE",
+        "sha256": "bfa9bf72a72ca009fd62a8f84fca3dca67e51d93af96352723646599898b6cf5"
+      },
+      {
+        "path": "third_party/go/modernc.org_mathutil@v1.7.1/mersenne/LICENSE",
+        "sha256": "c05630f9ca899ea094620d37daea6ba66f99adbf9268ea5fea9db607e1102bd9"
+      }
+    ]
+  },
+  {
+    "module": "modernc.org/memory",
+    "version": "v1.11.0",
+    "source": "https://modernc.org/memory",
+    "files": [
+      {
+        "path": "third_party/go/modernc.org_memory@v1.11.0/LICENSE",
+        "sha256": "59895e669f48f168b6b858358f6005779cdf40a265f7828813061b56af67b496"
+      }
+    ]
+  },
+  {
+    "module": "modernc.org/sqlite",
+    "version": "v1.54.0",
+    "source": "https://modernc.org/sqlite",
+    "files": [
+      {
+        "path": "third_party/go/modernc.org_sqlite@v1.54.0/LICENSE",
+        "sha256": "c6fe05491a60ae13bcd223088d2705e36dede24e5587226231d2459ada5c4822"
+      }
+    ]
+  }
+]

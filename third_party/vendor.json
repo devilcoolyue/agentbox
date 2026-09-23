@@ -1,0 +1,391 @@
+[
+  {
+    "name": "@xterm/addon-fit",
+    "version": "0.11.0",
+    "source": "https://registry.npmjs.org/@xterm/addon-fit/-/addon-fit-0.11.0.tgz",
+    "integrity": "sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==",
+    "license": "MIT",
+    "license_files": [
+      "third_party/licenses/@xterm_addon-fit-LICENSE"
+    ],
+    "files": [
+      {
+        "path": "internal/web/static/vendor/addon-fit.js",
+        "sha256": "ba3ea256ce0620a0992a197d6c9baea64823fc93d8da07a9e366ca9943c18527"
+      }
+    ]
+  },
+  {
+    "name": "@xterm/xterm",
+    "version": "6.0.0",
+    "source": "https://registry.npmjs.org/@xterm/xterm/-/xterm-6.0.0.tgz",
+    "integrity": "sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==",
+    "license": "MIT",
+    "license_files": [
+      "third_party/licenses/@xterm_xterm-LICENSE"
+    ],
+    "files": [
+      {
+        "path": "internal/web/static/vendor/xterm.js",
+        "sha256": "14903579ff54664cd72f8e8699e6961a6272c21863ec1c3b118cdc8af5d4a972"
+      },
+      {
+        "path": "internal/web/static/vendor/xterm.css",
+        "sha256": "854a7c0fb70e8b1a083c16797ab827299fb18744f5ad34f227b48337e33293c6"
+      }
+    ]
+  },
+  {
+    "name": "katex",
+    "version": "0.16.9",
+    "source": "https://registry.npmjs.org/katex/-/katex-0.16.9.tgz",
+    "integrity": "sha512-fsSYjWS0EEOwvy81j3vRA8TEAhQhKiqO+FQaKWp0m39qwOzHVBgAUBIXWj1pB+O2W3fIpNa6Y9KSKCVbfPhyAQ==",
+    "license": "MIT",
+    "license_files": [
+      "third_party/licenses/katex-LICENSE",
+      "third_party/licenses/KaTeX-fonts-LICENSE"
+    ],
+    "files": [
+      {
+        "path": "internal/web/static/vendor/katex/katex.min.js",
+        "sha256": "dc84b296ec3e884de093158f760fd9d45b6c7abe58b5381557f4e138f46a58ae"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/katex.min.css",
+        "sha256": "505d5f829022bb7b4f24dfee0aa1141cd7bba67afe411d1240335f820960b5c3"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Typewriter-Regular.woff2",
+        "sha256": "71d517d67827787cfabdf186914cc3358eda539e37931941f2b2fd4a21f68c0b"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_AMS-Regular.woff2",
+        "sha256": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Size3-Regular.woff2",
+        "sha256": "73d591271b1604960cb10bb90fee021670af7297017e0e98480b332d11f51995"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Main-Regular.woff2",
+        "sha256": "c2342cd8b869e01752a9321dc17213fc40d4d04c79688c1d43f2cf316abd7866"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Caligraphic-Bold.woff2",
+        "sha256": "de7701e42cf1f4cf0b766c03fb27977207eee2f4fd5d76fa82188406da43ea4c"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_SansSerif-Bold.woff2",
+        "sha256": "e99ae51144bf1232efcc1bfe5add36262c6866b0faab24fa75740e1b98577a62"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Math-Italic.woff2",
+        "sha256": "7af58c5ec8f132a2ddde9027c6d7814decce4d3b822a11192a42a20e2e973264"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Size4-Regular.woff2",
+        "sha256": "a4af7d414440a1c1790825cfb700cf9cf43b0f2c4b04f0ebc523011ad9853ec0"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Fraktur-Bold.woff2",
+        "sha256": "74444efd593c005e3f4573b44524704c0af0a937fe911cca9e94068d0d140d3f"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_SansSerif-Italic.woff2",
+        "sha256": "00b26ac825e2095056396e0553b8ac26d3f8ad158c3826e28b4c45b385c4714a"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Main-Bold.woff2",
+        "sha256": "0f60d1b897938ec918c8ce073092411baf9438f6739465693ff18b0f9d20b021"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_SansSerif-Regular.woff2",
+        "sha256": "68e8c73ef42afd3ccec58bf0fba302cce448938e7fc020a5e31f8a952eee1342"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Main-BoldItalic.woff2",
+        "sha256": "99cd42a3c072d918f2f44984a807cf7aa16e13545fd0875fc07c6c65f99e715b"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Fraktur-Regular.woff2",
+        "sha256": "51814d270d06ff0255dba0799994fa4d8c84d11f09951d47595f4abb1f3602dc"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Script-Regular.woff2",
+        "sha256": "036d4e95149b69ff9bcc0cd55771efeb25ffa3947293e69acd78d5ac328c684b"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Math-BoldItalic.woff2",
+        "sha256": "dc47344dbb6cb5b655c8460d561f4df5f501b90c804ad3c6cec65fe322351ab1"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Main-Italic.woff2",
+        "sha256": "97479ca6cce906abc961ecac96faa5f9ca2e61b8e7670d475826bcdee9a7c267"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Size1-Regular.woff2",
+        "sha256": "6b47c40166b6dbe21a5dfca7718413f2147fd2399be1ba605d8ad39cedf25dfe"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Size2-Regular.woff2",
+        "sha256": "d04c54219f9eaec6d4d4fd42dfb28785975a4794d6b2fc71e566b9cd6db842dd"
+      },
+      {
+        "path": "internal/web/static/vendor/katex/fonts/KaTeX_Caligraphic-Regular.woff2",
+        "sha256": "5d53e70ad607c2352162dec9e0923fb54ecdafaccbf604cd8dcf7d00facb989b"
+      }
+    ],
+    "font_license_source": "https://github.com/KaTeX/katex-fonts/blob/56e79c93c88c9054b017cc92e496b383e0bf82d7/LICENSE"
+  },
+  {
+    "name": "@xterm/addon-webgl",
+    "version": "0.19.0",
+    "source": "https://registry.npmjs.org/@xterm/addon-webgl/-/addon-webgl-0.19.0.tgz",
+    "license": "MIT",
+    "modifications": "Removed trailing sourceMappingURL comment only.",
+    "license_files": [
+      "third_party/licenses/@xterm_addon-webgl-LICENSE"
+    ],
+    "files": [
+      {
+        "path": "internal/web/static/vendor/addon-webgl.js",
+        "sha256": "e84bf980d7a5c3d0a69352a31f4c2d92b6edc3abebc722d856c3872573fea095"
+      }
+    ]
+  },
+  {
+    "name": "claude-hud",
+    "version": "0.5.1",
+    "source": "https://github.com/jarrodwatts/claude-hud/tree/10979d16dce075b112b7564bead95c5f236d8a87",
+    "license": "MIT",
+    "license_files": [
+      "images/agent/claude-hud/LICENSE"
+    ],
+    "files": [
+      {
+        "path": "images/agent/claude-hud/LICENSE",
+        "sha256": "510e16f7421025e2a661e93604c06d82048182b7ad4f30bfc793eda68b3686ff"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/auth.js",
+        "sha256": "eb89e9db4f559776109e6c1d791d508eb5b835b12e536d43ccdc28ceec3261db"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/claude-config-dir.js",
+        "sha256": "7bdeb80f4b809c7517c63ba6f40af81b699e68999beadcd6026c43beeaa561ba"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/config-reader.js",
+        "sha256": "9cdc0e1e89a3ca8630ab21627ffeb994c87c658fefcdac54c914e3d23a548019"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/config.js",
+        "sha256": "f9202931d1cc621739d9f61aa3e5738562688fb40f02fdd12e9d0dc60c7bd356"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/constants.js",
+        "sha256": "c156748628628fee402e3ff8e2c1a6340a2b977638d4bcb98ecb6d01822c5393"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/context-cache.js",
+        "sha256": "325c8f9e2896fbbe27287cae26f39e9d9a9e8d5604cca1767436a78967dd21c9"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/cost.js",
+        "sha256": "922355bbd7bd561cccf32efd9fd8c32c217c31a16dc80f454d4b114c088643ba"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/debug.js",
+        "sha256": "371f9f4835df32d7d1a91706267fbfa3e07b4355dfca0834224edc66dc1f5bda"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/effort.js",
+        "sha256": "8d63e8b5e1a8a088ba9a94de6dc261644e8cc2758f4e4b25ece4bb039288c1a8"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/external-usage.js",
+        "sha256": "86a251e49fe680ae687c261a77ccc821b4ebe3ef046fb675dc4efb490c07e632"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/extra-cmd.js",
+        "sha256": "354638d3fb8df403741da1a4e6ba9548b5498bcd84269eea1a577932e90115e6"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/git.js",
+        "sha256": "43cff2c2a1c3414b2043a442b2365482f4dfc971d3757f6ee46d6c9e786fa677"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/i18n/en.js",
+        "sha256": "e101f8a59cb30d2db99b681cd075c3aa31a369f1bb3acc3954545b7ee9645d52"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/i18n/index.js",
+        "sha256": "b3ae3229e9be8e221bdc246c6d5a1707b6535ce3224e85c3f11ca079f34b39bd"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/i18n/types.js",
+        "sha256": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/i18n/zh-Hans.js",
+        "sha256": "e753bdc531b253e5496753f71f03197e8e23eaa48e98d6bb05fa0b539b9bab9d"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/i18n/zh-Hant.js",
+        "sha256": "8f15662af27e1fb012ef9287d2cdaf1b169327fa81b9f051469aa6aa9cd9f936"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/index.js",
+        "sha256": "6e95cb1cde78b44505770dcc170aa1399bbd12b37e4fd52c4d8d834a0931d070"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/memory.js",
+        "sha256": "44ca8279987b722126b0146656d6eb76b465061b37bb4fc6f9f1ad616b88df35"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/model-source.js",
+        "sha256": "0c73ddc9d04bc9431f5c886e7e245f947b97b01748d9a7d7fbe6f5b8b29d4954"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/agents-line.js",
+        "sha256": "6bae4fd2779a4df870f6aa3eabf84f3cc1bf420a4a373744d86d1b3703bd0a86"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/colors.js",
+        "sha256": "352cb67b73bab86fc7a35206f720456a2fcef03629fc81a7fd68712a0cdbe159"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/format-reset-time.js",
+        "sha256": "1e17720169cb62d51c15e603eb7663252e85e190385c6ad63f53a5a2a0f49fa2"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/index.js",
+        "sha256": "aa4bfa6c89242a3b5b21115eb696f372fbca37ca08db55d3da811604263dfb88"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/added-dirs.js",
+        "sha256": "c64c05f209a939170487f92ed16075525eaf2665166e8460123c1c11713e799a"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/advisor.js",
+        "sha256": "532515f9cd9ce1c8f5515f37a9ffd23183443580c2a15996b16e7fdf0cc77c15"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/compactions.js",
+        "sha256": "396af9dcdb4fb83f884092095fb7ae51ce2409baf34aafe8e47bb35f25ec088b"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/cost.js",
+        "sha256": "036230afb194431c2d637c91823eba1e8d200ddaabf47938dffcfe768e0e7331"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/environment.js",
+        "sha256": "36609a7ff06dc6c95138e7982d50a8084d252b29330a3a5d3a7458fe23fe8f43"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/identity.js",
+        "sha256": "6dfca5aa5001d6bc7276235ae015e78e24508c0c4bdef2ac705310dfebc066f9"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/index.js",
+        "sha256": "128a111746f6cd3fba5464a0fc71c3bdc5945b1b971d52b7beb0a1186b40fd0b"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/label-align.js",
+        "sha256": "cc51fa6d5691aecdf0dc2430d1510c179a47ab551c4a030a54b16329f24859ad"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/memory.js",
+        "sha256": "de8e10fa62f6c8bffe9578a8775557ce390923bd09f6ee8ca3df5e4839beadea"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/project.js",
+        "sha256": "5b2cc66e5e17701f1ae9d7c539ba2df9a9532773e28e32060d0f8cfa817f9183"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/prompt-cache.js",
+        "sha256": "eff9ac99d5c6896867b0bad3f03ed9373ad428bf334cc52fb52bc0f511f80c16"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/session-time.js",
+        "sha256": "4ccacf689a69fa57dbf9abc118df71b42a7287e6a7d25b4f47b81f9976b7c85d"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/session-tokens.js",
+        "sha256": "7354eae76a8af5b2f9422434d6fa8b729176b79a5dd8f16ded67120053468927"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/lines/usage.js",
+        "sha256": "095fd14ce2ec270f9347c180f54b778b716dab1ab3ff4722e6873dcb30d0d6c9"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/model-display.js",
+        "sha256": "f6ba556214e2f6675ae598d4d283d80148146bd0499158e2230035c1b0fafb5a"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/session-line.js",
+        "sha256": "b2f9d19517e9b68229aa7f312a76cc3762a94240df9edf1e878d165037b57c44"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/skills-mcp-line.js",
+        "sha256": "ad9c1e38352c44574435d5e8ba83a248e3fe02a5f21cc7a525a436cfbdcabe3d"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/todos-line.js",
+        "sha256": "ab3cf5b1a2788547a7e715a6afa00e0052f17b248d976cb6bfe6b9958f620708"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/tools-line.js",
+        "sha256": "bb3afd38f451f7504feab48ba9f7c889d0a7698443c8080456aaa049b54c12c4"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/render/width.js",
+        "sha256": "2933fedc7ccf7b7ec55182744d1e06b07712e45011a07bb48f2eb1b61990d9e7"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/speed-tracker.js",
+        "sha256": "8f54729d845f6cab0c0453d4a42f01125fd20e05b877dc8445aa970afc4f6d7e"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/stdin.js",
+        "sha256": "5620cf1dc73298093829f4bd60a193382f1425ae8f5a497ffe018f661bc80279"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/transcript.js",
+        "sha256": "1739d76c5302f12a57ab01938c5008651ff2b33f71d7aa185e1322a25d60130c"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/types.js",
+        "sha256": "63d320b8cab325d488232e93cbb1dc76e13b3dca6d3ff8108a4224e8a322d190"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/utils/format.js",
+        "sha256": "a54eff60a5ac31596034fa0b1406087fea955b9f424dd762e3737faac1a9829d"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/utils/hyperlinks.js",
+        "sha256": "40af9511ae5d419a5d130393b45b3747b0cd2cb3e027074d278db8bccbe935bc"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/utils/sanitize.js",
+        "sha256": "49ccb827e9e2428ef9feacda915c2c455b0e2aefcb645d00febbc3810eb93713"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/utils/terminal.js",
+        "sha256": "5df254c51920ddd5e91752282c17509d58b84522e05a546edfec3cb5e5eb2b1d"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/utils/truncate.js",
+        "sha256": "0b841f077382bb123ee170652392815ac6d4432f59261f4051fca7ebbafbb2e0"
+      },
+      {
+        "path": "images/agent/claude-hud/dist/version.js",
+        "sha256": "6936bfd0c5b8a26606e0314809d4a7e25949145bf27ffaff2d1e6612c98aaba0"
+      },
+      {
+        "path": "images/agent/claude-hud/package.json",
+        "sha256": "dfd54f73581a71c9f763d3808bc18d86a904e1207a7629805e47f843e21c3f3b"
+      }
+    ]
+  }
+]

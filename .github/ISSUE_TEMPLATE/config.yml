@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全漏洞私密报告
+    url: https://github.com/devilcoolyue/agentbox/security/advisories/new
+    about: 请勿在公开 Issue 中提交漏洞细节或凭证

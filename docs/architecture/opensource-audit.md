@@ -1,0 +1,23 @@
+# 开源发布审查记录（2026-09-23）
+
+## 许可证与来源
+
+项目负责人已选择 Apache-2.0。LICENSE 使用 Apache 官方全文，NOTICE 标注 Agentbox contributors，并链接第三方声明。源代码内置的 xterm、KaTeX、字体与 claude-hud 已核对上游包/提交，逐文件比较并记录哈希；webgl 唯一差异是移除 sourceMappingURL 注释。33 个跨平台实际链接的 Go 模块携带上游许可/版权/NOTICE 全文，标准库附 Go LICENSE。
+
+Claude Code npm 许可声明不是开源授权。因此候选包仅提供用户本地安装的固定版本构建配方，不发布含该 CLI 的公共镜像；Codex 和系统包的上游许可也不会被项目许可证覆盖。详见 `third_party/README.md`。
+
+## 敏感信息扫描
+
+本地执行 `git fetch --all --tags` 后扫描全部 refs。范围含 3 个本地分支、origin/main、origin/feat/audit-improvements、origin/refactor/frontend-ts；当时无 tag，共 75 个可达提交。gitleaks 对差异扫描报告 72 个提交（不产生普通差异的提交不计入其统计）。另扫描当前跟踪文件、七个平台解包候选及二进制 printable strings。
+
+使用 gitleaks v8.24.3，报告在仓库外并脱敏。首轮 6 个命中已复核：公开 OAuth client ID、生成令牌的固定字符表、上游压缩 JS 的类型导出；二进制 strings 额外命中 Go 类型名拼接。`.gitleaks.toml` 仅豁免这些精确字符串，不跳过文件、目录或整个提交。配置后无未审查的密钥命中；未尝试验证令牌，不向外部服务发送候选密钥。
+
+补充审查了生产 SSH/URL 参数引用，发现 `deploy/agentbox.service` 仍有旧生产域名；当前版本已替换为项目主页。**旧域名仍留在历史中**，默认扫描器不会把域名视作密钥。正式公开前负责人需决定是否接受历史披露，或在备份后另建清理后的公开历史；本次没有改写历史、强推、轮换真实凭证或访问生产服务。
+
+扫描不能证明所有秘密不存在。被忽略的真实 config/accounts/data、其他机器的未推送分支、GitHub 未暴露的对象以及既往外部分发物不在本地扫描范围。新生成的正式包必须在发布前重扫；原工作区未提交 UI 不会进入本次干净提交的候选包。
+
+## 验证及发布前事项
+
+本地验证包括源码构建/测试/vet、前端一致性、第三方哈希与模块覆盖、固定镜像策略、多平台打包、校验和、无 Go/Node 的 Linux 包执行与备份恢复、真实 Docker 的合成会话 CRUD/文件/Git。服务冒烟只挂载临时命名卷与 Docker socket，测试容器与卷已清理。
+
+这不包括在线模型推理、生产数据恢复、Linux systemd 的正式升级/切换或远端 GitHub Actions 运行。公开 Release 和 tag 尚未创建。维护者在公开前还需启用 GitHub 私密漏洞报告、审阅候选文件和历史域名决策，再执行发布。源码安装脚本与按版本运行目录迁移的剩余工作仍属于 D1。

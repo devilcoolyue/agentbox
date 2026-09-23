@@ -20,11 +20,11 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
-	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
 
+	"agentbox/internal/buildinfo"
 	"agentbox/internal/safefs"
 	"modernc.org/sqlite"
 )
@@ -151,13 +151,7 @@ func Create(ctx context.Context, opts Options) (_ *Manifest, err error) {
 		m.Mode = "full"
 		m.Consistency = "service-locked-containers-stopped"
 	}
-	if b, ok := debug.ReadBuildInfo(); ok {
-		for _, s := range b.Settings {
-			if s.Key == "vcs.revision" {
-				m.Revision = s.Value
-			}
-		}
-	}
+	m.Revision = buildinfo.Commit()
 	f, err := os.OpenFile(filepath.Join(stage, "backup.tar.gz"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return nil, err

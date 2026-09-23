@@ -1,0 +1,56 @@
+name: Release candidate
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Validate tag matches a reviewed release commit
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$(git rev-parse HEAD)"
+          test -f LICENSE
+      - name: Validate Go
+        run: |
+          go build ./...
+          go test ./...
+          go vet ./...
+      - name: Build candidates
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/build-release.py --version "$RELEASE_TAG" --output "$RUNNER_TEMP/release"
+      - name: Verify archives and Linux installation
+        run: python3 scripts/test-release.py "$RUNNER_TEMP/release"
+      - name: Build pinned runtime and test synthetic session
+        run: |
+          ./scripts/build-image.sh
+          python3 scripts/test-release-server.py "$RUNNER_TEMP/release" --image agentbox-agent:latest
+      - name: Scan history and candidates
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.24.3
+          python3 scripts/scan-secrets.py --artifacts "$RUNNER_TEMP/release" --output "$RUNNER_TEMP/secret-audit"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 14
+# Deliberately produces reviewable artifacts only. Creating a public GitHub
+# Release and uploading it is the project owner's separate publication action.

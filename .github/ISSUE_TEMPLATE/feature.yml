@@ -1,0 +1,20 @@
+name: 功能建议
+description: 描述使用场景、问题与期望行为
+title: '[Feature] '
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 期望行为与已考虑的方案
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: 兼容性或部署约束

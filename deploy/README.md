@@ -30,7 +30,7 @@ sudo ./deploy/deploy.sh
 | 文件 | 作用 / 安装位置 |
 | --- | --- |
 | `agentbox.service` | `/etc/systemd/system/`，主服务 |
-| `agentbox-image-update.service` / `.timer` | 每日检查 CLI 版本并更新镜像 |
+| `agentbox-image-update.service` / `.timer` | 实验性每日追新，默认不启用 |
 | `agentbox-backup.service` / `.timer` | 每日备份核心状态 |
 | `agentbox.logrotate` | `/etc/logrotate.d/agentbox`，日志轮转 |
 | `production.env.example` | 维护者使用的生产参数模板 |
@@ -133,13 +133,13 @@ ssh -o BatchMode=yes "$PROD_SSH" "'$PROD_DIR/deploy/deploy.sh'"
 ```bash
 ./scripts/build-image.sh
 
-# 对比 npm 最新版；发现版本变化时重建镜像
-./scripts/auto-update-image.sh
+# 显式选择实验性追新
+AGENTBOX_AUTO_UPDATE=1 ./scripts/auto-update-image.sh
 ```
 
-`agentbox-image-update.timer` 每日运行版本检查，日志在 `/var/log/agentbox-image-update.log`。运行中空间不被直接打断；镜像变化后，停止再启动空间时会使用新镜像。
+稳定安装默认禁用 `agentbox-image-update.timer`，镜像使用固定基线；手动启用 timer 后才每日运行最新版检查，日志在 `/var/log/agentbox-image-update.log`。运行中空间不被直接打断；镜像变化后，停止再启动空间时会使用新镜像。
 
-如果需要控制 CLI 版本，可以手动传入 Dockerfile 的构建参数，并按自己的发布策略管理自动更新定时器：
+固定版本及回退说明见 [兼容矩阵](../docs/compatibility.md)。需要覆盖基线时可显式传入 Dockerfile 构建参数：
 
 ```bash
 docker build -t agentbox-agent:latest \

@@ -595,3 +595,12 @@ data/
 - Manifest 校验内容和元数据，符号链接不跟随；恢复仅允许不存在的新目录，配置中的 data_dir/credentials_dir 重写为恢复目录内相对路径。恢复目录发布使用不覆盖 rename，不能混入旧 WAL。
 - `scripts/backup.sh` 只负责编排内置命令、SHA-256 文件、同类型轮转和可选 rsync；`AGENTBOX_BIN`/`AGENTBOX_CONFIG` 支持独立部署路径。仅用户已授权运行该脚本的远端传输时才使用 BACKUP_REMOTE。
 - 验证：`go test ./internal/backup ./cmd/agentbox`、`scripts/test-backup.sh`；需要实际 Docker 检查时设置 `AGENTBOX_BACKUP_DOCKER_TEST=1`。同 daemon 上不能同时启动带相同 session ID 的旧实例与恢复实例。
+
+### 开源发布约定
+
+- 项目采用 Apache-2.0；保留 LICENSE、NOTICE 和 `third_party/` 中第三方许可。内置资源哈希及 Go 链接模块清单经 `scripts/verify-third-party.py` 校验；更新 Go 依赖后运行 `scripts/collect-go-licenses.py` 并审查变化。
+- `scripts/build-release.py` 在干净 checkout 构建 7 个平台包，含 `--version`/build.json/校验和。Tag 工作流只生成候选 artifact，不自动公开 Release 或包含 Claude Code 的镜像。
+- 发布包验证用 `scripts/test-release.py`；真实 Linux Docker 会话冒烟用 `scripts/test-release-server.py --image <已构建镜像>`，仅合成数据，不发模型请求。两者创建自己的容器并清理。
+- `scripts/scan-secrets.py` 扫描全部已获取 refs、当前跟踪文件和解包产物（含二进制 printable strings）；报告必须保存在仓库外，内容脱敏。扫描前先 fetch 分支和标签；扫描通过不是不存在敏感信息的证明，生产域名等仍需人工审查。
+- CLI/基础镜像默认版本在 versions.env 与 Dockerfile；构建覆盖参数使用 `AGENTBOX_CLAUDE_VERSION` / `AGENTBOX_CODEX_VERSION` / `AGENTBOX_BASE_IMAGE`，避免运行环境同名变量污染。`scripts/test-image-policy.py` 验证缺省无追新且版本固定。
+- 自动追新仅 `AGENTBOX_AUTO_UPDATE=1` 启用；install.sh 默认禁用更新 timer，显式 `AGENTBOX_ENABLE_AUTO_UPDATE=1` 才启用。保留旧镜像，禁止自动全局 prune。

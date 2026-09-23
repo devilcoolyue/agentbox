@@ -29,6 +29,7 @@
 package main
 
 import (
+	"agentbox/internal/buildinfo"
 	"flag"
 	"fmt"
 	"log"
@@ -49,6 +50,10 @@ func (s *stringList) Set(v string) error {
 }
 
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-version" || os.Args[1] == "version") {
+		fmt.Println(buildinfo.String("abox-link"))
+		return
+	}
 	log.SetFlags(log.LstdFlags)
 
 	var (
