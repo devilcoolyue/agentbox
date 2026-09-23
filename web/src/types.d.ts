@@ -223,12 +223,14 @@ export interface UsageEventRow {
   wall_ms: number;
   /** 首字延迟，同上；0 = 没量到 */
   ttft_ms: number;
-  /** 这一行在**当前**价目表下的单价，用来把费用逐项摊开；查不到价时没有这个字段 */
+  /** 这一行的入账单价快照；旧数据回退当前参考单价，用来把费用逐项摊开；查不到价时没有这个字段 */
   rate?: UsageRate;
 }
 
 /** 一行消耗对应的单价（已按档位选好），美元 / 百万 token。 */
 export interface UsageRate extends TokenRates {
+  /** true 表示入账时保存的价目表快照；缺省为旧数据的当前参考价。 */
+  snapshot?: boolean;
   /** 命中的价目表键：模型 ID，或作为兜底的 agent 名 */
   key: string;
   /** "table" 这行的钱就是它算出来的 | "reference" provider 自报了总额，这份只是照价目表推的参考拆分 */

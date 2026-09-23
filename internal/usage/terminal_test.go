@@ -1,4 +1,4 @@
-package server
+package usage
 
 import (
 	"os"
@@ -135,7 +135,7 @@ func TestScanTerminalUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sc := &termScanner{seen: map[string]termFileState{}}
+	sc := &Scanner{seen: map[string]termFileState{}}
 	s.scanTerminalUsage(sc)
 
 	rows := s.store.ListUsage(store.UsageFilter{Kind: store.UsageKindTerminal})

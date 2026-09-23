@@ -425,17 +425,19 @@ function openCost(r) {
     const lines = [];
     if (!rate) {
         lines.push(r.billing === "provider"
-            ? "这一行的钱由 provider 在回合收尾时自报，只给总额不给分项；价目表里也没有这个模型的价，推不出拆分。"
-            : "价目表里查不到这个模型的价，所以只记用量、不扣额度。到系统设置的「价目表」里配上单价，之后的消耗就会按 token 折算。");
+            ? "这一行的钱由 provider 在回合收尾时自报，只给总额不给分项；这条记录也没有可用的参考单价，无法拆分。"
+            : "这条记录没有可用单价，只记用量、不扣额度。配置价目表会用于之后的新记录，不会追溯补扣。");
     }
     else if (rate.basis === "reference") {
-        lines.push(`这一行的钱由 provider 自报总额，拆不出分项：上表是照当前价目表「${rate.key}」推的参考值，与实收有出入很正常。`);
+        lines.push(`这一行的钱由 provider 自报总额，拆不出分项：上表是照${rate.snapshot ? "入账时保存的" : "当前"}价目表「${rate.key}」推的参考值，与实收有出入很正常。`);
     }
     else {
-        lines.push(`按价目表「${rate.key}」${rate.key === r.model ? "" : "（兜底价）"}折算。`);
+        lines.push(`按${rate.snapshot ? "入账时保存的" : "当前"}价目表「${rate.key}」${rate.key === r.model ? "" : "（兜底价）"}折算。`);
         if (off)
-            lines.push("实收金额是入账当时按那会儿的单价算的，跟现在表里的价对不上说明价目表改过——以实收为准。");
+            lines.push(rate.snapshot ? "拆分与实收有差异，请以已入账金额为准。" : "这条历史记录没有价格快照，展示当前参考价；实收金额以入账记录为准。");
     }
+    if (rate && !rate.snapshot)
+        lines.push("旧记录没有保存入账价格，当前单价仅供参考。");
     if (rate?.long) {
         lines.push(`输入 + 缓存读取超过 ${num(rate.long_context_over || 0)} token，整个回合走的是长上下文档单价。`);
     }

@@ -1,4 +1,4 @@
-package server
+package usage
 
 import (
 	"testing"
@@ -35,7 +35,7 @@ func baseEvent() store.UsageEvent {
 }
 
 func TestParseUsageClaudePerModel(t *testing.T) {
-	evs, _ := parseUsage([]byte(claudeResultSample), baseEvent())
+	evs, _ := ParseUsage([]byte(claudeResultSample), baseEvent())
 	if len(evs) != 2 {
 		t.Fatalf("每个用到的模型应各出一行，得到 %d 行", len(evs))
 	}
@@ -94,7 +94,7 @@ func TestParseUsageClaudePerModel(t *testing.T) {
 func TestParseUsageClaudeNoModelUsage(t *testing.T) {
 	const legacy = `{"type":"result","duration_ms":1000,"total_cost_usd":0.5,` +
 		`"usage":{"input_tokens":10,"cache_creation_input_tokens":20,"cache_read_input_tokens":30,"output_tokens":40}}`
-	evs, _ := parseUsage([]byte(legacy), baseEvent())
+	evs, _ := ParseUsage([]byte(legacy), baseEvent())
 	if len(evs) != 1 {
 		t.Fatalf("应回退成单行，得到 %d 行", len(evs))
 	}
@@ -114,7 +114,7 @@ func TestParseUsageCodex(t *testing.T) {
 	base := baseEvent()
 	base.Agent = "codex"
 	base.Model = "" // codex 常走 provider 默认模型，事件里也不带模型名
-	evs, _ := parseUsage([]byte(codexTurnSample), base)
+	evs, _ := ParseUsage([]byte(codexTurnSample), base)
 	if len(evs) != 1 {
 		t.Fatalf("应出 1 行，得到 %d 行", len(evs))
 	}
@@ -140,7 +140,7 @@ func TestParseUsageCodexExec(t *testing.T) {
 	base := baseEvent()
 	base.Agent = "codex"
 	base.Model = ""
-	evs, _ := parseUsage([]byte(codexExecSample), base)
+	evs, _ := ParseUsage([]byte(codexExecSample), base)
 	if len(evs) != 1 {
 		t.Fatalf("应出 1 行，得到 %d 行", len(evs))
 	}
@@ -170,7 +170,7 @@ func TestParseUsageIgnoresOtherEvents(t *testing.T) {
 		`not json at all`,
 		``,
 	} {
-		if evs, _ := parseUsage([]byte(line), baseEvent()); len(evs) != 0 {
+		if evs, _ := ParseUsage([]byte(line), baseEvent()); len(evs) != 0 {
 			t.Errorf("不该产生流水: %s -> %+v", line, evs)
 		}
 	}
@@ -188,7 +188,7 @@ func TestParseUsageTitleTurn(t *testing.T) {
 	base := baseEvent()
 	base.Model = ""
 	base.Kind = store.UsageKindTitle
-	evs, _ := parseUsage([]byte(titleJSON), base)
+	evs, _ := ParseUsage([]byte(titleJSON), base)
 	if len(evs) != 1 {
 		t.Fatalf("应出 1 行，得到 %d 行", len(evs))
 	}
@@ -224,10 +224,10 @@ const claudeRateLimitSample = `{"type":"result","subtype":"success","is_error":t
 // 一个回合收到多个 claude result 时只能认最后一个：它们报的是本次运行的累计
 // 值，相加就是把同一笔钱扣好几遍（线上真扣了 14 遍，$25.87 变成 $362）。
 func TestUsageTallyClaudeResultsDoNotAccumulate(t *testing.T) {
-	var tally usageTally
-	tally.observe(baseEvent(), []byte(claudeResultSample))
-	tally.observe(baseEvent(), []byte(claudeTaskNotifySample))
-	tally.observe(baseEvent(), []byte(claudeRateLimitSample))
+	var tally Tally
+	tally.Observe(baseEvent(), []byte(claudeResultSample))
+	tally.Observe(baseEvent(), []byte(claudeTaskNotifySample))
+	tally.Observe(baseEvent(), []byte(claudeRateLimitSample))
 
 	if len(tally.evs) != 2 {
 		t.Fatalf("三个 result 只该留下最后一个的两行，得到 %d 行", len(tally.evs))
@@ -248,10 +248,10 @@ func TestUsageTallyClaudeResultsDoNotAccumulate(t *testing.T) {
 
 // 不认识的事件不该动汇总：一条真用量后面跟一串杂事件，账还是那份账。
 func TestUsageTallyIgnoresNonUsageLines(t *testing.T) {
-	var tally usageTally
-	tally.observe(baseEvent(), []byte(claudeResultSample))
-	tally.observe(baseEvent(), []byte(`{"type":"assistant","message":{"content":[]}}`))
-	tally.observe(baseEvent(), []byte(`not json`))
+	var tally Tally
+	tally.Observe(baseEvent(), []byte(claudeResultSample))
+	tally.Observe(baseEvent(), []byte(`{"type":"assistant","message":{"content":[]}}`))
+	tally.Observe(baseEvent(), []byte(`not json`))
 	if len(tally.evs) != 2 {
 		t.Fatalf("汇总应保持 2 行，得到 %d 行", len(tally.evs))
 	}
@@ -262,9 +262,9 @@ func TestUsageTallyIgnoresNonUsageLines(t *testing.T) {
 func TestUsageTallyCodexTurnsAccumulate(t *testing.T) {
 	base := baseEvent()
 	base.Agent = "codex"
-	var tally usageTally
-	tally.observe(base, []byte(codexTurnSample))
-	tally.observe(base, []byte(codexExecSample))
+	var tally Tally
+	tally.Observe(base, []byte(codexTurnSample))
+	tally.Observe(base, []byte(codexExecSample))
 	if len(tally.evs) != 2 {
 		t.Fatalf("两个 turn.completed 该各记一行，得到 %d 行", len(tally.evs))
 	}

@@ -258,3 +258,5 @@ curl --fail-with-body -sS "$ABOX_URL/api/users/alice/credits" \
 路由清单以 [`internal/server/server.go`](../internal/server/server.go) 为准，前端类型见 [`web/src/types.d.ts`](../web/src/types.d.ts)。`POST /api/sessions/{id}/chat/reset` 保留为旧客户端兼容入口，语义等同新建线程；新接入优先使用线程接口。
 
 预览入口 `/preview/<grant>/...` 使用短时通行证读取文件，不需要常规 Bearer 头；应先调用已鉴权的 `GET /api/sessions/{id}/preview` 取得 URL，不能将其当作长期公开文件托管地址。
+
+用量明细的 `rate.snapshot=true` 表示单价来自该行入账时保存的快照；缺省或 false 表示旧记录的当前参考价。`billing` 对新记录使用持久化来源 provider/table/none，不再按 Agent 名猜测；接口路径与原字段保持兼容。

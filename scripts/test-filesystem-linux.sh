@@ -25,15 +25,19 @@ case "$test_arch" in
 esac
 
 docker build -t "$test_image" -f internal/dockerx/testdata/git.Dockerfile internal/dockerx/testdata
-for package in safefs archivex agent server backup dockerx app workspace credentials; do
+for package in safefs archivex agent server backup dockerx app workspace credentials usage store; do
   GOOS=linux GOARCH="$test_arch" CGO_ENABLED=0 \
     go test -c -o "$test_stage/$package.test" "./internal/$package"
 done
 
 test_container=$(docker run -d --network none --security-opt no-new-privileges \
   --memory 512m --pids-limit 256 "$test_image")
-for package in safefs archivex agent server backup dockerx app workspace credentials; do
+for package in safefs archivex agent server backup dockerx app workspace credentials usage store; do
   docker cp "$test_stage/$package.test" "$test_container:/tmp/$package.test"
+  docker exec "$test_container" mkdir -p "/tmp/tests/$package"
+  if [[ -d "internal/$package/testdata" ]]; then
+    docker cp "internal/$package/testdata" "$test_container:/tmp/tests/$package/testdata"
+  fi
   echo "Linux tests: $package"
-  docker exec "$test_container" "/tmp/$package.test" -test.timeout=90s
+  docker exec -w "/tmp/tests/$package" "$test_container" "/tmp/$package.test" -test.timeout=90s
 done

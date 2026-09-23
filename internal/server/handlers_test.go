@@ -27,10 +27,9 @@ func newTestServer(t *testing.T) (*Server, store.Session) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	s := &Server{
-		cfg:      &config.Config{DataDir: dataDir, MaxUploadMB: 10},
-		store:    st,
-		logins:   newLoginGuard(),
-		termScan: &termScanner{seen: map[string]termFileState{}},
+		cfg:    &config.Config{DataDir: dataDir, MaxUploadMB: 10},
+		store:  st,
+		logins: newLoginGuard(),
 	}
 	sess := store.Session{ID: "s1", User: "alice", Name: "demo"}
 	if err := os.MkdirAll(s.workspaceDir(sess), 0o755); err != nil {

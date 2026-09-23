@@ -22,6 +22,7 @@ import uuid
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('artifacts', type=Path, nargs='?')
 p.add_argument('--binary', type=Path, help='test an already cross-compiled Linux binary')
+p.add_argument('--usage', action='store_true', help='verify Codex terminal backfill and persisted pricing with synthetic rollout')
 p.add_argument('--restart', action='store_true', help='verify shutdown with an open chat WebSocket and restart against the same data')
 p.add_argument('--image', required=True)
 a=p.parse_args()
@@ -92,6 +93,22 @@ try:
         status=request('/api/sessions/'+sess['id']+'/git/status')
         assert 'smoke.txt' in json.dumps(status),status
         assert 'packaged server works' in docker('exec','--user','1000:1000',cid,'cat','/workspace/smoke.txt')
+        if a.usage:
+            request('/api/settings',{'pricing':{'codex':{'input':2,'output':3}}},'PUT')
+            transcript_dir='/home/agent/.codex/sessions/2026/09/23'
+            docker('exec','--user','1000:1000',cid,'mkdir','-p',transcript_dir)
+            fixture=Path(__file__).resolve().parent.parent/'internal/usage/testdata/codex-terminal-0.145.0.jsonl'
+            docker('cp',str(fixture),cid+':'+transcript_dir+'/rollout-fixture.jsonl')
+            events=request('/api/usage/events?session='+sess['id'])
+            rows=events['rows']
+            assert len(rows)==3,events
+            costs={r['id']:r['cost_micro_usd'] for r in rows}
+            assert all(r['rate']['snapshot'] and r['rate']['input']==2 for r in rows),rows
+            request('/api/settings',{'pricing':{'codex':{'input':99,'output':99}}},'PUT')
+            rows=request('/api/usage/events?session='+sess['id'])['rows']
+            assert {r['id']:r['cost_micro_usd'] for r in rows}==costs
+            assert all(r['rate']['input']==2 for r in rows)
+            print('Codex terminal: synthetic rollout yielded 3 rows; saved prices survive table edits')
         if a.restart:
             docker('exec','--user','1000:1000',cid,'tmux','new-session','-d','-s','lifecycle-smoke','sleep 120')
             ws=socket.create_connection(('127.0.0.1',int(bindings[0]['HostPort'])),timeout=3)

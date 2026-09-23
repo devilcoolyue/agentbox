@@ -1,0 +1,3 @@
+{"type": "system", "session_id": "fixture-claude"}
+{"type": "stream_event", "event": {"type": "content_block_delta"}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "fixture"}]}}

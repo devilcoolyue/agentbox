@@ -120,9 +120,9 @@ third_party/
 - [x] C1：新增 app 管理数据锁/启动清理；后台任务、WS、代理/隧道和在途回合统一关闭，等待已观察到的用量落库。
 - [x] C2：提取 workspace，集中创建/启停/删除/播种/回收、可取消会话锁和活动引用；运行时失败不写假成功状态。
 - [x] C3：提取 credentials，统一凭证读写/续期/同步及账号锁；修复刷新后播发受 mtime 容差抑制的问题。
-- [ ] C4：提取 usage；保留事务边界，保存入账价格快照与来源。
-- [ ] C5：引入版本化数据库迁移；检测不支持的新 schema，明确二进制回退限制。
-- [ ] C6：统一 Agent 能力与事件接口，保留脱敏协议样本，补 Codex 终端用量。
+- [x] C4：提取 usage 的事件/定价/结算/终端扫描；用量、价格快照和扣款同事务，新历史明细使用入账单价。
+- [x] C5：引入 user_version 连续迁移，旧库基线升级、拒绝高版本、失败/进程中断回滚及回退说明完成。
+- [x] C6：Adapter 统一能力/聊天/标题/事件，保留合成协议样本，补 Codex TUI 终端聚合、去重和日期目录监听。
 
 验收：每次提取后 API/WS 行为兼容，现有测试通过；迁移覆盖历史库、重复启动和迁移中断；新增业务模块不依赖 HTTP 包。
 
@@ -146,7 +146,7 @@ third_party/
 - 2026-09-23：创建重构分支与设计文档；完成 A1 的实现及本地验证。新增容器命令执行适配器、`gitx`、额度入口检查、Git hook/环境隔离、首次提交 diff 与丢弃失败回归，并接入 CI 容器冒烟步骤。
 - 验证通过：`go build ./...`、`go test ./...`、`go vet ./...`、`npm run check`、`go test -race ./internal/gitx ./internal/dockerx`。
 - 本机 Docker 的 Linux arm64 最小 Alpine Git 容器实测通过：uid=1000、提交/diff、hook 禁用、过滤器不继承测试密钥环境变量。临时容器已清理，测试镜像保留用于复用。未调用模型、未挂载真实账号或工作区。
-- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。B 阶段本地实施与验证已完成，C/D 阶段仍待实施；公开发布前事项见开源审查记录。
+- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。B 阶段本地实施与验证已完成，D 阶段仍待实施；公开发布前事项见开源审查记录。
 
 - 2026-09-23：完成 A2。新增 `internal/safefs`，移除检查后返回绝对路径的文件助手与旧 rename 降级实现；普通文件读、原子保存、移动/删除、归档、预览、技能与凭证统一使用固定目录句柄。详见 [文件系统边界](filesystem-boundaries.md)。
 - A2 验证通过：Go build/test/vet、前端类型检查、safefs/archivex/agent/server 的 race 检查；`scripts/test-filesystem-linux.sh` 在无宿主挂载、无外网的 Linux arm64 容器运行四个包的完整测试通过。最小镜像补齐 tzdata 后解决了时区测试环境缺失；未连接生产或调用模型。
@@ -174,4 +174,9 @@ third_party/
 
 - 2026-09-23：完成 C3。`internal/credentials` 承接 OAuth 池文件与 Codex Key/provider 读写、状态读取、刷新合并、双向同步和账号级可取消锁；workspace 使用带 context 的同步接口。HTTP 层只保留授权流程、参数/响应与出口客户端适配，不引入业务模块对 server 的反向依赖。
 - 保留先同步→判断并刷新→立即播发的顺序，续期保留订阅档位/scopes/未知字段。刷新成功和新 OAuth 保存后的播发不再受日常同步的 2 秒 mtime 容差抑制；仍重查授权并仅更新已经播种的 home。Codex 两个文件逐文件原子写入，不宣称跨文件事务。
-- C3 验证：Go 全量 build/test/vet、credentials/workspace/server race，Linux arm64 隔离容器回归；20 并发请求只刷新一次、立即播发与撤权过滤、锁等待取消、代理失败不直连、字段合并、受限读取和 Codex 原配置保留测试通过。实际 Linux Docker 合成空间 CRUD/文件/Git/SIGTERM 重启再次通过；未使用真实凭证、未调用模型、未部署生产。C4–C6 尚未完成。
+- C3 验证：Go 全量 build/test/vet、credentials/workspace/server race，Linux arm64 隔离容器回归；20 并发请求只刷新一次、立即播发与撤权过滤、锁等待取消、代理失败不直连、字段合并、受限读取和 Codex 原配置保留测试通过。实际 Linux Docker 合成空间 CRUD/文件/Git/SIGTERM 重启再次通过；未使用真实凭证、未调用模型、未部署生产。C4–C6 后续实现见下方记录。
+
+- 2026-09-23：完成 C4–C6。`internal/usage` 承接回合归一化、定价、结算与终端扫描，server 保留接口鉴权/参数/响应。新增 PriceSnapshot 保存来源、价格键、两档单价与阈值；终端续写在 store 的 upsert 事务内沿用首次快照，旧行不伪造历史价。正常用量仍由 InsertUsage 同事务记账扣款；无额度行不限额、余额允许负数、终端只记账不变。
+- schema 版本 1 引导旧库并补齐遗留字段，版本 2 添加价格快照。所有待执行迁移及 user_version 同事务提交，读出不支持的高版本后拒绝写入；测试覆盖 SQL 失败与迁移进程 os.Exit 中断。回退说明见 [数据库迁移](database-migrations.md)，旧二进制无版本保护时仍不得直接连接新库。
+- Agent Adapter 提供能力、命令和事件解码，保持 Codex app-server 优先/exec 回退、续聊及中断。Codex 终端从日期目录解析 codex-tui rollout，以累计 token 差值排除重复额度通知，按 thread/turn/model 聚合并以空间区分去重；缓存输入和 reasoning 语义保持。样本为按固定版本公开结构构造的合成记录，没有读取真实 transcript 或调用模型。
+- C4–C6 验证：Go 全量 build/test/vet，usage/store/agent/server race，前端 check/build；Linux arm64 隔离容器 11 包回归通过。实际 Debian 会话内注入合成 rollout，经真实 HTTP 查到 3 行终端流水，修改价目表后费用/单价保持快照，SIGTERM 与同卷重启继续通过。Linux 脚本现同步复制 testdata；未执行远端 CI 或生产部署。

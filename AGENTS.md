@@ -24,6 +24,7 @@
 | `internal/credentials` | 账号凭证读取/保存、轮换同步、续期与账号级可取消锁。 |
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
 | `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）、用量计量与额度（`usage.go`/`quota.go`/`usagelog.go`）。 |
+| `internal/usage` | 回合用量归一化、定价快照、结算编排及 Claude/Codex 终端扫描。 |
 | `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens/usage_events/quotas/credit_ledger；首次打开会导入旧版 `state.json`。 |
 | `internal/backup` | 版本化 tar.gz 备份、SQLite 在线快照、清单/哈希验证、恢复到新目录；CLI 在 cmd/agentbox/backup.go。 |
 | `internal/safefs` | 基于 os.Root 的受限目录句柄、普通文件读取、原子写入及跨目录不覆盖重命名；详见 docs/architecture/filesystem-boundaries.md。 |
@@ -244,7 +245,7 @@ data/
 
 ### 用量计量
 
-- 回合收尾事件里的 token/费用落进 `usage_events` 表（`internal/server/usage.go` 解析，
+- 回合收尾事件里的 token/费用落进 `usage_events` 表（`internal/usage/events.go` 解析，
   `runTurn` 的 `onLine` 里挂钩），并在**同一个事务**里从用户额度扣掉（见下节）。
 - Claude 的 `type:"result"` 按 `modelUsage` **每个模型出一行**（含子 agent 用的 haiku），
   同回合各行共享 `turn_id`。实测 `total_cost_usd` 等于各行 `costUSD` 之和，而顶层 `usage`
@@ -321,9 +322,7 @@ data/
   `cache_creation.ephemeral_1h_input_tokens` 有值、`ephemeral_5m_input_tokens` 是 0。
   我们的用量只有一个「缓存写入」桶，两档合不了，只能取实际用的那档。
 - Claude 4.6 及之后的模型 1M 上下文按标准价计费，所以 claude 各行**都不配长上下文档**。
-- 已知小瑕疵：claude 对话行里 provider 偶尔报 0（子 agent），配了 claude 价之后这类行
-  会被 `priceEvent` 按表折算，但 `billingMode` 仍标成「官方报价」——因为我们没有存
-  「这个价是哪来的」。数更准了，标签略糙。
+- Claude 0 费用按表补算时，新记录保存 table 来源；旧记录没有价格快照，仍只能按旧规则推断来源。不要把事后参考价当作历史入账价格。
 - **长上下文是「过线整轮翻倍」，不是对超出部分加价。** 提示词超过
   `long_context_over`（OpenAI 现为 272000 input token）后，整个回合的四个桶都按
   `long` 那一档算。判定用的是「这轮喂进去多少」= 未命中缓存的输入 + 命中缓存的
@@ -377,10 +376,9 @@ data/
   四个 token 桶各自的 `token × 单价` 摊开，末尾对上实收金额，脚注写清计价算法。单价
   由服务端随行下发（`usageRowView.Rate` ← `rateFor` ← `config.PriceLookup`，顺带给出
   命中的键与档位），**别改成前端自己查价目表**——普通用户根本拿不到 `settings`。两件事
-  不能含糊：① 单价取自**当前**价目表，实收却是入账当时算的，中途改过价就对不上，
-  弹窗按差额自己提示「以实收为准」；② claude 对话行的钱是 provider 自报的一个总额、
+  不能含糊：① 新行使用入账价格快照（rate.snapshot=true），旧行才回退当前参考价并明确提示；② claude 对话行的钱是 provider 自报的一个总额、
   拆不出分项，这类行的 `basis` 是 `reference`，表里那份只是照价目表推的参考值。
-- **终端消耗靠事后扫 transcript 补记**（`internal/server/termusage.go`，`kind=terminal`）。
+- **终端消耗靠事后扫 transcript 补记**（`internal/usage/terminal.go`，`kind=terminal`）。
   终端里的 CLI 是容器内进程、输出直接进 PTY，`runTurn` 看不见；但 Claude Code 把完整
   记录落在 `<会话home>/.claude/projects/<cwd目录>/<provider会话id>.jsonl`，而会话 home
   是宿主机 bind mount，所以读文件就够，不用 hook、不用反代、不用进容器。要点：
@@ -401,7 +399,7 @@ data/
     哪怕是 claude 也只能标「价目表 / 未定价」，不能标「官方报价」。
   - 扫描按 (size, mtime) 跳过没动过的文件；只遍历库里存在的会话，磁盘上已删除会话的
     残留目录不补（补了也是归不到人头上的孤儿行）。
-  - 触发有三条路，都汇到 `Server.termScan`（扫描进度上锁，同一时刻只有一趟在跑）：
+  - 触发有三条路，都汇到 `usage.Service` 的扫描器（扫描进度上锁，同一时刻只有一趟在跑）：
     **inotify**（`termWatchLoop`，主力，实测写入到落库 ~700ms）、`termUsageLoop`
     每分钟的全量兜底、以及 `handleUsageEvents` 进来时先补一趟。
   - **inotify 能收到容器里的写入**：会话 home 是 bind mount，容器与宿主机是同一个
@@ -415,9 +413,7 @@ data/
 - 终端页顶栏的「本会话已花」（`term.ts` 的 `termSpendPolling`）直接复用
   `GET /api/usage/events?session=<id>&limit=1` 的 `total`，没有单独的接口——那个 total
   本来就是「按筛选条件算、与翻页无关」，正好是这个数。只在终端页轮询（15 秒）。
-- **codex 的终端消耗还没补。** rollout 在 `<会话home>/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`，
-  `token_count` 事件带 `last_token_usage`，`session_meta.originator` 是 `codex-tui`（终端）
-  还是 exec，判据齐全，只是格式另写一套解析。
+- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源，按 thread/turn/model 聚合；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；仍只记账不扣额度。
 
 ### 终端
 
@@ -551,8 +547,7 @@ data/
   但机器得能连 proxy.golang.org。
 - 现有测试集中在 `internal/agent`、`internal/linkapp`、`internal/server`、`internal/store`、`internal/tunnel`；`dockerx`、`config`、`gitx`、`archivex`、`safefs` 也有测试。文件安全改动须跑链接替换、归档与播种回归。
 - 配置变更是“副本上修改 → 校验 → 原子写盘 → 替换内存状态”的模式；不要绕过 `Config.mutate` 直接改字段。
-- SQLite 加列走 `store.migrate()` 里的幂等 `ALTER TABLE`（重复执行时忽略
-  `duplicate column name`）——`CREATE TABLE IF NOT EXISTS` 对已存在的库不生效。
+- SQLite 变更走 `internal/store/migrations.go` 的连续版本迁移与 migrations/*.sql，事务内更新 user_version；先拒绝高版本，再迁移，不能再靠忽略 duplicate column 错误补列。旧未版本化库由基线迁移检查列后补齐。
 - 前端不要用原生 `alert/confirm/prompt`：用 `util.js` 的 `askConfirm`/`askPrompt`
   （Promise 化的自定义对话框）或 `toast`。
 - 令牌只在 GET 请求接受 `?token=`（WS 升级与下载直链需要）；写操作一律走
@@ -628,3 +623,11 @@ data/
 - 日常双向同步沿用 2 秒 mtime 容差；服务端续期成功后的播发改为单向立即写入已有凭证副本，不用该容差，避免刚播种的会话遗漏新链。刷新与后台同步、OAuth 保存、Codex Key 保存共用账号锁，锁等待可取消。
 - 续期仍先回收会话新令牌，再判断/刷新，最后立即播发；合并保留订阅档位、scopes 及未知字段。每次同步/播发重查授权，不向撤权空间交付新凭证。未播种的 home 不由后台同步创建凭证树。
 - Codex auth/config 各文件使用受限原子写入，但跨文件不构成事务；后一个文件失败时可能已更新 Key，API 返回错误，重试完成配置。
+
+### 用量、迁移与 Agent 接口
+
+- `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度，终端 UpsertTerminalUsage 绝不扣额度。
+- 新行 `PriceSnapshot` 包含来源、价格键、普通/长上下文档和阈值。终端 upsert 在同一事务读取首份快照，续写不能改用新价；旧行没有快照时不要伪造历史单价。Claude 0 费用按表补算时保存 table 来源。
+- 当前 SQLite schema=2，user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
+- `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。
+- 协议样本放在 agent/usage 的 testdata，全部为合成脱敏数据。Linux 测试脚本必须复制这些 testdata；禁止读取真实用户 rollout 当测试夹具。

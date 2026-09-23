@@ -30,25 +30,7 @@ import (
 // priceEvent 给 provider 不报价的用量行折算费用，返回微美元。已经带价的行原样
 // 返回；查不到价目表时返回 0——记账照旧，只是这行不产生扣减。
 func (s *Server) priceEvent(ev store.UsageEvent) int64 {
-	if ev.CostMicroUSD != 0 {
-		return ev.CostMicroUSD
-	}
-	p, ok := s.cfg.Price(ev.Agent, ev.Model)
-	if !ok {
-		return 0
-	}
-	// 长上下文档按「这一轮喂进去多少」判定，也就是未命中缓存的输入加上命中
-	// 缓存的输入——两者相加正好还原 codex 事件里报的 input_tokens。cache_write
-	// 不加：它是否算在 input_tokens 里没实测过，这家 provider 又一直报 0，
-	// 加进来只会凭空把回合推过档位线。
-	r := p.Rates(ev.InputTokens + ev.CacheReadTokens)
-	// 价目表的单位是「每百万 token 多少美元」，要的结果是微美元，两个 1e6
-	// 正好约掉：micro = tokens × rate。1000 token × $1.25/M = 1250 微美元。
-	usd := float64(ev.InputTokens)*r.Input +
-		float64(ev.OutputTokens)*r.Output +
-		float64(ev.CacheReadTokens)*r.CacheRead +
-		float64(ev.CacheWriteTokens)*r.CacheWrite
-	return int64(math.Round(usd))
+	return s.usageService().Price(ev).CostMicroUSD
 }
 
 // quotaBlock 返回该用户此刻被拦的原因；空串表示放行。

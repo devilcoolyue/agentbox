@@ -18,7 +18,6 @@ import (
 	"github.com/gorilla/websocket"
 
 	"agentbox/internal/agent"
-	"agentbox/internal/config"
 	"agentbox/internal/dockerx"
 	"agentbox/internal/store"
 )
@@ -289,6 +288,11 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		return
 	}
 
+	adapter, err := agent.Lookup(sess.Agent)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
 	if model == "" {
 		model = sess.DefaultModel
 	}
@@ -304,7 +308,7 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 	turnID := store.NewID()
 	var tally usageTally
 	// 回合计时的起点，首字延迟与墙钟总耗时共用一块表：容器就绪之后开表（别把
-	// 拉容器的几秒算进去），第一个模型输出事件量首字（见 isOutputEvent），回合
+	// 拉容器的几秒算进去），第一个模型输出事件量首字（见 Adapter.Decode），回合
 	// 收尾时量总耗时。两个数同源才可比——provider 自报的 duration_ms 不含 CLI
 	// 自身启动的那两秒，单独拿它当总耗时会比首字还小。
 	var turnStart time.Time
@@ -314,7 +318,7 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 	r.broadcast(map[string]any{"type": "user_message", "text": text})
 	r.broadcast(map[string]any{"type": "status", "state": "running"})
 
-	sess, err := s.startSession(ctx, sess)
+	sess, err = s.startSession(ctx, sess)
 	if err != nil {
 		fail("启动容器失败: " + err.Error())
 		return
@@ -337,15 +341,14 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		if len(line) == 0 {
 			return
 		}
-		if line[0] == '{' && json.Valid(line) {
-			ev := make(json.RawMessage, len(line))
-			copy(ev, line)
+		if event, valid := adapter.Decode(line); valid {
+			ev := event.Raw
 			// 掐表要在增量分支之前：最早的模型输出往往就是个增量事件，放到
 			// 后面量到的是第一个完整事件，那已经是整段话说完了。
-			if ttftMS == 0 && isOutputEvent(line) {
+			if ttftMS == 0 && event.Output {
 				ttftMS = time.Since(turnStart).Milliseconds()
 			}
-			if agent.IsPartialEvent(line) {
+			if event.Partial {
 				// 增量 delta 只广播不落盘：随后的完整事件会带全文再来一份
 				r.broadcast(map[string]any{"type": "agent_event", "event": ev})
 				return
@@ -353,12 +356,12 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 			r.appendLog(logEntry{Kind: "event", Event: ev})
 			r.broadcast(map[string]any{"type": "agent_event", "event": ev})
 			// 回合收尾事件带 token/费用，先并进 tally，回合结束统一落库。
-			tally.observe(store.UsageEvent{
+			tally.Observe(store.UsageEvent{
 				User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: turnID,
 				Agent: sess.Agent, AccountID: sess.AccountID, Model: model,
 				Kind: store.UsageKindChat, TTFTMs: ttftMS,
 			}, line)
-			if id := agent.ExtractSessionID(line); id != "" && id != chatID {
+			if id := event.SessionID; id != "" && id != chatID {
 				chatID = id
 				if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.ChatSession = id }); err != nil {
 					log.Printf("save chat session id %s: %v", sess.ID, err)
@@ -374,7 +377,7 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 	// codex 优先走 app-server 协议（真流式增量）；容器里的 codex 太旧等
 	// 握手失败的情况回退传统 exec 路径（无增量，前端整段回放兜底）。
 	handled := false
-	if sess.Agent == config.AgentCodex {
+	if adapter.Capabilities().AppServer {
 		fallback, err := r.appServerTurn(ctx, sess, text, model, effort, onLine)
 		switch {
 		case err == nil:
@@ -387,7 +390,7 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		}
 	}
 	if !handled {
-		cmd, err := agent.ChatCommand(sess.Agent, s.cfg.GetPermissionMode(), chatID, model, effort)
+		cmd, err := adapter.Chat(s.cfg.GetPermissionMode(), chatID, model, effort)
 		if err != nil {
 			fail(err.Error())
 			return
@@ -560,7 +563,11 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	if _, err := s.sessionAccount(sess); err != nil {
 		return
 	}
-	cmd, err := agent.TitleCommand(sess.Agent)
+	adapter, err := agent.Lookup(sess.Agent)
+	if err != nil {
+		return
+	}
+	cmd, err := adapter.Title()
 	if err != nil {
 		return
 	}
@@ -576,7 +583,7 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 		log.Printf("gen title %s: %v", r.sessID, err)
 		return
 	}
-	raw, usage := agent.TitleOutput(sess.Agent, out)
+	raw, usage := adapter.ParseTitle(out)
 	// 先记账再管标题：钱已经花掉了，标题为空或被并发抢先都不改变这一点。
 	if len(usage) > 0 {
 		r.recordUsage(store.UsageEvent{

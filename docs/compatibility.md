@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | Node 基础镜像 | 22.23.2-bookworm-slim，OCI index SHA-256 见 versions.env | 包含 amd64/arm64；固定 digest |
 | Claude Code | 2.1.280 | Linux arm64 固定镜像无凭证版本命令；合成会话启动/文件/Git 验证通过 |
-| Codex CLI | 0.145.0 | Linux arm64 固定镜像版本命令；既有协议/用量样例以此版本实测；未做本阶段在线推理 |
+| Codex CLI | 0.145.0 | Linux arm64 固定镜像版本命令；终端 rollout 解析按此版本公开结构及合成样本验证；未做本阶段在线推理 |
 | claude-hud | 0.5.1 | vendored 文件与上游提交逐字节比对 |
 | abox-link | 与服务端相同发布版本 | 先升级服务端；配对依赖 `/api/tunnel/pair/redeem` |
 

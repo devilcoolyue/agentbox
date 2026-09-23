@@ -28,6 +28,7 @@ import (
 	"agentbox/internal/dockerx"
 	"agentbox/internal/gitx"
 	"agentbox/internal/store"
+	"agentbox/internal/usage"
 	"agentbox/internal/web"
 	"agentbox/internal/workspace"
 )
@@ -92,7 +93,8 @@ type Server struct {
 
 	mon *monState // 上一帧计数器快照，供监控页按轮询间隔算 CPU 速率
 
-	termScan *termScanner // 终端消耗补记的扫描进度（定时器与使用记录页共用）
+	usageOnce sync.Once
+	usage     *usage.Service
 }
 
 func New(cfg *config.Config) (*Server, error) { return NewContext(context.Background(), cfg) }
@@ -132,7 +134,6 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 		bootListen: cfg.GetListen(),
 		logins:     newLoginGuard(),
 		mon:        newMonState(),
-		termScan:   &termScanner{seen: map[string]termFileState{}},
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  32 << 10,
 			WriteBufferSize: 32 << 10,

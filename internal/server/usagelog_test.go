@@ -241,7 +241,7 @@ func TestFlushUsageStampsWallClock(t *testing.T) {
 			"claude-haiku-4-5":{"inputTokens":532,"outputTokens":18,"costUSD":0.0006}}}`)
 
 	var tally usageTally
-	tally.observe(store.UsageEvent{User: "alice", SessionID: "s1", TurnID: "t9",
+	tally.Observe(store.UsageEvent{User: "alice", SessionID: "s1", TurnID: "t9",
 		Agent: "claude", Kind: store.UsageKindChat, TTFTMs: ttft}, line)
 	if n := r.flushUsage(&tally, wall*time.Millisecond); n != 2 {
 		t.Fatalf("落库行数 = %d，想要 2（回合按模型拆两行）", n)
@@ -345,5 +345,20 @@ func TestRateForBasisAndTier(t *testing.T) {
 	// 表里没有的模型不给单价，前端据此显示「未定价」。
 	if v := s.rateFor(store.UsageEvent{Agent: "gemini", Model: "x"}); v != nil {
 		t.Errorf("查不到价时 = %+v，想要 nil", v)
+	}
+}
+
+func TestRateUsesSavedSnapshotAfterPriceEdit(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.cfg.Pricing = map[string]config.ModelPrice{"codex": {TokenRates: config.TokenRates{Input: 2}}}
+	e := s.usageService().Price(store.UsageEvent{Agent: "codex", InputTokens: 10})
+	s.cfg.Pricing["codex"] = config.ModelPrice{TokenRates: config.TokenRates{Input: 99}}
+	rate := s.rateFor(e)
+	if rate == nil || !rate.Snapshot || rate.Input != 2 || billingMode(e) != "table" {
+		t.Fatalf("historical price view: %+v", rate)
+	}
+	e.Price = nil
+	if rate = s.rateFor(e); rate == nil || rate.Snapshot || rate.Input != 99 {
+		t.Fatal("legacy reference changed")
 	}
 }

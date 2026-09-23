@@ -41,7 +41,7 @@ jobs:
       - name: Build pinned runtime and test synthetic session
         run: |
           ./scripts/build-image.sh
-          python3 scripts/test-release-server.py "$RUNNER_TEMP/release" --image agentbox-agent:latest
+          python3 scripts/test-release-server.py "$RUNNER_TEMP/release" --image agentbox-agent:latest --usage --restart
       - name: Scan history and candidates
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3

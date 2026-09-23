@@ -1,0 +1,3 @@
+{"type": "thread.started", "thread_id": "fixture-codex"}
+{"type": "stream_event", "event": {"type": "content_block_delta"}}
+{"type": "item.completed", "item": {"type": "agent_message", "text": "fixture"}}
