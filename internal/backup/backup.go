@@ -30,8 +30,11 @@ import (
 )
 
 const FormatVersion = 1
-const manifestLimit = 32 << 20
-const entryLimit = 100000
+
+// Large persistent CLI homes commonly contain more than 100k small files.
+// Keep finite bounds shared by creation and verification.
+const manifestLimit = 256 << 20
+const entryLimit = 1000000
 
 type Entry struct {
 	Name    string    `json:"name"`
@@ -288,7 +291,7 @@ func addTree(ctx context.Context, tw *tar.Writer, m *Manifest, base, rel, dest s
 			return err
 		}
 		if len(m.Entries) >= entryLimit {
-			return errors.New("backup exceeds 100000 entries")
+			return fmt.Errorf("backup exceeds %d entries", entryLimit)
 		}
 		if !info.IsDir() && !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
 			return fmt.Errorf("unsupported special file: %s", out)

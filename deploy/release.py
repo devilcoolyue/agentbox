@@ -3,6 +3,10 @@
 import argparse
 import contextlib
 import fcntl
+import hashlib
+import stat
+import tarfile
+import datetime
 import json
 import os
 from pathlib import Path
@@ -114,7 +118,7 @@ def switch(app, version):
 def schema(data):
     db = data / 'state.db'
     if not db.exists(): return 0
-    with sqlite3.connect(db.as_uri() + '?mode=ro', uri=True) as conn:
+    with contextlib.closing(sqlite3.connect(db.as_uri() + '?mode=ro', uri=True)) as conn:
         return conn.execute('pragma user_version').fetchone()[0]
 
 
@@ -174,6 +178,112 @@ def mounted_containers(roots):
     return result
 
 
+def check_reflink(source, destination_parent):
+    # Probe the actual filesystems before stopping the service. Never fall back
+    # to a full copy on a low-space host.
+    with tempfile.TemporaryDirectory(dir=source, prefix='.reflink-probe-') as src:
+        with tempfile.TemporaryDirectory(dir=destination_parent, prefix='.reflink-probe-') as dst:
+            f = Path(src) / 'fixture'; f.write_bytes(b'agentbox-reflink-test' * 4096)
+            run('cp', '--reflink=always', f, Path(dst) / 'copy')
+
+
+def verify_cloned_users(archive, directory):
+    # Compare the clone with the already-verified archive, not just the live
+    # source: this also detects source changes between backup and clone.
+    manifest = None
+    with tarfile.open(archive, 'r|gz') as tar:
+        for entry in tar:
+            if entry.name == 'manifest.json':
+                if entry.size > 256 << 20: raise ValueError('manifest too large')
+                manifest = json.load(tar.extractfile(entry))
+    if manifest is None or manifest['mode'] != 'full': raise ValueError('full manifest required')
+    expected = {}
+    for entry in manifest['entries']:
+        name = entry['name']
+        if name == 'data/users': expected['.'] = entry
+        elif name.startswith('data/users/'): expected[name[len('data/users/'):]] = entry
+    actual = {'.'} if directory.exists() else set()
+    if directory.exists():
+        for parent, dirs, files in os.walk(directory, followlinks=False):
+            actual.update(str((Path(parent) / name).relative_to(directory)) for name in dirs + files)
+    if actual != set(expected): raise ValueError('cloned user tree differs from full backup inventory')
+    for name, entry in expected.items():
+        file = directory / name
+        st = file.lstat()
+        kind = 53 if stat.S_ISDIR(st.st_mode) else 50 if stat.S_ISLNK(st.st_mode) else 48 if stat.S_ISREG(st.st_mode) else -1
+        if kind != entry['type'] or (stat.S_IMODE(st.st_mode) & 0o777) != entry['mode'] or st.st_uid != entry['uid'] or st.st_gid != entry['gid']:
+            raise ValueError('cloned user tree metadata mismatch')
+        stamp = entry['mtime']
+        parsed = datetime.datetime.fromisoformat(re.sub(r'\.\d+', '', stamp).replace('Z', '+00:00'))
+        nanos = int(parsed.replace(microsecond=0).timestamp()) * 1000000000
+        fraction = re.search(r'\.(\d+)', stamp)
+        if fraction: nanos += int(fraction.group(1).ljust(9, '0')[:9])
+        if st.st_mtime_ns != nanos: raise ValueError('cloned user tree timestamp mismatch')
+        if kind == 50 and os.readlink(file) != entry['link']: raise ValueError('cloned symlink mismatch')
+        if kind == 48:
+            with open(file, 'rb') as stream: digest = hashlib.file_digest(stream, 'sha256').hexdigest() if hasattr(hashlib, 'file_digest') else file_digest(stream)
+            if st.st_size != entry['size'] or digest != entry['sha256']: raise ValueError('cloned user file differs from full backup')
+
+
+def file_digest(stream):
+    digest = hashlib.sha256()
+    for block in iter(lambda: stream.read(1024 * 1024), b''): digest.update(block)
+    return digest.hexdigest()
+
+
+def tree_inventory(directory):
+    inventory = {}
+    def record(path):
+        st = path.lstat()
+        row = {'mode': st.st_mode, 'uid': st.st_uid, 'gid': st.st_gid, 'mtime_ns': st.st_mtime_ns}
+        if stat.S_ISLNK(st.st_mode): row['link'] = os.readlink(path)
+        elif stat.S_ISREG(st.st_mode):
+            row['size'] = st.st_size
+            with open(path, 'rb') as stream: row['sha256'] = file_digest(stream)
+            after = path.lstat()
+            if (after.st_size, after.st_mtime_ns, after.st_ino) != (st.st_size, st.st_mtime_ns, st.st_ino):
+                raise ValueError('snapshot source changed during hashing')
+        elif not stat.S_ISDIR(st.st_mode): raise ValueError('unsupported special file in snapshot')
+        inventory[str(path.relative_to(directory))] = row
+        if len(inventory) > 1000000: raise ValueError('snapshot exceeds one million entries')
+    if directory.exists():
+        record(directory)
+        for parent, dirs, files in os.walk(directory, followlinks=False):
+            for name in dirs + files: record(Path(parent) / name)
+    return inventory
+
+
+def verify_snapshot(directory):
+    manifest = read(directory / 'snapshot-manifest.json')
+    if manifest.get('format_version') != 1 or manifest.get('mode') != 'full-reflink':
+        raise ValueError('unsupported snapshot manifest')
+    # The root mtime changes when writing the manifest; compare every child.
+    actual = tree_inventory(directory)
+    actual.pop('.', None); actual.pop('snapshot-manifest.json', None)
+    if actual != manifest['entries']: raise ValueError('snapshot contents or metadata differ from manifest')
+
+
+def create_snapshot(binary, source, old_data, target):
+    # Self-contained recovery directory: SQLite/config/creds via verified system
+    # backup, all users via independent copy-on-write inodes. Never a hardlink.
+    system = target.with_name(target.name + '.system.tar.gz')
+    run(binary, 'backup', '--config', source, '--output', system)
+    run(binary, 'backup-verify', system)
+    run(binary, 'restore', '--to', target, system)
+    users = old_data / 'users'
+    if users.exists():
+        expected = tree_inventory(users)
+        clone = target / 'cloned-users'
+        run('cp', '-a', '--reflink=always', users, clone)
+        if tree_inventory(clone) != expected: raise ValueError('snapshot users differ from source')
+        templates = target / 'data' / 'users'
+        if templates.exists(): shutil.rmtree(templates)
+        os.rename(clone, templates)
+    inventory = tree_inventory(target); inventory.pop('.', None)
+    atomic_json(target / 'snapshot-manifest.json', {'format_version': 1, 'mode': 'full-reflink', 'entries': inventory})
+    verify_snapshot(target)
+
+
 def migrate(args):
     source, config, data, cache = map(absolute, [args.source_config, args.config, args.data, args.cache])
     binary = absolute(args.binary); archive = absolute(args.backup)
@@ -182,12 +292,14 @@ def migrate(args):
     disjoint([data, cache, config.parent])
     for dest in (data, cache, config.parent):
         for root in roots: disjoint([root, dest])
+    if getattr(args, 'snapshot_backup', False) and not getattr(args, 'reflink', False): raise ValueError('--snapshot-backup requires --reflink')
     if data.exists() or config.exists() or archive.exists(): raise ValueError('data/config/backup destinations must be new')
     containers = mounted_containers(roots)
     print(json.dumps({'source_data': str(old_data), 'destination_data': str(data),
                       'containers_to_stop_and_remove': [c['Id'][:12] for c in containers],
                       'apply': args.apply}, indent=2))
     if not args.apply: return
+    if getattr(args, 'reflink', False): check_reflink(old_data, data.parent)
     # Backup before downtime as well as the authoritative full backup after stop.
     archive.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     pre = archive.with_name(archive.name + '.preflight.tar.gz')
@@ -197,8 +309,15 @@ def migrate(args):
     if read(source) != cfg: raise ValueError('configuration changed during shutdown; inspect and retry before migration')
     for c in containers:
         if c.get('State', {}).get('Running'): run('docker', 'stop', c['Id'])
-    run(binary, 'backup', '--full', '--config', source, '--output', archive)
-    run(binary, 'backup-verify', archive)
+    snapshot_backup = getattr(args, 'snapshot_backup', False)
+    restore_archive = archive
+    if not snapshot_backup:
+        run(binary, 'backup', '--full', '--config', source, '--output', archive)
+        run(binary, 'backup-verify', archive)
+        if getattr(args, 'reflink', False):
+            restore_archive = archive.with_name(archive.name + '.system.tar.gz')
+            run(binary, 'backup', '--config', source, '--output', restore_archive)
+            run(binary, 'backup-verify', restore_archive)
     # Hold the service lock throughout restore/publication. The verified full
     # archive is the only source; never copy changing database/WAL files directly.
     with locked(old_data / 'agentbox.lock'):
@@ -207,7 +326,20 @@ def migrate(args):
         data.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=data.parent, prefix='.migration-') as tmp:
             restored = Path(tmp) / 'restore'
-            run(binary, 'restore', '--to', restored, archive)
+            if snapshot_backup:
+                create_snapshot(binary, source, old_data, archive)
+                run('cp', '-a', '--reflink=always', archive, restored)
+                verify_snapshot(restored)
+            else:
+                run(binary, 'restore', '--to', restored, restore_archive)
+                if getattr(args, 'reflink', False):
+                    cloned = Path(tmp) / 'users'
+                    if (old_data / 'users').exists(): run('cp', '-a', '--reflink=always', old_data / 'users', cloned)
+                    verify_cloned_users(archive, cloned)
+                    if cloned.exists():
+                        templates = restored / 'data' / 'users'
+                        if templates.exists(): shutil.rmtree(templates)
+                        os.rename(cloned, templates)
             updated = read(restored / 'config.json')
             # Credential roots may be outside data in the backup layout.
             creds = restored / 'data' / 'creds'
@@ -250,7 +382,8 @@ def main():
     s = sub.add_parser('install'); s.add_argument('--package', required=True)
     s = sub.add_parser('activate'); s.add_argument('--version', required=True); s.add_argument('--backup-dir', default='/var/lib/agentbox/backups')
     s = sub.add_parser('migrate'); s.add_argument('--source-config', required=True); s.add_argument('--binary', required=True); s.add_argument('--backup', required=True)
-    s.add_argument('--data', default='/var/lib/agentbox'); s.add_argument('--cache', default='/var/cache/agentbox'); s.add_argument('--apply', action='store_true')
+    s.add_argument('--snapshot-backup', action='store_true', help='create a verified self-contained full reflink recovery directory instead of a full tarball')
+    s.add_argument('--data', default='/var/lib/agentbox'); s.add_argument('--cache', default='/var/cache/agentbox'); s.add_argument('--apply', action='store_true'); s.add_argument('--reflink', action='store_true', help='require copy-on-write cloning of users; verify every entry against full backup')
     a = p.parse_args()
     if os.geteuid() != 0: p.error('run as root on the target Linux host')
     app, config, units = map(absolute, [a.app, a.config, a.unit_dir])

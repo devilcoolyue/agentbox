@@ -20,7 +20,8 @@ import urllib.request
 
 
 def inside():
- spec=importlib.util.spec_from_file_location('release','/tmp/release.py')
+ test_dir=Path(__file__).resolve().parent
+ spec=importlib.util.spec_from_file_location('release',test_dir/'release.py')
  m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
  base=Path(tempfile.mkdtemp(prefix='deployment-fixture-'))
  source=base/'old';data=source/'data';data.mkdir(parents=True)
@@ -36,7 +37,7 @@ def inside():
  with sqlite3.connect(data/'state.db') as conn:
   conn.execute('create table sessions(id text primary key,user text,name text,agent text,account_id text,container_id text,status text,chat_session text,created_at text,updated_at text)')
   conn.execute("insert into sessions values('s1','boxadmin','fixture','codex','fixture','old-container','stopped','','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')")
- args=SimpleNamespace(source_config=str(config),config=str(base/'etc/config.json'),data=str(base/'state'),cache=str(base/'cache'),binary='/tmp/agentbox',backup=str(base/'backups/full.tar.gz'),apply=True)
+ args=SimpleNamespace(source_config=str(config),config=str(base/'etc/config.json'),data=str(base/'state'),cache=str(base/'cache'),binary=str(test_dir/'agentbox'),backup=str(base/'backups/full.tar.gz'),apply=True,reflink=os.environ.get('AGENTBOX_TEST_REFLINK')=='1',snapshot_backup=os.environ.get('AGENTBOX_TEST_SNAPSHOT')=='1')
  actual_run=m.run;process=None;app=base/'app';units=base/'units';units.mkdir()
  def run(*argv,capture=False):
   nonlocal process
@@ -61,7 +62,7 @@ def inside():
    assert Path(migrated['accounts'][0]['credentials_dir'],'auth.json').read_text()=='{"synthetic":true}'
    assert (target/'users/boxadmin/sessions/s1/chats/t1.jsonl').exists()
    with sqlite3.connect(target/'state.db') as conn:assert conn.execute('select container_id,status from sessions').fetchone()==('','stopped')
-   package=base/'package';package.mkdir();shutil.copy2('/tmp/agentbox',package/'agentbox')
+   package=base/'package';package.mkdir();shutil.copy2(test_dir/'agentbox',package/'agentbox')
    for version in ['v0.0.1','v0.0.2']:
     (package/'build.json').write_text(json.dumps({'version':version,'program':'agentbox','os':'linux'}));m.stage(package,app)
    (units/'agentbox.service').write_text(m.unit(app,Path(args.config)))
@@ -86,11 +87,11 @@ def inside():
 
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--inside',action='store_true');p.add_argument('--binary');p.add_argument('--image',default='agentbox-agent:claude-2.1.280-codex-0.145.0');a=p.parse_args()
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--inside',action='store_true');p.add_argument('--reflink',action='store_true');p.add_argument('--binary');p.add_argument('--image',default='agentbox-agent:claude-2.1.280-codex-0.145.0');a=p.parse_args()
  if a.inside:inside();return
  if not a.binary:p.error('--binary required')
  root=Path(__file__).resolve().parent.parent
- cid=subprocess.check_output(['docker','run','-d','--user','0:0','--network','none','--mount','type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock',a.image,'sleep','infinity'],text=True).strip()
+ cid=subprocess.check_output(['docker','run','-d','-e','AGENTBOX_TEST_REFLINK='+('1' if a.reflink else '0'),'--user','0:0','--network','none','--mount','type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock',a.image,'sleep','infinity'],text=True).strip()
  try:
   for src,dst in [(Path(a.binary),'/tmp/agentbox'),(root/'deploy/release.py','/tmp/release.py'),(Path(__file__),'/tmp/test.py')]:subprocess.run(['docker','cp',str(src),cid+':'+dst],check=True)
   subprocess.run(['docker','exec',cid,'python3','/tmp/test.py','--inside'],check=True)

@@ -100,3 +100,9 @@ sudo python3 "$PACKAGE/deploy/release.py" migrate \
 `node scripts/test-browser.mjs` 使用合成 API 测试登录、保存容量、重复初始化、监控清理、用量同步显示、WS 代际与窄屏重新登录。需安装固定 `playwright@1.58.2` 及 Chromium；可通过 `AGENTBOX_PLAYWRIGHT_MODULE` 指向临时安装的 index.mjs，`AGENTBOX_BROWSER_CHANNEL=chrome` 使用本机 Chrome。CI 同样执行该脚本。
 
 另有真实 Docker 会话冒烟（容量拒绝、挂载、文件/Git、后台终端用量、SIGTERM 重启）及 Linux 文件系统回归。未执行生产迁移、真实 systemd 服务切换或远端 CI；这些在对应环境的发布窗口验收。
+
+### 空间紧张时的迁移
+
+`migrate --reflink --apply` 要求同一文件系统支持 GNU cp 的写时复制，停机前先用合成文件探测，不支持则停止。完整备份仍照常生成并验证；配置/SQLite/凭证通过额外离线系统备份恢复，users 通过 reflink 创建独立副本，再逐条核对完整备份清单的路径、类型、权限、属主、mtime、链接目标和 SHA-256。旧 users 保留，之后新文件写入时才分配新块。需预留完整压缩备份和后续写入空间，reflink 不能替代备份。备份清单上限为 100 万条、256 MiB，创建与验证使用同一边界。
+
+当完整压缩包也放不下时，可组合 `--reflink --snapshot-backup`：`--backup` 指向不存在的新目录。工具生成并验证离线系统备份，恢复数据库/配置/全部凭证，再 reflink 克隆 users；与源树逐条比对内容及元数据，写 `snapshot-manifest.json` 并重新验证，从恢复点再次 reflink 克隆后才发布运行目录。恢复点是自包含的完整目录（其中 config 路径为相对路径），旧源和恢复点均保留；不能把它当作 `backup-verify` 的 tar 包。恢复时应停所有相关写入、先调用脚本 `verify_snapshot` 校验，再复制到新目录启动；不要直接启动恢复点本身。XFS reflink 共享未修改的数据块，同盘恢复点仍不覆盖整盘损坏，应后续另做异机备份。

@@ -3,6 +3,10 @@
 import importlib.util
 from pathlib import Path
 import json
+import tarfile
+import io
+import hashlib
+import datetime
 import os
 import sqlite3
 import tempfile
@@ -13,6 +17,36 @@ spec=importlib.util.spec_from_file_location('release',Path(__file__).resolve().p
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 
 class Deployment(unittest.TestCase):
+ def test_cloned_users_verified_against_backup(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);tree=root/'users';tree.mkdir();(tree/'file').write_bytes(b'fixture')
+   (tree/'link').symlink_to('/shared/file')
+   entries=[]
+   for path in [tree,tree/'file',tree/'link']:
+    st=path.lstat(); name='data/users'+('/'+path.name if path!=tree else '')
+    kind=50 if path.is_symlink() else 53 if path.is_dir() else 48
+    stamp=datetime.datetime.fromtimestamp(st.st_mtime_ns//1000000000,datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')+f'.{st.st_mtime_ns%1000000000:09d}Z'
+    entry={'name':name,'type':kind,'mode':st.st_mode&0o777,'uid':st.st_uid,'gid':st.st_gid,'mtime':stamp,'size':st.st_size}
+    if kind==48:entry['sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+    if kind==50:entry['link']=os.readlink(path)
+    entries.append(entry)
+   archive=root/'full.tar.gz'
+   with tarfile.open(archive,'w:gz') as tar:
+    data=json.dumps({'mode':'full','entries':entries}).encode();info=tarfile.TarInfo('manifest.json');info.size=len(data);tar.addfile(info,io.BytesIO(data))
+   m.verify_cloned_users(archive,tree)
+   (tree/'file').write_bytes(b'changed')
+   with self.assertRaises(ValueError):m.verify_cloned_users(archive,tree)
+   (tree/'new').write_text('unexpected')
+   with self.assertRaises(ValueError):m.verify_cloned_users(archive,tree)
+ def test_snapshot_integrity_and_independence(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);(root/'file').write_bytes(b'snapshot data')
+   (root/'link').symlink_to('/outside')
+   inventory=m.tree_inventory(root);inventory.pop('.')
+   m.atomic_json(root/'snapshot-manifest.json',{'format_version':1,'mode':'full-reflink','entries':inventory})
+   m.verify_snapshot(root)
+   (root/'file').write_bytes(b'changed')
+   with self.assertRaises(ValueError):m.verify_snapshot(root)
  def test_version_stage_and_atomic_switch(self):
   with tempfile.TemporaryDirectory() as tmp:
    root=Path(tmp); package=root/'package';package.mkdir();app=root/'app'

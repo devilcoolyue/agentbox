@@ -18,6 +18,14 @@ expected = {('agentbox', 'linux', x) for x in ['amd64', 'arm64']}
 expected |= {('abox-link', s, a) for s, a in [('linux','amd64'),('linux','arm64'),('darwin','amd64'),('darwin','arm64'),('windows','amd64')]}
 if {(r['program'],r['os'],r['arch']) for r in records} != expected or len(records) != len(expected):
     raise SystemExit('Missing/duplicate release platform')
+names = [r['archive'] for r in records]
+if len(set(names)) != len(names):
+    raise SystemExit('Duplicate archive names across platforms')
+for r in records:
+    suffix = '.zip' if r['os'] == 'windows' else '.tar.gz'
+    expected_name = f"{r['program']}_{r['version']}_{r['os']}_{r['arch']}{suffix}"
+    if r['archive'] != expected_name:
+        raise SystemExit('Archive name does not match platform: ' + r['archive'])
 checks = {}
 for line in (out / 'SHA256SUMS').read_text().splitlines():
     digest, name = line.split('  ', 1)
