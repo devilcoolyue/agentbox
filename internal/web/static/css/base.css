@@ -169,25 +169,39 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 
 /* ---- 按钮 ---- */
 .btn {
-  background: var(--panel-2);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 38px;
+  background: var(--panel);
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 8px 14px;
+  border-radius: 8px;
+  padding: 8px 13px;
+  font-size: 13px; font-weight: 500; line-height: 20px;
+  white-space: nowrap; text-decoration: none; vertical-align: middle;
+  user-select: none; touch-action: manipulation;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 100ms ease;
 }
-.btn:hover { border-color: var(--muted); }
+.btn:hover:not(:disabled) { background: var(--panel-2); border-color: color-mix(in srgb, var(--muted) 60%, var(--line)); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:focus-visible { outline-offset: 3px; }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-.btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
-.btn-danger { color: var(--red); border-color: var(--red-line); }
-.btn-danger:hover { border-color: var(--red); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 16%, transparent); }
 .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
-.btn-ghost:hover { color: var(--text); }
-.btn-sm { padding: 5px 10px; font-size: 13px; }
+.btn-ghost:hover:not(:disabled) { background: var(--panel-2); border-color: transparent; color: var(--text); }
+.btn-danger { background: color-mix(in srgb, var(--red) 6%, var(--panel)); color: var(--red); border-color: var(--red-line); }
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 12%, var(--panel)); border-color: var(--red); color: var(--red); }
+.btn-ghost.btn-danger { background: transparent; border-color: transparent; }
+.btn-ghost.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 10%, transparent); border-color: transparent; }
+.btn-sm { min-height: 32px; padding: 5px 10px; font-size: 12.5px; }
 /* 图标按钮：图标随文字取色（danger 变体自动跟着变红），大小固定不被挤压 */
 .btn-ico { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .btn-ico svg { flex: none; }
+/* Explicit data-icon controls also include navigation, segmented controls and links. */
+[data-icon] { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.ui-icon { display: block; flex: none; pointer-events: none; }
+.btn > svg { flex: none; width: 16px; height: 16px; pointer-events: none; }
 .btn-block { width: 100%; }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 /* 按钮加载态：转圈 + 锁定点击 */
 .btn.loading, .btn.loading:disabled {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
@@ -197,6 +211,12 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .btn-primary .spin {
   border-color: color-mix(in srgb, var(--on-accent) 35%, transparent);
   border-top-color: var(--on-accent);
+}
+
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .dlg-x { min-width: 44px; min-height: 44px; }
+  .scope-btn, .thread-new { min-height: 40px; }
 }
 
 /* ---- Agent 品牌标识：官方 logo + 品牌色，跨侧栏/工作台/弹窗/设置复用 ----
@@ -327,6 +347,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .tip[data-side="right"]::after  { left: -4px;   top: var(--tip-ay);  margin-top: -4px;  border-top: 0; border-right: 0; }
 
 @media (prefers-reduced-motion: reduce) {
+  .btn { transition: none; }
+  .btn:active:not(:disabled) { transform: none; }
+  :root .scope-btn, :root .set-nav button { transition: none; }
   .wordmark .cursor { animation: none; }
   .boxi-bob, .boxi-eye, .boxi-glow { animation: none; }
   .led.on { animation: none; }

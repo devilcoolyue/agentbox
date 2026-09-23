@@ -253,6 +253,7 @@ export interface UsageTotals {
 
 /** GET /api/usage/events。facets 是筛选下拉的可选值（服务端按可见范围裁过）。 */
 export interface UsageEvents {
+ sync?: { last_scan_at: number; last_success_at: number; scanning: boolean; errors: number };
   rows: UsageEventRow[];
   total: UsageTotals;
   facets: { users: string[]; agents: string[]; models: string[] };
@@ -357,6 +358,7 @@ export interface TunnelConfig {
 
 /** GET/PUT /api/settings（server.settingsView）。 */
 export interface Settings {
+ resources: ResourceLimits;
   listen: string;
   agent_image: string;
   permission_mode: string;
@@ -406,6 +408,7 @@ export interface ProxyBridgeConfig {
 
 /** GET /api/system（关于页）。 */
 export interface SystemInfo {
+ version?: string; revision?: string; built_at?: string; schema_version?: number;
   go_version: string;
   data_dir: string;
   config_path: string;
@@ -827,3 +830,5 @@ export interface ChatMessage {
   /** status / error 的错误文案 */
   error?: string;
 }
+
+export interface ResourceLimits { max_running: number; max_running_per_user: number; min_free_bytes: number; }

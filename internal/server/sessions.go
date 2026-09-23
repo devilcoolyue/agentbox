@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -144,6 +145,9 @@ func (s *Server) handleStartSession(w http.ResponseWriter, r *http.Request, sess
 	updated, err := s.startSession(ctx, sess)
 	if err != nil {
 		status := http.StatusInternalServerError
+		if errors.Is(err, workspace.ErrCapacity) {
+			status = http.StatusTooManyRequests
+		}
 		if err == errAccountAccess {
 			status = http.StatusForbidden
 		}

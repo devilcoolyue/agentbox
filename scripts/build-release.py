@@ -82,7 +82,8 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
                 shutil.copy2(ROOT / 'scripts' / script, folder / 'scripts' / script)
             copy_tracked_tree('docs', folder / 'docs')
             (folder / 'deploy').mkdir()
-            shutil.copy2(ROOT / 'deploy' / 'README.md', folder / 'deploy' / 'README.md')
+            for name in ['README.md', 'release.py']:
+                shutil.copy2(ROOT / 'deploy' / name, folder / 'deploy' / name)
         metadata = {'program': program, 'version': a.version, 'revision': revision,
                     'built_at': built, 'os': system, 'arch': arch,
                     'go': subprocess.check_output(['go', 'version'], text=True).strip()}

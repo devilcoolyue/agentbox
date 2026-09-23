@@ -194,3 +194,7 @@ func TestConcurrentStartThenDeleteCannotLeaveOrphanContainer(t *testing.T) {
 		t.Fatalf("purge: %v", err)
 	}
 }
+
+func (f *fakeRuntime) Running(ctx context.Context, id string) (bool, error) {
+	return f.RunningWithMount(ctx, id, ""), f.fail
+}

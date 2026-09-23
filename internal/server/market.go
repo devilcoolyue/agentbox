@@ -32,7 +32,13 @@ const (
 	marketMaxSkills    = 30 // 单个插件最多装多少个技能，防目录异常撑爆
 )
 
-func (s *Server) marketDir() string  { return filepath.Join(s.cfg.DataDir, "marketplace") }
+func (s *Server) marketDir() string {
+	dir := s.cfg.CacheDir
+	if dir == "" {
+		dir = s.cfg.DataDir
+	}
+	return filepath.Join(dir, "marketplace")
+}
 func (s *Server) marketRepo() string { return filepath.Join(s.marketDir(), "repo") }
 
 // --- 目录数据 ---

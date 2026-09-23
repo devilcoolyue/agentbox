@@ -22,3 +22,7 @@ config.json.bak*
 # 浏览器调试产物
 /.playwright-cli/
 /output/
+# SpecStory explanation file
+.specstory/.what-is-this.md
+
+__pycache__/

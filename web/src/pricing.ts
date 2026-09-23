@@ -1,3 +1,4 @@
+import { settingsState } from "./features/settings/state.js";
 /* pricing：系统设置「价目表」分区 —— 按 token 折算费用的单价表。
  *
  * 这张表只在 **provider 不自报价格** 时用得上：Codex 的全部回合，以及从 CLI 记录里
@@ -10,6 +11,8 @@
  * 编辑是「整表提交」而不是逐行保存：删行没法用增量表达，而且价目表是要整体核对的
  * 东西，一次看完一次存更不容易漏。 */
 "use strict";
+
+import { buttonLabel } from "./icons.js";
 
 import { S } from "./state.js";
 import type { ModelPrice, TokenRates } from "./types.js";
@@ -67,7 +70,7 @@ const OPENAI_OFFICIAL: Record<string, [Quad, Quad | null]> = {
 /* agent 名当键时是「这个 agent 的兜底价」，比具体模型行管得宽，标出来免得看混。 */
 const FALLBACK_KEYS = new Set(["claude", "codex"]);
 
-/** 编辑中的表。进分区时从 S.settings 灌一次，保存前从 DOM 读回来。 */
+/** 编辑中的表。进分区时从 settingsState.value 灌一次，保存前从 DOM 读回来。 */
 let draft: Record<string, ModelPrice> = {};
 
 const num = (v: number | undefined) => (v ? String(v) : "");
@@ -134,7 +137,8 @@ function renderRows() {
     const btn = document.createElement("button");
     btn.className = "pt-del";
     btn.type = "button";
-    btn.textContent = "✕";
+    buttonLabel(btn, "", "trash");
+    btn.setAttribute("aria-label", "删除 " + key);
     setTip(btn, "删掉这一行");
     btn.addEventListener("click", () => {
       readDraft();          // 先把别的行的改动收进来，别让删除顺手回滚它们
@@ -198,14 +202,14 @@ function badCells() {
 /** 进入价目表分区：用服务端的当前配置重灌编辑区，丢弃上次没存的改动。 */
 export function openPricingSection() {
   draft = {};
-  const src = S.settings?.pricing || {};
+  const src = settingsState.value?.pricing || {};
   for (const [k, v] of Object.entries(src)) draft[k] = { ...v, long: v.long ? { ...v.long } : undefined };
   renderRows();
 }
 
 /** 左侧导航的条数：停在别的分区时也该是真的。 */
 export function refreshPriceCount() {
-  $("price-count").textContent = String(Object.keys(S.settings?.pricing || {}).length);
+  $("price-count").textContent = String(Object.keys(settingsState.value?.pricing || {}).length);
 }
 
 $("price-add").addEventListener("click", () => {

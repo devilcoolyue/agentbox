@@ -93,14 +93,32 @@ try:
         status=request('/api/sessions/'+sess['id']+'/git/status')
         assert 'smoke.txt' in json.dumps(status),status
         assert 'packaged server works' in docker('exec','--user','1000:1000',cid,'cat','/workspace/smoke.txt')
+        request('/api/settings',{'resources':{'max_running':1,'max_running_per_user':1,'min_free_bytes':0}},'PUT')
+        extra=request('/api/sessions',{'name':'capacity smoke','agent':'codex','account_id':'synthetic'})
+        sessions.append('agentbox-'+extra['id'])
+        try:
+            request('/api/sessions/'+extra['id']+'/start',{},'POST')
+            raise AssertionError('container cap did not reject startup')
+        except urllib.error.HTTPError as err:
+            assert err.code==429,err
+        request('/api/sessions/'+extra['id']+'?purge=1',method='DELETE')
+        diagnostics=request('/api/diagnostics')
+        assert diagnostics['schema_version']==2 and 'config_path' not in diagnostics
+        assert password not in json.dumps(diagnostics) and 'synthetic' not in json.dumps(diagnostics)
+        assert 'disk_available' in request('/api/storage')
         if a.usage:
             request('/api/settings',{'pricing':{'codex':{'input':2,'output':3}}},'PUT')
             transcript_dir='/home/agent/.codex/sessions/2026/09/23'
             docker('exec','--user','1000:1000',cid,'mkdir','-p',transcript_dir)
             fixture=Path(__file__).resolve().parent.parent/'internal/usage/testdata/codex-terminal-0.145.0.jsonl'
             docker('cp',str(fixture),cid+':'+transcript_dir+'/rollout-fixture.jsonl')
-            events=request('/api/usage/events?session='+sess['id'])
-            rows=events['rows']
+            deadline=time.monotonic()+20
+            while True:
+                events=request('/api/usage/events?session='+sess['id'])
+                rows=events['rows']
+                if len(rows)==3: break
+                if time.monotonic()>deadline: raise AssertionError(events)
+                time.sleep(.3)
             assert len(rows)==3,events
             costs={r['id']:r['cost_micro_usd'] for r in rows}
             assert all(r['rate']['snapshot'] and r['rate']['input']==2 for r in rows),rows

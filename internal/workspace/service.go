@@ -24,6 +24,7 @@ type Store interface {
 	All() []store.Session
 }
 type Runtime interface {
+	Running(context.Context, string) (bool, error)
 	RunningWithMount(context.Context, string, string) bool
 	EnsureRunning(context.Context, store.Session, config.Account, string, string, string) (string, error)
 	Stop(context.Context, string) error
@@ -40,11 +41,12 @@ type Service struct {
 	syncCredentials func(context.Context, config.Account, store.Session) error
 	activity        *Activity
 	mu              sync.Mutex
+	starts          sessionLock
 	locks           map[string]sessionLock
 }
 
 func New(cfg *config.Config, st Store, dock Runtime, account func(store.Session) (config.Account, error), syncCredentials func(context.Context, config.Account, store.Session) error) *Service {
-	return &Service{cfg: cfg, store: st, dock: dock, account: account, syncCredentials: syncCredentials, activity: NewActivity(), locks: map[string]sessionLock{}}
+	return &Service{cfg: cfg, store: st, dock: dock, account: account, syncCredentials: syncCredentials, activity: NewActivity(), starts: make(sessionLock, 1), locks: map[string]sessionLock{}}
 }
 func (s *Service) Activity() *Activity { return s.activity }
 
@@ -148,6 +150,14 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	}
 
 	if err := ctx.Err(); err != nil {
+		return store.Session{}, err
+	}
+
+	if err := s.starts.acquire(ctx); err != nil {
+		return store.Session{}, err
+	}
+	defer s.starts.release()
+	if err := s.admit(ctx, cur); err != nil {
 		return store.Session{}, err
 	}
 

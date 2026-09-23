@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"agentbox/internal/config"
@@ -20,14 +22,19 @@ type Store interface {
 	Get(string) (store.Session, bool)
 }
 type Service struct {
-	ctx      context.Context
-	cfg      *config.Config
-	store    Store
-	termScan *Scanner
+	request    chan struct{}
+	fullMu     sync.Mutex
+	statusMu   sync.RWMutex
+	status     SyncStatus
+	scanErrors atomic.Uint64
+	ctx        context.Context
+	cfg        *config.Config
+	store      Store
+	termScan   *Scanner
 }
 
 func New(ctx context.Context, cfg *config.Config, st Store) *Service {
-	return &Service{ctx: ctx, cfg: cfg, store: st, termScan: &Scanner{seen: map[string]termFileState{}}}
+	return &Service{request: make(chan struct{}, 1), ctx: ctx, cfg: cfg, store: st, termScan: &Scanner{seen: map[string]termFileState{}}}
 }
 func (s *Service) workContext() context.Context { return s.ctx }
 func (s *Service) homeDir(sess store.Session) string {
@@ -45,7 +52,7 @@ func (s *Service) openDataDir(dir string) (*safefs.Root, error) {
 	defer root.Close()
 	return root.Sub(rel)
 }
-func (s *Service) Scan()  { s.scanTerminalUsage(s.termScan) }
+func (s *Service) Scan()  { s.fullScan() }
 func (s *Service) Loop()  { s.termUsageLoop() }
 func (s *Service) Watch() { s.termWatchLoop() }
 func waitInterval(ctx context.Context, d time.Duration) bool {

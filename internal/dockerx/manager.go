@@ -547,3 +547,18 @@ func closeOnCancel(ctx context.Context, close func()) func() {
 	stop := context.AfterFunc(ctx, closeOnce)
 	return func() { stop(); closeOnce() }
 }
+
+// Running distinguishes daemon failures from a missing or stopped container.
+func (m *Manager) Running(ctx context.Context, id string) (bool, error) {
+	if id == "" {
+		return false, nil
+	}
+	info, err := m.cli.ContainerInspect(ctx, id)
+	if client.IsErrNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return info.State != nil && info.State.Running, nil
+}

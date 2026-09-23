@@ -139,6 +139,7 @@
 /* ---- 变更（Git 审查）页 ---- */
 .changes-bar {
   display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
   padding: 10px 20px; border-bottom: 1px solid var(--line);
 }
 .changes-repo {
@@ -168,7 +169,7 @@
   border: 1px solid var(--line); border-radius: 7px; overflow: hidden;
 }
 .changes-view-tabs .seg {
-  padding: 3px 10px; font-size: 12px;
+  padding: 5px 10px; min-height: 32px; font-size: 12px;
   background: var(--panel); color: var(--muted); border: 0; cursor: pointer;
 }
 .changes-view-tabs .seg + .seg { border-left: 1px solid var(--line); }
@@ -195,6 +196,7 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .change-discard {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
   flex-shrink: 0; border: none; background: none; color: var(--muted);
   cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 5px;
 }
@@ -245,6 +247,7 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .skill-arrow {
+  display: inline-flex; align-items: center; justify-content: center;
   flex: none; width: 14px; text-align: center; color: var(--muted);
   user-select: none; transition: transform 0.15s ease, color 0.15s ease;
 }
@@ -278,7 +281,7 @@
 .skill-head { border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 12px; }
 /* 看单个文件时的返回链接：回到技能概览（那儿才有复制/删除按钮） */
 .skill-back {
-  display: inline-block; margin-bottom: 8px; padding: 0;
+  display: inline-flex; margin-bottom: 8px; padding: 4px 0;
   background: none; border: none; cursor: pointer;
   color: var(--muted); font-size: 12px;
 }
@@ -287,7 +290,7 @@
 .skill-head-desc { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
 .skill-meta { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 .skill-source { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.skill-head-actions { display: flex; gap: 8px; margin-top: 12px; }
+.skill-head-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .skill-doc-bar {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; margin-bottom: 12px;
@@ -317,4 +320,6 @@
     border-right: none; border-bottom: 1px solid var(--line);
   }
   .skills-bar { padding: 10px 14px; }
+  .skills-left { flex: 1 0 100%; }
+  .skills-actions { margin-left: auto; }
 }

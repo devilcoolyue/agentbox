@@ -631,3 +631,13 @@ data/
 - 当前 SQLite schema=2，user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
 - `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。
 - 协议样本放在 agent/usage 的 testdata，全部为合成脱敏数据。Linux 测试脚本必须复制这些 testdata；禁止读取真实用户 rollout 当测试夹具。
+
+### 阶段 D 维护约定
+
+- 独立部署入口 `deploy/release.py`；路径、迁移停机与回退条件见 `docs/architecture/deployment-layout.md`。install 不覆盖其他布局单元或已有版本；activate 先查 schema 和 compatibility_epoch，再备份/停机/切换。不能对旧库调用 store.Open 来做只读兼容检查。
+- cache_dir 缺省兼容 data_dir，配置 mutate/persist 必须保留原始路径；备份恢复重写 cache_dir，避免恢复实例碰原实例缓存。
+- workspace 的启动闸门串行容量检查与容器创建，检查实际 Docker 运行状态；resources 的 0 为不限，不强杀已运行任务。
+- 用量 HTTP 只调用 RequestScan，禁止重新引入同步 Scan；同步进度只描述完整扫描，不承诺 provider 已写完文件。
+- 新运维接口均为 admin：storage、diagnostics、DELETE cache/marketplace。诊断严格字段白名单，不能拼接配置、环境、原始日志或 Docker inspect。
+- chat/settings 通过 app/lifecycle 显式初始化和清理；聊天连接、设置缓存与轮询 timer 不得放回全局 S。新嵌套 TS 模块仍保留原生相对 .js 导入及哈希前缀。
+- 浏览器测试 `scripts/test-browser.mjs` 使用合成 API；部署测试 systemctl 是模拟调用，记录时不得声称真实 systemd 已通过。

@@ -4,6 +4,35 @@
 
 const $ = (id) => document.getElementById(id);
 
+// This panel is embedded in its own binary, so its small icon set is standalone.
+const actionIcons = {
+  link: "M10 13a5 5 0 0 0 7 .5l3-3a5 5 0 0 0-7-7L11 5M14 11a5 5 0 0 0-7-.5l-3 3a5 5 0 0 0 7 7l2-1.5",
+  plus: "M12 5v14M5 12h14",
+  play: "M6.5 3.5 20 12 6.5 20.5Z",
+  stop: "M5.5 5.5h13v13h-13Z",
+  close: "m6 6 12 12M6 18 18 6",
+  undo: "M9 4 4 9l5 5M4 9h10a6 6 0 0 1 0 12",
+  save: "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2ZM7 3v6h10V3M7 21v-8h10v8",
+  trash: "M3 6h18M8 6V3h8v3M5.5 6l1 14.5h11L18.5 6",
+};
+function actionLabel(button, label, icon) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  const attrs = {
+    viewBox: "0 0 24 24", width: "16", height: "16", fill: "none",
+    stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round",
+    "stroke-linejoin": "round", "aria-hidden": "true", focusable: "false",
+  };
+  for (const [key, value] of Object.entries(attrs)) svg.setAttribute(key, value);
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", actionIcons[icon]);
+  svg.append(path);
+  button.replaceChildren(svg, document.createTextNode(label));
+}
+for (const button of document.querySelectorAll("button[data-icon]")) {
+  actionLabel(button, button.textContent, button.dataset.icon);
+}
+
 /* 面板 API：X-Abox-Panel 头是防跨站的凭据——浏览器不会让外站页面带上它。 */
 async function api(path, body) {
   const res = await fetch("/api" + path, {
@@ -45,7 +74,7 @@ function render() {
   $("wire").className = "wire " + look.cls; // 电路两条腿与三个节点全按状态取色
   $("st-title").textContent = look.title;
   $("st-sub").textContent = subtitle(st);
-  $("btn-toggle").textContent = look.btn;
+  actionLabel($("btn-toggle"), look.btn, look.btn === "停止" ? "stop" : "play");
 
   renderRules();
   renderOptions();
@@ -145,7 +174,8 @@ function input(value, placeholder, onCommit) {
 function removeBtn(onClick) {
   const b = document.createElement("button");
   b.type = "button";
-  b.textContent = "✕";
+  actionLabel(b, "", "trash");
+  b.setAttribute("aria-label", "删除规则");
   b.title = "删除";
   b.addEventListener("click", onClick);
   return b;
@@ -317,8 +347,15 @@ function uptime(ms) {
 }
 
 async function withBusy(btn, fn) {
+  if (btn.disabled) return;
   btn.disabled = true;
-  try { await fn(); } finally { btn.disabled = false; }
+  btn.classList.add("loading");
+  btn.setAttribute("aria-busy", "true");
+  try { await fn(); } finally {
+    btn.disabled = false;
+    btn.classList.remove("loading");
+    btn.removeAttribute("aria-busy");
+  }
 }
 
 let toastTimer = 0;

@@ -1,5 +1,6 @@
 /* util：DOM / 格式化 / 加载态 / 气泡 / 灯箱等无业务依赖的小工具。 */
 "use strict";
+import { buttonLabel } from "./icons.js";
 import { S } from "./state.js";
 /* $ 按 id 取元素，返回类型断言成非空：这些 id 全部写死在 index.html 里，取不到
  * 就是模板被改坏了，属于开发期错误，不值得让每个调用点都写一遍空值判断。需要
@@ -28,6 +29,7 @@ export function btnBusy(btn, label) {
         return;
     btnSaved.set(btn, [...btn.childNodes]);
     btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
     btn.classList.add("loading");
     btn.replaceChildren(spinEl(), document.createTextNode(label));
 }
@@ -35,6 +37,7 @@ export function btnDone(btn) {
     if (!btn.classList.contains("loading"))
         return;
     btn.classList.remove("loading");
+    btn.removeAttribute("aria-busy");
     btn.replaceChildren(...(btnSaved.get(btn) || []));
     btnSaved.delete(btn);
     btn.disabled = false;
@@ -160,7 +163,7 @@ export function askConfirm(text, opts = {}) {
     hint.textContent = opts.hint || "";
     hint.classList.toggle("hidden", !opts.hint);
     const ok = $("ask-ok");
-    ok.textContent = opts.okLabel || "确定";
+    buttonLabel(ok, opts.okLabel || "确定", opts.danger ? "trash" : "check");
     ok.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
     return dlgOnce($("dlg-ask"), (v) => v === "ok");
 }

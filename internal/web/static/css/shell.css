@@ -198,10 +198,11 @@
 /* 底栏左侧主题、右侧头像；用户信息与退出放在头像弹层中。 */
 .side-preferences {
   position: relative; display: flex; align-items: center; gap: 8px;
-  margin-top: 6px; padding: 6px 4px 0; border-top: 1px solid var(--line);
+  margin-top: 6px; padding: 6px 0 0 4px; border-top: 1px solid var(--line);
 }
-.side-user { margin-left: auto; background: var(--panel-2); }
-.side-user[aria-expanded="true"] { background: var(--side-active); color: var(--amber); }
+.side-user { margin-left: auto; }
+.side-user:hover, .side-user[aria-expanded="true"] { background: transparent; }
+.side-user[aria-expanded="true"] { color: var(--amber); }
 .side-user-menu {
   position: fixed; z-index: 90; width: 232px; max-width: calc(100vw - 24px);
   padding: 6px; border: 1px solid var(--line); border-radius: 10px;

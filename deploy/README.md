@@ -4,6 +4,10 @@
 
 生产目标是 **Linux + systemd + 本机 Docker Engine**。服务端是一个 Go 二进制，前端随二进制嵌入；工作空间在独立 Docker 容器中运行。以下命令在服务器的 agentbox 仓库根目录执行，默认使用 `config.json`、`data/` 和 `127.0.0.1:8180`，自定义路径时需相应调整。
 
+## 发布包独立部署
+
+新安装推荐使用包内 `deploy/release.py`，无需 Go 或 Node；配置、版本、数据与缓存分离。完整命令及旧安装迁移见[目录与迁移手册](../docs/architecture/deployment-layout.md)。下文 `install.sh` / `deploy.sh` 专指保留兼容的仓库内部署模式。
+
 ## 部署前准备
 
 - 安装 Docker Engine、Git、Go（版本以 `go.mod` 为准）、Python 3、curl 和提供 `ss` 的 iproute2。
@@ -25,7 +29,7 @@ sudo ./deploy/install.sh
 sudo ./deploy/deploy.sh
 ```
 
-`install.sh` 根据仓库实际路径替换 `__APP_DIR__`，安装单元、执行 `daemon-reload` 并启用服务和两个定时器；主服务由 `deploy.sh` 构建并启动。
+`install.sh` 根据仓库实际路径替换 `__APP_DIR__`，安装单元、执行 `daemon-reload` 并启用服务与备份定时器（追新默认关闭）；主服务由 `deploy.sh` 构建并启动。
 
 | 文件 | 作用 / 安装位置 |
 | --- | --- |

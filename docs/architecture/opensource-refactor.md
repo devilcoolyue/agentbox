@@ -128,10 +128,10 @@ third_party/
 
 ### D：部署、前端与运维
 
-- [ ] D1：运行目录独立，提供旧部署迁移工具和按版本发布/回退。
-- [ ] D2：前端按功能提取，显式初始化/销毁，收窄共享状态；增加关键浏览器流程测试。
-- [ ] D3：每用户/全局并发容器限制、磁盘使用和回收策略。
-- [ ] D4：终端扫描移出用量查询同步路径，返回同步时间；增加脱敏诊断与运行版本信息。
+- [x] D1：运行目录独立，提供旧部署迁移工具和按版本发布/回退。
+- [x] D2：前端按功能提取，显式初始化/销毁，收窄共享状态；增加关键浏览器流程测试。
+- [x] D3：每用户/全局并发容器限制、磁盘使用和回收策略。
+- [x] D4：终端扫描移出用量查询同步路径，返回同步时间；增加脱敏诊断与运行版本信息。
 
 验收：执行完整安装、升级、备份、恢复流程；前端编译产物一致；验证旧 abox-link 的兼容范围。
 
@@ -180,3 +180,7 @@ third_party/
 - schema 版本 1 引导旧库并补齐遗留字段，版本 2 添加价格快照。所有待执行迁移及 user_version 同事务提交，读出不支持的高版本后拒绝写入；测试覆盖 SQL 失败与迁移进程 os.Exit 中断。回退说明见 [数据库迁移](database-migrations.md)，旧二进制无版本保护时仍不得直接连接新库。
 - Agent Adapter 提供能力、命令和事件解码，保持 Codex app-server 优先/exec 回退、续聊及中断。Codex 终端从日期目录解析 codex-tui rollout，以累计 token 差值排除重复额度通知，按 thread/turn/model 聚合并以空间区分去重；缓存输入和 reasoning 语义保持。样本为按固定版本公开结构构造的合成记录，没有读取真实 transcript 或调用模型。
 - C4–C6 验证：Go 全量 build/test/vet，usage/store/agent/server race，前端 check/build；Linux arm64 隔离容器 11 包回归通过。实际 Debian 会话内注入合成 rollout，经真实 HTTP 查到 3 行终端流水，修改价目表后费用/单价保持快照，SIGTERM 与同卷重启继续通过。Linux 脚本现同步复制 testdata；未执行远端 CI 或生产部署。
+
+
+- 2026-09-23：完成 D1–D4。D1 新增 `deploy/release.py` 独立 `/etc`、`/opt`、`/var/lib`、`/var/cache` 布局，版本目录原子切换、schema/兼容代号检查、迁移停服务与相关 bind mount 容器、备份验证、UID/GID/mode/mtime/符号链接/历史/凭证保留；旧 `install.sh`/`deploy.sh` 保持兼容。D2 抽取 `ChatConnection`、可取消 `Poller`、设置运维 feature 和 app 生命周期；S 不再保存 chat/settings/poll timer；补合成 API 浏览器流程。D3 增加全局/每用户容器容量与数据盘准入、后台磁盘统计、市场缓存清理。D4 用量查询只排队后台扫描，响应下发同步状态；增加白名单诊断、版本/schema 信息。
+- D 验证：`go build ./...`、`go test ./...`、`go vet ./...`、config/workspace/usage/server/dockerx race、`npm run check`/`npm run build`、Linux 文件系统 11 包回归、真实 Docker 会话容量/后台 Codex 用量/快照/重启冒烟、合成 Playwright 浏览器回归、部署策略测试、Linux 容器迁移/版本切换/回退演练通过。迁移脚本的 systemd 调用在隔离演练中模拟；未执行生产迁移、真实主机 systemd 或远端 CI。

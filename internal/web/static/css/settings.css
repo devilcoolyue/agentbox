@@ -22,12 +22,14 @@
   padding-bottom: 24px;
 }
 .set-nav button {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px;
   width: 100%; text-align: left;
   background: none; border: 1px solid transparent; border-radius: 7px;
   color: var(--muted);
   font-size: 13.5px;
   padding: 8px 12px;
+  min-height: 40px;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
 }
 .set-nav button:hover { color: var(--text); background: var(--panel); }
 .set-nav button.active {
@@ -36,6 +38,7 @@
   border-color: var(--amber-dim);
 }
 .set-nav .count {
+  margin-left: auto;
   font-family: var(--mono); font-size: 11px;
   color: var(--muted);
   background: var(--panel-2);
@@ -157,7 +160,9 @@
   border: 1px dashed var(--line); border-radius: 8px;
 }
 .px-bridge.bad { color: var(--red); border-color: var(--red-line); border-style: solid; }
+.px-table th, .px-table td { padding-left: 10px; padding-right: 10px; }
 .px-table td { vertical-align: middle; }
+.px-actions .btn { padding-left: 7px; padding-right: 7px; gap: 5px; }
 .px-name { display: flex; align-items: center; gap: 7px; font-weight: 500; }
 .px-scheme {
   font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em;
@@ -203,7 +208,7 @@
  * 单价输入框定宽等宽字体，数字上下对齐才好核对；超阈值那四个挤在一格里。 */
 #sec-pricing { max-width: 1080px; }
 .sec-hint { font-size: 12px; }
-.sec-actions { display: flex; gap: 8px; flex: none; }
+.sec-actions { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
 
 .price-table-wrap { margin: -4px -4px 0; overflow-x: auto; }
 .price-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -229,10 +234,11 @@
 .price-table input.rate.wide { width: 96px; }
 .price-table .pt-long { display: flex; gap: 4px; justify-content: flex-end; }
 .price-table .pt-del {
+  min-width: 28px; min-height: 28px; border-radius: 6px;
   border: 0; background: none; color: var(--muted); cursor: pointer;
   padding: 2px 6px; font-size: 15px; line-height: 1;
 }
-.price-table .pt-del:hover { color: var(--red); }
+.price-table .pt-del:hover { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
 .price-add { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
 .price-add input { flex: 1; min-width: 160px; }
 

@@ -19,6 +19,7 @@ package usage
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"log"
@@ -99,11 +100,21 @@ type termFileState struct {
 // termUsageLoop 常驻补记终端消耗。用户不看页面时也得记——终端消耗要能在报表里
 // 回溯，不能只在有人打开页面的那一刻才存在。
 func (s *Service) termUsageLoop() {
-	for s.workContext().Err() == nil {
-		s.scanTerminalUsage(s.termScan)
-		if !waitInterval(s.workContext(), termScanInterval) {
+	for s.ctx.Err() == nil {
+		s.fullScan()
+		// Coalesce refresh requests and cap full scans at one per five seconds.
+		if !waitInterval(s.ctx, 5*time.Second) {
 			return
 		}
+		timer := time.NewTimer(termScanInterval - 5*time.Second)
+		select {
+		case <-s.ctx.Done():
+			timer.Stop()
+			return
+		case <-s.request:
+		case <-timer.C:
+		}
+		timer.Stop()
 	}
 }
 
@@ -137,10 +148,16 @@ func (s *Service) scanSessionUsage(sc *Scanner, sess store.Session) {
 	}
 	root, err := s.openDataDir(dir)
 	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			s.scanErrors.Add(1)
+		}
 		return
 	}
 	defer root.Close()
 	files, err := fs.Glob(root.FS(), pattern)
+	if err != nil {
+		s.scanErrors.Add(1)
+	}
 	if err != nil || len(files) == 0 {
 		return
 	}
@@ -153,10 +170,12 @@ func (s *Service) scanSessionUsage(sc *Scanner, sess store.Session) {
 		path := filepath.Join(dir, filepath.FromSlash(rel))
 		f, err := root.OpenFile(rel)
 		if err != nil {
+			s.scanErrors.Add(1)
 			continue
 		}
 		fi, err := f.Stat()
 		if err != nil {
+			s.scanErrors.Add(1)
 			f.Close()
 			continue
 		}
@@ -167,6 +186,7 @@ func (s *Service) scanSessionUsage(sc *Scanner, sess store.Session) {
 		turns, err := parser(f)
 		f.Close()
 		if err != nil {
+			s.scanErrors.Add(1)
 			log.Printf("terminal usage %s: %v", path, err)
 			continue
 		}
@@ -194,6 +214,7 @@ func (s *Service) scanSessionUsage(sc *Scanner, sess store.Session) {
 			evs = append(evs, ev)
 		}
 		if err := s.store.UpsertTerminalUsage(evs...); err != nil {
+			s.scanErrors.Add(1)
 			log.Printf("terminal usage %s: %v", path, err)
 			// 落库失败就把状态撤回，下一轮重试；不然这个文件要等到下次被改
 			// 动才会再看一眼，中间的消耗就永久漏了。

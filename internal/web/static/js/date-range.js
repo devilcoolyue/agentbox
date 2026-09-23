@@ -1,3 +1,6 @@
+/* 日期范围组件：草稿与已应用值分离。所有值都是指定时区的墙上时间，
+ * 不交给浏览器本地时区解析；只有快捷范围的相对时长按绝对时刻计算。 */
+import { decorateIcons } from "./icons.js";
 const pad = (n) => String(n).padStart(2, "0");
 const emptyRange = () => ({ since: "", until: "", followNow: false, preset: "" });
 const presets = [
@@ -77,20 +80,21 @@ export class DateRangePicker {
             <p class="dr-error" data-dr="error" role="alert"></p>
             <div class="dr-actions">
               <button type="button" class="btn btn-ghost" data-dr="cancel">取消</button>
-              <button type="submit" class="btn btn-primary">确定</button>
+              <button type="submit" class="btn btn-primary" data-icon="check">确定</button>
             </div>
           </div>
           <div class="dr-calendar">
             <div class="dr-month-nav">
-              <button type="button" data-dr="prev" aria-label="上个月">‹</button>
+              <button type="button" data-dr="prev" data-icon="chevron-left" aria-label="上个月"></button>
               <strong data-dr="month" aria-live="polite"></strong>
-              <button type="button" data-dr="next" aria-label="下个月">›</button>
+              <button type="button" data-dr="next" data-icon="chevron-right" aria-label="下个月"></button>
             </div>
             <div class="dr-weekdays" aria-hidden="true">${["日", "一", "二", "三", "四", "五", "六"].map(d => `<span>${d}</span>`).join("")}</div>
             <div class="dr-days" data-dr="days" role="group" aria-label="日期，方向键移动，回车选择"></div>
           </div>
         </div>
       </form>`;
+        decorateIcons(this.panel);
         document.body.append(this.panel);
         trigger.setAttribute("aria-haspopup", "dialog");
         trigger.setAttribute("aria-controls", this.panel.id);

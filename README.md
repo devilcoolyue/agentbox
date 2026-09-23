@@ -243,3 +243,9 @@ Agentbox 采用 [Apache-2.0](LICENSE)，版权声明见 [NOTICE](NOTICE)。第�
 凭证刷新、同步与保存由独立凭证服务管理，并按账号串行。成功续期后立即播发到有授权的已有会话，不再被日常同步的时间戳容差跳过。
 
 用量归一化、定价与终端扫描已集中到 `internal/usage`。新记录保存入账价格快照；SQLite 使用事务化版本迁移，遇到更高 schema 版本会拒绝打开。升级前请验证备份，旧二进制回退限制见 [数据库迁移说明](docs/architecture/database-migrations.md)。
+
+## 独立部署与运行维护
+
+新安装可使用版本化发布目录，配置、数据和市场缓存分别放在 `/etc/agentbox`、`/var/lib/agentbox`、`/var/cache/agentbox`；仓库内部署继续兼容。[部署目录与迁移手册](docs/architecture/deployment-layout.md) 包含安装、升级、回退、离线迁移与备份步骤。
+
+系统设置的「容器与资源」支持全局/每用户运行容器上限、数据盘保留空间、后台磁盘统计、市场缓存清理与脱敏诊断下载。用量页读取已入账记录并显示终端扫描时间，补记在后台完成。

@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 command -v go >/dev/null || export PATH=$PATH:/usr/local/go/bin
 
-OUT=data/abox-link
+OUT=${AGENTBOX_CLIENT_OUTPUT:-data/abox-link}
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 

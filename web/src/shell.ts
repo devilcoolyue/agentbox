@@ -152,6 +152,7 @@ export function updateTopbarTitle() {
 export function showView(name: View) {
   if (S.view === name) { closeDrawer(); updateTopbarTitle(); return; }
   S.view = name;
+  emit("view-changed", name);
   $("view-work").classList.toggle("hidden", name !== "work");
   $("view-settings").classList.toggle("hidden", name !== "settings");
   $("view-usage").classList.toggle("hidden", name !== "usage");

@@ -11,12 +11,15 @@ import (
 	"strconv"
 	"strings"
 
+	"agentbox/internal/buildinfo"
 	"agentbox/internal/config"
+	"agentbox/internal/store"
 )
 
 // --- 设置读写 ---
 
 type settingsView struct {
+	Resources      config.ResourceLimits           `json:"resources"`
 	Listen         string                          `json:"listen"`
 	AgentImage     string                          `json:"agent_image"`
 	PermissionMode string                          `json:"permission_mode"`
@@ -39,6 +42,7 @@ type settingsView struct {
 
 func (s *Server) settingsView() settingsView {
 	return settingsView{
+		Resources:       s.cfg.GetResources(),
 		Listen:          s.cfg.GetListen(),
 		AgentImage:      s.cfg.GetAgentImage(),
 		PermissionMode:  s.cfg.GetPermissionMode(),
@@ -98,7 +102,8 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"go_version":       runtime.Version(),
+		"go_version": runtime.Version(),
+		"version":    buildinfo.Version, "revision": buildinfo.Commit(), "built_at": buildinfo.BuiltAt, "schema_version": store.SchemaVersion,
 		"data_dir":         s.cfg.DataDir,
 		"config_path":      s.cfg.Path(),
 		"docker_version":   s.dock.ServerVersion(r.Context()),

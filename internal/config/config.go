@@ -314,6 +314,8 @@ type Config struct {
 	Listen         string                   `json:"listen"`
 	AuthToken      string                   `json:"auth_token"`
 	DataDir        string                   `json:"data_dir"`
+	CacheDir       string                   `json:"cache_dir,omitempty"`
+	Resources      ResourceLimits           `json:"resources"`
 	AgentImage     string                   `json:"agent_image"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
@@ -329,9 +331,10 @@ type Config struct {
 	TerminalTips   TerminalTips             `json:"terminal_tips"`
 	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
 
-	mu         sync.RWMutex
-	path       string
-	rawDataDir string // data_dir 原文，写回时保留
+	mu          sync.RWMutex
+	path        string
+	rawCacheDir string
+	rawDataDir  string // data_dir 原文，写回时保留
 }
 
 func Load(path string) (*Config, error) {
@@ -403,6 +406,12 @@ func Load(path string) (*Config, error) {
 		cfg.DataDir = "data"
 	}
 	cfg.DataDir = resolve(cfg.DataDir)
+	cfg.rawCacheDir = cfg.CacheDir
+	if cfg.CacheDir == "" {
+		cfg.CacheDir = cfg.DataDir
+	} else {
+		cfg.CacheDir = resolve(cfg.CacheDir)
+	}
 
 	if cfg.Tunnel.Enabled && cfg.Tunnel.ProxyBind == "" {
 		cfg.Tunnel.ProxyBind = defaultTunnelBind
@@ -425,6 +434,9 @@ func Load(path string) (*Config, error) {
 // validateLocked checks the whole config; callers must hold at least a read
 // lock (Load runs before the config is shared, which also counts).
 func (c *Config) validateLocked() error {
+	if c.Resources.MaxRunning < 0 || c.Resources.MaxRunningPerUser < 0 || c.Resources.MinFreeBytes < 0 {
+		return fmt.Errorf("resource limits cannot be negative")
+	}
 	if len(c.AuthToken) < 8 || c.AuthToken == "CHANGE_ME_TO_A_LONG_RANDOM_TOKEN" {
 		return fmt.Errorf("auth_token must be a secret of at least 8 characters")
 	}
@@ -574,6 +586,8 @@ type persistConfig struct {
 	Listen         string                   `json:"listen"`
 	AuthToken      string                   `json:"auth_token"`
 	DataDir        string                   `json:"data_dir,omitempty"`
+	CacheDir       string                   `json:"cache_dir,omitempty"`
+	Resources      ResourceLimits           `json:"resources"`
 	AgentImage     string                   `json:"agent_image"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
@@ -597,6 +611,8 @@ func (c *Config) saveLocked() error {
 		Listen:         c.Listen,
 		AuthToken:      c.AuthToken,
 		DataDir:        c.rawDataDir,
+		CacheDir:       c.rawCacheDir,
+		Resources:      c.Resources,
 		AgentImage:     c.AgentImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
@@ -894,6 +910,9 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Listen:         c.Listen,
 		AuthToken:      c.AuthToken,
 		DataDir:        c.DataDir,
+		CacheDir:       c.CacheDir,
+		Resources:      c.Resources,
+		rawCacheDir:    c.rawCacheDir,
 		AgentImage:     c.AgentImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
@@ -930,6 +949,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.IdleTimeoutMin = work.IdleTimeoutMin
 	c.TimeZone = work.TimeZone
 	c.Container = work.Container
+	c.Resources = work.Resources
 	c.Tunnel = work.Tunnel
 	c.ProxyBridge = work.ProxyBridge
 	c.Accounts = work.Accounts
@@ -943,6 +963,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 
 // SettingsPatch carries a partial settings update; nil fields stay unchanged.
 type SettingsPatch struct {
+	Resources      *ResourceLimits          `json:"resources"`
 	Listen         *string                  `json:"listen"`
 	AgentImage     *string                  `json:"agent_image"`
 	PermissionMode *string                  `json:"permission_mode"`
@@ -962,6 +983,9 @@ type SettingsPatch struct {
 
 func (c *Config) ApplySettings(p SettingsPatch) error {
 	return c.mutate(func(w *Config) error {
+		if p.Resources != nil {
+			w.Resources = *p.Resources
+		}
 		if p.Listen != nil {
 			w.Listen = *p.Listen
 		}

@@ -5,6 +5,7 @@
  * 「我的模板」写的是 data/users/<user>/home-template，每次会话启动铺进该用户
  * 的所有会话（服务端 agent.SeedHomeTemplate）。 */
 "use strict";
+import { buttonLabel, svgIcon } from "./icons.js";
 import { setSelectValue } from "./select.js";
 import { S } from "./state.js";
 import { $, spinEl, toast, askConfirm, fmtBytes, fmtSize, fmtTime, btnBusy, btnDone, startDownload, } from "./util.js";
@@ -165,9 +166,10 @@ function arrowEl(open, busy, toggle) {
     if (busy)
         a.replaceChildren(spinEl());
     else
-        a.textContent = "▸";
+        a.append(svgIcon("chevron-right", 12));
     setTip(a, open ? "收起" : "展开目录");
     a.setAttribute("role", "button");
+    a.setAttribute("aria-label", open ? "收起目录" : "展开目录");
     a.tabIndex = -1; // 行本身可聚焦就够了，别让 Tab 在树里走两遍
     a.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
     return a;
@@ -385,14 +387,14 @@ function renderDetail(det) {
     actions.className = "skill-head-actions";
     const move = document.createElement("button");
     move.className = "btn btn-sm";
-    move.textContent = SK.scope === "session" ? "复制到我的模板" : "装到本空间";
+    buttonLabel(move, SK.scope === "session" ? "复制到我的模板" : "装到本空间", SK.scope === "session" ? "copy" : "download");
     setTip(move, SK.scope === "session"
         ? "复制进模板后，你名下每个工作空间启动时都会带上它"
         : "把模板里的这个技能立刻装进当前工作空间，不必等下次启动");
     move.addEventListener("click", () => copySkill(det.name, move));
     const del = document.createElement("button");
     del.className = "btn btn-sm btn-danger";
-    del.textContent = "删除";
+    buttonLabel(del, "删除", "trash");
     del.addEventListener("click", () => removeSkill(det.name));
     actions.append(move, del);
     head.appendChild(actions);
@@ -417,7 +419,7 @@ function renderFile(skill, f) {
     const back = document.createElement("button");
     back.type = "button";
     back.className = "skill-back";
-    back.textContent = "← " + skill;
+    buttonLabel(back, skill, "arrow-left");
     setTip(back, "回到技能概览");
     back.addEventListener("click", () => selectSkill(skill));
     head.appendChild(back);
@@ -438,7 +440,7 @@ function renderFile(skill, f) {
     actions.className = "skill-head-actions";
     const dl = document.createElement("button");
     dl.className = "btn btn-sm";
-    dl.textContent = "下载";
+    buttonLabel(dl, "下载", "download");
     dl.addEventListener("click", () => startDownload(skillFileURL(skill, f.path, SK.scope, true)));
     actions.appendChild(dl);
     head.appendChild(actions);
@@ -484,7 +486,7 @@ function docView(label, content, truncated, skipMeta) {
         const b = document.createElement("button");
         b.type = "button";
         b.className = "scope-btn" + (SK.view === mode ? " active" : "");
-        b.textContent = text;
+        buttonLabel(b, text, mode === "preview" ? "eye" : "code");
         b.addEventListener("click", () => {
             if (SK.view === mode)
                 return;
@@ -737,7 +739,7 @@ function renderMarket() {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "btn btn-sm";
-        btn.textContent = "安装";
+        buttonLabel(btn, "安装", "download");
         btn.addEventListener("click", () => installFromMarket(p.name, btn));
         row.append(info, btn);
         frag.appendChild(row);

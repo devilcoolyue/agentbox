@@ -120,7 +120,7 @@
     <p class="login-hint">在你的服务器上，使用独立的 Agent 工作空间</p>
     <input id="login-user" type="text" placeholder="账号" autocomplete="username" autocapitalize="none" spellcheck="false" required>
     <input id="login-pass" type="password" placeholder="密码" autocomplete="current-password" required>
-    <button type="submit" id="login-btn" class="btn btn-primary">登录</button>
+    <button type="submit" id="login-btn" class="btn btn-primary" data-icon="login">登录</button>
     <p id="login-error" class="login-error hidden"></p>
   </form>
 </div>
@@ -140,7 +140,7 @@
       <span id="topbar-title" class="topbar-title"></span>
     </div>
     <div id="kebab-wrap" class="kebab-wrap hidden">
-      <button id="btn-kebab" class="menu-btn" aria-label="工作空间操作">⋯</button>
+      <button id="btn-kebab" class="menu-btn" aria-label="工作空间操作" data-icon="more"></button>
       <div id="kebab-menu" class="kebab-menu hidden">
         <button id="kb-start"><span class="glyph"></span>启动工作空间</button>
         <button id="kb-stop"><span class="glyph"></span>停止工作空间</button>
@@ -233,7 +233,7 @@
           <div class="mascot mascot-empty" data-mascot aria-hidden="true"></div>
           <h1 class="empty-title">从一个工作空间开始</h1>
           <p class="empty-sub">独立运行 Agent，集中管理文件、终端和对话。<br>选择左侧工作空间继续，或新建一个；停止后，文件与对话仍会保留。</p>
-          <button id="empty-new" class="btn btn-primary empty-cta">＋ 新建工作空间</button>
+          <button id="empty-new" class="btn btn-primary empty-cta" data-icon="plus">新建工作空间</button>
           <div class="empty-ready mono">已就绪<span id="empty-brands" class="empty-brands"></span></div>
         </div>
 
@@ -282,35 +282,35 @@
               <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话">
                 <span id="thread-title" class="t">新对话</span>
               </button>
-              <button id="btn-thread-new" class="thread-new" data-tip="在当前工作空间中新建对话，原对话保留在历史中">＋ 新建对话</button>
+              <button id="btn-thread-new" class="thread-new" data-tip="在当前工作空间中新建对话，原对话保留在历史中" data-icon="plus">新建对话</button>
             </div>
             <!-- 对话通道连接状态：仅在非正常连接时出现，避免占用常态空间 -->
             <div id="chat-conn" class="chat-conn hidden">
               <span id="chat-conn-dot" class="t-dot"></span>
               <span id="chat-conn-text"></span>
-              <button id="chat-reconnect" type="button" class="btn btn-sm">立即重连</button>
+              <button id="chat-reconnect" type="button" class="btn btn-sm" data-icon="refresh">立即重连</button>
             </div>
             <div id="chat-log" class="chat-log"></div>
             <div id="chat-loading" class="loading-block hidden">
               <span id="chat-loading-spin" class="spin"></span>
               <span id="chat-loading-text">正在加载历史对话…</span>
-              <button id="chat-loading-retry" type="button" class="btn btn-sm hidden">重试</button>
+              <button id="chat-loading-retry" type="button" class="btn btn-sm hidden" data-icon="refresh">重试</button>
             </div>
             <div id="chat-hero" class="chat-hero hidden">
               <div id="hero-avatar" class="hero-avatar"></div>
               <h2>我们该构建什么？<span class="hero-cursor">▊</span></h2>
               <div class="hero-pills">
-                <button class="hero-pill" data-fill="帮我梳理这个仓库的整体结构和核心模块，讲讲代码是如何组织的。">
-                  <span class="hp-ico">🔭</span>梳理仓库结构
+                <button class="hero-pill" data-fill="帮我梳理这个仓库的整体结构和核心模块，讲讲代码是如何组织的。" data-icon="network">
+                  梳理仓库结构
                 </button>
-                <button class="hero-pill" data-fill="我想实现一个新功能：">
-                  <span class="hp-ico">🔨</span>实现一个新功能
+                <button class="hero-pill" data-fill="我想实现一个新功能：" data-icon="sparkles">
+                  实现一个新功能
                 </button>
-                <button class="hero-pill" data-fill="请审查当前代码，找出问题并提出具体修改建议。">
-                  <span class="hp-ico">✅</span>审查当前代码
+                <button class="hero-pill" data-fill="请审查当前代码，找出问题并提出具体修改建议。" data-icon="list-check">
+                  审查当前代码
                 </button>
-                <button class="hero-pill" data-fill="现在有一个问题需要修复：">
-                  <span class="hp-ico">🐛</span>修复一个问题
+                <button class="hero-pill" data-fill="现在有一个问题需要修复：" data-icon="bug">
+                  修复一个问题
                 </button>
               </div>
             </div>
@@ -394,8 +394,8 @@
             <div class="files-bar">
               <div class="files-left">
                 <div class="scope-switch" role="tablist">
-                  <button id="scope-ws" class="scope-btn active">空间文件</button>
-                  <button id="scope-shared" class="scope-btn">共享目录</button>
+                  <button id="scope-ws" class="scope-btn active" data-icon="folder">空间文件</button>
+                  <button id="scope-shared" class="scope-btn" data-icon="users">共享目录</button>
                   <span class="help" tabindex="0" aria-label="共享目录说明">?
                     <span class="help-tip" role="tooltip">
                       <b>空间文件</b>（<code>/workspace</code>）仅属于当前工作空间。<br>
@@ -408,10 +408,10 @@
               </div>
               <div class="files-actions">
                 <label class="check"><input type="checkbox" id="upload-clear"> <span id="upload-clear-label">上传前清空空间文件</span></label>
-                <button id="btn-mkdir" class="btn btn-sm">新建文件夹</button>
-                <button id="btn-upload" class="btn btn-sm">上传代码包</button>
+                <button id="btn-mkdir" class="btn btn-sm" data-icon="folder-plus">新建文件夹</button>
+                <button id="btn-upload" class="btn btn-sm" data-icon="upload">上传代码包</button>
                 <input id="upload-input" type="file" class="hidden" multiple accept=".zip,.tar,.tar.gz,.tgz,*/*">
-                <button id="btn-download" class="btn btn-sm">下载空间文件 (zip)</button>
+                <button id="btn-download" class="btn btn-sm" data-icon="download">下载空间文件 (zip)</button>
               </div>
             </div>
             <div id="upload-progress" class="upload-progress hidden">
@@ -430,9 +430,9 @@
               <select id="changes-repo" class="changes-repo mono hidden" aria-label="仓库"></select>
               <div id="changes-branch" class="changes-branch mono"></div>
               <div class="changes-actions">
-                <button id="btn-changes-refresh" class="btn btn-sm">刷新</button>
-                <button id="btn-changes-discard-all" class="btn btn-sm" disabled>全部丢弃</button>
-                <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled>提交</button>
+                <button id="btn-changes-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
+                <button id="btn-changes-discard-all" class="btn btn-sm btn-ghost btn-danger" disabled data-icon="undo">全部丢弃</button>
+                <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled data-icon="commit">提交</button>
               </div>
             </div>
             <div class="changes-body">
@@ -441,8 +441,8 @@
                 <div id="changes-view-bar" class="changes-view-bar hidden">
                   <span id="changes-view-path" class="mono"></span>
                   <div class="changes-view-tabs">
-                    <button type="button" id="btn-view-diff" class="seg">差异</button>
-                    <button type="button" id="btn-view-full" class="seg">完整内容</button>
+                    <button type="button" id="btn-view-diff" class="seg" data-icon="diff">差异</button>
+                    <button type="button" id="btn-view-full" class="seg" data-icon="code">完整内容</button>
                   </div>
                 </div>
                 <div id="changes-diff" class="changes-diff"></div>
@@ -455,8 +455,8 @@
             <div class="skills-bar">
               <div class="skills-left">
                 <div class="scope-switch" role="tablist">
-                  <button id="skill-scope-session" class="scope-btn active">本空间</button>
-                  <button id="skill-scope-template" class="scope-btn">我的模板</button>
+                  <button id="skill-scope-session" class="scope-btn active" data-icon="box">本空间</button>
+                  <button id="skill-scope-template" class="scope-btn" data-icon="users">我的模板</button>
                   <span class="help" tabindex="0" aria-label="技能范围说明">?
                     <span class="help-tip" role="tooltip">
                       <b>本空间</b>的技能仅供当前工作空间使用。<br>
@@ -468,8 +468,8 @@
                 <div id="skills-count" class="skills-count"></div>
               </div>
               <div class="skills-actions">
-                <button id="btn-skills-refresh" class="btn btn-sm">刷新</button>
-                <button id="btn-skill-install" class="btn btn-sm btn-primary">安装技能</button>
+                <button id="btn-skills-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
+                <button id="btn-skill-install" class="btn btn-sm btn-primary" data-icon="plus">安装技能</button>
                 <input id="skill-install-input" type="file" class="hidden" accept=".md,.zip,.tar,.tgz,.gz">
               </div>
             </div>
@@ -499,15 +499,15 @@
 
         <div class="set-body">
           <nav id="set-nav" class="set-nav">
-            <button class="active" data-sec="accounts">账号池 <span id="set-acct-count" class="count">0</span></button>
-            <button data-sec="proxies">IP 代理 <span id="proxy-count" class="count">0</span></button>
-            <button data-sec="container">容器与资源</button>
-            <button data-sec="models">模型管理</button>
-            <button data-sec="pricing">价目表 <span id="price-count" class="count">0</span></button>
-            <button data-sec="interface">界面与提示</button>
-            <button data-sec="security">安全与访问</button>
-            <button data-sec="monitor">运维监控</button>
-            <button data-sec="about">关于</button>
+            <button class="active" data-sec="accounts" data-icon="users">账号池 <span id="set-acct-count" class="count">0</span></button>
+            <button data-sec="proxies" data-icon="network">IP 代理 <span id="proxy-count" class="count">0</span></button>
+            <button data-sec="container" data-icon="box">容器与资源</button>
+            <button data-sec="models" data-icon="cpu">模型管理</button>
+            <button data-sec="pricing" data-icon="wallet">价目表 <span id="price-count" class="count">0</span></button>
+            <button data-sec="interface" data-icon="sliders">界面与提示</button>
+            <button data-sec="security" data-icon="shield">安全与访问</button>
+            <button data-sec="monitor" data-icon="activity">运维监控</button>
+            <button data-sec="about" data-icon="info">关于</button>
           </nav>
 
           <div id="set-content" class="set-content">
@@ -518,7 +518,7 @@
                   <h2>账号池</h2>
                   <p>创建工作空间时可选用的订阅账号与 API Key。多个空间可共用账号，登录凭证由服务器统一管理和同步。</p>
                 </div>
-                <button id="btn-acct-add" class="btn btn-primary btn-sm">＋ 添加账号</button>
+                <button id="btn-acct-add" class="btn btn-primary btn-sm" data-icon="plus">添加账号</button>
               </div>
               <div id="acct-list-box" class="acct-list"></div>
             </section>
@@ -531,10 +531,10 @@
                   <p>账号级别的出口代理池。账号绑定其中一个后，它的全部官方请求——容器里 agent 发的，以及服务端代发的登录与探测——都从这个 IP 出去。在「账号池 → 编辑」里绑定。</p>
                 </div>
                 <div class="px-head-actions">
-                  <button id="btn-proxy-reload" class="btn btn-sm btn-ghost">刷新</button>
-                  <button id="btn-proxy-import" class="btn btn-sm btn-ghost">导入</button>
-                  <button id="btn-proxy-export" class="btn btn-sm btn-ghost">导出</button>
-                  <button id="btn-proxy-add" class="btn btn-primary btn-sm">＋ 添加代理</button>
+                  <button id="btn-proxy-reload" class="btn btn-sm btn-ghost" data-icon="refresh">刷新</button>
+                  <button id="btn-proxy-import" class="btn btn-sm btn-ghost" data-icon="upload">导入</button>
+                  <button id="btn-proxy-export" class="btn btn-sm btn-ghost" data-icon="download">导出</button>
+                  <button id="btn-proxy-add" class="btn btn-primary btn-sm" data-icon="plus">添加代理</button>
                 </div>
               </div>
               <div id="proxy-bridge-state" class="px-bridge"></div>
@@ -570,7 +570,7 @@
                 </div>
                 <div class="card-foot">
                   <span class="note">代理池非空时自动启动；绑定失败只影响代理功能，不影响服务</span>
-                  <button id="btn-save-bridge" class="btn btn-primary btn-sm">保存</button>
+                  <button id="btn-save-bridge" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
             </section>
@@ -616,7 +616,23 @@
                 </label>
                 <div class="card-foot">
                   <span class="note">对新启动的容器生效</span>
-                  <button id="btn-save-container" class="btn btn-primary btn-sm">保存</button>
+                  <button id="btn-save-container" class="btn btn-primary btn-sm" data-icon="save">保存</button>
+                </div>
+              </div>
+              <div class="card">
+                <h3>容量与磁盘</h3>
+                <p class="card-desc">只限制新启动的空间，已运行的任务继续执行。0 表示不限制。</p>
+                <div class="field-row">
+                  <label class="field"><span>全局运行容器上限</span><input id="set-running" type="number" min="0" step="1" required></label>
+                  <label class="field"><span>每用户运行容器上限</span><input id="set-user-running" type="number" min="0" step="1" required></label>
+                  <label class="field"><span>数据盘保留空间（GiB）</span><input id="set-free-gib" type="number" min="0" step="0.1" required></label>
+                </div>
+                <p id="storage-report" class="note">磁盘统计每 5 分钟刷新，按文件大小估算。</p>
+                <div class="card-foot">
+                  <button id="btn-storage" class="btn btn-sm">查看磁盘统计</button>
+                  <button id="btn-clear-cache" class="btn btn-sm">清理市场缓存</button>
+                  <button id="btn-diagnostics" class="btn btn-sm">导出脱敏诊断</button>
+                  <button id="btn-save-resources" class="btn btn-primary btn-sm">保存容量设置</button>
                 </div>
               </div>
               <div class="card">
@@ -628,7 +644,7 @@
                 </label>
                 <div class="card-foot">
                   <span class="note">即时生效，无需重启；0 表示永不自动停机</span>
-                  <button id="btn-save-idle" class="btn btn-primary btn-sm">保存</button>
+                  <button id="btn-save-idle" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
             </section>
@@ -651,7 +667,7 @@
                 <div class="model-add">
                   <input id="mdl-claude-label" type="text" placeholder="显示名称，如 Fable 5">
                   <input id="mdl-claude-id" type="text" placeholder="模型 ID，如 claude-fable-5" class="mono">
-                  <button class="btn btn-sm mdl-add" data-agent="claude">添加</button>
+                  <button class="btn btn-sm mdl-add" data-agent="claude" data-icon="plus">添加</button>
                 </div>
               </div>
               <div class="card">
@@ -664,7 +680,7 @@
                 <div class="model-add">
                   <input id="mdl-codex-label" type="text" placeholder="显示名称">
                   <input id="mdl-codex-id" type="text" placeholder="模型 ID" class="mono">
-                  <button class="btn btn-sm mdl-add" data-agent="codex">添加</button>
+                  <button class="btn btn-sm mdl-add" data-agent="codex" data-icon="plus">添加</button>
                 </div>
               </div>
             </section>
@@ -678,9 +694,9 @@
                   <p class="sec-hint">键可以是<b>模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b>agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p>
                 </div>
                 <div class="sec-actions">
-                  <button id="price-fill" class="btn btn-sm" data-tip="把官方公布的 Claude 价格填进表里；已有的行不会被覆盖">填入 Claude 官方价</button>
-                  <button id="price-fill-oai" class="btn btn-sm" data-tip="把官方公布的 OpenAI 价格填进表里；已有的行不会被覆盖">填入 OpenAI 官方价</button>
-                  <button id="price-save" class="btn btn-sm btn-primary">保存价目表</button>
+                  <button id="price-fill" class="btn btn-sm" data-tip="把官方公布的 Claude 价格填进表里；已有的行不会被覆盖" data-icon="download">填入 Claude 官方价</button>
+                  <button id="price-fill-oai" class="btn btn-sm" data-tip="把官方公布的 OpenAI 价格填进表里；已有的行不会被覆盖" data-icon="download">填入 OpenAI 官方价</button>
+                  <button id="price-save" class="btn btn-sm btn-primary" data-icon="save">保存价目表</button>
                 </div>
               </div>
               <div class="card">
@@ -704,7 +720,7 @@
                 <p id="price-empty" class="files-empty hidden">价目表是空的。所有按 token 折算的消耗都会记为「未定价」。</p>
                 <div class="price-add">
                   <input id="price-new-key" type="text" placeholder="模型 ID 或 agent 名，如 claude-opus-5" class="mono">
-                  <button id="price-add" class="btn btn-sm">添加一行</button>
+                  <button id="price-add" class="btn btn-sm" data-icon="plus">添加一行</button>
                 </div>
               </div>
             </section>
@@ -733,7 +749,7 @@
                 </label>
                 <div class="card-foot">
                   <span class="note">控制台时间、使用记录筛选与 CSV 导出采用此时区</span>
-                  <button id="btn-save-timezone" class="btn btn-primary btn-sm">保存</button>
+                  <button id="btn-save-timezone" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
               <div class="card">
@@ -757,7 +773,7 @@
                 </div>
                 <div class="card-foot">
                   <span class="note">每行一条，最多 30 条；频率 0 表示不轮播（只显示第一条）</span>
-                  <button id="btn-save-tips" class="btn btn-primary btn-sm">保存</button>
+                  <button id="btn-save-tips" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
             </section>
@@ -777,7 +793,7 @@
                 <div class="user-add">
                   <input id="user-new-name" type="text" class="mono" placeholder="用户名（小写字母数字开头，可含 - _）" autocapitalize="none" spellcheck="false">
                   <input id="user-new-pass" type="password" placeholder="初始密码（至少 8 位）" autocomplete="new-password">
-                  <button id="btn-user-add" class="btn btn-sm">添加用户</button>
+                  <button id="btn-user-add" class="btn btn-sm" data-icon="plus">添加用户</button>
                 </div>
               </div>
               <div class="card">
@@ -795,7 +811,7 @@
                 </div>
                 <div class="card-foot">
                   <span class="note">密码保存在服务端数据库（PBKDF2 哈希），不再依赖 config.json 的 auth_token</span>
-                  <button id="btn-pw-save" class="btn btn-primary btn-sm">修改密码</button>
+                  <button id="btn-pw-save" class="btn btn-primary btn-sm" data-icon="key">修改密码</button>
                 </div>
               </div>
               <div class="card">
@@ -828,7 +844,7 @@
                 </div>
                 <div class="card-foot">
                   <span id="tunnel-note" class="note">默认绑定 docker 网桥网关 172.17.0.1，仅容器与本机可达</span>
-                  <button id="btn-save-tunnel" class="btn btn-primary btn-sm">保存</button>
+                  <button id="btn-save-tunnel" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
               <div class="card">
@@ -845,7 +861,7 @@
                 </div>
                 <div class="card-foot">
                   <span id="security-note" class="note">权限模式与上传上限即时生效；监听地址需重启 agentbox 服务</span>
-                  <button id="btn-save-security" class="btn btn-primary btn-sm">保存</button>
+                  <button id="btn-save-security" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
             </section>
@@ -960,9 +976,9 @@
                 </button>
               </div>
               <div class="uf-actions">
-                <button id="uf-reset" class="btn btn-ghost btn-sm">重置</button>
-                <button id="uf-refresh" class="btn btn-sm">刷新</button>
-                <button id="uf-export" class="btn btn-sm">导出 CSV</button>
+                <button id="uf-reset" class="btn btn-ghost btn-sm" data-icon="undo">重置</button>
+                  <button id="uf-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
+                  <button id="uf-export" class="btn btn-sm" data-icon="download">导出 CSV</button>
               </div>
             </div>
           </div>
@@ -1052,7 +1068,7 @@
             <p>隧道功能未启用。启用后，你可以在自己的电脑上运行 abox-link 客户端，
             让云端容器里的智能体访问「只有你本机能连」的内网（公司内网、局域网设备、本地数据库）。</p>
             <div>
-              <button id="tun-goto-settings" class="btn btn-primary btn-sm">前往设置启用</button>
+              <button id="tun-goto-settings" class="btn btn-primary btn-sm" data-icon="sliders">前往设置启用</button>
             </div>
           </div>
 
@@ -1072,7 +1088,7 @@
                 <b>粘贴配对码完成接入</b>——不用输服务器地址和密码。
                 之后在控制台里点选放行规则、点「启动」即可，还能勾选开机自启。
                 <div class="tun-cmd-foot">
-                  <button id="tun-pair" class="btn btn-primary btn-sm">生成配对码</button>
+                  <button id="tun-pair" class="btn btn-primary btn-sm" data-icon="link">生成配对码</button>
                   <span id="tun-pair-hint" class="field-hint">10 分钟内有效，只能用一次</span>
                 </div>
                 <pre id="tun-pair-code" class="tun-cmd mono hidden"></pre>
@@ -1095,7 +1111,7 @@
   <form id="new-form" method="dialog">
     <div class="dlg-head">
       <h2 id="new-title">创建 Agent 工作空间</h2>
-      <button type="button" id="new-cancel" class="dlg-x" aria-label="关闭">✕</button>
+      <button type="button" id="new-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
     </div>
     <p id="new-desc" class="field-hint">独立运行 Agent，拥有自己的文件、终端和对话。</p>
     <label>工作空间名称
@@ -1112,7 +1128,7 @@
     </label>
     <p id="new-error" class="login-error hidden"></p>
     <div class="dlg-actions">
-      <button type="submit" id="new-ok" class="btn btn-primary">创建工作空间</button>
+      <button type="submit" id="new-ok" class="btn btn-primary" data-icon="plus">创建工作空间</button>
     </div>
   </form>
 </dialog>
@@ -1127,24 +1143,24 @@
       </div>
       <div class="fv-actions">
         <div id="fv-modes" class="scope-switch hidden" role="tablist" aria-label="查看方式">
-          <button type="button" id="fv-mode-view" class="scope-btn active">预览</button>
-          <button type="button" id="fv-mode-src" class="scope-btn">源码</button>
+          <button type="button" id="fv-mode-view" class="scope-btn active" data-icon="eye">预览</button>
+          <button type="button" id="fv-mode-src" class="scope-btn" data-icon="code">源码</button>
         </div>
         <div id="fv-vps" class="scope-switch fv-vps hidden" role="tablist" aria-label="模拟宽度">
-          <button type="button" class="scope-btn active" data-vp="desktop" data-tip="桌面宽度（自适应）">桌面</button>
-          <button type="button" class="scope-btn" data-vp="tablet" data-tip="平板宽度 834px">平板</button>
-          <button type="button" class="scope-btn" data-vp="phone" data-tip="手机宽度 390px">手机</button>
+          <button type="button" class="scope-btn active" data-vp="desktop" data-tip="桌面宽度（自适应）" data-icon="desktop">桌面</button>
+          <button type="button" class="scope-btn" data-vp="tablet" data-tip="平板宽度 834px" data-icon="tablet">平板</button>
+          <button type="button" class="scope-btn" data-vp="phone" data-tip="手机宽度 390px" data-icon="phone">手机</button>
         </div>
         <label id="fv-auto-wrap" class="check fv-auto hidden" data-tip="文件被 Agent 改动后自动重新渲染">
           <input type="checkbox" id="fv-auto" checked> <span>自动刷新</span>
         </label>
-        <button id="fv-reload" class="btn btn-sm hidden">刷新</button>
-        <button id="fv-newtab" class="btn btn-sm hidden" data-tip="在新标签页打开预览">新标签页</button>
-        <button id="fv-full" class="btn btn-sm hidden" data-tip="铺满窗口">全屏</button>
+        <button id="fv-reload" class="btn btn-sm hidden" data-icon="refresh">刷新</button>
+        <button id="fv-newtab" class="btn btn-sm hidden" data-tip="在新标签页打开预览" data-icon="external">新标签页</button>
+        <button id="fv-full" class="btn btn-sm hidden" data-tip="铺满窗口" data-icon="expand">全屏</button>
         <span id="fv-state" class="fv-state mono"></span>
-        <button id="fv-save" class="btn btn-sm btn-primary" disabled>保存</button>
-        <button id="fv-download" class="btn btn-sm">下载</button>
-        <button id="fv-close" class="dlg-x" aria-label="关闭" data-tip="关闭">✕</button>
+        <button id="fv-save" class="btn btn-sm btn-primary" disabled data-icon="save">保存</button>
+        <button id="fv-download" class="btn btn-sm" data-icon="download">下载</button>
+        <button id="fv-close" class="dlg-x" aria-label="关闭" data-tip="关闭" data-icon="close"></button>
       </div>
     </header>
     <div class="fv-body">
@@ -1166,7 +1182,7 @@
 <dialog id="dlg-file-move" class="dlg-file-move">
   <div class="dlg-head">
     <h2 id="file-move-title">移动文件</h2>
-    <button type="button" id="file-move-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="file-move-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
   <div class="file-op-source">
     <span>正在移动</span>
@@ -1174,8 +1190,8 @@
   </div>
   <div class="file-move-nav">
     <div class="scope-switch" role="tablist" aria-label="目标范围">
-      <button type="button" id="file-move-ws" class="scope-btn">空间文件</button>
-      <button type="button" id="file-move-shared" class="scope-btn">共享目录</button>
+      <button type="button" id="file-move-ws" class="scope-btn" data-icon="folder">空间文件</button>
+      <button type="button" id="file-move-shared" class="scope-btn" data-icon="users">共享目录</button>
     </div>
     <div id="file-move-crumb" class="file-move-crumb mono"></div>
   </div>
@@ -1186,8 +1202,8 @@
   </div>
   <p id="file-move-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="file-move-cancel" class="btn">取消</button>
-    <button type="button" id="file-move-ok" class="btn btn-primary">移动到这里</button>
+    <button type="button" id="file-move-cancel" class="btn btn-ghost">取消</button>
+    <button type="button" id="file-move-ok" class="btn btn-primary" data-icon="move">移动到这里</button>
   </div>
 </dialog>
 
@@ -1195,14 +1211,14 @@
 <dialog id="dlg-file-delete">
   <div class="dlg-head">
     <h2 id="file-delete-title">删除文件</h2>
-    <button type="button" id="file-delete-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="file-delete-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
   <p id="file-delete-text"></p>
   <p id="file-delete-warning" class="field-hint"></p>
   <p id="file-delete-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="file-delete-cancel" class="btn">取消</button>
-    <button type="button" id="file-delete-ok" class="btn btn-danger">删除</button>
+    <button type="button" id="file-delete-cancel" class="btn btn-ghost">取消</button>
+    <button type="button" id="file-delete-ok" class="btn btn-danger" data-icon="trash">删除</button>
   </div>
 </dialog>
 
@@ -1210,7 +1226,7 @@
 <dialog id="dlg-git-commit">
   <div class="dlg-head">
     <h2>提交变更</h2>
-    <button type="button" id="git-commit-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="git-commit-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
   <div class="file-name-field">
     <label for="git-commit-msg">提交信息</label>
@@ -1218,8 +1234,8 @@
   </div>
   <p id="git-commit-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="git-commit-cancel" class="btn">取消</button>
-    <button type="button" id="git-commit-ok" class="btn btn-primary">提交</button>
+    <button type="button" id="git-commit-cancel" class="btn btn-ghost">取消</button>
+    <button type="button" id="git-commit-ok" class="btn btn-primary" data-icon="commit">提交</button>
   </div>
 </dialog>
 
@@ -1227,19 +1243,19 @@
 <dialog id="dlg-skill-install" class="dlg-skill">
   <div class="dlg-head">
     <h2>安装技能</h2>
-    <button type="button" id="skill-install-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="skill-install-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
 
   <div class="skill-src-bar">
     <div class="scope-switch" role="tablist">
-      <button type="button" id="skill-src-local" class="scope-btn active">本地上传</button>
-      <button type="button" id="skill-src-market" class="scope-btn">官方市场</button>
+      <button type="button" id="skill-src-local" class="scope-btn active" data-icon="upload">本地上传</button>
+      <button type="button" id="skill-src-market" class="scope-btn" data-icon="box">官方市场</button>
     </div>
     <span class="skill-target">装到：<b id="skill-install-target">本空间</b></span>
   </div>
 
   <div id="skill-src-local-pane">
-    <button type="button" id="skill-drop" class="skill-drop">
+    <button type="button" id="skill-drop" class="skill-drop" data-icon="upload">
       <span class="skill-drop-main">拖拽文件到这里，或点击选择</span>
       <span class="skill-drop-hint"><code>.md</code> = 单文件技能　·　<code>.zip</code> / <code>.tar.gz</code> = 技能目录打包（可以外面套一层同名目录）</span>
     </button>
@@ -1250,7 +1266,7 @@
     <div class="market-bar">
       <input type="search" id="market-q" placeholder="搜索插件名、描述、作者…">
       <select id="market-cat" aria-label="分类"></select>
-      <button type="button" id="btn-market-refresh" class="btn btn-sm" data-tip="重新拉取官方目录">刷新目录</button>
+      <button type="button" id="btn-market-refresh" class="btn btn-sm" data-tip="重新拉取官方目录" data-icon="refresh">刷新目录</button>
     </div>
     <div id="market-list" class="market-list"></div>
     <p class="market-foot">
@@ -1265,13 +1281,13 @@
 <dialog id="dlg-git-discard">
   <div class="dlg-head">
     <h2 id="git-discard-title">丢弃改动</h2>
-    <button type="button" id="git-discard-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="git-discard-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
   <p id="git-discard-text"></p>
   <p class="field-hint">会把文件恢复到最近一次提交的状态，未提交的改动无法恢复。</p>
   <div class="dlg-actions">
-    <button type="button" id="git-discard-cancel" class="btn">取消</button>
-    <button type="button" id="git-discard-ok" class="btn btn-danger">丢弃</button>
+    <button type="button" id="git-discard-cancel" class="btn btn-ghost">取消</button>
+    <button type="button" id="git-discard-ok" class="btn btn-danger" data-icon="undo">丢弃</button>
   </div>
 </dialog>
 
@@ -1279,7 +1295,7 @@
 <dialog id="dlg-file-name">
   <div class="dlg-head">
     <h2 id="file-name-title">新建文件夹</h2>
-    <button type="button" id="file-name-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="file-name-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
   <div class="file-name-field">
     <label id="file-name-label" for="file-name-input">文件夹名称</label>
@@ -1287,8 +1303,8 @@
   </div>
   <p id="file-name-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="file-name-cancel" class="btn">取消</button>
-    <button type="button" id="file-name-ok" class="btn btn-primary">确定</button>
+    <button type="button" id="file-name-cancel" class="btn btn-ghost">取消</button>
+    <button type="button" id="file-name-ok" class="btn btn-primary" data-icon="check">确定</button>
   </div>
 </dialog>
 
@@ -1296,13 +1312,13 @@
 <dialog id="dlg-ask">
   <div class="dlg-head">
     <h2 id="ask-title">确认</h2>
-    <button type="button" id="ask-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="ask-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
   <p id="ask-text"></p>
   <p id="ask-hint" class="field-hint hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="ask-cancel" class="btn">取消</button>
-    <button type="button" id="ask-ok" class="btn btn-primary">确定</button>
+    <button type="button" id="ask-cancel" class="btn btn-ghost">取消</button>
+    <button type="button" id="ask-ok" class="btn btn-primary" data-icon="check">确定</button>
   </div>
 </dialog>
 
@@ -1310,7 +1326,7 @@
 <dialog id="dlg-ask-input">
   <div class="dlg-head">
     <h2 id="ask-input-title">输入</h2>
-    <button type="button" id="ask-input-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="ask-input-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
   <div class="file-name-field">
     <label id="ask-input-label" for="ask-input-field"></label>
@@ -1319,8 +1335,8 @@
   <p id="ask-input-hint" class="field-hint hidden"></p>
   <p id="ask-input-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="ask-input-cancel" class="btn">取消</button>
-    <button type="button" id="ask-input-ok" class="btn btn-primary">确定</button>
+    <button type="button" id="ask-input-cancel" class="btn btn-ghost">取消</button>
+    <button type="button" id="ask-input-ok" class="btn btn-primary" data-icon="check">确定</button>
   </div>
 </dialog>
 
@@ -1328,7 +1344,7 @@
 <dialog id="dlg-quota" class="dlg-quota">
   <div class="dlg-head">
     <h2>额度 · <span id="q-user" class="mono"></span></h2>
-    <button type="button" id="q-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="q-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
 
   <div id="q-body" class="q-body">
@@ -1361,7 +1377,7 @@
       <div class="q-grant">
         <input id="q-amount" type="text" class="mono" inputmode="decimal" placeholder="金额（美元，可为负数冲正）" autocomplete="off">
         <input id="q-note" type="text" placeholder="备注（可选）" autocomplete="off">
-        <button type="button" id="q-grant-btn" class="btn btn-primary btn-sm">充值</button>
+        <button type="button" id="q-grant-btn" class="btn btn-primary btn-sm" data-icon="wallet">充值</button>
       </div>
     </div>
 
@@ -1376,7 +1392,7 @@
 <dialog id="dlg-ausage" class="dlg-ausage">
   <div class="dlg-head">
     <h2>账号额度</h2>
-    <button type="button" id="au-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="au-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
 
   <div class="au-acct">
@@ -1388,7 +1404,7 @@
 
   <div class="au-foot">
     <span id="au-fetched" class="au-fetched mono"></span>
-    <button type="button" id="au-refresh" class="btn btn-sm">刷新</button>
+    <button type="button" id="au-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
   </div>
 </dialog>
 
@@ -1396,7 +1412,7 @@
 <dialog id="dlg-cost" class="dlg-cost">
   <div class="dlg-head">
     <h2>费用明细</h2>
-    <button type="button" id="cost-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="cost-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
 
   <div id="cost-head" class="cost-head"></div>
@@ -1420,7 +1436,7 @@
 
 <!-- 图片灯箱 -->
 <dialog id="dlg-img" class="dlg-img">
-  <button id="lb-close" class="dlg-x lb-x" aria-label="关闭">✕</button>
+  <button id="lb-close" class="dlg-x lb-x" aria-label="关闭" data-icon="close"></button>
   <img id="lb-img" alt="图片预览">
   <div class="lb-bar mono">
     <span id="lb-name"></span>
@@ -1431,11 +1447,11 @@
 <dialog id="dlg-auth" class="dlg-auth">
   <div class="dlg-head">
     <h2 id="auth-title">账号登录</h2>
-    <button type="button" id="auth-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button type="button" id="auth-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
   <div id="auth-modes" class="auth-modes hidden">
-    <button type="button" id="auth-mode-oauth" class="seg">订阅 OAuth</button>
-    <button type="button" id="auth-mode-key" class="seg">中转站 API Key</button>
+    <button type="button" id="auth-mode-oauth" class="seg" data-icon="shield">订阅 OAuth</button>
+    <button type="button" id="auth-mode-key" class="seg" data-icon="key">中转站 API Key</button>
   </div>
   <div id="auth-oauth" class="auth-body hidden">
     <p class="auth-hint">
@@ -1443,13 +1459,13 @@
       2. 授权页会回显一串授权码，粘贴回下方输入框完成登录。<br>
       这是一条独立的授权链，不影响你本机日常使用的 Claude 登录。
     </p>
-    <button id="auth-gen" class="btn">生成授权链接</button>
+    <button id="auth-gen" class="btn" data-icon="link">生成授权链接</button>
     <div id="auth-linkrow" class="auth-linkrow hidden">
       <a id="auth-link" class="auth-link mono" target="_blank" rel="noopener"></a>
-      <button id="auth-copy" class="btn btn-sm">复制</button>
+      <button id="auth-copy" class="btn btn-sm" data-icon="copy">复制</button>
     </div>
     <input id="auth-code" type="text" placeholder="粘贴授权码（形如 xxxx#yyyy）" autocomplete="off" class="hidden">
-    <button id="auth-finish" class="btn btn-primary hidden">完成登录</button>
+    <button id="auth-finish" class="btn btn-primary hidden" data-icon="check">完成登录</button>
   </div>
   <div id="auth-key" class="auth-body hidden">
     <p id="auth-key-hint" class="auth-hint"></p>
@@ -1460,11 +1476,11 @@
         <option value="responses">Responses API</option>
         <option value="chat">Chat Completions</option>
       </select>
-      <button id="auth-test" class="btn">测试连接</button>
-      <button id="auth-savekey" class="btn btn-primary">保存</button>
+      <button id="auth-test" class="btn" data-icon="activity">测试连接</button>
+      <button id="auth-savekey" class="btn btn-primary" data-icon="save">保存</button>
     </div>
     <div id="auth-models" class="auth-models hidden"></div>
-    <button id="auth-clearkey" class="btn btn-ghost btn-sm hidden">清除中转站配置，切回订阅凭证</button>
+    <button id="auth-clearkey" class="btn btn-ghost btn-sm hidden" data-icon="undo">清除中转站配置，切回订阅凭证</button>
   </div>
   <p id="auth-msg" class="auth-msg hidden"></p>
 </dialog>
@@ -1475,12 +1491,12 @@
   <form id="del-form" method="dialog">
     <div class="dlg-head">
       <h2>删除工作空间</h2>
-      <button type="button" id="del-cancel" class="dlg-x" aria-label="关闭">✕</button>
+      <button type="button" id="del-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
     </div>
     <p id="del-text"></p>
     <label class="check"><input type="checkbox" id="del-purge"> 同时清除文件、配置和对话记录（不可恢复）</label>
     <div class="dlg-actions">
-      <button type="submit" id="del-ok" class="btn btn-danger">删除</button>
+      <button type="submit" id="del-ok" class="btn btn-danger" data-icon="trash">删除</button>
     </div>
   </form>
 </dialog>
@@ -1490,7 +1506,7 @@
   <form id="acct-form" method="dialog">
     <div class="dlg-head">
       <h2>添加账号</h2>
-      <button type="button" id="acct-cancel" class="dlg-x" aria-label="关闭">✕</button>
+      <button type="button" id="acct-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
     </div>
     <label>账号类型
       <div class="agent-row">
@@ -1510,7 +1526,7 @@
     </label>
     <p id="acct-error" class="login-error hidden"></p>
     <div class="dlg-actions">
-      <button type="submit" id="acct-ok" class="btn btn-primary">创建并登录</button>
+      <button type="submit" id="acct-ok" class="btn btn-primary" data-icon="plus">创建并登录</button>
     </div>
   </form>
 </dialog>
@@ -1520,7 +1536,7 @@
   <form id="acct-edit-form" method="dialog">
     <div class="dlg-head">
       <h2 id="acct-edit-title">编辑账号</h2>
-      <button type="button" id="acct-edit-cancel" class="dlg-x" aria-label="关闭">✕</button>
+      <button type="button" id="acct-edit-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
     </div>
     <label>显示名称
       <input id="acct-edit-label" type="text" maxlength="32">
@@ -1534,7 +1550,7 @@
     </label>
     <p id="acct-edit-error" class="login-error hidden"></p>
     <div class="dlg-actions">
-      <button type="submit" id="acct-edit-ok" class="btn btn-primary">保存</button>
+      <button type="submit" id="acct-edit-ok" class="btn btn-primary" data-icon="save">保存</button>
     </div>
   </form>
 </dialog>
@@ -1544,12 +1560,12 @@
   <form id="acct-del-form" method="dialog">
     <div class="dlg-head">
       <h2>删除账号</h2>
-      <button type="button" id="acct-del-cancel" class="dlg-x" aria-label="关闭">✕</button>
+      <button type="button" id="acct-del-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
     </div>
     <p id="acct-del-text"></p>
     <p class="field-hint">凭证目录会保留在服务器磁盘上，不会随配置一起删除。</p>
     <div class="dlg-actions">
-      <button type="submit" id="acct-del-ok" class="btn btn-danger">删除</button>
+      <button type="submit" id="acct-del-ok" class="btn btn-danger" data-icon="trash">删除</button>
     </div>
   </form>
 </dialog>
@@ -1559,7 +1575,7 @@
   <form id="proxy-form" method="dialog">
     <div class="dlg-head">
       <h2 id="proxy-dlg-title">添加代理</h2>
-      <button type="button" id="proxy-cancel" class="dlg-x" aria-label="关闭">✕</button>
+      <button type="button" id="proxy-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
     </div>
     <label>名称
       <input id="proxy-name" type="text" maxlength="64" placeholder="留空则用主机名">
@@ -1595,8 +1611,8 @@
     </label>
     <p id="proxy-msg" class="auth-msg hidden"></p>
     <div class="dlg-actions">
-      <button type="button" id="proxy-test" class="btn btn-ghost">测试连接</button>
-      <button type="submit" id="proxy-ok" class="btn btn-primary">保存</button>
+      <button type="button" id="proxy-test" class="btn btn-ghost" data-icon="activity">测试连接</button>
+      <button type="submit" id="proxy-ok" class="btn btn-primary" data-icon="save">保存</button>
     </div>
   </form>
 </dialog>
@@ -1606,7 +1622,7 @@
   <form id="proxy-import-form" method="dialog">
     <div class="dlg-head">
       <h2>批量导入代理</h2>
-      <button type="button" id="proxy-import-cancel" class="dlg-x" aria-label="关闭">✕</button>
+      <button type="button" id="proxy-import-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
     </div>
     <label>每行一条，支持三种写法
       <textarea id="proxy-import-text" rows="8" class="mono" spellcheck="false"
@@ -1615,7 +1631,7 @@
     </label>
     <p id="proxy-import-msg" class="login-error hidden"></p>
     <div class="dlg-actions">
-      <button type="submit" id="proxy-import-ok" class="btn btn-primary">导入</button>
+      <button type="submit" id="proxy-import-ok" class="btn btn-primary" data-icon="upload">导入</button>
     </div>
   </form>
 </dialog>
@@ -1626,9 +1642,9 @@
   <header class="tp-head">
     <b>历史对话</b>
     <span id="tp-count" class="tp-count mono"></span>
-    <button id="tp-close" class="dlg-x" aria-label="关闭">✕</button>
+    <button id="tp-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </header>
-  <button id="tp-new" class="btn btn-primary tp-new">＋ 新建对话</button>
+  <button id="tp-new" class="btn btn-primary tp-new" data-icon="plus">新建对话</button>
   <input id="tp-search" class="tp-search" type="search" placeholder="搜索对话标题…" autocomplete="off">
   <div id="tp-list" class="tp-list"></div>
   <p class="tp-hint">同一工作空间内的对话各自保留上下文，共用空间中的文件和终端。</p>

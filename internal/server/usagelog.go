@@ -214,10 +214,8 @@ func parseUsageTime(v string, loc *time.Location) (time.Time, error) {
 // 合计与可选项都按「筛选条件」算而不是按「当前这一页」算：翻到第 3 页时表头
 // 显示的仍是整个筛选结果的总花费，否则每翻一页数字都变，没法用。
 func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
-	// 先补一趟终端消耗再查，否则刚在终端里花掉的量要等下一次定时扫描才出现，
-	// 用户看到的是「我刚用完，表里没有」。没改动过的 transcript 只花一次 stat，
-	// 真正要读的只有刚写过的那个文件。
-	s.usageService().Scan()
+	// Queries read committed rows immediately; one bounded worker coalesces refreshes.
+	s.usageService().RequestScan()
 
 	f, scopeUser := s.usageFilterFrom(r)
 	q := r.URL.Query()
@@ -275,6 +273,7 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"rows":   rows,
+		"sync":   s.usageService().SyncStatus(),
 		"total":  s.store.SumUsage(f),
 		"facets": s.store.FacetsUsage(f, scopeUser),
 		"limit":  f.Limit,

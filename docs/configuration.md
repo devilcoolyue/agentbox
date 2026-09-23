@@ -144,3 +144,9 @@ data/                               实际根目录由 data_dir 决定
 ```
 
 升级首次打开数据库时会导入旧版 `state.json`；旧版单文件聊天记录在访问时迁移到线程存储。迁移或恢复前，应同时保留数据库快照和对应用户文件，详见[部署手册](../deploy/README.md)。
+
+## 独立缓存与容量限制
+
+`cache_dir` 相对配置文件目录解析；空值/省略时沿用 `data_dir`，市场位于其 `marketplace/` 子目录。缓存目录是部署配置，修改后需重启；设置 API 不修改路径，其他设置保存会保留它。恢复备份时缓存重定位到恢复目录的 `cache/`，不写回原实例缓存。
+
+`resources` 支持 `max_running`、`max_running_per_user` 和 `min_free_bytes`，均为非负整数，0 禁用。可从管理员设置 API/界面原子保存并立即影响新启动。限制与磁盘统计口径见[运行维护](architecture/deployment-layout.md#容量与回收)。

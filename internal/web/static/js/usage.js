@@ -13,7 +13,7 @@
 "use strict";
 import { setSelectValue } from "./select.js";
 import { S, bus } from "./state.js";
-import { $, toast, startDownload } from "./util.js";
+import { $, toast, startDownload, fmtTime } from "./util.js";
 import { DateRangePicker } from "./date-range.js";
 import { api } from "./api.js";
 import { showView } from "./shell.js";
@@ -557,6 +557,8 @@ async function load() {
             return;
         }
         last = data;
+        const sync = data.sync;
+        $("usage-sub").textContent = sync ? (sync.last_scan_at ? `终端全量扫描：${fmtTime(sync.last_scan_at)}${sync.errors ? " · 部分文件失败，后台将重试" : ""}${sync.scanning ? " · 同步中" : ""}` : "终端用量正在后台同步") : "使用记录";
         usageTimeZone = data.timezone || S.timeZone || "Asia/Shanghai";
         S.timeZone = usageTimeZone;
         syncTimeZone();

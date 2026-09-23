@@ -21,7 +21,7 @@ func main() {
 	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "backup", "backup-verify", "restore":
+		case "backup", "backup-verify", "restore", "check-config":
 			if err := maintenance(os.Args[1:]); err != nil {
 				log.Fatal(err)
 			}

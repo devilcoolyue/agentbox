@@ -153,6 +153,7 @@ func rewriteConfig(root *safefs.Root, m *Manifest) error {
 		return errors.New("invalid configuration")
 	}
 	cfg["data_dir"] = json.RawMessage(`"data"`)
+	cfg["cache_dir"] = json.RawMessage(`"cache"`)
 	var accounts []map[string]json.RawMessage
 	if raw := cfg["accounts"]; len(raw) > 0 {
 		if err = json.Unmarshal(raw, &accounts); err != nil {

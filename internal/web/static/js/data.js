@@ -1,15 +1,18 @@
 /* data：sessions / accounts 的拉取与轮询。拉到新数据后广播 data-updated，
  * 由 shell（侧栏）、sessions（工作台头部）、settings（账号池）各自刷新。 */
 "use strict";
+import { Poller } from "./shared/poller.js";
 import { S, emit } from "./state.js";
 import { api } from "./api.js";
-export async function refreshAll() {
+export async function refreshAll(signal) {
     try {
         // 顺带把 /me 拉一遍：余额只在回合结束时变，而 chat.ts 正是在回合收尾
         // 调 refreshAll，所以额度显示会紧跟着扣款更新。
         const [sessions, accounts, me] = await Promise.all([
-            api("/sessions"), api("/accounts"), api("/me"),
+            api("/sessions", { signal }), api("/accounts", { signal }), api("/me", { signal }),
         ]);
+        if (signal?.aborted)
+            return;
         S.sessions = sessions;
         S.accounts = accounts;
         S.quota = me.quota || null;
@@ -26,8 +29,6 @@ export async function refreshAll() {
     }
     catch (_) { /* 网络抖动时保持现状 */ }
 }
-export function startPolling() {
-    if (S.refreshTimer)
-        clearInterval(S.refreshTimer);
-    S.refreshTimer = setInterval(refreshAll, 8000);
-}
+const polling = new Poller();
+export function startPolling() { polling.start(8000, signal => refreshAll(signal)); }
+export function stopPolling() { polling.stop(); }
