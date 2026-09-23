@@ -13,7 +13,7 @@
 "use strict";
 
 import type {
-  Account, ModelOption, Quota, Session, Settings, TerminalTips, Thread,
+  Account, ModelOption, Quota, Session, TerminalTips, Thread,
 } from "./types.js";
 
 export const bus = new EventTarget();
@@ -52,12 +52,7 @@ export interface AppState {
   view: View;
   /** 设置页当前分区 */
   sec: string;
-  /** GET /api/settings 的缓存 */
-  settings: Settings | null;
   tab: Tab;
-  chatWS: WebSocket | null;
-  /** 防止旧连接的重连定时器复活 */
-  chatWSGen: number;
   termWS: WebSocket | null;
   /** 终端连接代际：切换/收尾/手动重连时自增，作废旧连接的重连定时器 */
   termWSGen: number;
@@ -69,7 +64,6 @@ export interface AppState {
   fit: XtermFitAddon | null;
   filePath: string;
   fileScope: FileScope;
-  refreshTimer: ReturnType<typeof setInterval> | null;
   /** 启动/停止执行中，期间锁住生命周期按钮 */
   actionBusy: boolean;
   chatState: ChatState;
@@ -95,10 +89,7 @@ export const S: AppState = {
   current: null,
   view: "work",
   sec: "accounts",
-  settings: null,
   tab: "chat",
-  chatWS: null,
-  chatWSGen: 0,
   termWS: null,
   termWSGen: 0,
   termTips: null,
@@ -107,7 +98,6 @@ export const S: AppState = {
   fit: null,
   filePath: "",
   fileScope: "workspace",
-  refreshTimer: null,
   actionBusy: false,
   chatState: "idle",
   thread: null,

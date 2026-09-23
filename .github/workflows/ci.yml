@@ -32,6 +32,12 @@ jobs:
           fi
           echo "前端产物与源码一致。"
 
+      - name: Browser lifecycle regression (synthetic API)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-tools" --no-package-lock --no-audit --no-fund playwright@1.58.2
+          "$RUNNER_TEMP/browser-tools/node_modules/.bin/playwright" install --with-deps chromium
+          AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-browser.mjs
+
   build-test:
     runs-on: ubuntu-latest
     steps:
@@ -46,6 +52,14 @@ jobs:
         run: go vet ./...
       - name: test
         run: go test ./...
+      - name: Deployment policy
+        run: python3 scripts/test-deployment.py
+      - name: backup and restore CLI
+        run: AGENTBOX_BACKUP_DOCKER_TEST=1 ./scripts/test-backup.sh
+      - name: Git container smoke (no model calls)
+        run: |
+          docker build -t agentbox-git-test:ci -f internal/dockerx/testdata/git.Dockerfile internal/dockerx/testdata
+          AGENTBOX_DOCKER_TEST_IMAGE=agentbox-git-test:ci go test ./internal/dockerx -run '^TestGitContainerLive$' -count=1 -v
       - name: cross-compile abox-link (smoke)
         run: |
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
@@ -82,3 +96,21 @@ jobs:
             exit 1
           fi
           echo "没有未豁免的漏洞。"
+
+  source-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify stable image policy
+        run: python3 scripts/test-image-policy.py
+      - name: Verify bundled sources and licenses
+        run: python3 scripts/verify-third-party.py
+      - name: Scan fetched history and tracked files
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.24.3
+          python3 scripts/scan-secrets.py --output "$RUNNER_TEMP/secret-audit"

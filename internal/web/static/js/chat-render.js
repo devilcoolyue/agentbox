@@ -4,51 +4,10 @@
 "use strict";
 import { openLightbox, fmtTime } from "./util.js";
 import { imgURLFromPath } from "./api.js";
+import { svgIcon, buttonLabel } from "./icons.js";
+export { svgIcon } from "./icons.js";
 import { setTip } from "./tip.js";
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
-/* ---- 行内小图标：stroke 线稿，颜色随 currentColor ---- */
-const ICONS = {
-    tool: "M3.75 4.5 8.25 9l-4.5 4.5M9.75 13.5h4.5",
-    copy: "M6.75 6V4.13c0-.62.5-1.13 1.13-1.13h6c.62 0 1.12.5 1.12 1.13v6c0 .62-.5 1.12-1.12 1.12H12M3 7.88c0-.63.5-1.13 1.13-1.13h6c.62 0 1.12.5 1.12 1.13v6c0 .62-.5 1.12-1.13 1.12h-6C3.5 15 3 14.5 3 13.88Z",
-    check: "M3.75 9.75 7.5 13.5l6.75-8.25",
-    caret: "M6.75 3.75 12 9l-5.25 5.25",
-    chevron: "M3.75 6.75 9 12l5.25-5.25",
-    /* 会话动作三件套：与侧栏（内网隧道/系统设置/退出登录）同为 24 视框、1.8 线宽，
-     * 同尺寸渲染时观感才一致——18 视框的字形留白更多，会显得小一号。 */
-    play: { d: "M6.5 3.5 20 12 6.5 20.5Z", box: 24, width: 1.8 },
-    stop: { d: "M5.5 5.5h13v13h-13Z", box: 24, width: 1.8 },
-    trash: { d: "M3 6h18M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6M5.5 6l1 14.5h11L18.5 6", box: 24, width: 1.8 },
-    move: { d: "M3 7h6l2 2h10v11H3ZM8 14h8m-3-3 3 3-3 3", box: 24, width: 1.8 },
-    folder: { d: "M3 7h6l2 2h10v11H3Z", box: 24, width: 1.8 },
-    rename: { d: "M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17zM13.5 6.5l3 3", box: 24, width: 1.8 },
-    download: { d: "M12 3.5v11m0 0 4.5-4.5M12 14.5 7.5 10M4.5 16v3.5h15V16", box: 24, width: 1.8 },
-    /* 历史对话入口：表盘 + 指针 */
-    clock: { d: "M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18ZM12 7.2v5l3.4 2", box: 24, width: 1.8 },
-    /* 账号额度：仪表盘弧 + 指针。弧要占满 2–22 / 4–19，否则挤在下半格，
-     * 和同排的 play/stop/trash（都撑到 3–21）摆一起会明显小一号。 */
-    gauge: { d: "M3.34 19a10 10 0 1 1 17.32 0M12 14l4-4", box: 24, width: 1.8 },
-    /* HTML 渲染预览：眼睛 */
-    eye: { d: "M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Zm10 2.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z", box: 24, width: 1.8 },
-};
-export function svgIcon(name, size = 13) {
-    const ico = ICONS[name];
-    const { d, box = 18, width = 1.5 } = typeof ico === "string" ? { d: ico } : ico;
-    const ns = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", `0 0 ${box} ${box}`);
-    svg.setAttribute("width", String(size));
-    svg.setAttribute("height", String(size));
-    svg.setAttribute("fill", "none");
-    svg.setAttribute("aria-hidden", "true");
-    const p = document.createElementNS(ns, "path");
-    p.setAttribute("d", d);
-    p.setAttribute("stroke", "currentColor");
-    p.setAttribute("stroke-width", String(width));
-    p.setAttribute("stroke-linecap", "round");
-    p.setAttribute("stroke-linejoin", "round");
-    svg.appendChild(p);
-    return svg;
-}
 /* 复制到剪贴板：clipboard API 优先，非安全上下文回退 execCommand */
 async function copyText(text) {
     try {
@@ -96,7 +55,7 @@ export function toolChip(name, summary, htmlPath = "") {
         b.type = "button";
         b.className = "chip-open";
         b.dataset.htmlPreview = htmlPath;
-        b.textContent = "预览";
+        buttonLabel(b, "预览", "eye");
         setTip(b, "在预览窗口渲染 " + htmlPath);
         c.appendChild(b);
     }

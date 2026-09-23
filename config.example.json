@@ -2,6 +2,12 @@
   "listen": "127.0.0.1:8180",
   "auth_token": "CHANGE_ME_TO_A_LONG_RANDOM_TOKEN",
   "data_dir": "data",
+  "cache_dir": "",
+  "resources": {
+    "max_running": 0,
+    "max_running_per_user": 0,
+    "min_free_bytes": 0
+  },
   "agent_image": "agentbox-agent:latest",
   "permission_mode": "bypassPermissions",
   "max_upload_mb": 512,

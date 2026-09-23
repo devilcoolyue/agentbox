@@ -11,15 +11,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"agentbox/internal/config"
+	"agentbox/internal/credentials"
 )
 
 // Claude 订阅登录的 OAuth 常量。全部提取自本机安装的 Claude Code 二进制
@@ -159,7 +157,7 @@ func (s *Server) handleOAuthFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var tok oauthTokenResp
+	var tok credentials.OAuthTokenResponse
 	if err := json.Unmarshal(raw, &tok); err != nil || tok.AccessToken == "" {
 		writeErr(w, http.StatusBadGateway, "令牌响应解析失败")
 		return
@@ -197,12 +195,7 @@ func (s *Server) handleOAuthFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	out, _ := json.MarshalIndent(map[string]any{"claudeAiOauth": cred}, "", "  ")
 
-	dst := filepath.Join(acct.CredentialsDir, ".credentials.json")
-	if err := os.MkdirAll(acct.CredentialsDir, 0o700); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if err := os.WriteFile(dst, out, 0o600); err != nil {
+	if err := s.credentialService().SaveClaude(r.Context(), acct.ID, out); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -363,22 +356,9 @@ func (s *Server) handleSetAPIKey(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "wire_api 只能是 responses 或 chat")
 			return
 		}
-		if err := os.MkdirAll(acct.CredentialsDir, 0o700); err != nil {
+		if err := s.credentialService().SaveCodexKey(r.Context(), acct.ID, key, baseURL, wireAPI); err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return
-		}
-		out, _ := json.MarshalIndent(map[string]string{"OPENAI_API_KEY": key}, "", "  ")
-		dst := filepath.Join(acct.CredentialsDir, "auth.json")
-		if err := os.WriteFile(dst, out, 0o600); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		// base_url 留空表示走官方接口/保持现有 config.toml 不动
-		if baseURL != "" {
-			if err := writeCodexProviderTOML(acct.CredentialsDir, baseURL, wireAPI); err != nil {
-				writeErr(w, http.StatusInternalServerError, "config.toml 写入失败: "+err.Error())
-				return
-			}
 		}
 	default:
 		writeErr(w, http.StatusBadRequest, "该账号类型不使用 API Key")
@@ -416,93 +396,6 @@ func validateBaseURL(raw string) error {
 	return nil
 }
 
-// config.toml 里 provider 相关行的定位正则。只处理简单双引号字符串，
-// 手写复杂 TOML（多行字符串等）不在覆盖范围。
-var (
-	reTomlBaseURL  = regexp.MustCompile(`(?m)^(\s*base_url\s*=\s*)"([^"]*)"`)
-	reTomlWireAPI  = regexp.MustCompile(`(?m)^(\s*wire_api\s*=\s*)"([^"]*)"`)
-	reTomlProvider = regexp.MustCompile(`(?m)^(model_provider\s*=\s*)"([^"]*)"`)
-)
-
-// tomlSet 把 re 匹配到的第一处赋值改为 val，保留行首前缀；no-op 当无匹配。
-func tomlSet(text string, re *regexp.Regexp, val string) (string, bool) {
-	loc := re.FindStringSubmatchIndex(text)
-	if loc == nil {
-		return text, false
-	}
-	prefix := text[loc[2]:loc[3]]
-	return text[:loc[0]] + prefix + fmt.Sprintf("%q", val) + text[loc[1]:], true
-}
-
-// writeCodexProviderTOML 维护账号池 config.toml 的中转站配置。已有文件做
-// 行级原地替换（保留手工调优的其余键），没有才生成最小模板。
-func writeCodexProviderTOML(credDir, baseURL, wireAPI string) error {
-	path := filepath.Join(credDir, "config.toml")
-	raw, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	text := string(raw)
-	if strings.TrimSpace(text) == "" {
-		text = fmt.Sprintf(`model_provider = "agentbox"
-disable_response_storage = true
-
-[model_providers.agentbox]
-name = "agentbox"
-base_url = %q
-wire_api = %q
-requires_openai_auth = true
-`, baseURL, wireAPI)
-		return os.WriteFile(path, []byte(text), 0o600)
-	}
-
-	if next, ok := tomlSet(text, reTomlBaseURL, baseURL); ok {
-		text = next
-		if next, ok := tomlSet(text, reTomlWireAPI, wireAPI); ok {
-			text = next
-		} else {
-			// 有 base_url 没 wire_api 的旧文件：紧跟 base_url 行补一条
-			loc := reTomlBaseURL.FindStringIndex(text)
-			text = text[:loc[1]] + fmt.Sprintf("\nwire_api = %q", wireAPI) + text[loc[1]:]
-		}
-	} else {
-		// 完全没有 provider 段：追加模板段并让顶层 model_provider 指过去
-		if next, ok := tomlSet(text, reTomlProvider, "agentbox"); ok {
-			text = next
-		} else {
-			text = "model_provider = \"agentbox\"\n" + text
-		}
-		text = strings.TrimRight(text, "\n") + fmt.Sprintf(`
-
-[model_providers.agentbox]
-name = "agentbox"
-base_url = %q
-wire_api = %q
-requires_openai_auth = true
-`, baseURL, wireAPI)
-	}
-	return os.WriteFile(path, []byte(text), 0o600)
-}
-
-// readCodexProvider 从账号池 config.toml 读当前 base_url / wire_api，供
-// 前端弹窗预填。文件缺失或没配返回空串。
-func readCodexProvider(credDir string) (baseURL, wireAPI string) {
-	if credDir == "" {
-		return "", ""
-	}
-	raw, err := os.ReadFile(filepath.Join(credDir, "config.toml"))
-	if err != nil {
-		return "", ""
-	}
-	if m := reTomlBaseURL.FindSubmatch(raw); m != nil {
-		baseURL = string(m[2])
-	}
-	if m := reTomlWireAPI.FindSubmatch(raw); m != nil {
-		wireAPI = string(m[2])
-	}
-	return baseURL, wireAPI
-}
-
 // handleAPIKeyTest 探测中转站连通性：GET {base}/v1/models 拉模型列表，能
 // 拉到即认为 key+base_url 可用。字段留空时回退到账号池里已保存的值。
 func (s *Server) handleAPIKeyTest(w http.ResponseWriter, r *http.Request) {
@@ -534,10 +427,10 @@ func (s *Server) handleAPIKeyTest(w http.ResponseWriter, r *http.Request) {
 		}
 	case config.AgentCodex:
 		if key == "" {
-			key = savedAPIKey(acct.CredentialsDir)
+			key = credentials.SavedAPIKey(acct.CredentialsDir)
 		}
 		if baseURL == "" {
-			baseURL, _ = readCodexProvider(acct.CredentialsDir)
+			baseURL, _ = credentials.ReadCodexProvider(acct.CredentialsDir)
 		}
 		if baseURL == "" {
 			baseURL = "https://api.openai.com/v1"
@@ -618,57 +511,6 @@ func (s *Server) handleAPIKeyTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeErr(w, http.StatusBadGateway, "连接失败: "+lastErr)
-}
-
-// savedAPIKey 读账号池 auth.json 里已保存的 key，探测时留空复用。
-func savedAPIKey(credDir string) string {
-	if credDir == "" {
-		return ""
-	}
-	raw, err := os.ReadFile(filepath.Join(credDir, "auth.json"))
-	if err != nil {
-		return ""
-	}
-	var a struct {
-		Key string `json:"OPENAI_API_KEY"`
-	}
-	if json.Unmarshal(raw, &a) != nil {
-		return ""
-	}
-	return a.Key
-}
-
-// credStatus 汇总账号池凭证状态，供侧栏展示。
-//   - claude: ok(有 refreshToken) / norefresh(令牌被清空需重登) / missing
-//   - codex:  ok(auth.json 有 key) / missing
-func credStatus(a config.Account) (status string, expiresAt int64) {
-	if a.CredentialsDir == "" {
-		return "missing", 0
-	}
-	switch a.Type {
-	case config.AgentClaude:
-		raw, err := os.ReadFile(filepath.Join(a.CredentialsDir, ".credentials.json"))
-		if err != nil {
-			return "missing", 0
-		}
-		var c struct {
-			ClaudeAiOauth struct {
-				RefreshToken string `json:"refreshToken"`
-				ExpiresAt    int64  `json:"expiresAt"`
-			} `json:"claudeAiOauth"`
-		}
-		if json.Unmarshal(raw, &c) != nil || c.ClaudeAiOauth.RefreshToken == "" {
-			return "norefresh", 0
-		}
-		return "ok", c.ClaudeAiOauth.ExpiresAt
-	case config.AgentCodex:
-		raw, err := os.ReadFile(filepath.Join(a.CredentialsDir, "auth.json"))
-		if err != nil || !bytes.Contains(raw, []byte("OPENAI_API_KEY")) {
-			return "missing", 0
-		}
-		return "ok", 0
-	}
-	return "missing", 0
 }
 
 func firstNonEmpty(vals ...string) string {

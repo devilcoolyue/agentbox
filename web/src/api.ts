@@ -10,10 +10,12 @@ import type { UploadResult } from "./types.js";
  * 默认 unknown 而不是 any：忘了标注时，一用到返回值就会报错，逼着把接口形状
  * 写进 types.d.ts，而不是悄悄退化成无类型。 */
 export async function api<T = unknown>(path: string, opts: RequestInit = {}): Promise<T> {
+  const token = S.token;
   const res = await fetch("/api" + path, {
     ...opts,
     headers: { ...(opts.headers || {}), Authorization: "Bearer " + S.token },
   });
+  if (token !== S.token) throw new Error("登录状态已变化");
   if (res.status === 401) {
     emit("unauthorized");
     throw new Error("unauthorized");
@@ -23,7 +25,9 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
     try { msg = ((await res.json()) as { error?: string }).error || msg; } catch (_) {}
     throw new Error(msg);
   }
-  return res.json() as Promise<T>;
+  const data = await res.json() as T;
+  if (token !== S.token) throw new Error("登录状态已变化");
+  return data;
 }
 
 export function wsURL(path: string) {

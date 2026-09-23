@@ -8,26 +8,29 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
 
 	"agentbox/internal/config"
+	"agentbox/internal/credentials"
 	"agentbox/internal/dockerx"
+	"agentbox/internal/gitx"
 	"agentbox/internal/store"
+	"agentbox/internal/usage"
 	"agentbox/internal/web"
+	"agentbox/internal/workspace"
 )
 
 // legacyUser is the single-user era placeholder; seedUsers migrates its
@@ -52,14 +55,19 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
-	cfg      *config.Config
-	store    *store.Store
-	dock     *dockerx.Manager
-	chat     *chatManager
-	tunnels  *tunnelHub
-	pairs    *pairStore    // outstanding abox-link pairing codes
-	previews *previewStore // 短时只读的 HTML 预览通行证
-	mapAuth  mapSourceAuth // source-IP cache for tunnel port-map listeners
+	storage     storageState
+	runtimeOnce sync.Once
+	serving     atomic.Bool
+	life        *runtimeState
+	cfg         *config.Config
+	store       *store.Store
+	dock        *dockerx.Manager
+	git         *gitx.Runner
+	chat        *chatManager
+	tunnels     *tunnelHub
+	pairs       *pairStore    // outstanding abox-link pairing codes
+	previews    *previewStore // 短时只读的 HTML 预览通行证
+	mapAuth     mapSourceAuth // source-IP cache for tunnel port-map listeners
 
 	tunnelMu   sync.Mutex   // guards the SOCKS listener lifecycle below
 	tunnelLn   net.Listener // nil when the tunnel proxy is not running
@@ -75,21 +83,27 @@ type Server struct {
 	startedAt  time.Time
 	bootListen string // 启动时的监听地址；与配置不一致说明改动需重启
 
-	startMu sync.Mutex
-	starts  map[string]*sync.Mutex // per-session start locks
+	credentialsOnce sync.Once
+	credentials     *credentials.Service
+	workspaceOnce   sync.Once
+	workspace       *workspace.Service
 
 	marketMu sync.Mutex // 串行化官方市场的 git 抓取（拉仓库、装技能）
 
 	logins *loginGuard // per-IP failed-login throttle
 
-	idle *activity // per-session liveness for the idle reaper
-
 	mon *monState // 上一帧计数器快照，供监控页按轮询间隔算 CPU 速率
 
-	termScan *termScanner // 终端消耗补记的扫描进度（定时器与使用记录页共用）
+	usageOnce sync.Once
+	usage     *usage.Service
 }
 
-func New(cfg *config.Config) (*Server, error) {
+func New(cfg *config.Config) (*Server, error) { return NewContext(context.Background(), cfg) }
+
+func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -105,8 +119,9 @@ func New(cfg *config.Config) (*Server, error) {
 		st.Close()
 		return nil, err
 	}
-	dock, err := dockerx.New(cfg)
+	dock, err := dockerx.NewContext(ctx, cfg)
 	if err != nil {
+		st.Close()
 		return nil, err
 	}
 	s := &Server{
@@ -118,11 +133,8 @@ func New(cfg *config.Config) (*Server, error) {
 		previews:   newPreviewStore(),
 		startedAt:  time.Now(),
 		bootListen: cfg.GetListen(),
-		starts:     map[string]*sync.Mutex{},
 		logins:     newLoginGuard(),
-		idle:       newActivity(),
 		mon:        newMonState(),
-		termScan:   &termScanner{seen: map[string]termFileState{}},
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  32 << 10,
 			WriteBufferSize: 32 << 10,
@@ -130,26 +142,37 @@ func New(cfg *config.Config) (*Server, error) {
 		},
 	}
 	s.chat = newChatManager(s)
+	s.git = gitx.New(dock, s.prepareGitSession)
 	if err := s.seedUsers(); err != nil {
+		dock.Close()
+		st.Close()
 		return nil, err
 	}
-	s.reconcile()
+	s.reconcile(ctx)
+	if err := ctx.Err(); err != nil {
+		dock.Close()
+		st.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
 // reconcile fixes session status after a server restart: a session is running
 // iff its container is actually running.
-func (s *Server) reconcile() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (s *Server) reconcile(parent context.Context) {
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	for _, sess := range s.store.All() {
 		running := s.dock.IsRunning(ctx, sess.ContainerID)
+		if ctx.Err() != nil {
+			return
+		}
 		status := store.StatusStopped
 		if running {
 			status = store.StatusRunning
 			// Give a container that survived the restart a fresh idle window
 			// instead of letting the first sweep stop it out from under a user.
-			s.idle.touch(sess.ID)
+			s.workspaces().Activity().Touch(sess.ID)
 		}
 		if sess.Status != status {
 			if _, err := s.store.Update(sess.ID, func(x *store.Session) {
@@ -174,7 +197,7 @@ func sameHostOrigin(r *http.Request) bool {
 	return strings.EqualFold(trimmed, r.Host)
 }
 
-func (s *Server) Run() error {
+func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/login", s.handleLogin)
@@ -209,6 +232,9 @@ func (s *Server) Run() error {
 	mux.Handle("DELETE /api/proxies/{id}", s.admin(http.HandlerFunc(s.handleProxyDelete)))
 	mux.Handle("GET /api/settings", s.admin(http.HandlerFunc(s.handleGetSettings)))
 	mux.Handle("PUT /api/settings", s.admin(http.HandlerFunc(s.handlePutSettings)))
+	mux.Handle("GET /api/storage", s.admin(http.HandlerFunc(s.handleStorage)))
+	mux.Handle("DELETE /api/cache/marketplace", s.admin(http.HandlerFunc(s.handleClearMarketCache)))
+	mux.Handle("GET /api/diagnostics", s.admin(http.HandlerFunc(s.handleDiagnostics)))
 	mux.Handle("GET /api/system", s.admin(http.HandlerFunc(s.handleSystem)))
 	mux.Handle("GET /api/monitor", s.admin(http.HandlerFunc(s.handleMonitor)))
 	mux.Handle("GET /api/sessions", s.auth(http.HandlerFunc(s.handleListSessions)))
@@ -266,58 +292,66 @@ func (s *Server) Run() error {
 
 	mux.Handle("/", staticHandler())
 
-	srv := &http.Server{
-		Addr:              s.bootListen,
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	// Bind before announcing: ListenAndServe would let us log "listening" and
-	// only then fail on a taken port, which reads as a healthy start in the
-	// log right up until the process dies.
-	ln, err := net.Listen("tcp", srv.Addr)
+	return s.admit(mux)
+}
+
+func (s *Server) Run(ctx context.Context) error {
+	ln, err := net.Listen("tcp", s.bootListen)
 	if err != nil {
 		return err
 	}
+	return s.Serve(ctx, ln)
+}
 
-	go s.imageJanitor()  // 粘贴图片 48 小时自动清理
-	go s.credSyncLoop()  // OAuth 凭证与账号池双向收敛（刷新令牌轮换制）
-	go s.idleReaper()    // 空闲会话容器自动停机（30 分钟无活动）
-	go s.termUsageLoop() // 终端里手敲 CLI 的消耗补记进流水（只记账不扣额度）
-	go s.termWatchLoop() // 同上，inotify 盯着 transcript，写完就补，不等定时那趟
-	go s.tokenJanitor()  // 过期登录令牌定期清理
-	// A tunnel misconfiguration must not take down the whole server: log and
-	// keep serving without it (systemd Restart=always would otherwise
-	// crash-loop agentbox on, say, a taken port).
+// Serve consumes the listener and starts background work once. Close owns
+// shutdown; the application supplies cancellation instead of package signals.
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	if !s.serving.CompareAndSwap(false, true) {
+		_ = ln.Close()
+		return errors.New("server already served")
+	}
+	if err := ctx.Err(); err != nil {
+		_ = ln.Close()
+		return err
+	}
+	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	release, ok := s.track(func() { _ = srv.Close(); _ = ln.Close() })
+	if !ok {
+		_ = ln.Close()
+		return errors.New("server is closed")
+	}
+	defer release()
+	defer srv.Close()
+	s.spawn(s.imageJanitor)
+	s.spawn(s.credSyncLoop)
+	s.spawn(s.idleReaper)
+	s.spawn(s.storageLoop)
+	s.spawn(s.termUsageLoop)
+	s.spawn(s.termWatchLoop)
+	s.spawn(s.tokenJanitor)
 	if err := s.applyTunnel(); err != nil {
 		log.Printf("tunnel disabled: %v", err)
 	}
-	// Same deal for the account proxy bridge: a bad bind must not crash-loop the
-	// service. Accounts bound to a proxy will fail loudly instead of silently
-	// egressing from the server's own IP.
 	if err := s.applyProxyBridge(); err != nil {
 		log.Printf("account proxy bridge disabled: %v", err)
 	}
-	log.Printf("agentbox listening on http://%s", s.bootListen)
-
+	log.Printf("agentbox listening on http://%s", ln.Addr())
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
-
-	// The Go runtime kills the process outright on SIGTERM, which leaves an
-	// operator-initiated stop indistinguishable from a crash in the log.
-	// Handling it ourselves makes every shutdown attributable.
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(stop)
-
+	var err error
 	select {
-	case err := <-serveErr:
-		return err
-	case sig := <-stop:
-		log.Printf("received %s, shutting down", sig)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return srv.Shutdown(ctx)
+	case err = <-serveErr:
+	case <-ctx.Done():
+		log.Printf("shutdown requested: %v", ctx.Err())
+	case <-s.workContext().Done():
 	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	closeErr := s.Close(shutdownCtx)
+	if errors.Is(err, http.ErrServerClosed) {
+		err = nil
+	}
+	return errors.Join(err, closeErr)
 }
 
 // staticHandler 用「内容哈希版本化路径」发布前端资源：index.html 里的资源
@@ -450,32 +484,33 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 }
 
 type acctView struct {
-	ID         string            `json:"id"`
-	Type       string            `json:"type"`
-	Label      string            `json:"label"`
-	Sessions   int               `json:"sessions"`
-	CredStatus string            `json:"cred_status"`          // ok | norefresh | missing
-	ExpiresAt  int64             `json:"expires_at,omitempty"` // claude access token 到期(ms)
-	AuthMode   string            `json:"auth_mode,omitempty"`  // claude：oauth | apikey（中转站）
-	BaseURL    string            `json:"base_url,omitempty"`   // 中转站地址（codex 读 config.toml，claude 读 env）
-	WireAPI    string            `json:"wire_api,omitempty"`   // codex：responses | chat
-	Env        map[string]string `json:"env,omitempty"`
-	ProxyID    string            `json:"proxy_id,omitempty"` // 绑定的出口 IP 代理
-	ProxyLabel string            `json:"proxy_label,omitempty"`
+	Access     *config.AccountAccess `json:"access,omitempty"`
+	ID         string                `json:"id"`
+	Type       string                `json:"type"`
+	Label      string                `json:"label"`
+	Sessions   int                   `json:"sessions"`
+	CredStatus string                `json:"cred_status"`          // ok | norefresh | missing
+	ExpiresAt  int64                 `json:"expires_at,omitempty"` // claude access token 到期(ms)
+	AuthMode   string                `json:"auth_mode,omitempty"`  // claude：oauth | apikey（中转站）
+	BaseURL    string                `json:"base_url,omitempty"`   // 中转站地址（codex 读 config.toml，claude 读 env）
+	WireAPI    string                `json:"wire_api,omitempty"`   // codex：responses | chat
+	Env        map[string]string     `json:"env,omitempty"`
+	ProxyID    string                `json:"proxy_id,omitempty"` // 绑定的出口 IP 代理
+	ProxyLabel string                `json:"proxy_label,omitempty"`
 }
 
 func (s *Server) accountView(a config.Account, sessions int) acctView {
-	st, exp := credStatus(a)
+	st, exp := credentials.Status(a)
 	v := acctView{
 		ID: a.ID, Type: a.Type, Label: a.Label, Sessions: sessions,
-		CredStatus: st, ExpiresAt: exp, Env: a.Env, ProxyID: a.ProxyID,
+		CredStatus: st, ExpiresAt: exp, Env: a.Env, ProxyID: a.ProxyID, Access: a.Access,
 	}
 	if p, bound := s.cfg.AccountProxy(a.ID); bound {
 		v.ProxyLabel = p.Name + " · " + p.DisplayURL()
 	}
 	switch a.Type {
 	case config.AgentCodex:
-		v.BaseURL, v.WireAPI = readCodexProvider(a.CredentialsDir)
+		v.BaseURL, v.WireAPI = credentials.ReadCodexProvider(a.CredentialsDir)
 	case config.AgentClaude:
 		// env 里有中转站令牌就是 apikey 模式（实测其优先于 OAuth 凭证）
 		if base, token := claudeRelay(a); token != "" {
@@ -488,26 +523,20 @@ func (s *Server) accountView(a config.Account, sessions int) acctView {
 	return v
 }
 
-// acctEnvList 返回会话所属账号的 env（k=v 列表），随 exec 注入容器：容器
-// 自身的 env 建容器时就冻结了，exec 注入才能让改动对既有容器生效。
-func (s *Server) acctEnvList(sess store.Session) []string {
-	acct, ok := s.cfg.Account(sess.AccountID)
-	if !ok || len(acct.Env) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(acct.Env))
-	for k, v := range acct.Env {
-		out = append(out, k+"="+v)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // execEnv is the full per-exec env for a session: account env, the account's
 // outbound IP proxy when one is bound, plus the intranet proxy variable when
 // the owning user has a live reverse tunnel.
-func (s *Server) execEnv(sess store.Session) []string {
-	env := append(s.acctEnvList(sess), s.proxyEnvList(sess)...)
+func (s *Server) execEnv(sess store.Session) ([]string, error) {
+	acct, err := s.sessionAccount(sess)
+	if err != nil {
+		return nil, err
+	}
+	env := make([]string, 0, len(acct.Env))
+	for k, v := range acct.Env {
+		env = append(env, k+"="+v)
+	}
+	sort.Strings(env)
+	env = append(env, s.proxyEnvList(sess)...)
 	if sess.Agent == config.AgentClaude && sess.DefaultModel != "" {
 		// The workspace default takes precedence over an account model override.
 		filtered := env[:0]
@@ -518,7 +547,7 @@ func (s *Server) execEnv(sess store.Session) []string {
 		}
 		env = append(filtered, "ANTHROPIC_MODEL="+sess.DefaultModel)
 	}
-	return append(env, s.tunnelEnvList(sess)...)
+	return append(env, s.tunnelEnvList(sess)...), nil
 }
 
 // accountSessionCounts counts sessions per account across all users (guards
@@ -532,14 +561,25 @@ func (s *Server) accountSessionCounts() map[string]int {
 }
 
 func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
-	counts := s.accountSessionCounts()
 	isAdmin := reqUser(r).Role == store.RoleAdmin
+	counts := map[string]int{}
+	if isAdmin {
+		counts = s.accountSessionCounts()
+	} else {
+		for _, sess := range s.store.List(reqUser(r).Name) {
+			counts[sess.AccountID]++
+		}
+	}
 	out := []acctView{}
 	for _, a := range s.cfg.AccountList() {
+		if !a.CanUse(reqUser(r).Name, isAdmin) {
+			continue
+		}
 		v := s.accountView(a, counts[a.ID])
 		if !isAdmin {
 			// 普通用户建会话只需要账号列表本身，env/base_url 里可能有密钥，
 			// 出口 IP 也属于运维信息，一并摘掉。
+			v.Access = nil
 			v.Env, v.BaseURL = nil, ""
 			v.ProxyID, v.ProxyLabel = "", ""
 		}
@@ -548,15 +588,9 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// startLock returns a mutex dedicated to one session's start path so
-// concurrent chat/terminal opens don't race to create two containers.
-func (s *Server) startLock(id string) *sync.Mutex {
-	s.startMu.Lock()
-	defer s.startMu.Unlock()
-	if m, ok := s.starts[id]; ok {
-		return m
-	}
-	m := &sync.Mutex{}
-	s.starts[id] = m
-	return m
+func (s *Server) workspaces() *workspace.Service {
+	s.workspaceOnce.Do(func() {
+		s.workspace = workspace.New(s.cfg, s.store, s.dock, s.sessionAccount, s.credentialService().Sync)
+	})
+	return s.workspace
 }

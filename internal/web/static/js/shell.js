@@ -167,6 +167,7 @@ export function showView(name) {
         return;
     }
     S.view = name;
+    emit("view-changed", name);
     $("view-work").classList.toggle("hidden", name !== "work");
     $("view-settings").classList.toggle("hidden", name !== "settings");
     $("view-usage").classList.toggle("hidden", name !== "usage");

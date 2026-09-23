@@ -3,21 +3,19 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"errors"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"agentbox/internal/agent"
 	"agentbox/internal/config"
-	"agentbox/internal/dockerx"
 	"agentbox/internal/store"
+	"agentbox/internal/workspace"
 )
 
 func (s *Server) sessionDir(sess store.Session) string {
-	return filepath.Join(s.cfg.DataDir, "users", sess.User, "sessions", sess.ID)
+	return workspace.SessionDir(s.cfg.DataDir, sess)
 }
 
 func (s *Server) workspaceDir(sess store.Session) string {
@@ -49,14 +47,7 @@ func (s *Server) userTemplateDir(user string) string {
 // ensureSharedDir creates (idempotently) the per-user shared directory that is
 // bind-mounted into every session container at /shared.
 func (s *Server) ensureSharedDir(user string) (string, error) {
-	dir := filepath.Join(s.cfg.DataDir, "users", user, "shared")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	if err := os.Chown(dir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
-		return "", err
-	}
-	return dir, nil
+	return s.workspaces().EnsureSharedDir(user)
 }
 
 type sessionView struct {
@@ -107,6 +98,10 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "unknown account_id")
 		return
 	}
+	if !acct.CanUse(reqUser(r).Name, reqUser(r).Role == store.RoleAdmin) {
+		writeErr(w, http.StatusForbidden, errAccountAccess.Error())
+		return
+	}
 	if acct.Type != req.Agent {
 		writeErr(w, http.StatusBadRequest, "account type does not match agent type")
 		return
@@ -122,17 +117,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		Status:       store.StatusStopped,
 		CreatedAt:    time.Now(),
 	}
-	for _, dir := range []string{s.workspaceDir(sess), s.homeDir(sess)} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if err := os.Chown(dir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-	}
-	if err := s.store.Put(sess); err != nil {
+	if err := s.workspaces().Create(sess); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -142,68 +127,11 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 // startSession is the idempotent bring-up used by the REST endpoint and by
 // the chat/terminal channels (which auto-start stopped sessions).
 func (s *Server) startSession(ctx context.Context, sess store.Session) (store.Session, error) {
-	lock := s.startLock(sess.ID)
-	lock.Lock()
-	defer lock.Unlock()
-
-	// Re-read inside the lock: another caller may have finished the start.
-	cur, ok := s.store.Get(sess.ID)
-	if !ok {
-		return store.Session{}, errSessionGone
-	}
-	acct, ok := s.cfg.Account(cur.AccountID)
-	if !ok {
-		return store.Session{}, errAccountGone
-	}
-	// 每次拉起（含每轮对话、终端连接）前先与账号池对齐 OAuth 令牌链，
-	// 会话里刷新出的新令牌得以写回，池子的新令牌也播发进会话。
-	if acct.CredentialsDir != "" {
-		s.syncRotatingCred(acct, cur)
-	}
-	if cur.Status == store.StatusRunning && s.dock.RunningWithMount(ctx, cur.ContainerID, dockerx.SharedMount) {
-		s.idle.touch(cur.ID)
-		return cur, nil
-	}
-
-	// Before credentials: a stray credential file in the template must never
-	// outrank the account pool. A broken template shouldn't block the session
-	// from coming up either, so failures are logged and the start continues.
-	if err := agent.SeedHomeTemplate(s.homeDir(cur), dockerx.AgentUID, dockerx.AgentGID,
-		s.homeTemplateDir(), s.userTemplateDir(cur.User)); err != nil {
-		log.Printf("seed home template %s: %v", cur.ID, err)
-	}
-	if err := agent.SeedCredentials(cur.Agent, s.homeDir(cur), acct.CredentialsDir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
-		return store.Session{}, err
-	}
-	if err := agent.SeedDefaultModel(cur.Agent, s.homeDir(cur), cur.DefaultModel, dockerx.AgentUID, dockerx.AgentGID); err != nil {
-		return store.Session{}, err
-	}
-	// Only advertise the intranet proxy to the agent when the feature is on;
-	// the hint keys off $AGENTBOX_INTRANET_PROXY so it stays inert if no tunnel
-	// is live, but there's no reason to seed it when tunneling is disabled.
-	if s.cfg.GetTunnel().Enabled {
-		if err := agent.SeedIntranetHint(cur.Agent, s.homeDir(cur), dockerx.AgentUID, dockerx.AgentGID); err != nil {
-			log.Printf("seed intranet hint %s: %v", cur.ID, err)
-		}
-	}
-	shared, err := s.ensureSharedDir(cur.User)
-	if err != nil {
-		return store.Session{}, err
-	}
-	cid, err := s.dock.EnsureRunning(ctx, cur, acct, s.workspaceDir(cur), s.homeDir(cur), shared)
-	if err != nil {
-		return store.Session{}, err
-	}
-	s.idle.touch(cur.ID)
-	return s.store.Update(cur.ID, func(x *store.Session) {
-		x.ContainerID = cid
-		x.Status = store.StatusRunning
-		x.StopReason = "" // 又跑起来了，清掉上一次的休眠标记
-	})
+	return s.workspaces().Start(ctx, sess.ID)
 }
 
 var (
-	errSessionGone = jsonError("session no longer exists")
+	errSessionGone = workspace.ErrSessionGone
 	errAccountGone = jsonError("account referenced by session is gone from config")
 )
 
@@ -216,7 +144,14 @@ func (s *Server) handleStartSession(w http.ResponseWriter, r *http.Request, sess
 	defer cancel()
 	updated, err := s.startSession(ctx, sess)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		status := http.StatusInternalServerError
+		if errors.Is(err, workspace.ErrCapacity) {
+			status = http.StatusTooManyRequests
+		}
+		if err == errAccountAccess {
+			status = http.StatusForbidden
+		}
+		writeErr(w, status, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, s.view(updated))
@@ -249,40 +184,19 @@ func (s *Server) handleRenameSession(w http.ResponseWriter, r *http.Request, ses
 func (s *Server) handleStopSession(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if sess.ContainerID != "" {
-		if err := s.dock.Stop(ctx, sess.ContainerID); err != nil {
-			log.Printf("stop %s: %v", sess.ID, err)
-		}
-	}
-	updated, err := s.store.Update(sess.ID, func(x *store.Session) {
-		x.Status = store.StatusStopped
-		x.StopReason = "" // 用户主动停的，不是休眠
-	})
+	updated, err := s.workspaces().Stop(ctx, sess.ID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, s.view(updated))
 }
-
 func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if sess.ContainerID != "" {
-		if err := s.dock.Remove(ctx, sess.ContainerID); err != nil {
-			log.Printf("remove container of %s: %v", sess.ID, err)
-		}
-	}
-	if err := s.store.Delete(sess.ID); err != nil {
+	if err := s.workspaces().Delete(ctx, sess.ID, r.URL.Query().Get("purge") == "1"); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-	s.idle.forget(sess.ID)
-	if r.URL.Query().Get("purge") == "1" {
-		if err := os.RemoveAll(s.sessionDir(sess)); err != nil {
-			writeErr(w, http.StatusInternalServerError, "session deleted but purge failed: "+err.Error())
-			return
-		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }

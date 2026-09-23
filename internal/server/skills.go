@@ -18,6 +18,7 @@ import (
 
 	"agentbox/internal/archivex"
 	"agentbox/internal/dockerx"
+	"agentbox/internal/safefs"
 	"agentbox/internal/store"
 )
 
@@ -102,7 +103,12 @@ func (s *Server) handleSkillList(w http.ResponseWriter, r *http.Request, sess st
 		writeErr(w, http.StatusBadRequest, "invalid scope")
 		return
 	}
-	entries, err := os.ReadDir(root)
+	area, err := s.openDataDir(root)
+	var entries []fs.DirEntry
+	if err == nil {
+		entries, err = area.ReadDir(".")
+		area.Close()
+	}
 	if err != nil && !os.IsNotExist(err) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -131,8 +137,9 @@ func (s *Server) skillOrigin(sess store.Session, name string) string {
 		{s.userTemplateDir(sess.User), "template"},
 		{s.homeTemplateDir(), "global"},
 	} {
-		p := filepath.Join(probe.dir, filepath.FromSlash(skillsSubPath), name)
-		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+		dir, err := s.openDataDir(filepath.Join(probe.dir, filepath.FromSlash(skillsSubPath), name))
+		if err == nil {
+			dir.Close()
 			return probe.label
 		}
 	}
@@ -143,9 +150,18 @@ func (s *Server) skillOrigin(sess store.Session, name string) string {
 // 大小/时间取整个目录。读不动的目录也返回条目，让前端能显示并删除它。
 func (s *Server) describeSkill(dir, name string) skillInfo {
 	info := skillInfo{Name: name}
-	info.Description = skillDescription(filepath.Join(dir, skillManifest))
-	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+	root, err := s.openDataDir(dir)
+	if err != nil {
+		return info
+	}
+	defer root.Close()
+	raw, _ := root.ReadFile(skillManifest, 8<<10)
+	info.Description = parseSkillDescription(string(raw))
+	_ = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fs.SkipDir
+		}
+		if d.IsDir() {
 			return nil
 		}
 		fi, err := d.Info()
@@ -165,15 +181,8 @@ func (s *Server) describeSkill(dir, name string) skillInfo {
 // skillDescription 从 SKILL.md 的 YAML front matter 里取 description。
 // 只认最简单的 `key: value` 单行形式——技能文件都是这么写的，为此引一个
 // YAML 依赖不划算；取不到就留空，前端显示「（无描述）」。
-func skillDescription(path string) string {
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	head := make([]byte, 8<<10)
-	n, _ := io.ReadFull(f, head)
-	text := strings.ReplaceAll(string(head[:n]), "\r\n", "\n")
+func parseSkillDescription(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
 	if !strings.HasPrefix(text, "---\n") {
 		return ""
 	}
@@ -196,11 +205,13 @@ func (s *Server) handleSkillGet(w http.ResponseWriter, r *http.Request, sess sto
 	if !ok {
 		return
 	}
-	fi, err := os.Stat(dir)
-	if err != nil || !fi.IsDir() {
-		writeErr(w, http.StatusNotFound, "技能不存在")
+	root, err := s.openDataDir(dir)
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
+	defer root.Close()
+
 	det := skillDetail{skillInfo: s.describeSkill(dir, name), Entries: []skillEntry{}}
 	if r.URL.Query().Get("scope") == "template" {
 		det.Source = "template"
@@ -208,7 +219,7 @@ func (s *Server) handleSkillGet(w http.ResponseWriter, r *http.Request, sess sto
 		det.Source = s.skillOrigin(sess, name)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(dir, skillManifest))
+	raw, err := root.ReadFile(skillManifest, skillMaxRead+1)
 	switch {
 	case os.IsNotExist(err):
 		det.Content = ""
@@ -224,18 +235,15 @@ func (s *Server) handleSkillGet(w http.ResponseWriter, r *http.Request, sess sto
 
 	// 整棵树一次给全：技能是几个到几十个文件的量级，逐层懒加载不值当，
 	// 前端拿到扁平清单自己拼树即可。WalkDir 的顺序保证父在子前。
-	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || p == dir {
+	_ = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || p == "." {
 			return nil
 		}
 		if len(det.Entries) >= skillMaxEntries {
 			det.More = true
 			return fs.SkipAll
 		}
-		rel, rerr := filepath.Rel(dir, p)
-		if rerr != nil {
-			return nil
-		}
+		rel := p
 		e := skillEntry{Path: filepath.ToSlash(rel), Dir: d.IsDir(), Link: d.Type()&fs.ModeSymlink != 0}
 		if !e.Dir && !e.Link && !d.Type().IsRegular() {
 			return nil // 设备、管道之类：技能目录里不该有，列出来也没用
@@ -258,28 +266,24 @@ func (s *Server) handleSkillFile(w http.ResponseWriter, r *http.Request, sess st
 	if !ok {
 		return
 	}
-	// resolveFileEntry 逐段 Lstat 并拒绝符号链接：技能目录在会话 home 里，容器
-	// 内随手就能造一个指向 /etc 的链接，跟着走就把宿主机文件读出来了。
-	p, err := resolveFileEntry(dir, r.URL.Query().Get("path"))
+	root, err := s.openDataDir(dir)
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
 	}
-	info, err := os.Lstat(p)
+	defer root.Close()
+	p := r.URL.Query().Get("path")
+	f, err := root.OpenFile(p)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, "文件不存在")
-		return
-	}
-	if !info.Mode().IsRegular() {
-		writeErr(w, http.StatusBadRequest, "不是普通文件")
-		return
-	}
-	f, err := os.Open(p)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeFileOpErr(w, err)
 		return
 	}
 	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
 
 	if r.URL.Query().Get("raw") == "1" {
 		if r.URL.Query().Get("dl") == "1" {
@@ -348,14 +352,22 @@ func (s *Server) handleSkillDelete(w http.ResponseWriter, r *http.Request, sess 
 	if !ok {
 		return
 	}
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		writeErr(w, http.StatusNotFound, "技能不存在")
+	root, err := s.openDataDir(filepath.Dir(dir))
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
-	if err := os.RemoveAll(dir); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	defer root.Close()
+	name := filepath.Base(dir)
+	if _, err := root.Lstat(name); err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
+	if err := root.RemoveAll(name); err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -379,20 +391,23 @@ func (s *Server) handleSkillCopy(w http.ResponseWriter, r *http.Request, sess st
 		writeErr(w, http.StatusBadRequest, "invalid target scope")
 		return
 	}
-	if fi, err := os.Stat(src); err != nil || !fi.IsDir() {
-		writeErr(w, http.StatusNotFound, "技能不存在")
+	source, err := s.openDataDir(src)
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
+	source.Close()
+
 	// 复制到自己身上会先删掉源目录再无从拷起，直接拦下。
 	if src == filepath.Join(dstRoot, name) {
 		writeErr(w, http.StatusBadRequest, "源和目标是同一个范围")
 		return
 	}
-	if err := ensureSkillsRoot(dstRoot); err != nil {
+	if err := s.ensureSkillsRoot(dstRoot); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := replaceSkillDir(src, filepath.Join(dstRoot, name)); err != nil {
+	if err := s.replaceSkillDir(src, filepath.Join(dstRoot, name)); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -443,11 +458,11 @@ func (s *Server) handleSkillInstall(w http.ResponseWriter, r *http.Request, sess
 		writeErr(w, http.StatusBadRequest, "技能名无效（只能用字母、数字、. _ -，且不超过 64 字符）")
 		return
 	}
-	if err := ensureSkillsRoot(root); err != nil {
+	if err := s.ensureSkillsRoot(root); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := replaceSkillDir(srcDir, filepath.Join(root, name)); err != nil {
+	if err := s.replaceSkillDir(srcDir, filepath.Join(root, name)); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -544,77 +559,81 @@ func archiveBaseName(filename string) string {
 //
 // chown 与 files.go 一样是 best-effort：只有 root 才改得动属主，而非 root 环境
 // （CI、开发机）本来就没有容器要伺候，为这个把整个操作判失败没有意义。
-func ensureSkillsRoot(root string) error {
-	for _, dir := range []string{filepath.Dir(root), root} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-		_ = os.Chown(dir, dockerx.AgentUID, dockerx.AgentGID)
+func (s *Server) ensureSkillsRoot(root string) error {
+	base, err := safefs.Open(s.cfg.DataDir)
+	if err != nil {
+		return err
 	}
+	defer base.Close()
+	rel, err := filepath.Rel(s.cfg.DataDir, root)
+	if err != nil || !filepath.IsLocal(rel) {
+		return errFileOpInvalid
+	}
+	if err := base.MkdirAll(rel, 0o755); err != nil {
+		return err
+	}
+	_ = base.Chown(filepath.Dir(rel), dockerx.AgentUID, dockerx.AgentGID)
+	_ = base.Chown(rel, dockerx.AgentUID, dockerx.AgentGID)
 	return nil
 }
 
-// replaceSkillDir 把 src 目录整体搬到 dst（先删掉旧的同名技能）。复制而不是
-// rename：src 可能在别的范围里且必须保留（复制场景）。文件时间统一戳成当下，
-// 这样装进模板的技能一定比各会话里的旧副本新，下次启动才会推下去。
-func replaceSkillDir(src, dst string) error {
+// replaceSkillDir pins the source and destination beneath data_dir. Copying
+// skips symlinks and publishes files atomically without truncating shared inodes.
+func (s *Server) replaceSkillDir(src, dst string) error {
 	if src == dst {
-		return nil // 调用方本该拦住；这里兜底，别把源目录先删了
+		return nil
 	}
-	if err := os.RemoveAll(dst); err != nil {
+	source, err := s.openDataDir(src)
+	if err != nil {
 		return err
 	}
+	defer source.Close()
+	parent, err := s.openDataDir(filepath.Dir(dst))
+	if err != nil {
+		return err
+	}
+	defer parent.Close()
+	name := filepath.Base(dst)
+	if err := parent.RemoveAll(name); err != nil {
+		return err
+	}
+	if err := parent.Mkdir(name, 0o755); err != nil {
+		return err
+	}
+	_ = parent.Chown(name, dockerx.AgentUID, dockerx.AgentGID)
+	target, err := parent.Sub(name)
+	if err != nil {
+		return err
+	}
+	defer target.Close()
 	now := time.Now()
-	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+	return fs.WalkDir(source.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(src, p)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		switch {
-		case d.IsDir():
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-			_ = os.Chown(target, dockerx.AgentUID, dockerx.AgentGID) // best-effort，见 ensureSkillsRoot
+		if rel == "." {
 			return nil
-		case d.Type().IsRegular():
-			if err := copyRegular(p, target); err != nil {
+		}
+		if d.IsDir() {
+			if err := target.MkdirAll(rel, 0o755); err != nil {
 				return err
 			}
-			return os.Chtimes(target, now, now)
+			_ = target.Chown(rel, dockerx.AgentUID, dockerx.AgentGID)
+			return nil
 		}
-		return nil // 符号链接等不搬运：技能就是文本和脚本
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		f, err := source.OpenFile(rel)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		info, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		_, err = target.WriteAtomic(rel, f, safefs.WriteOptions{Mode: info.Mode().Perm(), Chown: true, UID: dockerx.AgentUID, GID: dockerx.AgentGID, BestEffortChown: true, ModTime: now})
+		return err
 	})
-}
-
-func copyRegular(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	fi, err := in.Stat()
-	if err != nil {
-		return err
-	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, fi.Mode().Perm())
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
-	}
-	if err := out.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(dst, fi.Mode().Perm()); err != nil {
-		return err
-	}
-	_ = os.Chown(dst, dockerx.AgentUID, dockerx.AgentGID) // best-effort，见 ensureSkillsRoot
-	return nil
 }

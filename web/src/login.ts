@@ -12,6 +12,9 @@ import { startPing } from "./ping.js";
 import { renderMyQuota } from "./quota.js";
 
 export function showLogin(err?: string) {
+  S.token = "";
+  localStorage.removeItem("agentbox_token");
+  emit("signed-out");
   $("app").classList.add("hidden");
   $("login").classList.remove("hidden");
   if (err) {
@@ -21,12 +24,15 @@ export function showLogin(err?: string) {
 }
 
 export async function tryEnter() {
+  const token = S.token;
   let me: Me;
   try {
     me = await api<Me>("/me");
   } catch (_) {
     return; // unauthorized 事件已触发 showLogin
   }
+  if (token !== S.token) return;
+  emit("signed-in");
   S.user = me.user;
   S.role = me.role;
   S.models = me.models || null;
@@ -40,6 +46,7 @@ export async function tryEnter() {
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
   await refreshAll();
+  if (token !== S.token) return;
   startPolling();
   startPing();
 }

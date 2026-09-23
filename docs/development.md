@@ -125,6 +125,23 @@ go build -o abox-link ./cmd/abox-link
 
 ## CI 与提交
 
+文件安全改动需执行 `go test -race ./internal/safefs ./internal/archivex ./internal/agent ./internal/server`。macOS 上还可运行 Linux 容器回归：
+
+```bash
+./scripts/test-filesystem-linux.sh
+```
+
+脚本构建最小测试镜像，交叉编译并运行 safefs、archivex、agent、server、backup 测试；不挂载源码、账号或用户工作区，不调用模型。测试容器禁用外网，结束时删除容器及本机临时二进制；测试镜像保留复用。镜像安装 Git、coreutils 与时区数据，不替代完整生产镜像验收。
+
+Git 容器执行有一个不调用模型、不挂载宿主机目录的 Linux 冒烟测试；CI 自动运行，本地可按需执行：
+
+```bash
+docker build -t agentbox-git-test:local -f internal/dockerx/testdata/git.Dockerfile internal/dockerx/testdata
+AGENTBOX_DOCKER_TEST_IMAGE=agentbox-git-test:local go test ./internal/dockerx -run '^TestGitContainerLive$' -count=1 -v
+```
+
+它验证真实 Docker exec 的 uid、Git 提交/diff、hook 禁用和继承环境清理，测试结束自动删除临时容器；镜像保留用于重复测试。Go Docker 客户端读取 `DOCKER_HOST`，不会自动读取 CLI 的 context；非默认 Docker context 需要设置对应地址。该测试使用最小 Alpine Git 镜像，不替代生产 Debian Agent 镜像、会话启动和 systemd 的完整验收。
+
 [`ci.yml`](../.github/workflows/ci.yml) 会执行前端类型检查与构建一致性、Go build / vet / test、abox-link 各平台交叉编译，以及按仓库策略执行 govulncheck。
 
 提交前检查：
@@ -137,3 +154,15 @@ git status --short
 PR 描述说明触发场景、行为变化和验证结果。涉及 Linux Docker、真实 OAuth 或真实模型的行为，应注明实际验证范围；本机编译通过不等于线上链路已经验证。
 
 生产发布流程见[部署与运维](../deploy/README.md)。文档和代码提交本身不代表需要立即部署。
+
+## 备份恢复回归
+
+`go test ./internal/backup ./cmd/agentbox` 覆盖带 WAL 的数据库快照、系统/完整范围、外部凭证、清单哈希、拒绝损坏归档、停止条件和恢复时不覆盖现有实例。
+
+```bash
+./scripts/test-backup.sh
+```
+
+脚本临时构建服务端，创建纯测试数据库和凭证，实际调用 backup / backup-verify / restore 以及定时脚本，检查恢复结果与轮转；不读取真实配置、不连接生产、不调用模型。
+
+设置 `AGENTBOX_BACKUP_DOCKER_TEST=1` 额外验证完整备份命令及工作区恢复，需要可达的 Docker daemon（非默认 context 设置 `DOCKER_HOST`）。该验证只读取 Docker 挂载列表，不操作已有容器；CI 默认开启。

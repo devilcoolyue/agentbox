@@ -105,20 +105,25 @@ func randomPreviewID() string {
 
 // handlePreviewGrant 为一个文件签发预览直链，返回的 URL 交给 iframe 当 src。
 func (s *Server) handlePreviewGrant(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	p, err := s.resolveFile(r, sess)
+	base, err := s.filesRoot(r, sess)
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
 	}
-	info, err := os.Lstat(p)
+	root, err := s.openDataDir(base)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, "文件不存在")
+		writeFileOpErr(w, err)
 		return
 	}
-	if !info.Mode().IsRegular() {
-		writeErr(w, http.StatusBadRequest, "不是普通文件")
+	defer root.Close()
+	rel := filepath.Clean(filepath.FromSlash(r.URL.Query().Get("path")))
+	f, err := root.OpenFile(rel)
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
+	f.Close()
+	p := filepath.Join(base, rel)
 	id, ok := s.previews.issue(reqUser(r).Name, filepath.Dir(p))
 	if !ok {
 		writeErr(w, http.StatusServiceUnavailable, "预览链接过多，请稍后再试")
@@ -143,22 +148,23 @@ func (s *Server) handlePreviewServe(w http.ResponseWriter, r *http.Request) {
 	if rel == "" {
 		rel = "index.html"
 	}
-	p, err := resolveFileEntry(grant.dir, rel)
+	root, err := s.openDataDir(grant.dir)
 	if err != nil {
 		http.Error(w, "文件不存在", http.StatusNotFound)
 		return
 	}
-	info, err := os.Lstat(p)
-	if err != nil || !info.Mode().IsRegular() {
+	defer root.Close()
+	f, err := root.OpenFile(rel)
+	if err != nil {
 		http.Error(w, "文件不存在", http.StatusNotFound)
 		return
 	}
-	f, err := os.Open(p)
+	defer f.Close()
+	info, err := f.Stat()
 	if err != nil {
 		http.Error(w, "读取失败", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
 
 	// sandbox 不带 allow-same-origin：脚本照跑，但文档是 opaque origin，拿不到
 	// 控制台的 localStorage / 同源凭证。no-store 保证「刷新」拿到的一定是新内容。
@@ -167,9 +173,9 @@ func (s *Server) handlePreviewServe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "no-store")
 
-	name := filepath.Base(p)
+	name := filepath.Base(rel)
 	if isHTMLName(name) && info.Size() <= previewMaxInject {
-		if raw, err := io.ReadAll(f); err == nil {
+		if raw, err := io.ReadAll(io.LimitReader(f, previewMaxInject+1)); err == nil && len(raw) <= previewMaxInject {
 			body := injectPreviewShim(raw)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Content-Length", strconv.Itoa(len(body)))

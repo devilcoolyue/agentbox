@@ -29,8 +29,15 @@ export interface Session {
   account_label: string;
 }
 
+export interface AccountAccess {
+  mode: "all" | "users" | "admin";
+  users?: string[];
+}
+
 /** GET /api/accounts 的账号池条目（server.acctView）。 */
 export interface Account {
+  /** 仅管理员可见；缺省表示全体用户共享。 */
+  access?: AccountAccess;
   id: string;
   /** "claude" | "codex" */
   type: string;
@@ -216,12 +223,14 @@ export interface UsageEventRow {
   wall_ms: number;
   /** 首字延迟，同上；0 = 没量到 */
   ttft_ms: number;
-  /** 这一行在**当前**价目表下的单价，用来把费用逐项摊开；查不到价时没有这个字段 */
+  /** 这一行的入账单价快照；旧数据回退当前参考单价，用来把费用逐项摊开；查不到价时没有这个字段 */
   rate?: UsageRate;
 }
 
 /** 一行消耗对应的单价（已按档位选好），美元 / 百万 token。 */
 export interface UsageRate extends TokenRates {
+  /** true 表示入账时保存的价目表快照；缺省为旧数据的当前参考价。 */
+  snapshot?: boolean;
   /** 命中的价目表键：模型 ID，或作为兜底的 agent 名 */
   key: string;
   /** "table" 这行的钱就是它算出来的 | "reference" provider 自报了总额，这份只是照价目表推的参考拆分 */
@@ -244,6 +253,7 @@ export interface UsageTotals {
 
 /** GET /api/usage/events。facets 是筛选下拉的可选值（服务端按可见范围裁过）。 */
 export interface UsageEvents {
+ sync?: { last_scan_at: number; last_success_at: number; scanning: boolean; errors: number };
   rows: UsageEventRow[];
   total: UsageTotals;
   facets: { users: string[]; agents: string[]; models: string[] };
@@ -348,6 +358,7 @@ export interface TunnelConfig {
 
 /** GET/PUT /api/settings（server.settingsView）。 */
 export interface Settings {
+ resources: ResourceLimits;
   listen: string;
   agent_image: string;
   permission_mode: string;
@@ -397,6 +408,7 @@ export interface ProxyBridgeConfig {
 
 /** GET /api/system（关于页）。 */
 export interface SystemInfo {
+ version?: string; revision?: string; built_at?: string; schema_version?: number;
   go_version: string;
   data_dir: string;
   config_path: string;
@@ -818,3 +830,5 @@ export interface ChatMessage {
   /** status / error 的错误文案 */
   error?: string;
 }
+
+export interface ResourceLimits { max_running: number; max_running_per_user: number; min_free_bytes: number; }

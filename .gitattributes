@@ -1,0 +1,3 @@
+# Preserve third-party license text exactly as supplied upstream.
+third_party/go/** -whitespace
+third_party/licenses/** -whitespace

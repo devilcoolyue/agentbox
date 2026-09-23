@@ -32,7 +32,13 @@ const (
 	marketMaxSkills    = 30 // 单个插件最多装多少个技能，防目录异常撑爆
 )
 
-func (s *Server) marketDir() string  { return filepath.Join(s.cfg.DataDir, "marketplace") }
+func (s *Server) marketDir() string {
+	dir := s.cfg.CacheDir
+	if dir == "" {
+		dir = s.cfg.DataDir
+	}
+	return filepath.Join(dir, "marketplace")
+}
 func (s *Server) marketRepo() string { return filepath.Join(s.marketDir(), "repo") }
 
 // --- 目录数据 ---
@@ -323,7 +329,7 @@ func (s *Server) handleSkillMarketInstall(w http.ResponseWriter, r *http.Request
 				"整包安装请在工作空间终端里跑：claude plugin install "+entry.Name+"@"+"claude-plugins-official")
 		return
 	}
-	if err := ensureSkillsRoot(root); err != nil {
+	if err := s.ensureSkillsRoot(root); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -333,7 +339,7 @@ func (s *Server) handleSkillMarketInstall(w http.ResponseWriter, r *http.Request
 		if !skillNameRe.MatchString(name) {
 			continue
 		}
-		if err := replaceSkillDir(dir, filepath.Join(root, name)); err != nil {
+		if err := s.replaceSkillDir(dir, filepath.Join(root, name)); err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}

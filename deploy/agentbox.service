@@ -1,6 +1,6 @@
 [Unit]
 Description=agentbox - containerized AI coding workbench
-Documentation=https://agentbox.example.com
+Documentation=https://github.com/devilcoolyue/agentbox
 After=network-online.target docker.service
 Wants=network-online.target docker.service
 # Without a limit, an unrecoverable start failure (a taken port, a bad config)

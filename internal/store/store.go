@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -66,102 +65,22 @@ type Store struct {
 	db *sql.DB
 }
 
-const schema = `
-CREATE TABLE IF NOT EXISTS sessions (
-	id           TEXT PRIMARY KEY,
-	user         TEXT NOT NULL,
-	name         TEXT NOT NULL,
-	agent        TEXT NOT NULL,
-	account_id   TEXT NOT NULL,
-	container_id TEXT NOT NULL DEFAULT '',
-	status       TEXT NOT NULL,
-	chat_session TEXT NOT NULL DEFAULT '',
-	created_at   TEXT NOT NULL,
-	updated_at   TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user);
-CREATE TABLE IF NOT EXISTS users (
-	name       TEXT PRIMARY KEY,
-	role       TEXT NOT NULL,
-	pass_hash  TEXT NOT NULL,
-	created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS tokens (
-	token      TEXT PRIMARY KEY,
-	user       TEXT NOT NULL,
-	created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_tokens_user ON tokens(user);
-CREATE TABLE IF NOT EXISTS usage_events (
-	id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-	ts                 TEXT    NOT NULL,
-	user               TEXT    NOT NULL,
-	session_id         TEXT    NOT NULL,
-	thread_id          TEXT    NOT NULL DEFAULT '',
-	turn_id            TEXT    NOT NULL DEFAULT '',
-	agent              TEXT    NOT NULL DEFAULT '',
-	account_id         TEXT    NOT NULL DEFAULT '',
-	model              TEXT    NOT NULL DEFAULT '',
-	kind               TEXT    NOT NULL DEFAULT 'chat',
-	input_tokens       INTEGER NOT NULL DEFAULT 0,
-	output_tokens      INTEGER NOT NULL DEFAULT 0,
-	cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
-	cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-	cost_micro_usd     INTEGER NOT NULL DEFAULT 0,
-	duration_ms        INTEGER NOT NULL DEFAULT 0,
-	wall_ms            INTEGER NOT NULL DEFAULT 0,
-	ttft_ms            INTEGER NOT NULL DEFAULT 0,
-	provider           TEXT    NOT NULL DEFAULT '',
-	req_id             TEXT    NOT NULL DEFAULT '',
-	raw                TEXT    NOT NULL DEFAULT ''
-);
--- 注意：req_id 上的唯一索引只能建在 migrate() 里，不能放这儿。已有的库对
--- CREATE TABLE IF NOT EXISTS 是空操作，此刻 req_id 这一列还没被 ALTER 加上，
--- 在这里建索引会让整段 schema 执行失败、服务起不来。
-CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts);
-CREATE INDEX IF NOT EXISTS idx_usage_user_ts ON usage_events(user, ts);
-CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_events(session_id);
-CREATE INDEX IF NOT EXISTS idx_usage_turn ON usage_events(turn_id);
-CREATE TABLE IF NOT EXISTS quotas (
-	user              TEXT PRIMARY KEY,
-	enforced          INTEGER NOT NULL DEFAULT 1,
-	balance_micro_usd INTEGER NOT NULL DEFAULT 0,
-	granted_micro_usd INTEGER NOT NULL DEFAULT 0,
-	spent_micro_usd   INTEGER NOT NULL DEFAULT 0,
-	created_at        TEXT NOT NULL,
-	updated_at        TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS credit_ledger (
-	id              INTEGER PRIMARY KEY AUTOINCREMENT,
-	ts              TEXT    NOT NULL,
-	user            TEXT    NOT NULL,
-	ref             TEXT    NOT NULL,
-	reason          TEXT    NOT NULL,
-	delta_micro_usd INTEGER NOT NULL,
-	balance_after   INTEGER NOT NULL,
-	note            TEXT    NOT NULL DEFAULT '',
-	actor           TEXT    NOT NULL DEFAULT ''
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_ref ON credit_ledger(ref);
-CREATE INDEX IF NOT EXISTS idx_ledger_user_ts ON credit_ledger(user, ts);
-`
-
 func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)")
+	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
 	// The driver serializes access per connection; a single connection keeps
 	// writes ordered and sidesteps SQLITE_BUSY between our own connections.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("init schema: %w", err)
-	}
 	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL"); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -174,30 +93,6 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
-
-// migrate applies additive column changes the CREATE TABLE above can't make to
-// an existing database. Each entry is idempotent: re-adding a column errors
-// with "duplicate column name", which is the already-applied case.
-func migrate(db *sql.DB) error {
-	stmts := []string{
-		`ALTER TABLE sessions ADD COLUMN default_model TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE sessions ADD COLUMN stop_reason TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE usage_events ADD COLUMN kind TEXT NOT NULL DEFAULT 'chat'`,
-		`ALTER TABLE usage_events ADD COLUMN ttft_ms INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE usage_events ADD COLUMN provider TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE usage_events ADD COLUMN wall_ms INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE usage_events ADD COLUMN req_id TEXT NOT NULL DEFAULT ''`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_req ON usage_events(req_id) WHERE req_id != ''`,
-		// 使用记录页默认按时间倒序翻页，没有这条索引时全表扫描加排序。
-		`CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts)`,
-	}
-	for _, stmt := range stmts {
-		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-			return fmt.Errorf("migrate %q: %w", stmt, err)
-		}
-	}
-	return nil
-}
 
 // importLegacyJSON migrates sessions from the pre-SQLite state file. Existing
 // rows win over the file so a crash between import and rename cannot undo
@@ -531,18 +426,19 @@ func (s *Store) DeleteUserTokensExcept(user, keep string) error {
 // InputTokens counts only input that missed the cache, CacheReadTokens the part
 // served from cache, CacheWriteTokens the part written into it. Codex instead
 // reports its cached count as a subset of the input count, so the writer
-// subtracts it out before storing (see server.parseUsage). Raw keeps the
+// subtracts it out before storing (see usage.ParseUsage). Raw keeps the
 // provider's untouched event so a normalization that turns out wrong can be
 // re-derived from history rather than lost.
 type UsageEvent struct {
-	ID        int64     `json:"id"`
-	TS        time.Time `json:"ts"`
-	User      string    `json:"user"`
-	SessionID string    `json:"session_id"`
-	ThreadID  string    `json:"thread_id,omitempty"`
-	TurnID    string    `json:"turn_id"`
-	Agent     string    `json:"agent"`
-	AccountID string    `json:"account_id,omitempty"`
+	Price     *PriceSnapshot `json:"price_snapshot,omitempty"`
+	ID        int64          `json:"id"`
+	TS        time.Time      `json:"ts"`
+	User      string         `json:"user"`
+	SessionID string         `json:"session_id"`
+	ThreadID  string         `json:"thread_id,omitempty"`
+	TurnID    string         `json:"turn_id"`
+	Agent     string         `json:"agent"`
+	AccountID string         `json:"account_id,omitempty"`
 	// Model is the provider's model id. Empty means the turn ran on the
 	// provider-side default and the event did not name it (Codex).
 	Model string `json:"model,omitempty"`
@@ -617,15 +513,19 @@ func (s *Store) InsertUsage(evs ...UsageEvent) error {
 		if e.Kind == "" {
 			e.Kind = UsageKindChat
 		}
+		snapshot, err := priceJSON(e.Price)
+		if err != nil {
+			return err
+		}
 		res, err := tx.Exec(`INSERT INTO usage_events
 			(ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			e.TS.Format(time.RFC3339Nano), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, e.Kind,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
-			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw)
+			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot)
 		if err != nil {
 			return fmt.Errorf("insert usage %s/%s: %w", e.SessionID, e.TurnID, err)
 		}
@@ -686,11 +586,40 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 		if e.TS.IsZero() {
 			e.TS = time.Now()
 		}
+		// Read under the same transaction as the upsert: concurrent scanners
+		// cannot replace the first observed price snapshot with a later table.
+		var oldJSON string
+		var oldCost, inTok, outTok, readTok, writeTok int64
+		err := tx.QueryRow("SELECT price_snapshot,cost_micro_usd,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens FROM usage_events WHERE req_id=?", e.ReqID).Scan(&oldJSON, &oldCost, &inTok, &outTok, &readTok, &writeTok)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
+		if err == nil {
+			if oldJSON != "" {
+				var original PriceSnapshot
+				if err := json.Unmarshal([]byte(oldJSON), &original); err != nil {
+					return err
+				}
+				e.Price = &original
+				e.CostMicroUSD = original.Cost(e)
+			} else {
+				// A pre-snapshot row has no recoverable historical price. Keep its
+				// cost when unchanged; growing legacy turns retain legacy labeling.
+				e.Price = nil
+				if e.InputTokens == inTok && e.OutputTokens == outTok && e.CacheReadTokens == readTok && e.CacheWriteTokens == writeTok {
+					e.CostMicroUSD = oldCost
+				}
+			}
+		}
+		snapshot, err := priceJSON(e.Price)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`INSERT INTO usage_events
 			(ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			-- 冲突目标必须把部分索引的 WHERE 原样带上，否则 SQLite 认不出
 			-- 这条唯一约束，直接报 "does not match any PRIMARY KEY or UNIQUE"。
 			ON CONFLICT(req_id) WHERE req_id != '' DO UPDATE SET
@@ -698,11 +627,11 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 				input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
 				cache_read_tokens = excluded.cache_read_tokens,
 				cache_write_tokens = excluded.cache_write_tokens,
-				cost_micro_usd = excluded.cost_micro_usd`,
+				cost_micro_usd = excluded.cost_micro_usd, price_snapshot = excluded.price_snapshot`,
 			e.TS.Format(time.RFC3339Nano), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, UsageKindTerminal,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
-			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw); err != nil {
+			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot); err != nil {
 			return fmt.Errorf("upsert terminal usage %s/%s: %w", e.SessionID, e.ReqID, err)
 		}
 	}
@@ -711,7 +640,7 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 
 const usageCols = `id, ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 	input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw`
+	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot`
 
 // UsageFilter narrows a usage query. The zero value matches everything.
 type UsageFilter struct {
@@ -788,13 +717,16 @@ func (s *Store) ListUsage(f UsageFilter) []UsageEvent {
 	var out []UsageEvent
 	for rows.Next() {
 		var e UsageEvent
-		var ts string
+		var ts, snapshot string
 		if err := rows.Scan(&e.ID, &ts, &e.User, &e.SessionID, &e.ThreadID, &e.TurnID,
 			&e.Agent, &e.AccountID, &e.Model, &e.Kind,
 			&e.InputTokens, &e.OutputTokens, &e.CacheReadTokens, &e.CacheWriteTokens,
 			&e.CostMicroUSD, &e.DurationMS, &e.WallMS, &e.TTFTMs, &e.Provider,
-			&e.ReqID, &e.Raw); err != nil {
+			&e.ReqID, &e.Raw, &snapshot); err != nil {
 			continue
+		}
+		if snapshot != "" {
+			_ = json.Unmarshal([]byte(snapshot), &e.Price)
 		}
 		e.TS, _ = time.Parse(time.RFC3339Nano, ts)
 		out = append(out, e)

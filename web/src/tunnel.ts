@@ -3,6 +3,8 @@
  * 普通用户在功能未启用时看不到入口；管理员始终可见（含「前往设置」引导）。 */
 "use strict";
 
+import { buttonLabel } from "./icons.js";
+
 import { S, bus, emit } from "./state.js";
 import type { TunnelClient, TunnelPair, TunnelStatus } from "./types.js";
 import { $, toast, fmtUptime } from "./util.js";
@@ -99,7 +101,7 @@ async function loadClients() {
   for (const c of list) {
     const a = document.createElement("a");
     a.className = "btn btn-sm tun-dl-btn";
-    a.textContent = platformLabel(c.name);
+    buttonLabel(a, platformLabel(c.name), "download");
     setTip(a, c.name + " · " + (c.size / 1048576).toFixed(1) + " MB");
     a.href = "/api/tunnel/clients/" + encodeURIComponent(c.name) +
       "?token=" + encodeURIComponent(S.token);

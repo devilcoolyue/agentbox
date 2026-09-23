@@ -302,30 +302,41 @@ main { max-width: 1060px; margin: 0 auto; padding: 22px; }
 /* ---------- 表单件 ---------- */
 
 button {
-  font: inherit; font-family: var(--ui);
-  font-size: 12.5px; letter-spacing: .03em;
-  padding: 8px 15px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  font: inherit; font-family: var(--sans);
+  font-size: 13px; font-weight: 500; line-height: 20px; white-space: nowrap;
+  min-height: 38px; padding: 8px 13px; border-radius: 8px;
   border: 1px solid var(--line); background: transparent; color: var(--text);
   cursor: pointer;
-  transition: border-color .15s, background .15s, color .15s, opacity .15s;
+  transition: border-color .14s, background .14s, color .14s, transform .1s;
 }
-button:hover { border-color: var(--muted); }
-button:disabled { opacity: .5; cursor: default; }
+button:hover:not(:disabled) { border-color: var(--muted); background: color-mix(in srgb, var(--text) 5%, transparent); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button svg { flex: none; pointer-events: none; }
 button.primary {
   background: var(--accent); border-color: var(--accent);
   color: var(--on-accent); font-weight: 600;
 }
-button.primary:hover { filter: brightness(1.08); }
+button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, var(--text)); border-color: var(--accent); }
 button.ghost { color: var(--muted); }
-button.ghost:hover { color: var(--text); }
-button.danger:hover { border-color: var(--red); color: var(--red); }
+button.ghost:hover:not(:disabled) { color: var(--text); }
+button.danger { color: var(--red); border-color: var(--red-line); }
+button.danger:hover:not(:disabled) { border-color: var(--red); color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }
+button.loading { cursor: progress; }
+button.loading svg { display: none; }
+button.loading::before {
+  content: ""; width: 14px; height: 14px; flex: none;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: button-spin .8s linear infinite;
+}
+@keyframes button-spin { to { transform: rotate(360deg); } }
 
 /* 加一行：虚线框，看起来就是个空槽位 */
 button.add {
   border-style: dashed;
   padding: 8px 14px;
 }
-button.add::before { content: "+"; margin-right: 7px; opacity: .8; }
 
 input[type=text], textarea {
   font: inherit; font-family: var(--ui);
@@ -470,7 +481,14 @@ input[type=text]:focus, textarea:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  button.loading::before { animation: none; }
+  button:active:not(:disabled) { transform: none; }
   .wire.busy .leg-a .glint { animation: none; left: calc(50% - 23px); }
   .savebar { animation: none; }
   * { transition-duration: .01ms !important; }
+}
+
+@media (pointer: coarse) {
+  button { min-height: 44px; }
+  .rule button { min-width: 44px; }
 }

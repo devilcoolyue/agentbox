@@ -11,23 +11,28 @@
 .files-crumb a { color: var(--amber); text-decoration: none; cursor: pointer; }
 
 /* 工作区 / 共享目录切换 */
-.scope-switch { display: inline-flex; align-items: center; gap: 8px; }
-.scope-btn {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  font-family: var(--mono); font-size: 12px;
-  padding: 4px 12px;
-  cursor: pointer;
+.scope-switch {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 3px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bg); max-width: 100%;
 }
-.scope-btn:first-child { border-radius: 6px 0 0 6px; margin-right: -9px; }
-.scope-btn + .scope-btn { border-radius: 0 6px 6px 0; }
+.scope-btn {
+  background: transparent;
+  border: 1px solid transparent; border-radius: 6px;
+  color: var(--muted);
+  font-family: var(--sans); font-size: 12px; line-height: 20px;
+  padding: 4px 10px; min-height: 30px; white-space: nowrap;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+.scope-btn:hover:not(:disabled) { color: var(--text); background: var(--panel-2); }
 .scope-btn.active {
   color: var(--amber);
-  border-color: var(--amber);
-  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border-color: var(--line);
+  background: var(--panel);
   position: relative; z-index: 1;
 }
+.scope-btn:focus-visible { outline-offset: -2px; }
 .scope-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ? 帮助提示（hover / 键盘聚焦 / 触屏点按均可弹出） */
@@ -65,7 +70,7 @@
 /* 文件列表：名称 | 权限 | 大小 | 修改时间 | 操作 */
 .files-head, .file-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px 88px 168px 140px;
+  grid-template-columns: minmax(0, 1fr) 110px 88px 168px 156px;
   gap: 14px; align-items: center;
   padding: 0 10px;
 }
@@ -92,6 +97,7 @@
   padding-left: calc(var(--depth, 0) * 20px);
 }
 .file-row .farrow {
+  display: inline-flex; align-items: center; justify-content: center;
   flex: none;
   width: 16px; text-align: center;
   color: var(--muted);
@@ -130,7 +136,7 @@
   background: transparent; color: var(--muted);
 }
 .file-act:hover, .file-act:focus-visible {
-  color: var(--amber); border-color: var(--line); background: var(--panel-2); outline: none;
+  color: var(--amber); border-color: var(--line); background: var(--panel-2);
 }
 .file-act.danger:hover, .file-act.danger:focus-visible { color: var(--red); border-color: var(--red-line); }
 .file-act:disabled { opacity: 0.4; cursor: progress; }
@@ -285,13 +291,13 @@
   .files-actions { justify-content: flex-end; }
   .files-actions .check { margin-right: auto; }
 
-  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) 66px 124px; gap: 8px; }
+  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) 54px 148px; gap: 8px; }
   .files-head span:nth-child(2), .files-head span:nth-child(4),
   .file-row .fperm, .file-row .ftime { display: none; }
   .files-head { margin: 4px 12px 0; }
   .files-list { padding: 0 12px 14px; }
   .file-row { padding-top: 10px; padding-bottom: 10px; } /* 触控行高 ≈40px */
-  .file-row .factions { min-width: 124px; gap: 2px; }
+  .file-row .factions { min-width: 148px; gap: 2px; }
 
   .dlg-file-move { width: 94vw; padding: 20px 18px; }
   .file-move-nav { align-items: stretch; flex-direction: column; gap: 10px; }

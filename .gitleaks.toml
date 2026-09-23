@@ -1,0 +1,18 @@
+[extend]
+useDefault = true
+
+# Exact public/non-secret strings only; no blanket file or commit exclusions.
+[allowlist]
+description = "Reviewed public identifiers, alphabet, and xterm exports"
+regexTarget = "secret"
+regexes = [
+  # Public Claude OAuth client identifier, not a client secret.
+  '''^9d1c250a-e61b-44d9-88ed-5944d1962f5e$''',
+  # Token generation alphabet, not an issued token.
+  '''^ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789$''',
+  # Byte-verified public xterm JavaScript exports, not API keys.
+  '''^t\.TwoKeyMap=void$''',
+  '''^t\.Sequencer=t\.Throttler=void$''',
+  # Adjacent Go runtime type names in strings output, not a credential.
+  '''^integerfloat32float64$''',
+]

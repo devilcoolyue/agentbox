@@ -2,6 +2,8 @@
  * 提交或丢弃。让「下发任务 → 审查改动 → 提交/回滚」的闭环不必切到终端。 */
 "use strict";
 
+import { buttonLabel } from "./icons.js";
+
 import { setSelectValue } from "./select.js";
 
 import { S } from "./state.js";
@@ -146,7 +148,7 @@ function renderList() {
     disc.className = "change-discard";
     setTip(disc, "丢弃此文件的改动");
     disc.setAttribute("aria-label", "丢弃此文件的改动");
-    disc.textContent = "⟲";
+    buttonLabel(disc, "", "undo");
     disc.addEventListener("click", (e) => { e.stopPropagation(); openDiscard(f.path); });
     row.append(badge, name, disc);
     const open = () => selectFile(f);

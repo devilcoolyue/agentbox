@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"agentbox/internal/safefs"
 	"fmt"
 	"os"
 	"path"
@@ -36,22 +37,25 @@ import (
 // Callers must seed templates BEFORE SeedCredentials so that a stray credential
 // file in a template can never win over the account pool.
 func SeedHomeTemplate(homeDir string, uid, gid int, templateDirs ...string) error {
+	home, err := openHome(homeDir)
+	if err != nil {
+		return err
+	}
+	defer home.Close()
 	merged := map[string]templateEntry{}
 	for _, dir := range templateDirs {
 		if dir == "" {
 			continue
 		}
-		fi, err := os.Stat(dir)
+		root, err := openHome(dir)
 		if os.IsNotExist(err) {
 			continue
 		}
 		if err != nil {
 			return err
 		}
-		if !fi.IsDir() {
-			return fmt.Errorf("home template %s is not a directory", dir)
-		}
-		if err := collectTemplate(dir, "", merged); err != nil {
+		defer root.Close()
+		if err := collectTemplate(root, ".", merged); err != nil {
 			return err
 		}
 	}
@@ -66,15 +70,15 @@ func SeedHomeTemplate(homeDir string, uid, gid int, templateDirs ...string) erro
 
 	for _, rel := range rels {
 		e := merged[rel]
-		dst := filepath.Join(homeDir, filepath.FromSlash(rel))
+		dst := filepath.FromSlash(rel)
 		var err error
 		switch {
 		case e.info.IsDir():
-			err = ensureTemplateDir(dst, e.info.Mode().Perm(), uid, gid)
+			err = ensureTemplateDir(home, dst, e.info.Mode().Perm(), uid, gid)
 		case e.info.Mode()&os.ModeSymlink != 0:
-			err = seedTemplateLink(e.src, dst, uid, gid)
+			err = seedTemplateLink(e.root, e.src, home, dst, uid, gid)
 		default:
-			err = seedTemplateFile(e.src, dst, e.info, uid, gid)
+			err = seedTemplateFile(e.root, e.src, home, dst, e.info, uid, gid)
 		}
 		if err != nil {
 			return err
@@ -85,12 +89,13 @@ func SeedHomeTemplate(homeDir string, uid, gid int, templateDirs ...string) erro
 
 // templateEntry is one resolved source path for a home-relative slash path.
 type templateEntry struct {
+	root *safefs.Root
 	src  string
 	info os.FileInfo // lstat: symlinks are described, not resolved
 }
 
-func collectTemplate(root, rel string, out map[string]templateEntry) error {
-	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(rel)))
+func collectTemplate(root *safefs.Root, rel string, out map[string]templateEntry) error {
+	entries, err := root.ReadDir(rel)
 	if err != nil {
 		return err
 	}
@@ -113,7 +118,7 @@ func collectTemplate(root, rel string, out map[string]templateEntry) error {
 				}
 			}
 		}
-		out[childRel] = templateEntry{src: filepath.Join(root, filepath.FromSlash(childRel)), info: info}
+		out[childRel] = templateEntry{root: root, src: filepath.FromSlash(childRel), info: info}
 		if info.IsDir() {
 			if err := collectTemplate(root, childRel, out); err != nil {
 				return err
@@ -123,65 +128,55 @@ func collectTemplate(root, rel string, out map[string]templateEntry) error {
 	return nil
 }
 
-func ensureTemplateDir(path string, perm os.FileMode, uid, gid int) error {
-	switch fi, err := os.Lstat(path); {
+func ensureTemplateDir(root *safefs.Root, name string, perm os.FileMode, uid, gid int) error {
+	switch fi, err := root.Lstat(name); {
 	case err == nil && fi.IsDir():
 		return nil
 	case err == nil:
-		// Someone put a file (or symlink) where the template wants a directory;
-		// clobbering it would be worse than skipping the subtree.
-		return fmt.Errorf("home template: %s exists and is not a directory", path)
+		return fmt.Errorf("home template: %s exists and is not a directory", name)
 	case !os.IsNotExist(err):
 		return err
 	}
-	if err := os.MkdirAll(path, perm); err != nil {
+	if err := root.MkdirAll(name, perm); err != nil {
 		return err
 	}
-	if err := os.Chmod(path, perm); err != nil { // MkdirAll applied the umask
+	if err := root.ChmodDir(name, perm); err != nil {
 		return err
 	}
-	return os.Chown(path, uid, gid)
+	return root.Chown(name, uid, gid)
 }
 
-// seedTemplateLink mirrors a symlink verbatim. mtime comparison is meaningless
-// for links, so the template simply owns the link target.
-func seedTemplateLink(src, dst string, uid, gid int) error {
-	target, err := os.Readlink(src)
+func seedTemplateLink(src *safefs.Root, source string, dst *safefs.Root, target string, uid, gid int) error {
+	link, err := src.Readlink(source)
 	if err != nil {
 		return err
 	}
-	if cur, err := os.Readlink(dst); err == nil {
-		if cur == target {
+	if current, err := dst.Readlink(target); err == nil {
+		if current == link {
 			return nil
 		}
-		if err := os.Remove(dst); err != nil {
+		if err := dst.RemoveAll(target); err != nil {
 			return err
 		}
-	} else if _, err := os.Lstat(dst); err == nil {
-		return nil // a real file or directory claimed the name in-session; leave it
+	} else if _, err := dst.Lstat(target); err == nil {
+		return nil
 	}
-	if err := os.Symlink(target, dst); err != nil {
-		return err
-	}
-	return os.Lchown(dst, uid, gid)
+	return dst.Symlink(link, target, uid, gid)
 }
 
-func seedTemplateFile(src, dst string, si os.FileInfo, uid, gid int) error {
-	if di, err := os.Lstat(dst); err == nil {
+func seedTemplateFile(src *safefs.Root, source string, dst *safefs.Root, target string, si os.FileInfo, uid, gid int) error {
+	if di, err := dst.Lstat(target); err == nil {
 		if !di.Mode().IsRegular() || !si.ModTime().After(di.ModTime()) {
 			return nil
 		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := copyFile(src, dst, uid, gid); err != nil {
+	f, err := src.OpenFile(source)
+	if err != nil {
 		return err
 	}
-	// Mode carries the executable bit that hooks and statusline scripts need.
-	if err := os.Chmod(dst, si.Mode().Perm()); err != nil {
-		return err
-	}
-	// Align mtime with the source so the comparison above stays stable across
-	// starts instead of recopying every time.
-	return os.Chtimes(dst, si.ModTime(), si.ModTime())
+	defer f.Close()
+	_, err = dst.WriteAtomic(target, f, safefs.WriteOptions{Mode: si.Mode().Perm(), Chown: true, UID: uid, GID: gid, ModTime: si.ModTime()})
+	return err
 }

@@ -35,6 +35,8 @@ DELETE /api/sessions/{id}?purge=1   删除（purge 同时清除文件、配置�
 
 ## 文件与预览
 
+文件、预览和技能内容访问均通过受限目录句柄，不沿符号链接访问；无效路径或静态链接通常返回 `400`，路径并发变化可能返回 `404` 或操作错误。编辑器 PUT 以原子替换保存，并保留原文件权限位。上传在服务端 staging 目录验证后合并，解压失败不改动原目录；合并并非跨目录事务。
+
 ```text
 POST   /api/sessions/{id}/upload    上传 multipart(file)，普通文件或 zip/tar.gz/tgz/tar；clear=1 先清空
 GET    /api/sessions/{id}/archive   打包下载 (zip)
@@ -68,6 +70,8 @@ POST   /api/sessions/{id}/skills/{name}/copy    在范围间复制 {to:"session"
 ```
 
 ## Git 变更
+
+Git 命令在会话容器内执行，会按需启动空间；额度拦截返回 `403`。Git 执行模块未配置返回 `503`，其他启动/运行错误按接口返回错误，不回退宿主机 Git，也不以空 diff 隐藏失败。单条命令限时 15 秒（随后最多 2 秒强制终止），stdout 上限 4 MiB；超过限制返回错误。网页提交禁用 hook 与签名。`git/file` 是普通文件读取，不执行 Git。
 
 ```text
 GET    /api/sessions/{id}/git/status  变更列表（repos=工作区里发现的仓库、repo=当前那个、
@@ -254,3 +258,5 @@ curl --fail-with-body -sS "$ABOX_URL/api/users/alice/credits" \
 路由清单以 [`internal/server/server.go`](../internal/server/server.go) 为准，前端类型见 [`web/src/types.d.ts`](../web/src/types.d.ts)。`POST /api/sessions/{id}/chat/reset` 保留为旧客户端兼容入口，语义等同新建线程；新接入优先使用线程接口。
 
 预览入口 `/preview/<grant>/...` 使用短时通行证读取文件，不需要常规 Bearer 头；应先调用已鉴权的 `GET /api/sessions/{id}/preview` 取得 URL，不能将其当作长期公开文件托管地址。
+
+用量明细的 `rate.snapshot=true` 表示单价来自该行入账时保存的快照；缺省或 false 表示旧记录的当前参考价。`billing` 对新记录使用持久化来源 provider/table/none，不再按 Agent 名猜测；接口路径与原字段保持兼容。

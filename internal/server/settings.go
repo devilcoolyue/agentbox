@@ -11,12 +11,15 @@ import (
 	"strconv"
 	"strings"
 
+	"agentbox/internal/buildinfo"
 	"agentbox/internal/config"
+	"agentbox/internal/store"
 )
 
 // --- 设置读写 ---
 
 type settingsView struct {
+	Resources      config.ResourceLimits           `json:"resources"`
 	Listen         string                          `json:"listen"`
 	AgentImage     string                          `json:"agent_image"`
 	PermissionMode string                          `json:"permission_mode"`
@@ -39,6 +42,7 @@ type settingsView struct {
 
 func (s *Server) settingsView() settingsView {
 	return settingsView{
+		Resources:       s.cfg.GetResources(),
 		Listen:          s.cfg.GetListen(),
 		AgentImage:      s.cfg.GetAgentImage(),
 		PermissionMode:  s.cfg.GetPermissionMode(),
@@ -98,7 +102,8 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"go_version":       runtime.Version(),
+		"go_version": runtime.Version(),
+		"version":    buildinfo.Version, "revision": buildinfo.Commit(), "built_at": buildinfo.BuiltAt, "schema_version": store.SchemaVersion,
 		"data_dir":         s.cfg.DataDir,
 		"config_path":      s.cfg.Path(),
 		"docker_version":   s.dock.ServerVersion(r.Context()),
@@ -117,10 +122,11 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 // 创建后前端随即引导进入登录（OAuth / API Key）流程。
 func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ID    string            `json:"id"`
-		Type  string            `json:"type"`
-		Label string            `json:"label"`
-		Env   map[string]string `json:"env"`
+		ID     string                `json:"id"`
+		Type   string                `json:"type"`
+		Label  string                `json:"label"`
+		Env    map[string]string     `json:"env"`
+		Access *config.AccountAccess `json:"access"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
@@ -139,6 +145,10 @@ func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 	if req.Label == "" {
 		req.Label = req.ID
 	}
+	if err := s.validateAccountAccess(req.Access); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	credDir := filepath.Join(s.cfg.DataDir, "creds", req.ID)
 	if err := os.MkdirAll(credDir, 0o700); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
@@ -146,7 +156,7 @@ func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	acct := config.Account{
 		ID: req.ID, Type: req.Type, Label: req.Label,
-		CredentialsDir: credDir, Env: req.Env,
+		CredentialsDir: credDir, Env: req.Env, Access: req.Access,
 	}
 	if err := s.cfg.AddAccount(acct); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -162,15 +172,20 @@ func (s *Server) handleAccountPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Label   *string            `json:"label"`
-		Env     *map[string]string `json:"env"`
-		ProxyID *string            `json:"proxy_id"`
+		Label   *string               `json:"label"`
+		Env     *map[string]string    `json:"env"`
+		ProxyID *string               `json:"proxy_id"`
+		Access  *config.AccountAccess `json:"access"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
-	var patch config.AccountPatch
+	if err := s.validateAccountAccess(req.Access); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	patch := config.AccountPatch{Access: req.Access}
 	if req.Label != nil {
 		label := strings.TrimSpace(*req.Label)
 		if label == "" {

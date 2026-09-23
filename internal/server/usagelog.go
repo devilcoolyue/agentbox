@@ -80,6 +80,7 @@ type usageRowView struct {
 
 // usageRateView 交代一行的钱是按价目表里的哪一条、哪一档算的。
 type usageRateView struct {
+	Snapshot bool `json:"snapshot,omitempty"`
 	// Key 是命中的价目表键：模型 ID，或作为兜底的 agent 名。
 	Key string `json:"key"`
 	// Basis 区分这份单价的分量：
@@ -109,9 +110,14 @@ func tableBilled(e store.UsageEvent) bool {
 	return e.Kind == store.UsageKindTerminal || e.Agent != config.AgentClaude
 }
 
-// billingMode 说明这一行的 cost 是哪来的。claude 的对话行永远以 provider 报的
-// 为准，哪怕报的是 0（子 agent 偶尔如此）；查表的那些有价就是查表来的。
+// billingMode 使用持久化来源；只有无快照旧行才按历史规则推断。
 func billingMode(e store.UsageEvent) string {
+	if e.Price != nil {
+		if e.Price.Source == "unpriced" {
+			return billingNone
+		}
+		return e.Price.Source
+	}
 	if !tableBilled(e) {
 		return billingProvider
 	}
@@ -121,9 +127,20 @@ func billingMode(e store.UsageEvent) string {
 	return billingNone
 }
 
-// rateFor 取这一行在**当前**价目表下的单价。历史行的实收金额是记账当时算的，
-// 中途改过价就对不上——差多少由前端自己比对后提示，这里不猜。
+// rateFor 优先返回入账价格快照；旧行缺失快照时回退当前参考价。
 func (s *Server) rateFor(e store.UsageEvent) *usageRateView {
+	if e.Price != nil {
+		if e.Price.Key == "" {
+			return nil
+		}
+		rates, long := e.Price.Rates(e.InputTokens + e.CacheReadTokens)
+		basis := rateBasisTable
+		if e.Price.Source == "provider" {
+			basis = rateBasisReference
+		}
+		return &usageRateView{Key: e.Price.Key, Basis: basis, Snapshot: true, Long: long, Over: e.Price.LongContextOver, Input: rates.Input, Output: rates.Output, CacheRead: rates.CacheRead, CacheWrite: rates.CacheWrite}
+	}
+
 	p, key, ok := s.cfg.PriceLookup(e.Agent, e.Model)
 	if !ok {
 		return nil
@@ -197,10 +214,8 @@ func parseUsageTime(v string, loc *time.Location) (time.Time, error) {
 // 合计与可选项都按「筛选条件」算而不是按「当前这一页」算：翻到第 3 页时表头
 // 显示的仍是整个筛选结果的总花费，否则每翻一页数字都变，没法用。
 func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
-	// 先补一趟终端消耗再查，否则刚在终端里花掉的量要等下一次定时扫描才出现，
-	// 用户看到的是「我刚用完，表里没有」。没改动过的 transcript 只花一次 stat，
-	// 真正要读的只有刚写过的那个文件。
-	s.scanTerminalUsage(s.termScan)
+	// Queries read committed rows immediately; one bounded worker coalesces refreshes.
+	s.usageService().RequestScan()
 
 	f, scopeUser := s.usageFilterFrom(r)
 	q := r.URL.Query()
@@ -258,6 +273,7 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"rows":   rows,
+		"sync":   s.usageService().SyncStatus(),
 		"total":  s.store.SumUsage(f),
 		"facets": s.store.FacetsUsage(f, scopeUser),
 		"limit":  f.Limit,

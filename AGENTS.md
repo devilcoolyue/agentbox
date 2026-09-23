@@ -17,11 +17,18 @@
 
 | 路径 | 作用 |
 |---|---|
-| `cmd/agentbox/main.go` | 服务端启动入口；`lockDataDir` 防止多个进程共用同一个 `data_dir`。 |
+| `cmd/agentbox/main.go` | 服务端入口与信号；`internal/app` 管理数据锁、启动与依赖清理。 |
 | `cmd/abox-link/main.go` | 隧道客户端入口；面板模式与 `--server` 无头模式分流。 |
+| `internal/app` | 启动编排、数据目录独占锁与依赖收尾。 |
+| `internal/workspace` | 会话创建/启停/删除、模板与凭证播种、活动引用与空闲回收。 |
+| `internal/credentials` | 账号凭证读取/保存、轮换同步、续期与账号级可取消锁。 |
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
 | `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）、用量计量与额度（`usage.go`/`quota.go`/`usagelog.go`）。 |
+| `internal/usage` | 回合用量归一化、定价快照、结算编排及 Claude/Codex 终端扫描。 |
 | `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens/usage_events/quotas/credit_ledger；首次打开会导入旧版 `state.json`。 |
+| `internal/backup` | 版本化 tar.gz 备份、SQLite 在线快照、清单/哈希验证、恢复到新目录；CLI 在 cmd/agentbox/backup.go。 |
+| `internal/safefs` | 基于 os.Root 的受限目录句柄、普通文件读取、原子写入及跨目录不覆盖重命名；详见 docs/architecture/filesystem-boundaries.md。 |
+| `internal/gitx` | 网页 Git 的容器执行策略：argv、环境隔离、超时与窄执行接口；禁止宿主机 Git 降级。 |
 | `internal/dockerx` | Docker Engine API 封装：容器生命周期、exec PTY/stream、stats、镜像/挂载检查。 |
 | `internal/agent` | Claude/Codex 适配层：headless 命令、标题生成、凭证播种、Claude HUD、Codex app-server 协议。 |
 | `internal/archivex` | 上传压缩包解压（防 zip-slip/符号链接/解压炸弹）与工作区 zip 下载。 |
@@ -178,11 +185,11 @@ curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 10 --max-time 20 "$P
 - 启动：`startSession` 是幂等路径，REST 启动、聊天 WS、终端 WS 都会走它。流程：同步账号池 OAuth 轮换凭证 → `agent.SeedHomeTemplate` 铺 home 模板 → `agent.SeedCredentials` 播种 home → 可选播种内网提示 → 确保用户共享目录 → `dockerx.EnsureRunning` 复用/重建容器 → 更新 SQLite。
 - home 模板：会话 home 每次都是全新空目录，skill / 用户级 MCP / rc 文件本来每开一个会话就得重装一遍，模板就是补这个。两层，后者盖前者：服务器级 `data/home-template/`（全体用户）、用户级 `data/users/<user>/home-template/`（该用户所有会话，「技能」页签写的就是它）。**两层先合并再落盘**，否则用户层里较旧的文件会输给服务器层。合并结果与会话副本之间逐文件按 mtime「谁新用谁」（同 credsync 的收敛规则）：容器里改过的留着，模板更新的推下去；符号链接原样重建、不跟随，可以把大块内容指向 `/shared`。必须排在 `SeedCredentials` 之前，模板里万一混进凭证文件也压不过账号池。模板失败只记日志，不挡会话启动。
 - 官方市场（`internal/server/market.go`）：`anthropics/claude-plugins-official` 浅克隆到 `data/marketplace/repo`（12h 过期，整仓重克隆而非增量；拉不动就沿用旧副本），它既是目录数据源也直接提供一方插件的内容。目录条目的 `source` 有四种写法（仓库内相对路径 / git-subdir / url / github），`parsePluginSource` 归一化，路径与协议都当不可信输入校验。**市场的单位是插件不是技能**：`discoverSkillDirs` 按「显式 skills 声明 → skills/<名字>/ → 插件根就是技能」三级找，一个都没有就回 422 并让用户改用终端装整包。git 抓取由 `marketMu` 串行化，`GIT_TERMINAL_PROMPT=0` 防私有仓库卡在密码提示上。
-- 技能页（`internal/server/skills.go` + `web/src/skills.ts`）：管理 `.claude/skills`，范围 `session`（会话 home）与 `template`（用户模板）。列表里的 `source` 靠探测两层模板里有没有同名目录得出，顺序与 SeedHomeTemplate 的分层一致。装／复制统一走 `replaceSkillDir`：整目录替换并把 mtime 戳成当下，保证刚进模板的技能一定比各会话里的旧副本新，下次启动推得下去。技能名同时是目录名，`skillNameRe` 卡死路径穿越。详情接口连整个技能目录的扁平清单（`entries`，含子目录，父在子前，上限 2000 条）一起返回，前端 `buildTree` 拼成左侧文件树；点开单个文件走 `GET …/skills/{name}/file?path=`，路径用 `resolveFileEntry` 逐段 Lstat 拒绝符号链接（技能目录在会话 home 里，容器内随手就能造一个指向宿主机文件的链接）。
+- 技能页（`internal/server/skills.go` + `web/src/skills.ts`）：管理 `.claude/skills`，范围 `session`（会话 home）与 `template`（用户模板）。列表里的 `source` 靠探测两层模板里有没有同名目录得出，顺序与 SeedHomeTemplate 的分层一致。装／复制统一走 `replaceSkillDir`：整目录替换并把 mtime 戳成当下，保证刚进模板的技能一定比各会话里的旧副本新，下次启动推得下去。技能名同时是目录名，`skillNameRe` 卡死路径穿越。详情接口连整个技能目录的扁平清单（`entries`，含子目录，父在子前，上限 2000 条）一起返回，前端 `buildTree` 拼成左侧文件树；点开单个文件走 `GET …/skills/{name}/file?path=`，路径通过 `s.openDataDir` / `safefs.Root.OpenFile` 固定目录句柄并拒绝符号链接（技能目录在会话 home 里，容器内随手就能造一个指向宿主机文件的链接）。
 - **账号 env 绝不烘进容器**（`dockerx.baseContainerEnv`）：容器 `Config.Env` 在 create 那一刻定死，之后只能靠 exec 往上加、减不掉。账号从中转站切回订阅登录时 `clearClaudeRelay` 只改得动 `config.json`，旧容器里那份 `ANTHROPIC_AUTH_TOKEN` 还在，而 claude CLI 认 env 里的 Bearer 令牌优先于 OAuth 凭证——订阅登录形同虚设，CLI 卡在重试里直到被杀（回合报「进程退出码 137」，stderr 只剩一句 connectors are disabled 的告警）。所以账号 env 一律走 `server.execEnv` 每次 exec 注入，加和减都即时生效。`EnsureRunning` 里的 `hasBakedEnv` 负责认出老版本烘过 env 的容器并重建（比键不比值，镜像升级改 `NODE_VERSION` 的值不算脏）。
 - 停止/删除：只停/删容器；工作区、home、聊天线程仍在宿主机。`DELETE ?purge=1` 才删除会话目录。
 - 重启服务端后：`Server.reconcile` 以 Docker 实际运行状态修正 session status。
-- **OAuth 令牌服务端自动续期**（`internal/server/credrefresh.go`）：访问令牌只有几小时
+- **OAuth 令牌服务端自动续期**（`internal/credentials/refresh.go`）：访问令牌只有几小时
   寿命，账号池那份新不新鲜取决于容器里的 CLI 最近跑没跑过——挂一夜的账号第二天点
   「查额度」必然过期。服务端自己拿刷新令牌续，不再让用户「先发一轮对话」。刷新令牌
   是轮换制（一份用掉另一份作废），所以 `ensureClaudeCred` 里的三步顺序不能动：
@@ -211,6 +218,14 @@ data/
       chats/<tid>.jsonl
 ```
 
+### 账号使用授权
+
+- `config.Account.Access` 缺省兼容全体共享；`mode=all/users/admin`，管理员始终可用。指定用户按用户名匹配，HTTP 编辑校验用户存在。
+- `sessionAccount` 按空间属主的当前角色判断；创建/启动/聊天/终端/Git/额度查询都需校验。`execEnv` 返回错误时必须停止执行，不能丢掉账号 env 后继续调用 Docker。
+- `syncRotatingCred` 重新读取当前账号授权，撤权空间不得再参与双向凭证同步；保持同步→刷新→立即播发的原顺序。
+- 授权名单仅发给管理员；普通用户的账号列表过滤范围，空间计数只含本人。文件/历史/停止/删除仍按空间属主授权。
+- 撤权是准入控制，不能撤回已交付凭证或杀死 tmux；终端输入/30 秒心跳复查，关闭码 4004。旧二进制忽略授权字段，不能无条件回退。详见 `docs/accounts-and-models.md`。
+
 ### 默认模型
 
 - `config.default_models` 按 `claude` / `codex` 配置，初始为 `claude-opus-5` / `gpt-5.5`。
@@ -230,7 +245,7 @@ data/
 
 ### 用量计量
 
-- 回合收尾事件里的 token/费用落进 `usage_events` 表（`internal/server/usage.go` 解析，
+- 回合收尾事件里的 token/费用落进 `usage_events` 表（`internal/usage/events.go` 解析，
   `runTurn` 的 `onLine` 里挂钩），并在**同一个事务**里从用户额度扣掉（见下节）。
 - Claude 的 `type:"result"` 按 `modelUsage` **每个模型出一行**（含子 agent 用的 haiku），
   同回合各行共享 `turn_id`。实测 `total_cost_usd` 等于各行 `costUSD` 之和，而顶层 `usage`
@@ -307,9 +322,7 @@ data/
   `cache_creation.ephemeral_1h_input_tokens` 有值、`ephemeral_5m_input_tokens` 是 0。
   我们的用量只有一个「缓存写入」桶，两档合不了，只能取实际用的那档。
 - Claude 4.6 及之后的模型 1M 上下文按标准价计费，所以 claude 各行**都不配长上下文档**。
-- 已知小瑕疵：claude 对话行里 provider 偶尔报 0（子 agent），配了 claude 价之后这类行
-  会被 `priceEvent` 按表折算，但 `billingMode` 仍标成「官方报价」——因为我们没有存
-  「这个价是哪来的」。数更准了，标签略糙。
+- Claude 0 费用按表补算时，新记录保存 table 来源；旧记录没有价格快照，仍只能按旧规则推断来源。不要把事后参考价当作历史入账价格。
 - **长上下文是「过线整轮翻倍」，不是对超出部分加价。** 提示词超过
   `long_context_over`（OpenAI 现为 272000 input token）后，整个回合的四个桶都按
   `long` 那一档算。判定用的是「这轮喂进去多少」= 未命中缓存的输入 + 命中缓存的
@@ -363,10 +376,9 @@ data/
   四个 token 桶各自的 `token × 单价` 摊开，末尾对上实收金额，脚注写清计价算法。单价
   由服务端随行下发（`usageRowView.Rate` ← `rateFor` ← `config.PriceLookup`，顺带给出
   命中的键与档位），**别改成前端自己查价目表**——普通用户根本拿不到 `settings`。两件事
-  不能含糊：① 单价取自**当前**价目表，实收却是入账当时算的，中途改过价就对不上，
-  弹窗按差额自己提示「以实收为准」；② claude 对话行的钱是 provider 自报的一个总额、
+  不能含糊：① 新行使用入账价格快照（rate.snapshot=true），旧行才回退当前参考价并明确提示；② claude 对话行的钱是 provider 自报的一个总额、
   拆不出分项，这类行的 `basis` 是 `reference`，表里那份只是照价目表推的参考值。
-- **终端消耗靠事后扫 transcript 补记**（`internal/server/termusage.go`，`kind=terminal`）。
+- **终端消耗靠事后扫 transcript 补记**（`internal/usage/terminal.go`，`kind=terminal`）。
   终端里的 CLI 是容器内进程、输出直接进 PTY，`runTurn` 看不见；但 Claude Code 把完整
   记录落在 `<会话home>/.claude/projects/<cwd目录>/<provider会话id>.jsonl`，而会话 home
   是宿主机 bind mount，所以读文件就够，不用 hook、不用反代、不用进容器。要点：
@@ -387,7 +399,7 @@ data/
     哪怕是 claude 也只能标「价目表 / 未定价」，不能标「官方报价」。
   - 扫描按 (size, mtime) 跳过没动过的文件；只遍历库里存在的会话，磁盘上已删除会话的
     残留目录不补（补了也是归不到人头上的孤儿行）。
-  - 触发有三条路，都汇到 `Server.termScan`（扫描进度上锁，同一时刻只有一趟在跑）：
+  - 触发有三条路，都汇到 `usage.Service` 的扫描器（扫描进度上锁，同一时刻只有一趟在跑）：
     **inotify**（`termWatchLoop`，主力，实测写入到落库 ~700ms）、`termUsageLoop`
     每分钟的全量兜底、以及 `handleUsageEvents` 进来时先补一趟。
   - **inotify 能收到容器里的写入**：会话 home 是 bind mount，容器与宿主机是同一个
@@ -401,9 +413,7 @@ data/
 - 终端页顶栏的「本会话已花」（`term.ts` 的 `termSpendPolling`）直接复用
   `GET /api/usage/events?session=<id>&limit=1` 的 `total`，没有单独的接口——那个 total
   本来就是「按筛选条件算、与翻页无关」，正好是这个数。只在终端页轮询（15 秒）。
-- **codex 的终端消耗还没补。** rollout 在 `<会话home>/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`，
-  `token_count` 事件带 `last_token_usage`，`session_meta.originator` 是 `codex-tui`（终端）
-  还是 exec，判据齐全，只是格式另写一套解析。
+- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源，按 thread/turn/model 聚合；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；仍只记账不扣额度。
 
 ### 终端
 
@@ -423,19 +433,31 @@ data/
 ### 文件/共享目录
 
 - 默认操作为会话 `workspace`；`?scope=shared` 操作用户级共享目录（挂载到所有会话容器 `/shared`）。
-- 上传支持普通文件与 `.zip/.tar.gz/.tgz/.tar`；解压经 `archivex` 做安全校验，且解压后统一 `ChownTree` 到 `1000:1000`。
-- 文件路径必须过 `filepath.IsLocal` 校验；读取/保存只接受普通文件，避免符号链接逃逸。
+- 上传支持普通文件与 `.zip/.tar.gz/.tgz/.tar`；一律在容器挂载外的 staging 完整验证，
+  `archivex.ExtractRoot` 限制解压量并拒绝路径逃逸，再用目录句柄合并；属主通过
+  `ChownRoot` 调整为 1000:1000。合并不是跨目录事务，遇到冲突/磁盘错误可能部分完成。
+- 文件路径必须经 `safefs` 目录句柄访问；禁止恢复「Lstat 校验后返回绝对路径再调用
+  os.Open/WriteFile」的写法。读取只接受普通文件，保存通过随机临时文件原子替换，
+  保留权限位、避免覆盖原硬链接 inode。边界与已迁移入口见
+  `docs/architecture/filesystem-boundaries.md`。
 
 ### 变更审查（Git）
 
-- `internal/server/git.go` 用**宿主机的 git** 直接操作会话工作区里的仓库（不进容器），
-  统一带 `-c safe.directory=<repo>`：仓库属主是 uid 1000，服务端是 root。
+- `internal/server/git.go` 负责 HTTP 与仓库选择；`internal/gitx` 通过 `dockerx.ExecCommand`
+  在会话容器里以 uid/gid 1000:1000 执行 Git。**禁止回退宿主机 Git**：仓库 hook、
+  过滤器等是用户代码，曾确认宿主机 root 的 commit 会执行用户仓库 hook。
+- Git 请求通过 `prepareGitSession` 按需启动空间，先检查与终端一致的额度拦截，
+  并持有活动引用避免空闲回收。文件查看/下载仍可独立使用。
+- Git 命令由 argv 传入，容器内用 `timeout` 限时 15 秒、再给 2 秒终止宽限；Docker
+  exec 断连不会杀进程，不能只依靠请求 context。stdout 上限 4 MiB，超限明确报错。
+- 网页 Git 使用清理后的环境，不注入账号/代理凭证；禁用 hook、fsmonitor、签名和
+  自动维护，需要 hook/签名时用户可在终端操作。容器里的已有凭证仍可被用户代码读取。
 - **必须挡住 git 的向上仓库发现**：`data_dir` 通常就在服务端自己的 checkout 里
   （默认相对路径 `data`），workspace 自己没有 `.git` 时 `git -C <ws>` 会一路向上找到
   **服务端仓库**——曾经的表现是每个会话的「变更」页都显示 agentbox 自己的改动，
   而「提交」会把服务端仓库整棵工作树 `add -A` 进去。`.gitignore` 里的 `/data/` 挡不住，
   ignore 只管文件跟不跟踪，不管仓库发现。两道防线：`repoRoots` 只认真实存在 `.git`
-  的目录，`runGit` 再用 `GIT_CEILING_DIRECTORIES`（**必须绝对路径**，git 忽略相对项）
+  的目录，`gitx` 再用容器内的 `GIT_CEILING_DIRECTORIES`（**必须绝对路径**）
   把发现范围钉死在目标目录。
 - **工作区根几乎从来不是仓库**，项目一般 clone/解压在子目录里，所以 `repoRoots` 往下
   找两层（跳过隐藏目录与 `node_modules`/`__MACOSX`/`vendor`，符号链接目录不跟随），
@@ -446,23 +468,20 @@ data/
 - 变更列表与 `?path=` 都是**相对仓库根**，不是相对 workspace。
 - 右侧支持「差异 / 完整内容」两种视图：新文件（`??`）相对 HEAD 根本没有 diff，
   只能走 `git/file` 读工作树里的内容，所以选中新文件时默认就是完整内容视图，
-  「差异」按钮置灰；删除的文件反过来（没内容可读，只有 diff）。`git/file` 复用
-  `resolveUnderRoot` 做逐段 Lstat 的符号链接校验，并按 `maxFileViewBytes` 拒绝大文件、
+  「差异」按钮置灰；删除的文件反过来（没内容可读，只有 diff）。`git/file` 通过
+  `safefs` 固定目录句柄读取普通文件，并按 `maxFileViewBytes` 拒绝大文件、
   按 NUL/非 UTF-8 拒绝二进制——它渲染成一个个 DOM 行，不能由着文件大小来。
 - `status` 必须带 `--untracked-files=all`：默认口径会把整个未跟踪目录折叠成一条
   `dir/`，用户看到的是「.claude/」而不是里面那个新文件，单文件的 diff 和丢弃都无从下手。
   代价是未跟踪的大目录（没 gitignore 的 node_modules）会撑爆列表，所以服务端按
   `maxStatusFiles` 截断并回 `truncated`。
-- **宿主机 root 的 git 配置不能漏进来**：`GIT_CONFIG_GLOBAL=/dev/null` +
-  `GIT_CONFIG_NOSYSTEM=1`，另外 `-c core.excludesFile=/dev/null` —— 全局排除文件
-  走的是自己的默认路径（`~/.config/git/ignore`），**`GIT_CONFIG_GLOBAL` 管不着它**，
-  必须单独指空。不这么做的话 Claude Code 给 root 写的那条
-  `**/.claude/settings.local.json` 会把用户的文件从审查列表里悄悄抹掉，而且这事只在
-  `HOME` 有值时发生（systemd 起的服务没有 HOME，手工在 shell 里跑就有），
-  两种跑法结论不一样最难查。仓库自己的 `.gitignore` 和 `.git/info/exclude` 照常生效。
-- 写操作（commit / discard）后必须 `chownWorkspace` 把属主修回 1000:1000，
-  否则 root 写下的 `.git` 对象会让容器内 agent 后续 git 操作失权。
-- `discard` 是 `checkout HEAD -- <path>` + `clean -fd -- <path>`，破坏性操作，
+- Git 全局配置隔离使用 `env -i`、`GIT_CONFIG_GLOBAL=/dev/null`、
+  `GIT_CONFIG_NOSYSTEM=1` 和 `-c core.excludesFile=/dev/null`。仓库自己的 `.gitignore`
+  与 `.git/info/exclude` 照常生效；`GIT_LITERAL_PATHSPECS=1` 保证文件名不被当成通配表达式。
+- 写操作由容器用户执行，不再用宿主机递归 chown 修补属主。无 HEAD 的新仓库 diff
+  使用 `--cached`；Docker、启动等其他错误必须向用户报告，不能回空 diff 掩盖。
+- `discard` 先用 `ls-files` 判断是否含已跟踪文件，需要时执行 `checkout HEAD -- <path>`，
+  成功后才 `clean -fd -- <path>`；仅未跟踪文件跳过 checkout。破坏性操作，
   前端有二次确认。
 
 ### 附件与清理
@@ -526,10 +545,9 @@ data/
   抬这一行修——它们没法进豁免清单。宿主上的 go 比这行旧时，`go build` 会按
   `GOTOOLCHAIN=auto` 自动下载对应工具链，所以生产机上不必手动升级 `/usr/local/go`，
   但机器得能连 proxy.golang.org。
-- 现有测试集中在 `internal/agent`、`internal/linkapp`、`internal/server`、`internal/store`、`internal/tunnel`；`dockerx`、`archivex`、`config` 等目前没有测试。改动这些包时优先补针对性测试。
+- 现有测试集中在 `internal/agent`、`internal/linkapp`、`internal/server`、`internal/store`、`internal/tunnel`；`dockerx`、`config`、`gitx`、`archivex`、`safefs` 也有测试。文件安全改动须跑链接替换、归档与播种回归。
 - 配置变更是“副本上修改 → 校验 → 原子写盘 → 替换内存状态”的模式；不要绕过 `Config.mutate` 直接改字段。
-- SQLite 加列走 `store.migrate()` 里的幂等 `ALTER TABLE`（重复执行时忽略
-  `duplicate column name`）——`CREATE TABLE IF NOT EXISTS` 对已存在的库不生效。
+- SQLite 变更走 `internal/store/migrations.go` 的连续版本迁移与 migrations/*.sql，事务内更新 user_version；先拒绝高版本，再迁移，不能再靠忽略 duplicate column 错误补列。旧未版本化库由基线迁移检查列后补齐。
 - 前端不要用原生 `alert/confirm/prompt`：用 `util.js` 的 `askConfirm`/`askPrompt`
   （Promise 化的自定义对话框）或 `toast`。
 - 令牌只在 GET 请求接受 `?token=`（WS 升级与下载直链需要）；写操作一律走
@@ -561,3 +579,65 @@ data/
 - 会话镜像内禁用 CLI 自升级（`DISABLE_AUTOUPDATER=1`）；Claude/Codex 版本由 `images/agent/Dockerfile` 与 `scripts/auto-update-image.sh` 管理。
 - `config.json`、`accounts/`、`data/` 含密钥和运行时状态，已在 `.gitignore`；不要提交。
 - 若改动影响用户可见行为、部署步骤、API 或配置字段，同步更新 `README.md`（必要时也更新 `deploy/README.md`）。
+
+## 开源重构
+
+目标模块、运行目录迁移与逐阶段验收见 `docs/architecture/opensource-refactor.md`。
+每完成一个实施单元更新记录，明确本地验证与 Linux Docker 实测的区别。
+
+### 备份与恢复约定
+
+- `agentbox backup` / `backup-verify` / `restore` 在服务初始化之前分流，不能为了备份调用 `store.Open`，否则会迁移正在备份的旧数据库。
+- 数据库通过 modernc SQLite Backup API 取快照，只将临时快照切为 DELETE journal 模式，源库 WAL 不改。
+- 默认系统备份含配置、数据库、全部凭证与双层模板；`--full` 再含 users 全量，必须取得 data_dir flock 并验证 Docker 中无运行容器挂载源目录。命令不自动停容器。
+- Manifest 校验内容和元数据，符号链接不跟随；恢复仅允许不存在的新目录，配置中的 data_dir/credentials_dir 重写为恢复目录内相对路径。恢复目录发布使用不覆盖 rename，不能混入旧 WAL。
+- `scripts/backup.sh` 只负责编排内置命令、SHA-256 文件、同类型轮转和可选 rsync；`AGENTBOX_BIN`/`AGENTBOX_CONFIG` 支持独立部署路径。仅用户已授权运行该脚本的远端传输时才使用 BACKUP_REMOTE。
+- 验证：`go test ./internal/backup ./cmd/agentbox`、`scripts/test-backup.sh`；需要实际 Docker 检查时设置 `AGENTBOX_BACKUP_DOCKER_TEST=1`。同 daemon 上不能同时启动带相同 session ID 的旧实例与恢复实例。
+
+### 开源发布约定
+
+- 项目采用 Apache-2.0；保留 LICENSE、NOTICE 和 `third_party/` 中第三方许可。内置资源哈希及 Go 链接模块清单经 `scripts/verify-third-party.py` 校验；更新 Go 依赖后运行 `scripts/collect-go-licenses.py` 并审查变化。
+- `scripts/build-release.py` 在干净 checkout 构建 7 个平台包，含 `--version`/build.json/校验和。Tag 工作流只生成候选 artifact，不自动公开 Release 或包含 Claude Code 的镜像。
+- 发布包验证用 `scripts/test-release.py`；真实 Linux Docker 会话冒烟用 `scripts/test-release-server.py --image <已构建镜像>`，仅合成数据，不发模型请求。两者创建自己的容器并清理。
+- `scripts/scan-secrets.py` 扫描全部已获取 refs、当前跟踪文件和解包产物（含二进制 printable strings）；报告必须保存在仓库外，内容脱敏。扫描前先 fetch 分支和标签；扫描通过不是不存在敏感信息的证明，生产域名等仍需人工审查。
+- CLI/基础镜像默认版本在 versions.env 与 Dockerfile；构建覆盖参数使用 `AGENTBOX_CLAUDE_VERSION` / `AGENTBOX_CODEX_VERSION` / `AGENTBOX_BASE_IMAGE`，避免运行环境同名变量污染。`scripts/test-image-policy.py` 验证缺省无追新且版本固定。
+- 自动追新仅 `AGENTBOX_AUTO_UPDATE=1` 启用；install.sh 默认禁用更新 timer，显式 `AGENTBOX_ENABLE_AUTO_UPDATE=1` 才启用。保留旧镜像，禁止自动全局 prune。
+
+### 生命周期
+
+- `cmd/agentbox` 接收信号并调用 `internal/app.Run(ctx,cfg)`，数据目录锁最后释放；初始化失败需释放已打开的 SQLite/Docker 客户端。维护命令仍先于服务初始化分流。
+- `server.Handler` 只组装路由；`Serve/Run` 绑定运行生命周期，`Close(ctx)` 幂等。请求和后台任务的准入与 WaitGroup.Add 同锁，退出后拒绝新任务。
+- 后台任务走 `spawn` 和 `workContext`，长连接走 `track`；不能新增无法停止的 sleep 循环或脱离生命周期的模型任务。Docker hijack 必须显式随 context 关闭。
+- 退出先拒绝新工作，尝试中断在途聊天并最多等 2 秒收尾，然后取消上下文、关闭连接、等待任务和已有用量事务，最后关闭依赖。超时返回错误，不提前关库或解数据锁；CLI 将退出，嵌入调用者的清理仍继续。
+- 不杀会话容器/tmux，不承诺强制终止已脱离输出连接的 CLI 子进程或收到未发回的用量。关闭测试不使用真实凭证；`scripts/test-release-server.py --binary <Linux binary> --restart --image <image>` 验证 SIGTERM、WS 关闭、原卷重启、容器与 tmux 保留。
+
+### 工作区服务
+
+- `internal/workspace.Service` 持有会话锁、活动引用、创建/启动/停止/删除和回收。HTTP 层保留属主鉴权、参数校验和响应转换，业务包不能反向依赖 server。
+- 同一会话的启停删都必须经过服务的可取消锁，不能单独调用 Docker 后更新 SQLite。Stop/Remove 失败时保留记录和状态；Docker 404 是幂等成功。模板→凭证→默认模型的顺序保持。
+- 活动引用仍由聊天/终端/Git 执行持有，删除后迟到的 release 不重新创建活动记录。目录挂载/UID 保持原约定；Linux 测试覆盖需要 root chown 的并发创建/删除。
+
+### 凭证服务
+
+- `internal/credentials.Service` 管理池文件、续期/同步/保存与每账号锁；HTTP 层保留 OAuth 发起/回调参数和响应转换。账号网络出口通过注入客户端工厂提供，失败不能静默直连。
+- 日常双向同步沿用 2 秒 mtime 容差；服务端续期成功后的播发改为单向立即写入已有凭证副本，不用该容差，避免刚播种的会话遗漏新链。刷新与后台同步、OAuth 保存、Codex Key 保存共用账号锁，锁等待可取消。
+- 续期仍先回收会话新令牌，再判断/刷新，最后立即播发；合并保留订阅档位、scopes 及未知字段。每次同步/播发重查授权，不向撤权空间交付新凭证。未播种的 home 不由后台同步创建凭证树。
+- Codex auth/config 各文件使用受限原子写入，但跨文件不构成事务；后一个文件失败时可能已更新 Key，API 返回错误，重试完成配置。
+
+### 用量、迁移与 Agent 接口
+
+- `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度，终端 UpsertTerminalUsage 绝不扣额度。
+- 新行 `PriceSnapshot` 包含来源、价格键、普通/长上下文档和阈值。终端 upsert 在同一事务读取首份快照，续写不能改用新价；旧行没有快照时不要伪造历史单价。Claude 0 费用按表补算时保存 table 来源。
+- 当前 SQLite schema=2，user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
+- `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。
+- 协议样本放在 agent/usage 的 testdata，全部为合成脱敏数据。Linux 测试脚本必须复制这些 testdata；禁止读取真实用户 rollout 当测试夹具。
+
+### 阶段 D 维护约定
+
+- 独立部署入口 `deploy/release.py`；路径、迁移停机与回退条件见 `docs/architecture/deployment-layout.md`。install 不覆盖其他布局单元或已有版本；activate 先查 schema 和 compatibility_epoch，再备份/停机/切换。不能对旧库调用 store.Open 来做只读兼容检查。
+- cache_dir 缺省兼容 data_dir，配置 mutate/persist 必须保留原始路径；备份恢复重写 cache_dir，避免恢复实例碰原实例缓存。
+- workspace 的启动闸门串行容量检查与容器创建，检查实际 Docker 运行状态；resources 的 0 为不限，不强杀已运行任务。
+- 用量 HTTP 只调用 RequestScan，禁止重新引入同步 Scan；同步进度只描述完整扫描，不承诺 provider 已写完文件。
+- 新运维接口均为 admin：storage、diagnostics、DELETE cache/marketplace。诊断严格字段白名单，不能拼接配置、环境、原始日志或 Docker inspect。
+- chat/settings 通过 app/lifecycle 显式初始化和清理；聊天连接、设置缓存与轮询 timer 不得放回全局 S。新嵌套 TS 模块仍保留原生相对 .js 导入及哈希前缀。
+- 浏览器测试 `scripts/test-browser.mjs` 使用合成 API；部署测试 systemctl 是模拟调用，记录时不得声称真实 systemd 已通过。

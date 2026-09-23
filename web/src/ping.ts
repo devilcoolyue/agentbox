@@ -13,14 +13,18 @@ const TIMEOUT = 8000;
 const OFFLINE_AFTER = 2;
 let timer = 0;
 let fails = 0;
+let generation = 0;
+let pending: AbortController | null = null;
 
 async function measure() {
-  if (document.hidden) return; // 后台标签不必刷，回到前台下一拍即恢复
-  const ctrl = new AbortController();
+  if (document.hidden || pending) return; // 后台标签不必刷，回到前台下一拍即恢复
+  const gen = generation;
+  const ctrl = pending = new AbortController();
   const to = setTimeout(() => ctrl.abort(), TIMEOUT);
   const t0 = performance.now();
   try {
     const res = await fetch("/api/ping?t=" + Date.now(), { cache: "no-store", signal: ctrl.signal });
+    if (gen !== generation) return;
     if (!res.ok) throw new Error("bad");
     const wasOffline = fails >= OFFLINE_AFTER;
     fails = 0;
@@ -29,11 +33,13 @@ async function measure() {
     // 断线期间的状态变化（会话被停、被别的端删除）没被 8 秒轮询拿到，补一次
     if (wasOffline) refreshAll();
   } catch (_) {
+    if (gen !== generation) return;
     fails++;
     render(0, false);
     setOffline(fails >= OFFLINE_AFTER);
   } finally {
     clearTimeout(to);
+    if (pending === ctrl) pending = null;
   }
 }
 
@@ -63,3 +69,5 @@ export function startPing() {
   measure();
   timer = setInterval(measure, INTERVAL);
 }
+
+export function stopPing() { ++generation; clearInterval(timer); timer = 0; pending?.abort(); pending = null; fails = 0; }

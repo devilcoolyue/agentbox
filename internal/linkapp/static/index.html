@@ -39,7 +39,7 @@
         <span>服务器用的是自签名证书，跳过证书校验</span>
       </label>
       <div class="row">
-        <button class="primary" id="btn-pair">接入</button>
+        <button class="primary" id="btn-pair" data-icon="link">接入</button>
         <span class="err" id="pair-err"></span>
       </div>
     </div>
@@ -69,7 +69,7 @@
         <div class="st-title" id="st-title">未连接</div>
         <div class="st-sub" id="st-sub"></div>
       </div>
-      <button class="primary" id="btn-toggle">启动</button>
+      <button class="primary" id="btn-toggle" data-icon="play">启动</button>
     </div>
   </section>
 
@@ -89,7 +89,7 @@
         </p>
         <div id="allow-list" class="rules"
              data-empty="还没有规则 — 容器现在到不了任何内网地址。"></div>
-        <button class="ghost add" id="btn-add-allow">添加规则</button>
+        <button class="ghost add" id="btn-add-allow" data-icon="plus">添加规则</button>
       </section>
 
       <section class="card">
@@ -104,7 +104,7 @@
         </p>
         <div id="map-list" class="rules"
              data-empty="没有映射 — 容器走 SOCKS 代理访问内网。"></div>
-        <button class="ghost add" id="btn-add-map">添加映射</button>
+        <button class="ghost add" id="btn-add-map" data-icon="plus">添加映射</button>
       </section>
 
     </div>
@@ -137,7 +137,7 @@
           <span>跳过 TLS 证书校验（服务器用自签名证书时才勾）</span>
         </label>
         <div class="unpair">
-          <button class="ghost danger" id="btn-unpair">解除绑定</button>
+          <button class="ghost danger" id="btn-unpair" data-icon="close">解除绑定</button>
           <span class="hint">保留放行规则，只清除服务器与登录凭证</span>
         </div>
       </section>
@@ -150,8 +150,8 @@
 <div class="savebar hidden" id="savebar">
   <span id="save-msg">改动还没生效</span>
   <div class="row">
-    <button class="ghost" id="btn-revert">放弃</button>
-    <button class="primary" id="btn-save">保存并应用</button>
+    <button class="ghost" id="btn-revert" data-icon="undo">放弃</button>
+    <button class="primary" id="btn-save" data-icon="save">保存并应用</button>
   </div>
 </div>
 

@@ -378,10 +378,10 @@ details.think.streaming .think-body::after {
 .thread-new {
   flex: none; margin-left: auto;
   background: none;
-  border: 1px solid var(--line); border-radius: 999px;
-  color: var(--muted);
-  font-size: 11px;
-  padding: 3px 10px;
+  border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text);
+  font-size: 12px; font-weight: 500;
+  min-height: 32px; padding: 4px 10px;
 }
 .thread-new:hover { color: var(--text); border-color: var(--amber-dim); background: var(--panel); }
 
@@ -667,7 +667,7 @@ details.think.streaming .think-body::after {
 .pick-row:hover, .pick-row.open { background: var(--panel-2); }
 .pick-row .val { color: var(--muted); font-size: 12px; }
 .pick-back {
-  display: block; width: 100%; text-align: left;
+  display: flex; justify-content: flex-start; width: 100%; text-align: left;
   background: none; border: none; border-bottom: 1px solid var(--line);
   color: var(--muted);
   font-size: 12px;

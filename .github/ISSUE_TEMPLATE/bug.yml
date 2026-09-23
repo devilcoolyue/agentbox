@@ -1,0 +1,30 @@
+name: 问题反馈
+description: 报告可复现的问题；安全漏洞请使用私密报告渠道
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: '请勿包含真实凭证、生产地址、数据库或用户文件。安全漏洞见 SECURITY.md。'
+  - type: textarea
+    id: environment
+    attributes:
+      label: 版本与环境
+      description: agentbox/abox-link --version、操作系统/架构、Docker 和相关 CLI 版本
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 脱敏日志或合成样例

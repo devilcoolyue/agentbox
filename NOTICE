@@ -1,0 +1,10 @@
+Agentbox
+Copyright 2026 Agentbox contributors
+
+This product includes third-party software. See third_party/README.md,
+third_party/vendor.json, third_party/go-modules.json, and their referenced
+license and notice files for attribution and applicable terms.
+
+Claude Code, Codex, and other referenced products and trademarks belong to
+their respective owners. This project does not grant rights to upstream
+services or imply endorsement by their providers.

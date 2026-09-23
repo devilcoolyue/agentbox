@@ -13,6 +13,7 @@
 package server
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -109,10 +110,16 @@ func (s *Server) applyProxyBridge() error {
 	s.bridgeUp.Store(true)
 	log.Printf("account proxy bridge listening on %s", ln.Addr())
 	srv := &http.Server{
-		Handler:           http.HandlerFunc(s.serveProxyBridge),
+		Handler:           s.admit(http.HandlerFunc(s.serveProxyBridge)),
 		ReadHeaderTimeout: 15 * time.Second,
 	}
-	go func() {
+	release, ok := s.track(func() { _ = srv.Close(); _ = ln.Close() })
+	if !ok {
+		return context.Canceled
+	}
+	if !s.spawn(func() {
+		defer release()
+		defer srv.Close()
 		err := srv.Serve(ln)
 		// Only report down if we are still the current listener — a rebind
 		// closes us on purpose and has already flipped the state itself.
@@ -123,7 +130,11 @@ func (s *Server) applyProxyBridge() error {
 			log.Printf("proxy bridge serve stopped: %v", err)
 		}
 		s.bridgeMu.Unlock()
-	}()
+	}) {
+		release()
+		_ = srv.Close()
+		_ = ln.Close()
+	}
 	return nil
 }
 
@@ -203,6 +214,11 @@ func (s *Server) bridgeConnect(w http.ResponseWriter, r *http.Request, p config.
 		return
 	}
 	defer down.Close()
+	release, tracked := s.track(func() { _ = down.Close(); _ = up.Close() })
+	if !tracked {
+		return
+	}
+	defer release()
 	if _, err := down.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
 		return
 	}

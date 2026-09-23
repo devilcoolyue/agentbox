@@ -1,6 +1,7 @@
 /* files：文件页 —— 工作区/共享目录切换、懒加载目录树、上传/下载。
  * 单文件预览/编辑弹窗在 preview.ts。 */
 "use strict";
+import { buttonLabel } from "./icons.js";
 import { S, emit } from "./state.js";
 import { $, spinEl, btnBusy, btnDone, fmtSize, isMobile, onMobileChange, startDownload, toast } from "./util.js";
 import { api, archiveDownloadURL, fileDownloadURL, scopeQS } from "./api.js";
@@ -112,7 +113,7 @@ function upRow() {
     name.className = "fname";
     const label = document.createElement("span");
     label.className = "flabel";
-    label.textContent = "‹ 上一级";
+    buttonLabel(label, "上一级", "arrow-left");
     label.setAttribute("role", "button");
     label.tabIndex = 0;
     const up = () => {
@@ -144,9 +145,10 @@ function fileRow(ent, rel, depth) {
         // 箭头：原地展开/收起下级
         const arrow = document.createElement("span");
         arrow.className = "farrow" + (tree.expanded.has(rel) ? " open" : "");
-        arrow.textContent = "▸";
+        arrow.append(svgIcon("chevron-right", 12));
         setTip(arrow, tree.expanded.has(rel) ? "收起" : "展开下级");
         arrow.setAttribute("role", "button");
+        arrow.setAttribute("aria-label", tree.expanded.has(rel) ? "收起目录" : "展开目录");
         arrow.tabIndex = 0;
         const toggle = async () => {
             if (tree.expanded.has(rel)) {
@@ -653,8 +655,8 @@ export function scopeLabel() {
 /* 工具条按钮文案：窄屏用短词（上传 / 下载 zip / 上传前清空） */
 function updateFileLabels() {
     const short = isMobile();
-    $("btn-upload").textContent = short ? "上传" : "上传代码包";
-    $("btn-download").textContent = short ? "下载 zip" : `下载${scopeLabel()} (zip)`;
+    buttonLabel($("btn-upload"), short ? "上传" : "上传代码包", "upload");
+    buttonLabel($("btn-download"), short ? "下载 zip" : `下载${scopeLabel()} (zip)`, "download");
     $("upload-clear-label").textContent = short ? "上传前清空" : "上传前清空" + scopeLabel();
 }
 onMobileChange(updateFileLabels);

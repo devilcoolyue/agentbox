@@ -1,16 +1,15 @@
-// Git 变更审查：对会话 workspace 直接跑宿主机 git，让用户在网页里查看 agent 的
-// 改动、提交或回滚，无需切到终端。写操作后把 .git/工作树属主修回容器用户
-// (1000:1000)，避免 root 写下的对象让容器内 agent 后续 git 操作失权。
+// Git 变更审查：目录发现与 HTTP 响应在这里，Git 命令交给 gitx 在会话容器内
+// 以 1000:1000 执行。仓库配置可执行代码，因此绝不能回退宿主机 Git。
 package server
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
@@ -18,47 +17,52 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"agentbox/internal/archivex"
-	"agentbox/internal/dockerx"
+	"agentbox/internal/gitx"
+	"agentbox/internal/safefs"
 	"agentbox/internal/store"
 )
 
-// runGit runs git in dir with ownership checks disabled (root reads a repo owned
-// by uid 1000). Returns stdout; on failure the error carries stderr.
-//
-// dir must be a directory we already know holds a .git: session workspaces live
-// under data_dir, which may itself sit inside a git repo (the server's own
-// checkout). Left to itself git's repo discovery walks up out of the workspace
-// and lands on that repo, so every session would report the server repo's
-// changes — and `add -A` would stage its whole tree. GIT_CEILING_DIRECTORIES
-// stops the walk one level above dir; git ignores relative entries, hence Abs.
-func runGit(ctx context.Context, dir string, args ...string) (string, error) {
-	// core.excludesFile is not covered by GIT_CONFIG_GLOBAL: its default path
-	// (~/.config/git/ignore) applies even with no global config at all, so it
-	// has to be pointed at an empty file explicitly. The repo's own .gitignore
-	// and .git/info/exclude still apply — those belong to the repo.
-	full := append([]string{
-		"-c", "safe.directory=" + dir,
-		"-c", "core.excludesFile=/dev/null",
-		"-C", dir,
-	}, args...)
-	cmd := exec.CommandContext(ctx, "git", full...)
-	// Review must reflect the repo's own rules, not whoever's config the server
-	// inherited: root's ~/.config/git/ignore would silently hide files from the
-	// user (Claude Code's own default ignores .claude/settings.local.json), and
-	// core.hooksPath there would run host hooks on a container-owned repo. That
-	// leak only bites when HOME happens to be set — systemd gives the unit none,
-	// a shell does — which is exactly the kind of difference not worth debugging.
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
-	if abs, err := filepath.Abs(dir); err == nil {
-		cmd.Env = append(cmd.Env, "GIT_CEILING_DIRECTORIES="+filepath.Dir(abs))
+var errGitQuota = errors.New("额度已用完，无法运行 Git；文件仍可查看和下载")
+
+func (s *Server) prepareGitSession(ctx context.Context, id string) (string, func(), error) {
+	sess, ok := s.store.Get(id)
+	if !ok {
+		return "", nil, errSessionGone
 	}
-	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
-	if err := cmd.Run(); err != nil {
-		return out.String(), fmt.Errorf("%w: %s", err, strings.TrimSpace(errb.String()))
+	// Git filters are executable user code too. Apply the same entry gate as
+	// terminal access before starting a container or invoking any Git command.
+	if s.quotaBlock(sess.User) != "" {
+		return "", nil, errGitQuota
 	}
-	return out.String(), nil
+	if _, err := s.sessionAccount(sess); err != nil {
+		return "", nil, err
+	}
+	s.workspaces().Activity().Hold(id)
+	release := func() { s.workspaces().Activity().Release(id) }
+	sess, err := s.startSession(ctx, sess)
+	if err != nil {
+		release()
+		return "", nil, err
+	}
+	return sess.ContainerID, release, nil
+}
+
+func (s *Server) runGit(ctx context.Context, sess store.Session, dir string, args ...string) (string, error) {
+	rel, err := filepath.Rel(s.workspaceDir(sess), dir)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", errors.New("invalid Git repository path")
+	}
+	return s.git.Run(ctx, sess.ID, filepath.ToSlash(rel), args...)
+}
+
+func writeGitErr(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	if errors.Is(err, errGitQuota) || errors.Is(err, errAccountAccess) {
+		status = http.StatusForbidden
+	} else if errors.Is(err, gitx.ErrUnavailable) {
+		status = http.StatusServiceUnavailable
+	}
+	writeErr(w, status, err.Error())
 }
 
 // 扫描 workspace 找仓库的边界：往下最多两层（上传的压缩包常多包一层目录），
@@ -79,49 +83,51 @@ const maxStatusFiles = 2000
 // renders one DOM node per line; anything bigger belongs in the files page.
 const maxFileViewBytes = 512 << 10
 
-// hasGitDir reports whether dir is a repository root. .git is a directory for a
-// normal clone and a file for worktrees/submodules, so only existence matters.
-func hasGitDir(dir string) bool {
-	_, err := os.Lstat(filepath.Join(dir, ".git"))
-	return err == nil
-}
-
-// repoRoots lists the repositories a session's change review may act on, as
-// slash paths relative to ws ("" = ws itself). The workspace root is rarely a
-// repo in practice — users clone or unzip a project into a subdirectory — so
-// when it isn't we look inside instead of giving up. Symlinked directories are
-// skipped (ReadDir reports the link's own type), keeping the scan inside ws.
-func repoRoots(ws string) []string {
-	if hasGitDir(ws) {
+// repoRoots discovers only real directories through data_dir's pinned root.
+func (s *Server) repoRoots(ws string) []string {
+	root, err := s.openDataDir(ws)
+	if err != nil {
+		return []string{}
+	}
+	defer root.Close()
+	hasGit := func(dir *safefs.Root) bool {
+		info, err := dir.Lstat(".git")
+		return err == nil && (info.IsDir() || info.Mode().IsRegular())
+	}
+	if hasGit(root) {
 		return []string{""}
 	}
 	out := []string{}
-	var walk func(dir, rel string, depth int)
-	walk = func(dir, rel string, depth int) {
+	var walk func(*safefs.Root, string, int)
+	walk = func(dir *safefs.Root, rel string, depth int) {
 		if depth > repoScanDepth || len(out) >= repoScanMax {
 			return
 		}
-		ents, err := os.ReadDir(dir)
+		entries, err := dir.ReadDir(".")
 		if err != nil {
 			return
 		}
-		for _, e := range ents {
+		for _, e := range entries {
 			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || repoScanSkip[e.Name()] {
 				continue
 			}
-			sub, subRel := filepath.Join(dir, e.Name()), path.Join(rel, e.Name())
-			if hasGitDir(sub) {
-				// Repos nested inside a repo are that repo's own business.
+			sub, err := dir.Sub(e.Name())
+			if err != nil {
+				continue
+			}
+			subRel := path.Join(rel, e.Name())
+			if hasGit(sub) {
 				out = append(out, subRel)
 			} else {
 				walk(sub, subRel, depth+1)
 			}
+			sub.Close()
 			if len(out) >= repoScanMax {
 				return
 			}
 		}
 	}
-	walk(ws, "", 1)
+	walk(root, "", 1)
 	sort.Strings(out)
 	return out
 }
@@ -147,7 +153,7 @@ func pickRepo(roots []string, want string) (string, bool) {
 // path, writing the error response itself when there is nothing to act on.
 func (s *Server) gitRepo(w http.ResponseWriter, sess store.Session, want string) (string, bool) {
 	ws := s.workspaceDir(sess)
-	roots := repoRoots(ws)
+	roots := s.repoRoots(ws)
 	if len(roots) == 0 {
 		writeErr(w, http.StatusBadRequest, "工作区里没有 Git 仓库")
 		return "", false
@@ -195,7 +201,7 @@ func parsePorcelain(out string) []gitFile {
 // for the client to resync a stale selection against.
 func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	ws := s.workspaceDir(sess)
-	roots := repoRoots(ws)
+	roots := s.repoRoots(ws)
 	if len(roots) == 0 {
 		writeJSON(w, http.StatusOK, map[string]any{"is_repo": false, "repos": roots})
 		return
@@ -207,13 +213,13 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request, sess st
 	dir := filepath.Join(ws, filepath.FromSlash(rel))
 	ctx, cancel := gitCtx(r)
 	defer cancel()
-	branch, _ := runGit(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
+	branch, _ := s.runGit(ctx, sess, dir, "rev-parse", "--abbrev-ref", "HEAD")
 	// --untracked-files=all: the default collapses a wholly-untracked directory
 	// into one "dir/" entry, so a new .claude/settings.local.json shows up as
 	// ".claude/" with no way to diff or discard the file itself.
-	out, err := runGit(ctx, dir, "status", "--porcelain=v1", "--untracked-files=all")
+	out, err := s.runGit(ctx, sess, dir, "status", "--porcelain=v1", "--untracked-files=all")
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeGitErr(w, err)
 		return
 	}
 	files := parsePorcelain(out)
@@ -240,21 +246,32 @@ func (s *Server) handleGitDiff(w http.ResponseWriter, r *http.Request, sess stor
 	if !ok {
 		return
 	}
+	p := filepath.FromSlash(r.URL.Query().Get("path"))
+	if p != "" && !filepath.IsLocal(p) {
+		writeErr(w, http.StatusBadRequest, "invalid path")
+		return
+	}
 	ctx, cancel := gitCtx(r)
 	defer cancel()
-	args := []string{"diff", "HEAD"}
-	if p := filepath.FromSlash(r.URL.Query().Get("path")); p != "" {
-		if !filepath.IsLocal(p) {
-			writeErr(w, http.StatusBadRequest, "invalid path")
-			return
-		}
-		args = append(args, "--", p)
+	args := []string{"diff", "--no-ext-diff", "--no-textconv"}
+	// Only exit 1 from this quiet probe means an unborn HEAD. Runtime failures
+	// must not become a successful empty diff.
+	if _, err := s.runGit(ctx, sess, dir, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
+		args = append(args, "HEAD")
+	} else if gitx.IsExit(err, 1) {
+		args = append(args, "--cached")
+	} else {
+		writeGitErr(w, err)
+		return
 	}
-	out, err := runGit(ctx, dir, args...)
+	args = append(args, "--")
+	if p != "" {
+		args = append(args, p)
+	}
+	out, err := s.runGit(ctx, sess, dir, args...)
 	if err != nil {
-		// A repo with no commits yet has no HEAD; fall back to diffing the index.
-		fallback := append([]string{"diff"}, args[1:]...)
-		out, _ = runGit(ctx, dir, fallback...)
+		writeGitErr(w, err)
+		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(out))
@@ -271,28 +288,34 @@ func (s *Server) handleGitFile(w http.ResponseWriter, r *http.Request, sess stor
 	if !ok {
 		return
 	}
-	p, err := resolveUnderRoot(dir, r.URL.Query().Get("path"))
+	root, err := s.openDataDir(dir)
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
 	}
-	info, err := os.Lstat(p)
+	defer root.Close()
+	f, err := root.OpenFile(r.URL.Query().Get("path"))
 	if err != nil {
-		// Deleted files are in the change list but no longer on disk.
-		writeErr(w, http.StatusNotFound, "文件已不存在，只能看 diff")
+		writeFileOpErr(w, err)
 		return
 	}
-	if !info.Mode().IsRegular() {
-		writeErr(w, http.StatusBadRequest, "不是普通文件")
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
 	if info.Size() > maxFileViewBytes {
 		writeErr(w, http.StatusBadRequest, fmt.Sprintf("文件太大（%.1f MB），请到「文件」页打开", float64(info.Size())/(1<<20)))
 		return
 	}
-	body, err := os.ReadFile(p)
+	body, err := io.ReadAll(io.LimitReader(f, maxFileViewBytes+1))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if len(body) > maxFileViewBytes {
+		writeErr(w, http.StatusBadRequest, "文件太大，请到终端查看")
 		return
 	}
 	if bytes.IndexByte(body, 0) >= 0 || !utf8.Valid(body) {
@@ -301,11 +324,6 @@ func (s *Server) handleGitFile(w http.ResponseWriter, r *http.Request, sess stor
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write(body)
-}
-
-func (s *Server) chownWorkspace(sess store.Session) {
-	// Best-effort: keep everything git touched owned by the container user.
-	_ = archivex.ChownTree(s.workspaceDir(sess), dockerx.AgentUID, dockerx.AgentGID)
 }
 
 func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request, sess store.Session) {
@@ -328,15 +346,18 @@ func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request, sess st
 	}
 	ctx, cancel := gitCtx(r)
 	defer cancel()
-	if _, err := runGit(ctx, dir, "add", "-A"); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	if _, err := s.runGit(ctx, sess, dir, "add", "-A"); err != nil {
+		writeGitErr(w, err)
 		return
 	}
-	out, err := runGit(ctx, dir,
+	out, err := s.runGit(ctx, sess, dir,
 		"-c", "user.name=agentbox", "-c", "user.email=agentbox@localhost",
 		"commit", "-m", msg)
-	s.chownWorkspace(sess)
 	if err != nil {
+		if errors.Is(err, errGitQuota) || errors.Is(err, errAccountAccess) || errors.Is(err, gitx.ErrUnavailable) {
+			writeGitErr(w, err)
+			return
+		}
 		writeErr(w, http.StatusBadRequest, "提交失败："+strings.TrimSpace(out+" "+err.Error()))
 		return
 	}
@@ -369,14 +390,22 @@ func (s *Server) handleGitDiscard(w http.ResponseWriter, r *http.Request, sess s
 		}
 		target = p
 	}
-	// checkout restores tracked files; clean removes untracked ones. A path that
-	// is only untracked makes checkout error, which is fine — clean handles it.
-	_, _ = runGit(ctx, dir, "checkout", "HEAD", "--", target)
-	if _, err := runGit(ctx, dir, "clean", "-fd", "--", target); err != nil {
-		s.chownWorkspace(sess)
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	// Untracked-only selections don't need checkout. For tracked paths, a
+	// failed restore must stop the operation before cleaning unrelated files.
+	tracked, err := s.runGit(ctx, sess, dir, "ls-files", "-z", "--", target)
+	if err != nil {
+		writeGitErr(w, err)
 		return
 	}
-	s.chownWorkspace(sess)
+	if tracked != "" {
+		if _, err := s.runGit(ctx, sess, dir, "checkout", "HEAD", "--", target); err != nil {
+			writeGitErr(w, err)
+			return
+		}
+	}
+	if _, err := s.runGit(ctx, sess, dir, "clean", "-fd", "--", target); err != nil {
+		writeGitErr(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

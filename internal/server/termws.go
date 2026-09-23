@@ -27,6 +27,7 @@ const (
 // 按退避策略无限重连——理由不会变，只是把服务端敲个不停。带原因的私有关闭码让
 // 前端能把话原样显示出来，并且知道这次不该重连。
 const closeQuota = 4003
+const closeAccountAccess = 4004
 
 // closeWithReason 送出一个带原因的关闭帧。
 //
@@ -145,6 +146,14 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 		return
 	}
 
+	if _, err := s.sessionAccount(sess); err != nil {
+		if conn, upgradeErr := s.upgrader.Upgrade(w, r, nil); upgradeErr == nil {
+			closeWithReason(conn, closeAccountAccess, err.Error())
+			conn.Close()
+		}
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	sess, err := s.startSession(ctx, sess)
 	cancel()
@@ -162,8 +171,15 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 	//       exec exits cleanly, and the frontend treats clean closes as final
 	//       rather than auto-reconnecting, so two tabs don't fight)
 	// Containers built from pre-tmux images fall back to a plain bash.
-	env := s.execEnv(sess)
-	pty, err := s.dock.ExecPTY(context.Background(), sess.ContainerID, []string{"/bin/bash", "-c", termCommand(env)}, env)
+	env, err := s.execEnv(sess)
+	if err != nil {
+		if conn, upgradeErr := s.upgrader.Upgrade(w, r, nil); upgradeErr == nil {
+			closeWithReason(conn, closeAccountAccess, err.Error())
+			conn.Close()
+		}
+		return
+	}
+	pty, err := s.dock.ExecPTY(r.Context(), sess.ContainerID, []string{"/bin/bash", "-c", termCommand(env)}, env)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "exec: "+err.Error())
 		return
@@ -176,11 +192,16 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 	}
 	defer conn.Close()
 	defer pty.Close()
+	release, ok := s.track(func() { _ = conn.Close(); pty.Close() })
+	if !ok {
+		return
+	}
+	defer release()
 
 	// An attached terminal runs a live PTY exec inside the container; hold it
 	// so the idle reaper can't stop the container out from under the shell.
-	s.idle.hold(sess.ID)
-	defer s.idle.release(sess.ID)
+	s.workspaces().Activity().Hold(sess.ID)
+	defer s.workspaces().Activity().Release(sess.ID)
 
 	conn.SetReadDeadline(time.Now().Add(wsPongWait))
 	conn.SetPongHandler(func(string) error {
@@ -189,6 +210,8 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 	})
 
 	done := make(chan struct{})
+	pingDone := make(chan struct{})
+	defer func() { _ = conn.Close(); pty.Close(); <-done; <-pingDone }()
 
 	// container -> browser
 	go func() {
@@ -214,6 +237,7 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 
 	// keepalive pings，顺带巡一遍额度
 	go func() {
+		defer close(pingDone)
 		t := time.NewTicker(wsPingPeriod)
 		defer t.Stop()
 		for {
@@ -221,6 +245,11 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 			case <-done:
 				return
 			case <-t.C:
+				if _, err := s.sessionAccount(sess); err != nil {
+					closeWithReason(conn, closeAccountAccess, err.Error())
+					conn.Close()
+					return
+				}
 				// 余额是在别处（对话页）被扣穿的，挂着的终端不会自己发现。不巡的话
 				// 把终端标签页一直开着就绕过了入口检查——那正是这次要堵的洞。代价是
 				// 最多晚一个 ping 周期，以及可能打断用户正在敲的东西；人都欠费了，
@@ -239,6 +268,10 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 	for {
 		mt, data, err := conn.ReadMessage()
 		if err != nil {
+			return
+		}
+		if _, err := s.sessionAccount(sess); err != nil {
+			closeWithReason(conn, closeAccountAccess, err.Error())
 			return
 		}
 		switch mt {

@@ -273,13 +273,15 @@ func clientIP(r *http.Request) string {
 
 // tokenJanitor periodically deletes login tokens past their TTL.
 func (s *Server) tokenJanitor() {
-	for {
+	for s.workContext().Err() == nil {
 		if n, err := s.store.PurgeExpiredTokens(); err != nil {
 			log.Printf("token janitor: %v", err)
 		} else if n > 0 {
 			log.Printf("token janitor: purged %d expired token(s)", n)
 		}
-		time.Sleep(6 * time.Hour)
+		if !waitInterval(s.workContext(), 6*time.Hour) {
+			return
+		}
 	}
 }
 
@@ -377,7 +379,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleUserSetPassword 管理员重置任意用户密码；该用户其他端全部下线
-//（重置自己时当前端保持登录）。
+// （重置自己时当前端保持登录）。
 func (s *Server) handleUserSetPassword(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, ok := s.store.GetUser(name); !ok {

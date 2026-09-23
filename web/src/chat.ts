@@ -2,6 +2,8 @@
  * 模型与思考强度选择、空会话引导。渲染管线在 chat-render.ts。 */
 "use strict";
 
+import { buttonLabel } from "./icons.js";
+
 import { S, bus } from "./state.js";
 import type { Pick } from "./state.js";
 import type {
@@ -21,10 +23,13 @@ import { setTip } from "./tip.js";
  * 服务端把完整事件落盘在线程 JSONL 里，重新拉一次历史即可对齐。
  * 连接本身还兼作「唤醒」：服务端 chat WS 会幂等地拉起已休眠的容器。 */
 
-const CHAT_BACKOFF = [1000, 2000, 4000, 8000, 15000];
+import { ChatConnection } from "./features/chat/connection.js";
+const connection = new ChatConnection({
+ message: data => { try { handleChatMsg(JSON.parse(data)); } catch (_) {} },
+ state: (state, attempt) => { chatAttempt = attempt; setChatConn(state); },
+ reconnect: () => { void loadHistory({ silent: true }); },
+});
 let chatAttempt = 0;
-let chatRetryTimer: ReturnType<typeof setTimeout> | null = null;
-let chatWasOpen = false; // 曾经连上过 → 这次是重连，需要补拉错过的消息
 
 /** 对话通道状态条的四种态；connected 表示收起状态条 */
 type ChatConn = "connected" | "connecting" | "waking" | "closed";
@@ -53,54 +58,16 @@ function setChatConn(state: ChatConn) {
 }
 
 export function connectChat() {
-  const sess = S.current; if (!sess) return;
-  clearTimeout(chatRetryTimer!);
-  chatRetryTimer = null;
-  const gen = ++S.chatWSGen;
-  setChatConn("connecting");
-  const ws = new WebSocket(wsURL(`/sessions/${sess.id}/chat`));
-  S.chatWS = ws;
-  ws.onopen = () => {
-    if (gen !== S.chatWSGen) return;
-    const reconnected = chatWasOpen;
-    chatWasOpen = true;
-    chatAttempt = 0;
-    setChatConn("connected");
-    // 断线期间服务端仍在跑回合，事件只进了落盘的 JSONL；重拉历史对齐。
-    if (reconnected) loadHistory({ silent: true });
-  };
-  ws.onmessage = (e) => {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch (_) { return; }
-    handleChatMsg(msg);
-  };
-  ws.onclose = () => {
-    if (gen !== S.chatWSGen) return; // 已切换会话
-    S.chatWS = null;
-    setChatConn("closed");
-    const delay = CHAT_BACKOFF[Math.min(chatAttempt, CHAT_BACKOFF.length - 1)];
-    chatAttempt++;
-    chatRetryTimer = setTimeout(() => {
-      if (gen === S.chatWSGen && S.current) connectChat();
-    }, delay);
-  };
+ if (S.current) connection.connect(wsURL(`/sessions/${S.current.id}/chat`));
 }
 
-$("chat-reconnect").addEventListener("click", () => {
-  if (!S.current) return;
-  chatAttempt = 0;
-  connectChat();
-});
-
 /* 切换/删除会话时收尾：作废重连定时器、关连接、复位状态 */
+let chatEpoch = 0;
 export function chatTeardown() {
-  S.chatWSGen++;
-  clearTimeout(chatRetryTimer!);
-  chatRetryTimer = null;
-  chatAttempt = 0;
-  chatWasOpen = false;
-  setChatConn("connected"); // 收起状态条
-  if (S.chatWS) { S.chatWS.close(); S.chatWS = null; }
+  ++chatEpoch;
+  waking = false;
+  connection.dispose();
+  setChatConn("connected");
   cancelHistoryLoad();
   replayReset();
   setChatStatus("idle");
@@ -382,14 +349,9 @@ function updateScrollBottomButton() {
   btn.setAttribute("aria-hidden", String(!show));
 }
 
-$("chat-log").addEventListener("scroll", updateScrollBottomButton, { passive: true });
-$("chat-scroll-bottom").addEventListener("click", () => {
-  $("chat-log").scrollTo({
-    top: $("chat-log").scrollHeight,
-    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-  });
-});
-window.addEventListener("resize", updateScrollBottomButton);
+
+
+
 
 function liveRender(b: LiveBlock) {
   const log = $("chat-log");
@@ -461,27 +423,18 @@ export function setChatStatus(state: string, error?: string) {
   updateHero();
 }
 
-$("chat-send").addEventListener("click", () => {
-  if (S.chatState === "running") sendInterrupt();
-  else sendChat();
-});
-$("chat-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendChat();
-  }
-});
+
+
 /* 占位提示：窄屏一行放不下长文案，且键盘快捷键提示在手机上无意义 */
 function updateChatPlaceholder() {
   $<HTMLTextAreaElement>("chat-input").placeholder = isMobile()
     ? "向 Agent 下达任务…"
     : "随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）";
 }
-onMobileChange(updateChatPlaceholder);
-updateChatPlaceholder();
+
 
 /* 输入框随内容自动增高（1 行起步，封顶后内部滚动） */
-$("chat-input").addEventListener("input", autoGrow);
+
 export function autoGrow() {
   const t = $("chat-input");
   t.style.height = "auto";
@@ -495,7 +448,7 @@ export function sendChat() {
     appendChat(chip("附件仍在上传中，请稍候…", "err"));
     return;
   }
-  if (!S.chatWS || S.chatWS.readyState !== WebSocket.OPEN) {
+  if (!connection.ready) {
     // 多半是会话空闲休眠后连接被断开。别让用户先去点启动：重新连一次即可，
     // 服务端的 chat 通道会幂等地把容器拉起来，连上后自动把这条消息发出去。
     wakeAndSend();
@@ -507,7 +460,7 @@ export function sendChat() {
     text = text.split(`[Image #${n}]`).join(`[图片#${n} ${info.path}]`);
     text = text.split(`[File #${n}]`).join(`[附件#${n} ${info.path}]`);
   }
-  S.chatWS.send(JSON.stringify({
+  connection.send(JSON.stringify({
     type: "user_message", text,
     model: S.pick.model, effort: S.pick.effort,
   }));
@@ -527,11 +480,12 @@ async function wakeAndSend() {
   send.disabled = true;
   chatAttempt = 0;
   connectChat();
+  const epoch = chatEpoch;
   const deadline = Date.now() + 60000;
   try {
     while (Date.now() < deadline) {
-      if (!S.current) return;
-      if (S.chatWS && S.chatWS.readyState === WebSocket.OPEN) {
+      if (!S.current || epoch !== chatEpoch) return;
+      if (connection.ready) {
         waking = false;
         send.disabled = false;
         sendChat(); // 连上了，把用户刚才那条发出去
@@ -542,14 +496,15 @@ async function wakeAndSend() {
     }
     appendChat(chip("唤醒工作空间超时，请稍后重试或手动启动工作空间", "err"));
   } finally {
+    if (epoch !== chatEpoch) return;
     waking = false;
     send.disabled = chatImgs.uploading > 0;
   }
 }
 
 function sendInterrupt() {
-  if (S.chatWS && S.chatWS.readyState === WebSocket.OPEN) {
-    S.chatWS.send(JSON.stringify({ type: "interrupt" }));
+  if (connection.ready) {
+    connection.send(JSON.stringify({ type: "interrupt" }));
   }
 }
 
@@ -641,19 +596,10 @@ export function pastedImages(e: ClipboardEvent) {
     .filter((f): f is File => !!f);
 }
 
-$("chat-input").addEventListener("paste", (e) => {
-  const files = pastedImages(e);
-  if (!files.length || !S.current) return;
-  e.preventDefault();
-  for (const f of files) attachFile(f);
-});
 
-$("btn-attach").addEventListener("click", () => $("attach-input").click());
-$("attach-input").addEventListener("change", () => {
-  if (!S.current) return;
-  for (const f of [...$<HTMLInputElement>("attach-input").files!]) attachFile(f);
-  $<HTMLInputElement>("attach-input").value = "";
-});
+
+
+
 
 /* ---------------- 模型 / 思考强度选择 ----------------
  * 两级菜单（仿 Codex 桌面端）：主面板是「模型 / 思考强度」两行，
@@ -862,7 +808,7 @@ function buildPickSub(kind: string) {
   menu.replaceChildren();
   const h = document.createElement("button");
   h.className = "pick-back mono";
-  h.textContent = "‹ " + (kind === "model" ? "模型" : effortTitle());
+  buttonLabel(h, kind === "model" ? "模型" : effortTitle(), "chevron-left");
   h.addEventListener("click", (e) => { e.stopPropagation(); buildPickMain(); });
   menu.append(h, ...optList(kind));
 }
@@ -887,25 +833,12 @@ function pickOpt(label: string, sub: string, on: boolean, onPick: () => void) {
   return b;
 }
 
-$("btn-pick").addEventListener("click", (e) => {
-  e.stopPropagation();
-  const menu = $("pick-menu");
-  if (menu.classList.contains("hidden")) {
-    buildPickMain();
-    menu.classList.remove("hidden");
-  } else {
-    closePickMenu();
-  }
-});
+
 // 悬停行外的任何位置（面板其余部分 / 选择器之外）都收回浮层，回到默认层级
-$("pick-menu").addEventListener("mouseover", (e) => {
-  if (!(e.target as Element).closest(".pick-row")) scheduleHideFly();
-});
-$("pick-fly").addEventListener("mouseenter", cancelHideFly);
-$("picker").addEventListener("mouseleave", scheduleHideFly);
-document.addEventListener("click", (e) => {
-  if (!(e.target as Element).closest(".picker")) closePickMenu();
-});
+
+
+
+
 onMobileChange(closePickMenu);
 
 /* ---------------- 空状态引导 ---------------- */
@@ -1030,8 +963,8 @@ export async function reloadThread() {
   setThreadBar(null);
   await loadHistory();
 }
-bus.addEventListener("thread-changed", () => { reloadThread(); });
-$("chat-loading-retry").addEventListener("click", reloadThread);
+
+
 
 /* Agent 回合分组：两条用户消息之间的 agent 输出（文字/工具行/思考…）
  * 归入同一个 .turn 容器，左侧挂品牌头像（OpenWebUI 式对话流）。
@@ -1105,4 +1038,70 @@ function clearWorking() {
 function setWorkingLabel(text: string) {
   const l = workingEl && workingEl.querySelector(".work-label");
   if (l) l.textContent = text;
+}
+
+let disposeChat: (() => void) | undefined;
+export function initChat() {
+ disposeChat?.();
+ const lifetime = new AbortController();
+ window.matchMedia("(max-width: 760px)").addEventListener("change", updateChatPlaceholder, { signal: lifetime.signal });
+ updateChatPlaceholder();
+ $("chat-reconnect").addEventListener("click", () => {
+  if (!S.current) return;
+  chatAttempt = 0;
+  connectChat();
+}, { signal: lifetime.signal });
+$("chat-log").addEventListener("scroll", updateScrollBottomButton, { ...({ passive: true }), signal: lifetime.signal });
+$("chat-scroll-bottom").addEventListener("click", () => {
+  $("chat-log").scrollTo({
+    top: $("chat-log").scrollHeight,
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+  });
+}, { signal: lifetime.signal });
+window.addEventListener("resize", updateScrollBottomButton, { signal: lifetime.signal });
+$("chat-send").addEventListener("click", () => {
+  if (S.chatState === "running") sendInterrupt();
+  else sendChat();
+}, { signal: lifetime.signal });
+$("chat-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+}, { signal: lifetime.signal });
+$("chat-input").addEventListener("input", autoGrow, { signal: lifetime.signal });
+$("chat-input").addEventListener("paste", (e) => {
+  const files = pastedImages(e);
+  if (!files.length || !S.current) return;
+  e.preventDefault();
+  for (const f of files) attachFile(f);
+}, { signal: lifetime.signal });
+$("btn-attach").addEventListener("click", () => $("attach-input").click(), { signal: lifetime.signal });
+$("attach-input").addEventListener("change", () => {
+  if (!S.current) return;
+  for (const f of [...$<HTMLInputElement>("attach-input").files!]) attachFile(f);
+  $<HTMLInputElement>("attach-input").value = "";
+}, { signal: lifetime.signal });
+$("btn-pick").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const menu = $("pick-menu");
+  if (menu.classList.contains("hidden")) {
+    buildPickMain();
+    menu.classList.remove("hidden");
+  } else {
+    closePickMenu();
+  }
+}, { signal: lifetime.signal });
+$("pick-menu").addEventListener("mouseover", (e) => {
+  if (!(e.target as Element).closest(".pick-row")) scheduleHideFly();
+}, { signal: lifetime.signal });
+$("pick-fly").addEventListener("mouseenter", cancelHideFly, { signal: lifetime.signal });
+$("picker").addEventListener("mouseleave", scheduleHideFly, { signal: lifetime.signal });
+document.addEventListener("click", (e) => {
+  if (!(e.target as Element).closest(".picker")) closePickMenu();
+}, { signal: lifetime.signal });
+bus.addEventListener("thread-changed", () => { reloadThread(); }, { signal: lifetime.signal });
+$("chat-loading-retry").addEventListener("click", reloadThread, { signal: lifetime.signal });
+ disposeChat = () => { lifetime.abort(); chatTeardown(); };
+ return disposeChat;
 }

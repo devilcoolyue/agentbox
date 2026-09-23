@@ -1,6 +1,8 @@
 /* util：DOM / 格式化 / 加载态 / 气泡 / 灯箱等无业务依赖的小工具。 */
 "use strict";
 
+import { buttonLabel } from "./icons.js";
+
 import { S } from "./state.js";
 
 /* $ 按 id 取元素，返回类型断言成非空：这些 id 全部写死在 index.html 里，取不到
@@ -37,6 +39,7 @@ export function btnBusy(btn: HTMLButtonElement, label: string) {
   if (btn.classList.contains("loading")) return;
   btnSaved.set(btn, [...btn.childNodes]);
   btn.disabled = true;
+  btn.setAttribute("aria-busy", "true");
   btn.classList.add("loading");
   btn.replaceChildren(spinEl(), document.createTextNode(label));
 }
@@ -44,6 +47,7 @@ export function btnBusy(btn: HTMLButtonElement, label: string) {
 export function btnDone(btn: HTMLButtonElement) {
   if (!btn.classList.contains("loading")) return;
   btn.classList.remove("loading");
+  btn.removeAttribute("aria-busy");
   btn.replaceChildren(...(btnSaved.get(btn) || []));
   btnSaved.delete(btn);
   btn.disabled = false;
@@ -181,7 +185,7 @@ export function askConfirm(text: string, opts: ConfirmOpts = {}) {
   hint.textContent = opts.hint || "";
   hint.classList.toggle("hidden", !opts.hint);
   const ok = $("ask-ok");
-  ok.textContent = opts.okLabel || "确定";
+  buttonLabel(ok, opts.okLabel || "确定", opts.danger ? "trash" : "check");
   ok.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
   return dlgOnce($<HTMLDialogElement>("dlg-ask"), (v) => v === "ok");
 }

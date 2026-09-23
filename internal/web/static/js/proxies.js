@@ -5,6 +5,7 @@
  * 和服务端自己发的 OAuth / Key 探测。所以这里的「停用」是硬开关，不是「绕过
  * 它走直连」——直连等于把服务器真实 IP 交出去，正是绑代理要避免的事。 */
 "use strict";
+import { buttonLabel } from "./icons.js";
 import { setSelectValue } from "./select.js";
 import { $, btnBusy, btnDone, toast, askConfirm, fmtLatency } from "./util.js";
 import { api } from "./api.js";
@@ -146,15 +147,15 @@ function proxyRow(p) {
     acts.className = "px-actions";
     const test = document.createElement("button");
     test.className = "btn btn-sm btn-ghost";
-    test.textContent = "测试";
+    buttonLabel(test, "测试", "activity");
     test.addEventListener("click", () => runProbe(p, test));
     const edit = document.createElement("button");
     edit.className = "btn btn-sm btn-ghost";
-    edit.textContent = "编辑";
+    buttonLabel(edit, "编辑", "rename");
     edit.addEventListener("click", () => openProxyDlg(p));
     const del = document.createElement("button");
     del.className = "btn btn-sm btn-danger";
-    del.textContent = "删除";
+    buttonLabel(del, "删除", "trash");
     del.addEventListener("click", () => removeProxy(p));
     acts.append(test, edit, del);
     tr.append(name, scheme, addr, auth, acct, probe, acts);
@@ -436,7 +437,7 @@ export function mountProxyPicker(root) {
             const test = document.createElement("button");
             test.type = "button";
             test.className = "pp-test";
-            test.textContent = "测试";
+            buttonLabel(test, "测试", "activity");
             setTip(test, "测试该代理连通性");
             test.addEventListener("click", (e) => {
                 e.stopPropagation(); // 别顺手把这一行选中了

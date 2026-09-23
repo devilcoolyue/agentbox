@@ -51,6 +51,7 @@ type Account struct {
 	CredentialsDir string            `json:"credentials_dir,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	ProxyID        string            `json:"proxy_id,omitempty"`
+	Access         *AccountAccess    `json:"access,omitempty"`
 
 	// credentials_dir 在配置文件里的原文（可能是相对路径），写回时保留原样。
 	rawCredDir string
@@ -313,6 +314,8 @@ type Config struct {
 	Listen         string                   `json:"listen"`
 	AuthToken      string                   `json:"auth_token"`
 	DataDir        string                   `json:"data_dir"`
+	CacheDir       string                   `json:"cache_dir,omitempty"`
+	Resources      ResourceLimits           `json:"resources"`
 	AgentImage     string                   `json:"agent_image"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
@@ -328,9 +331,10 @@ type Config struct {
 	TerminalTips   TerminalTips             `json:"terminal_tips"`
 	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
 
-	mu         sync.RWMutex
-	path       string
-	rawDataDir string // data_dir 原文，写回时保留
+	mu          sync.RWMutex
+	path        string
+	rawCacheDir string
+	rawDataDir  string // data_dir 原文，写回时保留
 }
 
 func Load(path string) (*Config, error) {
@@ -402,6 +406,12 @@ func Load(path string) (*Config, error) {
 		cfg.DataDir = "data"
 	}
 	cfg.DataDir = resolve(cfg.DataDir)
+	cfg.rawCacheDir = cfg.CacheDir
+	if cfg.CacheDir == "" {
+		cfg.CacheDir = cfg.DataDir
+	} else {
+		cfg.CacheDir = resolve(cfg.CacheDir)
+	}
 
 	if cfg.Tunnel.Enabled && cfg.Tunnel.ProxyBind == "" {
 		cfg.Tunnel.ProxyBind = defaultTunnelBind
@@ -424,6 +434,9 @@ func Load(path string) (*Config, error) {
 // validateLocked checks the whole config; callers must hold at least a read
 // lock (Load runs before the config is shared, which also counts).
 func (c *Config) validateLocked() error {
+	if c.Resources.MaxRunning < 0 || c.Resources.MaxRunningPerUser < 0 || c.Resources.MinFreeBytes < 0 {
+		return fmt.Errorf("resource limits cannot be negative")
+	}
 	if len(c.AuthToken) < 8 || c.AuthToken == "CHANGE_ME_TO_A_LONG_RANDOM_TOKEN" {
 		return fmt.Errorf("auth_token must be a secret of at least 8 characters")
 	}
@@ -522,6 +535,9 @@ func (c *Config) validateLocked() error {
 		if a.ProxyID != "" && !proxySeen[a.ProxyID] {
 			return fmt.Errorf("account %q: proxy_id %q 不存在", a.ID, a.ProxyID)
 		}
+		if err := a.Access.Validate(); err != nil {
+			return fmt.Errorf("account %q: %w", a.ID, err)
+		}
 		for k := range a.Env {
 			if !envKeyRe.MatchString(k) {
 				return fmt.Errorf("account %q: env key %q invalid", a.ID, k)
@@ -563,12 +579,15 @@ type persistAccount struct {
 	CredentialsDir string            `json:"credentials_dir,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	ProxyID        string            `json:"proxy_id,omitempty"`
+	Access         *AccountAccess    `json:"access,omitempty"`
 }
 
 type persistConfig struct {
 	Listen         string                   `json:"listen"`
 	AuthToken      string                   `json:"auth_token"`
 	DataDir        string                   `json:"data_dir,omitempty"`
+	CacheDir       string                   `json:"cache_dir,omitempty"`
+	Resources      ResourceLimits           `json:"resources"`
 	AgentImage     string                   `json:"agent_image"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
@@ -592,6 +611,8 @@ func (c *Config) saveLocked() error {
 		Listen:         c.Listen,
 		AuthToken:      c.AuthToken,
 		DataDir:        c.rawDataDir,
+		CacheDir:       c.rawCacheDir,
+		Resources:      c.Resources,
 		AgentImage:     c.AgentImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
@@ -614,7 +635,7 @@ func (c *Config) saveLocked() error {
 		}
 		out.Accounts = append(out.Accounts, persistAccount{
 			ID: a.ID, Type: a.Type, Label: a.Label, CredentialsDir: dir,
-			Env: a.Env, ProxyID: a.ProxyID,
+			Env: a.Env, ProxyID: a.ProxyID, Access: a.Access,
 		})
 	}
 	raw, err := json.MarshalIndent(out, "", "  ")
@@ -635,7 +656,7 @@ func (c *Config) Account(id string) (Account, bool) {
 	defer c.mu.RUnlock()
 	for _, a := range c.Accounts {
 		if a.ID == id {
-			return a, true
+			return cloneAccount(a), true
 		}
 	}
 	return Account{}, false
@@ -645,7 +666,9 @@ func (c *Config) AccountList() []Account {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	out := make([]Account, len(c.Accounts))
-	copy(out, c.Accounts)
+	for i, a := range c.Accounts {
+		out[i] = cloneAccount(a)
+	}
 	return out
 }
 
@@ -887,6 +910,9 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Listen:         c.Listen,
 		AuthToken:      c.AuthToken,
 		DataDir:        c.DataDir,
+		CacheDir:       c.CacheDir,
+		Resources:      c.Resources,
+		rawCacheDir:    c.rawCacheDir,
 		AgentImage:     c.AgentImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
@@ -923,6 +949,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.IdleTimeoutMin = work.IdleTimeoutMin
 	c.TimeZone = work.TimeZone
 	c.Container = work.Container
+	c.Resources = work.Resources
 	c.Tunnel = work.Tunnel
 	c.ProxyBridge = work.ProxyBridge
 	c.Accounts = work.Accounts
@@ -936,6 +963,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 
 // SettingsPatch carries a partial settings update; nil fields stay unchanged.
 type SettingsPatch struct {
+	Resources      *ResourceLimits          `json:"resources"`
 	Listen         *string                  `json:"listen"`
 	AgentImage     *string                  `json:"agent_image"`
 	PermissionMode *string                  `json:"permission_mode"`
@@ -955,6 +983,9 @@ type SettingsPatch struct {
 
 func (c *Config) ApplySettings(p SettingsPatch) error {
 	return c.mutate(func(w *Config) error {
+		if p.Resources != nil {
+			w.Resources = *p.Resources
+		}
 		if p.Listen != nil {
 			w.Listen = *p.Listen
 		}
@@ -1025,7 +1056,7 @@ func (c *Config) AddAccount(a Account) error {
 				return fmt.Errorf("账号 ID %q 已存在", a.ID)
 			}
 		}
-		w.Accounts = append(w.Accounts, a)
+		w.Accounts = append(w.Accounts, cloneAccount(a))
 		return nil
 	})
 }
@@ -1038,6 +1069,7 @@ type AccountPatch struct {
 	Label   *string
 	Env     *map[string]string
 	ProxyID *string
+	Access  *AccountAccess
 }
 
 func (c *Config) UpdateAccount(id string, p AccountPatch) (Account, error) {
@@ -1051,12 +1083,15 @@ func (c *Config) UpdateAccount(id string, p AccountPatch) (Account, error) {
 				w.Accounts[i].Label = *p.Label
 			}
 			if p.Env != nil {
-				w.Accounts[i].Env = *p.Env
+				w.Accounts[i].Env = cloneAccount(Account{Env: *p.Env}).Env
 			}
 			if p.ProxyID != nil {
 				w.Accounts[i].ProxyID = *p.ProxyID
 			}
-			out = w.Accounts[i]
+			if p.Access != nil {
+				w.Accounts[i].Access = cloneAccess(p.Access)
+			}
+			out = cloneAccount(w.Accounts[i])
 			return nil
 		}
 		return fmt.Errorf("account %q not found", id)

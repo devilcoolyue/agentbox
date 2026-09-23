@@ -4,6 +4,10 @@
 
 生产目标是 **Linux + systemd + 本机 Docker Engine**。服务端是一个 Go 二进制，前端随二进制嵌入；工作空间在独立 Docker 容器中运行。以下命令在服务器的 agentbox 仓库根目录执行，默认使用 `config.json`、`data/` 和 `127.0.0.1:8180`，自定义路径时需相应调整。
 
+## 发布包独立部署
+
+新安装推荐使用包内 `deploy/release.py`，无需 Go 或 Node；配置、版本、数据与缓存分离。完整命令及旧安装迁移见[目录与迁移手册](../docs/architecture/deployment-layout.md)。下文 `install.sh` / `deploy.sh` 专指保留兼容的仓库内部署模式。
+
 ## 部署前准备
 
 - 安装 Docker Engine、Git、Go（版本以 `go.mod` 为准）、Python 3、curl 和提供 `ss` 的 iproute2。
@@ -12,7 +16,7 @@
 - 准备账号订阅凭证或 API Key；也可先以空账号池启动，再从网页配置。
 - 如需域名访问，准备 DNS、TLS 证书与支持 WebSocket 的反向代理。
 
-`sqlite3` 命令行是可选依赖，备份脚本可退回 Python 的 SQLite 在线备份 API。生产服务器不需要 Node.js；改动 TypeScript 后应在开发机生成并提交 JS 产物。
+备份使用服务端二进制内置的 SQLite 在线备份 API，不依赖 `sqlite3` 命令行；定时脚本的轮转依赖 Python 3。生产服务器不需要 Node.js；改动 TypeScript 后应在开发机生成并提交 JS 产物。
 
 配套服务以 root 运行，以便管理 Docker 和挂载目录属主。运行数据与 Docker socket 都属于服务器管理边界，容器不挂载 Docker socket。
 
@@ -25,12 +29,12 @@ sudo ./deploy/install.sh
 sudo ./deploy/deploy.sh
 ```
 
-`install.sh` 根据仓库实际路径替换 `__APP_DIR__`，安装单元、执行 `daemon-reload` 并启用服务和两个定时器；主服务由 `deploy.sh` 构建并启动。
+`install.sh` 根据仓库实际路径替换 `__APP_DIR__`，安装单元、执行 `daemon-reload` 并启用服务与备份定时器（追新默认关闭）；主服务由 `deploy.sh` 构建并启动。
 
 | 文件 | 作用 / 安装位置 |
 | --- | --- |
 | `agentbox.service` | `/etc/systemd/system/`，主服务 |
-| `agentbox-image-update.service` / `.timer` | 每日检查 CLI 版本并更新镜像 |
+| `agentbox-image-update.service` / `.timer` | 实验性每日追新，默认不启用 |
 | `agentbox-backup.service` / `.timer` | 每日备份核心状态 |
 | `agentbox.logrotate` | `/etc/logrotate.d/agentbox`，日志轮转 |
 | `production.env.example` | 维护者使用的生产参数模板 |
@@ -133,13 +137,13 @@ ssh -o BatchMode=yes "$PROD_SSH" "'$PROD_DIR/deploy/deploy.sh'"
 ```bash
 ./scripts/build-image.sh
 
-# 对比 npm 最新版；发现版本变化时重建镜像
-./scripts/auto-update-image.sh
+# 显式选择实验性追新
+AGENTBOX_AUTO_UPDATE=1 ./scripts/auto-update-image.sh
 ```
 
-`agentbox-image-update.timer` 每日运行版本检查，日志在 `/var/log/agentbox-image-update.log`。运行中空间不被直接打断；镜像变化后，停止再启动空间时会使用新镜像。
+稳定安装默认禁用 `agentbox-image-update.timer`，镜像使用固定基线；手动启用 timer 后才每日运行最新版检查，日志在 `/var/log/agentbox-image-update.log`。运行中空间不被直接打断；镜像变化后，停止再启动空间时会使用新镜像。
 
-如果需要控制 CLI 版本，可以手动传入 Dockerfile 的构建参数，并按自己的发布策略管理自动更新定时器：
+固定版本及回退说明见 [兼容矩阵](../docs/compatibility.md)。需要覆盖基线时可显式传入 Dockerfile 构建参数：
 
 ```bash
 docker build -t agentbox-agent:latest \
@@ -160,63 +164,83 @@ docker build -t agentbox-agent:latest \
 
 ## 备份与恢复
 
-### 内置备份覆盖什么
+### 系统备份与完整备份
 
-`agentbox-backup.timer` 每天约 04:17（宿主机时区，另加最多 20 分钟随机延迟）运行 `scripts/backup.sh`，产物写入 `<data_dir>/backups/`，默认保留 14 份、权限为 0600。
+`agentbox-backup.timer` 每天约 04:17（宿主机时区，另加最多 20 分钟随机延迟）调用 `scripts/backup.sh` 创建系统备份。实际备份由 Go 二进制完成；脚本增加校验和文件、保留份数和可选远端传输。默认输出 `<data_dir>/backups/`，保留最近 14 份同类型备份，包与 SHA-256 文件权限为 0600。
 
-| 内容 | 内置脚本是否覆盖 |
-| --- | --- |
-| SQLite `state.db`，含用户、空间、令牌、用量、额度和账本 | 是，通过在线备份 API 取得一致快照 |
-| 仓库根目录 `config.json` | 是 |
-| 仓库根目录 `accounts/` | 是（目录存在时） |
-| 网页创建账号的 `<data_dir>/creds/` | **否，需额外备份** |
-| `users/` 内项目、home、聊天记录、共享目录、用户模板 | **否，需额外备份** |
-| 服务器级 `home-template/` | **否，需额外备份** |
-| 其他位置的 `credentials_dir` | **否，按实际配置备份** |
+| 内容 | 系统备份 | `--full` 完整备份 |
+| --- | --- | --- |
+| SQLite `state.db`（含 WAL 中已提交记录） | 在线备份 API 一致快照 | 相同 |
+| 指定的配置文件、同目录 `accounts/` | 是 | 是 |
+| `data/creds/`、所有账号配置的外部 `credentials_dir` | 是 | 是 |
+| 服务器 home 模板、每个用户的 home 模板 | 是 | 是 |
+| 用户 workspace、home、聊天记录、shared | 否 | 是 |
+| marketplace 缓存、已编译 abox-link、旧备份、锁文件 | 否，可重新生成 | 否 |
+
+配置的凭证目录缺失、不可读取或扫描中有文件变化会导致备份失败，避免产生静默漏数据的成功包。文件清单保存权限、UID/GID、mtime、链接目标和文件 SHA-256；符号链接原样记录、不跟随，特殊文件（设备、FIFO、socket）会报错，需要先处理这些运行时残留。setuid/setgid/sticky 特殊权限不恢复，不保存扩展属性和 ACL。当前单包最多 100000 个条目、manifest 最大 32 MiB，超限会报错；较大实例需按数据规模规划外部快照方案。
 
 ```bash
-sudo ./scripts/backup.sh
+# 使用已经构建/部署的新版二进制
+./agentbox backup --config /etc/agentbox/config.json
+./agentbox backup --config config.json --output /backup/system.tar.gz
+./agentbox backup-verify /backup/system.tar.gz
 
-# 可选：更改保留份数，并推送到自己的备份服务器
-sudo env BACKUP_KEEP=30 BACKUP_REMOTE=user@backup-host:/backups/agentbox \
-  ./scripts/backup.sh
+# 定时脚本：默认使用仓库下的 agentbox/config.json，也可指定独立部署路径
+sudo env AGENTBOX_BIN=/opt/agentbox/current/agentbox \
+  AGENTBOX_CONFIG=/etc/agentbox/config.json BACKUP_KEEP=30 \
+  BACKUP_REMOTE=user@backup-host:/backups/agentbox ./scripts/backup.sh
 ```
 
-定时任务的环境变量可通过 `systemctl edit agentbox-backup.service` 的 `[Service]` / `Environment=` 配置；交互 Shell 的变量不会自动传给 systemd。
+`backup` 与 `backup-verify` 输出 JSON 结果；备份格式版本和程序提交号在包内 `manifest.json`。新版验证/恢复命令仅处理带 manifest 的新格式，旧版 `state.db/config.json/accounts` 包请按旧格式单独恢复，不要混用。
 
-SQLite 使用 WAL 模式，**不要直接复制运行中的 `state.db` 作为备份**，那可能漏掉已提交数据。内置脚本使用 SQLite 在线备份 API，并检查快照表和数据。
-
-### 完整备份
-
-完整恢复还需要用户文件与全部凭证，不能仅依赖内置备份包。建议按实际 `data_dir` 制定文件系统快照或归档流程，覆盖上表中未自动备份的项目并保留文件属主、权限和符号链接。
-
-需要数据库与工作区处于同一时间点时，应先让用户结束任务、停止工作空间容器，再停止 agentbox，取得数据库快照和文件备份。**仅停止服务端不等于停止容器**，tmux / CLI 可能仍在写 home 和 workspace。归档不要递归包含不断增长的 `backups/` 自身。
-
-备份同时含源码、账号令牌与配置密钥，应使用受控目录保存；异机备份与定期恢复演练能确认本机损坏后仍可恢复。
-
-### 恢复核心状态
-
-以下示例针对默认 `data_dir=data`。先停止相关空间和服务，把当前状态保留到单独目录，再恢复选定快照；不要把快照直接覆盖到仍运行的 SQLite 上。
+系统备份适合日常在线运行，但数据库与文件不构成同一时点的全局快照。完整一致性备份要求先让用户结束任务、停止相关空间容器，再停止 agentbox：
 
 ```bash
+# 先在控制台停止所有需要备份的空间，再停止服务
 sudo systemctl stop agentbox
-sudo mkdir -p /var/tmp/agentbox-restore
-sudo tar -xzf data/backups/agentbox-backup-YYYYmmdd-HHMMSS.tar.gz \
-  -C /var/tmp/agentbox-restore
-sudo ls -la /var/tmp/agentbox-restore
+sudo ./agentbox backup --config config.json --full --output /backup/full.tar.gz
+sudo systemctl start agentbox
 ```
 
-确认包内容和时间点正确后，先将当前 `state.db` 及存在的 `state.db-wal`、`state.db-shm` **一并移至一个新的保留目录**，再将快照的 `state.db` 放回数据目录。不能把旧 WAL 留在恢复后的新数据库旁边。
+命令会持有 `data_dir/agentbox.lock` 的独占锁，并在归档前后检查 Docker：任何运行中的容器挂载了数据目录或账号凭证目录（含其父目录/子目录）都会拒绝。**仅停止服务端不等于停止容器**。检查不会主动停止或暂停容器；备份期间也不要从 Docker CLI 或其他宿主机进程修改源文件。需连接同一个本机 Docker daemon；Go 客户端读 `DOCKER_HOST`，不自动读取 Docker CLI context。
 
-按需要恢复 `config.json` 和 `accounts/`；同时从额外的文件备份恢复匹配的 `creds/`、`users/`、模板和外部凭证目录。旧 OAuth 刷新令牌可能已失效，恢复后需逐账号检查，必要时重新授权。
+命令自身不要求 Python、sqlite3 或 tar；定时脚本的保留和传输仍依赖 Python 3，远端传输依赖 rsync。定时环境通过 `systemctl edit agentbox-backup.service` 配置；交互 Shell 的环境不会自动进入 systemd。系统与完整备份分别轮转，旧格式文件不自动删除。远端传输失败时保留本机备份并报告失败。
+
+### 校验与恢复
 
 ```bash
-sudo systemctl start agentbox
-sudo systemctl is-active agentbox
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8180/api/ping
+./agentbox backup-verify /backup/full.tar.gz
+# 目标目录必须尚不存在，父目录须已创建
+sudo ./agentbox restore --to /var/lib/agentbox-restored /backup/full.tar.gz
 ```
 
-探活预期 `204`。再登录检查用户、空间、文件、聊天历史和额度，不能只凭首页可访问判断恢复完成。
+恢复先检查归档路径、类型、清单和哈希，再在私有临时目录解包；文件完成后才创建链接，并执行 SQLite integrity_check，最后以不覆盖方式发布新目录。失败不会覆盖已有实例，不会复用旧 WAL/SHM。普通文件权限和 mtime 恢复（文件时间精度到微秒），root 执行时保留 UID/GID；非 root 演练时文件归当前用户，生产迁移请使用 root。
+
+恢复目录结构：
+
+```text
+agentbox-restored/
+  config.json                 # data_dir 改为相对路径 data
+  data/state.db
+  data/creds/
+  data/home-template/
+  data/users/                 # 系统备份只有用户模板，完整备份含全部用户数据
+  accounts/                   # 旧目录保留
+  credentials/<编号>/         # 账号使用的独立凭证副本
+  backup-manifest.json
+```
+
+配置中各账号的 `credentials_dir` 会指向恢复目录下 `credentials/<编号>`；同源账号继续共用同一份目录。其他配置字段原样保留，**不会自动改监听地址、域名、代理、镜像或用户文件中的绝对路径**。数据库内容原样保留，含会话 ID 和原容器引用。
+
+启动前必须检查：
+
+1. 恢复包类型和来源正确，用户文件、聊天历史及凭证齐全；系统备份不能单独恢复项目文件。
+2. 新的 `data_dir` 和凭证路径正确；按新目录刷新 systemd 配置。
+3. 新实例使用独立 Docker daemon，或在停旧实例后人工处理旧会话容器，确保按新宿主路径重建 bind mounts。同一 daemon 上不能同时启动共享会话 ID 的旧、新实例，容器名称会冲突。
+4. 用户 home 中 OAuth 刷新链可能已失效，逐账号检查，必要时重新授权。
+5. 启动后检查 `/api/ping`、登录、文件、聊天历史、用量和额度；不能只凭首页可访问判断恢复完成。
+
+SHA-256 和清单用于检测损坏，不是来源认证。备份含源码、登录令牌和账号密钥，存储权限与异机副本应受控；定期使用 `scripts/test-backup.sh` 验证命令，并对自己的真实数据执行隔离恢复演练。
 
 ## 迁移与回退
 
@@ -265,3 +289,5 @@ sudo systemctl start agentbox
 ```
 
 journald 是否跨重启持久化取决于宿主机配置，不能默认存在历史 boot 日志；需长期追踪时保留文件日志并核对 logrotate。更多症状见[常见问题](../docs/troubleshooting.md)。
+
+服务停止会中断正在处理的网页回合并等待本地收尾，断开 WebSocket、隧道和代理连接；会话容器与终端 tmux 保留。后台退出超时会报错，不能将服务停止当作完整备份所需的“容器已停”条件。

@@ -346,19 +346,21 @@ func (s *Server) applyTunnel() error {
 	s.tunnels.proxyUp.Store(true)
 	log.Printf("tunnel SOCKS5 proxy listening on %s", tc.ProxyBind)
 	srv := s.tunnels.socksServer()
-	go func() {
-		err := srv.Serve(ln)
+	if !s.spawn(func() {
+		s.serveConnections(ln, func(conn net.Conn) { _ = srv.ServeConn(conn) })
 		// Only report down if we are still the current listener — a rebind
 		// closes us on purpose and has already flipped the state itself.
 		s.tunnelMu.Lock()
 		if s.tunnelLn == ln {
 			s.tunnelLn = nil
 			s.tunnels.proxyUp.Store(false)
-			log.Printf("tunnel proxy serve stopped: %v", err)
+			log.Printf("tunnel proxy serve stopped")
 		}
 		s.tunnelMu.Unlock()
-	}()
-	go s.warnTunnelReachability(tc.ProxyBind, s.cfg.GetContainer().Network)
+	}) {
+		_ = ln.Close()
+	}
+	s.spawn(func() { s.warnTunnelReachability(tc.ProxyBind, s.cfg.GetContainer().Network) })
 	return nil
 }
 
@@ -371,7 +373,7 @@ func (s *Server) warnTunnelReachability(bind, sessionNetwork string) {
 	if err != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(s.workContext(), 5*time.Second)
 	defer cancel()
 	gw, err := s.dock.NetworkGateway(ctx, sessionNetwork)
 	if err != nil {
@@ -411,7 +413,11 @@ func (s *Server) bindUserMaps(user string, specs []tunnel.MapSpec) (statuses []s
 				status = err.Error()
 			} else {
 				entries = append(entries, mapEntry{Port: spec.Port, Target: spec.Target, ln: ln})
-				go s.tunnels.serveMapListener(user, spec.Target, ln, s.authorizeMapSource)
+				if !s.spawn(func() {
+					s.serveConnections(ln, func(conn net.Conn) { s.tunnels.serveMapConn(user, spec.Target, conn, s.authorizeMapSource) })
+				}) {
+					_ = ln.Close()
+				}
 				log.Printf("tunnel map for %q: %s -> %s", user, ln.Addr(), spec.Target)
 			}
 		}
@@ -470,7 +476,7 @@ func (s *Server) userContainerIPs(user string, refresh bool) map[string]bool {
 		return ent.ips
 	}
 	ips := map[string]bool{}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(s.workContext(), 5*time.Second)
 	defer cancel()
 	for _, sess := range s.store.All() {
 		if sess.User != user || sess.ContainerID == "" {
@@ -514,6 +520,12 @@ func (s *Server) handleTunnelWS(w http.ResponseWriter, r *http.Request) {
 		releaseMaps()
 		return
 	}
+	releaseConn, tracked := s.track(func() { _ = conn.Close() })
+	if !tracked {
+		releaseMaps()
+		return
+	}
+	defer releaseConn()
 	cfg := yamux.DefaultConfig()
 	cfg.KeepAliveInterval = 15 * time.Second
 	cfg.ConnectionWriteTimeout = 15 * time.Second
