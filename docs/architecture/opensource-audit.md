@@ -21,3 +21,9 @@ Claude Code npm 许可声明不是开源授权。因此候选包仅提供用户�
 本地验证包括源码构建/测试/vet、前端一致性、第三方哈希与模块覆盖、固定镜像策略、多平台打包、校验和、无 Go/Node 的 Linux 包执行与备份恢复、真实 Docker 的合成会话 CRUD/文件/Git。服务冒烟只挂载临时命名卷与 Docker socket，测试容器与卷已清理。
 
 这不包括在线模型推理、生产数据恢复、Linux systemd 的正式升级/切换或远端 GitHub Actions 运行。公开 Release 和 tag 尚未创建。维护者在公开前还需启用 GitHub 私密漏洞报告、审阅候选文件和历史域名决策，再执行发布。源码安装脚本与按版本运行目录迁移的剩余工作仍属于 D1。
+
+## 最终本地候选
+
+采用正式 Apache-2.0 的本地候选 `v0.1.0-rc.1` 来自干净提交 `5dceb81`，未创建同名 tag。七个平台归档、版本/提交元数据及校验和核对通过；Linux arm64 包在 Alpine 容器中执行备份/校验/恢复后再次读取恢复库，合成内容一致；Debian Agent 镜像的服务链路也复测通过。最终密钥扫描对源码、全部已获取 refs、解包产物及二进制 printable strings 无未审查命中。
+
+本机候选目录 `/tmp/agentbox-b-final-candidates`、脱敏报告 `/tmp/agentbox-b-final-audit` 均不进入版本库。工作流 artifact 的访问范围取决于仓库/Actions 设置，并非私密漏洞反馈渠道。

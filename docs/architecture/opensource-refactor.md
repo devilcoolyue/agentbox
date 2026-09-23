@@ -108,9 +108,9 @@ third_party/
 ### B：开源发布基础
 
 - [x] B1：负责人选择 Apache-2.0；补 LICENSE/NOTICE、第三方来源、许可全文、版本与哈希清单。
-- [ ] B2：历史/分支/标签、源码与候选产物扫描已通过；旧生产域名仍在历史，公开前需负责人决定保留披露或清理历史。
+- [x] B2：已扫描全部已获取历史/分支/标签、跟踪源码、解包产物及二进制可打印内容；无未审查密钥命中。旧生产域名历史披露列为公开前人工决策，未改写历史。
 - [x] B3：贡献、安全反馈、Issue/PR 模板和变更记录已加入；GitHub 私密漏洞报告需发布前启用。
-- [ ] B4：Tag 候选包工作流、7 平台构建和版本/校验和已实现；正式许可证候选包最终验证进行中，未运行远端 CI。
+- [x] B4：Tag 候选工作流、7 平台构建、版本/校验和实现；正式 Apache-2.0 候选包校验和 Linux 无源码安装/会话冒烟通过，未运行远端 CI。
 - [x] B5：固定 Claude 2.1.280 / Codex 0.145.0 / Node 22.23.2 digest，默认禁用追新，保留旧镜像标签；合成 Linux 会话链路验证通过。
 
 验收：干净 Linux 环境能从发布包安装，不需要源码构建；上游 CLI 的分发条件已核对。许可证选择与公开发布由项目负责人决定。
@@ -146,14 +146,14 @@ third_party/
 - 2026-09-23：创建重构分支与设计文档；完成 A1 的实现及本地验证。新增容器命令执行适配器、`gitx`、额度入口检查、Git hook/环境隔离、首次提交 diff 与丢弃失败回归，并接入 CI 容器冒烟步骤。
 - 验证通过：`go build ./...`、`go test ./...`、`go vet ./...`、`npm run check`、`go test -race ./internal/gitx ./internal/dockerx`。
 - 本机 Docker 的 Linux arm64 最小 Alpine Git 容器实测通过：uid=1000、提交/diff、hook 禁用、过滤器不继承测试密钥环境变量。临时容器已清理，测试镜像保留用于复用。未调用模型、未挂载真实账号或工作区。
-- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。B1–D4 尚未实现。下一阶段为 B 的开源发布基础；许可证仍由项目负责人选择。
+- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。B 阶段本地实施与验证已完成，C/D 阶段仍待实施；公开发布前事项见开源审查记录。
 
 - 2026-09-23：完成 A2。新增 `internal/safefs`，移除检查后返回绝对路径的文件助手与旧 rename 降级实现；普通文件读、原子保存、移动/删除、归档、预览、技能与凭证统一使用固定目录句柄。详见 [文件系统边界](filesystem-boundaries.md)。
 - A2 验证通过：Go build/test/vet、前端类型检查、safefs/archivex/agent/server 的 race 检查；`scripts/test-filesystem-linux.sh` 在无宿主挂载、无外网的 Linux arm64 容器运行四个包的完整测试通过。最小镜像补齐 tzdata 后解决了时区测试环境缺失；未连接生产或调用模型。
 
 - 2026-09-23：完成 A3/A4。新增 `internal/backup`、`agentbox backup` / `backup-verify` / `restore --to`；定时脚本改为编排内置命令，支持独立配置/二进制路径，分别轮转系统与完整备份。SQLite 使用在线 Backup API，临时快照转独立 DELETE journal 模式，保留源库 WAL。
 - A3/A4 验证通过：Go 全量构建/测试/vet，backup/safefs/cmd 的 race；`scripts/test-backup.sh` 实际命令演练覆盖 WAL、外部凭证、模板、哈希验证、恢复、拒绝覆盖与轮转；启用 Docker 检查的完整工作区恢复通过。`scripts/test-filesystem-linux.sh` 在 Linux arm64 最小镜像运行五个包（含 backup）的全量测试通过。
-- 备份恢复验证使用合成数据和隔离临时目录，未读取真实凭证、未停止生产服务；实际生产数据的恢复演练、systemd 配置切换和新 CI 远端运行仍待验证。恢复不自动接管原容器，同一 daemon 上的会话 ID 冲突须按部署手册处理。开源许可证、历史扫描、发布流水线与 C/D 阶段仍未完成。
+- 备份恢复验证使用合成数据和隔离临时目录，未读取真实凭证、未停止生产服务；实际生产数据的恢复演练、systemd 配置切换和新 CI 远端运行仍待验证。恢复不自动接管原容器，同一 daemon 上的会话 ID 冲突须按部署手册处理。C/D 阶段仍未完成；许可证、扫描与发布基础的后续实施见 B 阶段记录。
 
 - 2026-09-23：完成 A5。`Account.access` 支持 `all/users/admin`，缺省保持共享，管理员始终可用；账号列表过滤并隐藏授权名单，普通用户空间计数限本人。创建/启动/聊天/标题/终端/Git/订阅额度及 exec 环境生成统一检查账号使用权，凭证同步重新读取当前策略。文件和历史继续按空间属主访问。
 - A5 界面：账号行新增「使用范围」，独立 `web/src/account-access.ts` 负责编辑；设置页仅增加入口，TS 与 JS 一同提交，原有未提交 UI 改动保持独立。非法用户提示、名单去重、保存回显、取消及 390px 窄屏布局通过本地 Playwright 合成 API 页面验证；截图保存在本机 `output/playwright/`，不进版本库。
@@ -162,3 +162,6 @@ third_party/
 
 - 2026-09-23：阶段 B 实施中。负责人选择 Apache-2.0；补齐许可证、第三方资产比对及 33 个链接 Go 模块许可、贡献/安全模板、版本元数据、7 平台候选构建和扫描流水线。CLI 追新改为显式开启，修复宿主 CODEX_VERSION 污染默认镜像版本的问题，构建覆盖使用 AGENTBOX_ 前缀。
 - B 本地初步验证：Go 全量 build/test/vet、固定镜像策略、第三方哈希/链接模块覆盖；隔离 fixture 的 7 平台打包及校验通过，Linux arm64 包备份恢复通过；实际 Debian 固定镜像的 CLI/Node 版本和合成空间登录/启动/挂载/UID/文件/Git/停止/删除通过，无模型调用。正式 LICENSE 已落地，正从干净提交重建最终候选。详细审查与公开前限制见 [开源审查](opensource-audit.md)。
+
+- B 最终验证：`5dceb81` 干净 worktree 构建 `v0.1.0-rc.1` 本地候选（未创建 tag），七个平台包与 SHA256SUMS 验证通过。Linux arm64 Alpine 中直接运行包内二进制并完成合成 SQLite 备份/校验/恢复且核对数据；真实 Debian 会话镜像的合成服务链路再次通过。gitleaks 对当前全部 refs、跟踪源码和解包候选（含 strings 提取的二进制内容）均为 0 个未审查命中。
+- 候选位于本机 `/tmp/agentbox-b-final-candidates`，扫描报告在 `/tmp/agentbox-b-final-audit`；测试容器/命名卷已清理。未推送、未创建 GitHub Release、未调用模型或部署生产。B 的本地验收完成不表示已对外发布；历史域名披露、私密漏洞报告设置、远端 CI 及生产 systemd 验证仍按 [审查记录](opensource-audit.md) 在对应发布/部署步骤处理。

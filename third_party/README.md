@@ -16,7 +16,7 @@ Agentbox 的项目许可证不替代第三方许可证。发布包携带本目�
 
 ## Go 依赖
 
-`go-modules.json` 记录七个发行目标实际链接的模块及版本；`go/` 保留这些模块中的 LICENSE/COPYING/NOTICE 等全文（含嵌套版权文件）。`licenses/Go-LICENSE` 是当前构建工具链的标准库许可。源码的完整依赖图以 go.mod/go.sum 为准，清单不包含仅构建工具、测试或未链接模块。
+`go-modules.json` 记录七个发行目标实际链接的模块及版本；`go/` 保留这些模块中的 LICENSE/COPYING/NOTICE 等全文（含嵌套版权文件）。`licenses/Go-LICENSE` 是当前构建工具链的标准库许可。源码的完整依赖图以 go.mod/go.sum 为准，模块清单不包含仅构建工具、测试或未链接模块。为完整保留上游声明，已链接模块目录中的辅助示例/测试许可也一并收录；保留其文本不代表这些辅助代码被链接进发行二进制。
 
 更新 Go 依赖后执行 `python3 scripts/collect-go-licenses.py`，审查新增和删除的组件及文本后提交清单。不要把工具链升级自动视为许可证已审查。
 

@@ -19,7 +19,7 @@ python3 scripts/scan-secrets.py --artifacts /tmp/agentbox-release --output /tmp/
 
 发布脚本拒绝已有输出目录、缺失 LICENSE 或脏工作区。`--allow-dirty` 仅供本地候选验证，版本信息会标记 dirty，不可公开发布。发布前须重新从干净提交构建。
 
-`v*` 标签触发 `.github/workflows/release.yml`，执行验证、构建、Linux 包冒烟及敏感信息扫描，上传私有工作流候选 artifact。它不自动公开 GitHub Release，也不推送含 Claude Code 的镜像。维护者审阅检查结果、变更说明及许可证后，再手工创建 Release 并附上候选文件；预览版本标记为 prerelease。创建/推送标签与公开发布需要项目负责人的明确决定。
+`v*` 标签触发 `.github/workflows/release.yml`，执行验证、构建、Linux 包冒烟及敏感信息扫描，上传供评审的工作流候选 artifact（可见性跟随仓库及 Actions 权限，不保证私密）。它不自动公开 GitHub Release，也不推送含 Claude Code 的镜像。维护者审阅检查结果、变更说明及许可证后，再手工创建 Release 并附上候选文件；预览版本标记为 prerelease。创建/推送标签与公开发布需要项目负责人的明确决定。
 
 ## 从包安装（无需 Go/Node 编译服务端）
 
