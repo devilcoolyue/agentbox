@@ -125,6 +125,15 @@ go build -o abox-link ./cmd/abox-link
 
 ## CI 与提交
 
+Git 容器执行有一个不调用模型、不挂载宿主机目录的 Linux 冒烟测试；CI 自动运行，本地可按需执行：
+
+```bash
+docker build -t agentbox-git-test:local -f internal/dockerx/testdata/git.Dockerfile internal/dockerx/testdata
+AGENTBOX_DOCKER_TEST_IMAGE=agentbox-git-test:local go test ./internal/dockerx -run '^TestGitContainerLive$' -count=1 -v
+```
+
+它验证真实 Docker exec 的 uid、Git 提交/diff、hook 禁用和继承环境清理，测试结束自动删除临时容器；镜像保留用于重复测试。Go Docker 客户端读取 `DOCKER_HOST`，不会自动读取 CLI 的 context；非默认 Docker context 需要设置对应地址。该测试使用最小 Alpine Git 镜像，不替代生产 Debian Agent 镜像、会话启动和 systemd 的完整验收。
+
 [`ci.yml`](../.github/workflows/ci.yml) 会执行前端类型检查与构建一致性、Go build / vet / test、abox-link 各平台交叉编译，以及按仓库策略执行 govulncheck。
 
 提交前检查：

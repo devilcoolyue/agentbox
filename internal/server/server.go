@@ -26,6 +26,7 @@ import (
 
 	"agentbox/internal/config"
 	"agentbox/internal/dockerx"
+	"agentbox/internal/gitx"
 	"agentbox/internal/store"
 	"agentbox/internal/web"
 )
@@ -55,6 +56,7 @@ type Server struct {
 	cfg      *config.Config
 	store    *store.Store
 	dock     *dockerx.Manager
+	git      *gitx.Runner
 	chat     *chatManager
 	tunnels  *tunnelHub
 	pairs    *pairStore    // outstanding abox-link pairing codes
@@ -130,6 +132,7 @@ func New(cfg *config.Config) (*Server, error) {
 		},
 	}
 	s.chat = newChatManager(s)
+	s.git = gitx.New(dock, s.prepareGitSession)
 	if err := s.seedUsers(); err != nil {
 		return nil, err
 	}

@@ -46,6 +46,10 @@ jobs:
         run: go vet ./...
       - name: test
         run: go test ./...
+      - name: Git container smoke (no model calls)
+        run: |
+          docker build -t agentbox-git-test:ci -f internal/dockerx/testdata/git.Dockerfile internal/dockerx/testdata
+          AGENTBOX_DOCKER_TEST_IMAGE=agentbox-git-test:ci go test ./internal/dockerx -run '^TestGitContainerLive$' -count=1 -v
       - name: cross-compile abox-link (smoke)
         run: |
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do

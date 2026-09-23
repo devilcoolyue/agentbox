@@ -22,6 +22,7 @@
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
 | `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）、用量计量与额度（`usage.go`/`quota.go`/`usagelog.go`）。 |
 | `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens/usage_events/quotas/credit_ledger；首次打开会导入旧版 `state.json`。 |
+| `internal/gitx` | 网页 Git 的容器执行策略：argv、环境隔离、超时与窄执行接口；禁止宿主机 Git 降级。 |
 | `internal/dockerx` | Docker Engine API 封装：容器生命周期、exec PTY/stream、stats、镜像/挂载检查。 |
 | `internal/agent` | Claude/Codex 适配层：headless 命令、标题生成、凭证播种、Claude HUD、Codex app-server 协议。 |
 | `internal/archivex` | 上传压缩包解压（防 zip-slip/符号链接/解压炸弹）与工作区 zip 下载。 |
@@ -428,14 +429,21 @@ data/
 
 ### 变更审查（Git）
 
-- `internal/server/git.go` 用**宿主机的 git** 直接操作会话工作区里的仓库（不进容器），
-  统一带 `-c safe.directory=<repo>`：仓库属主是 uid 1000，服务端是 root。
+- `internal/server/git.go` 负责 HTTP 与仓库选择；`internal/gitx` 通过 `dockerx.ExecCommand`
+  在会话容器里以 uid/gid 1000:1000 执行 Git。**禁止回退宿主机 Git**：仓库 hook、
+  过滤器等是用户代码，曾确认宿主机 root 的 commit 会执行用户仓库 hook。
+- Git 请求通过 `prepareGitSession` 按需启动空间，先检查与终端一致的额度拦截，
+  并持有活动引用避免空闲回收。文件查看/下载仍可独立使用。
+- Git 命令由 argv 传入，容器内用 `timeout` 限时 15 秒、再给 2 秒终止宽限；Docker
+  exec 断连不会杀进程，不能只依靠请求 context。stdout 上限 4 MiB，超限明确报错。
+- 网页 Git 使用清理后的环境，不注入账号/代理凭证；禁用 hook、fsmonitor、签名和
+  自动维护，需要 hook/签名时用户可在终端操作。容器里的已有凭证仍可被用户代码读取。
 - **必须挡住 git 的向上仓库发现**：`data_dir` 通常就在服务端自己的 checkout 里
   （默认相对路径 `data`），workspace 自己没有 `.git` 时 `git -C <ws>` 会一路向上找到
   **服务端仓库**——曾经的表现是每个会话的「变更」页都显示 agentbox 自己的改动，
   而「提交」会把服务端仓库整棵工作树 `add -A` 进去。`.gitignore` 里的 `/data/` 挡不住，
   ignore 只管文件跟不跟踪，不管仓库发现。两道防线：`repoRoots` 只认真实存在 `.git`
-  的目录，`runGit` 再用 `GIT_CEILING_DIRECTORIES`（**必须绝对路径**，git 忽略相对项）
+  的目录，`gitx` 再用容器内的 `GIT_CEILING_DIRECTORIES`（**必须绝对路径**）
   把发现范围钉死在目标目录。
 - **工作区根几乎从来不是仓库**，项目一般 clone/解压在子目录里，所以 `repoRoots` 往下
   找两层（跳过隐藏目录与 `node_modules`/`__MACOSX`/`vendor`，符号链接目录不跟随），
@@ -453,16 +461,13 @@ data/
   `dir/`，用户看到的是「.claude/」而不是里面那个新文件，单文件的 diff 和丢弃都无从下手。
   代价是未跟踪的大目录（没 gitignore 的 node_modules）会撑爆列表，所以服务端按
   `maxStatusFiles` 截断并回 `truncated`。
-- **宿主机 root 的 git 配置不能漏进来**：`GIT_CONFIG_GLOBAL=/dev/null` +
-  `GIT_CONFIG_NOSYSTEM=1`，另外 `-c core.excludesFile=/dev/null` —— 全局排除文件
-  走的是自己的默认路径（`~/.config/git/ignore`），**`GIT_CONFIG_GLOBAL` 管不着它**，
-  必须单独指空。不这么做的话 Claude Code 给 root 写的那条
-  `**/.claude/settings.local.json` 会把用户的文件从审查列表里悄悄抹掉，而且这事只在
-  `HOME` 有值时发生（systemd 起的服务没有 HOME，手工在 shell 里跑就有），
-  两种跑法结论不一样最难查。仓库自己的 `.gitignore` 和 `.git/info/exclude` 照常生效。
-- 写操作（commit / discard）后必须 `chownWorkspace` 把属主修回 1000:1000，
-  否则 root 写下的 `.git` 对象会让容器内 agent 后续 git 操作失权。
-- `discard` 是 `checkout HEAD -- <path>` + `clean -fd -- <path>`，破坏性操作，
+- Git 全局配置隔离使用 `env -i`、`GIT_CONFIG_GLOBAL=/dev/null`、
+  `GIT_CONFIG_NOSYSTEM=1` 和 `-c core.excludesFile=/dev/null`。仓库自己的 `.gitignore`
+  与 `.git/info/exclude` 照常生效；`GIT_LITERAL_PATHSPECS=1` 保证文件名不被当成通配表达式。
+- 写操作由容器用户执行，不再用宿主机递归 chown 修补属主。无 HEAD 的新仓库 diff
+  使用 `--cached`；Docker、启动等其他错误必须向用户报告，不能回空 diff 掩盖。
+- `discard` 先用 `ls-files` 判断是否含已跟踪文件，需要时执行 `checkout HEAD -- <path>`，
+  成功后才 `clean -fd -- <path>`；仅未跟踪文件跳过 checkout。破坏性操作，
   前端有二次确认。
 
 ### 附件与清理
@@ -526,7 +531,7 @@ data/
   抬这一行修——它们没法进豁免清单。宿主上的 go 比这行旧时，`go build` 会按
   `GOTOOLCHAIN=auto` 自动下载对应工具链，所以生产机上不必手动升级 `/usr/local/go`，
   但机器得能连 proxy.golang.org。
-- 现有测试集中在 `internal/agent`、`internal/linkapp`、`internal/server`、`internal/store`、`internal/tunnel`；`dockerx`、`archivex`、`config` 等目前没有测试。改动这些包时优先补针对性测试。
+- 现有测试集中在 `internal/agent`、`internal/linkapp`、`internal/server`、`internal/store`、`internal/tunnel`；`dockerx`、`config`、`gitx` 也有测试；`archivex` 目前没有包内测试。改动时优先补针对性测试。
 - 配置变更是“副本上修改 → 校验 → 原子写盘 → 替换内存状态”的模式；不要绕过 `Config.mutate` 直接改字段。
 - SQLite 加列走 `store.migrate()` 里的幂等 `ALTER TABLE`（重复执行时忽略
   `duplicate column name`）——`CREATE TABLE IF NOT EXISTS` 对已存在的库不生效。
@@ -561,3 +566,8 @@ data/
 - 会话镜像内禁用 CLI 自升级（`DISABLE_AUTOUPDATER=1`）；Claude/Codex 版本由 `images/agent/Dockerfile` 与 `scripts/auto-update-image.sh` 管理。
 - `config.json`、`accounts/`、`data/` 含密钥和运行时状态，已在 `.gitignore`；不要提交。
 - 若改动影响用户可见行为、部署步骤、API 或配置字段，同步更新 `README.md`（必要时也更新 `deploy/README.md`）。
+
+## 开源重构
+
+目标模块、运行目录迁移与逐阶段验收见 `docs/architecture/opensource-refactor.md`。
+每完成一个实施单元更新记录，明确本地验证与 Linux Docker 实测的区别。

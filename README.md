@@ -163,6 +163,8 @@ sudo ./deploy/deploy.sh
 
 当前账号池由管理员统一维护，尚无逐用户的账号使用授权。管理员的工作空间 API 同样受属主校验；系统管理权限不提供跨用户的空间浏览入口。服务器管理员仍可直接访问宿主机持久数据。
 
+账号凭证会提供给容器内的 CLI，拥有终端访问权的用户可以读取这些凭证。因此，共享账号池适用于可信用户；不要将管理员的订阅或 API 凭证分享给不可信用户。
+
 ## 当前支持范围
 
 | 能力 | Claude Code | Codex CLI |
@@ -182,6 +184,7 @@ sudo ./deploy/deploy.sh
 - **默认备份不是完整工作区备份。** 内置脚本覆盖数据库、`config.json` 与根目录 `accounts/`；用户目录、home 模板、网页创建账号的 `data/creds/` 和外部凭证目录需另外备份。
 - **生产发布会短暂断开连接。** 当前采用单机、单服务进程与本机 Docker，同一 `data_dir` 只允许一个 agentbox 进程。
 - **容器允许 Agent 执行代码。** 默认权限模式为 `bypassPermissions`。容器以非 root 用户运行，设置资源限制与 `no-new-privileges`；服务端具有 Docker 权限，适合由可信管理员部署和维护。
+- **Git 审查在会话容器内执行。** 进入审查会按需启动空间，并遵循终端相同的额度入口限制；网页提交不执行 Git hook 或签名，需要这些功能时请在终端提交。
 
 ## 使用文档
 
@@ -198,6 +201,7 @@ sudo ./deploy/deploy.sh
 | [部署与运维](deploy/README.md) | systemd、HTTPS、更新、备份恢复、迁移与日志 |
 | [API 参考](docs/api.md) | 登录、工作空间、文件、聊天、用量与管理接口 |
 | [开发指南](docs/development.md) | 仓库结构、构建、前端热加载、测试与贡献约定 |
+| [开源重构设计](docs/architecture/opensource-refactor.md) | 模块边界、目录迁移、分阶段实施与验收进度 |
 | [常见问题](docs/troubleshooting.md) | 启动、登录、容器、代理、用量、备份与前端排障 |
 
 ## 技术栈与本地开发

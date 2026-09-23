@@ -69,6 +69,8 @@ POST   /api/sessions/{id}/skills/{name}/copy    在范围间复制 {to:"session"
 
 ## Git 变更
 
+Git 命令在会话容器内执行，会按需启动空间；额度拦截返回 `403`。Git 执行模块未配置返回 `503`，其他启动/运行错误按接口返回错误，不回退宿主机 Git，也不以空 diff 隐藏失败。单条命令限时 15 秒（随后最多 2 秒强制终止），stdout 上限 4 MiB；超过限制返回错误。网页提交禁用 hook 与签名。`git/file` 是普通文件读取，不执行 Git。
+
 ```text
 GET    /api/sessions/{id}/git/status  变更列表（repos=工作区里发现的仓库、repo=当前那个、
                                       分支 + 文件状态，未跟踪目录逐个文件列出、超 2000 条

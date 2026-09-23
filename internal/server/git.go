@@ -1,16 +1,15 @@
-// Git 变更审查：对会话 workspace 直接跑宿主机 git，让用户在网页里查看 agent 的
-// 改动、提交或回滚，无需切到终端。写操作后把 .git/工作树属主修回容器用户
-// (1000:1000)，避免 root 写下的对象让容器内 agent 后续 git 操作失权。
+// Git 变更审查：目录发现与 HTTP 响应在这里，Git 命令交给 gitx 在会话容器内
+// 以 1000:1000 执行。仓库配置可执行代码，因此绝不能回退宿主机 Git。
 package server
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
@@ -18,47 +17,48 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"agentbox/internal/archivex"
-	"agentbox/internal/dockerx"
+	"agentbox/internal/gitx"
 	"agentbox/internal/store"
 )
 
-// runGit runs git in dir with ownership checks disabled (root reads a repo owned
-// by uid 1000). Returns stdout; on failure the error carries stderr.
-//
-// dir must be a directory we already know holds a .git: session workspaces live
-// under data_dir, which may itself sit inside a git repo (the server's own
-// checkout). Left to itself git's repo discovery walks up out of the workspace
-// and lands on that repo, so every session would report the server repo's
-// changes — and `add -A` would stage its whole tree. GIT_CEILING_DIRECTORIES
-// stops the walk one level above dir; git ignores relative entries, hence Abs.
-func runGit(ctx context.Context, dir string, args ...string) (string, error) {
-	// core.excludesFile is not covered by GIT_CONFIG_GLOBAL: its default path
-	// (~/.config/git/ignore) applies even with no global config at all, so it
-	// has to be pointed at an empty file explicitly. The repo's own .gitignore
-	// and .git/info/exclude still apply — those belong to the repo.
-	full := append([]string{
-		"-c", "safe.directory=" + dir,
-		"-c", "core.excludesFile=/dev/null",
-		"-C", dir,
-	}, args...)
-	cmd := exec.CommandContext(ctx, "git", full...)
-	// Review must reflect the repo's own rules, not whoever's config the server
-	// inherited: root's ~/.config/git/ignore would silently hide files from the
-	// user (Claude Code's own default ignores .claude/settings.local.json), and
-	// core.hooksPath there would run host hooks on a container-owned repo. That
-	// leak only bites when HOME happens to be set — systemd gives the unit none,
-	// a shell does — which is exactly the kind of difference not worth debugging.
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
-	if abs, err := filepath.Abs(dir); err == nil {
-		cmd.Env = append(cmd.Env, "GIT_CEILING_DIRECTORIES="+filepath.Dir(abs))
+var errGitQuota = errors.New("额度已用完，无法运行 Git；文件仍可查看和下载")
+
+func (s *Server) prepareGitSession(ctx context.Context, id string) (string, func(), error) {
+	sess, ok := s.store.Get(id)
+	if !ok {
+		return "", nil, errSessionGone
 	}
-	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
-	if err := cmd.Run(); err != nil {
-		return out.String(), fmt.Errorf("%w: %s", err, strings.TrimSpace(errb.String()))
+	// Git filters are executable user code too. Apply the same entry gate as
+	// terminal access before starting a container or invoking any Git command.
+	if s.quotaBlock(sess.User) != "" {
+		return "", nil, errGitQuota
 	}
-	return out.String(), nil
+	s.idle.hold(id)
+	release := func() { s.idle.release(id) }
+	sess, err := s.startSession(ctx, sess)
+	if err != nil {
+		release()
+		return "", nil, err
+	}
+	return sess.ContainerID, release, nil
+}
+
+func (s *Server) runGit(ctx context.Context, sess store.Session, dir string, args ...string) (string, error) {
+	rel, err := filepath.Rel(s.workspaceDir(sess), dir)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", errors.New("invalid Git repository path")
+	}
+	return s.git.Run(ctx, sess.ID, filepath.ToSlash(rel), args...)
+}
+
+func writeGitErr(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	if errors.Is(err, errGitQuota) {
+		status = http.StatusForbidden
+	} else if errors.Is(err, gitx.ErrUnavailable) {
+		status = http.StatusServiceUnavailable
+	}
+	writeErr(w, status, err.Error())
 }
 
 // 扫描 workspace 找仓库的边界：往下最多两层（上传的压缩包常多包一层目录），
@@ -207,13 +207,13 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request, sess st
 	dir := filepath.Join(ws, filepath.FromSlash(rel))
 	ctx, cancel := gitCtx(r)
 	defer cancel()
-	branch, _ := runGit(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD")
+	branch, _ := s.runGit(ctx, sess, dir, "rev-parse", "--abbrev-ref", "HEAD")
 	// --untracked-files=all: the default collapses a wholly-untracked directory
 	// into one "dir/" entry, so a new .claude/settings.local.json shows up as
 	// ".claude/" with no way to diff or discard the file itself.
-	out, err := runGit(ctx, dir, "status", "--porcelain=v1", "--untracked-files=all")
+	out, err := s.runGit(ctx, sess, dir, "status", "--porcelain=v1", "--untracked-files=all")
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeGitErr(w, err)
 		return
 	}
 	files := parsePorcelain(out)
@@ -240,21 +240,32 @@ func (s *Server) handleGitDiff(w http.ResponseWriter, r *http.Request, sess stor
 	if !ok {
 		return
 	}
+	p := filepath.FromSlash(r.URL.Query().Get("path"))
+	if p != "" && !filepath.IsLocal(p) {
+		writeErr(w, http.StatusBadRequest, "invalid path")
+		return
+	}
 	ctx, cancel := gitCtx(r)
 	defer cancel()
-	args := []string{"diff", "HEAD"}
-	if p := filepath.FromSlash(r.URL.Query().Get("path")); p != "" {
-		if !filepath.IsLocal(p) {
-			writeErr(w, http.StatusBadRequest, "invalid path")
-			return
-		}
-		args = append(args, "--", p)
+	args := []string{"diff", "--no-ext-diff", "--no-textconv"}
+	// Only exit 1 from this quiet probe means an unborn HEAD. Runtime failures
+	// must not become a successful empty diff.
+	if _, err := s.runGit(ctx, sess, dir, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
+		args = append(args, "HEAD")
+	} else if gitx.IsExit(err, 1) {
+		args = append(args, "--cached")
+	} else {
+		writeGitErr(w, err)
+		return
 	}
-	out, err := runGit(ctx, dir, args...)
+	args = append(args, "--")
+	if p != "" {
+		args = append(args, p)
+	}
+	out, err := s.runGit(ctx, sess, dir, args...)
 	if err != nil {
-		// A repo with no commits yet has no HEAD; fall back to diffing the index.
-		fallback := append([]string{"diff"}, args[1:]...)
-		out, _ = runGit(ctx, dir, fallback...)
+		writeGitErr(w, err)
+		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(out))
@@ -303,11 +314,6 @@ func (s *Server) handleGitFile(w http.ResponseWriter, r *http.Request, sess stor
 	_, _ = w.Write(body)
 }
 
-func (s *Server) chownWorkspace(sess store.Session) {
-	// Best-effort: keep everything git touched owned by the container user.
-	_ = archivex.ChownTree(s.workspaceDir(sess), dockerx.AgentUID, dockerx.AgentGID)
-}
-
 func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	var req struct {
 		Message string `json:"message"`
@@ -328,15 +334,18 @@ func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request, sess st
 	}
 	ctx, cancel := gitCtx(r)
 	defer cancel()
-	if _, err := runGit(ctx, dir, "add", "-A"); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	if _, err := s.runGit(ctx, sess, dir, "add", "-A"); err != nil {
+		writeGitErr(w, err)
 		return
 	}
-	out, err := runGit(ctx, dir,
+	out, err := s.runGit(ctx, sess, dir,
 		"-c", "user.name=agentbox", "-c", "user.email=agentbox@localhost",
 		"commit", "-m", msg)
-	s.chownWorkspace(sess)
 	if err != nil {
+		if errors.Is(err, errGitQuota) || errors.Is(err, gitx.ErrUnavailable) {
+			writeGitErr(w, err)
+			return
+		}
 		writeErr(w, http.StatusBadRequest, "提交失败："+strings.TrimSpace(out+" "+err.Error()))
 		return
 	}
@@ -369,14 +378,22 @@ func (s *Server) handleGitDiscard(w http.ResponseWriter, r *http.Request, sess s
 		}
 		target = p
 	}
-	// checkout restores tracked files; clean removes untracked ones. A path that
-	// is only untracked makes checkout error, which is fine — clean handles it.
-	_, _ = runGit(ctx, dir, "checkout", "HEAD", "--", target)
-	if _, err := runGit(ctx, dir, "clean", "-fd", "--", target); err != nil {
-		s.chownWorkspace(sess)
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	// Untracked-only selections don't need checkout. For tracked paths, a
+	// failed restore must stop the operation before cleaning unrelated files.
+	tracked, err := s.runGit(ctx, sess, dir, "ls-files", "-z", "--", target)
+	if err != nil {
+		writeGitErr(w, err)
 		return
 	}
-	s.chownWorkspace(sess)
+	if tracked != "" {
+		if _, err := s.runGit(ctx, sess, dir, "checkout", "HEAD", "--", target); err != nil {
+			writeGitErr(w, err)
+			return
+		}
+	}
+	if _, err := s.runGit(ctx, sess, dir, "clean", "-fd", "--", target); err != nil {
+		writeGitErr(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

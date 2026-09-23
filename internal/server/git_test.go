@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,8 +13,151 @@ import (
 	"strings"
 	"testing"
 
+	"agentbox/internal/gitx"
 	"agentbox/internal/store"
 )
+
+// This executor maps container paths to a temporary fixture for handler tests.
+// Production has no local executor; Docker API behavior is tested in dockerx.
+type localGitExecutor struct{ workspace string }
+
+func (e localGitExecutor) ExecCommand(ctx context.Context, containerID string, argv []string) (string, error) {
+	if containerID != "test-container" {
+		return "", errors.New("unexpected container")
+	}
+	// The fixture uses host Git, so omit the Linux-only timeout wrapper.
+	args := append([]string(nil), argv[4:]...)
+	for i, arg := range args {
+		if arg == "/workspace" || strings.HasPrefix(arg, "/workspace/") {
+			args[i] = e.workspace + strings.TrimPrefix(arg, "/workspace")
+		} else if strings.HasPrefix(arg, "GIT_CEILING_DIRECTORIES=") {
+			dir := strings.TrimPrefix(arg, "GIT_CEILING_DIRECTORIES=")
+			if dir == "/" {
+				dir = filepath.Dir(e.workspace)
+			} else {
+				dir = e.workspace + strings.TrimPrefix(dir, "/workspace")
+			}
+			args[i] = "GIT_CEILING_DIRECTORIES=" + dir
+		}
+	}
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	returnBytes, err := cmd.Output()
+	return string(returnBytes), err
+}
+
+func newGitTestServer(t *testing.T) (*Server, store.Session) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	s, sess := newTestServer(t)
+	s.git = gitx.New(localGitExecutor{s.workspaceDir(sess)}, func(context.Context, string) (string, func(), error) {
+		return "test-container", func() {}, nil
+	})
+	return s, sess
+}
+
+func TestGitWebCommitDoesNotRunHooks(t *testing.T) {
+	s, sess := newGitTestServer(t)
+	ws := s.workspaceDir(sess)
+	gitCmd(t, ws, "init", "-q")
+	if err := os.WriteFile(filepath.Join(ws, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A hook installed by the user must not execute when committing in the UI.
+	hooks := filepath.Join(ws, "custom-hooks")
+	if err := os.Mkdir(hooks, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hooks, "pre-commit"), []byte("#!/bin/sh\ntouch hook-ran\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitCmd(t, ws, "config", "core.hooksPath", hooks)
+	w := httptest.NewRecorder()
+	s.handleGitCommit(w, httptest.NewRequest(http.MethodPost, "/g/commit", strings.NewReader(`{"message":"first commit"}`)), sess)
+	if w.Code != http.StatusOK {
+		t.Fatalf("commit: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(ws, "hook-ran")); !os.IsNotExist(err) {
+		t.Fatalf("repository hook ran: %v", err)
+	}
+}
+
+func TestGitDiffBeforeFirstCommitAndUnavailableRuntime(t *testing.T) {
+	s, sess := newGitTestServer(t)
+	ws := s.workspaceDir(sess)
+	gitCmd(t, ws, "init", "-q")
+	if err := os.WriteFile(filepath.Join(ws, "first.txt"), []byte("first content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitCmd(t, ws, "add", "first.txt")
+	w := httptest.NewRecorder()
+	s.handleGitDiff(w, httptest.NewRequest(http.MethodGet, "/g/diff", nil), sess)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "+first content") {
+		t.Fatalf("unborn HEAD diff: %d %s", w.Code, w.Body.String())
+	}
+	// A runtime failure must not silently become an empty successful diff, and
+	// must never invoke host Git as a fallback even though the repo is present.
+	s.git = nil
+	w = httptest.NewRecorder()
+	s.handleGitDiff(w, httptest.NewRequest(http.MethodGet, "/g/diff", nil), sess)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unavailable: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGitQuotaBlocksBeforeContainerStart(t *testing.T) {
+	s, sess := newTestServer(t)
+	if err := s.store.Put(sess); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.store.SetQuotaEnforced(sess.User, true); err != nil {
+		t.Fatal(err)
+	}
+	// idle and dock are nil: reaching either would panic. Rejection must happen
+	// before any activity hold, credentials synchronization or Docker operation.
+	_, release, err := s.prepareGitSession(t.Context(), sess.ID)
+	if !errors.Is(err, errGitQuota) || release != nil {
+		t.Fatalf("quota: release present=%v err=%v", release != nil, err)
+	}
+}
+
+func TestGitDiscardUsesLiteralPathsAndStopsOnRestoreFailure(t *testing.T) {
+	s, sess := newGitTestServer(t)
+	ws := s.workspaceDir(sess)
+	gitCmd(t, ws, "init", "-q")
+	for _, name := range []string{"tracked.txt", "[ab].txt", "a.txt"} {
+		if err := os.WriteFile(filepath.Join(ws, name), []byte("content\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitCmd(t, ws, "add", "tracked.txt")
+	gitCmd(t, ws, "commit", "-q", "-m", "init")
+	w := httptest.NewRecorder()
+	s.handleGitDiscard(w, httptest.NewRequest(http.MethodPost, "/g/discard", strings.NewReader(`{"path":"[ab].txt"}`)), sess)
+	if w.Code != http.StatusOK {
+		t.Fatalf("discard: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(ws, "[ab].txt")); !os.IsNotExist(err) {
+		t.Fatalf("selected path remains: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(ws, "a.txt")); err != nil {
+		t.Fatalf("literal path matched a different file: %v", err)
+	}
+	// A corrupt HEAD prevents checkout. The untracked file must survive the
+	// failed restore rather than being deleted by a subsequent clean.
+	if err := os.WriteFile(filepath.Join(ws, ".git", "HEAD"), []byte("ref: refs/heads/missing\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	s.handleGitDiscard(w, httptest.NewRequest(http.MethodPost, "/g/discard", strings.NewReader(`{}`)), sess)
+	if w.Code == http.StatusOK {
+		t.Fatal("failed restore reported success")
+	}
+	if _, err := os.Stat(filepath.Join(ws, "a.txt")); err != nil {
+		t.Fatalf("clean ran after failed checkout: %v", err)
+	}
+}
 
 func gitCmd(t *testing.T, dir string, args ...string) {
 	t.Helper()
@@ -59,7 +204,7 @@ func TestGitStatusDoesNotEscapeWorkspace(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
-	s, sess := newTestServer(t)
+	s, sess := newGitTestServer(t)
 	outer := s.cfg.DataDir // encloses the session workspace
 	gitCmd(t, outer, "init", "-q")
 	if err := os.WriteFile(filepath.Join(outer, "outer.txt"), []byte("host repo\n"), 0o644); err != nil {
@@ -73,7 +218,7 @@ func TestGitStatusDoesNotEscapeWorkspace(t *testing.T) {
 		t.Fatalf("status = %+v, want no repo (must not see the enclosing repo)", st)
 	}
 	// Second layer: even asked to run there directly, git must not discover upward.
-	if out, err := runGit(t.Context(), s.workspaceDir(sess), "rev-parse", "--show-toplevel"); err == nil {
+	if out, err := s.runGit(t.Context(), sess, s.workspaceDir(sess), "rev-parse", "--show-toplevel"); err == nil {
 		t.Fatalf("git found a repo at %q, want discovery stopped at the workspace", strings.TrimSpace(out))
 	}
 	// Write paths refuse to run at all rather than falling back to the enclosing repo.
@@ -96,7 +241,7 @@ func TestGitStatusListsUntrackedFilesIndividually(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
-	s, sess := newTestServer(t)
+	s, sess := newGitTestServer(t)
 	ws := s.workspaceDir(sess)
 	gitCmd(t, ws, "init", "-q")
 	if err := os.WriteFile(filepath.Join(ws, "tracked.txt"), []byte("x\n"), 0o644); err != nil {
@@ -145,7 +290,7 @@ func TestGitNestedRepos(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
-	s, sess := newTestServer(t)
+	s, sess := newGitTestServer(t)
 	ws := s.workspaceDir(sess)
 	for _, name := range []string{"proj", "later", filepath.Join("node_modules", "dep"), filepath.Join("__MACOSX", "proj")} {
 		dir := filepath.Join(ws, name)
@@ -204,7 +349,7 @@ func TestGitFileView(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
-	s, sess := newTestServer(t)
+	s, sess := newGitTestServer(t)
 	ws := s.workspaceDir(sess)
 	proj := filepath.Join(ws, "proj")
 	if err := os.MkdirAll(filepath.Join(proj, ".claude"), 0o755); err != nil {
@@ -273,7 +418,7 @@ func TestGitStatusDiffCommitDiscard(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
-	s, sess := newTestServer(t)
+	s, sess := newGitTestServer(t)
 	ws := s.workspaceDir(sess)
 
 	git := func(args ...string) { gitCmd(t, ws, args...) }

@@ -13,6 +13,7 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 | 管理用户和成本 | [配置参考](configuration.md) → [账号与模型](accounts-and-models.md) → [额度与价目表](usage-and-quotas.md) |
 | 访问本地数据库或公司内网 | [出口代理与内网隧道](networking.md) |
 | 接入脚本或参与开发 | [API 参考](api.md) → [开发指南](development.md) |
+| 参与开源重构 | [重构设计与实施计划](architecture/opensource-refactor.md) |
 | 遇到错误 | [常见问题](troubleshooting.md) → [部署日志](../deploy/README.md#日志与健康检查) |
 
 ## 文档地图
