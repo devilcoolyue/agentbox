@@ -99,8 +99,8 @@ third_party/
 
 - [x] A1：Git 执行迁入容器，提取 `gitx`，增加回归测试和使用说明；最小 Linux Git 容器验证通过。
 - [x] A2：新增 `safefs` 目录句柄封装，迁移文件、归档、技能、预览、模板/凭证和终端 transcript 读取；并发链接替换及 Linux 回归通过。
-- [ ] A3：系统备份覆盖 SQLite、配置、全部凭证来源、模板；完整备份额外覆盖 users（home/workspace/chats/shared）。输出清单、版本和校验和。
-- [ ] A4：增加恢复校验与演练；完整一致性备份须暂停写入或使用协调快照，在线 SQLite 快照不代表所有文件跨资源一致。
+- [x] A3：系统/完整备份内置到 Go 二进制，覆盖全部配置凭证根与模板；完整备份含 users，输出格式版本、清单与 SHA-256。
+- [x] A4：恢复仅发布到新目录，验证清单/哈希与 SQLite 完整性；完整备份需持有服务 flock 并检查 Docker 挂载；系统/完整合成数据恢复演练通过。
 - [ ] A5：明确可信团队边界，增加账号可用范围；兼容既有管理员账号池。
 
 验收：安全回归通过；在 Linux 上完成容器内 Git 验证；在隔离环境完成一次备份恢复。真实凭证不进入测试夹具。
@@ -146,7 +146,11 @@ third_party/
 - 2026-09-23：创建重构分支与设计文档；完成 A1 的实现及本地验证。新增容器命令执行适配器、`gitx`、额度入口检查、Git hook/环境隔离、首次提交 diff 与丢弃失败回归，并接入 CI 容器冒烟步骤。
 - 验证通过：`go build ./...`、`go test ./...`、`go vet ./...`、`npm run check`、`go test -race ./internal/gitx ./internal/dockerx`。
 - 本机 Docker 的 Linux arm64 最小 Alpine Git 容器实测通过：uid=1000、提交/diff、hook 禁用、过滤器不继承测试密钥环境变量。临时容器已清理，测试镜像保留用于复用。未调用模型、未挂载真实账号或工作区。
-- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。A3–D4 尚未实现。下一实施单元为 A3/A4 的备份恢复。
+- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。A5–D4 尚未实现。下一实施单元为 A5 的账号使用授权。
 
 - 2026-09-23：完成 A2。新增 `internal/safefs`，移除检查后返回绝对路径的文件助手与旧 rename 降级实现；普通文件读、原子保存、移动/删除、归档、预览、技能与凭证统一使用固定目录句柄。详见 [文件系统边界](filesystem-boundaries.md)。
 - A2 验证通过：Go build/test/vet、前端类型检查、safefs/archivex/agent/server 的 race 检查；`scripts/test-filesystem-linux.sh` 在无宿主挂载、无外网的 Linux arm64 容器运行四个包的完整测试通过。最小镜像补齐 tzdata 后解决了时区测试环境缺失；未连接生产或调用模型。
+
+- 2026-09-23：完成 A3/A4。新增 `internal/backup`、`agentbox backup` / `backup-verify` / `restore --to`；定时脚本改为编排内置命令，支持独立配置/二进制路径，分别轮转系统与完整备份。SQLite 使用在线 Backup API，临时快照转独立 DELETE journal 模式，保留源库 WAL。
+- A3/A4 验证通过：Go 全量构建/测试/vet，backup/safefs/cmd 的 race；`scripts/test-backup.sh` 实际命令演练覆盖 WAL、外部凭证、模板、哈希验证、恢复、拒绝覆盖与轮转；启用 Docker 检查的完整工作区恢复通过。`scripts/test-filesystem-linux.sh` 在 Linux arm64 最小镜像运行五个包（含 backup）的全量测试通过。
+- 备份恢复验证使用合成数据和隔离临时目录，未读取真实凭证、未停止生产服务；实际生产数据的恢复演练、systemd 配置切换和新 CI 远端运行仍待验证。恢复不自动接管原容器，同一 daemon 上的会话 ID 冲突须按部署手册处理。开源许可证、历史扫描、发布流水线与 C/D 阶段仍未完成。

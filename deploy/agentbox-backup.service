@@ -1,5 +1,5 @@
 [Unit]
-Description=agentbox data backup (SQLite + config + accounts)
+Description=agentbox data backup (database + credentials + templates)
 After=agentbox.service
 
 [Service]

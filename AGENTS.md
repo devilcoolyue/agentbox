@@ -22,6 +22,7 @@
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
 | `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）、用量计量与额度（`usage.go`/`quota.go`/`usagelog.go`）。 |
 | `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens/usage_events/quotas/credit_ledger；首次打开会导入旧版 `state.json`。 |
+| `internal/backup` | 版本化 tar.gz 备份、SQLite 在线快照、清单/哈希验证、恢复到新目录；CLI 在 cmd/agentbox/backup.go。 |
 | `internal/safefs` | 基于 os.Root 的受限目录句柄、普通文件读取、原子写入及跨目录不覆盖重命名；详见 docs/architecture/filesystem-boundaries.md。 |
 | `internal/gitx` | 网页 Git 的容器执行策略：argv、环境隔离、超时与窄执行接口；禁止宿主机 Git 降级。 |
 | `internal/dockerx` | Docker Engine API 封装：容器生命周期、exec PTY/stream、stats、镜像/挂载检查。 |
@@ -577,3 +578,12 @@ data/
 
 目标模块、运行目录迁移与逐阶段验收见 `docs/architecture/opensource-refactor.md`。
 每完成一个实施单元更新记录，明确本地验证与 Linux Docker 实测的区别。
+
+### 备份与恢复约定
+
+- `agentbox backup` / `backup-verify` / `restore` 在服务初始化之前分流，不能为了备份调用 `store.Open`，否则会迁移正在备份的旧数据库。
+- 数据库通过 modernc SQLite Backup API 取快照，只将临时快照切为 DELETE journal 模式，源库 WAL 不改。
+- 默认系统备份含配置、数据库、全部凭证与双层模板；`--full` 再含 users 全量，必须取得 data_dir flock 并验证 Docker 中无运行容器挂载源目录。命令不自动停容器。
+- Manifest 校验内容和元数据，符号链接不跟随；恢复仅允许不存在的新目录，配置中的 data_dir/credentials_dir 重写为恢复目录内相对路径。恢复目录发布使用不覆盖 rename，不能混入旧 WAL。
+- `scripts/backup.sh` 只负责编排内置命令、SHA-256 文件、同类型轮转和可选 rsync；`AGENTBOX_BIN`/`AGENTBOX_CONFIG` 支持独立部署路径。仅用户已授权运行该脚本的远端传输时才使用 BACKUP_REMOTE。
+- 验证：`go test ./internal/backup ./cmd/agentbox`、`scripts/test-backup.sh`；需要实际 Docker 检查时设置 `AGENTBOX_BACKUP_DOCKER_TEST=1`。同 daemon 上不能同时启动带相同 session ID 的旧实例与恢复实例。

@@ -15,6 +15,15 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "backup", "backup-verify", "restore":
+			if err := maintenance(os.Args[1:]); err != nil {
+				log.Fatal(err)
+			}
+			return
+		}
+	}
 	cfgPath := flag.String("config", "config.json", "path to config JSON file")
 	flag.Parse()
 

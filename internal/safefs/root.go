@@ -58,6 +58,32 @@ func (r *Root) Symlink(target, name string, uid, gid int) error {
 	return p.root.Lchown(leaf, uid, gid)
 }
 
+func (r *Root) SetLinkTime(name string, mtime time.Time) error {
+	p, leaf, err := r.parent(name)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	f, err := p.root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	conn, err := f.SyscallConn()
+	if err != nil {
+		return err
+	}
+	var callErr error
+	err = conn.Control(func(fd uintptr) {
+		ts := unix.NsecToTimespec(mtime.UnixNano())
+		callErr = unix.UtimesNanoAt(int(fd), leaf, []unix.Timespec{ts, ts}, unix.AT_SYMLINK_NOFOLLOW)
+	})
+	if err != nil {
+		return err
+	}
+	return callErr
+}
+
 func (r *Root) ChmodDir(name string, mode os.FileMode) error {
 	d, err := r.Sub(name)
 	if err != nil {
@@ -70,6 +96,30 @@ func (r *Root) ChmodDir(name string, mode os.FileMode) error {
 	}
 	defer f.Close()
 	return f.Chmod(mode)
+}
+
+// SetDirMetadata applies metadata after restoring children, through the pinned
+// directory descriptor so a concurrent rename cannot retarget the operation.
+func (r *Root) SetDirMetadata(name string, mode os.FileMode, uid, gid int, mtime time.Time) error {
+	d, err := r.Sub(name)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	f, err := d.root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if uid >= 0 {
+		if err := f.Chown(uid, gid); err != nil {
+			return err
+		}
+	}
+	if err := f.Chmod(mode); err != nil {
+		return err
+	}
+	return setFileTime(f, mtime)
 }
 
 func clean(name string, allowRoot bool) (string, error) {

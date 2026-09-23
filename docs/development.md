@@ -131,7 +131,7 @@ go build -o abox-link ./cmd/abox-link
 ./scripts/test-filesystem-linux.sh
 ```
 
-脚本构建最小测试镜像，交叉编译并运行 safefs、archivex、agent、server 测试；不挂载源码、账号或用户工作区，不调用模型。测试容器禁用外网，结束时删除容器及本机临时二进制；测试镜像保留复用。镜像安装 Git、coreutils 与时区数据，不替代完整生产镜像验收。
+脚本构建最小测试镜像，交叉编译并运行 safefs、archivex、agent、server、backup 测试；不挂载源码、账号或用户工作区，不调用模型。测试容器禁用外网，结束时删除容器及本机临时二进制；测试镜像保留复用。镜像安装 Git、coreutils 与时区数据，不替代完整生产镜像验收。
 
 Git 容器执行有一个不调用模型、不挂载宿主机目录的 Linux 冒烟测试；CI 自动运行，本地可按需执行：
 
@@ -154,3 +154,15 @@ git status --short
 PR 描述说明触发场景、行为变化和验证结果。涉及 Linux Docker、真实 OAuth 或真实模型的行为，应注明实际验证范围；本机编译通过不等于线上链路已经验证。
 
 生产发布流程见[部署与运维](../deploy/README.md)。文档和代码提交本身不代表需要立即部署。
+
+## 备份恢复回归
+
+`go test ./internal/backup ./cmd/agentbox` 覆盖带 WAL 的数据库快照、系统/完整范围、外部凭证、清单哈希、拒绝损坏归档、停止条件和恢复时不覆盖现有实例。
+
+```bash
+./scripts/test-backup.sh
+```
+
+脚本临时构建服务端，创建纯测试数据库和凭证，实际调用 backup / backup-verify / restore 以及定时脚本，检查恢复结果与轮转；不读取真实配置、不连接生产、不调用模型。
+
+设置 `AGENTBOX_BACKUP_DOCKER_TEST=1` 额外验证完整备份命令及工作区恢复，需要可达的 Docker daemon（非默认 context 设置 `DOCKER_HOST`）。该验证只读取 Docker 挂载列表，不操作已有容器；CI 默认开启。

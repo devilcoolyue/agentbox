@@ -71,7 +71,7 @@ flowchart LR
 | OpenSSL | 生成初始管理员密码 |
 | Node.js 22 / npm（可选） | 仅修改主控制台 TypeScript 时需要 |
 
-部署机无需编译前端：`internal/web/static/js/` 的产物已经提交，并随 Go 二进制嵌入。`sqlite3` 命令行可选，备份脚本可使用 Python 的 SQLite 模块。
+部署机无需编译前端：`internal/web/static/js/` 的产物已经提交，并随 Go 二进制嵌入。备份由二进制内置 SQLite 在线备份 API 完成，定时脚本的轮转使用 Python 3。
 
 每个容器默认限制为 **2048 MiB 内存、2 CPU、512 个进程**；按并发空间数为服务器预留资源。macOS 可用于构建和单元测试，完整容器与 systemd 部署以 Linux 为目标。
 
@@ -181,7 +181,7 @@ sudo ./deploy/deploy.sh
 
 - **文件持久化不等于进程持久化。** 终端网络断开可续接；停止或重建容器会终止其中进程。应把需要保留的内容放在 `/workspace`、`/home/agent` 或 `/shared`。
 - **额度不是实时硬上限。** 网页回合结束时结算，余额见底的这一轮可能超支；终端补记不扣余额，Codex 终端消耗尚未计入。
-- **默认备份不是完整工作区备份。** 内置脚本覆盖数据库、`config.json` 与根目录 `accounts/`；用户目录、home 模板、网页创建账号的 `data/creds/` 和外部凭证目录需另外备份。
+- **默认系统备份不包含工作区。** 系统备份覆盖数据库、配置、账号凭证与双层模板；`agentbox backup --full` 额外覆盖用户文件和历史，需要先停止服务及相关容器。提供 `backup-verify` 校验和 `restore --to` 恢复到新目录，见[备份与恢复](deploy/README.md#备份与恢复)。
 - **生产发布会短暂断开连接。** 当前采用单机、单服务进程与本机 Docker，同一 `data_dir` 只允许一个 agentbox 进程。
 - **容器允许 Agent 执行代码。** 默认权限模式为 `bypassPermissions`。容器以非 root 用户运行，设置资源限制与 `no-new-privileges`；服务端具有 Docker 权限，适合由可信管理员部署和维护。
 - **Git 审查在会话容器内执行。** 进入审查会按需启动空间，并遵循终端相同的额度入口限制；网页提交不执行 Git hook 或签名，需要这些功能时请在终端提交。
