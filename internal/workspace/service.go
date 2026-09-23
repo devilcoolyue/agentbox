@@ -37,13 +37,13 @@ type Service struct {
 	store           Store
 	dock            Runtime
 	account         func(store.Session) (config.Account, error)
-	syncCredentials func(config.Account, store.Session)
+	syncCredentials func(context.Context, config.Account, store.Session) error
 	activity        *Activity
 	mu              sync.Mutex
 	locks           map[string]sessionLock
 }
 
-func New(cfg *config.Config, st Store, dock Runtime, account func(store.Session) (config.Account, error), syncCredentials func(config.Account, store.Session)) *Service {
+func New(cfg *config.Config, st Store, dock Runtime, account func(store.Session) (config.Account, error), syncCredentials func(context.Context, config.Account, store.Session) error) *Service {
 	return &Service{cfg: cfg, store: st, dock: dock, account: account, syncCredentials: syncCredentials, activity: NewActivity(), locks: map[string]sessionLock{}}
 }
 func (s *Service) Activity() *Activity { return s.activity }
@@ -138,7 +138,9 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	// 每次拉起（含每轮对话、终端连接）前先与账号池对齐 OAuth 令牌链，
 	// 会话里刷新出的新令牌得以写回，池子的新令牌也播发进会话。
 	if acct.CredentialsDir != "" {
-		s.syncCredentials(acct, cur)
+		if err := s.syncCredentials(ctx, acct, cur); err != nil {
+			return store.Session{}, err
+		}
 	}
 	if cur.Status == store.StatusRunning && s.dock.RunningWithMount(ctx, cur.ContainerID, dockerx.SharedMount) {
 		s.activity.Touch(cur.ID)

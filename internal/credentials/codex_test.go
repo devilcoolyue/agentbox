@@ -1,4 +1,4 @@
-package server
+package credentials
 
 import (
 	"os"
@@ -12,7 +12,7 @@ func TestWriteCodexProviderTOMLFresh(t *testing.T) {
 	if err := writeCodexProviderTOML(dir, "https://api.example.com", "responses"); err != nil {
 		t.Fatal(err)
 	}
-	base, wire := readCodexProvider(dir)
+	base, wire := ReadCodexProvider(dir)
 	if base != "https://api.example.com" || wire != "responses" {
 		t.Fatalf("round-trip = %q, %q", base, wire)
 	}
@@ -42,7 +42,7 @@ trust_level = "trusted"
 	if err := writeCodexProviderTOML(dir, "https://new.example.com", "chat"); err != nil {
 		t.Fatal(err)
 	}
-	base, wire := readCodexProvider(dir)
+	base, wire := ReadCodexProvider(dir)
 	if base != "https://new.example.com" || wire != "chat" {
 		t.Fatalf("round-trip = %q, %q", base, wire)
 	}
@@ -62,7 +62,7 @@ func TestWriteCodexProviderTOMLAppend(t *testing.T) {
 	if err := writeCodexProviderTOML(dir, "https://api.example.com", "responses"); err != nil {
 		t.Fatal(err)
 	}
-	base, wire := readCodexProvider(dir)
+	base, wire := ReadCodexProvider(dir)
 	if base != "https://api.example.com" || wire != "responses" {
 		t.Fatalf("round-trip = %q, %q", base, wire)
 	}
@@ -87,7 +87,7 @@ requires_openai_auth = true
 	if err := writeCodexProviderTOML(dir, "https://new.example.com", "chat"); err != nil {
 		t.Fatal(err)
 	}
-	base, wire := readCodexProvider(dir)
+	base, wire := ReadCodexProvider(dir)
 	if base != "https://new.example.com" || wire != "chat" {
 		t.Fatalf("round-trip = %q, %q", base, wire)
 	}

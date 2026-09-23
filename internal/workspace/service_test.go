@@ -77,7 +77,7 @@ func fixture(t *testing.T) (*Service, *fakeRuntime, store.Session) {
 	runtime := &fakeRuntime{running: true}
 	service := New(&config.Config{DataDir: root}, st, runtime, func(store.Session) (config.Account, error) {
 		return config.Account{ID: "acct", Type: config.AgentCodex}, nil
-	}, func(config.Account, store.Session) {})
+	}, func(context.Context, config.Account, store.Session) error { return nil })
 	return service, runtime, sess
 }
 func TestStopDeleteFailuresKeepPersistentSession(t *testing.T) {

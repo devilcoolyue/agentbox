@@ -119,7 +119,7 @@ third_party/
 
 - [x] C1：新增 app 管理数据锁/启动清理；后台任务、WS、代理/隧道和在途回合统一关闭，等待已观察到的用量落库。
 - [x] C2：提取 workspace，集中创建/启停/删除/播种/回收、可取消会话锁和活动引用；运行时失败不写假成功状态。
-- [ ] C3：提取 credentials，保留凭证刷新与同步的收敛规则。
+- [x] C3：提取 credentials，统一凭证读写/续期/同步及账号锁；修复刷新后播发受 mtime 容差抑制的问题。
 - [ ] C4：提取 usage；保留事务边界，保存入账价格快照与来源。
 - [ ] C5：引入版本化数据库迁移；检测不支持的新 schema，明确二进制回退限制。
 - [ ] C6：统一 Agent 能力与事件接口，保留脱敏协议样本，补 Codex 终端用量。
@@ -171,3 +171,7 @@ third_party/
 
 - 2026-09-23：完成 C2。`internal/workspace` 使用消费者定义的 Store/Runtime 窄接口，集中会话创建、模板→凭证→默认模型播种、幂等启动、停止/删除及空闲回收；授权与凭证同步暂通过注入函数保持边界，C3 再提取凭证服务。停止/删除与启动共用锁，等待锁支持 context 取消；Docker 失败保留会话，已不存在容器按幂等成功处理；清理目录使用受限句柄。
 - C2 验证：全量 Go build/test/vet，workspace/server/app race，合成 Linux Docker 会话+SIGTERM 重启验证通过。并发启动/删除与 UID 播种测试在 Linux 容器运行；发现旧 Docker mock 未读完请求体即关闭会引起 TCP reset，已修正测试夹具并重跑 Linux 八包回归。无真实凭证和模型调用。
+
+- 2026-09-23：完成 C3。`internal/credentials` 承接 OAuth 池文件与 Codex Key/provider 读写、状态读取、刷新合并、双向同步和账号级可取消锁；workspace 使用带 context 的同步接口。HTTP 层只保留授权流程、参数/响应与出口客户端适配，不引入业务模块对 server 的反向依赖。
+- 保留先同步→判断并刷新→立即播发的顺序，续期保留订阅档位/scopes/未知字段。刷新成功和新 OAuth 保存后的播发不再受日常同步的 2 秒 mtime 容差抑制；仍重查授权并仅更新已经播种的 home。Codex 两个文件逐文件原子写入，不宣称跨文件事务。
+- C3 验证：Go 全量 build/test/vet、credentials/workspace/server race，Linux arm64 隔离容器回归；20 并发请求只刷新一次、立即播发与撤权过滤、锁等待取消、代理失败不直连、字段合并、受限读取和 Codex 原配置保留测试通过。实际 Linux Docker 合成空间 CRUD/文件/Git/SIGTERM 重启再次通过；未使用真实凭证、未调用模型、未部署生产。C4–C6 尚未完成。

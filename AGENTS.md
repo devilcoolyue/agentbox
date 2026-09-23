@@ -19,6 +19,9 @@
 |---|---|
 | `cmd/agentbox/main.go` | 服务端入口与信号；`internal/app` 管理数据锁、启动与依赖清理。 |
 | `cmd/abox-link/main.go` | 隧道客户端入口；面板模式与 `--server` 无头模式分流。 |
+| `internal/app` | 启动编排、数据目录独占锁与依赖收尾。 |
+| `internal/workspace` | 会话创建/启停/删除、模板与凭证播种、活动引用与空闲回收。 |
+| `internal/credentials` | 账号凭证读取/保存、轮换同步、续期与账号级可取消锁。 |
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
 | `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）、用量计量与额度（`usage.go`/`quota.go`/`usagelog.go`）。 |
 | `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens/usage_events/quotas/credit_ledger；首次打开会导入旧版 `state.json`。 |
@@ -185,7 +188,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 10 --max-time 20 "$P
 - **账号 env 绝不烘进容器**（`dockerx.baseContainerEnv`）：容器 `Config.Env` 在 create 那一刻定死，之后只能靠 exec 往上加、减不掉。账号从中转站切回订阅登录时 `clearClaudeRelay` 只改得动 `config.json`，旧容器里那份 `ANTHROPIC_AUTH_TOKEN` 还在，而 claude CLI 认 env 里的 Bearer 令牌优先于 OAuth 凭证——订阅登录形同虚设，CLI 卡在重试里直到被杀（回合报「进程退出码 137」，stderr 只剩一句 connectors are disabled 的告警）。所以账号 env 一律走 `server.execEnv` 每次 exec 注入，加和减都即时生效。`EnsureRunning` 里的 `hasBakedEnv` 负责认出老版本烘过 env 的容器并重建（比键不比值，镜像升级改 `NODE_VERSION` 的值不算脏）。
 - 停止/删除：只停/删容器；工作区、home、聊天线程仍在宿主机。`DELETE ?purge=1` 才删除会话目录。
 - 重启服务端后：`Server.reconcile` 以 Docker 实际运行状态修正 session status。
-- **OAuth 令牌服务端自动续期**（`internal/server/credrefresh.go`）：访问令牌只有几小时
+- **OAuth 令牌服务端自动续期**（`internal/credentials/refresh.go`）：访问令牌只有几小时
   寿命，账号池那份新不新鲜取决于容器里的 CLI 最近跑没跑过——挂一夜的账号第二天点
   「查额度」必然过期。服务端自己拿刷新令牌续，不再让用户「先发一轮对话」。刷新令牌
   是轮换制（一份用掉另一份作废），所以 `ensureClaudeCred` 里的三步顺序不能动：
@@ -618,3 +621,10 @@ data/
 - `internal/workspace.Service` 持有会话锁、活动引用、创建/启动/停止/删除和回收。HTTP 层保留属主鉴权、参数校验和响应转换，业务包不能反向依赖 server。
 - 同一会话的启停删都必须经过服务的可取消锁，不能单独调用 Docker 后更新 SQLite。Stop/Remove 失败时保留记录和状态；Docker 404 是幂等成功。模板→凭证→默认模型的顺序保持。
 - 活动引用仍由聊天/终端/Git 执行持有，删除后迟到的 release 不重新创建活动记录。目录挂载/UID 保持原约定；Linux 测试覆盖需要 root chown 的并发创建/删除。
+
+### 凭证服务
+
+- `internal/credentials.Service` 管理池文件、续期/同步/保存与每账号锁；HTTP 层保留 OAuth 发起/回调参数和响应转换。账号网络出口通过注入客户端工厂提供，失败不能静默直连。
+- 日常双向同步沿用 2 秒 mtime 容差；服务端续期成功后的播发改为单向立即写入已有凭证副本，不用该容差，避免刚播种的会话遗漏新链。刷新与后台同步、OAuth 保存、Codex Key 保存共用账号锁，锁等待可取消。
+- 续期仍先回收会话新令牌，再判断/刷新，最后立即播发；合并保留订阅档位、scopes 及未知字段。每次同步/播发重查授权，不向撤权空间交付新凭证。未播种的 home 不由后台同步创建凭证树。
+- Codex auth/config 各文件使用受限原子写入，但跨文件不构成事务；后一个文件失败时可能已更新 Key，API 返回错误，重试完成配置。

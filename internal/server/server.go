@@ -24,6 +24,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"agentbox/internal/config"
+	"agentbox/internal/credentials"
 	"agentbox/internal/dockerx"
 	"agentbox/internal/gitx"
 	"agentbox/internal/store"
@@ -80,8 +81,10 @@ type Server struct {
 	startedAt  time.Time
 	bootListen string // 启动时的监听地址；与配置不一致说明改动需重启
 
-	workspaceOnce sync.Once
-	workspace     *workspace.Service
+	credentialsOnce sync.Once
+	credentials     *credentials.Service
+	workspaceOnce   sync.Once
+	workspace       *workspace.Service
 
 	marketMu sync.Mutex // 串行化官方市场的 git 抓取（拉仓库、装技能）
 
@@ -491,7 +494,7 @@ type acctView struct {
 }
 
 func (s *Server) accountView(a config.Account, sessions int) acctView {
-	st, exp := credStatus(a)
+	st, exp := credentials.Status(a)
 	v := acctView{
 		ID: a.ID, Type: a.Type, Label: a.Label, Sessions: sessions,
 		CredStatus: st, ExpiresAt: exp, Env: a.Env, ProxyID: a.ProxyID, Access: a.Access,
@@ -501,7 +504,7 @@ func (s *Server) accountView(a config.Account, sessions int) acctView {
 	}
 	switch a.Type {
 	case config.AgentCodex:
-		v.BaseURL, v.WireAPI = readCodexProvider(a.CredentialsDir)
+		v.BaseURL, v.WireAPI = credentials.ReadCodexProvider(a.CredentialsDir)
 	case config.AgentClaude:
 		// env 里有中转站令牌就是 apikey 模式（实测其优先于 OAuth 凭证）
 		if base, token := claudeRelay(a); token != "" {
@@ -580,6 +583,8 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) workspaces() *workspace.Service {
-	s.workspaceOnce.Do(func() { s.workspace = workspace.New(s.cfg, s.store, s.dock, s.sessionAccount, s.syncRotatingCred) })
+	s.workspaceOnce.Do(func() {
+		s.workspace = workspace.New(s.cfg, s.store, s.dock, s.sessionAccount, s.credentialService().Sync)
+	})
 	return s.workspace
 }
