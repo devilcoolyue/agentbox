@@ -7,13 +7,13 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"agentbox/internal/config"
+	"agentbox/internal/safefs"
 )
 
 // PidFile is written inside the container by every headless chat turn so the
@@ -217,21 +217,31 @@ func SeedCredentials(agentType, homeDir, credDir string, uid, gid int) error {
 	var target string
 	switch agentType {
 	case config.AgentClaude:
-		target = filepath.Join(homeDir, ".claude")
+		target = ".claude"
 	case config.AgentCodex:
-		target = filepath.Join(homeDir, ".codex")
+		target = ".codex"
 	default:
 		return fmt.Errorf("unknown agent type %q", agentType)
 	}
-	if err := os.MkdirAll(target, 0o700); err != nil {
+	root, err := openHome(homeDir)
+	if err != nil {
 		return err
 	}
-	if err := os.Chown(target, uid, gid); err != nil {
+	defer root.Close()
+	if err := root.MkdirAll(target, 0o700); err != nil {
+		return err
+	}
+	if err := root.Chown(target, uid, gid); err != nil {
 		return err
 	}
 
 	if credDir != "" {
-		entries, err := os.ReadDir(credDir)
+		pool, err := safefs.Open(credDir)
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		entries, err := pool.ReadDir(".")
 		if err != nil {
 			return fmt.Errorf("account credentials dir: %w", err)
 		}
@@ -239,23 +249,20 @@ func SeedCredentials(agentType, homeDir, credDir string, uid, gid int) error {
 			if !e.Type().IsRegular() {
 				continue
 			}
-			if err := copyFile(filepath.Join(credDir, e.Name()), filepath.Join(target, e.Name()), uid, gid); err != nil {
+			if err := copyConfined(pool, e.Name(), root, filepath.Join(target, e.Name()), uid, gid); err != nil {
 				return err
 			}
 		}
 	}
 
 	if agentType == config.AgentClaude {
-		stateFile := filepath.Join(homeDir, ".claude.json")
-		if _, err := os.Stat(stateFile); os.IsNotExist(err) {
+		stateFile := ".claude.json"
+		if _, err := root.Lstat(stateFile); os.IsNotExist(err) {
 			raw, err := json.MarshalIndent(claudeSeedState, "", "  ")
 			if err != nil {
 				return err
 			}
-			if err := os.WriteFile(stateFile, raw, 0o600); err != nil {
-				return err
-			}
-			if err := os.Chown(stateFile, uid, gid); err != nil {
+			if err := writeOwned(root, stateFile, raw, uid, gid); err != nil {
 				return err
 			}
 		}
@@ -305,18 +312,26 @@ func SeedIntranetHint(agentType, homeDir string, uid, gid int) error {
 	var path string
 	switch agentType {
 	case config.AgentClaude:
-		path = filepath.Join(homeDir, ".claude", "CLAUDE.md")
+		path = filepath.Join(".claude", "CLAUDE.md")
 	case config.AgentCodex:
-		path = filepath.Join(homeDir, ".codex", "AGENTS.md")
+		path = filepath.Join(".codex", "AGENTS.md")
 	default:
 		return fmt.Errorf("unknown agent type %q", agentType)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	root, err := openHome(homeDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	block := intranetHintBegin + "\n" + intranetHintBody + "\n" + intranetHintEnd
 
-	existing, _ := os.ReadFile(path)
+	existing, err := root.ReadAll(path, 4<<20)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	var next string
 	if s := string(existing); strings.Contains(s, intranetHintBegin) && strings.Contains(s, intranetHintEnd) {
 		pre := s[:strings.Index(s, intranetHintBegin)]
@@ -330,7 +345,7 @@ func SeedIntranetHint(agentType, homeDir string, uid, gid int) error {
 	if next == string(existing) {
 		return nil
 	}
-	return writeOwned(path, []byte(next), uid, gid)
+	return writeOwned(root, path, []byte(next), uid, gid)
 }
 
 // hudStatusLineCmd 驱动镜像内置的 claude-hud（/opt/claude-hud）。终端宽度
@@ -343,9 +358,18 @@ const hudStatusLineCmd = `bash -c 'cols=${COLUMNS:-}; case "$cols" in ""|*[!0-9]
 func seedClaudeHUD(homeDir string, uid, gid int) error {
 	// settings.json 可能已被容器里的 claude 自己写过（如权限提示的记忆），
 	// 所以是合并而不是缺失才写：只在没有 statusLine 键时补上，其余原样保留。
-	settings := filepath.Join(homeDir, ".claude", "settings.json")
+	root, err := openHome(homeDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	settings := filepath.Join(".claude", "settings.json")
 	cur := map[string]any{}
-	if raw, err := os.ReadFile(settings); err == nil {
+	raw, err := root.ReadAll(settings, 4<<20)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err == nil {
 		if json.Unmarshal(raw, &cur) != nil {
 			cur = nil // 解析不了的用户文件不碰
 		}
@@ -357,23 +381,23 @@ func seedClaudeHUD(homeDir string, uid, gid int) error {
 				"command": hudStatusLineCmd,
 			}
 			raw, _ := json.MarshalIndent(cur, "", "  ")
-			if err := writeOwned(settings, raw, uid, gid); err != nil {
+			if err := writeOwned(root, settings, raw, uid, gid); err != nil {
 				return err
 			}
 		}
 	}
 
-	hudDir := filepath.Join(homeDir, ".claude", "plugins", "claude-hud")
+	hudDir := filepath.Join(".claude", "plugins", "claude-hud")
 	for _, d := range []string{filepath.Dir(hudDir), hudDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
+		if err := root.MkdirAll(d, 0o755); err != nil {
 			return err
 		}
-		if err := os.Chown(d, uid, gid); err != nil {
+		if err := root.Chown(d, uid, gid); err != nil {
 			return err
 		}
 	}
 	cfg := filepath.Join(hudDir, "config.json")
-	if _, err := os.Stat(cfg); os.IsNotExist(err) {
+	if _, err := root.Lstat(cfg); os.IsNotExist(err) {
 		raw, _ := json.MarshalIndent(map[string]any{
 			"display": map[string]any{
 				"showTools":         true,
@@ -382,38 +406,36 @@ func seedClaudeHUD(homeDir string, uid, gid int) error {
 				"sevenDayThreshold": 0,
 			},
 		}, "", "  ")
-		if err := writeOwned(cfg, raw, uid, gid); err != nil {
+		if err := writeOwned(root, cfg, raw, uid, gid); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func writeOwned(path string, data []byte, uid, gid int) error {
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return err
+// The session's parent is service-owned, but its home name can be replaced.
+func openHome(home string) (*safefs.Root, error) {
+	parent, err := safefs.Open(filepath.Dir(home))
+	if err != nil {
+		return nil, err
 	}
-	return os.Chown(path, uid, gid)
+	defer parent.Close()
+	return parent.Sub(filepath.Base(home))
 }
 
-func copyFile(src, dst string, uid, gid int) error {
-	in, err := os.Open(src)
+func writeOwned(root *safefs.Root, name string, data []byte, uid, gid int) error {
+	_, err := root.WriteFile(name, data, safefs.WriteOptions{Mode: 0o600, Chown: true, UID: uid, GID: gid})
+	return err
+}
+
+func copyConfined(src *safefs.Root, source string, dst *safefs.Root, target string, uid, gid int) error {
+	f, err := src.OpenFile(source)
 	if err != nil {
 		return err
 	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
-	}
-	if err := out.Close(); err != nil {
-		return err
-	}
-	return os.Chown(dst, uid, gid)
+	defer f.Close()
+	_, err = dst.WriteAtomic(target, f, safefs.WriteOptions{Mode: 0o600, Chown: true, UID: uid, GID: gid, MaxBytes: 4 << 20})
+	return err
 }
 
 // IsPartialEvent reports whether a stream line is an incremental

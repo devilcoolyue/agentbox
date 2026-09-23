@@ -32,12 +32,12 @@ func SeedDefaultModel(agentType, homeDir, model string, uid, gid int) error {
 	}
 	// Session homes are writable by the container. Confine symlink resolution
 	// to that home when reading and writing settings as the host service user.
-	root, err := os.OpenRoot(homeDir)
+	root, err := openHome(homeDir)
 	if err != nil {
 		return err
 	}
 	defer root.Close()
-	raw, err := root.ReadFile(rel)
+	raw, err := root.ReadAll(rel, 4<<20)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -77,16 +77,5 @@ func SeedDefaultModel(agentType, homeDir, model string, uid, gid int) error {
 	if err != nil {
 		return err
 	}
-	f, err := root.OpenFile(rel, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if err := f.Chown(uid, gid); err != nil {
-		return err
-	}
-	if _, err := f.Write(append(raw, '\n')); err != nil {
-		return err
-	}
-	return f.Close()
+	return writeOwned(root, rel, append(raw, '\n'), uid, gid)
 }

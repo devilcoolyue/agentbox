@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"agentbox/internal/config"
+	"agentbox/internal/safefs"
 )
 
 // Claude OAuth 访问令牌的服务端自动续期。
@@ -133,9 +134,23 @@ func (s *Server) refreshClaudeCred(ctx context.Context, acct config.Account, ref
 // 会被容器里的 Claude Code 当成 API 账号。同理，响应里没给的字段一律留原值。
 func mergeClaudeCred(path string, tok oauthTokenResp) (claudeCred, error) {
 	var out claudeCred
+	area, err := safefs.Open(filepath.Dir(path))
+	if err != nil {
+		return out, err
+	}
+	defer area.Close()
 	root := map[string]any{}
-	if raw, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(raw, &root)
+	raw, _, err := readCredential(area, filepath.Base(path))
+	if err != nil && !os.IsNotExist(err) {
+		return out, err
+	}
+	if err == nil {
+		if err := json.Unmarshal(raw, &root); err != nil {
+			return out, fmt.Errorf("读取旧凭证失败: %w", err)
+		}
+		if root == nil {
+			root = map[string]any{}
+		}
 	}
 	cur, _ := root["claudeAiOauth"].(map[string]any)
 	if cur == nil {
@@ -168,14 +183,8 @@ func mergeClaudeCred(path string, tok oauthTokenResp) (claudeCred, error) {
 	if err != nil {
 		return out, fmt.Errorf("续期凭证序列化失败: %v", err)
 	}
-	// 原子替换：容器里的 CLI 随时可能在读同一个文件链上的副本，别让它读到半截。
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, blob, 0o600); err != nil {
-		return out, fmt.Errorf("写入续期凭证失败: %v", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return out, fmt.Errorf("写入续期凭证失败: %v", err)
+	if _, err := area.WriteFile(filepath.Base(path), blob, safefs.WriteOptions{Mode: 0o600}); err != nil {
+		return out, fmt.Errorf("写入续期凭证失败: %w", err)
 	}
 
 	out.AccessToken = tok.AccessToken

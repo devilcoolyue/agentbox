@@ -35,6 +35,16 @@ func writeFixture(t *testing.T) string {
 	return path
 }
 
+// Fixtures are service-owned; production opens transcripts through safefs.
+func parseTerminalTranscript(path string) ([]termTurn, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return parseTerminalReader(f)
+}
+
 func TestParseTerminalTranscript(t *testing.T) {
 	turns, err := parseTerminalTranscript(writeFixture(t))
 	if err != nil {

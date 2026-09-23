@@ -83,28 +83,6 @@ func TestMoveFileEntryRejectsConflict(t *testing.T) {
 	}
 }
 
-func TestRenameNoReplaceRejectsConflict(t *testing.T) {
-	root := t.TempDir()
-	source := filepath.Join(root, "source.txt")
-	destination := filepath.Join(root, "destination.txt")
-	if err := os.WriteFile(source, []byte("source"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(destination, []byte("destination"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := renameNoReplace(source, destination); !os.IsExist(err) {
-		t.Fatalf("rename error = %v, want destination exists", err)
-	}
-	if raw, err := os.ReadFile(source); err != nil || string(raw) != "source" {
-		t.Fatalf("source changed: %q, %v", raw, err)
-	}
-	if raw, err := os.ReadFile(destination); err != nil || string(raw) != "destination" {
-		t.Fatalf("destination changed: %q, %v", raw, err)
-	}
-}
-
 func TestMoveFileEntryRejectsDirectoryDescendant(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "project", "nested"), 0o755); err != nil {

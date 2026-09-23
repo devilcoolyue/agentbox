@@ -1,6 +1,9 @@
 package server
 
 import (
+	"agentbox/internal/safefs"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -36,69 +39,66 @@ func (s *Server) credSyncLoop() {
 // syncRotatingCred 让池子与该会话 home 的轮换凭证文件收敛到较新的一份。
 func (s *Server) syncRotatingCred(acct config.Account, sess store.Session) {
 	poolName, homeRel := agent.RotatingCredFile(sess.Agent)
-	pool := filepath.Join(acct.CredentialsDir, poolName)
-	home := filepath.Join(s.homeDir(sess), filepath.FromSlash(homeRel))
-
-	pi, perr := os.Stat(pool)
-	hi, herr := os.Stat(home)
-	switch {
-	case herr != nil && perr != nil:
-		return
-	case herr != nil:
-		return // 会话尚未播种，SeedCredentials 会从池子拷入
-	case perr != nil:
-		s.copyCred(home, pool, 0, hi.ModTime()) // 首次发布到池子
+	pool, err := safefs.Open(acct.CredentialsDir)
+	if err != nil {
 		return
 	}
-
+	defer pool.Close()
+	home, err := s.openDataDir(s.homeDir(sess))
+	if err != nil {
+		return
+	}
+	defer home.Close()
+	poolData, pi, perr := readCredential(pool, poolName)
+	homeData, hi, herr := readCredential(home, filepath.FromSlash(homeRel))
+	if herr != nil {
+		return
+	} // unseeded or unsafe home: never read outside it
+	if perr != nil {
+		if os.IsNotExist(perr) {
+			syncCredential(pool, poolName, homeData, 0, hi.ModTime())
+		}
+		return
+	}
 	diff := hi.ModTime().Sub(pi.ModTime())
 	switch {
 	case diff > 2*time.Second:
-		// 会话里刷新过 → 写回池子。刷新失败后 CLI 可能清空令牌字段，
-		// 这种"残骸"不能覆盖池子里仍持有刷新令牌的文件。
-		if !hasRefreshToken(home) && hasRefreshToken(pool) {
+		if !refreshTokenRe.Match(homeData) && refreshTokenRe.Match(poolData) {
 			return
 		}
-		s.copyCred(home, pool, 0, hi.ModTime())
+		syncCredential(pool, poolName, homeData, 0, hi.ModTime())
 	case diff < -2*time.Second:
-		if !hasRefreshToken(pool) && hasRefreshToken(home) {
+		if !refreshTokenRe.Match(poolData) && refreshTokenRe.Match(homeData) {
 			return
 		}
-		s.copyCred(pool, home, dockerx.AgentUID, pi.ModTime())
+		syncCredential(home, filepath.FromSlash(homeRel), poolData, dockerx.AgentUID, pi.ModTime())
 	}
 }
 
 var refreshTokenRe = regexp.MustCompile(`"refreshToken"\s*:\s*"[^"]`)
 
-// hasRefreshToken reports whether the file carries a non-empty refresh token.
-// codex API-key auth.json has none on either side, so the guard never fires.
-func hasRefreshToken(path string) bool {
-	raw, err := os.ReadFile(path)
+const credentialMaxBytes = 4 << 20
+
+func readCredential(root *safefs.Root, name string) ([]byte, os.FileInfo, error) {
+	f, err := root.OpenFile(name)
 	if err != nil {
-		return false
+		return nil, nil, err
 	}
-	return refreshTokenRe.Match(raw)
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, nil, err
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, credentialMaxBytes+1))
+	if err == nil && len(raw) > credentialMaxBytes {
+		err = fmt.Errorf("credential file exceeds size limit")
+	}
+	return raw, info, err
 }
 
-// copyCred 原子替换目标文件并把 mtime 对齐到来源，避免下轮重复拷贝。
-// uid 非 0 时把目标 chown 给容器用户（会话 home 内的副本需要）。
-func (s *Server) copyCred(src, dst string, uid int, mtime time.Time) {
-	raw, err := os.ReadFile(src)
+func syncCredential(root *safefs.Root, name string, raw []byte, uid int, mtime time.Time) {
+	_, err := root.WriteFile(name, raw, safefs.WriteOptions{Mode: 0o600, Chown: uid != 0, UID: uid, GID: dockerx.AgentGID, BestEffortChown: true, ModTime: mtime})
 	if err != nil {
-		return
+		log.Printf("credsync %s: %v", name, err)
 	}
-	tmp := dst + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		log.Printf("credsync %s: %v", dst, err)
-		return
-	}
-	if uid != 0 {
-		_ = os.Chown(tmp, uid, dockerx.AgentGID)
-	}
-	if err := os.Rename(tmp, dst); err != nil {
-		_ = os.Remove(tmp)
-		log.Printf("credsync %s: %v", dst, err)
-		return
-	}
-	_ = os.Chtimes(dst, mtime, mtime)
 }

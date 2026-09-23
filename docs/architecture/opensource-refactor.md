@@ -98,7 +98,7 @@ third_party/
 ### A：安全与恢复
 
 - [x] A1：Git 执行迁入容器，提取 `gitx`，增加回归测试和使用说明；最小 Linux Git 容器验证通过。
-- [ ] A2：基于 `os.Root` 等目录句柄机制统一受限文件操作，覆盖读写、上传、技能、预览和凭证路径；验证并发符号链接替换。
+- [x] A2：新增 `safefs` 目录句柄封装，迁移文件、归档、技能、预览、模板/凭证和终端 transcript 读取；并发链接替换及 Linux 回归通过。
 - [ ] A3：系统备份覆盖 SQLite、配置、全部凭证来源、模板；完整备份额外覆盖 users（home/workspace/chats/shared）。输出清单、版本和校验和。
 - [ ] A4：增加恢复校验与演练；完整一致性备份须暂停写入或使用协调快照，在线 SQLite 快照不代表所有文件跨资源一致。
 - [ ] A5：明确可信团队边界，增加账号可用范围；兼容既有管理员账号池。
@@ -146,4 +146,7 @@ third_party/
 - 2026-09-23：创建重构分支与设计文档；完成 A1 的实现及本地验证。新增容器命令执行适配器、`gitx`、额度入口检查、Git hook/环境隔离、首次提交 diff 与丢弃失败回归，并接入 CI 容器冒烟步骤。
 - 验证通过：`go build ./...`、`go test ./...`、`go vet ./...`、`npm run check`、`go test -race ./internal/gitx ./internal/dockerx`。
 - 本机 Docker 的 Linux arm64 最小 Alpine Git 容器实测通过：uid=1000、提交/diff、hook 禁用、过滤器不继承测试密钥环境变量。临时容器已清理，测试镜像保留用于复用。未调用模型、未挂载真实账号或工作区。
-- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。A2–D4 尚未实现。下一实施单元为 A2 的受限文件访问。
+- 仍待验证：生产 Debian Agent 镜像与完整会话启动链路、systemd 部署；新 CI 步骤尚未在远端运行。A3–D4 尚未实现。下一实施单元为 A3/A4 的备份恢复。
+
+- 2026-09-23：完成 A2。新增 `internal/safefs`，移除检查后返回绝对路径的文件助手与旧 rename 降级实现；普通文件读、原子保存、移动/删除、归档、预览、技能与凭证统一使用固定目录句柄。详见 [文件系统边界](filesystem-boundaries.md)。
+- A2 验证通过：Go build/test/vet、前端类型检查、safefs/archivex/agent/server 的 race 检查；`scripts/test-filesystem-linux.sh` 在无宿主挂载、无外网的 Linux arm64 容器运行四个包的完整测试通过。最小镜像补齐 tzdata 后解决了时区测试环境缺失；未连接生产或调用模型。

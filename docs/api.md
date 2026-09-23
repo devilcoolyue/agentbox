@@ -35,6 +35,8 @@ DELETE /api/sessions/{id}?purge=1   删除（purge 同时清除文件、配置�
 
 ## 文件与预览
 
+文件、预览和技能内容访问均通过受限目录句柄，不沿符号链接访问；无效路径或静态链接通常返回 `400`，路径并发变化可能返回 `404` 或操作错误。编辑器 PUT 以原子替换保存，并保留原文件权限位。上传在服务端 staging 目录验证后合并，解压失败不改动原目录；合并并非跨目录事务。
+
 ```text
 POST   /api/sessions/{id}/upload    上传 multipart(file)，普通文件或 zip/tar.gz/tgz/tar；clear=1 先清空
 GET    /api/sessions/{id}/archive   打包下载 (zip)

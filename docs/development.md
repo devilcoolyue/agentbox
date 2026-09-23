@@ -125,6 +125,14 @@ go build -o abox-link ./cmd/abox-link
 
 ## CI 与提交
 
+文件安全改动需执行 `go test -race ./internal/safefs ./internal/archivex ./internal/agent ./internal/server`。macOS 上还可运行 Linux 容器回归：
+
+```bash
+./scripts/test-filesystem-linux.sh
+```
+
+脚本构建最小测试镜像，交叉编译并运行 safefs、archivex、agent、server 测试；不挂载源码、账号或用户工作区，不调用模型。测试容器禁用外网，结束时删除容器及本机临时二进制；测试镜像保留复用。镜像安装 Git、coreutils 与时区数据，不替代完整生产镜像验收。
+
 Git 容器执行有一个不调用模型、不挂载宿主机目录的 Linux 冒烟测试；CI 自动运行，本地可按需执行：
 
 ```bash

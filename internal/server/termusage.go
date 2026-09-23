@@ -19,8 +19,9 @@ package server
 import (
 	"bufio"
 	"encoding/json"
+	"io"
+	"io/fs"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -120,21 +121,34 @@ func (s *Server) scanSessionUsage(sc *termScanner, sess store.Session) {
 		return // codex 的 rollout 是另一套格式，还没做
 	}
 	dir := filepath.Join(s.homeDir(sess), ".claude", "projects")
-	files, err := filepath.Glob(filepath.Join(dir, "*", "*.jsonl"))
+	root, err := s.openDataDir(dir)
+	if err != nil {
+		return
+	}
+	defer root.Close()
+	files, err := fs.Glob(root.FS(), "*/*.jsonl")
 	if err != nil || len(files) == 0 {
 		return
 	}
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	for _, path := range files {
-		fi, err := os.Stat(path)
+	for _, rel := range files {
+		path := filepath.Join(dir, filepath.FromSlash(rel))
+		f, err := root.OpenFile(rel)
 		if err != nil {
 			continue
 		}
-		if st, ok := sc.seen[path]; ok && st.size == fi.Size() && st.mtime.Equal(fi.ModTime()) {
+		fi, err := f.Stat()
+		if err != nil {
+			f.Close()
 			continue
 		}
-		turns, err := parseTerminalTranscript(path)
+		if st, ok := sc.seen[path]; ok && st.size == fi.Size() && st.mtime.Equal(fi.ModTime()) {
+			f.Close()
+			continue
+		}
+		turns, err := parseTerminalReader(f)
+		f.Close()
 		if err != nil {
 			log.Printf("terminal usage %s: %v", path, err)
 			continue
@@ -241,11 +255,13 @@ func (s *Server) syncTermWatches(w *fsnotify.Watcher, watched map[string]string)
 			continue
 		}
 		root := filepath.Join(s.homeDir(sess), ".claude", "projects")
-		if _, err := os.Stat(root); err != nil {
-			continue // 会话还没跑过 claude，目录都还没有
+		area, err := s.openDataDir(root)
+		if err != nil {
+			continue
 		}
 		want[root] = sess.ID
-		entries, err := os.ReadDir(root)
+		entries, err := area.ReadDir(".")
+		area.Close()
 		if err != nil {
 			continue
 		}
@@ -280,13 +296,7 @@ func (s *Server) syncTermWatches(w *fsnotify.Watcher, watched map[string]string)
 // 按文件顺序流式聚合：遇到 user 记录就开一个新回合，其后的 assistant 记录按模型
 // 累加进去。同一个 requestId 会在文件里出现多次（流式中途写一遍、收尾再写一遍），
 // 只认最后一次，否则同一次调用会被加两遍。
-func parseTerminalTranscript(path string) ([]termTurn, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
+func parseTerminalReader(f io.Reader) ([]termTurn, error) {
 	// 按 (回合, 模型) 归并，同时记住出场顺序——报表里回合按时间排，靠这个稳定。
 	type key struct{ turn, model string }
 	acc := map[key]*termTurn{}

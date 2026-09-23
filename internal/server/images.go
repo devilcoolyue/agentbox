@@ -1,7 +1,6 @@
 package server
 
 import (
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"agentbox/internal/dockerx"
+	"agentbox/internal/safefs"
 	"agentbox/internal/store"
 )
 
@@ -59,30 +59,22 @@ func (s *Server) handleImageUpload(w http.ResponseWriter, r *http.Request, sess 
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	dir := filepath.Join(shared, subdir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	root, err := s.openDataDir(shared)
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
-	_ = os.Chown(dir, dockerx.AgentUID, dockerx.AgentGID)
-
+	defer root.Close()
+	if err := root.MkdirAll(subdir, 0o755); err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	_ = root.Chown(subdir, dockerx.AgentUID, dockerx.AgentGID)
 	name := time.Now().Format("20060102-150405") + "-" + store.NewID()[:6] + ext
-	dst := filepath.Join(dir, name)
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	if _, err := root.WriteAtomic(filepath.Join(subdir, name), file, safefs.WriteOptions{Mode: 0o644, Chown: true, UID: dockerx.AgentUID, GID: dockerx.AgentGID, BestEffortChown: true, MaxBytes: imageMaxMB << 20}); err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
-	_, err = io.Copy(out, file)
-	if cerr := out.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		_ = os.Remove(dst)
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	_ = os.Chown(dst, dockerx.AgentUID, dockerx.AgentGID)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"name": name,
 		"orig": filepath.Base(hdr.Filename),
@@ -137,7 +129,12 @@ func (s *Server) cleanExpiredImages() {
 		var expired []string
 		for _, sub := range []string{imagesSubdir, filesSubdir} {
 			dir := filepath.Join(userDir, "shared", sub)
-			entries, err := os.ReadDir(dir)
+			area, err := s.openDataDir(dir)
+			if err != nil {
+				continue
+			}
+			entries, err := area.ReadDir(".")
+			area.Close()
 			if err != nil {
 				continue
 			}
@@ -159,7 +156,13 @@ func (s *Server) cleanExpiredImages() {
 			if refs[filepath.Base(path)] {
 				continue // 仍被某条消息引用，留着
 			}
-			if err := os.Remove(path); err != nil {
+			area, err := s.openDataDir(filepath.Dir(path))
+			if err != nil {
+				continue
+			}
+			err = area.RemoveAll(filepath.Base(path))
+			area.Close()
+			if err != nil {
 				log.Printf("image janitor: %v", err)
 			}
 		}

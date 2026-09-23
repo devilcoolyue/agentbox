@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"agentbox/internal/gitx"
+	"agentbox/internal/safefs"
 	"agentbox/internal/store"
 )
 
@@ -79,49 +80,51 @@ const maxStatusFiles = 2000
 // renders one DOM node per line; anything bigger belongs in the files page.
 const maxFileViewBytes = 512 << 10
 
-// hasGitDir reports whether dir is a repository root. .git is a directory for a
-// normal clone and a file for worktrees/submodules, so only existence matters.
-func hasGitDir(dir string) bool {
-	_, err := os.Lstat(filepath.Join(dir, ".git"))
-	return err == nil
-}
-
-// repoRoots lists the repositories a session's change review may act on, as
-// slash paths relative to ws ("" = ws itself). The workspace root is rarely a
-// repo in practice — users clone or unzip a project into a subdirectory — so
-// when it isn't we look inside instead of giving up. Symlinked directories are
-// skipped (ReadDir reports the link's own type), keeping the scan inside ws.
-func repoRoots(ws string) []string {
-	if hasGitDir(ws) {
+// repoRoots discovers only real directories through data_dir's pinned root.
+func (s *Server) repoRoots(ws string) []string {
+	root, err := s.openDataDir(ws)
+	if err != nil {
+		return []string{}
+	}
+	defer root.Close()
+	hasGit := func(dir *safefs.Root) bool {
+		info, err := dir.Lstat(".git")
+		return err == nil && (info.IsDir() || info.Mode().IsRegular())
+	}
+	if hasGit(root) {
 		return []string{""}
 	}
 	out := []string{}
-	var walk func(dir, rel string, depth int)
-	walk = func(dir, rel string, depth int) {
+	var walk func(*safefs.Root, string, int)
+	walk = func(dir *safefs.Root, rel string, depth int) {
 		if depth > repoScanDepth || len(out) >= repoScanMax {
 			return
 		}
-		ents, err := os.ReadDir(dir)
+		entries, err := dir.ReadDir(".")
 		if err != nil {
 			return
 		}
-		for _, e := range ents {
+		for _, e := range entries {
 			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || repoScanSkip[e.Name()] {
 				continue
 			}
-			sub, subRel := filepath.Join(dir, e.Name()), path.Join(rel, e.Name())
-			if hasGitDir(sub) {
-				// Repos nested inside a repo are that repo's own business.
+			sub, err := dir.Sub(e.Name())
+			if err != nil {
+				continue
+			}
+			subRel := path.Join(rel, e.Name())
+			if hasGit(sub) {
 				out = append(out, subRel)
 			} else {
 				walk(sub, subRel, depth+1)
 			}
+			sub.Close()
 			if len(out) >= repoScanMax {
 				return
 			}
 		}
 	}
-	walk(ws, "", 1)
+	walk(root, "", 1)
 	sort.Strings(out)
 	return out
 }
@@ -147,7 +150,7 @@ func pickRepo(roots []string, want string) (string, bool) {
 // path, writing the error response itself when there is nothing to act on.
 func (s *Server) gitRepo(w http.ResponseWriter, sess store.Session, want string) (string, bool) {
 	ws := s.workspaceDir(sess)
-	roots := repoRoots(ws)
+	roots := s.repoRoots(ws)
 	if len(roots) == 0 {
 		writeErr(w, http.StatusBadRequest, "工作区里没有 Git 仓库")
 		return "", false
@@ -195,7 +198,7 @@ func parsePorcelain(out string) []gitFile {
 // for the client to resync a stale selection against.
 func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	ws := s.workspaceDir(sess)
-	roots := repoRoots(ws)
+	roots := s.repoRoots(ws)
 	if len(roots) == 0 {
 		writeJSON(w, http.StatusOK, map[string]any{"is_repo": false, "repos": roots})
 		return
@@ -282,28 +285,34 @@ func (s *Server) handleGitFile(w http.ResponseWriter, r *http.Request, sess stor
 	if !ok {
 		return
 	}
-	p, err := resolveUnderRoot(dir, r.URL.Query().Get("path"))
+	root, err := s.openDataDir(dir)
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
 	}
-	info, err := os.Lstat(p)
+	defer root.Close()
+	f, err := root.OpenFile(r.URL.Query().Get("path"))
 	if err != nil {
-		// Deleted files are in the change list but no longer on disk.
-		writeErr(w, http.StatusNotFound, "文件已不存在，只能看 diff")
+		writeFileOpErr(w, err)
 		return
 	}
-	if !info.Mode().IsRegular() {
-		writeErr(w, http.StatusBadRequest, "不是普通文件")
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
 	if info.Size() > maxFileViewBytes {
 		writeErr(w, http.StatusBadRequest, fmt.Sprintf("文件太大（%.1f MB），请到「文件」页打开", float64(info.Size())/(1<<20)))
 		return
 	}
-	body, err := os.ReadFile(p)
+	body, err := io.ReadAll(io.LimitReader(f, maxFileViewBytes+1))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if len(body) > maxFileViewBytes {
+		writeErr(w, http.StatusBadRequest, "文件太大，请到终端查看")
 		return
 	}
 	if bytes.IndexByte(body, 0) >= 0 || !utf8.Valid(body) {

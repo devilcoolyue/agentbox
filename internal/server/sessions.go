@@ -13,6 +13,7 @@ import (
 	"agentbox/internal/agent"
 	"agentbox/internal/config"
 	"agentbox/internal/dockerx"
+	"agentbox/internal/safefs"
 	"agentbox/internal/store"
 )
 
@@ -50,12 +51,19 @@ func (s *Server) userTemplateDir(user string) string {
 // bind-mounted into every session container at /shared.
 func (s *Server) ensureSharedDir(user string) (string, error) {
 	dir := filepath.Join(s.cfg.DataDir, "users", user, "shared")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	root, err := safefs.Open(s.cfg.DataDir)
+	if err != nil {
 		return "", err
 	}
-	if err := os.Chown(dir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
+	defer root.Close()
+	rel := filepath.Join("users", user, "shared")
+	if err := root.MkdirAll(rel, 0o755); err != nil {
 		return "", err
 	}
+	if err := root.Chown(rel, dockerx.AgentUID, dockerx.AgentGID); err != nil {
+		return "", err
+	}
+
 	return dir, nil
 }
 

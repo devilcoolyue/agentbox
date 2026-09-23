@@ -1,6 +1,6 @@
-// Package archivex extracts uploaded code archives into a workspace and
-// streams workspaces back out as zip downloads. Extraction is hardened
-// against zip-slip, symlink entries and decompression bombs.
+// Package archivex extracts uploads and streams workspace zip downloads through
+// pinned directory handles. Archive entries and existing workspace paths are
+// both untrusted: lexical zip-slip checks alone do not stop symlink races.
 package archivex
 
 import (
@@ -13,10 +13,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"agentbox/internal/safefs"
 )
 
-// ExtractLimitMultiplier caps total uncompressed size relative to the
-// configured upload limit, guarding against decompression bombs.
 const ExtractLimitMultiplier = 8
 
 func IsArchiveName(name string) bool {
@@ -24,48 +24,59 @@ func IsArchiveName(name string) bool {
 	return strings.HasSuffix(l, ".zip") || strings.HasSuffix(l, ".tar.gz") || strings.HasSuffix(l, ".tgz") || strings.HasSuffix(l, ".tar")
 }
 
-// Extract unpacks the archive at src (with original filename name) into dst.
-// Returns the number of files written.
+// Extract accepts a service-owned staging directory as dst. Live container
+// directories should be opened from data_dir and passed to ExtractRoot.
 func Extract(src, name, dst string, maxBytes int64) (int, error) {
+	root, err := safefs.Open(dst)
+	if err != nil {
+		return 0, err
+	}
+	defer root.Close()
+	return ExtractRoot(src, name, root, maxBytes)
+}
+
+func ExtractRoot(src, name string, root *safefs.Root, maxBytes int64) (int, error) {
+	if maxBytes <= 0 {
+		return 0, fmt.Errorf("invalid extraction limit")
+	}
 	l := strings.ToLower(name)
 	switch {
 	case strings.HasSuffix(l, ".zip"):
-		return extractZip(src, dst, maxBytes)
+		return extractZip(src, root, maxBytes)
 	case strings.HasSuffix(l, ".tar.gz"), strings.HasSuffix(l, ".tgz"), strings.HasSuffix(l, ".tar"):
-		return extractTar(src, dst, maxBytes, strings.HasSuffix(l, ".tar"))
+		return extractTar(src, root, maxBytes, strings.HasSuffix(l, ".tar"))
 	default:
 		return 0, fmt.Errorf("unsupported archive type: %s", name)
 	}
 }
 
-func safeJoin(root, entry string) (string, error) {
+func archivePath(entry string) (string, error) {
 	entry = filepath.FromSlash(entry)
-	if entry == "" || filepath.IsAbs(entry) || !filepath.IsLocal(entry) {
+	if entry == "" || !filepath.IsLocal(entry) {
 		return "", fmt.Errorf("unsafe path in archive: %q", entry)
 	}
-	return filepath.Join(root, entry), nil
+	return filepath.Clean(entry), nil
 }
 
-func extractZip(src, dst string, maxBytes int64) (int, error) {
+func extractZip(src string, root *safefs.Root, maxBytes int64) (int, error) {
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return 0, err
 	}
 	defer r.Close()
-
 	var total int64
 	count := 0
 	for _, f := range r.File {
 		mode := f.Mode()
 		if mode&os.ModeSymlink != 0 {
-			continue // never materialize symlinks from user archives
+			continue
 		}
-		target, err := safeJoin(dst, f.Name)
+		name, err := archivePath(f.Name)
 		if err != nil {
 			return count, err
 		}
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0o755); err != nil {
+			if err := root.MkdirAll(name, 0o755); err != nil {
 				return count, err
 			}
 			continue
@@ -73,31 +84,30 @@ func extractZip(src, dst string, maxBytes int64) (int, error) {
 		if !mode.IsRegular() {
 			continue
 		}
-		total += int64(f.UncompressedSize64)
-		if total > maxBytes {
+		if f.UncompressedSize64 > uint64(maxBytes-total) {
 			return count, fmt.Errorf("archive exceeds extraction limit (%d MB)", maxBytes>>20)
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return count, err
 		}
-		err = writeFile(target, rc, maxBytes-total+int64(f.UncompressedSize64), mode)
+		n, err := writeFile(root, name, rc, maxBytes-total, mode)
 		rc.Close()
 		if err != nil {
 			return count, err
 		}
+		total += n
 		count++
 	}
 	return count, nil
 }
 
-func extractTar(src, dst string, maxBytes int64, plain bool) (int, error) {
+func extractTar(src string, root *safefs.Root, maxBytes int64, plain bool) (int, error) {
 	f, err := os.Open(src)
 	if err != nil {
 		return 0, err
 	}
 	defer f.Close()
-
 	var tr *tar.Reader
 	if plain {
 		tr = tar.NewReader(f)
@@ -109,7 +119,6 @@ func extractTar(src, dst string, maxBytes int64, plain bool) (int, error) {
 		defer gz.Close()
 		tr = tar.NewReader(gz)
 	}
-
 	var total int64
 	count := 0
 	for {
@@ -120,68 +129,70 @@ func extractTar(src, dst string, maxBytes int64, plain bool) (int, error) {
 		if err != nil {
 			return count, err
 		}
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			target, err := safeJoin(dst, hdr.Name)
-			if err != nil {
-				return count, err
-			}
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return count, err
-			}
-		case tar.TypeReg:
-			target, err := safeJoin(dst, hdr.Name)
-			if err != nil {
-				return count, err
-			}
-			total += hdr.Size
-			if total > maxBytes {
-				return count, fmt.Errorf("archive exceeds extraction limit (%d MB)", maxBytes>>20)
-			}
-			if err := writeFile(target, tr, hdr.Size+1, hdr.FileInfo().Mode()); err != nil {
-				return count, err
-			}
-			count++
-		default:
-			// symlinks, devices etc. are dropped
+		if hdr.Typeflag != tar.TypeDir && hdr.Typeflag != tar.TypeReg {
+			continue
 		}
+		name, err := archivePath(hdr.Name)
+		if err != nil {
+			return count, err
+		}
+		if hdr.Typeflag == tar.TypeDir {
+			if err := root.MkdirAll(name, 0o755); err != nil {
+				return count, err
+			}
+			continue
+		}
+		if hdr.Size < 0 || hdr.Size > maxBytes-total {
+			return count, fmt.Errorf("archive exceeds extraction limit (%d MB)", maxBytes>>20)
+		}
+		n, err := writeFile(root, name, tr, maxBytes-total, hdr.FileInfo().Mode())
+		if err != nil {
+			return count, err
+		}
+		total += n
+		count++
 	}
 }
 
-func writeFile(target string, r io.Reader, limit int64, mode fs.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return err
+func writeFile(root *safefs.Root, name string, r io.Reader, limit int64, mode fs.FileMode) (int64, error) {
+	if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+		return 0, err
 	}
 	perm := mode.Perm()
 	if perm == 0 {
 		perm = 0o644
 	}
-	out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
+	info, err := root.WriteAtomic(name, r, safefs.WriteOptions{Mode: perm, MaxBytes: limit, Limit: true})
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
+func ZipDir(w io.Writer, dir string) error {
+	root, err := safefs.Open(dir)
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(out, io.LimitReader(r, limit))
-	if cerr := out.Close(); err == nil {
-		err = cerr
-	}
-	return err
+	defer root.Close()
+	return ZipRoot(w, root)
 }
 
-// ZipDir streams dir as a zip archive to w. Only regular files are included.
-func ZipDir(w io.Writer, dir string) error {
+func ZipRoot(w io.Writer, root *safefs.Root) error {
 	zw := zip.NewWriter(w)
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(root.FS(), ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if !d.Type().IsRegular() {
 			return nil
 		}
-		rel, err := filepath.Rel(dir, path)
+		f, err := root.OpenFile(name)
 		if err != nil {
 			return err
 		}
-		info, err := d.Info()
+		defer f.Close()
+		info, err := f.Stat()
 		if err != nil {
 			return err
 		}
@@ -189,33 +200,39 @@ func ZipDir(w io.Writer, dir string) error {
 		if err != nil {
 			return err
 		}
-		hdr.Name = filepath.ToSlash(rel)
+		hdr.Name = filepath.ToSlash(name)
 		hdr.Method = zip.Deflate
 		fw, err := zw.CreateHeader(hdr)
 		if err != nil {
 			return err
 		}
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		_, err = io.Copy(fw, f)
-		f.Close()
+		_, err = io.CopyN(fw, f, info.Size())
 		return err
 	})
 	if err != nil {
-		zw.Close()
+		_ = zw.Close()
 		return err
 	}
 	return zw.Close()
 }
 
-// ChownTree recursively changes ownership so the container user can write.
-func ChownTree(root string, uid, gid int) error {
-	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+func ChownTree(dir string, uid, gid int) error {
+	root, err := safefs.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return ChownRoot(root, uid, gid)
+}
+
+func ChownRoot(root *safefs.Root, uid, gid int) error {
+	return fs.WalkDir(root.FS(), ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		return os.Lchown(path, uid, gid)
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		return root.Chown(name, uid, gid)
 	})
 }

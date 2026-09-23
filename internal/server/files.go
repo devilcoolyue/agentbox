@@ -14,6 +14,7 @@ import (
 
 	"agentbox/internal/archivex"
 	"agentbox/internal/dockerx"
+	"agentbox/internal/safefs"
 	"agentbox/internal/store"
 )
 
@@ -56,120 +57,111 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sess store
 		writeFileOpErr(w, err)
 		return
 	}
+	root, err := s.openDataDir(ws)
+	if err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	defer root.Close()
 	clear := r.FormValue("clear") == "1"
-
+	// Stage every upload outside container mounts. A malformed archive cannot
+	// leave a partially overwritten live tree even when clear is false.
+	stage, err := os.MkdirTemp(s.cfg.DataDir, ".stage-upload-*")
+	if err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	defer os.RemoveAll(stage)
+	content := filepath.Join(stage, "content")
+	if err := os.Mkdir(content, 0o700); err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	staged, err := safefs.Open(content)
+	if err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	defer staged.Close()
+	count, mode := 1, "file"
 	if !archivex.IsArchiveName(hdr.Filename) {
 		name := filepath.Base(filepath.Clean(hdr.Filename))
 		if name == "." || name == ".." || name == "/" {
-			writeErr(w, http.StatusBadRequest, "invalid filename")
+			writeFileOpErr(w, errFileOpInvalid)
 			return
 		}
-		// Write to a staging file first; only clear + swap once it's fully
-		// written, so a failed upload never leaves the target emptied.
-		stage, err := os.CreateTemp(filepath.Dir(ws), ".stage-upload-*")
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		stagePath := stage.Name()
-		defer os.Remove(stagePath)
-		_, err = io.Copy(stage, file)
-		if cerr := stage.Close(); err == nil {
-			err = cerr
-		}
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		_ = os.Chown(stagePath, dockerx.AgentUID, dockerx.AgentGID)
-		if clear {
-			if err := clearDir(ws); err != nil {
-				writeErr(w, http.StatusInternalServerError, err.Error())
-				return
+		_, err = staged.WriteAtomic(name, file, safefs.WriteOptions{Mode: 0o644, MaxBytes: maxBytes, Limit: true})
+	} else {
+		mode = "archive"
+		archive := filepath.Join(stage, "archive")
+		var f *os.File
+		f, err = os.OpenFile(archive, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err == nil {
+			_, err = io.Copy(f, file)
+			if cerr := f.Close(); err == nil {
+				err = cerr
 			}
 		}
-		if err := os.Rename(stagePath, filepath.Join(ws, name)); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
+		if err == nil {
+			count, err = archivex.ExtractRoot(archive, hdr.Filename, staged, maxBytes*archivex.ExtractLimitMultiplier)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"files": 1, "mode": "file"})
-		return
 	}
-
-	// Spool the archive to disk first so zip (which needs random access) works.
-	tmp, err := os.CreateTemp(s.sessionDir(sess), "upload-*"+filepath.Ext(hdr.Filename))
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	defer os.Remove(tmp.Name())
-	if _, err := io.Copy(tmp, file); err != nil {
-		tmp.Close()
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	tmp.Close()
-
-	// Extract into a staging directory first. When clear=1 this guarantees the
-	// existing workspace is only emptied after a successful, validated extract,
-	// so a corrupt archive / zip bomb / illegal path can't destroy the tree
-	// with no way back.
-	target := ws
-	var stageDir string
-	if clear {
-		stageDir, err = os.MkdirTemp(filepath.Dir(ws), ".stage-extract-*")
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		defer os.RemoveAll(stageDir)
-		target = stageDir
-	}
-
-	n, err := archivex.Extract(tmp.Name(), hdr.Filename, target, maxBytes*archivex.ExtractLimitMultiplier)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, "extract failed: "+err.Error())
-		return
-	}
-	if err := archivex.ChownTree(target, dockerx.AgentUID, dockerx.AgentGID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	// Linux ownership errors are significant. Local developers cannot chown;
+	// match the editor's best-effort behavior when not running as root.
+	if err = archivex.ChownRoot(staged, dockerx.AgentUID, dockerx.AgentGID); err != nil && os.Geteuid() == 0 {
+		writeFileOpErr(w, err)
 		return
 	}
 	if clear {
-		if err := clearDir(ws); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if err := moveDirContents(stageDir, ws); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
+		if err := root.Clear(); err != nil {
+			writeFileOpErr(w, err)
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"files": n, "mode": "archive"})
+	if err := mergeUpload(staged, root); err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"files": count, "mode": mode})
 }
 
-func clearDir(dir string) error {
-	entries, err := os.ReadDir(dir)
+func mergeUpload(src, dst *safefs.Root) error {
+	entries, err := src.ReadDir(".")
 	if err != nil {
 		return err
 	}
 	for _, e := range entries {
-		if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+		name := e.Name()
+		info, err := dst.Lstat(name)
+		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
-	}
-	return nil
-}
-
-// moveDirContents moves every top-level entry from src into dst. src and dst
-// are expected on the same filesystem so each rename is atomic and cheap.
-func moveDirContents(src, dst string) error {
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		if err := os.Rename(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+		if info != nil && info.Mode()&os.ModeSymlink != 0 {
+			return errFileOpInvalid
+		}
+		if !e.IsDir() || info == nil {
+			if err := src.RenameTo(name, dst, name, true); err != nil {
+				return err
+			}
+			continue
+		}
+		a, err := src.Sub(name)
+		if err != nil {
+			return err
+		}
+		b, err := dst.Sub(name)
+		if err != nil {
+			a.Close()
+			return err
+		}
+		err = mergeUpload(a, b)
+		a.Close()
+		b.Close()
+		if err != nil {
 			return err
 		}
 	}
@@ -182,14 +174,19 @@ func (s *Server) handleArchive(w http.ResponseWriter, r *http.Request, sess stor
 		writeFileOpErr(w, err)
 		return
 	}
+	root, err := s.openDataDir(dir)
+	if err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	defer root.Close()
 	name := sess.Name + "-workspace.zip"
 	if r.URL.Query().Get("scope") == "shared" {
 		name = "shared.zip"
 	}
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", name))
-	if err := archivex.ZipDir(w, dir); err != nil {
-		// Headers are already sent; all we can do is log via the error path.
+	if err := archivex.ZipRoot(w, root); err != nil {
 		fmt.Fprintf(os.Stderr, "archive %s: %v\n", sess.ID, err)
 	}
 }
@@ -208,16 +205,15 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, sess store.
 		writeFileOpErr(w, err)
 		return
 	}
-	// resolveFileDir rejects symlink components so listing can't follow a
-	// workspace symlink out of the mounted directory.
-	dir, err := resolveFileDir(root, r.URL.Query().Get("path"))
+	dir, err := s.openDataDir(root)
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
 	}
-	entries, err := os.ReadDir(dir)
+	defer dir.Close()
+	entries, err := dir.ReadDir(r.URL.Query().Get("path"))
 	if err != nil {
-		writeErr(w, http.StatusNotFound, err.Error())
+		writeFileOpErr(w, err)
 		return
 	}
 	out := []fileEntry{}
@@ -238,107 +234,73 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request, sess store.
 }
 
 var (
-	errFileOpInvalid  = errors.New("invalid file operation")
+	errFileOpInvalid  = safefs.ErrInvalid
 	errFileOpConflict = errors.New("destination already exists")
 	errInvalidScope   = errors.New("invalid scope")
 )
 
-// resolveFileEntry resolves a non-root path and rejects symlinks in every
-// component. File operations must not be able to follow a workspace symlink
-// into an arbitrary host path.
-func resolveFileEntry(root, raw string) (string, error) {
-	rel := filepath.Clean(filepath.FromSlash(raw))
-	if rel == "." || rel == "" || !filepath.IsLocal(rel) {
-		return "", fmt.Errorf("%w: invalid path", errFileOpInvalid)
-	}
-	cur := root
-	for _, part := range strings.Split(rel, string(filepath.Separator)) {
-		cur = filepath.Join(cur, part)
-		info, err := os.Lstat(cur)
-		if err != nil {
-			return "", err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("%w: symlinks are not supported", errFileOpInvalid)
-		}
-	}
-	return cur, nil
-}
-
-// resolveFileDir is the directory counterpart of resolveFileEntry. The root
-// itself is a valid destination, while every nested component must already
-// exist and be a real directory.
-func resolveFileDir(root, raw string) (string, error) {
-	rel := filepath.Clean(filepath.FromSlash(raw))
-	if rel == "" {
-		rel = "."
-	}
-	if !filepath.IsLocal(rel) && rel != "." {
-		return "", fmt.Errorf("%w: invalid destination", errFileOpInvalid)
-	}
-	cur := root
-	if rel != "." {
-		for _, part := range strings.Split(rel, string(filepath.Separator)) {
-			cur = filepath.Join(cur, part)
-			info, err := os.Lstat(cur)
-			if err != nil {
-				return "", err
-			}
-			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-				return "", fmt.Errorf("%w: destination is not a directory", errFileOpInvalid)
-			}
-		}
-	}
-	return cur, nil
-}
-
 func removeFileEntry(root, rel string) error {
-	p, err := resolveFileEntry(root, rel)
+	rel = filepath.Clean(filepath.FromSlash(rel))
+	if rel == "." || !filepath.IsLocal(rel) {
+		return errFileOpInvalid
+	}
+	dir, err := openFileArea(root)
 	if err != nil {
 		return err
 	}
-	return os.RemoveAll(p)
+	defer dir.Close()
+	info, err := dir.Lstat(rel)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return errFileOpInvalid
+	}
+	return dir.RemoveAll(rel)
 }
 
 func moveFileEntry(sourceRoot, sourceRel, destinationRoot, destinationDirRel string) (string, error) {
-	source, err := resolveFileEntry(sourceRoot, sourceRel)
+	sourceRel = filepath.Clean(filepath.FromSlash(sourceRel))
+	destinationDirRel = filepath.Clean(filepath.FromSlash(destinationDirRel))
+	if sourceRel == "." || !filepath.IsLocal(sourceRel) || !filepath.IsLocal(destinationDirRel) {
+		return "", errFileOpInvalid
+	}
+	src, err := openFileArea(sourceRoot)
 	if err != nil {
 		return "", err
 	}
-	destinationDir, err := resolveFileDir(destinationRoot, destinationDirRel)
+	defer src.Close()
+	dst, err := openFileArea(destinationRoot)
 	if err != nil {
 		return "", err
 	}
-
-	if info, err := os.Lstat(source); err != nil {
+	defer dst.Close()
+	info, err := src.Lstat(sourceRel)
+	if err != nil {
 		return "", err
-	} else if info.IsDir() {
-		rel, relErr := filepath.Rel(source, destinationDir)
-		if relErr == nil && (rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))) {
-			return "", fmt.Errorf("%w: cannot move a directory into itself", errFileOpInvalid)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", errFileOpInvalid
+	}
+	target := filepath.Join(destinationDirRel, filepath.Base(sourceRel))
+	source := filepath.Join(sourceRoot, sourceRel)
+	destination := filepath.Join(destinationRoot, target)
+	if source == destination {
+		return "", errFileOpInvalid
+	}
+	if info.IsDir() {
+		rel, err := filepath.Rel(source, filepath.Join(destinationRoot, destinationDirRel))
+		if err == nil && filepath.IsLocal(rel) {
+			return "", errFileOpInvalid
 		}
 	}
-
-	destination := filepath.Join(destinationDir, filepath.Base(source))
-	if filepath.Clean(source) == filepath.Clean(destination) {
-		return "", fmt.Errorf("%w: source is already in this directory", errFileOpInvalid)
-	}
-	if _, err := os.Lstat(destination); err == nil {
-		return "", errFileOpConflict
-	} else if !os.IsNotExist(err) {
-		return "", err
-	}
-	if err := renameNoReplace(source, destination); err != nil {
+	if err := src.RenameTo(sourceRel, dst, target, false); err != nil {
 		if os.IsExist(err) {
 			return "", errFileOpConflict
 		}
 		return "", err
 	}
-	rel, err := filepath.Rel(destinationRoot, destination)
-	if err != nil {
-		return "", err
-	}
-	return filepath.ToSlash(rel), nil
+	return filepath.ToSlash(target), nil
 }
 
 func writeFileOpErr(w http.ResponseWriter, err error) {
@@ -406,7 +368,7 @@ func (s *Server) handleFileMove(w http.ResponseWriter, r *http.Request, sess sto
 // "."/".."), used by mkdir and rename where only the leaf name is user-supplied.
 func validFileName(name string) (string, bool) {
 	name = strings.TrimSpace(name)
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) || strings.ContainsRune(name, 0) {
 		return "", false
 	}
 	return name, true
@@ -434,23 +396,27 @@ func (s *Server) handleFileMkdir(w http.ResponseWriter, r *http.Request, sess st
 		writeFileOpErr(w, fmt.Errorf("%w: invalid name", errFileOpInvalid))
 		return
 	}
-	parent, err := resolveFileDir(root, req.Dir)
+	dir, err := s.openDataDir(root)
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
 	}
-	target := filepath.Join(parent, name)
-	if err := os.Mkdir(target, 0o755); err != nil {
-		if os.IsExist(err) {
-			writeErr(w, http.StatusConflict, "目标目录中已存在同名文件或目录")
-			return
-		}
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	defer dir.Close()
+	parent, err := dir.Sub(req.Dir)
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
-	_ = os.Chown(target, dockerx.AgentUID, dockerx.AgentGID)
-	rel, _ := filepath.Rel(root, target)
-	writeJSON(w, http.StatusOK, map[string]string{"path": filepath.ToSlash(rel)})
+	defer parent.Close()
+	if err := parent.Mkdir(name, 0o755); err != nil {
+		if os.IsExist(err) {
+			err = errFileOpConflict
+		}
+		writeFileOpErr(w, err)
+		return
+	}
+	_ = parent.Chown(name, dockerx.AgentUID, dockerx.AgentGID)
+	writeJSON(w, http.StatusOK, map[string]string{"path": filepath.ToSlash(filepath.Join(req.Dir, name))})
 }
 
 type renameRequest struct {
@@ -475,106 +441,95 @@ func (s *Server) handleFileRename(w http.ResponseWriter, r *http.Request, sess s
 		writeFileOpErr(w, fmt.Errorf("%w: invalid name", errFileOpInvalid))
 		return
 	}
-	source, err := resolveFileEntry(root, req.Path)
+	rel := filepath.Clean(filepath.FromSlash(req.Path))
+	if rel == "." || !filepath.IsLocal(rel) {
+		writeFileOpErr(w, errFileOpInvalid)
+		return
+	}
+	dir, err := s.openDataDir(root)
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
 	}
-	dest := filepath.Join(filepath.Dir(source), name)
-	if filepath.Clean(source) == filepath.Clean(dest) {
-		rel, _ := filepath.Rel(root, source)
-		writeJSON(w, http.StatusOK, map[string]string{"path": filepath.ToSlash(rel)})
+	defer dir.Close()
+	info, err := dir.Lstat(rel)
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
-	if err := renameNoReplace(source, dest); err != nil {
-		if os.IsExist(err) {
-			writeErr(w, http.StatusConflict, "目标目录中已存在同名文件或目录")
+	if info.Mode()&os.ModeSymlink != 0 {
+		writeFileOpErr(w, errFileOpInvalid)
+		return
+	}
+	target := filepath.Join(filepath.Dir(rel), name)
+	if rel != target {
+		if err := dir.RenameTo(rel, dir, target, false); err != nil {
+			if os.IsExist(err) {
+				err = errFileOpConflict
+			}
+			writeFileOpErr(w, err)
 			return
 		}
-		writeFileOpErr(w, err)
-		return
 	}
-	rel, _ := filepath.Rel(root, dest)
-	writeJSON(w, http.StatusOK, map[string]string{"path": filepath.ToSlash(rel)})
-}
-
-// resolveFile validates ?path= and returns the absolute path of a file inside
-// the request's files root (workspace or shared).
-func (s *Server) resolveFile(r *http.Request, sess store.Session) (string, error) {
-	root, err := s.filesRoot(r, sess)
-	if err != nil {
-		return "", err
-	}
-	return resolveUnderRoot(root, r.URL.Query().Get("path"))
-}
-
-// resolveUnderRoot joins a client-supplied relative path onto root. Every path
-// component is checked with Lstat so a workspace symlink can't lead the web API
-// outside the mounted directory; the final component may be absent (a new file
-// created via the editor's save path).
-func resolveUnderRoot(root, want string) (string, error) {
-	rel := filepath.Clean(filepath.FromSlash(want))
-	if rel == "." || rel == "" || !filepath.IsLocal(rel) {
-		return "", fmt.Errorf("%w: invalid path", errFileOpInvalid)
-	}
-	parts := strings.Split(rel, string(filepath.Separator))
-	cur := root
-	for i, part := range parts {
-		cur = filepath.Join(cur, part)
-		info, err := os.Lstat(cur)
-		if err != nil {
-			if i == len(parts)-1 && os.IsNotExist(err) {
-				break // final component may be created by a save
-			}
-			return "", err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("%w: symlinks are not supported", errFileOpInvalid)
-		}
-	}
-	return cur, nil
+	writeJSON(w, http.StatusOK, map[string]string{"path": filepath.ToSlash(target)})
 }
 
 // handleFileGet streams a single file's raw content; ?dl=1 forces download.
 func (s *Server) handleFileGet(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	p, err := s.resolveFile(r, sess)
+	root, err := s.filesRoot(r, sess)
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
 	}
-	info, err := os.Lstat(p)
+	dir, err := s.openDataDir(root)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, err.Error())
+		writeFileOpErr(w, err)
 		return
 	}
-	if !info.Mode().IsRegular() {
-		writeErr(w, http.StatusBadRequest, "not a regular file")
-		return
-	}
-	f, err := os.Open(p)
+	defer dir.Close()
+	name := r.URL.Query().Get("path")
+	f, err := dir.OpenFile(name)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeFileOpErr(w, err)
 		return
 	}
 	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
 	if r.URL.Query().Get("dl") == "1" {
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(p)))
-		http.ServeContent(w, r, filepath.Base(p), info.ModTime(), f)
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filepath.Base(name)))
+		http.ServeContent(w, r, filepath.Base(name), info.ModTime(), f)
 		return
 	}
 	serveRawInline(w, r, f, info)
 }
 
-// handleFilePut writes the request body as the file's new content (creating
-// it if absent) — the save path of the web editor.
+// handleFilePut replaces a file atomically through a pinned directory handle.
 func (s *Server) handleFilePut(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	p, err := s.resolveFile(r, sess)
+	root, err := s.filesRoot(r, sess)
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
 	}
-	if info, err := os.Lstat(p); err == nil && !info.Mode().IsRegular() {
-		writeErr(w, http.StatusBadRequest, "not a regular file")
+	dir, err := s.openDataDir(root)
+	if err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	defer dir.Close()
+	name := r.URL.Query().Get("path")
+	mode := os.FileMode(0o644)
+	if old, err := dir.Lstat(name); err == nil {
+		if !old.Mode().IsRegular() {
+			writeFileOpErr(w, errFileOpInvalid)
+			return
+		}
+		mode = old.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		writeFileOpErr(w, err)
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 16<<20))
@@ -582,11 +537,36 @@ func (s *Server) handleFilePut(w http.ResponseWriter, r *http.Request, sess stor
 		writeErr(w, http.StatusBadRequest, "file too large (max 16MB) or read failed")
 		return
 	}
-	if err := os.WriteFile(p, body, 0o644); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	info, err := dir.WriteFile(name, body, safefs.WriteOptions{Mode: mode, Chown: true, UID: dockerx.AgentUID, GID: dockerx.AgentGID, BestEffortChown: true})
+	if err != nil {
+		writeFileOpErr(w, err)
 		return
 	}
-	_ = os.Chown(p, dockerx.AgentUID, dockerx.AgentGID)
-	info, _ := os.Stat(p)
 	writeJSON(w, http.StatusOK, map[string]any{"size": len(body), "mtime": info.ModTime()})
+}
+
+// Only the configured data directory is trusted. Descendants may contain
+// container-controlled components and must be opened through Sub.
+func (s *Server) openDataDir(dir string) (*safefs.Root, error) {
+	rel, err := filepath.Rel(s.cfg.DataDir, dir)
+	if err != nil || !filepath.IsLocal(rel) {
+		return nil, errFileOpInvalid
+	}
+	root, err := safefs.Open(s.cfg.DataDir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.Sub(rel)
+}
+
+// Files areas themselves are mount points; pin them through their service-owned
+// parent so replacing the mount-point name with a symlink is rejected too.
+func openFileArea(dir string) (*safefs.Root, error) {
+	parent, err := safefs.Open(filepath.Dir(dir))
+	if err != nil {
+		return nil, err
+	}
+	defer parent.Close()
+	return parent.Sub(filepath.Base(dir))
 }

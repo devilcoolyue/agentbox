@@ -323,7 +323,7 @@ func (s *Server) handleSkillMarketInstall(w http.ResponseWriter, r *http.Request
 				"整包安装请在工作空间终端里跑：claude plugin install "+entry.Name+"@"+"claude-plugins-official")
 		return
 	}
-	if err := ensureSkillsRoot(root); err != nil {
+	if err := s.ensureSkillsRoot(root); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -333,7 +333,7 @@ func (s *Server) handleSkillMarketInstall(w http.ResponseWriter, r *http.Request
 		if !skillNameRe.MatchString(name) {
 			continue
 		}
-		if err := replaceSkillDir(dir, filepath.Join(root, name)); err != nil {
+		if err := s.replaceSkillDir(dir, filepath.Join(root, name)); err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
