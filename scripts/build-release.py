@@ -75,6 +75,7 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
             shutil.copy2(ROOT / doc, folder / doc)
         copy_tracked_tree('third_party', folder / 'third_party')
         if program == 'agentbox':
+            shutil.copy2(ROOT / 'install.sh', folder / 'install.sh')
             shutil.copy2(ROOT / 'config.example.json', folder / 'config.example.json')
             copy_tracked_tree('images', folder / 'images')
             (folder / 'scripts').mkdir()
@@ -82,7 +83,7 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
                 shutil.copy2(ROOT / 'scripts' / script, folder / 'scripts' / script)
             copy_tracked_tree('docs', folder / 'docs')
             (folder / 'deploy').mkdir()
-            for deploy_file in ['README.md', 'release.py']:
+            for deploy_file in ['README.md', 'release.py', 'bootstrap.py']:
                 shutil.copy2(ROOT / 'deploy' / deploy_file, folder / 'deploy' / deploy_file)
         metadata = {'program': program, 'version': a.version, 'revision': revision,
                     'built_at': built, 'os': system, 'arch': arch,

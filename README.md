@@ -64,6 +64,24 @@ flowchart LR
 
 ## 快速开始
 
+### 一条命令安装（发布包入口）
+
+在 Linux 服务器上执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
+```
+
+**可用条件：维护者已将安装脚本推送到 main，并发布包含新安装器的 GitHub Release。** 当前尚无正式稳定发布；有预览包时可在命令末尾加 `-s -- --version v0.1.0-rc.1`（替换为实际发布版本）。默认只选择正式发布，不会下载 Actions 候选包。
+
+安装器支持 Linux x86_64 / arm64 + systemd；Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker，其他发行版需预先安装 Python 3.9+、Git、curl、CA 证书、时区数据和本机 Docker Engine。服务端使用预编译包，无需在服务器安装 Go 或 Node。
+
+命令会校验发布包、构建固定版本工作空间镜像、生成配置和随机管理员密码、安装并启动 `agentbox.service`。首次构建镜像需要几分钟及对镜像仓库、Debian 软件源和 npm 的网络访问。完成后打开 `http://服务器IP:8180`，使用终端显示的 `boxadmin` 和初始密码登录，在「系统设置 → 账号池」添加账号。远程访问需放行防火墙/安全组的 TCP 8180，公网长期使用请配置 HTTPS。
+
+可在命令末尾加 `-s -- --listen 127.0.0.1:8180`，只允许本机或反向代理访问。配置、数据分别存放在 `/etc/agentbox`、`/var/lib/agentbox`。已有部署会停止安装并保留原文件；升级、失败恢复和完整选项见[一键安装说明](deploy/README.md#一键安装)。
+
+以下是开发者从源码安装的步骤。
+
 ### 1. 准备 Linux 服务器
 
 | 依赖 | 用途 |

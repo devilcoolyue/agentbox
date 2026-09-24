@@ -32,6 +32,10 @@ jobs:
           go build ./...
           go test ./...
           go vet ./...
+      - name: Validate installer
+        run: |
+          bash -n install.sh
+          python3 scripts/test-install.py
       - name: Build candidates
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -46,6 +50,7 @@ jobs:
         run: |
           go build -o "$RUNNER_TEMP/agentbox-deployment" ./cmd/agentbox
           python3 scripts/test-deployment-linux.py --binary "$RUNNER_TEMP/agentbox-deployment" --image agentbox-agent:latest
+          python3 scripts/test-install-linux.py --binary "$RUNNER_TEMP/agentbox-deployment" --image agentbox-agent:latest
       - name: Scan history and candidates
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3

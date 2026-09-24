@@ -2,6 +2,8 @@
 
 当前尚无正式稳定发布。下面说明仓库提供的候选包流程，实际可下载版本以 GitHub Releases 为准。
 
+新用户的一键入口是仓库根目录 `install.sh`，使用方法见[一键安装](../deploy/README.md#一键安装)。维护者需推送该入口，并将新构建的 Linux 发布包和 `SHA256SUMS` 附到公开 Release：默认命令读取 latest 正式发布，只有预览包时必须指定 `--version`。仅创建 Actions artifact 不会让安装命令可用；支持一键安装的包必须包含 `deploy/bootstrap.py`。
+
 ## 维护者构建
 
 在干净 checkout 中准备 Go（版本见 go.mod）、Node.js 22、npm、Python 3.12+、Docker，以及 gitleaks v8.24.3。

@@ -59,6 +59,9 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-test-') as tmp:
             if meta[key]!=r[key]:raise SystemExit('Metadata mismatch')
         for path in ['LICENSE','NOTICE','third_party/README.md','third_party/vendor.json','third_party/go-modules.json']:
             if not (folder/path).is_file():raise SystemExit('Missing license inventory')
+        if r['program']=='agentbox':
+            for path in ['install.sh','deploy/bootstrap.py','deploy/release.py','scripts/build-image.sh','images/agent/versions.env']:
+                if not (folder/path).is_file():raise SystemExit('Missing installer resource: '+path)
         if r['os']!='linux' or r['arch']!=arch:continue
         binary=r['program']
         # A clean no-network Alpine container demonstrates no Go/Node/glibc dependency.
