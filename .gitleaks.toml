@@ -15,4 +15,7 @@ regexes = [
   '''^t\.Sequencer=t\.Throttler=void$''',
   # Adjacent Go runtime type names in strings output, not a credential.
   '''^integerfloat32float64$''',
+  # Codex OAuth httptest fixture: empty JWT header, account_id="fixture", and
+  # literal "signature" (not signed by any provider and never a real credential).
+  '''^e30\.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiZml4dHVyZSJ9fQ\.signature$''',
 ]
