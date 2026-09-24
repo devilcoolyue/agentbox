@@ -22,6 +22,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main
 
 - 支持 Linux x86_64/arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+/Debian 12+ 缺依赖时自动通过 apt 安装；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata、Docker。现有 Docker 不替换、不切换 CLI context，所有操作固定使用 `/var/run/docker.sock`。
 - 默认监听 `0.0.0.0:8180`，安装完打印访问地址、管理员 `boxadmin` 和随机初始密码；密码同时保存在仅 root 可读的 `/etc/agentbox/config.json`。登录后添加模型账号即可创建空间。防火墙/云安全组由管理员放行；HTTPS 配置见下文。
+- v0.1.1 起发布包内含五个平台的 abox-link 客户端，激活时自动安装到数据目录，无需用户构建。
 - 发布包按 SHA-256 校验，解压拒绝路径穿越、链接和特殊文件；只安装所选架构的包。校验提供完整性检查，不是独立数字签名。
 - 工作空间镜像在服务器本机构建，固定使用包内 CLI/基础镜像版本，标记为 `agentbox-agent:<发布版本>`。不自动追新，不清理旧镜像，也不启动镜像更新或备份定时器。首次构建需要访问镜像源、Debian 软件源和 npm。
 - 目录沿用独立部署布局：程序 `/opt/agentbox/releases/<版本>`、配置 `/etc/agentbox`、数据 `/var/lib/agentbox`、缓存 `/var/cache/agentbox`。通过既有 `release.py` 安装和激活，探活成功后才显示安装完成；日志进 journald，服务开机自启。
@@ -29,6 +30,8 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main
 这是**首次安装入口**：发现已有目录或任何已安装的 `agentbox.service` 就退出，不覆盖密码、不迁移数据、不升级现有部署。发布包下载或镜像构建失败时尚未写入部署目录，可排除问题后重跑；系统依赖及 Docker 可能已安装，构建缓存会保留。
 
 如果失败发生在写入配置之后，安装器保留文件供排查，不能简单重跑在线安装命令。先检查 `journalctl -u agentbox --no-pager -n 50`：版本目录已完整安装时，用 `python3 /opt/agentbox/releases/<版本>/deploy/release.py activate --version <版本>` 重试激活；尚未暂存版本时，重新下载并校验同版本包，再执行包内 `deploy/release.py install --package <解压目录>`。保留已有配置；如果版本已存在但单元尚未安装，需检查失败步骤并按目录手册修复，不能覆盖版本目录。
+
+一键卸载与全新重装见[用户说明](downloads/README.md#一键卸载与重新安装)，兼容 v0.1.0，默认保留文件到私有备份目录。
 
 安装完成后添加备份任务、升级或迁移旧部署，继续使用[独立部署与迁移手册](../docs/architecture/deployment-layout.md)。升级有数据库兼容性检查及备份，不以重新运行安装器代替。
 

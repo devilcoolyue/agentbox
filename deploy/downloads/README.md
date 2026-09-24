@@ -15,14 +15,27 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.0 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.1 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
 
-首次安装会校验发布包、构建固定版本的 Claude/Codex 工作空间镜像、生成管理员密码、安装 systemd 服务并设置开机自启。镜像构建需要访问基础镜像仓库、Debian 软件源和 npm，可能耗时数分钟。
+首次安装会校验发布包、构建固定版本的 Claude/Codex 工作空间镜像、自动安装随包附带的五个平台 abox-link 客户端、生成管理员密码、安装 systemd 服务并设置开机自启。镜像构建需要访问基础镜像仓库、Debian 软件源和 npm，可能耗时数分钟。
 
 完成后访问 `http://服务器IP:8180`，使用终端显示的 `boxadmin` 和随机初始密码登录，在「系统设置 → 账号池」添加账号，再创建工作空间。默认监听 `0.0.0.0:8180`；远程访问需在防火墙/安全组放行 TCP 8180，公网长期使用请配置支持 WebSocket 的 HTTPS 反向代理。管理员密码首次创建后保存在数据库中，修改配置里的初始密码不会重置已有账号。
+
+## 一键卸载与重新安装
+
+适用于默认目录的一键安装，兼容 v0.1.0。默认停止并禁用服务、移除本安装的工作空间容器，把程序、配置、凭证和数据移到 `/var/backups/agentbox-uninstall/<时间>/`（仅 root 可读），让原目录可用于全新安装。保留 Docker、镜像、其他容器和防火墙规则。备份目录与安装目录需在同一文件系统；自定义目录/服务覆盖配置会拒绝自动卸载。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/uninstall.sh | sudo bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.1
+```
+
+新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
+
+v0.1.1 安装器自动恢复 SELinux 程序标签，无需关闭 SELinux。SELinux 启用时需提供 `restorecon`（`policycoreutils`）。旧包启动失败可以先执行 `sudo restorecon -R /opt/agentbox` 后重试激活。
 
 ## 运行维护
 
@@ -50,13 +63,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.0_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.1_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.0_linux_arm64/install.sh --version v0.1.0
+sudo bash agentbox_v0.1.1_linux_arm64/install.sh --version v0.1.1
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -83,10 +96,10 @@ sudo /opt/agentbox/current/agentbox backup-verify /安全备份目录/system.tar
 
 下载对应系统/架构的 `abox-link` 包并校验、解压。无参数运行打开本机控制台；通过浏览器中的内网隧道页面取得配对信息。无头模式用 `abox-link --help` 查看参数。
 
-发布平台：Linux amd64/arm64、macOS amd64/arm64、Windows amd64。若需在 Agentbox 控制台提供客户端下载，将二进制命名为 `abox-link-<os>-<arch>[.exe]` 并放到 `/var/lib/agentbox/abox-link/`。
+发布平台：Linux amd64/arm64、macOS amd64/arm64、Windows amd64。v0.1.1 起安装/升级会把随包编译好的五个平台客户端放到 `/var/lib/agentbox/abox-link/`，控制台直接提供下载，不需要服务器安装 Go 或用户自行编译。
 
 ## 许可证与验证范围
 
 发布包携带 `LICENSE`、`NOTICE` 及 `third_party/` 声明。工作空间镜像由用户本机从官方源下载 CLI 构建，Claude Code、Codex CLI 和模型服务遵循各自条款。
 
-v0.1.0 已验证包校验、Linux 实际服务登录、工作空间、文件/Git、终端用量、重启、备份恢复和迁移。安装器自动化演练中的镜像构建和 systemctl 为模拟调用，干净主机上的 apt 安装与开机自启尚未验收。
+发布验证覆盖包校验、Linux 服务登录、工作空间、文件/Git、终端用量、重启、备份恢复与迁移。v0.1.1 增加客户端安装、默认保留数据卸载、彻底卸载与重装回归。安装器自动化演练中的镜像构建和 systemctl 为模拟调用，干净主机上的 apt 安装与开机自启尚未验收。

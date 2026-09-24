@@ -95,6 +95,28 @@ export async function smoke(page) {
   assert.equal(await password.inputValue(),'','successful login clears the password');
   await page.locator('#sec-container').waitFor({state:'visible'});
   assert.equal(new URL(page.url()).hash,'#/settings/container','login preserves destination');
+  assert.equal(await page.locator('#login-btn').isDisabled(),false);
+  // Transient /me errors must show a usable login form, including stored-token reload.
+  await page.route('**/api/me',route=>route.fulfill({status:503,json:{error:'fixture unavailable'}}));
+  await page.reload();
+  await page.locator('#login').waitFor({state:'visible'});
+  assert.match(await page.locator('#login-error').innerText(),/读取登录状态失败/);
+  assert.equal(await page.locator('#login-btn').isDisabled(),false);
+  await page.unroute('**/api/me');
+  await page.locator('#login-user').fill('fixture');await page.locator('#login-pass').fill('fixture-password');
+  await page.locator('#login-btn').click();
+  await page.locator('#sec-container').waitFor({state:'visible'});
+  // A stalled login request must time out and allow another attempt without reload.
+  await page.evaluate(async()=>{const {showLogin}=await import('/_v/{{BUILD}}/js/login.js');showLogin();});
+  await page.evaluate(()=>{window.__originalTimeout=AbortSignal.timeout;AbortSignal.timeout=()=>window.__originalTimeout(100);});
+  await page.route('**/api/login',async route=>{await new Promise(resolve=>setTimeout(resolve,400));await route.abort().catch(()=>{});});
+  await password.fill('fixture-password');await page.locator('#login-btn').click();
+  await page.locator('#login-error').filter({hasText:'无法连接服务器'}).waitFor();
+  assert.equal(await page.locator('#login-btn').isDisabled(),false,'timed out login remains disabled');
+  await page.evaluate(()=>{AbortSignal.timeout=window.__originalTimeout;});
+  await page.unroute('**/api/login');
+  await password.fill('fixture-password');await page.locator('#login-btn').click();
+  await page.locator('#sec-container').waitFor({state:'visible'});
   // Version entry, shared state, failure recovery, responsive layout and focus.
   await page.locator('#version-badge.has-update').waitFor();
   assert.equal(updateChecks,1,'initial automatic update check missing or duplicated');

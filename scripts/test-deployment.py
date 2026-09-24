@@ -18,6 +18,18 @@ spec=importlib.util.spec_from_file_location('release',Path(__file__).resolve().p
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 
 class Deployment(unittest.TestCase):
+ def test_bundled_clients_install_and_upgrade(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);package=root/'package';source=package/'clients';source.mkdir(parents=True);data=root/'data';data.mkdir()
+   for name in m.CLIENT_NAMES:(source/name).write_bytes(('v1:'+name).encode())
+   m.install_clients(package,data)
+   for name in m.CLIENT_NAMES:self.assertEqual((data/'abox-link'/name).read_bytes(),('v1:'+name).encode())
+   (source/m.CLIENT_NAMES[0]).write_bytes(b'v2')
+   m.install_clients(package,data)
+   self.assertEqual((data/'abox-link'/m.CLIENT_NAMES[0]).read_bytes(),b'v2')
+   (source/m.CLIENT_NAMES[-1]).unlink()
+   with self.assertRaises(ValueError):m.install_clients(package,data)
+   self.assertEqual((data/'abox-link'/m.CLIENT_NAMES[0]).read_bytes(),b'v2')
  def test_selinux_context_restoration(self):
   with patch.object(m.Path,'exists',return_value=False), patch.object(m,'run') as run:
    m.restore_context(Path('/fixture/release'))

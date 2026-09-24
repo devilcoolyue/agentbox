@@ -57,6 +57,7 @@ jobs:
           python3 scripts/test-deployment.py
           bash -n install.sh
           python3 scripts/test-install.py
+          python3 scripts/test-uninstall.py
       - name: backup and restore CLI
         run: AGENTBOX_BACKUP_DOCKER_TEST=1 ./scripts/test-backup.sh
       - name: Git container smoke (no model calls)

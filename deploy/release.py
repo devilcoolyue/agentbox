@@ -146,6 +146,30 @@ def compatible(binary, config, data):
         raise ValueError('incompatible database; restore a compatible backup to a NEW directory first')
 
 
+CLIENT_NAMES = tuple('abox-link-' + system + '-' + arch + ('.exe' if system == 'windows' else '')
+                     for system, arch in [('linux', 'amd64'), ('linux', 'arm64'),
+                                          ('darwin', 'amd64'), ('darwin', 'arm64'), ('windows', 'amd64')])
+
+
+def install_clients(package, data):
+    source = package / 'clients'
+    if not source.exists():
+        return  # Releases before v0.1.1 did not bundle clients.
+    for name in CLIENT_NAMES:
+        if not (source / name).is_file() or (source / name).is_symlink():
+            raise ValueError('Incomplete bundled clients: ' + name)
+    target = data / 'abox-link'
+    if target.is_symlink():
+        raise ValueError('client directory must not be a symlink')
+    target.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=data, prefix='.clients-') as tmp:
+        for name in CLIENT_NAMES:
+            shutil.copyfile(source / name, Path(tmp) / name)
+            (Path(tmp) / name).chmod(0o755)
+        for name in CLIENT_NAMES:
+            os.replace(Path(tmp) / name, target / name)
+
+
 def activate(app, version, config, backup_dir, unit_dir):
     # Only manage a unit created for this layout. Never hijack a repository install.
     if (unit_dir / 'agentbox.service').read_text() != unit(app, config):
@@ -169,6 +193,7 @@ def activate(app, version, config, backup_dir, unit_dir):
     with locked(data / 'agentbox.lock'):
         compatible(binary, config, data)
         switch(app, version)
+    install_clients(binary.parent, data)
     run('systemctl', 'start', 'agentbox.service')
     listen = cfg.get('listen', '127.0.0.1:8080')
     host, port = listen.rsplit(':', 1)

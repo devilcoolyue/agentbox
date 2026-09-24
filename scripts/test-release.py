@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-test-') as tmp:
         allowed = {'agentbox', 'abox-link', 'abox-link.exe', 'LICENSE', 'NOTICE',
                    'README.md', 'build.json', 'third_party'}
         if r['program']=='agentbox':
-            allowed |= {'install.sh', 'config.example.json', 'images', 'scripts', 'deploy'}
+            allowed |= {'install.sh', 'uninstall.sh', 'clients', 'config.example.json', 'images', 'scripts', 'deploy'}
         if {path.name for path in folder.iterdir()} - allowed:
             raise SystemExit('Unexpected files in public binary package')
         if any(path.suffix in ('.go', '.ts') or path.name in ('AGENTS.md', '.git') for path in folder.rglob('*')):
@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-test-') as tmp:
         for path in ['LICENSE','NOTICE','third_party/README.md','third_party/vendor.json','third_party/go-modules.json']:
             if not (folder/path).is_file():raise SystemExit('Missing license inventory')
         if r['program']=='agentbox':
-            for path in ['install.sh','deploy/bootstrap.py','deploy/release.py','scripts/build-image.sh','images/agent/versions.env']:
+            for path in ['uninstall.sh', 'clients/abox-link-linux-amd64', 'clients/abox-link-linux-arm64', 'clients/abox-link-darwin-amd64', 'clients/abox-link-darwin-arm64', 'clients/abox-link-windows-amd64.exe', 'install.sh','deploy/bootstrap.py','deploy/release.py','scripts/build-image.sh','images/agent/versions.env']:
                 if not (folder/path).is_file():raise SystemExit('Missing installer resource: '+path)
         if r['os']!='linux' or r['arch']!=arch:continue
         binary=r['program']

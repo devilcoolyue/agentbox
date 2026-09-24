@@ -2,7 +2,7 @@
 
 源码仓库保持私有；公开下载仓库为 `devilcoolyue/agentbox-releases`，仅提交安装脚本、用户说明和许可证，Release 附件为二进制安装包。打包只携带 `deploy/downloads/README.md` 用户说明，不复制内部架构、审计或开发文档。
 
-首个正式版本为 [v0.1.0](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.0)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
+当前正式版本为 [v0.1.1](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.1)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
 
 新用户的一键入口是仓库根目录 `install.sh`，使用方法见[一键安装](../deploy/README.md#一键安装)。维护者需推送该入口，并将新构建的 Linux 发布包和 `SHA256SUMS` 附到公开 Release：默认命令读取 latest 正式发布，只有预览包时必须指定 `--version`。仅创建 Actions artifact 不会让安装命令可用；支持一键安装的包必须包含 `deploy/bootstrap.py`。
 
@@ -12,7 +12,7 @@
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.0 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.1 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0
@@ -45,7 +45,7 @@ chmod 600 config.json
 
 新安装推荐使用一键安装器，自动配置 systemd 与独立运行目录；手工安装、升级和迁移使用包内 `deploy/release.py`，详见[目录与迁移手册](architecture/deployment-layout.md)。`deploy/install.sh` / `deploy/deploy.sh` 仍属于源码安装流程。
 
-单独下载对应平台的 abox-link，校验后解压，运行 `./abox-link --version` 或 `abox-link.exe --version`。若要让控制台提供下载，将它按 `abox-link-<os>-<arch>[.exe]` 命名，放到配置的 `<data_dir>/abox-link/`；先升级服务端，再更新客户端。
+单独下载对应平台的 abox-link，校验后解压，运行 `./abox-link --version` 或 `abox-link.exe --version`。v0.1.1 起服务端包同时携带这五个平台的客户端，激活时自动安装到 `<data_dir>/abox-link/`，无需手工构建。
 
 ## 升级与回退
 
@@ -62,3 +62,7 @@ CLI 镜像独立于服务端包，版本与回退见 [兼容矩阵](compatibilit
 管理员侧栏版本徽标和「关于与更新」页显示运行中二进制的构建信息。`GET /api/updates` 读取本地版本与检查缓存，`POST /api/updates/check` 检查上游正式发布（两者均需管理员权限）；`?force=1` 可手动检查，仍有 1 分钟防重复请求间隔。自动检查由已登录、可见且联网的控制台每 4 小时触发，服务端缓存由所有页面共享，重启后重新检查。
 
 数据源是公开下载仓库 `devilcoolyue/agentbox-releases` 的 GitHub Releases latest 接口，不包含 draft/prerelease，也不检查会话镜像或 abox-link。没有正式发布、开发构建无法比较、网络失败均单独显示；不会把检查失败当成最新版本。版本号由发布构建注入，普通 `go build` 为 `dev`。当前界面提供发布记录、版本说明和升级文档，不下载或替换运行中的服务端。
+
+## v0.1.1
+
+包含最新控制台铺满布局、版本提醒、登录错误处理与限时重试、配对码复制；修复 SELinux 安装启动以及卸载后立即重装的端口检查。服务端包携带五个平台客户端，并提供兼容 v0.1.0 默认布局的一键卸载入口。卸载默认保留数据，可显式彻底删除。源码提交和 GitHub 二进制发布互相独立，旧版本附件不会随 main 自动更新。

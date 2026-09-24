@@ -28,6 +28,9 @@ def inside():
         shutil.copy2(root / relative, target)
     (package / 'build.json').write_text(json.dumps(dict(program='agentbox', os='linux', arch=arch,
                                                       version='v0.0.1', revision='synthetic-fixture')))
+    (package / 'clients').mkdir()
+    for client in ('linux-amd64', 'linux-arm64', 'darwin-amd64', 'darwin-arm64', 'windows-amd64.exe'):
+        (package / 'clients' / ('abox-link-' + client)).write_bytes(b'synthetic client')
     archive = fixture / (name + '.tar.gz')
     with tarfile.open(archive, 'w:gz') as tar: tar.add(package, arcname=name)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
@@ -45,13 +48,14 @@ shutil.copyfile(Path('/tmp/install-test/fixture')/name,sys.argv[sys.argv.index('
         'docker': '''import json,sys
 if sys.argv[1:4]==['network','inspect','bridge']:
  print(json.dumps([{'IPAM':{'Config':[{'Gateway':'172.17.0.1'}]}}]))
+elif sys.argv[1]=='ps': pass
 elif sys.argv[1] not in ('info','build'): raise SystemExit('unexpected Docker CLI operation')
 ''',
-        'systemctl': '''import os,signal,subprocess,sys
+        'systemctl': '''import os,signal,subprocess,sys,time,socket
 from pathlib import Path
 args=sys.argv[1:];pid=Path('/tmp/install-test/server.pid')
 if args[0]=='show':
- if Path('/etc/systemd/system/agentbox.service').exists(): print('/etc/systemd/system/agentbox.service')
+ if '--property=DropInPaths' not in args and Path('/etc/systemd/system/agentbox.service').exists(): print('/etc/systemd/system/agentbox.service')
 elif args[0]=='start':
  with open('/tmp/install-test/server.log','ab') as log:
   proc=subprocess.Popen(['/opt/agentbox/current/agentbox','--config','/etc/agentbox/config.json'],stdout=log,stderr=log,start_new_session=True)
@@ -59,9 +63,13 @@ elif args[0]=='start':
 elif args[0]=='stop':
  if pid.exists():
   os.kill(int(pid.read_text()),signal.SIGTERM);pid.unlink()
+  for _ in range(100):
+   with socket.socket() as probe:
+    if probe.connect_ex(('127.0.0.1',18189)) != 0: break
+   time.sleep(.05)
 elif args[0]=='is-active':
  os.kill(int(pid.read_text()),0)
-elif args[0] not in ('enable','daemon-reload'): raise SystemExit('unexpected systemctl operation')
+elif args[0] not in ('enable','disable','daemon-reload','reset-failed'): raise SystemExit('unexpected systemctl operation')
 ''',
     }
     for name, body in commands.items():
@@ -93,12 +101,26 @@ elif args[0] not in ('enable','daemon-reload'): raise SystemExit('unexpected sys
         data=json.dumps({'username':'boxadmin','password':config['auth_token']}).encode(),
         headers={'Content-Type':'application/json'})
     with urllib.request.urlopen(req, timeout=5) as response:
-        assert json.load(response)['token']
+        token = json.load(response)['token']
+    with urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:18189/api/tunnel/clients', headers={'Authorization':'Bearer '+token}), timeout=5) as response:
+        clients = json.load(response)
+        assert len(clients) == 5, clients
+    assert all((Path('/var/lib/agentbox/abox-link') / c['name']).read_bytes() == b'synthetic client' for c in clients)
     assert Path('/var/lib/agentbox/state.db').is_file()
     again = subprocess.run(command, env=env, capture_output=True, text=True)
     assert again.returncode != 0 and 'Existing installation' in again.stderr
     assert config_path.read_bytes() == original
     assert set(Path('/tmp').glob('tmp.*')) == original_staging, 'successful download staging was not cleaned'
+    result = subprocess.run(['bash', str(root / 'uninstall.sh'), '--yes'], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert not config_path.exists() and not Path('/opt/agentbox').exists()
+    retained = list(Path('/var/backups/agentbox-uninstall').glob('*/config/config.json'))
+    assert len(retained) == 1 and retained[0].read_bytes() == original
+    result = subprocess.run(command, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    result = subprocess.run(['bash', str(root / 'uninstall.sh'), '--yes', '--purge'], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert retained[0].read_bytes() == original and not Path('/var/lib/agentbox').exists()
     print('Linux installer: checksum rejection/cleanup, download/extract/install/activate, real HTTP login, private config and repeat-install refusal passed; systemd/downloads/image build simulated')
 
 
@@ -119,7 +141,7 @@ def main():
         import tempfile
         with tempfile.TemporaryDirectory(prefix='agentbox-install-fixture-') as tmp:
             staging = Path(tmp)
-            for relative in ('install.sh', 'config.example.json', 'deploy/bootstrap.py', 'deploy/release.py',
+            for relative in ('install.sh', 'uninstall.sh', 'config.example.json', 'deploy/bootstrap.py', 'deploy/release.py',
                              'scripts/build-image.sh', 'images/agent/versions.env'):
                 dest = staging / relative; dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(root / relative, dest)

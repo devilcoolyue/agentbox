@@ -50,6 +50,9 @@ def available(value):
     address, port = listen_address(value)
     family = socket.AF_INET6 if address.version == 6 else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as listener:
+        # Match Go's listener: recently closed HTTP sockets can remain in
+        # TIME_WAIT after uninstall, but must not prevent immediate reinstall.
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.bind((str(address), port))
 
 

@@ -34,8 +34,10 @@ jobs:
           go vet ./...
       - name: Validate installer
         run: |
-          bash -n install.sh
+          bash -n install.sh uninstall.sh
           python3 scripts/test-install.py
+          python3 scripts/test-uninstall.py
+          python3 scripts/test-deployment.py
       - name: Build candidates
         env:
           RELEASE_TAG: ${{ github.ref_name }}

@@ -36,10 +36,14 @@ export async function tryEnter() {
     const token = S.token;
     let me;
     try {
-        me = await api("/me");
+        me = await api("/me", { signal: AbortSignal.timeout(15000) });
     }
-    catch (_) {
-        return; // unauthorized 事件已触发 showLogin
+    catch (error) {
+        // Non-401 failures previously disappeared, leaving stored-token startup
+        // blank or a submitted login waiting without a useful retry path.
+        if (token === S.token)
+            showLogin("读取登录状态失败，请重试：" + error.message);
+        return;
     }
     if (token !== S.token)
         return;
@@ -59,7 +63,8 @@ export async function tryEnter() {
     setPasswordVisible(false);
     $("login-pass").value = "";
     $("app").classList.remove("hidden");
-    await refreshAll();
+    btnDone($("login-btn")); // Authentication is complete; data loading is separate.
+    await refreshAll(AbortSignal.timeout(15000));
     if (token !== S.token)
         return;
     emit("app-ready");
@@ -74,6 +79,7 @@ $("login-form").addEventListener("submit", async (e) => {
     try {
         const res = await fetch("/api/login", {
             method: "POST",
+            signal: AbortSignal.timeout(15000),
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 username: $("login-user").value.trim(),

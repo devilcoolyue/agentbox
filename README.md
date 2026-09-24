@@ -60,7 +60,7 @@ flowchart LR
 
 控制台通过 URL 记录当前页面，例如 `#/usage`（使用记录）、`#/settings/container`（容器设置）、`#/sessions/<空间ID>/files`（空间文件页）。刷新、浏览器前进/后退或收藏链接后重开，都会恢复对应页面、设置分区和空间标签；未登录时先登录再恢复。链接仍受账号权限校验，失效空间或无权访问的页面返回首页。路径使用 `#`，无需额外配置服务端或反向代理。
 
-登录页提供账号、密码图标；密码默认隐藏，点击眼睛按钮可显示或隐藏输入内容，重新进入登录页时恢复隐藏。
+登录和身份读取限时 15 秒，失败显示可重试的错误；登录完成后进入目标页面，不需手动刷新。登录页提供账号、密码图标；密码默认隐藏，点击眼睛按钮可显示或隐藏输入内容，重新进入登录页时恢复隐藏。
 
 侧栏底部的图表图标打开使用记录，位于内网隧道图标前；输入框旁的回形针图标用于添加图片或文件附件。
 
@@ -78,7 +78,7 @@ flowchart LR
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash
 ```
 
-首个正式版本为 [v0.1.0](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.0)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.0`。
+当前正式版本为 [v0.1.1](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.1)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.1`。
 
 Oracle Linux / RHEL 等启用 SELinux 的系统，若旧版安装包启动时报 `203/EXEC` / `Permission denied`，按[SELinux 安装恢复](deploy/README.md#selinux-安装恢复)修复程序标签后重试激活。
 
@@ -181,6 +181,8 @@ sudo ./deploy/deploy.sh
 管理员登录后，侧栏 AGENTBOX 名称下方显示服务端版本。点击版本可查看更新状态，并跳转「系统设置 → 关于与更新」。页面可见且联网时每 4 小时自动检查 GitHub 正式发布；发现更高版本时徽标和提示变为黄色。手动检查共用服务端缓存，最短间隔 1 分钟；检查失败会保留上次结果并提示错误。开发构建（`dev` / dirty）不推断可升级状态，也不显示“已是最新”。这里只检查并提示，实际升级按[发布说明](docs/releases.md#升级与回退)由管理员完成。
 
 `install.sh` 安装服务、镜像更新与备份定时器；`deploy.sh` 构建、替换二进制、重启并探活。远程长期访问请配置 HTTPS 与 WebSocket 反向代理，完整步骤见[部署与运维](deploy/README.md)。
+
+一键卸载与重新安装见[下载与安装说明](deploy/downloads/README.md#一键卸载与重新安装)。卸载默认保留全部文件到私有备份目录；`--purge` 才彻底删除。v0.1.1 起发布包附带五个平台的 abox-link，安装/升级自动放置客户端下载文件。
 
 ## 用户与权限
 

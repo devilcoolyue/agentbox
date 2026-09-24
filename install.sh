@@ -10,7 +10,8 @@ agentbox Linux installer (new installations only)
 Usage: sudo bash install.sh [--version vX.Y.Z] [--listen 0.0.0.0:8180]
 
 Downloads a verified release, builds the pinned workspace image, and starts
-agentbox.service. No Go or Node required on the host.
+agentbox.service. v0.1.1+ also installs all five bundled abox-link clients.
+No Go or Node required on the host.
 Ubuntu/Debian: missing dependencies and Docker are installed with apt.
 Other systemd Linux distributions: install Python 3.9+, Git, curl, CA certificates,
 tzdata and a local Docker Engine first. Supports x86_64 and arm64.
@@ -66,6 +67,10 @@ main() {
     esac
   fi
   python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else "Python 3.9+ is required")'
+
+  if [[ -e /sys/fs/selinux/enforce ]] && ! command -v restorecon >/dev/null; then
+    fail 'SELinux requires restorecon; install policycoreutils first'
+  fi
 
   umask 077
   task_tmp=$(mktemp -d)

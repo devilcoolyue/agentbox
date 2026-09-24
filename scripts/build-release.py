@@ -60,9 +60,10 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
     products = stage / 'artifacts'
     products.mkdir()
     records = []
-    targets = [('agentbox', 'linux', arch) for arch in ['amd64', 'arm64']]
-    targets += [('abox-link', system, arch) for system, arch in
+    clients = stage / 'clients'; clients.mkdir()
+    targets = [('abox-link', system, arch) for system, arch in
                 [('linux', 'amd64'), ('linux', 'arm64'), ('darwin', 'amd64'), ('darwin', 'arm64'), ('windows', 'amd64')]]
+    targets += [('agentbox', 'linux', arch) for arch in ['amd64', 'arm64']]
     for program, system, arch in targets:
         name = f'{program}_{a.version}_{system}_{arch}'
         folder = stage / name
@@ -71,6 +72,8 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
         env = dict(os.environ, GOOS=system, GOARCH=arch, CGO_ENABLED='0')
         subprocess.run(['go', 'build', '-trimpath', '-buildvcs=false', '-ldflags', flags,
                         '-o', str(binary), './cmd/' + program], check=True, env=env)
+        if program == 'abox-link':
+            shutil.copy2(binary, clients / (f'abox-link-{system}-{arch}' + ('.exe' if system == 'windows' else '')))
         for doc in ['LICENSE', 'NOTICE']:
             shutil.copy2(ROOT / doc, folder / doc)
         # Public binary distribution contains operator instructions only. Never
@@ -79,6 +82,8 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
         copy_tracked_tree('third_party', folder / 'third_party')
         if program == 'agentbox':
             shutil.copy2(ROOT / 'install.sh', folder / 'install.sh')
+            shutil.copy2(ROOT / 'uninstall.sh', folder / 'uninstall.sh')
+            shutil.copytree(clients, folder / 'clients')
             shutil.copy2(ROOT / 'config.example.json', folder / 'config.example.json')
             copy_tracked_tree('images', folder / 'images')
             (folder / 'scripts').mkdir()
