@@ -10,14 +10,14 @@
 
 ## 一键安装
 
-仓库根目录的 `install.sh` 是面向新用户的在线安装入口，和 `deploy/install.sh`（源码安装 systemd 单元）用途不同。需要先将脚本推送到 main，并公开包含 `deploy/bootstrap.py` 的发布包及 `SHA256SUMS`；当前候选工作流不会自动公开 Release，未发布时命令会清楚报告下载失败。
+仓库根目录的 `install.sh` 是面向新用户的在线安装入口，和 `deploy/install.sh`（源码安装 systemd 单元）用途不同。从 v0.1.0 起提供正式发布包及 `SHA256SUMS`，默认命令安装最新正式版本。
 
 ```bash
 # 安装最新正式发布；以 root 登录时，可将 sudo bash 换成 bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
 
 # 指定已发布版本（包括预览版），仅监听本机
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.0-rc.1 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.0 --listen 127.0.0.1:8180
 ```
 
 - 支持 Linux x86_64/arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+/Debian 12+ 缺依赖时自动通过 apt 安装；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata、Docker。现有 Docker 不替换、不切换 CLI context，所有操作固定使用 `/var/run/docker.sock`。

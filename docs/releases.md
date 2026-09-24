@@ -1,6 +1,6 @@
 # 版本发布与二进制安装
 
-当前尚无正式稳定发布。下面说明仓库提供的候选包流程，实际可下载版本以 GitHub Releases 为准。
+首个正式版本为 [v0.1.0](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.0)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
 
 新用户的一键入口是仓库根目录 `install.sh`，使用方法见[一键安装](../deploy/README.md#一键安装)。维护者需推送该入口，并将新构建的 Linux 发布包和 `SHA256SUMS` 附到公开 Release：默认命令读取 latest 正式发布，只有预览包时必须指定 `--version`。仅创建 Actions artifact 不会让安装命令可用；支持一键安装的包必须包含 `deploy/bootstrap.py`。
 
@@ -10,7 +10,7 @@
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.0-rc.1 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.0 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0
@@ -29,8 +29,8 @@ python3 scripts/scan-secrets.py --artifacts /tmp/agentbox-release --output /tmp/
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
-tar -xzf agentbox_v0.1.0-rc.1_linux_arm64.tar.gz
-cd agentbox_v0.1.0-rc.1_linux_arm64
+tar -xzf agentbox_v0.1.0_linux_arm64.tar.gz
+cd agentbox_v0.1.0_linux_arm64
 ./agentbox --version
 cp config.example.json config.json
 chmod 600 config.json
@@ -41,7 +41,7 @@ chmod 600 config.json
 
 校验必须报告所选包 OK；只校验不相关文件不能替代校验安装包。不要直接运行示例中的占位凭证。镜像构建会联网下载固定版本的 CLI，需遵循其上游条款；服务端本身不需要 Go/Node。
 
-后台托管可由管理员创建 systemd 单元，使用 `deploy/README.md` 的服务参数，将 `WorkingDirectory` 和 `ExecStart` 指向解压目录及配置绝对路径。当前包不运行源码仓库的 `deploy/install.sh` / `deploy/deploy.sh`，这些脚本仍属于源码安装流程。后续独立运行目录和按版本自动切换见架构 D1；本阶段不自动迁移旧数据。
+新安装推荐使用一键安装器，自动配置 systemd 与独立运行目录；手工安装、升级和迁移使用包内 `deploy/release.py`，详见[目录与迁移手册](architecture/deployment-layout.md)。`deploy/install.sh` / `deploy/deploy.sh` 仍属于源码安装流程。
 
 单独下载对应平台的 abox-link，校验后解压，运行 `./abox-link --version` 或 `abox-link.exe --version`。若要让控制台提供下载，将它按 `abox-link-<os>-<arch>[.exe]` 命名，放到配置的 `<data_dir>/abox-link/`；先升级服务端，再更新客户端。
 
