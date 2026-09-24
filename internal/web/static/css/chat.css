@@ -11,7 +11,6 @@
   flex: 1; overflow-y: auto;
   padding: 24px max(20px, calc((100% - 800px) / 2)) 8px;
   display: flex; flex-direction: column; gap: 14px;
-  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
   /* 上下边界虚化：对话内容在贴近「对话切换栏」和「输入卡」时渐隐，
    * 与上下两栏之间留出一道柔和的分界，视觉上把中间的对话流单独划出来。
    * 顶部渐隐更长（旧内容滚上去时溶入切换栏），底部只轻描一笔，
@@ -25,10 +24,6 @@
     transparent 0, #000 var(--fade-top),
     #000 calc(100% - var(--fade-bottom)), transparent 100%);
 }
-.chat-log::-webkit-scrollbar { width: 8px; }
-.chat-log::-webkit-scrollbar-track { background: transparent; }
-.chat-log::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
-.chat-log::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 /* 滚动 flex 容器的子项禁止收缩，否则内容超高时消息会被垂直压扁 */
 .chat-log > * { flex-shrink: 0; }
 
@@ -82,7 +77,6 @@
 .math-display {
   margin: 12px 0; padding: 2px 0;
   overflow-x: auto; overflow-y: hidden;
-  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
 }
 .math-display .katex-display { margin: 0; }
 .md-list { margin: 0 0 10px; padding-left: 22px; }
@@ -187,7 +181,6 @@
   overflow-x: auto;
   font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
   white-space: pre;
-  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
 }
 .codeblock code {
   background: none; border: none; padding: 0;
@@ -426,7 +419,6 @@ details.think.streaming .think-body::after {
   flex: 1; overflow-y: auto;
   display: flex; flex-direction: column; gap: 3px;
   padding: 2px 10px 12px;
-  scrollbar-width: thin; scrollbar-color: var(--line) transparent;
 }
 .tp-item {
   display: flex; align-items: stretch;
@@ -708,13 +700,15 @@ details.think.streaming .think-body::after {
   box-shadow: 0 0 44px color-mix(in srgb, var(--brand) 22%, transparent);
 }
 .chat-hero h2 {
+  display: flex; align-items: center; justify-content: center;
   margin: 0;
   font-size: 26px; font-weight: 600; letter-spacing: 0.01em;
 }
 .hero-cursor {
-  color: var(--amber);
-  font-family: var(--mono); font-size: 22px;
-  margin-left: 4px;
+  display: block; flex: none; overflow: hidden;
+  width: 0.55em; height: 1.02em;
+  margin-left: 8px;
+  background: var(--accent); color: transparent;
   animation: blink 1.1s steps(1) infinite;
 }
 .hero-pills {

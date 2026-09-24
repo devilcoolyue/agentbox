@@ -26,3 +26,6 @@ config.json.bak*
 .specstory/.what-is-this.md
 
 __pycache__/
+
+# macOS 文件夹元数据
+.DS_Store

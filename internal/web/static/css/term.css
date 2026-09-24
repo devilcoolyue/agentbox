@@ -92,17 +92,12 @@
    放容器上会导致终端比容器大一圈、把整页撑出滚动条 */
 .term-mount { flex: 1; min-height: 0; background: var(--term-bg); overflow: hidden; color-scheme: dark; }
 .term-mount .xterm { height: 100%; padding: 8px 8px 8px 16px; }
-/* 终端始终是深色「设备屏幕」，滚动条也须始终深色。xterm 的 .xterm-viewport 用原生
-   overflow-y:scroll 永远预留一条滚动条槽；不显式着色时，浅色主题、或 macOS「总是显示
-   滚动条」下它会渲染成浅灰原生条，压在深底终端右侧露出一条刺眼的浅缝（看着像没铺满）。
-   color-scheme:dark 在部分平台压不住原生条，故这里按终端深色把它显式画一遍：webkit 用
-   ::-webkit-scrollbar（会改用可着色的自定义滚动条，跨平台生效、不再是系统浅灰条），
-   firefox 用 scrollbar-color。颜色写死深色不取主题令牌——终端两种主题下都是深屏。 */
-.term-mount .xterm-viewport { scrollbar-width: thin; scrollbar-color: #2e3646 transparent; }
-.term-mount .xterm-viewport::-webkit-scrollbar { width: 10px; }
-.term-mount .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
-.term-mount .xterm-viewport::-webkit-scrollbar-thumb { background: #2e3646; border-radius: 5px; }
-.term-mount .xterm-viewport::-webkit-scrollbar-thumb:hover { background: #454e60; }
+/* 终端始终深色；复用全局滚动条形状，只覆盖颜色令牌。 */
+.term-mount {
+  --scroll-thumb: var(--term-sel);
+  --scroll-thumb-hover: #566174;
+  --scroll-thumb-active: var(--term-cursor);
+}
 /* 连接加载态：盖在终端显示区上（而非按钮条），底色与终端一致 */
 .term-loading {
   position: absolute; inset: 0; z-index: 10;

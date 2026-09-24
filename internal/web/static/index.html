@@ -32,6 +32,7 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/base.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/select.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/shell.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/updates.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/work.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/chat.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/term.css">
@@ -112,14 +113,33 @@
   </svg>
 </template>
 
+<div id="version-menu" class="version-menu" popover="auto" role="dialog" aria-label="版本与更新">
+  <header><strong>当前版本</strong><button type="button" class="version-check" data-update-check data-icon="refresh" aria-label="检查更新" title="检查更新"></button></header>
+  <div class="version-menu-body">
+    <div class="version-number"><span data-update-version>—</span><span id="version-current" class="version-current hidden" data-icon="check" aria-label="已是最新版本"></span></div>
+    <p class="update-status" data-update-status role="status">尚未检查更新</p>
+    <button id="version-upgrade" type="button" class="btn btn-primary hidden" data-update-about data-icon="download">查看更新</button>
+    <a class="version-release" data-update-release target="_blank" rel="noopener noreferrer" data-icon="external">查看发布</a>
+    <p class="update-error hidden" data-update-error></p>
+  </div>
+  <button type="button" class="version-menu-footer" data-update-about><span>每 4 小时自动检查<span data-update-time>尚未检查</span></span><span data-icon="caret" aria-hidden="true"></span></button>
+</div>
+
 <!-- 登录：默认跟随系统主题，页内不放主题切换（登录后在侧栏切换） -->
 <div id="login" class="login hidden">
   <form id="login-form" class="login-card">
     <div class="mascot mascot-login" data-mascot aria-hidden="true"></div>
-    <div class="wordmark"><span data-mark></span>AGENTBOX<span class="cursor">▊</span></div>
+    <div class="wordmark"><span data-mark></span><span>AGENTBOX<span class="cursor" aria-hidden="true"></span></span></div>
     <p class="login-hint">在你的服务器上，使用独立的 Agent 工作空间</p>
-    <input id="login-user" type="text" placeholder="账号" autocomplete="username" autocapitalize="none" spellcheck="false" required>
-    <input id="login-pass" type="password" placeholder="密码" autocomplete="current-password" required>
+    <div class="login-field">
+      <span class="login-field-icon" data-icon="user" aria-hidden="true"></span>
+      <input id="login-user" type="text" placeholder="账号" aria-label="账号" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    </div>
+    <div class="login-field login-password">
+      <span class="login-field-icon" data-icon="lock" aria-hidden="true"></span>
+      <input id="login-pass" type="password" placeholder="密码" aria-label="密码" autocomplete="current-password" required>
+      <button id="login-password-toggle" class="login-password-toggle" type="button" data-icon="eye-off" aria-label="显示密码" aria-controls="login-pass" title="显示密码"></button>
+    </div>
     <button type="submit" id="login-btn" class="btn btn-primary" data-icon="login">登录</button>
     <p id="login-error" class="login-error hidden"></p>
   </form>
@@ -158,6 +178,7 @@
     <aside id="sidebar" class="sidebar" aria-label="主导航">
       <div class="side-head">
         <button id="btn-home" type="button" class="wordmark wordmark-sm side-brand" data-tip="回到工作台首页" aria-label="AGENTBOX 工作台首页"><span class="side-mark"><span data-mark></span></span><span class="side-brand-name">AGENTBOX</span></button>
+        <button id="version-badge" type="button" class="version-badge hidden" aria-label="版本与更新" aria-haspopup="dialog" aria-expanded="false" aria-controls="version-menu"><span id="version-label">版本</span><span class="version-dot" aria-hidden="true"></span></button>
         <button id="btn-sidebar-toggle" type="button" class="side-collapse" aria-label="收起侧栏" aria-expanded="true" aria-controls="sidebar" data-tip="收起侧栏">
           <span class="glyph"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18m7-13-4 4 4 4"/></svg></span>
         </button>
@@ -299,7 +320,7 @@
             </div>
             <div id="chat-hero" class="chat-hero hidden">
               <div id="hero-avatar" class="hero-avatar"></div>
-              <h2>我们该构建什么？<span class="hero-cursor">▊</span></h2>
+              <h2>我们该构建什么？<span class="hero-cursor" aria-hidden="true"></span></h2>
               <div class="hero-pills">
                 <button class="hero-pill" data-fill="帮我梳理这个仓库的整体结构和核心模块，讲讲代码是如何组织的。" data-icon="network">
                   梳理仓库结构
@@ -508,7 +529,7 @@
             <button data-sec="interface" data-icon="sliders">界面与提示</button>
             <button data-sec="security" data-icon="shield">安全与访问</button>
             <button data-sec="monitor" data-icon="activity">运维监控</button>
-            <button data-sec="about" data-icon="info">关于</button>
+            <button data-sec="about" data-icon="info">关于与更新</button>
           </nav>
 
           <div id="set-content" class="set-content">
@@ -910,8 +931,25 @@
             <section id="sec-about" class="set-section hidden">
               <div class="sec-intro">
                 <div>
-                  <h2>关于</h2>
-                  <p>服务运行状态与环境信息，便于排障时截图。</p>
+                  <h2>关于与更新</h2>
+                  <p>版本信息、软件更新与服务运行状态。</p>
+                </div>
+              </div>
+              <div class="update-panel">
+                <div class="update-product">
+                  <span class="update-mark" data-mark></span>
+                  <div><h3>AGENTBOX</h3><p>服务端 <span data-update-version>—</span></p><p id="update-build" class="update-meta"></p></div>
+                </div>
+                <div class="update-detail">
+                  <div><h3>软件更新</h3><p>自动检查正式发布版本。升级由管理员在服务器完成。</p></div>
+                  <div class="update-detail-main">
+                    <div class="update-actions"><button type="button" class="btn" data-update-check data-icon="refresh">检查更新</button><a data-update-release target="_blank" rel="noopener noreferrer" data-icon="external">发行记录</a></div>
+                    <p class="update-status" data-update-status role="status">尚未检查更新</p>
+                    <p class="update-error hidden" data-update-error></p>
+                    <p class="update-meta" data-update-time></p>
+                    <a class="update-guide" href="https://github.com/devilcoolyue/agentbox-releases#手工安装与升级" target="_blank" rel="noopener noreferrer">查看升级说明 <span aria-hidden="true">↗</span></a>
+                    <details id="update-notes-wrap" class="update-notes hidden"><summary>版本说明</summary><pre id="update-notes"></pre></details>
+                  </div>
                 </div>
               </div>
               <div class="card">
@@ -986,39 +1024,41 @@
 
           <div id="usage-summary" class="usage-summary"></div>
 
-          <div id="usage-table-scroll" class="usage-table-wrap" role="region" aria-label="使用记录明细" tabindex="0">
-            <table class="usage-table">
-              <thead>
-                <tr>
-                  <th class="col-user">用户</th>
-                  <th>工作空间 / 账号</th>
-                  <th>模型</th>
-                  <th>类型</th>
-                  <th class="num">Token</th>
-                  <th class="num">费用</th>
-                  <th class="num">延迟</th>
-                  <!-- 时间列可排序：上下箭头分别选正序/倒序，默认倒序（最新在最前）。
-                       窄屏下表头整体隐藏，只留这一格当排序条用（见 usage.css） -->
-                  <th class="num col-time">
-                    <span class="u-sort">
-                      <span>时间</span>
-                      <span class="u-sort-btns">
-                        <button type="button" id="usage-sort-asc" class="u-sort-b asc"
-                                aria-pressed="false" data-tip="正序：最早的在最前"
-                                aria-label="按时间正序排列"></button>
-                        <button type="button" id="usage-sort-desc" class="u-sort-b desc on"
-                                aria-pressed="true" data-tip="倒序：最新的在最前"
-                                aria-label="按时间倒序排列"></button>
+          <div class="usage-table-frame">
+            <div id="usage-table-scroll" class="usage-table-wrap" role="region" aria-label="使用记录明细" tabindex="0">
+              <table class="usage-table">
+                <thead>
+                  <tr>
+                    <th class="col-user">用户</th>
+                    <th>工作空间 / 账号</th>
+                    <th>模型</th>
+                    <th>类型</th>
+                    <th class="num">Token</th>
+                    <th class="num">费用</th>
+                    <th class="num">延迟</th>
+                    <!-- 时间列可排序：上下箭头分别选正序/倒序，默认倒序（最新在最前）。
+                         窄屏下表头整体隐藏，只留这一格当排序条用（见 usage.css） -->
+                    <th class="num col-time">
+                      <span class="u-sort">
+                        <span>时间</span>
+                        <span class="u-sort-btns">
+                          <button type="button" id="usage-sort-asc" class="u-sort-b asc"
+                                  aria-pressed="false" data-tip="正序：最早的在最前"
+                                  aria-label="按时间正序排列"></button>
+                          <button type="button" id="usage-sort-desc" class="u-sort-b desc on"
+                                  aria-pressed="true" data-tip="倒序：最新的在最前"
+                                  aria-label="按时间倒序排列"></button>
+                        </span>
                       </span>
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody id="usage-rows"></tbody>
-            </table>
-            <div id="usage-empty" class="files-empty hidden">这个筛选条件下还没有消耗记录。</div>
-            <div id="usage-loading" class="loading-block hidden">
-              <span class="spin"></span><span>读取中…</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="usage-rows"></tbody>
+              </table>
+              <div id="usage-empty" class="files-empty hidden">这个筛选条件下还没有消耗记录。</div>
+              <div id="usage-loading" class="loading-block hidden">
+                <span class="spin"></span><span>读取中…</span>
+              </div>
             </div>
           </div>
 
@@ -1092,7 +1132,10 @@
                   <button id="tun-pair" class="btn btn-primary btn-sm" data-icon="link">生成配对码</button>
                   <span id="tun-pair-hint" class="field-hint">10 分钟内有效，只能用一次</span>
                 </div>
-                <pre id="tun-pair-code" class="tun-cmd mono hidden"></pre>
+                <div id="tun-pair-result" class="tun-pair-result hidden">
+                  <pre id="tun-pair-code" class="tun-cmd mono"></pre>
+                  <button id="tun-pair-copy" type="button" class="btn btn-ghost tun-pair-copy" data-icon="copy" aria-label="复制配对码" data-tip="复制配对码"></button>
+                </div>
               </li>
               <li>
                 <b>完成。</b>连接成功后此处状态变为「在线」，工作空间容器内自动注入

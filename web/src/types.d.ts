@@ -406,6 +406,14 @@ export interface ProxyBridgeConfig {
   host?: string;
 }
 
+/** GET /api/updates and POST /api/updates/check（管理员版本检查）。 */
+export interface UpdateInfo {
+  current_version: string; revision: string; built_at: string;
+  latest_version: string; available: boolean; comparable: boolean;
+  release_url: string; notes: string;
+  checked_at: number; attempted_at: number; error: string;
+}
+
 /** GET /api/system（关于页）。 */
 export interface SystemInfo {
  version?: string; revision?: string; built_at?: string; schema_version?: number;

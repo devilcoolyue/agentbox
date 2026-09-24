@@ -55,6 +55,7 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
+	updates     updateState
 	storage     storageState
 	runtimeOnce sync.Once
 	serving     atomic.Bool
@@ -236,6 +237,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/cache/marketplace", s.admin(http.HandlerFunc(s.handleClearMarketCache)))
 	mux.Handle("GET /api/diagnostics", s.admin(http.HandlerFunc(s.handleDiagnostics)))
 	mux.Handle("GET /api/system", s.admin(http.HandlerFunc(s.handleSystem)))
+	mux.Handle("GET /api/updates", s.admin(http.HandlerFunc(s.handleUpdates)))
+	mux.Handle("POST /api/updates/check", s.admin(http.HandlerFunc(s.handleUpdateCheck)))
 	mux.Handle("GET /api/monitor", s.admin(http.HandlerFunc(s.handleMonitor)))
 	mux.Handle("GET /api/sessions", s.auth(http.HandlerFunc(s.handleListSessions)))
 	mux.Handle("POST /api/sessions", s.auth(http.HandlerFunc(s.handleCreateSession)))

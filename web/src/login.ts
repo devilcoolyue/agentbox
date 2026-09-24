@@ -10,8 +10,23 @@ import type { Me } from "./types.js";
 import { refreshAll, startPolling } from "./data.js";
 import { startPing } from "./ping.js";
 import { renderMyQuota } from "./quota.js";
+import { buttonLabel } from "./icons.js";
+
+function setPasswordVisible(visible: boolean) {
+  $<HTMLInputElement>("login-pass").type = visible ? "text" : "password";
+  const toggle = $("login-password-toggle");
+  const label = visible ? "隐藏密码" : "显示密码";
+  toggle.setAttribute("aria-label", label);
+  toggle.title = label;
+  buttonLabel(toggle, "", visible ? "eye" : "eye-off");
+}
+
+$("login-password-toggle").addEventListener("click", () => {
+  setPasswordVisible($<HTMLInputElement>("login-pass").type === "password");
+});
 
 export function showLogin(err?: string) {
+  setPasswordVisible(false);
   S.token = "";
   localStorage.removeItem("agentbox_token");
   emit("signed-out");
@@ -32,18 +47,21 @@ export async function tryEnter() {
     return; // unauthorized 事件已触发 showLogin
   }
   if (token !== S.token) return;
-  emit("signed-in");
   S.user = me.user;
   S.role = me.role;
   S.models = me.models || null;
   S.termTips = me.terminal_tips || null;
   S.timeZone = me.timezone || "Asia/Shanghai";
   S.quota = me.quota || null;
+  // Features initialized by this event need the authenticated role and timezone.
+  emit("signed-in");
   renderMyQuota();
   emit("tips-updated"); // 让 term.js 用下发的提示语初始化顶栏轮播
   emit("timezone-updated");
   $("btn-settings").classList.toggle("hidden", me.role !== "admin");
   $("login").classList.add("hidden");
+  setPasswordVisible(false);
+  $<HTMLInputElement>("login-pass").value = "";
   $("app").classList.remove("hidden");
   await refreshAll();
   if (token !== S.token) return;

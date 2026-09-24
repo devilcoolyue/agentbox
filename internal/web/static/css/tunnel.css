@@ -1,15 +1,11 @@
-/* tunnel：内网隧道视图（状态卡 + 端口映射 + 接入指引）。
- * 页宽跟设置页对齐（1040px 内容区里再收到 720px）：这页是一段读下来的指引，
- * 拉满屏行长会难读。 */
+/* tunnel：内网隧道视图（状态卡 + 端口映射 + 接入指引），撑满主内容区。 */
 
 .tun-body {
   flex: 1; min-height: 0;
   overflow-y: auto;
-  max-width: 1040px; width: 100%;
-  margin: 0 auto;
+  width: 100%;
   padding: 18px 28px 40px;
 }
-.tun-body > * { max-width: 720px; }
 
 .tun-status {
   display: flex; align-items: center; gap: 12px;
@@ -43,20 +39,26 @@
 }
 .tun-dl { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .tun-dl-btn { text-decoration: none; }
-.tun-cmd {
+.tun-pair-result {
+  display: flex; align-items: center; gap: 8px;
   margin: 8px 0 0;
-  padding: 12px 14px;
+  padding: 6px 8px 6px 14px;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+}
+.tun-cmd {
+  flex: 1; min-width: 0; margin: 0; padding: 6px 0;
   font-size: 12px; line-height: 1.7;
   overflow-x: auto; white-space: pre;
   user-select: all;
 }
+.tun-pair-copy { flex: none; width: 36px; height: 36px; padding: 0; }
 .tun-cmd-foot {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
   margin-top: 8px;
 }
+.tun-cmd-foot > .btn { flex: none; }
 
 @media (max-width: 760px) {
   .tun-body { padding: 14px 16px 28px; }
-  .tun-cmd-foot { flex-wrap: wrap; }
+  .tun-pair-copy { width: 44px; height: 44px; }
 }

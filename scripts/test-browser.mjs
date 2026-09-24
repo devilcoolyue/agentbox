@@ -2,7 +2,7 @@
 // Synthetic API/browser regression. No Docker, real accounts or provider calls.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -22,7 +22,9 @@ export async function smoke(page) {
  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
  const base = `http://127.0.0.1:${server.address().port}`;
  const errors = []; page.on('pageerror', e => errors.push(e.message));
- let settingsWrites = 0, monitorCalls = 0;
+ let settingsWrites = 0, monitorCalls = 0, updateChecks = 0, updateReads = 0;
+ let release = {current_version:'v0.1.0-rc.2-updates2',revision:'0123456789abcdef',built_at:'2026-09-24T08:00:00Z',latest_version:'',available:false,comparable:true,release_url:'https://github.com/devilcoolyue/agentbox-releases/releases',notes:'',checked_at:0,attempted_at:0,error:''};
+ let nextRelease = {latest_version:'v0.2.0',available:true,notes:'新增版本提醒。\n<script>untrusted release notes</script>'};
  const accounts = []; let accountCreates = 0, failOAuthOnce = true, oauthFinishes = 0, keyWrites = 0;
  let settings = { listen:'127.0.0.1:8180', agent_image:'fixture', permission_mode:'bypassPermissions', max_upload_mb:10,
   idle_timeout_min:30, timezone:'UTC', container:{memory_mb:512,cpus:1,pids_limit:128,network:'none'},
@@ -36,6 +38,12 @@ export async function smoke(page) {
   let body={};
   if (path === '/api/login') body={token:'synthetic-browser-token'};
   else if(path === '/api/me') body=me;
+  else if(path === '/api/updates') { updateReads++; body=release; }
+  else if(path === '/api/updates/check') {
+   assert.equal(route.request().method(),'POST'); updateChecks++;
+   release={...release,...nextRelease,checked_at:Date.now(),attempted_at:Date.now()};body=release;
+  }
+  else if(path === '/api/system') body={version:'v0.1.0',go_version:'go1.26.6',docker_version:'28.5.2',schema_version:2,sessions_running:0,sessions_total:1,users:1,accounts:0,listen:'127.0.0.1:8180',data_dir:'/fixture/data',config_path:'/fixture/config.json',started_at:Date.now()};
   else if(path === '/api/sessions') body=sessions;
   else if(path === '/api/accounts') {
    if(route.request().method()==='POST') {
@@ -65,10 +73,101 @@ export async function smoke(page) {
  });
  try {
   await page.goto(base + '/#/settings/container');
-  await page.locator('#login-user').fill('fixture');await page.locator('#login-pass').fill('fixture-password');await page.locator('#login-btn').click();
+  await page.locator('#login-user').fill('fixture');await page.locator('#login-pass').fill('fixture-password');
+  const password = page.locator('#login-pass'), reveal = page.locator('#login-password-toggle');
+  assert.equal(await password.getAttribute('type'),'password');
+  assert.equal(await page.locator('.login-field-icon .ui-icon').count(),2);
+  await reveal.click();
+  assert.equal(await password.getAttribute('type'),'text');
+  assert.equal(await reveal.getAttribute('aria-label'),'隐藏密码');
+  assert.equal(await password.inputValue(),'fixture-password');
+  assert.equal(await page.locator('#login').isVisible(),true,'reveal must not submit login');
+  await reveal.press('Space');
+  assert.equal(await password.getAttribute('type'),'password');
+  assert.equal(await password.inputValue(),'fixture-password');
+  await reveal.click();
+  await page.evaluate(async()=>{const {showLogin}=await import('/_v/{{BUILD}}/js/login.js');showLogin();});
+  assert.equal(await password.getAttribute('type'),'password','returning to login resets visibility');
+  await reveal.click();
+  await page.locator('#login-btn').click();
   await page.locator('#app').waitFor({state:'visible'});
+  assert.equal(await password.getAttribute('type'),'password');
+  assert.equal(await password.inputValue(),'','successful login clears the password');
   await page.locator('#sec-container').waitFor({state:'visible'});
   assert.equal(new URL(page.url()).hash,'#/settings/container','login preserves destination');
+  // Version entry, shared state, failure recovery, responsive layout and focus.
+  await page.locator('#version-badge.has-update').waitFor();
+  assert.equal(updateChecks,1,'initial automatic update check missing or duplicated');
+  await page.locator('#version-badge').click();
+  await page.locator('#version-menu').waitFor({state:'visible'});
+  assert.match(await page.locator('#version-menu [data-update-status]').innerText(),/v0.2.0 可用/);
+  await page.keyboard.press('Escape');
+  await page.locator('#version-menu').waitFor({state:'hidden'});
+  await page.locator('#version-badge').click();
+  await page.locator('#version-upgrade').click();
+  await page.locator('#sec-about').waitFor({state:'visible'});
+  await page.waitForFunction(()=>location.hash==='#/settings/about');
+  await page.locator('#update-notes-wrap summary').click();
+  assert.match(await page.locator('#update-notes').innerText(),/<script>/,'release notes must stay plain text');
+  assert.equal(await page.locator('#update-notes script').count(),0);
+  await page.locator('#update-notes-wrap summary').click();
+  const screenshot = async name => {
+   if(process.env.AGENTBOX_UPDATE_SCREENSHOTS) {
+    await mkdir('output/playwright',{recursive:true});
+    await page.screenshot({path:`output/playwright/updates-${name}.png`,animations:'disabled'});
+   }
+  };
+  const check = () => page.locator('#sec-about [data-update-check]').click();
+  const status = text => page.locator('#sec-about [data-update-status]').filter({hasText:text}).waitFor();
+  await page.setViewportSize({width:1440,height:960});
+  for(const theme of ['dark','light']) {
+   await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+   await page.locator('#version-badge').click();
+   await screenshot(theme);
+   const bounds=await page.locator('#version-menu').boundingBox();
+   assert.ok(bounds.x>=0 && bounds.x+bounds.width<=1440,'desktop popover outside viewport');
+   await page.keyboard.press('Escape');
+  }
+  await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+  nextRelease={available:true,error:'暂时无法获取发布信息，请稍后重试。'};
+  await check(); await status('上次检查结果');
+  assert.equal(await page.locator('#version-badge.has-update').count(),1,'failure lost update indicator');
+  nextRelease={current_version:'v0.1.0',latest_version:'v0.1.0',available:false,error:''};
+  await check(); await status('已是最新版本');
+  assert.equal(await page.locator('#version-badge.has-update').count(),0);
+  await page.locator('#version-badge').click();
+  assert.equal(await page.locator('#version-current').isVisible(),true);
+  await screenshot('current');
+  await page.keyboard.press('Escape');
+  nextRelease={error:'暂时无法获取发布信息，请稍后重试。'};
+  await check(); await status('检查未完成');
+  nextRelease={latest_version:'',error:''};
+  await check(); await status('暂无正式发布的版本');
+  nextRelease={current_version:'dev',latest_version:'v0.2.0',comparable:false};
+  await check(); await status('开发构建，无法比较版本');
+  nextRelease={current_version:'v0.1.0-rc.2-updates2',latest_version:'v0.2.0',comparable:true,available:true};
+  await check(); await status('v0.2.0 可用');
+  await page.locator('#btn-sidebar-toggle').click();
+  await page.locator('#version-badge').click();
+  await screenshot('collapsed');
+  await page.keyboard.press('Escape');
+  await page.locator('#btn-sidebar-toggle').click();
+  await page.setViewportSize({width:390,height:844});
+  await screenshot('mobile-about');
+  assert.equal(await page.locator('#sec-about').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'mobile update panel overflows');
+  await page.locator('#btn-menu').click();
+  await page.locator('#version-badge').click();
+  await screenshot('mobile-menu');
+  const mobileBounds=await page.locator('#version-menu').boundingBox();
+  assert.ok(mobileBounds.x>=0 && mobileBounds.x+mobileBounds.width<=390,'mobile popover outside viewport');
+  await page.keyboard.press('Escape');
+  await page.locator('#btn-sidebar-close').click();
+  await page.setViewportSize({width:1280,height:900});
+  // Reload restores the shared server cache without another upstream check.
+  const beforeReload=updateChecks;
+  await page.reload();
+  await page.locator('#version-badge.has-update').waitFor();
+  assert.equal(updateChecks,beforeReload,'fresh cache triggered another automatic check');
   // Open through public event used by sidebar; user UI may nest the button in a menu.
   await page.evaluate(async () => { const {emit}=await import('/_v/{{BUILD}}/js/state.js');emit('open-settings'); });
   await page.locator('#set-nav [data-sec="container"]').click();
@@ -193,6 +292,7 @@ export async function smoke(page) {
   sessions = [];
   await page.reload();
   await at('#/','#empty'); // Deleted or inaccessible workspace.
+  const checksBeforeUser=updateChecks, readsBeforeUser=updateReads;
   me.role = 'user';
   await page.reload();
   await page.locator('#app').waitFor({state:'visible'});
@@ -200,8 +300,11 @@ export async function smoke(page) {
   await at('#/','#empty');
   await page.goto(base + '/#/sessions/%E0%A4%A/files');
   await at('#/','#empty'); // Malformed URL must not break initialization.
+  assert.equal(await page.locator('#version-badge').isVisible(),false);
+  assert.equal(updateChecks,checksBeforeUser,'ordinary user initiated update check');
+  assert.equal(updateReads,readsBeforeUser,'ordinary user fetched update metadata');
   assert.deepEqual(errors,[]);
-  console.log('Browser: unified account creation, Codex OAuth retry, Claude/Codex API keys, mobile account form, login, capacity save, repeated init, usage sync, monitor cleanup, socket generation, mobile re-login, URL refresh/history/deep links/permissions passed');
+  console.log('Browser: update status/cache/permissions, responsive update popover, unified account creation, Codex OAuth retry, Claude/Codex API keys, mobile account form, login, capacity save, repeated init, usage sync, monitor cleanup, socket generation, mobile re-login, URL refresh/history/deep links/permissions passed');
  } finally { await page.unroute('**/api/**'); server.closeAllConnections(); await new Promise(r=>server.close(r)); }
 }
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

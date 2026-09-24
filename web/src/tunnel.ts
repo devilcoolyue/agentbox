@@ -116,7 +116,7 @@ let pairTimer = 0; // 配对码有效期倒计时
  * 留在页面上只会让人以为还能用。 */
 function resetPair() {
   clearInterval(pairTimer);
-  $("tun-pair-code").classList.add("hidden");
+  $("tun-pair-result").classList.add("hidden");
   $("tun-pair-code").textContent = "";
   $("tun-pair-hint").textContent = "10 分钟内有效，只能用一次";
 }
@@ -146,7 +146,7 @@ $("tun-pair").addEventListener("click", async () => {
     });
     const box = $("tun-pair-code");
     box.textContent = res.code;
-    box.classList.remove("hidden");
+    $("tun-pair-result").classList.remove("hidden");
     try {
       await navigator.clipboard.writeText(res.code);
       toast("配对码已复制，粘贴到 abox-link 控制台");
@@ -161,6 +161,17 @@ $("tun-pair").addEventListener("click", async () => {
   }
 });
 
+$("tun-pair-copy").addEventListener("click", async () => {
+  const code = $("tun-pair-code").textContent;
+  if (!code || $("tun-pair-result").classList.contains("hidden")) return;
+  try {
+    await navigator.clipboard.writeText(code);
+    toast("配对码已复制，粘贴到 abox-link 控制台");
+  } catch (_) {
+    toast("复制失败，请手动选中配对码复制", true);
+  }
+});
+
 function startPairCountdown(seconds: number) {
   clearInterval(pairTimer);
   const hint = $("tun-pair-hint");
@@ -170,7 +181,8 @@ function startPairCountdown(seconds: number) {
     if (left <= 0) {
       clearInterval(pairTimer);
       hint.textContent = "已过期，请重新生成";
-      $("tun-pair-code").classList.add("hidden");
+      $("tun-pair-result").classList.add("hidden");
+      $("tun-pair-code").textContent = "";
       return;
     }
     hint.textContent = "剩余 " + Math.floor(left / 60) + ":" +
