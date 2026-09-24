@@ -71,8 +71,11 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
         env = dict(os.environ, GOOS=system, GOARCH=arch, CGO_ENABLED='0')
         subprocess.run(['go', 'build', '-trimpath', '-buildvcs=false', '-ldflags', flags,
                         '-o', str(binary), './cmd/' + program], check=True, env=env)
-        for doc in ['LICENSE', 'NOTICE', 'README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'CHANGELOG.md']:
+        for doc in ['LICENSE', 'NOTICE']:
             shutil.copy2(ROOT / doc, folder / doc)
+        # Public binary distribution contains operator instructions only. Never
+        # copy the private repository's architecture/audit/development documents.
+        shutil.copy2(ROOT / 'deploy/downloads/README.md', folder / 'README.md')
         copy_tracked_tree('third_party', folder / 'third_party')
         if program == 'agentbox':
             shutil.copy2(ROOT / 'install.sh', folder / 'install.sh')
@@ -81,9 +84,9 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
             (folder / 'scripts').mkdir()
             for script in ['build-image.sh', 'backup.sh']:
                 shutil.copy2(ROOT / 'scripts' / script, folder / 'scripts' / script)
-            copy_tracked_tree('docs', folder / 'docs')
             (folder / 'deploy').mkdir()
-            for deploy_file in ['README.md', 'release.py', 'bootstrap.py']:
+            shutil.copy2(ROOT / 'deploy/downloads/README.md', folder / 'deploy/README.md')
+            for deploy_file in ['release.py', 'bootstrap.py']:
                 shutil.copy2(ROOT / 'deploy' / deploy_file, folder / 'deploy' / deploy_file)
         metadata = {'program': program, 'version': a.version, 'revision': revision,
                     'built_at': built, 'os': system, 'arch': arch,

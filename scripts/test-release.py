@@ -54,6 +54,14 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-test-') as tmp:
         roots=list(dest.iterdir())
         if len(roots)!=1:raise SystemExit('Unexpected package root')
         folder=roots[0]
+        allowed = {'agentbox', 'abox-link', 'abox-link.exe', 'LICENSE', 'NOTICE',
+                   'README.md', 'build.json', 'third_party'}
+        if r['program']=='agentbox':
+            allowed |= {'install.sh', 'config.example.json', 'images', 'scripts', 'deploy'}
+        if {path.name for path in folder.iterdir()} - allowed:
+            raise SystemExit('Unexpected files in public binary package')
+        if any(path.suffix in ('.go', '.ts') or path.name in ('AGENTS.md', '.git') for path in folder.rglob('*')):
+            raise SystemExit('Private project sources in public binary package')
         meta=json.loads((folder/'build.json').read_text())
         for key in ['version','revision','os','arch']:
             if meta[key]!=r[key]:raise SystemExit('Metadata mismatch')

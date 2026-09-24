@@ -14,10 +14,10 @@
 
 ```bash
 # 安装最新正式发布；以 root 登录时，可将 sudo bash 换成 bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash
 
 # 指定已发布版本（包括预览版），仅监听本机
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.0 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.0 --listen 127.0.0.1:8180
 ```
 
 - 支持 Linux x86_64/arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+/Debian 12+ 缺依赖时自动通过 apt 安装；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata、Docker。现有 Docker 不替换、不切换 CLI context，所有操作固定使用 `/var/run/docker.sock`。

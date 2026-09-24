@@ -69,10 +69,10 @@ flowchart LR
 在 Linux 服务器上执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash
 ```
 
-首个正式版本为 [v0.1.0](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.0)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.0`。
+首个正式版本为 [v0.1.0](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.0)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.0`。
 
 安装器支持 Linux x86_64 / arm64 + systemd；Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker，其他发行版需预先安装 Python 3.9+、Git、curl、CA 证书、时区数据和本机 Docker Engine。服务端使用预编译包，无需在服务器安装 Go 或 Node。
 
