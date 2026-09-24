@@ -53,7 +53,11 @@ export function renderMyQuota() {
     const q = S.quota;
     usage.classList.toggle("quota-blocked", !!q?.metered && !!q.blocked);
     if (!q || !q.metered) {
-        box.classList.add("hidden");
+        box.classList.toggle("hidden", !q);
+        $("my-quota-num").textContent = "不限额";
+        $("my-quota-num").classList.remove("empty");
+        setTip(box, "当前账号不限额");
+        box.setAttribute("aria-label", "当前账号不限额");
         setTip(usage, "使用记录");
         usage.setAttribute("aria-label", "使用记录");
         return;

@@ -22,15 +22,23 @@ const SIDEBAR_KEY = "agentbox_sidebar_collapsed";
 /* 用户弹层：展开时向上贴齐头像，图标栏时在侧栏右侧展开。 */
 const userButton = $("btn-user-menu");
 const userMenu = $("sidebar-user-menu");
+const hoverMQ = window.matchMedia("(hover: hover) and (pointer: fine)");
+let userMenuCloseTimer: ReturnType<typeof setTimeout> | undefined;
+
+function cancelUserMenuClose() {
+  clearTimeout(userMenuCloseTimer);
+  userMenuCloseTimer = undefined;
+}
 
 function renderUserMenu() {
   const role = S.role === "admin" ? "管理员" : "普通用户";
   $("sidebar-user-name").textContent = S.user;
   $("sidebar-user-role").textContent = role;
-  setTip(userButton, userMenu.inert ? `${S.user} · ${role}` : null);
+  userButton.setAttribute("aria-label", `${S.user} · ${role}，用户菜单`);
 }
 
 function closeUserMenu(restoreFocus = false) {
+  cancelUserMenuClose();
   userMenu.classList.remove("open");
   userMenu.inert = true;
   userButton.setAttribute("aria-expanded", "false");
@@ -50,16 +58,36 @@ function positionUserMenu() {
   userMenu.style.top = Math.max(8, Math.min(top, innerHeight - userMenu.offsetHeight - 8)) + "px";
 }
 
-userButton.addEventListener("click", () => {
-  if (!userMenu.inert) { closeUserMenu(); return; }
+function openUserMenu(focus = false) {
+  cancelUserMenuClose();
   hideTip();
   userMenu.inert = false;
   renderUserMenu();
   positionUserMenu();
   userMenu.classList.add("open");
   userButton.setAttribute("aria-expanded", "true");
-  userMenu.focus({ preventScroll: true });
+  if (focus) userMenu.focus({ preventScroll: true });
+}
+
+userButton.addEventListener("click", e => {
+  // 悬停已打开时，点击进入弹层；触屏仍可再次点击关闭。
+  if (!userMenu.inert && (!hoverMQ.matches || e.pointerType === "touch")) { closeUserMenu(); return; }
+  openUserMenu(true);
 });
+for (const el of [userButton, userMenu]) {
+  el.addEventListener("pointerenter", e => {
+    if (!hoverMQ.matches || e.pointerType === "touch") return;
+    openUserMenu();
+  });
+  el.addEventListener("pointerleave", () => {
+    if (!hoverMQ.matches) return;
+    cancelUserMenuClose();
+    // 留出跨越图标和弹层间隙的时间；键盘操作期间保持打开。
+    userMenuCloseTimer = setTimeout(() => {
+      if (!userMenu.contains(document.activeElement)) closeUserMenu();
+    }, 200);
+  });
+}
 for (const event of ["pointerdown", "focusin"]) {
   document.addEventListener(event, e => {
     if (userMenu.inert || userMenu.contains(e.target as Node) || userButton.contains(e.target as Node)) return;
@@ -150,6 +178,7 @@ export function updateTopbarTitle() {
 /* ---- 主区视图切换 ---- */
 
 export function showView(name: View) {
+  emit("navigation-changed");
   if (S.view === name) { closeDrawer(); updateTopbarTitle(); return; }
   S.view = name;
   emit("view-changed", name);

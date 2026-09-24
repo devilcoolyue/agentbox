@@ -522,7 +522,7 @@ func (s *Store) InsertUsage(evs ...UsageEvent) error {
 			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			e.TS.Format(time.RFC3339Nano), e.User, e.SessionID, e.ThreadID, e.TurnID,
+			usageTimestamp(e.TS), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, e.Kind,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
 			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot)
@@ -628,7 +628,7 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 				cache_read_tokens = excluded.cache_read_tokens,
 				cache_write_tokens = excluded.cache_write_tokens,
 				cost_micro_usd = excluded.cost_micro_usd, price_snapshot = excluded.price_snapshot`,
-			e.TS.Format(time.RFC3339Nano), e.User, e.SessionID, e.ThreadID, e.TurnID,
+			usageTimestamp(e.TS), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, UsageKindTerminal,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
 			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot); err != nil {
@@ -641,6 +641,11 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 const usageCols = `id, ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 	input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot`
+
+// Fixed-width UTC text preserves chronological ordering in SQLite's ts index.
+func usageTimestamp(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05.000000000Z")
+}
 
 // UsageFilter narrows a usage query. The zero value matches everything.
 type UsageFilter struct {
@@ -682,10 +687,10 @@ func (f UsageFilter) where() (string, []any) {
 		add(" AND model = ?", f.Model)
 	}
 	if !f.Since.IsZero() {
-		add(" AND ts >= ?", f.Since.Format(time.RFC3339Nano))
+		add(" AND ts >= ?", usageTimestamp(f.Since))
 	}
 	if !f.Until.IsZero() {
-		add(" AND ts < ?", f.Until.Format(time.RFC3339Nano))
+		add(" AND ts < ?", usageTimestamp(f.Until))
 	}
 	return q, args
 }

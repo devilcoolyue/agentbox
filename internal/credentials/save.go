@@ -60,8 +60,9 @@ func (s *Service) SaveCodexKey(ctx context.Context, id, key, baseURL, wireAPI st
 	if err := writePoolFile(acct, "auth.json", raw); err != nil {
 		return err
 	}
-	if baseURL != "" {
-		return writeCodexProviderTOML(acct.CredentialsDir, baseURL, wireAPI)
+	if err := writeCodexProviderTOML(acct.CredentialsDir, baseURL, wireAPI); err != nil {
+		return err
 	}
+	s.broadcast(acct)
 	return nil
 }

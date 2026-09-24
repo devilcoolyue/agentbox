@@ -2,79 +2,57 @@ package credentials
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
-	"regexp"
-	"strings"
 
 	"agentbox/internal/config"
+	"github.com/pelletier/go-toml/v2"
 )
 
-// config.toml 里 provider 相关行的定位正则。只处理简单双引号字符串，
-// 手写复杂 TOML（多行字符串等）不在覆盖范围。
-var (
-	reTomlBaseURL  = regexp.MustCompile(`(?m)^(\s*base_url\s*=\s*)"([^"]*)"`)
-	reTomlWireAPI  = regexp.MustCompile(`(?m)^(\s*wire_api\s*=\s*)"([^"]*)"`)
-	reTomlProvider = regexp.MustCompile(`(?m)^(model_provider\s*=\s*)"([^"]*)"`)
-)
-
-// tomlSet 把 re 匹配到的第一处赋值改为 val，保留行首前缀；no-op 当无匹配。
-func tomlSet(text string, re *regexp.Regexp, val string) (string, bool) {
-	loc := re.FindStringSubmatchIndex(text)
-	if loc == nil {
-		return text, false
-	}
-	prefix := text[loc[2]:loc[3]]
-	return text[:loc[0]] + prefix + fmt.Sprintf("%q", val) + text[loc[1]:], true
-}
-
-// writeCodexProviderTOML 维护账号池 config.toml 的中转站配置。已有文件做
-// 行级原地替换（保留手工调优的其余键），没有才生成最小模板。
+// writeCodexProviderTOML 更新账号池的连接配置，保留模型、推理强度和 MCP。
 func writeCodexProviderTOML(credDir, baseURL, wireAPI string) error {
 	raw, err := readPoolFile(config.Account{CredentialsDir: credDir}, "config.toml")
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	text := string(raw)
-	if strings.TrimSpace(text) == "" {
-		text = fmt.Sprintf(`model_provider = "agentbox"
-disable_response_storage = true
-
-[model_providers.agentbox]
-name = "agentbox"
-base_url = %q
-wire_api = %q
-requires_openai_auth = true
-`, baseURL, wireAPI)
-		return writePoolFile(config.Account{CredentialsDir: credDir}, "config.toml", []byte(text))
+	settings := map[string]any{}
+	if err := toml.Unmarshal(raw, &settings); err != nil {
+		return err
 	}
-
-	if next, ok := tomlSet(text, reTomlBaseURL, baseURL); ok {
-		text = next
-		if next, ok := tomlSet(text, reTomlWireAPI, wireAPI); ok {
-			text = next
-		} else {
-			// 有 base_url 没 wire_api 的旧文件：紧跟 base_url 行补一条
-			loc := reTomlBaseURL.FindStringIndex(text)
-			text = text[:loc[1]] + fmt.Sprintf("\nwire_api = %q", wireAPI) + text[loc[1]:]
-		}
-	} else {
-		// 完全没有 provider 段：追加模板段并让顶层 model_provider 指过去
-		if next, ok := tomlSet(text, reTomlProvider, "agentbox"); ok {
-			text = next
-		} else {
-			text = "model_provider = \"agentbox\"\n" + text
-		}
-		text = strings.TrimRight(text, "\n") + fmt.Sprintf(`
-
-[model_providers.agentbox]
-name = "agentbox"
-base_url = %q
-wire_api = %q
-requires_openai_auth = true
-`, baseURL, wireAPI)
+	if len(settings) == 0 {
+		settings["disable_response_storage"] = true
 	}
-	return writePoolFile(config.Account{CredentialsDir: credDir}, "config.toml", []byte(text))
+	provider := "openai"
+	if baseURL != "" {
+		provider = "agentbox"
+	}
+	settings["model_provider"] = provider
+	settings["forced_login_method"] = "api"
+	settings["cli_auth_credentials_store"] = "file"
+	delete(settings, "forced_chatgpt_workspace_id")
+	providers, _ := settings["model_providers"].(map[string]any)
+	if providers == nil {
+		providers = map[string]any{}
+		settings["model_providers"] = providers
+	}
+	delete(providers, "openai")
+	if baseURL != "" {
+		providers["agentbox"] = map[string]any{"name": "agentbox", "base_url": baseURL, "wire_api": wireAPI, "requires_openai_auth": true}
+	}
+	if profiles, ok := settings["profiles"].(map[string]any); ok {
+		if name, ok := settings["profile"].(string); ok {
+			if profile, ok := profiles[name].(map[string]any); ok {
+				profile["model_provider"] = provider
+				delete(profile, "forced_login_method")
+				delete(profile, "forced_chatgpt_workspace_id")
+				delete(profile, "cli_auth_credentials_store")
+			}
+		}
+	}
+	next, err := toml.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	return writePoolFile(config.Account{CredentialsDir: credDir}, "config.toml", next)
 }
 
 // ReadCodexProvider 从账号池 config.toml 读当前 base_url / wire_api，供
@@ -87,11 +65,25 @@ func ReadCodexProvider(credDir string) (baseURL, wireAPI string) {
 	if err != nil {
 		return "", ""
 	}
-	if m := reTomlBaseURL.FindSubmatch(raw); m != nil {
-		baseURL = string(m[2])
+	var settings map[string]any
+	if toml.Unmarshal(raw, &settings) != nil {
+		return "", ""
 	}
-	if m := reTomlWireAPI.FindSubmatch(raw); m != nil {
-		wireAPI = string(m[2])
+	provider, _ := settings["model_provider"].(string)
+	if profiles, ok := settings["profiles"].(map[string]any); ok {
+		if name, ok := settings["profile"].(string); ok {
+			if profile, ok := profiles[name].(map[string]any); ok {
+				if p, ok := profile["model_provider"].(string); ok {
+					provider = p
+				}
+			}
+		}
+	}
+	if providers, ok := settings["model_providers"].(map[string]any); ok {
+		if selected, ok := providers[provider].(map[string]any); ok {
+			baseURL, _ = selected["base_url"].(string)
+			wireAPI, _ = selected["wire_api"].(string)
+		}
 	}
 	return baseURL, wireAPI
 }

@@ -179,19 +179,19 @@
       </section>
 
       <footer class="side-foot">
-        <!-- 使用记录与剩余额度合并；btn-usage 仍是工作台的账号额度入口。 -->
+        <!-- 使用记录与内网隧道、设置共用图标工具栏；余额放在用户弹层。 -->
         <nav class="side-nav" aria-label="管理与工具">
-          <button id="btn-usagelog" aria-label="使用记录" data-tip="使用记录" class="side-item"><span class="glyph">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 3v16a2 2 0 0 0 2 2h16"/>
-              <path d="M7 15l3.5-4 3 2.5L20 7"/>
-            </svg>
-          </span><span class="side-item-label">使用记录</span><span id="my-quota" class="my-quota hidden"><span class="mq-label">余额</span><span id="my-quota-num" class="mq-num mono">—</span></span></button>
           <div class="side-tools">
             <div id="conn-latency" class="conn-latency" tabindex="0" data-tip="到服务器的连接延迟">
               <span id="conn-dot" class="t-dot"></span>
               <span id="conn-text" class="conn-text mono">连接中…</span>
             </div>
+            <button id="btn-usagelog" aria-label="使用记录" data-tip="使用记录" class="side-item side-tool"><span class="glyph">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 3v16a2 2 0 0 0 2 2h16"/>
+                <path d="M7 15l3.5-4 3 2.5L20 7"/>
+              </svg>
+            </span><span class="side-item-label">使用记录</span></button>
             <button id="btn-tunnel" aria-label="内网隧道" data-tip="内网隧道" class="side-item side-tool hidden"><span class="glyph">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
@@ -213,11 +213,12 @@
             <button type="button" data-theme-option="dark" aria-label="切换到深色" data-tip="深色" aria-pressed="false"><span class="glyph" data-theme-ico></span></button>
           </div>
           <button type="button" class="side-item side-tool side-theme-cycle" data-theme-cycle aria-label="切换主题"><span class="glyph" data-theme-ico></span></button>
-          <button id="btn-user-menu" type="button" class="side-item side-tool side-user" aria-label="用户菜单" data-tip="用户菜单" aria-haspopup="dialog" aria-expanded="false" aria-controls="sidebar-user-menu">
+          <button id="btn-user-menu" type="button" class="side-item side-tool side-user" aria-label="用户菜单" aria-haspopup="dialog" aria-expanded="false" aria-controls="sidebar-user-menu">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
           </button>
           <div id="sidebar-user-menu" class="side-user-menu" role="dialog" aria-label="当前用户" aria-describedby="sidebar-user-name sidebar-user-role" tabindex="-1" inert>
             <div class="side-user-info"><span id="sidebar-user-name" class="side-user-name"></span><span id="sidebar-user-role" class="side-user-role"></span></div>
+            <div id="my-quota" class="my-quota hidden" tabindex="0"><span class="mq-label">余额</span><span id="my-quota-num" class="mq-num mono">—</span></div>
             <button id="btn-logout" type="button" class="side-logout"><span class="glyph">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v9"/><path d="M18.36 7.64a9 9 0 1 1-12.73 0"/></svg>
             </span><span>退出登录</span></button>
@@ -326,13 +327,13 @@
                 <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）"></textarea>
                 <div class="composer-bar">
                   <button id="btn-attach" class="icon-btn" aria-label="添加附件" data-tip="添加附件（图片或文件，48 小时后过期）">
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                      <path d="M9 3.75v10.5M3.75 9h10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l10-10a4 4 0 0 1 5.66 5.66L9.41 17.41a2 2 0 0 1-2.83-2.83l9.2-9.19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                   </button>
                   <button id="btn-voice" class="icon-btn" aria-label="语音输入" data-tip="语音输入：点击说话，再点一次停止并发送">
-                    <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                      <path d="M6.75 4.5a2.25 2.25 0 0 1 4.5 0v3.75a2.25 2.25 0 0 1-4.5 0ZM3.75 8.25a5.25 5.25 0 0 0 10.5 0M9 13.5v2.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                   </button>
                   <input id="attach-input" type="file" multiple class="hidden">
@@ -1449,28 +1450,47 @@
     <h2 id="auth-title">账号登录</h2>
     <button type="button" id="auth-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
-  <div id="auth-modes" class="auth-modes hidden">
+  <form id="acct-form" class="hidden" novalidate>
+    <fieldset id="acct-fields" class="acct-fields">
+      <div class="acct-field-label">账号类型</div>
+      <div class="agent-row">
+        <label class="agent-opt"><input type="radio" name="atype" value="claude" checked>Claude Code</label>
+        <label class="agent-opt"><input type="radio" name="atype" value="codex">Codex CLI</label>
+      </div>
+      <div class="acct-basics">
+        <label>显示名称<input id="acct-label" type="text" maxlength="32" placeholder="例如：团队订阅账号"></label>
+        <label>账号 ID<input id="acct-id" type="text" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{1,31}" required class="mono" placeholder="例如：codex-team"></label>
+      </div>
+      <div class="acct-basics">
+        <label>使用范围<select id="acct-access"><option value="all">全体用户</option><option value="users">指定用户</option><option value="admin">仅管理员</option></select></label>
+        <div><span class="acct-field-label">出口 IP 代理</span><div id="acct-proxy"></div></div>
+      </div>
+      <label id="acct-users-row" class="hidden">用户名<textarea id="acct-users" rows="2" placeholder="每行一个用户名，也可用逗号分隔"></textarea></label>
+      <details class="acct-advanced"><summary>高级设置</summary>
+        <label>环境变量<textarea id="acct-env" rows="2" class="mono" placeholder="每行一条 KEY=VALUE" spellcheck="false"></textarea></label>
+        <p class="field-hint">账号 ID 创建后不可修改。认证信息请在下方填写，无需手动设置环境变量。</p>
+      </details>
+    </fieldset>
+    <p id="acct-created" class="field-hint hidden" role="status">账号已保存，等待完成认证。关闭后可在账号列表继续。</p>
+  </form>
+  <div id="auth-modes" class="auth-modes" aria-label="认证方式">
     <button type="button" id="auth-mode-oauth" class="seg" data-icon="shield">订阅 OAuth</button>
-    <button type="button" id="auth-mode-key" class="seg" data-icon="key">中转站 API Key</button>
+    <button type="button" id="auth-mode-key" class="seg" data-icon="key">API Key / 中转</button>
   </div>
   <div id="auth-oauth" class="auth-body hidden">
-    <p class="auth-hint">
-      1. 生成授权链接，在浏览器中打开并用该账号完成授权；<br>
-      2. 授权页会回显一串授权码，粘贴回下方输入框完成登录。<br>
-      这是一条独立的授权链，不影响你本机日常使用的 Claude 登录。
-    </p>
+    <p id="auth-oauth-hint" class="auth-hint"></p>
     <button id="auth-gen" class="btn" data-icon="link">生成授权链接</button>
     <div id="auth-linkrow" class="auth-linkrow hidden">
-      <a id="auth-link" class="auth-link mono" target="_blank" rel="noopener"></a>
+      <a id="auth-link" class="auth-link" target="_blank" rel="noopener noreferrer"></a>
       <button id="auth-copy" class="btn btn-sm" data-icon="copy">复制</button>
     </div>
-    <input id="auth-code" type="text" placeholder="粘贴授权码（形如 xxxx#yyyy）" autocomplete="off" class="hidden">
+    <label id="auth-code-label" class="hidden"><span id="auth-code-title">授权码</span><input id="auth-code" type="text" placeholder="粘贴授权码（形如 xxxx#yyyy）" autocomplete="off" spellcheck="false"></label>
     <button id="auth-finish" class="btn btn-primary hidden" data-icon="check">完成登录</button>
   </div>
   <div id="auth-key" class="auth-body hidden">
     <p id="auth-key-hint" class="auth-hint"></p>
-    <input id="auth-apikey" type="password" placeholder="API Key（sk-...，已保存过的话测试时可留空）" autocomplete="off">
-    <input id="auth-baseurl" type="text" class="mono" placeholder="Base URL，如 https://api.1024gate.com" autocomplete="off" spellcheck="false">
+    <label>API Key<input id="auth-apikey" type="password" placeholder="输入 API Key" autocomplete="off"></label>
+    <label>Base URL<input id="auth-baseurl" type="url" class="mono" placeholder="留空使用官方接口" autocomplete="off" spellcheck="false"></label>
     <div class="auth-keyrow">
       <select id="auth-wire" data-tip="中转站接口协议">
         <option value="responses">Responses API</option>
@@ -1482,7 +1502,7 @@
     <div id="auth-models" class="auth-models hidden"></div>
     <button id="auth-clearkey" class="btn btn-ghost btn-sm hidden" data-icon="undo">清除中转站配置，切回订阅凭证</button>
   </div>
-  <p id="auth-msg" class="auth-msg hidden"></p>
+  <p id="auth-msg" class="auth-msg hidden" role="status" aria-live="polite"></p>
 </dialog>
 
 <!-- 内网隧道：状态 + 接入指引 -->
@@ -1497,36 +1517,6 @@
     <label class="check"><input type="checkbox" id="del-purge"> 同时清除文件、配置和对话记录（不可恢复）</label>
     <div class="dlg-actions">
       <button type="submit" id="del-ok" class="btn btn-danger" data-icon="trash">删除</button>
-    </div>
-  </form>
-</dialog>
-
-<!-- 添加账号 -->
-<dialog id="dlg-acct">
-  <form id="acct-form" method="dialog">
-    <div class="dlg-head">
-      <h2>添加账号</h2>
-      <button type="button" id="acct-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
-    </div>
-    <label>账号类型
-      <div class="agent-row">
-        <label class="agent-opt"><input type="radio" name="atype" value="claude" checked>Claude Code</label>
-        <label class="agent-opt"><input type="radio" name="atype" value="codex">Codex CLI</label>
-      </div>
-    </label>
-    <label>显示名称
-      <input id="acct-label" type="text" maxlength="32" placeholder="例如：团队 Max 账号 2">
-    </label>
-    <label>账号 ID
-      <input id="acct-id" type="text" maxlength="32" placeholder="例如：claude-2" class="mono" required>
-      <span class="field-hint">小写字母/数字开头，可含 - 和 _。用于工作空间关联与凭证目录命名，创建后不可修改；凭证目录自动创建于 data/creds/&lt;ID&gt;。</span>
-    </label>
-    <label>环境变量（可选，每行一条 KEY=VALUE）
-      <textarea id="acct-env" rows="2" class="mono" placeholder="ANTHROPIC_BASE_URL=https://…" spellcheck="false"></textarea>
-    </label>
-    <p id="acct-error" class="login-error hidden"></p>
-    <div class="dlg-actions">
-      <button type="submit" id="acct-ok" class="btn btn-primary" data-icon="plus">创建并登录</button>
     </div>
   </form>
 </dialog>

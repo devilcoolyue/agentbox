@@ -7,6 +7,8 @@
  *   open-settings            — 侧栏点击系统设置
  *   open-usage               — 侧栏点击使用记录
  *   open-tunnel              — 侧栏点击内网隧道
+ *   app-ready                — 登录验证及初始数据加载完成，恢复 URL 页面
+ *   navigation-changed       — 页面/分区/标签变化，将最终状态写入 URL
  *   thread-changed           — 对话线程切换/新建/删除，chat.ts 重载对话流
  *   tips-updated             — 终端提示语配置变化（登录下发 / 管理员保存），term.ts 重排轮播
  *   timezone-updated         — 系统界面时区变化，使用记录重绘时间 */

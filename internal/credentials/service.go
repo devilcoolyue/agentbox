@@ -5,7 +5,9 @@ package credentials
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -128,6 +130,26 @@ func (s *Service) broadcast(acct config.Account) {
 		// Don't create a new credential tree in a home that has never been seeded.
 		_, _, err = readCredential(home, filepath.FromSlash(homeRel))
 		if err == nil {
+			// Never publish subscription tokens while a session still targets a relay.
+			if acct.Type == config.AgentCodex {
+				configRaw, readErr := home.ReadAll(".codex/config.toml", credentialMaxBytes)
+				if readErr == nil || os.IsNotExist(readErr) {
+					var next []byte
+					var poolConfig []byte
+					poolConfig, readErr = readPoolFile(acct, "config.toml")
+					if readErr == nil {
+						next, readErr = codexConnectionConfig(configRaw, poolConfig)
+					}
+					if readErr == nil {
+						_, readErr = home.WriteFile(".codex/config.toml", next, safefs.WriteOptions{Mode: 0600, Chown: true, UID: dockerx.AgentUID, GID: dockerx.AgentGID, BestEffortChown: true})
+					}
+				}
+				if readErr != nil {
+					log.Printf("credsync %s: Codex 配置切换失败: %v", sess.ID, readErr)
+					home.Close()
+					continue
+				}
+			}
 			syncCredential(home, filepath.FromSlash(homeRel), raw, dockerx.AgentUID, info.ModTime())
 		}
 		home.Close()

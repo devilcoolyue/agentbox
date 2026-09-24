@@ -1,7 +1,7 @@
 /* sessions：会话的打开/切换、生命周期（启动/停止/删除，含窄屏 ⋯ 菜单）、
  * 新建会话弹窗、工作台标签页。 */
 "use strict";
-import { S, bus } from "./state.js";
+import { S, bus, emit } from "./state.js";
 import { $, btnBusy, btnDone, wbBusy, wbIdle, toast, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
@@ -17,9 +17,13 @@ import { agentKey, agentName, agentIcon, agentAvatar, decorateAgentOpts } from "
 import { openAcctUsage, syncUsageBtn } from "./acct-usage.js";
 import { setTip } from "./tip.js";
 /* ---------------- 打开 / 切换 ---------------- */
-export async function openSession(sess) {
+export async function openSession(sess, tab) {
+    if (sess.agent !== "claude" && tab === "skills")
+        tab = "chat";
     if (S.current && S.current.id === sess.id) {
         showView("work");
+        if (tab && tab !== S.tab)
+            setTab(tab);
         return;
     }
     closeChannels();
@@ -36,11 +40,12 @@ export async function openSession(sess) {
     setThreadBar(null); // 切换会话时先清掉上一个会话的线程标题
     S.histLoading = true; // loadHistory 还没跑之前也不要闪引导页
     updateHero();
-    setTab("chat");
+    setTab(tab || "chat");
     renderSidebar();
     renderHead();
     await loadHistory();
-    connectChat();
+    if (S.current?.id === sess.id)
+        connectChat();
 }
 export function renderHead() {
     const sess = S.current;
@@ -91,6 +96,7 @@ bus.addEventListener("data-updated", () => { if (S.current)
 /* ---------------- 标签页 ---------------- */
 export function setTab(name) {
     S.tab = name;
+    emit("navigation-changed");
     for (const t of document.querySelectorAll(".tab")) {
         t.classList.toggle("active", t.dataset.tab === name);
     }
@@ -264,6 +270,7 @@ $("del-form").addEventListener("submit", async (e) => {
         $("workbench").classList.add("hidden");
         $("empty").classList.remove("hidden");
         updateTopbarTitle();
+        emit("navigation-changed");
         refreshAll();
     }
     catch (err) {
@@ -284,17 +291,18 @@ for (const a of ["claude", "codex"]) {
 }
 $("empty-new").addEventListener("click", () => $("btn-new").click());
 /* 侧栏字标 = 首页入口：放下当前会话回到空状态（只断前端通道，容器不动） */
-$("btn-home").addEventListener("click", () => {
+export function openHome() {
     if (S.current) {
         closeChannels();
         S.current = null;
-        $("workbench").classList.add("hidden");
-        $("empty").classList.remove("hidden");
     }
+    $("workbench").classList.add("hidden");
+    $("empty").classList.remove("hidden");
     showView("work"); /* 已在工作台时走早退分支，仍会收抽屉 */
     updateTopbarTitle();
     renderSidebar();
-});
+}
+$("btn-home").addEventListener("click", openHome);
 $("btn-new").addEventListener("click", () => {
     fillAccountSelect();
     $("new-error").classList.add("hidden");

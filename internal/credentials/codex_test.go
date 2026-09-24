@@ -1,9 +1,9 @@
 package credentials
 
 import (
+	"github.com/pelletier/go-toml/v2"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -17,11 +17,19 @@ func TestWriteCodexProviderTOMLFresh(t *testing.T) {
 		t.Fatalf("round-trip = %q, %q", base, wire)
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, "config.toml"))
-	for _, want := range []string{`model_provider = "agentbox"`, "requires_openai_auth = true"} {
-		if !strings.Contains(string(raw), want) {
-			t.Errorf("template missing %q:\n%s", want, raw)
-		}
+	var got struct {
+		Provider  string `toml:"model_provider"`
+		Providers map[string]struct {
+			Auth bool `toml:"requires_openai_auth"`
+		} `toml:"model_providers"`
 	}
+	if err := toml.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Provider != "agentbox" || !got.Providers["agentbox"].Auth {
+		t.Fatalf("bad provider: %s", raw)
+	}
+
 }
 
 func TestWriteCodexProviderTOMLInPlace(t *testing.T) {
@@ -47,12 +55,20 @@ trust_level = "trusted"
 		t.Fatalf("round-trip = %q, %q", base, wire)
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, "config.toml"))
-	// 手工调优的其余键必须原样保留，provider 名不被改写
-	for _, want := range []string{`model = "gpt-5.5"`, `model_provider = "OpenAI"`, `trust_level = "trusted"`} {
-		if !strings.Contains(string(raw), want) {
-			t.Errorf("in-place edit lost %q:\n%s", want, raw)
+	var got struct {
+		Model    string
+		Provider string `toml:"model_provider"`
+		Projects map[string]struct {
+			Trust string `toml:"trust_level"`
 		}
 	}
+	if err := toml.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Model != "gpt-5.5" || got.Provider != "agentbox" || got.Projects["/root"].Trust != "trusted" {
+		t.Fatalf("unrelated settings lost: %s", raw)
+	}
+
 }
 
 func TestWriteCodexProviderTOMLAppend(t *testing.T) {
@@ -67,12 +83,17 @@ func TestWriteCodexProviderTOMLAppend(t *testing.T) {
 		t.Fatalf("round-trip = %q, %q", base, wire)
 	}
 	raw, _ := os.ReadFile(filepath.Join(dir, "config.toml"))
-	if !strings.Contains(string(raw), `model_provider = "agentbox"`) {
-		t.Errorf("append path missing model_provider:\n%s", raw)
+	var got struct {
+		Provider  string `toml:"model_provider"`
+		Reasoning string `toml:"model_reasoning_effort"`
 	}
-	if !strings.Contains(string(raw), "model_reasoning_effort = \"high\"") {
-		t.Errorf("append path lost existing keys:\n%s", raw)
+	if err := toml.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
 	}
+	if got.Provider != "agentbox" || got.Reasoning != "high" {
+		t.Fatalf("bad config: %s", raw)
+	}
+
 }
 
 func TestWriteCodexProviderTOMLAddsMissingWireAPI(t *testing.T) {

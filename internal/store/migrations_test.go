@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFutureSchemaRejectedWithoutMutation(t *testing.T) {
@@ -115,6 +116,57 @@ func TestVersionOneUpgradeAndDataPreservation(t *testing.T) {
 	st.db.QueryRow("PRAGMA user_version").Scan(&version)
 	if version != SchemaVersion {
 		t.Fatal(version)
+	}
+}
+
+func TestUsageTimestampMigrationPreservesInstantsAndOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []struct{ ts, turn string }{
+		{"2026-09-23T23:59:59.999999999+08:00", "yesterday"},
+		{"2026-09-23T17:04:00Z", "today"},
+		{"2026-09-24T00:01:00+08:00", "midnight"},
+	} {
+		if _, err := st.db.Exec(`INSERT INTO usage_events(ts,user,session_id,turn_id,agent)
+			VALUES (?, 'alice', 's1', ?, 'claude')`, e.ts, e.turn); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.db.Exec("PRAGMA user_version=2"); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	st, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	filter := UsageFilter{
+		Since: time.Date(2026, 9, 23, 0, 0, 0, 0, loc),
+		Until: time.Date(2026, 9, 24, 0, 0, 0, 0, loc),
+	}
+	rows := st.ListUsage(filter)
+	if len(rows) != 1 || rows[0].TurnID != "yesterday" || st.SumUsage(filter).Rows != 1 {
+		t.Fatalf("旧时间迁移后昨日筛选错误: %+v", rows)
+	}
+	all := st.ListUsage(UsageFilter{Asc: true})
+	if len(all) != 3 || all[0].TurnID != "yesterday" || all[1].TurnID != "midnight" || all[2].TurnID != "today" {
+		t.Fatalf("混合偏移时间排序错误: %+v", all)
+	}
+	var stored string
+	if err := st.db.QueryRow("SELECT ts FROM usage_events WHERE turn_id = 'yesterday'").Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != "2026-09-23T15:59:59.999999999Z" {
+		t.Fatalf("迁移改变时间精度: %q", stored)
 	}
 }
 

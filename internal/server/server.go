@@ -491,7 +491,7 @@ type acctView struct {
 	Sessions   int                   `json:"sessions"`
 	CredStatus string                `json:"cred_status"`          // ok | norefresh | missing
 	ExpiresAt  int64                 `json:"expires_at,omitempty"` // claude access token 到期(ms)
-	AuthMode   string                `json:"auth_mode,omitempty"`  // claude：oauth | apikey（中转站）
+	AuthMode   string                `json:"auth_mode,omitempty"`  // oauth | apikey
 	BaseURL    string                `json:"base_url,omitempty"`   // 中转站地址（codex 读 config.toml，claude 读 env）
 	WireAPI    string                `json:"wire_api,omitempty"`   // codex：responses | chat
 	Env        map[string]string     `json:"env,omitempty"`
@@ -510,7 +510,10 @@ func (s *Server) accountView(a config.Account, sessions int) acctView {
 	}
 	switch a.Type {
 	case config.AgentCodex:
-		v.BaseURL, v.WireAPI = credentials.ReadCodexProvider(a.CredentialsDir)
+		v.AuthMode = credentials.CodexAuthMode(a)
+		if v.AuthMode != "oauth" {
+			v.BaseURL, v.WireAPI = credentials.ReadCodexProvider(a.CredentialsDir)
+		}
 	case config.AgentClaude:
 		// env 里有中转站令牌就是 apikey 模式（实测其优先于 OAuth 凭证）
 		if base, token := claudeRelay(a); token != "" {

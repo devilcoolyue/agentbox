@@ -4,11 +4,12 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"time"
 )
 
 // SchemaVersion changes only with a committed, ordered migration. Versions
 // predating this framework use user_version=0, including partially upgraded DBs.
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 //go:embed migrations/001_baseline.sql
 var baselineSQL string
@@ -22,7 +23,11 @@ type migration struct {
 }
 
 func migrations() []migration {
-	return []migration{{1, baselineMigration}, {2, func(tx *sql.Tx) error { _, err := tx.Exec(usagePriceSQL); return err }}}
+	return []migration{
+		{1, baselineMigration},
+		{2, func(tx *sql.Tx) error { _, err := tx.Exec(usagePriceSQL); return err }},
+		{3, normalizeUsageTimestamps},
+	}
 }
 func migrate(db *sql.DB) error { return runMigrations(db, migrations()) }
 func runMigrations(db *sql.DB, steps []migration) error {
@@ -83,4 +88,45 @@ func baselineMigration(tx *sql.Tx) error {
 	_, err := tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_req ON usage_events(req_id) WHERE req_id != '';
  CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_events(ts);`)
 	return err
+}
+
+func normalizeUsageTimestamps(tx *sql.Tx) error {
+	var lastID int64
+	for {
+		rows, err := tx.Query("SELECT id, ts FROM usage_events WHERE id > ? ORDER BY id LIMIT 1000", lastID)
+		if err != nil {
+			return err
+		}
+		type entry struct {
+			id int64
+			ts string
+		}
+		var batch []entry
+		for rows.Next() {
+			var e entry
+			if err := rows.Scan(&e.id, &e.ts); err != nil {
+				rows.Close()
+				return err
+			}
+			batch = append(batch, e)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if len(batch) == 0 {
+			return nil
+		}
+		for _, e := range batch {
+			ts, err := time.Parse(time.RFC3339Nano, e.ts)
+			if err != nil {
+				return fmt.Errorf("usage event %d timestamp %q: %w", e.id, e.ts, err)
+			}
+			if _, err := tx.Exec("UPDATE usage_events SET ts = ? WHERE id = ?", usageTimestamp(ts), e.id); err != nil {
+				return err
+			}
+		}
+		lastID = batch[len(batch)-1].id
+	}
 }

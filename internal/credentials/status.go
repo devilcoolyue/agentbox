@@ -1,7 +1,6 @@
 package credentials
 
 import (
-	"bytes"
 	"encoding/json"
 
 	"agentbox/internal/config"
@@ -28,9 +27,18 @@ func Status(a config.Account) (status string, expiresAt int64) {
 		}
 		return "ok", c.ClaudeAiOauth.ExpiresAt
 	case config.AgentCodex:
-		raw, err := readPoolFile(a, "auth.json")
-		if err != nil || !bytes.Contains(raw, []byte("OPENAI_API_KEY")) {
+		auth, err := readCodexAuth(a)
+		if err != nil {
 			return "missing", 0
+		}
+		if auth.APIKey != "" {
+			return "ok", 0
+		}
+		if auth.Tokens.AccessToken == "" {
+			return "missing", 0
+		}
+		if auth.Tokens.RefreshToken == "" {
+			return "norefresh", 0
 		}
 		return "ok", 0
 	}

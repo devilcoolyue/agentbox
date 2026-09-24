@@ -6,9 +6,11 @@ import { termTeardown, termSpendPolling } from "../term.js";
 import { stopPolling } from "../data.js";
 import { stopPing } from "../ping.js";
 import { settingsState } from "../features/settings/state.js";
+import { initRouter } from "./router.js";
 /** App-owned feature lifetime; each init can be safely repeated. */
 export function initApplication() {
     const lifetime = new AbortController();
+    const disposeRouter = initRouter();
     let disposers = [];
     const stop = () => {
         disposers.splice(0).reverse().forEach(dispose => dispose());
@@ -34,5 +36,5 @@ export function initApplication() {
     // bfcache restores the same JS heap. Revalidate the login on restoration.
     window.addEventListener("pageshow", e => { if (e.persisted)
         location.reload(); }, { signal: lifetime.signal });
-    return () => { stop(); lifetime.abort(); };
+    return () => { disposeRouter(); stop(); lifetime.abort(); };
 }

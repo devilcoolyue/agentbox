@@ -122,11 +122,12 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 // 创建后前端随即引导进入登录（OAuth / API Key）流程。
 func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ID     string                `json:"id"`
-		Type   string                `json:"type"`
-		Label  string                `json:"label"`
-		Env    map[string]string     `json:"env"`
-		Access *config.AccountAccess `json:"access"`
+		ID      string                `json:"id"`
+		Type    string                `json:"type"`
+		Label   string                `json:"label"`
+		Env     map[string]string     `json:"env"`
+		ProxyID string                `json:"proxy_id"`
+		Access  *config.AccountAccess `json:"access"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
@@ -156,7 +157,7 @@ func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	acct := config.Account{
 		ID: req.ID, Type: req.Type, Label: req.Label,
-		CredentialsDir: credDir, Env: req.Env, Access: req.Access,
+		CredentialsDir: credDir, Env: req.Env, Access: req.Access, ProxyID: req.ProxyID,
 	}
 	if err := s.cfg.AddAccount(acct); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())

@@ -116,6 +116,38 @@ func TestUsageFilterWallClockUsesConfiguredTimeZone(t *testing.T) {
 	}
 }
 
+func TestUsageEventsYesterdayExcludesTodayInShanghai(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.cfg.TimeZone = "Asia/Shanghai"
+	for _, e := range []struct {
+		stamp string
+		turn  string
+	}{
+		{"2026-09-22T15:59:00Z", "before"}, // 09/22 23:59 Shanghai
+		{"2026-09-22T16:00:00Z", "start"},  // 09/23 00:00 Shanghai
+		{"2026-09-23T15:59:00Z", "end"},    // 09/23 23:59 Shanghai
+		{"2026-09-23T17:04:00Z", "today"},  // 09/24 01:04 Shanghai
+	} {
+		ts, err := time.Parse(time.RFC3339, e.stamp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.store.InsertUsage(store.UsageEvent{TS: ts, User: "alice", SessionID: "s1",
+			TurnID: e.turn, Agent: "claude", CostMicroUSD: 100}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := getUsageEvents(t, s,
+		"/api/usage/events?since=2026-09-23T00:00&until=2026-09-24T00:00",
+		"root", store.RoleAdmin)
+	if got.Total.Rows != 2 || len(got.Rows) != 2 || got.Total.CostMicroUSD != 200 {
+		t.Fatalf("昨日筛选结果 = %+v，想要两条 09/23 记录", got)
+	}
+	if got.Rows[0].TurnID != "end" || got.Rows[1].TurnID != "start" {
+		t.Fatalf("昨日记录或顺序错误: %+v", got.Rows)
+	}
+}
+
 // 普通用户只看得到自己的，连别人的用户名都不该从筛选项里漏出去——
 // facets 会为了「选了还能改回来」放宽 user 过滤，边界必须另外钉死。
 func TestUsageEventsUserScopedIncludingFacets(t *testing.T) {

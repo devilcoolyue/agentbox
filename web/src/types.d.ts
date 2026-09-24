@@ -48,7 +48,7 @@ export interface Account {
   cred_status: string;
   /** claude access token 到期时间(ms) */
   expires_at?: number;
-  /** claude："oauth" | "apikey"（中转站） */
+  /** Claude / Codex："oauth" | "apikey" */
   auth_mode?: string;
   base_url?: string;
   /** codex："responses" | "chat" */
@@ -120,9 +120,9 @@ export interface OAuthStart {
 export interface OAuthFinish {
   ok: boolean;
   /** pro / max / …，查不到订阅身份时为空 */
-  subscription_type: string;
-  /** access token 到期时间(ms) */
-  expires_at: number;
+  subscription_type?: string;
+  /** Claude access token 到期时间(ms) */
+  expires_at?: number;
 }
 
 /** POST /api/accounts/{id}/apikey/test：拉一次 /v1/models 探活。 */

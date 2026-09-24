@@ -42,9 +42,10 @@ export async function openSettingsView() {
         toast("读取设置失败：" + e.message, true);
     }
 }
-const SET_SECS = ["accounts", "proxies", "container", "models", "pricing", "interface", "security", "monitor", "about"];
+export const SET_SECS = ["accounts", "proxies", "container", "models", "pricing", "interface", "security", "monitor", "about"];
 function setSec(name) {
     S.sec = name;
+    emit("navigation-changed");
     for (const b of document.querySelectorAll("#set-nav button")) {
         b.classList.toggle("active", b.dataset.sec === name);
     }
@@ -78,9 +79,13 @@ function acctStateSeg(a) {
             return ["warn", "需重新登录", "refresh token 已失效"];
         return ["", "未登录", "凭证目录已就绪，等待授权"];
     }
+    if (a.auth_mode === "oauth" && a.cred_status === "ok")
+        return ["ok", "订阅已授权", "ChatGPT 订阅 · CLI 自动续期"];
+    if (a.cred_status === "norefresh")
+        return ["warn", "需重新授权", "缺少刷新令牌"];
     if (a.cred_status === "ok")
         return ["ok", "Key 已配置", via];
-    return ["", "未配置 Key", a.base_url ? via : ""];
+    return ["", "未认证", "选择订阅授权或 API Key"];
 }
 export function renderSettingsAccounts() {
     $("set-acct-count").textContent = String(S.accounts.length);
@@ -137,9 +142,7 @@ function acctRow(a) {
     const auth = document.createElement("button");
     const needAuth = a.cred_status !== "ok";
     auth.className = "btn btn-sm" + (needAuth ? " btn-primary" : "");
-    auth.textContent = a.type === "claude"
-        ? (a.auth_mode === "apikey" ? "更换 Key" : (a.cred_status === "missing" ? "登录" : "重新授权"))
-        : (a.cred_status === "ok" ? "更换 Key" : "配置 Key");
+    auth.textContent = needAuth ? "认证账号" : "管理认证";
     buttonLabel(auth, auth.textContent || "", "key");
     auth.addEventListener("click", () => openAuthDlg(a));
     const edit = document.createElement("button");
@@ -208,42 +211,126 @@ function openAcctDel(a) {
     $("acct-del-text").textContent = "确认从账号池删除「" + a.label + "」（" + a.id + "）？";
     $("dlg-acct-del").showModal();
 }
-/* ---- 账号登录 / 配置弹窗（claude OAuth / codex API Key） ---- */
+/* ---- 账号创建与认证：同一弹窗，失败保留账号以便重试 ---- */
 let authAcct = null;
+let authCreating = false;
+let authBusy = false;
+let authMode = "oauth";
+let createPicker = null;
 function authMsg(text, isErr) {
     const m = $("auth-msg");
-    m.textContent = text || "";
+    m.textContent = text;
     m.classList.toggle("hidden", !text);
     m.classList.toggle("err", !!isErr);
 }
-export function openAuthDlg(a) {
-    authAcct = a;
-    const isClaude = a.type === "claude";
-    $("auth-title").textContent = a.label + (isClaude ? " · 账号认证" : " · API Key");
-    $("auth-modes").classList.toggle("hidden", !isClaude);
+function authType() {
+    return authAcct?.type || document.querySelector('#acct-form input[name="atype"]:checked').value;
+}
+function resetAuthCode() {
     $("auth-linkrow").classList.add("hidden");
-    $("auth-code").classList.add("hidden");
+    $("auth-code-label").classList.add("hidden");
     $("auth-finish").classList.add("hidden");
     $("auth-code").value = "";
+    $("auth-link").removeAttribute("href");
+}
+function updateAuthType() {
+    const claude = authType() === "claude";
+    $("auth-oauth-hint").textContent = claude
+        ? "打开授权链接，使用 Claude 订阅账号登录，再把页面显示的授权码粘贴回来。"
+        : "打开授权链接，使用 ChatGPT 账号登录。授权后复制地址栏中完整的 localhost:1455 回调地址并粘贴回来；本地页面无法打开也不影响完成授权。";
+    $("auth-code-title").textContent = claude ? "授权码" : "完整回调地址";
+    $("auth-code").placeholder = claude ? "粘贴授权码（xxxx#yyyy）" : "http://localhost:1455/auth/callback?code=…&state=…";
+    $("auth-wire").hidden = claude;
+    $("auth-key-hint").textContent = "填写官方或中转服务的 API Key。Base URL 留空使用官方接口，填写时请使用服务商提供的完整 API 地址。";
+    $("auth-test").classList.toggle("hidden", !authAcct);
+    $("auth-clearkey").classList.toggle("hidden", !(claude && authAcct?.auth_mode === "apikey"));
+    buttonLabel($("auth-gen"), authCreating && !authAcct ? "保存账号并生成授权链接" : "生成授权链接", "link");
+    buttonLabel($("auth-savekey"), authCreating ? "保存并完成" : "保存", "save");
+}
+export function openAuthDlg(a) {
+    if (authBusy)
+        return;
+    authCreating = false;
+    authAcct = a;
+    $("acct-form").classList.add("hidden");
+    $("auth-title").textContent = a.label + " · 账号认证";
+    resetAuthCode();
     $("auth-apikey").value = "";
     $("auth-baseurl").value = a.base_url || "";
     setSelectValue($("auth-wire"), a.wire_api === "chat" ? "chat" : "responses");
-    $("auth-wire").classList.toggle("hidden", isClaude); // wire_api 仅 codex 有意义
-    $("auth-clearkey").classList.toggle("hidden", !(isClaude && a.auth_mode === "apikey"));
-    $("auth-key-hint").textContent = isClaude
-        ? "中转站 API Key + Base URL，保存进账号环境变量（ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN），对新对话和新开终端立即生效，优先于订阅凭证。Base URL 留空 = 官方 api.anthropic.com。"
-        : "中转站或官方 API Key + Base URL。保存后写入账号池 auth.json 与 config.toml（base_url），容器下次拉起生效。Base URL 留空 = 官方接口/保持现有 config.toml 不动。";
     renderAuthModels(null);
     authMsg("");
-    setAuthMode(isClaude && a.auth_mode !== "apikey" ? "oauth" : "key");
+    updateAuthType();
+    setAuthMode(a.auth_mode === "apikey" || (!a.auth_mode && a.cred_status === "ok") ? "key" : "oauth");
     $("dlg-auth").showModal();
 }
 function setAuthMode(mode) {
-    const isClaude = authAcct && authAcct.type === "claude";
-    $("auth-oauth").classList.toggle("hidden", !(isClaude && mode === "oauth"));
+    if (authBusy)
+        return;
+    authMode = mode;
+    $("auth-oauth").classList.toggle("hidden", mode !== "oauth");
     $("auth-key").classList.toggle("hidden", mode !== "key");
-    $("auth-mode-oauth").classList.toggle("active", mode === "oauth");
-    $("auth-mode-key").classList.toggle("active", mode === "key");
+    for (const m of ["oauth", "key"]) {
+        $("auth-mode-" + m).classList.toggle("active", mode === m);
+        $("auth-mode-" + m).setAttribute("aria-pressed", String(mode === m));
+    }
+    authMsg("");
+}
+async function ensureAuthAccount() {
+    if (authAcct)
+        return authAcct;
+    const env = parseEnvText($("acct-env").value);
+    const mode = $("acct-access").value;
+    const users = [...new Set($("acct-users").value.split(/[\s,，]+/).filter(Boolean))];
+    // The request only happens on an authentication action. Retain its result on
+    // errors so retry never creates a second account or loses the configured proxy.
+    authAcct = await api("/accounts", { method: "POST", body: JSON.stringify({
+            id: $("acct-id").value.trim(), type: authType(),
+            label: $("acct-label").value.trim(), env,
+            proxy_id: createPicker?.get() || "", access: { mode, ...(mode === "users" ? { users } : {}) },
+        }) });
+    $("acct-created").classList.remove("hidden");
+    updateAuthType();
+    void refreshAll().catch(e => toast(e.message, true));
+    return authAcct;
+}
+async function authAction(button, work) {
+    if (authBusy)
+        return;
+    if (!authAcct && !$("acct-form").reportValidity())
+        return;
+    authBusy = true;
+    authMsg("");
+    btnBusy($(button), "处理中…");
+    const controls = [...$("dlg-auth").querySelectorAll("button, input, select, textarea")];
+    const disabled = controls.map(el => el.disabled);
+    controls.forEach(el => { el.disabled = true; });
+    try {
+        await work();
+    }
+    catch (e) {
+        authMsg(e.message, true);
+    }
+    finally {
+        controls.forEach((el, i) => { el.disabled = disabled[i]; });
+        btnDone($(button));
+        authBusy = false;
+        $("acct-fields").disabled = authCreating && !!authAcct;
+        updateAuthType();
+    }
+}
+function finishAuth() {
+    $("auth-code").value = "";
+    $("auth-apikey").value = "";
+    resetAuthCode();
+    if (authCreating) {
+        $("dlg-auth").close();
+        toast("账号已添加并完成认证");
+    }
+    else {
+        authMsg("认证已保存，下次对话或重新打开终端时使用新配置。");
+    }
+    void refreshAll().catch(e => toast(e.message, true));
 }
 /* 测试连接 = 拉一次 /v1/models：通就显示延迟 + 模型列表，点模型直接入库 */
 function renderAuthModels(models) {
@@ -563,47 +650,50 @@ export function initSettings() {
             renderSettingsAccounts();
     }, { signal: lifetime.signal });
     $("btn-acct-add").addEventListener("click", () => {
-        $("acct-form").reset();
-        $("acct-error").classList.add("hidden");
-        $("dlg-acct").showModal();
-    }, { signal: lifetime.signal });
-    $("acct-cancel").addEventListener("click", () => $("dlg-acct").close(), { signal: lifetime.signal });
-    $("acct-form").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const errEl = $("acct-error");
-        errEl.classList.add("hidden");
-        let env;
-        try {
-            env = parseEnvText($("acct-env").value);
-        }
-        catch (err) {
-            errEl.textContent = err.message;
-            errEl.classList.remove("hidden");
+        if (authBusy)
             return;
+        authAcct = null;
+        authCreating = true;
+        $("acct-form").reset();
+        $("acct-fields").disabled = false;
+        $("acct-form").classList.remove("hidden");
+        $("acct-created").classList.add("hidden");
+        $("acct-users-row").classList.add("hidden");
+        setSelectValue($("acct-access"), "all");
+        if (!createPicker)
+            createPicker = mountProxyPicker($("acct-proxy"));
+        createPicker.set("");
+        void loadProxies().then(() => createPicker?.set(createPicker.get())).catch(() => { });
+        $("auth-title").textContent = "添加账号";
+        resetAuthCode();
+        $("auth-apikey").value = "";
+        $("auth-baseurl").value = "";
+        setSelectValue($("auth-wire"), "responses");
+        renderAuthModels(null);
+        updateAuthType();
+        setAuthMode("oauth");
+        $("dlg-auth").showModal();
+    }, { signal: lifetime.signal });
+    $("acct-form").addEventListener("submit", e => {
+        e.preventDefault();
+        if (!authBusy)
+            $(authMode === "oauth" ? "auth-gen" : "auth-savekey").click();
+    }, { signal: lifetime.signal });
+    $("acct-form").addEventListener("change", e => {
+        if (e.target.name === "atype") {
+            resetAuthCode();
+            updateAuthType();
         }
-        const body = {
-            id: $("acct-id").value.trim(),
-            type: document.querySelector('#acct-form input[name="atype"]:checked').value,
-            label: $("acct-label").value.trim(),
-            env,
-        };
-        btnBusy($("acct-ok"), "创建中…");
-        $("acct-cancel").disabled = true;
-        try {
-            const acct = await api("/accounts", { method: "POST", body: JSON.stringify(body) });
-            $("dlg-acct").close();
-            toast("账号 " + acct.label + " 已创建");
-            await refreshAll();
-            openAuthDlg(acct); // 创建后直接进入登录流程
-        }
-        catch (err) {
-            errEl.textContent = err.message;
-            errEl.classList.remove("hidden");
-        }
-        finally {
-            btnDone($("acct-ok"));
-            $("acct-cancel").disabled = false;
-        }
+    }, { signal: lifetime.signal });
+    $("acct-access").addEventListener("change", () => {
+        $("acct-users-row").classList.toggle("hidden", $("acct-access").value !== "users");
+    }, { signal: lifetime.signal });
+    $("dlg-auth").addEventListener("cancel", e => { if (authBusy)
+        e.preventDefault(); }, { signal: lifetime.signal });
+    $("dlg-auth").addEventListener("close", () => {
+        $("auth-apikey").value = "";
+        $("acct-env").value = "";
+        resetAuthCode();
     }, { signal: lifetime.signal });
     $("acct-edit-cancel").addEventListener("click", () => $("dlg-acct-edit").close(), { signal: lifetime.signal });
     $("acct-edit-form").addEventListener("submit", async (e) => {
@@ -664,25 +754,18 @@ export function initSettings() {
     }, { signal: lifetime.signal });
     $("auth-mode-oauth").addEventListener("click", () => setAuthMode("oauth"), { signal: lifetime.signal });
     $("auth-mode-key").addEventListener("click", () => setAuthMode("key"), { signal: lifetime.signal });
-    $("auth-gen").addEventListener("click", async () => {
-        if (!authAcct)
-            return;
-        btnBusy($("auth-gen"), "生成中…");
-        try {
-            const { url } = await api(`/accounts/${authAcct.id}/oauth/start`, { method: "POST" });
-            const link = $("auth-link");
-            link.href = url;
-            link.textContent = url;
-            $("auth-linkrow").classList.remove("hidden");
-            $("auth-code").classList.remove("hidden");
-            $("auth-finish").classList.remove("hidden");
-            authMsg("在浏览器完成授权后，把回显的授权码粘贴到下方输入框");
-        }
-        catch (e) {
-            authMsg("生成失败：" + e.message, true);
-        }
-        btnDone($("auth-gen"));
-    }, { signal: lifetime.signal });
+    $("auth-gen").addEventListener("click", () => authAction("auth-gen", async () => {
+        const acct = await ensureAuthAccount();
+        const { url } = await api(`/accounts/${acct.id}/oauth/start`, { method: "POST" });
+        resetAuthCode();
+        const link = $("auth-link");
+        link.href = url;
+        link.textContent = "打开授权页面 ↗";
+        $("auth-linkrow").classList.remove("hidden");
+        $("auth-code-label").classList.remove("hidden");
+        $("auth-finish").classList.remove("hidden");
+        authMsg("授权链接已生成，15 分钟内有效。请打开链接完成授权。");
+    }), { signal: lifetime.signal });
     $("auth-copy").addEventListener("click", async () => {
         try {
             await navigator.clipboard.writeText($("auth-link").href);
@@ -692,101 +775,63 @@ export function initSettings() {
             authMsg("复制失败，请手动选中链接复制", true);
         }
     }, { signal: lifetime.signal });
-    $("auth-finish").addEventListener("click", async () => {
+    $("auth-finish").addEventListener("click", () => authAction("auth-finish", async () => {
         if (!authAcct)
             return;
         const code = $("auth-code").value.trim();
-        if (!code) {
-            authMsg("请先粘贴授权码", true);
-            return;
-        }
-        btnBusy($("auth-finish"), "换取令牌…");
-        try {
-            const res = await api(`/accounts/${authAcct.id}/oauth/finish`, {
-                method: "POST", body: JSON.stringify({ code }),
-            });
-            authMsg(`登录成功${res.subscription_type ? "（" + res.subscription_type + " 订阅）" : ""}，工作空间将在下次对话或拉起时使用新凭证`);
-            refreshAll();
-        }
-        catch (e) {
-            authMsg("登录失败：" + e.message, true);
-        }
-        btnDone($("auth-finish"));
-    }, { signal: lifetime.signal });
-    $("auth-savekey").addEventListener("click", async () => {
-        if (!authAcct)
-            return;
+        if (!code)
+            throw new Error(authType() === "codex" ? "请粘贴完整回调地址" : "请粘贴授权码");
+        await api(`/accounts/${authAcct.id}/oauth/finish`, { method: "POST", body: JSON.stringify({ code }) });
+        authAcct.auth_mode = "oauth";
+        authAcct.base_url = "";
+        $("auth-baseurl").value = "";
+        finishAuth();
+    }), { signal: lifetime.signal });
+    $("auth-savekey").addEventListener("click", () => authAction("auth-savekey", async () => {
         const key = $("auth-apikey").value.trim();
         const base = $("auth-baseurl").value.trim();
-        if (!key) {
-            authMsg("请输入 API Key", true);
-            return;
-        }
-        btnBusy($("auth-savekey"), "保存中…");
-        try {
-            await api(`/accounts/${authAcct.id}/apikey`, {
-                method: "POST",
-                body: JSON.stringify({ api_key: key, base_url: base, wire_api: $("auth-wire").value }),
-            });
-            if (authAcct.type === "claude") {
-                authMsg(base
-                    ? "已保存到账号环境变量，对新对话和新开终端立即生效"
-                    : "已保存（走官方 api.anthropic.com），对新对话和新开终端立即生效");
-                $("auth-clearkey").classList.remove("hidden");
+        if (!key)
+            throw new Error("请输入 API Key");
+        if (base) {
+            let parsed;
+            try {
+                parsed = new URL(base);
             }
-            else {
-                authMsg(base
-                    ? "已保存（auth.json + config.toml），容器下次拉起生效"
-                    : "已保存（auth.json，config.toml 未改动），容器下次拉起生效");
+            catch {
+                throw new Error("Base URL 必须是完整的 http(s) 地址");
             }
-            $("auth-apikey").value = "";
-            refreshAll();
+            if (!["http:", "https:"].includes(parsed.protocol))
+                throw new Error("Base URL 必须以 http:// 或 https:// 开头");
         }
-        catch (e) {
-            authMsg("保存失败：" + e.message, true);
-        }
-        btnDone($("auth-savekey"));
-    }, { signal: lifetime.signal });
-    $("auth-test").addEventListener("click", async () => {
+        const acct = await ensureAuthAccount();
+        await api(`/accounts/${acct.id}/apikey`, { method: "POST", body: JSON.stringify({ api_key: key, base_url: base, wire_api: $("auth-wire").value }) });
+        acct.auth_mode = "apikey";
+        acct.base_url = base;
+        finishAuth();
+    }), { signal: lifetime.signal });
+    $("auth-test").addEventListener("click", () => authAction("auth-test", async () => {
         if (!authAcct)
             return;
-        btnBusy($("auth-test"), "探测中…");
-        try {
-            const res = await api(`/accounts/${authAcct.id}/apikey/test`, {
-                method: "POST",
-                body: JSON.stringify({
-                    api_key: $("auth-apikey").value.trim(),
-                    base_url: $("auth-baseurl").value.trim(),
-                }),
-            });
-            renderAuthModels(res.models);
-            authMsg(`连接正常 · ${res.latency_ms}ms · ${res.endpoint} · ${res.models.length} 个模型`
-                + (res.models.length ? "，点击模型可加入下拉菜单" : ""));
-        }
-        catch (e) {
-            renderAuthModels(null);
-            authMsg("连接失败：" + e.message, true);
-        }
-        btnDone($("auth-test"));
-    }, { signal: lifetime.signal });
-    $("auth-clearkey").addEventListener("click", async () => {
+        renderAuthModels(null);
+        const res = await api(`/accounts/${authAcct.id}/apikey/test`, {
+            method: "POST", body: JSON.stringify({ api_key: $("auth-apikey").value.trim(), base_url: $("auth-baseurl").value.trim() }),
+        });
+        renderAuthModels(res.models);
+        authMsg(`连接正常 · ${res.latency_ms}ms · ${res.models.length} 个模型，可点击加入模型列表`);
+    }), { signal: lifetime.signal });
+    $("auth-clearkey").addEventListener("click", () => authAction("auth-clearkey", async () => {
         if (!authAcct)
             return;
-        btnBusy($("auth-clearkey"), "清除中…");
-        try {
-            await api(`/accounts/${authAcct.id}/apikey`, { method: "DELETE" });
-            authMsg("已清除中转站配置，该账号切回订阅 OAuth 凭证");
-            $("auth-baseurl").value = "";
-            $("auth-clearkey").classList.add("hidden");
-            renderAuthModels(null);
-            refreshAll();
-        }
-        catch (e) {
-            authMsg("清除失败：" + e.message, true);
-        }
-        btnDone($("auth-clearkey"));
-    }, { signal: lifetime.signal });
-    $("auth-close").addEventListener("click", () => $("dlg-auth").close(), { signal: lifetime.signal });
+        await api(`/accounts/${authAcct.id}/apikey`, { method: "DELETE" });
+        authAcct.auth_mode = "oauth";
+        authAcct.base_url = "";
+        $("auth-baseurl").value = "";
+        renderAuthModels(null);
+        authMsg("已清除中转配置，切回保存的订阅凭证；如未授权，请先完成订阅授权。");
+        void refreshAll();
+    }), { signal: lifetime.signal });
+    $("auth-close").addEventListener("click", () => { if (!authBusy)
+        $("dlg-auth").close(); }, { signal: lifetime.signal });
     $("btn-save-container").addEventListener("click", () => {
         putSettings({
             agent_image: $("set-image").value.trim(),

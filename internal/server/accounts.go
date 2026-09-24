@@ -41,6 +41,7 @@ type oauthPending struct {
 	verifier string
 	state    string
 	created  time.Time
+	busy     bool
 }
 
 var (
@@ -62,7 +63,7 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "account not found")
 		return
 	}
-	if acct.Type != config.AgentClaude {
+	if acct.Type != config.AgentClaude && acct.Type != config.AgentCodex {
 		writeErr(w, http.StatusBadRequest, "该账号类型不使用 OAuth 登录")
 		return
 	}
@@ -77,6 +78,16 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	state := randB64(32)
 
 	oauthMu.Lock()
+	if oauthPend[acct.ID].busy {
+		oauthMu.Unlock()
+		writeErr(w, http.StatusConflict, "正在完成授权，请稍后重试")
+		return
+	}
+	for id, pending := range oauthPend {
+		if time.Since(pending.created) > oauthPendingTTL && !pending.busy {
+			delete(oauthPend, id)
+		}
+	}
 	oauthPend[acct.ID] = oauthPending{verifier: verifier, state: state, created: time.Now()}
 	oauthMu.Unlock()
 
@@ -90,7 +101,17 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		"code_challenge_method": {"S256"},
 		"state":                 {state},
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"url": claudeOAuthAuthorize + "?" + q.Encode()})
+	authorize := claudeOAuthAuthorize
+	if acct.Type == config.AgentCodex {
+		authorize = codexOAuthAuthorize
+		q.Del("code")
+		q.Set("client_id", codexOAuthClientID)
+		q.Set("redirect_uri", codexOAuthRedirect)
+		q.Set("scope", "openid profile email offline_access")
+		q.Set("id_token_add_organizations", "true")
+		q.Set("codex_cli_simplified_flow", "true")
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": authorize + "?" + q.Encode()})
 }
 
 // handleOAuthFinish 用授权码换令牌并写入账号池。写入后 credsync 会把新
@@ -99,6 +120,14 @@ func (s *Server) handleOAuthFinish(w http.ResponseWriter, r *http.Request) {
 	acct, ok := s.cfg.Account(r.PathValue("id"))
 	if !ok {
 		writeErr(w, http.StatusNotFound, "account not found")
+		return
+	}
+	if acct.Type == config.AgentCodex {
+		s.handleCodexOAuthFinish(w, r, acct)
+		return
+	}
+	if acct.Type != config.AgentClaude {
+		writeErr(w, http.StatusBadRequest, "该账号类型不使用 OAuth 登录")
 		return
 	}
 	var body struct {

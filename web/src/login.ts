@@ -47,6 +47,7 @@ export async function tryEnter() {
   $("app").classList.remove("hidden");
   await refreshAll();
   if (token !== S.token) return;
+  emit("app-ready");
   startPolling();
   startPing();
 }

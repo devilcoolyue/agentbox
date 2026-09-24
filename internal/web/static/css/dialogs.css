@@ -170,7 +170,7 @@ dialog label.check input { margin: 0; flex: none; }
 .lb-x:hover { background: rgba(6, 8, 12, 0.88); color: #fff; }
 
 /* ---- 账号登录 / 配置对话框 ---- */
-.dlg-auth { width: min(520px, 92vw); }
+.dlg-auth { width: min(580px, 94vw); }
 .auth-body { display: flex; flex-direction: column; gap: 12px; }
 .auth-hint { margin: 0; font-size: 12px; line-height: 1.7; color: var(--muted); }
 .auth-linkrow {
@@ -400,3 +400,25 @@ dialog label.check input { margin: 0; flex: none; }
   margin-top: 18px;
 }
 .au-fetched { font-size: 11px; color: var(--muted); }
+
+/* Account creation and authentication share one calm, responsive form. */
+.acct-fields { border: 0; padding: 0; margin: 0 0 20px; min-width: 0; }
+.acct-fields:disabled { opacity: .65; pointer-events: none; }
+.acct-field-label { display: block; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+.acct-basics { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.acct-basics > * { min-width: 0; }
+.acct-basics label { margin: 0; }
+.acct-advanced { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.acct-advanced summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.acct-advanced label { margin-top: 12px; }
+.dlg-auth .auth-body > label { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.dlg-auth input[type="url"] { width: 100%; }
+.dlg-auth .auth-modes .seg { transition: background .15s, color .15s; }
+.dlg-auth .auth-link { font-size: 13px; }
+#auth-gen { align-self: flex-start; }
+#auth-finish { align-self: flex-end; }
+@media (max-width: 540px) {
+  .acct-basics { grid-template-columns: 1fr; gap: 12px; }
+  .auth-keyrow { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { .dlg-auth .auth-modes .seg { transition: none; } }

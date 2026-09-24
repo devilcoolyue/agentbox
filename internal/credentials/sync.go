@@ -46,6 +46,12 @@ func (s *Service) syncRotatingCred(acct config.Account, sess store.Session) {
 		}
 		return
 	}
+	// A stale CLI still running after a login-mode change must not restore the
+	// previous mode into the pool. Publish config and auth together in that case.
+	if acct.Type == config.AgentCodex && codexAuthMode(poolData) != "" && codexAuthMode(poolData) != codexAuthMode(homeData) {
+		s.broadcast(acct)
+		return
+	}
 	diff := hi.ModTime().Sub(pi.ModTime())
 	switch {
 	case diff > 2*time.Second:
@@ -61,7 +67,7 @@ func (s *Service) syncRotatingCred(acct config.Account, sess store.Session) {
 	}
 }
 
-var refreshTokenRe = regexp.MustCompile(`"refreshToken"\s*:\s*"[^"]`)
+var refreshTokenRe = regexp.MustCompile(`"(?:refreshToken|refresh_token)"\s*:\s*"[^"]`)
 
 const credentialMaxBytes = 4 << 20
 
