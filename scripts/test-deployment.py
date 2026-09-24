@@ -9,6 +9,7 @@ import hashlib
 import datetime
 import os
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -17,6 +18,39 @@ spec=importlib.util.spec_from_file_location('release',Path(__file__).resolve().p
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 
 class Deployment(unittest.TestCase):
+ def test_selinux_context_restoration(self):
+  with patch.object(m.Path,'exists',return_value=False), patch.object(m,'run') as run:
+   m.restore_context(Path('/fixture/release'))
+   run.assert_not_called()
+  with patch.object(m.Path,'exists',return_value=True), patch.object(m.shutil,'which',return_value='/sbin/restorecon'), patch.object(m,'run') as run:
+   m.restore_context(Path('/fixture/release'))
+   run.assert_called_once_with('/sbin/restorecon','-R',Path('/fixture/release'))
+  with patch.object(m.Path,'exists',return_value=True), patch.object(m.shutil,'which',return_value=None):
+   with self.assertRaisesRegex(RuntimeError,'policycoreutils'):m.restore_context(Path('/fixture/release'))
+ def test_failed_relabel_leaves_staging_retryable(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);package=root/'package';package.mkdir();app=root/'app'
+   (package/'build.json').write_text(json.dumps({'program':'agentbox','os':'linux','version':'v1.0.0'}))
+   (package/'agentbox').write_text('#!/bin/sh\necho fixture\n');(package/'agentbox').chmod(0o755)
+   target=app/'releases/v1.0.0'
+   def fail(path):
+    self.assertEqual(path,target)
+    self.assertTrue((path/'agentbox').is_file())
+    raise subprocess.CalledProcessError(1,'restorecon')
+   with patch.object(m,'restore_context',side_effect=fail):
+    with self.assertRaises(subprocess.CalledProcessError):m.stage(package,app)
+   self.assertFalse(target.exists())
+   self.assertFalse((app/'current').exists())
+   with patch.object(m,'restore_context') as restore:
+    self.assertEqual(m.stage(package,app),'v1.0.0')
+    restore.assert_called_once_with(target)
+ def test_activation_relabel_failure_preserves_running_service(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);config=root/'config.json'
+   (root/'agentbox.service').write_text(m.unit(root,config))
+   with patch.object(m,'restore_context',side_effect=RuntimeError('restore failed')), patch.object(m,'run') as run:
+    with self.assertRaisesRegex(RuntimeError,'restore failed'):m.activate(root,'v1.0.0',config,root/'backups',root)
+    run.assert_not_called()
  def test_cloned_users_verified_against_backup(self):
   with tempfile.TemporaryDirectory() as tmp:
    root=Path(tmp);tree=root/'users';tree.mkdir();(tree/'file').write_bytes(b'fixture')

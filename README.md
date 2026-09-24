@@ -80,6 +80,8 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main
 
 首个正式版本为 [v0.1.0](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.0)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.0`。
 
+Oracle Linux / RHEL 等启用 SELinux 的系统，若旧版安装包启动时报 `203/EXEC` / `Permission denied`，按[SELinux 安装恢复](deploy/README.md#selinux-安装恢复)修复程序标签后重试激活。
+
 安装器支持 Linux x86_64 / arm64 + systemd；Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker，其他发行版需预先安装 Python 3.9+、Git、curl、CA 证书、时区数据和本机 Docker Engine。服务端使用预编译包，无需在服务器安装 Go 或 Node。
 
 命令会校验发布包、构建固定版本工作空间镜像、生成配置和随机管理员密码、安装并启动 `agentbox.service`。首次构建镜像需要几分钟及对镜像仓库、Debian 软件源和 npm 的网络访问。完成后打开 `http://服务器IP:8180`，使用终端显示的 `boxadmin` 和初始密码登录，在「系统设置 → 账号池」添加账号。远程访问需放行防火墙/安全组的 TCP 8180，公网长期使用请配置 HTTPS。

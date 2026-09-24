@@ -87,6 +87,18 @@ WantedBy=multi-user.target
 '''
 
 
+def restore_context(path):
+    # copytree/copy2 preserve security.selinux xattrs from the download's /tmp
+    # directory. systemd cannot execute user_tmp_t files on enforcing hosts.
+    # Apply the host policy at the final installation path, never to user data.
+    if not Path('/sys/fs/selinux/enforce').exists():
+        return
+    restorecon = shutil.which('restorecon')
+    if not restorecon:
+        raise RuntimeError('SELinux is enabled but restorecon is missing; install policycoreutils and retry')
+    run(restorecon, '-R', path)
+
+
 def stage(package, app):
     meta = read(package / 'build.json')
     version = meta['version']
@@ -102,6 +114,12 @@ def stage(package, app):
         shutil.copytree(package, dest)
         run(dest / 'agentbox', '--version')
         os.rename(dest, target)
+        try:
+            restore_context(target)
+        except Exception:
+            # Keep failed staging retryable; no current link points here yet.
+            os.rename(target, dest)
+            raise
     return version
 
 
@@ -134,6 +152,8 @@ def activate(app, version, config, backup_dir, unit_dir):
         raise ValueError('unit belongs to another installation; migrate/install explicitly first')
     if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-[\w.-]+)?', version): raise ValueError('invalid version')
     binary = app / 'releases' / version / 'agentbox'
+    # Also repairs versions staged by older installers, before stopping service.
+    restore_context(binary.parent)
     cfg = read(config); data = resolve(config.parent, cfg.get('data_dir', 'data'))
     compatible(binary, config, data)
     run('systemctl', 'stop', 'agentbox.service')

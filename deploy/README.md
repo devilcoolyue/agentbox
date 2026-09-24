@@ -34,6 +34,30 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main
 
 安装器回归：`python3 scripts/test-install.py` 检查校验、归档边界、保留已有安装和失败处理；`python3 scripts/test-install-linux.py --binary <Linux二进制> --image <已有会话镜像>` 在一次性 Linux 容器运行完整入口及真实 HTTP 登录，下载、镜像构建和 systemctl 使用模拟命令。后者不验证 apt 安装或真实 systemd 开机自启，这两项仍需在干净 Linux 主机验收。
 
+### SELinux 安装恢复
+
+Oracle Linux / RHEL 等启用 SELinux 的主机上，旧版安装器可能把临时目录的 `user_tmp_t` 标签复制到 `/opt/agentbox/releases/<版本>`，导致 systemd 报 `203/EXEC` / `Permission denied`。新版 `release.py` 在暂存版本和激活前使用 `restorecon` 按目标路径恢复标签；启用 SELinux 时需安装提供该命令的 `policycoreutils`。修复失败会停止安装/激活，不关闭 SELinux，也不重标记用户工作区。
+
+已安装 v0.1.0 但无法启动时，先确认日志与 `ls -lZ /opt/agentbox/current/agentbox` 符合上述情况，然后执行：
+
+```bash
+sudo restorecon -R /opt/agentbox
+sudo systemctl reset-failed agentbox
+sudo python3 /opt/agentbox/releases/v0.1.0/deploy/release.py activate --version v0.1.0
+sudo systemctl is-active agentbox
+curl -fsS http://127.0.0.1:8180/api/ping
+```
+
+不需要重新安装或重建镜像。若安装器在打印初始密码前退出，管理员仍为 `boxadmin`；可在服务器本机读取初始密码（仅在首次登录未修改密码时有效）：
+
+```bash
+sudo python3 -c 'import json; print(json.load(open("/etc/agentbox/config.json"))["auth_token"])'
+```
+
+本机探活正常但公网连接失败时，再检查主机防火墙和云安全组；服务启动与公网端口放行是两个步骤。
+
+验证范围：已在 Oracle Linux 9.8 arm64、SELinux Enforcing 下恢复 v0.1.0 服务，并用标记为 `user_tmp_t` 的临时程序验证新版暂存逻辑恢复标签后可由真实 systemd 执行。该验证不等同于重新安装新版发布包。
+
 ## 部署前准备
 
 - 安装 Docker Engine、Git、Go（版本以 `go.mod` 为准）、Python 3、curl 和提供 `ss` 的 iproute2。
