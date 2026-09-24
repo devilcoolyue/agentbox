@@ -103,7 +103,8 @@ try:
             assert err.code==429,err
         request('/api/sessions/'+extra['id']+'?purge=1',method='DELETE')
         diagnostics=request('/api/diagnostics')
-        assert diagnostics['schema_version']==2 and 'config_path' not in diagnostics
+        compatibility=json.loads(docker('exec',server,'/opt/agentbox','check-config','--config','/tmp/config.json'))
+        assert diagnostics['schema_version']==compatibility['schema_version'] and 'config_path' not in diagnostics
         assert password not in json.dumps(diagnostics) and 'synthetic' not in json.dumps(diagnostics)
         assert 'disk_available' in request('/api/storage')
         if a.usage:
