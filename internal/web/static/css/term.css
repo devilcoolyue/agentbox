@@ -121,6 +121,42 @@
 }
 .term-overlay-box .spin { width: 26px; height: 26px; border-width: 3px; }
 
+/* 手机辅助键独立于终端滚动区；横滑查看更多，键盘开关始终留在右侧。 */
+.term-keys { display: none; }
+@media (max-width: 760px), (pointer: coarse) {
+  .term-keys {
+    display: flex; align-items: center; flex: none; gap: 4px;
+    min-width: 0; margin: 0; border: 0; border-top: 1px solid var(--term-sel);
+    padding: 4px 6px max(4px, env(safe-area-inset-bottom));
+    background: var(--term-bg); color: var(--term-fg);
+  }
+  .term-keys-scroll {
+    display: flex; flex: 1; min-width: 0; gap: 2px;
+    overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  }
+  .term-keys-scroll::-webkit-scrollbar { display: none; }
+  .term-keys button {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: none; min-width: 44px; height: 44px; padding: 0 8px;
+    border: 0; border-radius: 7px; background: transparent; color: var(--term-cursor);
+    font: 13px var(--mono); white-space: nowrap;
+    touch-action: manipulation; user-select: none; -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .term-keys button:active, .term-keys button[aria-pressed="true"] {
+    background: var(--term-sel); color: var(--term-fg);
+  }
+  .term-keys button[aria-pressed="true"] { box-shadow: inset 0 -2px var(--term-cursor); }
+  .term-keys button:focus-visible { outline: 2px solid var(--term-cursor); outline-offset: -2px; }
+  .term-keys button:disabled { opacity: .35; }
+  #term-keyboard { border-left: 1px solid var(--term-sel); border-radius: 0; }
+  /* dvh 不会在所有手机浏览器中随软键盘缩小，实际高度由 VisualViewport 提供。 */
+  .app.term-viewport {
+    position: fixed; left: 0; right: 0; top: var(--term-viewport-top);
+    height: var(--term-viewport-height);
+  }
+}
+
 /* ---- 窄屏：提示占据连接状态左侧的剩余空间（xterm 字号在 js/term.js 里降到 12） ---- */
 @media (max-width: 760px) {
   .term-bar { padding: 2px 12px; }

@@ -406,6 +406,29 @@
                 <span class="spin"></span><span>连接中…（首次可能需要拉起容器）</span>
               </div>
             </div>
+            <fieldset id="term-keys" class="term-keys" aria-label="终端快捷键" disabled>
+              <div class="term-keys-scroll">
+                <button type="button" data-term-key="escape" aria-label="Esc 退出">esc</button>
+                <button type="button" data-term-key="tab" aria-label="Tab 补全">tab</button>
+                <button type="button" data-term-key="shift-tab" aria-label="Shift+Tab">⇧ tab</button>
+                <button type="button" data-term-mod="ctrl" aria-label="Ctrl，作用于下一次输入" aria-pressed="false">ctrl</button>
+                <button type="button" data-term-mod="alt" aria-label="Alt，作用于下一次输入" aria-pressed="false">alt</button>
+                <button type="button" data-term-key="interrupt" aria-label="Ctrl+C 中断">^C</button>
+                <button type="button" data-term-key="up" aria-label="方向上，上一条历史命令">↑</button>
+                <button type="button" data-term-key="down" aria-label="方向下，下一条历史命令">↓</button>
+                <button type="button" data-term-key="left" aria-label="方向左">←</button>
+                <button type="button" data-term-key="right" aria-label="方向右">→</button>
+                <button type="button" data-term-key="/">/</button>
+                <button type="button" data-term-key="|">|</button>
+                <button type="button" data-term-key="-">-</button>
+              </div>
+              <button type="button" id="term-keyboard" aria-label="显示或收起键盘">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                  <rect x="2" y="4" width="20" height="14" rx="2"/>
+                  <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 11h.01M10 11h.01M14 11h.01M18 11h.01M7 14h10M9 21h6"/>
+                </svg>
+              </button>
+            </fieldset>
             <div id="term-overlay" class="term-overlay hidden">
               <div class="term-overlay-box"><span class="spin"></span><span id="term-overlay-text">图片上传中…</span></div>
             </div>

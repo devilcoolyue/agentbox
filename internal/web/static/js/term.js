@@ -29,6 +29,7 @@ const RESET_INPUT_MODES = "\x1b[?9l\x1b[?1000l\x1b[?1001l\x1b[?1002l\x1b[?1003l"
 const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 /* ---------------- 连接状态展示（顶栏右侧：状态点 + 文案 + 重连钮） ---------------- */
 function setConnStatus(state) {
+    syncTermKeys(state === "connected");
     const dot = $("term-conn-dot");
     const st = $("term-state");
     const btn = $("term-reconnect");
@@ -112,6 +113,7 @@ export function termTeardown() {
         S.term = null;
         S.fit = null;
     }
+    fitTermViewport();
 }
 // 手动重连：作废旧连接与在途重连，保留已有终端实例（不丢回滚），立即重新连接。
 export function termReconnect() {
@@ -189,9 +191,15 @@ function ensureTerm() {
     fit.fit();
     S.term = term;
     S.fit = fit;
+    fitTermViewport();
     term.onData((d) => {
-        if (S.termWS && S.termWS.readyState === WebSocket.OPEN)
-            S.termWS.send(ENC.encode(d));
+        // 焦点上报不是用户按键，不能消耗一次性的 Ctrl / Alt。
+        if (d === "\x1b[I" || d === "\x1b[O") {
+            sendTermInput(d);
+        }
+        else {
+            sendTermInput(modifiedTermInput(d));
+        }
     });
     term.onResize(({ cols, rows }) => {
         if (S.termWS && S.termWS.readyState === WebSocket.OPEN) {
@@ -304,6 +312,115 @@ new ResizeObserver(([entry]) => {
     if (S.fit && S.tab === "term" && entry.contentRect.width && entry.contentRect.height)
         S.fit.fit();
 }).observe($("term-mount"));
+/* ---------------- 手机辅助键 ---------------- */
+const termKeys = $("term-keys");
+const termModifiers = { ctrl: false, alt: false };
+let keysConnected = false;
+function resetTermModifiers() {
+    termModifiers.ctrl = termModifiers.alt = false;
+    renderTermModifiers();
+}
+function renderTermModifiers() {
+    for (const button of termKeys.querySelectorAll("[data-term-mod]")) {
+        const mod = button.dataset.termMod;
+        button.setAttribute("aria-pressed", String(termModifiers[mod]));
+    }
+}
+function syncTermKeys(connected = keysConnected) {
+    keysConnected = connected;
+    termKeys.disabled = !connected || !!S.term?.options.disableStdin;
+    if (termKeys.disabled)
+        resetTermModifiers();
+}
+function sendTermInput(data) {
+    if (!S.term || S.term.options.disableStdin || S.termWS?.readyState !== WebSocket.OPEN)
+        return;
+    S.termWS.send(ENC.encode(data));
+}
+function modifiedTermInput(data) {
+    const { ctrl, alt } = termModifiers;
+    if (!ctrl && !alt)
+        return data;
+    resetTermModifiers();
+    // 只组合单个 ASCII 按键，中文输入和整段粘贴原样通过。
+    if (data.length !== 1 || data.charCodeAt(0) > 127)
+        return data;
+    if (ctrl) {
+        const code = data.toUpperCase().charCodeAt(0);
+        if (code >= 64 && code <= 95)
+            data = String.fromCharCode(code - 64);
+        else if (data === " ")
+            data = "\x00";
+        else if (data === "?")
+            data = "\x7f";
+    }
+    return (alt ? "\x1b" : "") + data;
+}
+// 阻止按钮抢走 textarea 焦点；触摸仍允许横向滚动，点击后同步 focus 可唤起 iOS 键盘。
+termKeys.addEventListener("mousedown", (event) => event.preventDefault());
+termKeys.addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button || termKeys.disabled || !S.term)
+        return;
+    if (button.id === "term-keyboard") {
+        resetTermModifiers();
+        if (document.activeElement === S.term.textarea)
+            S.term.textarea?.blur();
+        else
+            S.term.focus();
+        return;
+    }
+    const mod = button.dataset.termMod;
+    if (mod === "ctrl" || mod === "alt") {
+        termModifiers[mod] = !termModifiers[mod];
+        renderTermModifiers();
+    }
+    else {
+        const key = button.dataset.termKey;
+        const arrows = { up: "A", down: "B", right: "C", left: "D" };
+        const fixed = { escape: "\x1b", tab: "\t", "shift-tab": "\x1b[Z", interrupt: "\x03" };
+        let data;
+        if (arrows[key]) {
+            const modifier = 1 + (termModifiers.alt ? 2 : 0) + (termModifiers.ctrl ? 4 : 0);
+            data = modifier > 1 ? `\x1b[1;${modifier}${arrows[key]}`
+                : `\x1b${S.term.modes.applicationCursorKeysMode ? "O" : "["}${arrows[key]}`;
+            resetTermModifiers();
+        }
+        else if (key === "interrupt" || key === "shift-tab") {
+            data = fixed[key];
+            resetTermModifiers();
+        }
+        else {
+            data = modifiedTermInput(fixed[key] ?? key);
+        }
+        sendTermInput(data);
+    }
+    S.term.focus();
+});
+const touchTerminal = matchMedia("(max-width: 760px), (pointer: coarse)");
+function fitTermViewport() {
+    const viewport = window.visualViewport;
+    const active = !!S.term && S.view === "work" && S.tab === "term" && touchTerminal.matches;
+    const app = $("app");
+    // 放大页面时保留浏览器的平移与缩放行为。
+    app.classList.toggle("term-viewport", active && !!viewport && viewport.scale === 1);
+    if (active && viewport) {
+        app.style.setProperty("--term-viewport-height", `${viewport.height}px`);
+        app.style.setProperty("--term-viewport-top", `${viewport.offsetTop}px`);
+    }
+    if (!active)
+        resetTermModifiers();
+}
+window.visualViewport?.addEventListener("resize", fitTermViewport);
+window.visualViewport?.addEventListener("scroll", fitTermViewport);
+touchTerminal.addEventListener("change", fitTermViewport);
+const termVisibility = new MutationObserver(() => {
+    resetTermModifiers();
+    fitTermViewport();
+});
+for (const id of ["tab-term", "view-work"]) {
+    termVisibility.observe($(id), { attributes: true, attributeFilter: ["class"] });
+}
 /* ---------------- 顶栏提示轮播 ----------------
  * 提示语与频率/动画在系统设置「界面与提示」里配置，经 /me 下发给所有用户（S.termTips）。
  * 单行视窗 + 纵向轨道：每隔 interval 逐条上移一行，末尾追加首条克隆做无缝回卷。
@@ -439,6 +556,7 @@ function termUploadUI() {
         if (!on)
             refocusTerm(); // disableStdin 切过 readOnly，须刷新 IME 上下文
     }
+    syncTermKeys();
 }
 $("term-mount").addEventListener("paste", (e) => {
     const files = pastedImages(e);

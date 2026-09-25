@@ -60,6 +60,7 @@ interface XtermTerminal {
   readonly cols: number;
   readonly rows: number;
   readonly buffer: XtermBuffer;
+  readonly modes: { applicationCursorKeysMode: boolean };
   /** 承载键盘输入的隐藏 textarea；IME 相关处理需要直接操作它 */
   readonly textarea: HTMLTextAreaElement | undefined;
   options: XtermOptions;

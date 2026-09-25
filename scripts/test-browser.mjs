@@ -33,6 +33,11 @@ export async function smoke(page) {
  const me = {user:'fixture',role:'admin',timezone:'UTC',models:{claude:[],codex:[]},quota:{metered:false}};
  let sessions = [{id:'fixture-space',name:'Fixture workspace',agent:'codex',account_id:'fixture',account_label:'Fixture',status:'stopped',default_model:'fixture'}];
  await page.routeWebSocket('**/api/sessions/*/chat?*', () => {});
+ const terminalInput = []; let terminalSocket;
+ await page.routeWebSocket('**/api/sessions/*/term?*', ws => {
+  terminalSocket = ws;
+  ws.onMessage(data => { if (typeof data !== 'string') terminalInput.push(data.toString()); });
+ });
  await page.route('**/api/**', async route => {
   const u = new URL(route.request().url()), path=u.pathname;
   let body={};
@@ -311,6 +316,63 @@ export async function smoke(page) {
   await at('#/sessions/fixture-space/files','#tab-files');
   await page.goto(base + '/#/sessions/fixture-space/skills');
   await at('#/sessions/fixture-space/chat','#tab-chat'); // Codex has no skills tab.
+  // Mobile keys go through the real xterm input and binary WebSocket path.
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('.tab[data-tab="term"]').click();
+  await page.locator('#term-state[data-state="connected"]').waitFor();
+  const key = name => page.locator(`[data-term-key="${name}"]`);
+  const modifier = name => page.locator(`[data-term-mod="${name}"]`);
+  const lastInput = async expected => {
+   await page.waitForTimeout(50);
+   assert.equal(terminalInput.at(-1),expected);
+  };
+  await key('escape').click(); await lastInput('\x1b');
+  await key('tab').click(); await lastInput('\t');
+  await key('shift-tab').click(); await lastInput('\x1b[Z');
+  await key('interrupt').click(); await lastInput('\x03');
+  assert.equal(await page.locator('.xterm-helper-textarea').evaluate(el=>el===document.activeElement),true);
+  await modifier('ctrl').click();
+  assert.equal(await modifier('ctrl').getAttribute('aria-pressed'),'true');
+  await page.keyboard.type('c'); await lastInput('\x03');
+  await page.keyboard.type('c'); await lastInput('c');
+  assert.equal(await modifier('ctrl').getAttribute('aria-pressed'),'false');
+  await modifier('alt').click(); await page.keyboard.type('b'); await lastInput('\x1bb');
+  await key('up').click(); await lastInput('\x1b[A');
+  terminalSocket.send('\x1b[?1h'); // Vim/tmux application cursor mode.
+  await page.waitForFunction(async()=> (await import('/_v/{{BUILD}}/js/state.js')).S.term.modes.applicationCursorKeysMode);
+  await key('up').click(); await lastInput('\x1bOA');
+  await modifier('ctrl').click(); await key('left').click(); await lastInput('\x1b[1;5D');
+  await key('|').click(); await lastInput('|');
+  await page.locator('#term-keyboard').click();
+  assert.equal(await page.locator('.xterm-helper-textarea').evaluate(el=>el===document.activeElement),false);
+  await page.locator('#term-keyboard').click();
+  assert.equal(await page.locator('.xterm-helper-textarea').evaluate(el=>el===document.activeElement),true);
+  // Emulate a keyboard shrinking/panning only the visual viewport (iOS behavior).
+  await page.evaluate(()=>{
+   Object.defineProperty(visualViewport,'height',{configurable:true,value:440});
+   Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:18});
+   visualViewport.dispatchEvent(new Event('resize'));
+  });
+  const keysBounds = await page.locator('#term-keys').boundingBox();
+  assert.ok(keysBounds.y+keysBounds.height<=458 && keysBounds.y>=18,'keys obscured by keyboard');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.locator('.term-keys-scroll').evaluate(el=>{el.scrollLeft=0;});
+  await mkdir(resolve('output/playwright'),{recursive:true});
+  await page.screenshot({path:resolve('output/playwright/terminal-mobile-keyboard.png')});
+  await page.evaluate(()=>{
+   delete visualViewport.height; delete visualViewport.offsetTop;
+   visualViewport.dispatchEvent(new Event('resize'));
+  });
+  await modifier('ctrl').click();
+  await page.locator('.tab[data-tab="chat"]').click();
+  await page.waitForFunction(()=>!document.querySelector('#app').classList.contains('term-viewport'));
+  assert.equal(await modifier('ctrl').getAttribute('aria-pressed'),'false');
+  await page.locator('.tab[data-tab="term"]').click();
+  terminalSocket.close({code:4003,reason:'fixture quota'});
+  await page.locator('#term-state[data-state="closed"]').waitFor();
+  assert.equal(await key('interrupt').isDisabled(),true);
+  await page.setViewportSize({width:1280,height:900});
+  assert.equal(await page.locator('#term-keys').isVisible(),false,'desktop toolbar should stay hidden');
   sessions = [];
   await page.reload();
   await at('#/','#empty'); // Deleted or inaccessible workspace.
