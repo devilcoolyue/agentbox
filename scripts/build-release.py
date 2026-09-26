@@ -40,10 +40,12 @@ if not a.allow_dirty:
     subprocess.run(['git', 'diff', '--exit-code', '--', 'internal/web/static/js'], check=True)
 subprocess.run(['python3', 'scripts/verify-third-party.py'], check=True)
 flags = f'-s -w -X agentbox/internal/buildinfo.Version={a.version} -X agentbox/internal/buildinfo.Revision={revision} -X agentbox/internal/buildinfo.BuiltAt={built}'
-def copy_tracked_tree(name, destination):
+def copy_tracked_tree(name, destination, required=()):
     # Never package ignored files, credentials or a developer's extra files.
     files = subprocess.check_output(['git', 'ls-files', '-z', name]).decode().split('\0')
-    for entry in files:
+    # Explicit resources are also required in --allow-dirty local candidates,
+    # where newly added default configuration may not be tracked yet.
+    for entry in sorted(set(files) | set(required)):
         if not entry:
             continue
         source = ROOT / entry
@@ -85,7 +87,8 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
             shutil.copy2(ROOT / 'uninstall.sh', folder / 'uninstall.sh')
             shutil.copytree(clients, folder / 'clients')
             shutil.copy2(ROOT / 'config.example.json', folder / 'config.example.json')
-            copy_tracked_tree('images', folder / 'images')
+            copy_tracked_tree('images', folder / 'images', required=(
+                'images/agent/bashrc', 'images/agent/vimrc'))
             (folder / 'scripts').mkdir()
             for script in ['build-image.sh', 'backup.sh']:
                 shutil.copy2(ROOT / 'scripts' / script, folder / 'scripts' / script)

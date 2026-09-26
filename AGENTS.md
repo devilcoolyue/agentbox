@@ -290,6 +290,13 @@ data/
 - `duration_ms` / `wall_ms` / `ttft_ms` 都是**回合级**指标，在同回合拆出的各行上重复；
   聚合时只能按 `turn_id` 取一份，绝不能 SUM。`store.UsageTotals` 因此故意不含这几项。
 
+### 价格目录维护
+
+- `internal/pricecatalog` 管理独立、版本化 JSON 候选与缓存；拉取不修改生效价格。旧前端快照迁入 `catalog.json`，明确未重新核验，不能填虚假的核验时间。远程目录要求四项显式单价、HTTPS 来源与核验时间；维护流程见 `docs/pricing-catalog.md`。
+- 管理接口 `/api/pricing`、`/check`、`/apply`、`/restore` 均为 admin；应用/编辑/回退带修订号防并发覆盖。旧配置行默认自定义；手动改价转自定义，目录应用不能静默覆盖自定义或删除消失模型。
+- `pricing_catalog`、`pricing_managed`、`pricing_history` 必须一起进入 Config 的 mutate/persist；价格历史最多 10 次，回退不改历史用量或目录地址。后台每日检查通过 server 生命周期运行，默认不联网、不自动应用。
+- 网页回合与起标题用 `usage.Service.NewTally()` 在 CLI 调用前锁定整张表，Flush 不得重新读新价；终端仍首次入账锁定。用量 JSON 快照增补修订与目录来源，schema 无需加列。
+
 ### 额度与扣减
 
 `internal/store/quota.go`（账本）+ `internal/server/quota.go`（定价、拦截、管理接口）。

@@ -5,8 +5,14 @@ FROM ${BASE_IMAGE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git curl wget ca-certificates procps ripgrep jq unzip zip less \
-      vim-tiny openssh-client python3 build-essential tmux \
+      vim openssh-client python3 build-essential tmux \
     && rm -rf /var/lib/apt/lists/*
+
+# 会话 home 是宿主机的空目录挂载，不能把默认配置只放进 /home/agent。
+# 系统配置先加载，用户自己的 .bashrc / .vimrc 仍可覆盖。
+COPY bashrc /etc/agentbox.bashrc
+RUN printf '\n. /etc/agentbox.bashrc\n' >> /etc/bash.bashrc
+COPY vimrc /etc/vim/vimrc.local
 
 # 终端持久化：网页终端 exec 统一 attach 到 tmux 会话（见 termws.go），断线重连后
 # claude/codex 原样还在。配置追求"隐形"，用户无感知（无状态栏、无前缀键）。

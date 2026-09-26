@@ -15,6 +15,8 @@ import { $, withSpin, fmtSize, askConfirm, startDownload } from "./util.js";
 import { api, fileDownloadURL } from "./api.js";
 import { loadFiles } from "./files.js";
 import { formatText, splitFrontMatter, frontMatterChips } from "./chat-render.js";
+import { SourceEditor } from "./source-editor.js";
+const sourceEditor = new SourceEditor();
 const FV = {
     path: "",
     scope: "workspace",
@@ -42,7 +44,9 @@ const POLL_MS = 2500;
 const qs = () => (FV.scope === "shared" ? "&scope=shared" : "");
 const fileAPI = (extra = "") => `/api/sessions/${S.current.id}/file?path=${encodeURIComponent(FV.path)}${qs()}${extra}`;
 function fvShow(which) {
-    $("fv-editor").classList.toggle("hidden", which !== "editor");
+    $("fv-source").classList.toggle("hidden", which !== "editor");
+    if (which === "editor")
+        sourceEditor.refresh();
     $("fv-framewrap").classList.toggle("hidden", which !== "frame");
     $("fv-mdwrap").classList.toggle("hidden", which !== "md");
     $("fv-imgwrap").classList.toggle("hidden", which !== "img");
@@ -52,7 +56,7 @@ function notice(text) {
     $("fv-notice").textContent = text;
     fvShow("notice");
 }
-/* 头部按钮的显隐：能渲染的（HTML / Markdown）才有模式切换、刷新、全屏；
+/* 头部按钮的显隐：HTML / Markdown 提供模式切换与刷新，源码也能全屏；
  * 视口模拟和「新标签页」是 iframe 独有的。 */
 function syncChrome() {
     const dual = FV.kind !== "plain";
@@ -63,7 +67,7 @@ function syncChrome() {
     $("fv-auto-wrap").classList.toggle("hidden", !preview);
     $("fv-reload").classList.toggle("hidden", !preview);
     $("fv-newtab").classList.toggle("hidden", !frame);
-    $("fv-full").classList.toggle("hidden", !dual);
+    $("fv-full").classList.toggle("hidden", !dual && !FV.srcLoaded);
     $("fv-mode-view").classList.toggle("active", FV.mode === "preview");
     $("fv-mode-src").classList.toggle("active", FV.mode === "source");
     // iframe 预览态没有「保存」可言，避免和 fv-state 的提示打架；Markdown 预览
@@ -192,7 +196,9 @@ async function loadSource(size) {
             }
         }
         $("fv-editor").value = new TextDecoder("utf-8").decode(buf);
+        sourceEditor.load(FV.name);
         FV.srcLoaded = true;
+        syncChrome();
         fvShow("editor");
         $("fv-state").textContent = "可编辑";
     }
@@ -385,6 +391,7 @@ $("fv-editor").addEventListener("keydown", (e) => {
         e.preventDefault();
         const t = e.target, s = t.selectionStart;
         t.setRangeText("  ", s, t.selectionEnd, "end");
+        sourceEditor.update();
         markDirty();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
@@ -482,6 +489,7 @@ async function closePreview() {
         FV.blobURL = "";
     }
     $("fv-editor").value = "";
+    sourceEditor.load("");
     $("fv-md").replaceChildren();
     $("fv-frame").src = "about:blank"; // 别让原型在后台继续跑
     $("dlg-file").classList.remove("fv-max");

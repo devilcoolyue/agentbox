@@ -201,7 +201,10 @@
   background: var(--panel);
 }
 .fv-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1; }
-.fv-name { color: var(--amber); font-size: 14px; font-weight: 600; }
+.fv-name {
+  color: var(--amber); font-size: 14px; font-weight: 600;
+  max-width: 60%; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .fv-meta {
   color: var(--muted); font-size: 12px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -211,15 +214,61 @@
   display: inline-flex; align-items: center; gap: 6px;
   color: var(--muted); font-size: 12px; margin-right: 4px;
 }
-.fv-body { flex: 1; min-height: 0; display: flex; }
-.fv-editor {
-  flex: 1;
-  background: var(--code-bg);
+.fv-body { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.fv-source {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  background: var(--code-bg); --fv-gutter-digits: 3;
+}
+.fv-codearea { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+.fv-gutter {
+  flex: none; position: relative; overflow: hidden; user-select: none;
+  width: calc(var(--fv-gutter-digits) * 1ch + 24px);
+  font: 13px/22px var(--mono); color: var(--muted);
+  background: var(--code-head); border-right: 1px solid var(--code-line);
+}
+.fv-gutter span { position: absolute; left: 0; right: 0; padding-right: 12px; text-align: right; }
+.fv-gutter .active { color: var(--amber); background: var(--panel-2); }
+.fv-codepane { flex: 1; min-width: 0; position: relative; overflow: hidden; }
+.fv-editor, .fv-highlight {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
   color: var(--text);
   border: none; outline: none; resize: none;
   padding: 14px 16px;
-  font-size: 13px; line-height: 1.65;
-  tab-size: 4;
+  font: 13px/22px var(--mono); font-variant-ligatures: none;
+  letter-spacing: normal; tab-size: 4; white-space: pre; overflow-wrap: normal;
+  text-align: left; direction: ltr;
+}
+.fv-highlight { overflow: hidden; pointer-events: none; background: transparent; }
+.fv-codepane .fv-editor {
+  background: transparent; color: transparent; caret-color: var(--text);
+  overflow: auto; resize: none; outline: none;
+}
+.fv-editor::selection { color: transparent; background: color-mix(in srgb, var(--amber) 28%, transparent); }
+.fv-current-line { position: absolute; left: 0; right: 0; background: var(--code-head); pointer-events: none; }
+.fv-source-status {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  padding: 6px 12px; border-top: 1px solid var(--code-line);
+  background: var(--code-head); color: var(--muted); font-size: 11px;
+}
+/* Prism 的 tag 等类名也被页面组件使用；着色不能改变字宽、行高或盒模型，
+ * 否则可见代码会偏离负责输入的 textarea。先隔离 token，再只赋予颜色。 */
+.fv-highlight .token { all: unset; }
+.fv-highlight .token.comment, .fv-highlight .token.prolog,
+.fv-highlight .token.doctype, .fv-highlight .token.cdata { color: var(--muted); }
+.fv-highlight .token.keyword, .fv-highlight .token.tag,
+.fv-highlight .token.boolean, .fv-highlight .token.important { color: var(--syntax-keyword); }
+.fv-highlight .token.string, .fv-highlight .token.char,
+.fv-highlight .token.attr-value, .fv-highlight .token.inserted { color: var(--green); }
+.fv-highlight .token.number, .fv-highlight .token.constant,
+.fv-highlight .token.symbol, .fv-highlight .token.attr-name { color: var(--amber); }
+.fv-highlight .token.function, .fv-highlight .token.class-name,
+.fv-highlight .token.property, .fv-highlight .token.selector { color: var(--syntax-function); }
+.fv-highlight .token.operator, .fv-highlight .token.punctuation { color: var(--muted); }
+.fv-highlight .token.deleted { color: var(--red); }
+@media (forced-colors: active) {
+  .fv-highlight { visibility: hidden; }
+  .fv-codepane .fv-editor { color: CanvasText; caret-color: CanvasText; }
+  .fv-editor::selection { color: HighlightText; background: Highlight; }
 }
 .fv-imgwrap {
   flex: 1; display: flex; align-items: center; justify-content: center;
@@ -312,7 +361,8 @@
   /* 窄屏本来就满屏了，视口模拟和全屏按钮都没有意义，腾出位置给模式切换 */
   .fv-vps, #fv-full { display: none !important; }
   .fv-head { padding: 10px 12px; }
-  .fv-actions { gap: 6px; }
+  .fv-title { flex-basis: 100%; }
+  .fv-actions { gap: 6px; width: 100%; }
   .fv-mdwrap { padding: 14px 14px 30px; }
 }
 

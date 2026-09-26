@@ -161,6 +161,11 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `POST /api/users/{name}/credits` | `{micro_usd, ref?, note?}`，正数充值、负数冲正 |
 | `GET /api/settings` | 当前配置视图；不返回管理员初始密码 |
 | `PUT /api/settings` | 配置 patch；`pricing` 是整表替换 |
+| `GET /api/pricing` | 管理员：生效价格/修订、候选目录、差异、缺价与兜底提示、版本历史 |
+| `PUT /api/pricing` | 管理员：`revision` 必填；`prices` 整表编辑、`custom_models` 设为自定义、`catalog: {url, auto_check}` 修改来源 |
+| `POST /api/pricing/check` | 管理员：检查候选更新，间隔至少 1 分钟；失败保留旧价并在响应 `candidate.error` 描述 |
+| `POST /api/pricing/apply` | 管理员：`revision`、`catalog_revision`、`models`；覆盖自定义需逐项列入 `adopt_custom`；修订冲突返回 409 |
+| `POST /api/pricing/restore` | 管理员：`revision`、历史版本 `id`；恢复价格与跟随状态 |
 | `GET /api/system` | 服务、Docker、数据目录与数量概览 |
 | `GET /api/monitor` | 运维监控数据 |
 | `GET /api/storage` | 数据 / 缓存磁盘容量与分类统计 |

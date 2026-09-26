@@ -335,6 +335,9 @@ type Config struct {
 	DefaultModels  map[string]string        `json:"default_models"`
 	TerminalTips   TerminalTips             `json:"terminal_tips"`
 	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
+	PricingCatalog PricingCatalogConfig     `json:"pricing_catalog"`
+	PricingManaged map[string]PriceOrigin   `json:"pricing_managed,omitempty"`
+	PricingHistory []PricingRevision        `json:"pricing_history,omitempty"`
 
 	mu          sync.RWMutex
 	path        string
@@ -440,6 +443,9 @@ func Load(path string) (*Config, error) {
 // validateLocked checks the whole config; callers must hold at least a read
 // lock (Load runs before the config is shared, which also counts).
 func (c *Config) validateLocked() error {
+	if err := c.validatePricing(); err != nil {
+		return err
+	}
 	if c.Resources.MaxRunning < 0 || c.Resources.MaxRunningPerUser < 0 || c.Resources.MinFreeBytes < 0 {
 		return fmt.Errorf("resource limits cannot be negative")
 	}
@@ -638,6 +644,9 @@ type persistConfig struct {
 	DefaultModels  map[string]string        `json:"default_models"`
 	TerminalTips   TerminalTips             `json:"terminal_tips"`
 	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
+	PricingCatalog PricingCatalogConfig     `json:"pricing_catalog"`
+	PricingManaged map[string]PriceOrigin   `json:"pricing_managed,omitempty"`
+	PricingHistory []PricingRevision        `json:"pricing_history,omitempty"`
 }
 
 // saveLocked writes the config file atomically; callers must hold the write
@@ -663,6 +672,9 @@ func (c *Config) saveLocked() error {
 		DefaultModels:  c.DefaultModels,
 		TerminalTips:   c.TerminalTips,
 		Pricing:        c.Pricing,
+		PricingCatalog: c.PricingCatalog,
+		PricingManaged: c.PricingManaged,
+		PricingHistory: c.PricingHistory,
 	}
 	for _, a := range c.Accounts {
 		dir := a.rawCredDir
@@ -918,17 +930,21 @@ func (c *Config) Price(agent, model string) (ModelPrice, bool) {
 func (c *Config) PriceLookup(agent, model string) (ModelPrice, string, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if p, ok := c.Pricing[model]; ok && model != "" {
+	return LookupPrice(c.Pricing, agent, model)
+}
+
+func LookupPrice(prices map[string]ModelPrice, agent, model string) (ModelPrice, string, bool) {
+	if p, ok := prices[model]; ok && model != "" {
 		return p, model, true
 	}
 	// provider 有时给带日期的模型 id（claude-haiku-4-5-20251001），价目表里配的
 	// 通常是不带日期的那个。价按模型系列走，日期只是快照，所以退一步再查一次。
 	if base := stripModelDate(model); base != model {
-		if p, ok := c.Pricing[base]; ok {
+		if p, ok := prices[base]; ok {
 			return p, base, true
 		}
 	}
-	if p, ok := c.Pricing[agent]; ok && agent != "" {
+	if p, ok := prices[agent]; ok && agent != "" {
 		return p, agent, true
 	}
 	return ModelPrice{}, "", false
@@ -971,9 +987,12 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		TerminalTips:   c.TerminalTips,
 		// 这份工作副本会被整体写回 config.json：**漏抄一个字段就等于从文件里
 		// 删掉它**。加字段时必须同时加到这里。
-		Pricing:    c.Pricing,
-		path:       c.path,
-		rawDataDir: c.rawDataDir,
+		Pricing:        c.Pricing,
+		PricingCatalog: c.PricingCatalog,
+		PricingManaged: c.PricingManaged,
+		PricingHistory: c.PricingHistory,
+		path:           c.path,
+		rawDataDir:     c.rawDataDir,
 	}
 	if err := fn(work); err != nil {
 		return err
@@ -1001,6 +1020,9 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.DefaultModels = work.DefaultModels
 	c.TerminalTips = work.TerminalTips
 	c.Pricing = work.Pricing
+	c.PricingCatalog = work.PricingCatalog
+	c.PricingManaged = work.PricingManaged
+	c.PricingHistory = work.PricingHistory
 	return nil
 }
 
@@ -1079,7 +1101,7 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 			if err != nil {
 				return err
 			}
-			w.Pricing = clean
+			w.replacePricing(clean, retainedOrigins(w.Pricing, clean, w.PricingManaged), "手动编辑")
 		}
 		return nil
 	})

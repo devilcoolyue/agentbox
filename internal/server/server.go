@@ -27,6 +27,7 @@ import (
 	"agentbox/internal/credentials"
 	"agentbox/internal/dockerx"
 	"agentbox/internal/gitx"
+	"agentbox/internal/pricecatalog"
 	"agentbox/internal/store"
 	"agentbox/internal/usage"
 	"agentbox/internal/web"
@@ -55,6 +56,9 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
+	priceCatalogOnce sync.Once
+	prices           *pricecatalog.Service
+
 	network     networkState
 	updates     updateState
 	storage     storageState
@@ -233,6 +237,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/proxies/export", s.admin(http.HandlerFunc(s.handleProxyExport)))
 	mux.Handle("PATCH /api/proxies/{id}", s.admin(http.HandlerFunc(s.handleProxyPatch)))
 	mux.Handle("DELETE /api/proxies/{id}", s.admin(http.HandlerFunc(s.handleProxyDelete)))
+	mux.Handle("GET /api/pricing", s.admin(http.HandlerFunc(s.handlePricing)))
+	mux.Handle("PUT /api/pricing", s.admin(http.HandlerFunc(s.handlePricingSave)))
+	mux.Handle("POST /api/pricing/check", s.admin(http.HandlerFunc(s.handlePricingCheck)))
+	mux.Handle("POST /api/pricing/apply", s.admin(http.HandlerFunc(s.handlePricingApply)))
+	mux.Handle("POST /api/pricing/restore", s.admin(http.HandlerFunc(s.handlePricingRestore)))
 	mux.Handle("GET /api/settings", s.admin(http.HandlerFunc(s.handleGetSettings)))
 	mux.Handle("PUT /api/settings", s.admin(http.HandlerFunc(s.handlePutSettings)))
 	mux.Handle("GET /api/storage", s.admin(http.HandlerFunc(s.handleStorage)))
@@ -332,6 +341,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.spawn(s.credSyncLoop)
 	s.spawn(s.idleReaper)
 	s.spawn(s.storageLoop)
+	s.spawn(s.pricingLoop)
 	s.spawn(s.termUsageLoop)
 	s.spawn(s.termWatchLoop)
 	s.spawn(s.tokenJanitor)

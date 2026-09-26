@@ -7,6 +7,7 @@ import { stopPolling } from "../data.js";
 import { stopPing } from "../ping.js";
 import { settingsState } from "../features/settings/state.js";
 import { initRouter } from "./router.js";
+import { initPricing } from "../pricing.js";
 import { initUpdates } from "../updates.js";
 /** App-owned feature lifetime; each init can be safely repeated. */
 export function initApplication() {
@@ -29,7 +30,7 @@ export function initApplication() {
     };
     const start = () => {
         disposers.splice(0).reverse().forEach(dispose => dispose());
-        disposers = [initChat(), initSettings(), initUpdates()];
+        disposers = [initChat(), initSettings(), initUpdates(), initPricing()];
     };
     bus.addEventListener("signed-in", start, { signal: lifetime.signal });
     bus.addEventListener("signed-out", stop, { signal: lifetime.signal });

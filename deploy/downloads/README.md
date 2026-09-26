@@ -15,12 +15,14 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.1 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.2 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
 
 首次安装会校验发布包、构建固定版本的 Claude/Codex 工作空间镜像、自动安装随包附带的五个平台 abox-link 客户端、生成管理员密码、安装 systemd 服务并设置开机自启。镜像构建需要访问基础镜像仓库、Debian 软件源和 npm，可能耗时数分钟。
+
+工作空间使用 Debian 12（Bookworm）和 Node.js 22，镜像包含彩色 Bash 提示符、彩色 `ls`、`ll` 别名及完整 Vim（`vi` / `vim`）。默认配置不依赖会话 home 中已有文件，新空间开箱即可使用；个人设置可写入 `~/.bashrc` / `~/.vimrc`。安装器从所选发布包构建这些配置，镜像标记为 `agentbox-agent:<发布版本>`；旧发布包仍使用旧配方。
 
 完成后访问 `http://服务器IP:8180`，使用终端显示的 `boxadmin` 和随机初始密码登录，在「系统设置 → 账号池」添加账号，再创建工作空间。默认监听 `0.0.0.0:8180`；远程访问需在防火墙/安全组放行 TCP 8180，公网长期使用请配置支持 WebSocket 的 HTTPS 反向代理。管理员密码首次创建后保存在数据库中，修改配置里的初始密码不会重置已有账号。
 
@@ -30,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.1
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.2
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -63,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.1_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.2_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.1_linux_arm64/install.sh --version v0.1.1
+sudo bash agentbox_v0.1.2_linux_arm64/install.sh --version v0.1.2
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：

@@ -43,6 +43,8 @@
   --code-head: #151a24;
   --code-line: #242b3a;
   --code-text: #e5c07b;
+  --syntax-keyword: #c5a0e5;
+  --syntax-function: #7ebee6;
 
   /* ---- 终端：两个主题下都保持深色。
    * xterm 里跑的是 agent TUI，它的 ANSI 配色按深底设计，翻成浅底会有大片
@@ -100,6 +102,8 @@
   --code-head: #e9e3d5;
   --code-line: #dcd5c5;
   --code-text: #8a5316;
+  --syntax-keyword: #80529a;
+  --syntax-function: #286b94;
 
   --scrim: rgba(36, 32, 24, 0.3);
   --backdrop: rgba(36, 32, 24, 0.32);

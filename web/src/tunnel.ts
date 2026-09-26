@@ -48,11 +48,21 @@ function renderSideItem() {
 }
 
 function renderChatNetwork() {
- const btn = $("chat-network");
- btn.classList.toggle("hidden", !st?.enabled);
- if (!st?.enabled) return;
- const current = st.workspaces?.find(w => w.session === S.current?.id);
- btn.textContent = !st.connected ? "内网：离线" : !st.transparent || !st.client_transparent ? "内网：兼容代理" : current?.ready ? "内网：可直接访问" : "内网：网络待就绪";
+  const btn = $("chat-network");
+  btn.classList.toggle("hidden", !st?.enabled);
+  if (!st?.enabled) return;
+  const current = st.workspaces?.find(w => w.session === S.current?.id);
+  const state = !st.connected ? "offline" : !st.transparent || !st.client_transparent ? "proxy" : current?.ready ? "ready" : "pending";
+  const states = {
+    offline: { label: "离线", hint: "本机客户端未连接，点击查看接入方式" },
+    proxy: { label: "代理模式", hint: "通过代理或端口映射访问内网，点击查看连接详情" },
+    ready: { label: "已连接", hint: "当前工作空间可直接访问已放行的内网目标，点击查看详情" },
+    pending: { label: "待就绪", hint: "客户端已连接，当前工作空间的网络尚未就绪，点击查看详情" },
+  };
+  btn.dataset.state = state;
+  $("chat-network-status").textContent = states[state].label;
+  btn.setAttribute("aria-label", `内网：${states[state].label}，查看连接详情`);
+  setTip(btn, states[state].hint);
 }
 $("chat-network").addEventListener("click", openTunnelView);
 $("tun-probe").addEventListener("click", async () => {

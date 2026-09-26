@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
 
 export async function smoke(page) {
@@ -470,6 +471,7 @@ export async function smoke(page) {
   sessions = [];
   await page.reload();
   await at('#/','#empty'); // Deleted or inaccessible workspace.
+  await pricingSmoke(page);
   const checksBeforeUser=updateChecks, readsBeforeUser=updateReads;
   me.role = 'user';
   await page.reload();

@@ -23,7 +23,8 @@ def inside():
     name = f'agentbox_v0.0.1_linux_{arch}'
     package = fixture / name; package.mkdir()
     for relative in ('agentbox', 'config.example.json', 'deploy/release.py', 'deploy/bootstrap.py',
-                     'scripts/build-image.sh', 'images/agent/versions.env'):
+                     'scripts/build-image.sh', 'images/agent/versions.env', 'images/agent/Dockerfile',
+                     'images/agent/tmux.conf', 'images/agent/bashrc', 'images/agent/vimrc'):
         target = package / relative; target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root / relative, target)
     (package / 'build.json').write_text(json.dumps(dict(program='agentbox', os='linux', arch=arch,
@@ -142,7 +143,8 @@ def main():
         with tempfile.TemporaryDirectory(prefix='agentbox-install-fixture-') as tmp:
             staging = Path(tmp)
             for relative in ('install.sh', 'uninstall.sh', 'config.example.json', 'deploy/bootstrap.py', 'deploy/release.py',
-                             'scripts/build-image.sh', 'images/agent/versions.env'):
+                             'scripts/build-image.sh', 'images/agent/versions.env', 'images/agent/Dockerfile',
+                             'images/agent/tmux.conf', 'images/agent/bashrc', 'images/agent/vimrc'):
                 dest = staging / relative; dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(root / relative, dest)
             shutil.copy2(args.binary, staging / 'agentbox')

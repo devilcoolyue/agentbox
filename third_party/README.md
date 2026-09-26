@@ -10,6 +10,7 @@ Agentbox 的项目许可证不替代第三方许可证。发布包携带本目�
 | @xterm/addon-fit | 0.11.0，npm / xtermjs/xterm.js | MIT | 无 |
 | @xterm/addon-webgl | 0.19.0，npm / xtermjs/xterm.js | MIT | 仅移除末尾 sourceMappingURL 注释 |
 | KaTeX | 0.16.9，npm / KaTeX/KaTeX | MIT；另附字体仓库 MIT 许可 | JS/CSS/20 个 woff2 与 npm 逐字节一致 |
+| Prism | 1.30.0，npm / PrismJS/prism | MIT | 按 vendor.json 中顺序拼接上游压缩核心与语言组件，添加许可头；未修改语法规则 |
 | claude-hud | 0.5.1，jarrodwatts/claude-hud @ 10979d16dce075b112b7564bead95c5f236d8a87 | MIT | package.json 和 54 个 dist 文件与上游一致；补入上游 LICENSE |
 
 来源 URL、每个文件的 SHA-256、许可文件位置见 `vendor.json`。更新资源后需重新核对来源、版本、修改及许可，不能仅修改哈希绕过校验。执行 `python3 scripts/verify-third-party.py` 验证。

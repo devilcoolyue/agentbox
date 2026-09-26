@@ -80,7 +80,11 @@ type usageRowView struct {
 
 // usageRateView 交代一行的钱是按价目表里的哪一条、哪一档算的。
 type usageRateView struct {
-	Snapshot bool `json:"snapshot,omitempty"`
+	PricingRevision string `json:"pricing_revision,omitempty"`
+	CatalogVersion  string `json:"catalog_version,omitempty"`
+	SourceURL       string `json:"source_url,omitempty"`
+	VerifiedAt      string `json:"verified_at,omitempty"`
+	Snapshot        bool   `json:"snapshot,omitempty"`
 	// Key 是命中的价目表键：模型 ID，或作为兜底的 agent 名。
 	Key string `json:"key"`
 	// Basis 区分这份单价的分量：
@@ -138,7 +142,7 @@ func (s *Server) rateFor(e store.UsageEvent) *usageRateView {
 		if e.Price.Source == "provider" {
 			basis = rateBasisReference
 		}
-		return &usageRateView{Key: e.Price.Key, Basis: basis, Snapshot: true, Long: long, Over: e.Price.LongContextOver, Input: rates.Input, Output: rates.Output, CacheRead: rates.CacheRead, CacheWrite: rates.CacheWrite}
+		return &usageRateView{PricingRevision: e.Price.PricingRevision, CatalogVersion: e.Price.CatalogVersion, SourceURL: e.Price.SourceURL, VerifiedAt: e.Price.VerifiedAt, Key: e.Price.Key, Basis: basis, Snapshot: true, Long: long, Over: e.Price.LongContextOver, Input: rates.Input, Output: rates.Output, CacheRead: rates.CacheRead, CacheWrite: rates.CacheWrite}
 	}
 
 	p, key, ok := s.cfg.PriceLookup(e.Agent, e.Model)

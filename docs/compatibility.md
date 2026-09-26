@@ -14,6 +14,7 @@ AGENTBOX_CLI_TEST_IMAGE=agentbox-agent:claude-2.1.280-codex-0.145.0 \
 | 组件 | 默认版本 | 验证范围 |
 | --- | --- | --- |
 | Node 基础镜像 | 22.23.2-bookworm-slim，OCI index SHA-256 见 versions.env | 包含 amd64/arm64；固定 digest |
+| 终端默认环境 | Debian 12、彩色 Bash / `ll`、完整 Vim | 系统配置不受空 home 挂载影响；真实浏览器验证方向键、退格、冒号命令、保存和 tmux 重连 |
 | Claude Code | 2.1.280 | Linux arm64 固定镜像无凭证版本命令；合成会话启动/文件/Git 验证通过 |
 | Codex CLI | 0.145.0 | Linux arm64 固定镜像版本命令；终端 rollout 解析按此版本公开结构及合成样本验证；未做本阶段在线推理 |
 | claude-hud | 0.5.1 | vendored 文件与上游提交逐字节比对 |

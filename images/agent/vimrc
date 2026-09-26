@@ -1,0 +1,14 @@
+" System defaults survive the per-session home bind mount. ~/.vimrc can override.
+" Otherwise Vim loads defaults.vim again when ~/.vimrc is absent, enabling mouse.
+let g:skip_defaults_vim = 1
+set nocompatible
+set backspace=indent,eol,start
+set showmode
+set showcmd
+set ruler
+" Keep selection in the browser; editing does not require terminal mouse reports.
+set mouse=
+if has('syntax')
+  syntax on
+endif
+filetype plugin indent on

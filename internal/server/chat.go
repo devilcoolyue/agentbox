@@ -403,6 +403,7 @@ func (r *chatRoom) runTurn(text, model, effort string, controls ...string) {
 		Unsupported: options.Unsupported, BudgetTokens: options.BudgetTokens,
 	}}, "user_message", "")
 	turnStart = time.Now()
+	tally = s.usageService().NewTally()
 
 	// 容器起来之后才可能产生消耗，之后无论回合正常收尾、报错还是被中断，已经
 	// 报上来的用量都要落库——钱花了就得记。一行都没记到说明这个 agent/版本报
@@ -660,6 +661,7 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	if err != nil {
 		return
 	}
+	titleTally := s.usageService().NewTally()
 	out, err := s.dock.ExecCapture(ctx, sess.ContainerID, cmd, env, titlePrompt(firstMsg))
 	if err != nil {
 		log.Printf("gen title %s: %v", r.sessID, err)
@@ -668,10 +670,11 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	raw, usage := adapter.ParseTitle(out)
 	// 先记账再管标题：钱已经花掉了，标题为空或被并发抢先都不改变这一点。
 	if len(usage) > 0 {
-		r.recordUsage(store.UsageEvent{
+		titleTally.Observe(store.UsageEvent{
 			User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: store.NewID(),
 			Agent: sess.Agent, AccountID: sess.AccountID, Kind: store.UsageKindTitle,
-		}, usage, time.Since(titleStart))
+		}, usage)
+		r.flushUsage(&titleTally, time.Since(titleStart))
 	}
 	title := sanitizeTitle(raw)
 	if title == "" {

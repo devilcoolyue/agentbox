@@ -230,6 +230,10 @@ export interface UsageEventRow {
 
 /** 一行消耗对应的单价（已按档位选好），美元 / 百万 token。 */
 export interface UsageRate extends TokenRates {
+  pricing_revision?: string;
+  catalog_version?: string;
+  source_url?: string;
+  verified_at?: string;
   /** true 表示入账时保存的价目表快照；缺省为旧数据的当前参考价。 */
   snapshot?: boolean;
   /** 命中的价目表键：模型 ID，或作为兜底的 agent 名 */
@@ -397,6 +401,41 @@ export interface Settings {
   pricing: Record<string, ModelPrice>;
   /** listen 改过但未重启 */
   restart_required: boolean;
+}
+
+/** Admin price catalog API. Candidate prices never become active implicitly. */
+export interface PriceOrigin {
+  version: string;
+  source_url: string;
+  verified_at?: string;
+}
+export interface PricingCatalogConfig { url: string; auto_check: boolean }
+export interface PricingRevision {
+  id: string; saved_at: number; reason: string;
+  prices: Record<string, ModelPrice>; managed: Record<string, PriceOrigin>;
+}
+export interface PricingState {
+  revision: string; prices: Record<string, ModelPrice>; managed: Record<string, PriceOrigin>;
+  catalog: PricingCatalogConfig; history: PricingRevision[];
+}
+export interface PriceCatalogEntry {
+  price: ModelPrice; source_url: string; verified_at?: string; notes?: string;
+}
+export interface PriceCatalog {
+  schema: number; version: string; published_at: string; entries: Record<string, PriceCatalogEntry>;
+}
+export interface PriceCatalogStatus {
+  catalog: PriceCatalog; revision: string; url: string; bundled: boolean;
+  checked_at: number; attempted_at: number; error: string;
+}
+export interface PriceChange {
+  model: string; kind: "new" | "update" | "custom" | "current" | "removed";
+  current?: ModelPrice; candidate?: PriceCatalogEntry;
+}
+export interface PricingView {
+  active: PricingState; candidate: PriceCatalogStatus; changes: PriceChange[];
+  warnings: { agent: string; model: string; kind: "unpriced" | "fallback"; key: string }[];
+  warnings_truncated: boolean; warning_error?: string;
 }
 
 /** 一档单价，美元 / 百万 token。0 表示这一桶免费。 */

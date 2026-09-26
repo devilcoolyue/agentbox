@@ -387,5 +387,21 @@
         "sha256": "dfd54f73581a71c9f763d3808bc18d86a904e1207a7629805e47f843e21c3f3b"
       }
     ]
+  },
+  {
+    "name": "prismjs",
+    "version": "1.30.0",
+    "source": "https://registry.npmjs.org/prismjs/-/prismjs-1.30.0.tgz",
+    "license": "MIT",
+    "modifications": "Concatenated upstream minified components in order: core, markup, css, clike, javascript, typescript, jsx, tsx, json, bash, python, go, rust, java, c, cpp, yaml, toml, sql, markdown, docker, ini, diff. Added license header.",
+    "license_files": [
+      "third_party/licenses/prismjs-LICENSE"
+    ],
+    "files": [
+      {
+        "path": "internal/web/static/vendor/prism.js",
+        "sha256": "dba03cb384cb7308d2a7e8072078d109f0fa06cb6c062731faeb646f7e3340f4"
+      }
+    ]
   }
 ]

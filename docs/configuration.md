@@ -49,6 +49,8 @@
 | `accounts` | 账号数组，可为空 | `id`、`type`、`label`、`credentials_dir`、`env`、`proxy_id`、`access`、`model_reasoning` |
 | `models` | 按 `claude` / `codex` 分组的数组 | 每项含 `id`、`label` 与可选 `reasoning` 能力，维护对话候选模型 |
 | `default_models` | 按 Agent 分组的模型 ID | 初始为 `claude-opus-5` / `gpt-5.5`，必须在对应候选列表中 |
+| `pricing_catalog` | `url` + `auto_check` | 独立 HTTPS 价格目录；默认不联网，自动检查只生成候选，详见 [维护流程](pricing-catalog.md) |
+| `pricing_managed` / `pricing_history` | 跟随目录元数据 / 最近 10 次价格版本 | 由价格管理接口维护，随配置原子持久化 |
 | `pricing` | 模型 ID / Agent 名到单价的映射 | provider 不报价时用于 token 折算；省略则无价格表 |
 
 `accounts[].type` 仅接受 `claude` 或 `codex`。账号 ID 与代理 ID 为 2–32 位小写字母、数字、`-`、`_`，首位为字母或数字，且在各自列表内唯一。账号引用的 `proxy_id` 必须存在于代理池。

@@ -66,8 +66,15 @@ func waitInterval(ctx context.Context, d time.Duration) bool {
 	}
 }
 func (s *Service) Price(ev store.UsageEvent) store.UsageEvent {
-	p, key, ok := s.cfg.PriceLookup(ev.Agent, ev.Model)
-	snapshot := &store.PriceSnapshot{Version: 1, Source: "unpriced"}
+	return priceWith(s.cfg.PricingPlan(), ev)
+}
+
+func priceWith(plan config.PricingState, ev store.UsageEvent) store.UsageEvent {
+	p, key, ok := config.LookupPrice(plan.Prices, ev.Agent, ev.Model)
+	snapshot := &store.PriceSnapshot{Version: 1, Source: "unpriced", PricingRevision: plan.Revision}
+	if origin, found := plan.Managed[key]; found {
+		snapshot.CatalogVersion, snapshot.SourceURL, snapshot.VerifiedAt = origin.Version, origin.SourceURL, origin.VerifiedAt
+	}
 	if ok {
 		snapshot.Key = key
 		snapshot.Standard = store.TokenRates{Input: p.Input, Output: p.Output, CacheRead: p.CacheRead, CacheWrite: p.CacheWrite}

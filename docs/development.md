@@ -184,6 +184,19 @@ PR 描述说明触发场景、行为变化和验证结果。涉及 Linux Docker�
 
 设置 `AGENTBOX_BACKUP_DOCKER_TEST=1` 额外验证完整备份命令及工作区恢复，需要可达的 Docker daemon（非默认 context 设置 `DOCKER_HOST`）。该验证只读取 Docker 挂载列表，不操作已有容器；CI 默认开启。
 
+## 真实终端回归
+
+`scripts/test-terminal.mjs` 将当前网页的 xterm 接到临时 Docker 容器，验证空 home 下的 Shell 默认配置、vi/Vim 的插入、退格、方向键、冒号命令、保存、窗口缩放与 tmux 重连。API 使用合成数据，不读取账号或调用模型；需要本机 Docker Unix socket 和 Playwright，结束后删除测试容器。
+
+```bash
+docker build -t agentbox-agent:terminal-test images/agent
+AGENTBOX_TERMINAL_IMAGE=agentbox-agent:terminal-test \
+  AGENTBOX_PLAYWRIGHT_MODULE=/tmp/agentbox-docs-browser/node_modules/playwright/index.mjs \
+  AGENTBOX_BROWSER_CHANNEL=chrome node scripts/test-terminal.mjs
+```
+
+Playwright 安装方法见下节，截图保存在 `output/playwright/`。这项测试使用真实 Docker PTY，但 API 和 WebSocket 桥接由测试脚本提供，不覆盖 Go 服务端鉴权或会话生命周期。
+
 ## 文档截图
 
 README 的截图由 [`scripts/capture-readme.mjs`](../scripts/capture-readme.mjs) 渲染当前 `internal/web/static/` 生成，使用本机临时 HTTP 服务和合成 API / WebSocket 数据，不连接生产、不调用模型、不需要 Docker。终端输出、对话、用户与费用均为演示数据，不是实际模型或性能测试结果。
