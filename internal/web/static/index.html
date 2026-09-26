@@ -304,6 +304,7 @@
               <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话">
                 <span id="thread-title" class="t">新对话</span>
               </button>
+              <button id="chat-network" type="button" class="btn btn-sm hidden">内网状态</button>
               <button id="btn-thread-new" class="thread-new" data-tip="在当前工作空间中新建对话，原对话保留在历史中" data-icon="plus">新建对话</button>
             </div>
             <!-- 对话通道连接状态：仅在非正常连接时出现，避免占用常态空间 -->
@@ -873,9 +874,11 @@
               </div>
               <div class="card">
                 <h3>内网反向隧道</h3>
-                <p class="card-desc">用户在自己电脑上运行 abox-link 客户端拨回服务器后，其工作空间容器可经
-                SOCKS5 代理与端口映射访问该用户本机可达的内网。放行规则由用户在本机侧声明（默认拒绝），
-                各用户隧道相互隔离。</p>
+                <p class="card-desc">本机 abox-link 连接后，工作空间可访问你放行的内网服务。两种模式都通过同一条隧道，按用户隔离，并由本机白名单控制。</p>
+                <p class="card-desc"><b>透明模式（默认，推荐）</b>：对话与终端直接使用内网 IP 或域名，无需 Agent 配置代理，支持 IPv4 / TCP。首次启用需先准备网络辅助镜像。</p>
+                <p class="card-desc"><b>兼容代理模式（保留，暂不推荐）</b>：取消下方勾选后使用。需要 Agent 显式使用 SOCKS 代理，不支持代理的程序需配置端口映射；依赖使用说明，容易漏用，仅供旧客户端或特殊场景。</p>
+                <label class="check"><input type="checkbox" id="set-tunnel-transparent"> 使用透明模式（默认，推荐）</label>
+                <div class="field-row"><label class="field"><span>网络控制监听地址</span><input id="set-network-bind" class="mono" placeholder="默认网桥地址:1082"></label><label class="field"><span>网络辅助镜像</span><input id="set-network-image" class="mono" placeholder="agentbox-network:latest"></label></div>
                 <label class="check"><input type="checkbox" id="set-tunnel-on"> 启用隧道 <span class="tag live">即时生效</span></label>
                 <div class="field-row">
                   <label class="field">
@@ -1126,6 +1129,24 @@
             </div>
           </div>
           <div id="tun-maps" class="tun-maps hidden"></div>
+          <div id="tun-modes" class="card tun-guide">
+            <h3>访问模式</h3>
+            <p id="tun-mode-current" role="status"></p>
+            <p><b>透明模式 · 默认推荐</b>：直接访问放行的内网 IP 或域名，对话与终端无需配置代理。支持 IPv4 / TCP。</p>
+            <p><b>兼容代理模式 · 暂不推荐</b>：保留给旧客户端或特殊场景；需要显式使用 SOCKS 代理，数据库等程序通常要另配端口映射，Agent 可能因漏用代理而连接失败。</p>
+            <p>两种模式都需要本机 abox-link 在线并配置白名单。旧客户端不会自动切换；请下载新版客户端，在本机开启透明模式并保存重连。</p>
+          </div>
+          <div id="tun-network" class="card hidden">
+            <h3>透明内网访问</h3>
+            <p id="tun-network-note" class="card-desc"></p>
+            <div id="tun-network-rules" class="mono"></div>
+            <div id="tun-network-workspaces"></div>
+            <div class="field-row">
+              <label class="field"><span>检查客户端到目标的 TCP 连接</span><input id="tun-probe-target" class="mono" placeholder="db.corp.local:5432"></label>
+              <button id="tun-probe" class="btn btn-sm" type="button">检查连接</button>
+            </div>
+            <p id="tun-probe-result" role="status"></p>
+          </div>
           <p id="tun-admin-online" class="field-hint hidden"></p>
 
           <div id="tun-off-admin" class="card tun-hint hidden">
@@ -1160,9 +1181,7 @@
                 </div>
               </li>
               <li>
-                <b>完成。</b>连接成功后此处状态变为「在线」，工作空间容器内自动注入
-                <code>$AGENTBOX_INTRANET_PROXY</code>（及 <code>$AGENTBOX_INTRANET_MAPS</code>），
-                智能体即可按需访问你本机可达的内网；断开后自动失效。
+                <b>完成。</b><span id="tun-guide-mode">连接后可访问本机放行的内网目标。</span>
               </li>
             </ol>
           </div>

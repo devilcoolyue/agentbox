@@ -62,6 +62,48 @@
 .msg.agent > :first-child { margin-top: 0; }
 .msg.agent > :last-child { margin-bottom: 0; }
 
+/* Answer actions and provenance: one quiet footer, always reachable on touch. */
+.answer-footer {
+  display: flex; align-items: flex-start; flex-wrap: wrap; gap: 0 8px;
+  margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.6;
+}
+.answer-footer[hidden] { display: none; }
+.answer-actions { display: flex; flex: none; }
+.answer-copy {
+  flex: none; width: 32px; height: 32px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 7px; background: transparent; color: var(--muted);
+  cursor: pointer; transition: background 140ms, color 140ms;
+}
+.answer-copy:hover { background: var(--panel-2); color: var(--text); }
+.answer-copy:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.answer-copy.copied { color: var(--green); }
+.answer-context {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 12px;
+  flex: 1; min-width: 0; padding: 6px 0;
+}
+.answer-context > * { min-width: 0; overflow-wrap: anywhere; }
+.answer-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.answer-model { color: var(--text); opacity: .72; }
+.answer-effort { white-space: nowrap; }
+.answer-cost { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.answer-cost.priced { color: var(--green); }
+.answer-details {
+  flex-basis: 100%; margin: 6px 0 4px 8px; padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--line); overflow-wrap: anywhere;
+}
+.answer-details[hidden] { display: none; }
+.answer-details > div + div { margin-top: 4px; }
+.answer-details .chip.result { font-size: inherit; padding: 0; opacity: 1; }
+@media (max-width: 760px) {
+  .answer-copy { width: 40px; height: 40px; }
+  .answer-context { padding: 9px 0; gap: 3px 10px; }
+  .answer-time { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .answer-copy { transition: none; }
+}
+
 /* ---- 轻量 Markdown ---- */
 .md-p { white-space: pre-wrap; margin: 0 0 10px; }
 .md-h { font-weight: 650; line-height: 1.45; margin: 16px 0 6px; }

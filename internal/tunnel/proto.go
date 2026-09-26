@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hashicorp/yamux"
 )
 
 // Stream request types. A type byte prefixes every stream so the wire format
@@ -131,25 +132,35 @@ func (w *WSConn) SetDeadline(t time.Time) error {
 func (w *WSConn) SetReadDeadline(t time.Time) error  { return w.c.SetReadDeadline(t) }
 func (w *WSConn) SetWriteDeadline(t time.Time) error { return w.c.SetWriteDeadline(t) }
 
-// Pipe copies bytes both ways between a and b until either side closes,
-// returning after both directions have finished. Each conn is closed exactly
-// once (the first copy to finish closes both, which unblocks the other).
+// Pipe preserves TCP and yamux half-closes so request protocols can signal
+// end-of-input before receiving a response. Errors abort both directions.
 func Pipe(a, b io.ReadWriteCloser) {
 	var once sync.Once
-	closeBoth := func() {
-		once.Do(func() {
-			a.Close()
-			b.Close()
-		})
+	closeBoth := func() { once.Do(func() { a.Close(); b.Close() }) }
+	defer closeBoth()
+	halfClose := func(c io.ReadWriteCloser) {
+		switch v := c.(type) {
+		case interface{ CloseWrite() error }:
+			_ = v.CloseWrite()
+		case *yamux.Stream:
+			_ = v.Close() // yamux Close sends FIN; reads remain usable.
+		default:
+			closeBoth()
+		}
 	}
-	var wg sync.WaitGroup
-	wg.Add(2)
-	cp := func(dst, src io.ReadWriteCloser) {
-		defer wg.Done()
-		io.Copy(dst, src)
+	done := make(chan struct{})
+	go func() {
+		if _, err := io.Copy(b, a); err != nil {
+			closeBoth()
+		} else {
+			halfClose(b)
+		}
+		close(done)
+	}()
+	if _, err := io.Copy(a, b); err != nil {
 		closeBoth()
+	} else {
+		halfClose(a)
 	}
-	go cp(a, b)
-	go cp(b, a)
-	wg.Wait()
+	<-done
 }

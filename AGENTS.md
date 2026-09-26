@@ -528,6 +528,12 @@ data/
 
 ### 内网隧道
 
+- `tunnel.transparent` 未指定时默认 true，JSON 必须保留显式 false（不能 omitempty），保证兼容模式保存后不会重载成透明模式；客户端同样默认 true，CLI 用 `--transparent=false` 选择兼容。总开关 disabled 时不启动辅助网络。
+- `tunnel.transparent` 启用工作空间透明 IPv4/TCP：`internal/netaccess` 管理规则、虚拟 DNS 与辅助进程，`internal/server/netaccess.go` 管理按用户策略和按空间认证的控制端口，`internal/dockerx/netaccess.go` 管理无用户目录挂载的网络辅助容器。仅辅助容器有 NET_ADMIN，Agent 仍为 UID 1000。
+- 客户端 `--transparent` / 面板开关通过能力协商上报规范化放行规则。透明授权仍由客户端白名单最终检查；账号 HTTP 桥接必须按实际工作空间归属选择隧道，不能仅按共享账号分流。
+- `data/users/<user>/network.json` 保留历史捕获目标与不复用的域名虚拟 IP。掉线、规则撤销、服务重启不能删除捕获规则后静默直连。透明模式退出前停止空间，让网络命名空间重建；不要热清空规则。
+- 透明模式不依赖说明文件或专用代理 env；旧客户端仍保留兼容代理。配置、部署和验收见 `docs/architecture/transparent-network.md`、`docs/networking.md`。真实合成容器测试用 `scripts/test-transparent-network.py`。
+
 - 管理端开启 `tunnel.enabled` 后，`applyTunnel` 热启动/停止/重绑 SOCKS5 代理；绑定失败只记错误，不打垮主服务。
 - abox-link 通过 `GET /api/tunnel` 拨入，服务端以 yamux client 维持连接；每个用户一条隧道、一份稳定 SOCKS secret。
 - 容器不会得到全局 `HTTP_PROXY`；只在 exec env 注入 `AGENTBOX_INTRANET_PROXY` / `AGENTBOX_INTRANET_MAPS`，由 agent 按需使用。

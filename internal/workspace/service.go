@@ -34,6 +34,7 @@ type Runtime interface {
 // Service owns workspace lifecycle, activity and per-session serialization.
 // Account resolution/synchronization are injected until credentials extraction.
 type Service struct {
+	network         func(context.Context, store.Session) error
 	cfg             *config.Config
 	store           Store
 	dock            Runtime
@@ -145,6 +146,11 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 		}
 	}
 	if cur.Status == store.StatusRunning && s.dock.RunningWithMount(ctx, cur.ContainerID, dockerx.SharedMount) {
+		if s.network != nil {
+			if err := s.network(ctx, cur); err != nil {
+				return store.Session{}, err
+			}
+		}
 		s.activity.Touch(cur.ID)
 		return cur, nil
 	}
@@ -191,11 +197,20 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 		return store.Session{}, err
 	}
 	s.activity.Touch(cur.ID)
-	return s.store.Update(cur.ID, func(x *store.Session) {
+	cur, err = s.store.Update(cur.ID, func(x *store.Session) {
 		x.ContainerID = cid
 		x.Status = store.StatusRunning
-		x.StopReason = "" // 又跑起来了，清掉上一次的休眠标记
+		x.StopReason = ""
 	})
+	if err != nil {
+		return store.Session{}, err
+	}
+	if s.network != nil {
+		if err := s.network(ctx, cur); err != nil {
+			return store.Session{}, err
+		}
+	}
+	return cur, nil
 }
 
 func (s *Service) Create(sess store.Session) error {
@@ -303,4 +318,28 @@ func (s *Service) Reap(ctx context.Context, d time.Duration) {
 
 func SessionDir(dataDir string, sess store.Session) string {
 	return filepath.Join(dataDir, "users", sess.User, "sessions", sess.ID)
+}
+
+// SetNetworkHook must be called before the service is shared with callers.
+func (s *Service) SetNetworkHook(hook func(context.Context, store.Session) error) { s.network = hook }
+
+// RefreshNetwork serializes reconciliation with start, stop and deletion.
+func (s *Service) RefreshNetwork(ctx context.Context, id string) error {
+	lock := s.lock(id)
+	if err := lock.acquire(ctx); err != nil {
+		return err
+	}
+	defer lock.release()
+	sess, ok := s.store.Get(id)
+	if !ok || sess.Status != store.StatusRunning || s.network == nil {
+		return nil
+	}
+	running, err := s.dock.Running(ctx, sess.ContainerID)
+	if err != nil {
+		return err
+	}
+	if !running {
+		return nil
+	}
+	return s.network(ctx, sess)
 }

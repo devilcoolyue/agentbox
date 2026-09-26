@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { chatFooterSmoke } from './test-chat-footer.mjs';
 
 export async function smoke(page) {
  page.setDefaultTimeout(15000);
@@ -28,11 +29,12 @@ export async function smoke(page) {
  const accounts = []; let accountCreates = 0, failOAuthOnce = true, oauthFinishes = 0, keyWrites = 0;
  let settings = { listen:'127.0.0.1:8180', agent_image:'fixture', permission_mode:'bypassPermissions', max_upload_mb:10,
   idle_timeout_min:30, timezone:'UTC', container:{memory_mb:512,cpus:1,pids_limit:128,network:'none'},
-  resources:{max_running:2,max_running_per_user:1,min_free_bytes:0},models:{claude:[],codex:[]}, default_models:{claude:'fixture',codex:'fixture'},
+  resources:{max_running:2,max_running_per_user:1,min_free_bytes:0},models:{claude:[],codex:[{id:'fixture',label:'Fixture',reasoning:{support:'supported',control:'effort',levels:['low','high','xhigh']}},{id:'fixture-lite',label:'Fixture Lite',reasoning:{support:'supported',control:'effort',levels:['low','high']}},{id:'fixture-none',label:'No adjustment',reasoning:{support:'unsupported'}},{id:'fixture-custom',label:'Custom'}]}, default_models:{claude:'fixture',codex:'fixture'},
   terminal_tips:{tips:['fixture'],interval_sec:4,animation:'scroll'},tunnel:{enabled:false},proxy_bridge:{bind:'127.0.0.1:1081'},pricing:{} };
  const me = {user:'fixture',role:'admin',timezone:'UTC',models:{claude:[],codex:[]},quota:{metered:false}};
  let sessions = [{id:'fixture-space',name:'Fixture workspace',agent:'codex',account_id:'fixture',account_label:'Fixture',status:'stopped',default_model:'fixture'}];
- await page.routeWebSocket('**/api/sessions/*/chat?*', () => {});
+ const chatMessages = []; let chatSocket, historyEntries = [], historyCosts = {};
+ await page.routeWebSocket('**/api/sessions/*/chat?*', ws => { chatSocket=ws; ws.onMessage(data => chatMessages.push(JSON.parse(data))); });
  const terminalInput = []; let terminalSocket;
  await page.routeWebSocket('**/api/sessions/*/term?*', ws => {
   terminalSocket = ws;
@@ -49,12 +51,17 @@ export async function smoke(page) {
    release={...release,...nextRelease,checked_at:Date.now(),attempted_at:Date.now()};body=release;
   }
   else if(path === '/api/system') body={version:'v0.1.0',go_version:'go1.26.6',docker_version:'28.5.2',schema_version:2,sessions_running:0,sessions_total:1,users:1,accounts:0,listen:'127.0.0.1:8180',data_dir:'/fixture/data',config_path:'/fixture/config.json',started_at:Date.now()};
+  else if(path === '/api/tunnel/status') body={enabled:true,transparent:true,client_transparent:true,connected:true,proxy_up:true,since:Date.now()-10000,remote:'192.0.2.10:1234',maps:[],rules:['db.corp:5432','10.20.0.0/16'],workspaces:[{session:'fixture-space',name:'Fixture workspace',ready:true}]};
+  else if(path === '/api/tunnel/probe') { assert.equal(route.request().postDataJSON().target,'db.corp:5432'); body={ok:true,elapsed_ms:12}; }
   else if(path === '/api/sessions') body=sessions;
+  else if(path.endsWith('/models') && path.startsWith('/api/sessions/')) body={models:settings.models.codex,default_reasoning:{support:'unknown',control:'effort'},discovery:'available'};
   else if(path === '/api/accounts') {
    if(route.request().method()==='POST') {
     const data=route.request().postDataJSON(); accountCreates++;
     body={...data,cred_status:'missing',sessions:0};accounts.push(body);
    } else body=accounts;
+  } else if(path.startsWith('/api/accounts/') && route.request().method()==='PATCH') {
+   const id=path.split('/')[3], account=accounts.find(a=>a.id===id);Object.assign(account,route.request().postDataJSON());body=account;
   } else if(path.endsWith('/oauth/start')) {
    body={url:'https://auth.example.invalid/authorize?state=fixture'};
   } else if(path.endsWith('/oauth/finish')) {
@@ -66,7 +73,7 @@ export async function smoke(page) {
    keyWrites++; accounts.find(a=>a.id===path.split('/')[3]).auth_mode='apikey';
    accounts.find(a=>a.id===path.split('/')[3]).cred_status='ok';body={ok:true};
   } else if(['/api/proxies','/api/users','/api/tunnel/clients'].includes(path) || path.endsWith('/files')) body=[];
-  else if(path.endsWith('/history')) body={entries:[],thread:null};
+  else if(path.endsWith('/history')) body={entries:historyEntries,thread:null,costs:historyCosts};
   else if(path === '/api/settings') {
    if(route.request().method()==='PUT'){settingsWrites++;settings={...settings,...route.request().postDataJSON()};}
    body=settings;
@@ -239,6 +246,16 @@ export async function smoke(page) {
    await page.locator('#dlg-auth').waitFor({state:'hidden'});
   }
   assert.equal(accountCreates,3);assert.equal(keyWrites,2);
+  const acctRow = page.locator('.acct-row').filter({hasText:'codex-key-fixture'});
+  await acctRow.getByRole('button',{name:'模型能力',exact:true}).click();
+  await page.locator('#ask-input-field').fill('fixture');await page.locator('#ask-input-ok').click();
+  const overrideDialog=page.locator('dialog[open]').filter({has:page.locator('select[name="support"]')});
+  await overrideDialog.locator('label').filter({hasText:'支持范围'}).getByRole('combobox').click();
+  await overrideDialog.getByRole('option',{name:'不支持调整',exact:true}).click();
+  await overrideDialog.getByRole('button',{name:'保存',exact:true}).click();
+  await page.waitForTimeout(150);
+  assert.equal(accounts.find(a=>a.id==='codex-key-fixture').model_reasoning.fixture.support,'unsupported');
+
   await page.setViewportSize({width:390,height:844});
   await page.locator('#btn-acct-add').click();
   await page.locator('#acct-form label.agent-codex').click();
@@ -296,16 +313,84 @@ export async function smoke(page) {
   await at('#/settings/container','#sec-container');
   await page.locator('#set-nav [data-sec="models"]').click();
   await at('#/settings/models','#sec-models');
+  const capabilityRow = page.locator('.model-row').filter({hasText:'Fixture Lite'});
+  await capabilityRow.getByRole('button',{name:'推理强度 · low / high'}).click();
+  const capabilityDialog = page.locator('dialog[open]').filter({hasText:'模型能力'});
+  await capabilityDialog.locator('input[value="low"]').uncheck();
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await capabilityDialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true,'capability dialog overflows');
+  await mkdir(resolve('output/playwright'),{recursive:true});
+  await page.screenshot({path:resolve('output/playwright/reasoning-editor-mobile.png')});
+  await capabilityDialog.getByRole('button',{name:'保存',exact:true}).click();
+  await capabilityRow.getByRole('button',{name:'推理强度 · high',exact:true}).waitFor();
+  assert.deepEqual(settings.models.codex.find(m=>m.id==='fixture-lite').reasoning.levels,['high']);
+  await capabilityRow.getByRole('button',{name:'推理强度 · high',exact:true}).click();
+  await capabilityDialog.locator('input[value="low"]').check();
+  await capabilityDialog.getByRole('button',{name:'保存',exact:true}).click();
+  await capabilityRow.getByRole('button',{name:'推理强度 · low / high'}).waitFor();
+  await page.setViewportSize({width:1280,height:900});
   await page.goBack();
   await at('#/settings/container','#sec-container');
   await page.goForward();
   await at('#/settings/models','#sec-models');
   await open('open-tunnel');
   await at('#/tunnel','#view-tunnel');
+  await page.locator('#tun-network').waitFor({state:'visible'});
+  assert.match(await page.locator('#tun-modes').innerText(),/默认推荐/);
+  assert.match(await page.locator('#tun-modes').innerText(),/暂不推荐/);
+  assert.match(await page.locator('#tun-mode-current').innerText(),/当前连接：透明模式/);
+  assert.match(await page.locator('#tun-network-rules').innerText(),/db.corp:5432/);
+  assert.match(await page.locator('#tun-network-workspaces').innerText(),/网络就绪/);
+  await page.locator('#tun-probe-target').fill('db.corp:5432');
+  await page.locator('#tun-probe').click();
+  await page.locator('#tun-probe-result').filter({hasText:'12 ms'}).waitFor();
+  await mkdir(resolve('output/playwright'),{recursive:true});
+  await page.screenshot({path:resolve('output/playwright/transparent-network.png')});
   await page.reload();
   await at('#/tunnel','#view-tunnel');
   await page.locator('[data-session-id="fixture-space"]').click();
   await at('#/sessions/fixture-space/chat','#tab-chat');
+  // Model capabilities: compatible choices survive, incompatible/unknown ones reset.
+  await page.setViewportSize({width:1280,height:900});
+  const pick = async (kind, label) => {
+   await page.locator('#btn-pick').click();
+   await page.locator('#pick-menu .pick-row').filter({hasText:kind}).hover();
+   await page.locator('#pick-fly .pick-opt').filter({hasText:label}).click();
+  };
+  await page.locator('#btn-pick').filter({hasText:'Fixture'}).waitFor();
+  await pick('推理强度','极高');
+  await pick('模型','Fixture Lite');
+  assert.match(await page.locator('#btn-pick').innerText(),/跟随 CLI 默认/);
+  await pick('推理强度','高');
+  await page.locator('#chat-input').fill('synthetic reasoning message');
+  await page.locator('#chat-send').click();
+  await page.waitForTimeout(100);
+  assert.equal(chatMessages.at(-1).effort,'high');
+  assert.equal(chatMessages.at(-1).effort_control,'effort');
+  assert.equal(chatMessages.at(-1).model,'fixture-lite');
+  await pick('模型','No adjustment');
+  assert.match(await page.locator('#btn-pick').innerText(),/不支持调整/);
+  await pick('模型','Custom');
+  await page.locator('#btn-pick').click();
+  await page.locator('#pick-menu .pick-row').filter({hasText:'推理强度'}).hover();
+  assert.equal(await page.locator('#pick-fly .pick-opt').count(),2,'unknown model must require manual opt-in');
+  await page.locator('#pick-fly .pick-opt').filter({hasText:'手动指定'}).click();
+  await page.locator('#pick-menu .pick-opt').filter({hasText:'极高'}).click();
+  await page.reload();
+  await page.locator('#btn-pick').filter({hasText:'极高'}).waitFor();
+  await page.evaluate(()=>localStorage.setItem('agentbox_pick_fixture-space',JSON.stringify({model:'fixture-lite',effort:'xhigh'})));
+  await page.reload();
+  await page.locator('#btn-pick').filter({hasText:'Fixture Lite'}).waitFor();
+  assert.match(await page.locator('#btn-pick').innerText(),/跟随 CLI 默认/,'v1 persisted choice must migrate safely');
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('#btn-pick').click();
+  await page.locator('#pick-menu .pick-row').filter({hasText:'推理强度'}).click();
+  assert.equal(await page.locator('#pick-menu .pick-opt').count(),3);
+  await mkdir(resolve('output/playwright'),{recursive:true});
+  await page.screenshot({path:resolve('output/playwright/reasoning-mobile.png')});
+  await page.locator('#pick-menu .pick-opt').filter({hasText:'轻度'}).click();
+  await page.setViewportSize({width:1280,height:900});
+  await chatFooterSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg))});
   await page.locator('.tab[data-tab="files"]').click();
   await at('#/sessions/fixture-space/files','#tab-files');
   await page.reload();
@@ -388,7 +473,7 @@ export async function smoke(page) {
   assert.equal(updateChecks,checksBeforeUser,'ordinary user initiated update check');
   assert.equal(updateReads,readsBeforeUser,'ordinary user fetched update metadata');
   assert.deepEqual(errors,[]);
-  console.log('Browser: update status/cache/permissions, responsive update popover, unified account creation, Codex OAuth retry, Claude/Codex API keys, mobile account form, login, capacity save, repeated init, usage sync, monitor cleanup, socket generation, mobile re-login, URL refresh/history/deep links/permissions passed');
+  console.log('Browser: model capabilities/editor/account overrides/safe selection migration, update status/cache/permissions, responsive update popover, unified account creation, Codex OAuth retry, Claude/Codex API keys, mobile account form, login, capacity save, repeated init, usage sync, monitor cleanup, socket generation, mobile re-login, URL refresh/history/deep links/permissions passed');
  } finally { await page.unroute('**/api/**'); server.closeAllConnections(); await new Promise(r=>server.close(r)); }
 }
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

@@ -102,3 +102,26 @@ func TestLoadCorruptConfigReportsClearly(t *testing.T) {
 		t.Fatalf("want a corruption error, got %v", err)
 	}
 }
+
+func TestDefaultTransparentAndSavedCompatibility(t *testing.T) {
+	t.Setenv("ABOX_LINK_HOME", t.TempDir())
+	cfg, err := LoadConfig()
+	if err != nil || !cfg.Transparent {
+		t.Fatalf("new config: %+v %v", cfg, err)
+	}
+	if err = os.WriteFile(configPath(), []byte(`{"server":"https://fixture.invalid","allow":["db.corp:443"]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = LoadConfig()
+	if err != nil || !cfg.Transparent {
+		t.Fatal("missing mode should use new default", err)
+	}
+	cfg.Transparent = false
+	if err = SaveConfig(cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = LoadConfig()
+	if err != nil || cfg.Transparent {
+		t.Fatal("explicit compatibility selection lost", err)
+	}
+}

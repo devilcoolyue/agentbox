@@ -45,13 +45,14 @@ var (
 // official API calls inside the container as well as the server's own OAuth /
 // key-test calls — to one entry of Proxies. Empty means direct.
 type Account struct {
-	ID             string            `json:"id"`
-	Type           string            `json:"type"` // "claude" | "codex"
-	Label          string            `json:"label"`
-	CredentialsDir string            `json:"credentials_dir,omitempty"`
-	Env            map[string]string `json:"env,omitempty"`
-	ProxyID        string            `json:"proxy_id,omitempty"`
-	Access         *AccountAccess    `json:"access,omitempty"`
+	ID             string                         `json:"id"`
+	Type           string                         `json:"type"` // "claude" | "codex"
+	Label          string                         `json:"label"`
+	CredentialsDir string                         `json:"credentials_dir,omitempty"`
+	Env            map[string]string              `json:"env,omitempty"`
+	ProxyID        string                         `json:"proxy_id,omitempty"`
+	Access         *AccountAccess                 `json:"access,omitempty"`
+	ModelReasoning map[string]ReasoningCapability `json:"model_reasoning,omitempty"`
 
 	// credentials_dir 在配置文件里的原文（可能是相对路径），写回时保留原样。
 	rawCredDir string
@@ -124,9 +125,12 @@ type ContainerLimits struct {
 // from containers, e.g. the bridge gateway); ProxyHost is what gets advertised
 // to containers in the injected proxy URL (defaults to ProxyBind's host).
 type TunnelConfig struct {
-	Enabled   bool   `json:"enabled"`
-	ProxyBind string `json:"proxy_bind,omitempty"` // host:port the SOCKS5 proxy binds, default defaultTunnelBind
-	ProxyHost string `json:"proxy_host,omitempty"` // host containers use to reach it, default = host of ProxyBind
+	Transparent  bool   `json:"transparent"`
+	NetworkBind  string `json:"network_bind,omitempty"`
+	NetworkImage string `json:"network_image,omitempty"`
+	Enabled      bool   `json:"enabled"`
+	ProxyBind    string `json:"proxy_bind,omitempty"` // host:port the SOCKS5 proxy binds, default defaultTunnelBind
+	ProxyHost    string `json:"proxy_host,omitempty"` // host containers use to reach it, default = host of ProxyBind
 }
 
 // defaultTunnelBind is the docker bridge gateway — the one host address every
@@ -159,8 +163,9 @@ const defaultProxyBridgeBind = "172.17.0.1:1081"
 // ModelOption is one selectable model in the chat composer. The list is
 // editable in 系统设置 so new models don't require a rebuild.
 type ModelOption struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
+	ID        string               `json:"id"`
+	Label     string               `json:"label"`
+	Reasoning *ReasoningCapability `json:"reasoning,omitempty"`
 }
 
 // TokenRates is one tier of per-million-token prices in USD. The four buckets
@@ -343,6 +348,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg := &Config{
+		Tunnel:         TunnelConfig{Transparent: true},
 		Listen:         "127.0.0.1:8080",
 		AgentImage:     "agentbox-agent:latest",
 		PermissionMode: "bypassPermissions",
@@ -413,7 +419,7 @@ func Load(path string) (*Config, error) {
 		cfg.CacheDir = resolve(cfg.CacheDir)
 	}
 
-	if cfg.Tunnel.Enabled && cfg.Tunnel.ProxyBind == "" {
+	if (cfg.Tunnel.Enabled || cfg.Tunnel.Transparent) && cfg.Tunnel.ProxyBind == "" {
 		cfg.Tunnel.ProxyBind = defaultTunnelBind
 	}
 	if cfg.ProxyBridge.Bind == "" {
@@ -472,7 +478,20 @@ func (c *Config) validateLocked() error {
 	if c.Container.Network == "" {
 		return fmt.Errorf("container.network must not be empty")
 	}
-	if c.Tunnel.Enabled {
+	if c.Tunnel.Enabled && c.Tunnel.Transparent {
+		if c.Tunnel.ProxyBind == "" {
+			return fmt.Errorf("tunnel.proxy_bind is required for transparent networking")
+		}
+		if c.Tunnel.NetworkBind != "" {
+			if _, _, err := net.SplitHostPort(c.Tunnel.NetworkBind); err != nil {
+				return fmt.Errorf("invalid tunnel.network_bind: %w", err)
+			}
+		}
+		if c.Container.Network == "host" || c.Container.Network == "none" || strings.HasPrefix(c.Container.Network, "container:") {
+			return fmt.Errorf("transparent networking requires an isolated Docker bridge network")
+		}
+	}
+	if c.Tunnel.Enabled || c.Tunnel.Transparent {
 		host, _, err := net.SplitHostPort(c.Tunnel.ProxyBind)
 		if err != nil {
 			return fmt.Errorf("tunnel.proxy_bind %q invalid (want host:port): %w", c.Tunnel.ProxyBind, err)
@@ -529,6 +548,14 @@ func (c *Config) validateLocked() error {
 		if a.Type != AgentClaude && a.Type != AgentCodex {
 			return fmt.Errorf("account %q: type must be claude or codex", a.ID)
 		}
+		for model, capability := range a.ModelReasoning {
+			if !modelIDRe.MatchString(model) {
+				return fmt.Errorf("account %s: invalid model %q", a.ID, model)
+			}
+			if err := ValidateReasoning(a.Type, &capability); err != nil {
+				return fmt.Errorf("account %s model %s: %w", a.ID, model, err)
+			}
+		}
 		if a.Label == "" {
 			a.Label = a.ID
 		}
@@ -548,7 +575,15 @@ func (c *Config) validateLocked() error {
 		if agent != AgentClaude && agent != AgentCodex {
 			return fmt.Errorf("models: unknown agent type %q", agent)
 		}
+		modelSeen := map[string]bool{}
 		for _, o := range opts {
+			if modelSeen[o.ID] {
+				return fmt.Errorf("duplicate model %q", o.ID)
+			}
+			modelSeen[o.ID] = true
+			if err := ValidateReasoning(agent, o.Reasoning); err != nil {
+				return fmt.Errorf("models.%s.%s: %w", agent, o.ID, err)
+			}
 			if o.Label == "" || !modelIDRe.MatchString(o.ID) {
 				return fmt.Errorf("models.%s: entry %q/%q invalid", agent, o.Label, o.ID)
 			}
@@ -573,13 +608,14 @@ func (c *Config) validateLocked() error {
 // persist* mirror the JSON schema of the config file so writes keep the
 // original key order and the original (possibly relative) path spellings.
 type persistAccount struct {
-	ID             string            `json:"id"`
-	Type           string            `json:"type"`
-	Label          string            `json:"label"`
-	CredentialsDir string            `json:"credentials_dir,omitempty"`
-	Env            map[string]string `json:"env,omitempty"`
-	ProxyID        string            `json:"proxy_id,omitempty"`
-	Access         *AccountAccess    `json:"access,omitempty"`
+	ID             string                         `json:"id"`
+	Type           string                         `json:"type"`
+	Label          string                         `json:"label"`
+	CredentialsDir string                         `json:"credentials_dir,omitempty"`
+	Env            map[string]string              `json:"env,omitempty"`
+	ProxyID        string                         `json:"proxy_id,omitempty"`
+	Access         *AccountAccess                 `json:"access,omitempty"`
+	ModelReasoning map[string]ReasoningCapability `json:"model_reasoning,omitempty"`
 }
 
 type persistConfig struct {
@@ -635,7 +671,7 @@ func (c *Config) saveLocked() error {
 		}
 		out.Accounts = append(out.Accounts, persistAccount{
 			ID: a.ID, Type: a.Type, Label: a.Label, CredentialsDir: dir,
-			Env: a.Env, ProxyID: a.ProxyID, Access: a.Access,
+			Env: a.Env, ProxyID: a.ProxyID, Access: a.Access, ModelReasoning: a.ModelReasoning,
 		})
 	}
 	raw, err := json.MarshalIndent(out, "", "  ")
@@ -749,6 +785,13 @@ func (c *Config) GetTunnel() TunnelConfig {
 			t.ProxyHost = host
 		}
 	}
+	if t.NetworkBind == "" {
+		host, _, _ := net.SplitHostPort(t.ProxyBind)
+		t.NetworkBind = net.JoinHostPort(host, "1082")
+	}
+	if t.NetworkImage == "" {
+		t.NetworkImage = "agentbox-network:latest"
+	}
 	return t
 }
 
@@ -831,7 +874,7 @@ func (c *Config) GetModels() map[string][]ModelOption {
 	defer c.mu.RUnlock()
 	out := make(map[string][]ModelOption, len(c.Models))
 	for k, v := range c.Models {
-		out[k] = append([]ModelOption(nil), v...)
+		out[k] = cloneModelOptions(v)
 	}
 	return out
 }
@@ -1008,7 +1051,7 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 			w.Container = *p.Container
 		}
 		if p.Models != nil {
-			w.Models = p.Models
+			w.Models = cloneModels(p.Models)
 		}
 		if p.DefaultModels != nil {
 			w.DefaultModels = w.defaultModels()
@@ -1018,7 +1061,7 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.Tunnel != nil {
 			w.Tunnel = *p.Tunnel
-			if w.Tunnel.Enabled && w.Tunnel.ProxyBind == "" {
+			if (w.Tunnel.Enabled || w.Tunnel.Transparent) && w.Tunnel.ProxyBind == "" {
 				w.Tunnel.ProxyBind = defaultTunnelBind // same default as Load
 			}
 		}
@@ -1066,10 +1109,11 @@ func (c *Config) AddAccount(a Account) error {
 // (the relay helpers only ever rewrite Env, the edit dialog only Label/ProxyID)
 // and passing the current value back in for the rest invites clobbering.
 type AccountPatch struct {
-	Label   *string
-	Env     *map[string]string
-	ProxyID *string
-	Access  *AccountAccess
+	Label          *string
+	Env            *map[string]string
+	ProxyID        *string
+	Access         *AccountAccess
+	ModelReasoning *map[string]ReasoningCapability
 }
 
 func (c *Config) UpdateAccount(id string, p AccountPatch) (Account, error) {
@@ -1087,6 +1131,9 @@ func (c *Config) UpdateAccount(id string, p AccountPatch) (Account, error) {
 			}
 			if p.ProxyID != nil {
 				w.Accounts[i].ProxyID = *p.ProxyID
+			}
+			if p.ModelReasoning != nil {
+				w.Accounts[i].ModelReasoning = cloneReasoningMap(*p.ModelReasoning)
 			}
 			if p.Access != nil {
 				w.Accounts[i].Access = cloneAccess(p.Access)

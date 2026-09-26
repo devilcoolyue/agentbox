@@ -258,6 +258,11 @@ func envKey(kv string) string {
 func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct config.Account, workspaceDir, homeDir, sharedDir string) (string, error) {
 	if sess.ContainerID != "" {
 		info, err := m.cli.ContainerInspect(ctx, sess.ContainerID)
+		if client.IsErrNotFound(err) {
+			if err := m.removeNetwork(ctx, sess.ContainerID); err != nil {
+				return "", err
+			}
+		}
 		if err == nil {
 			hasShared := false
 			for _, mnt := range info.Mounts {
@@ -289,6 +294,9 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 			// Unstartable leftover, a pre-/shared container, or a stale image:
 			// replace it (workspace/home live on the host, so recreation loses
 			// nothing).
+			if err := m.removeNetwork(ctx, sess.ContainerID); err != nil {
+				return "", err
+			}
 			_ = m.cli.ContainerRemove(ctx, sess.ContainerID, container.RemoveOptions{Force: true})
 		}
 	}
@@ -349,13 +357,16 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 func (m *Manager) Stop(ctx context.Context, containerID string) error {
 	timeout := 10
 	err := m.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
-	if client.IsErrNotFound(err) {
-		return nil
+	if err == nil || client.IsErrNotFound(err) {
+		return m.removeNetwork(ctx, containerID)
 	}
 	return err
 }
 
 func (m *Manager) Remove(ctx context.Context, containerID string) error {
+	if err := m.removeNetwork(ctx, containerID); err != nil {
+		return err
+	}
 	err := m.cli.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true, RemoveVolumes: true})
 	if client.IsErrNotFound(err) {
 		return nil

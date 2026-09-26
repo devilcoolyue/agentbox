@@ -111,6 +111,7 @@ func (p *Panel) state() map[string]any {
 	cfg := p.Config()
 	return map[string]any{
 		"paired":       cfg.Paired(),
+		"transparent":  cfg.Transparent,
 		"server":       cfg.Server,
 		"user":         cfg.User,
 		"insecure":     cfg.Insecure,
@@ -189,6 +190,7 @@ func (p *Panel) handleUnpair(w http.ResponseWriter, r *http.Request) {
 
 func (p *Panel) handleConfig(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		Transparent bool     `json:"transparent"`
 		Allow       []string `json:"allow"`
 		Maps        []string `json:"maps"`
 		AutoConnect bool     `json:"auto_connect"`
@@ -200,6 +202,7 @@ func (p *Panel) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 	p.mu.Lock()
 	cfg := p.cfg
+	cfg.Transparent = req.Transparent
 	cfg.Allow = cleanList(req.Allow)
 	cfg.Maps = cleanList(req.Maps)
 	cfg.AutoConnect = req.AutoConnect

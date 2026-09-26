@@ -57,6 +57,7 @@ func cloneAccess(a *AccountAccess) *AccountAccess {
 }
 
 func cloneAccount(a Account) Account {
+	a.ModelReasoning = cloneReasoningMap(a.ModelReasoning)
 	a.Access = cloneAccess(a.Access)
 	a.Env = maps.Clone(a.Env)
 	return a

@@ -99,11 +99,11 @@
           <span class="head-line"></span>
         </div>
         <p>
-          给不会说 SOCKS 的客户端（psql、mysql、各类数据库驱动）用：
+          兼容代理模式下，给不支持 SOCKS 的程序使用；透明访问下可直接连接放行目标。也可
           在服务端开一个固定端口，直通某个内网地址。映射的目标自动放行。
         </p>
         <div id="map-list" class="rules"
-             data-empty="没有映射 — 容器走 SOCKS 代理访问内网。"></div>
+             data-empty="未配置端口映射。透明模式下，直接访问放行目标即可。"></div>
         <button class="ghost add" id="btn-add-map" data-icon="plus">添加映射</button>
       </section>
 
@@ -124,6 +124,11 @@
           <h2>选项</h2>
           <span class="head-line"></span>
         </div>
+        <label class="check">
+          <input type="checkbox" id="opt-transparent">
+          <span>透明内网访问（默认，推荐） <span class="hint">直接使用放行的 IPv4 地址与域名，无需 Agent 配置代理；需服务端支持</span></span>
+        </label>
+        <p class="hint">取消上方勾选可使用兼容代理模式（保留，暂不推荐）：需要显式使用 SOCKS 代理或配置端口映射，Agent 可能因漏用代理而连接失败。两种模式都受本机白名单限制。</p>
         <label class="check">
           <input type="checkbox" id="opt-auto">
           <span>启动本程序时自动连接隧道</span>

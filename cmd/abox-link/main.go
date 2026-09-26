@@ -57,15 +57,16 @@ func main() {
 	log.SetFlags(log.LstdFlags)
 
 	var (
-		server   = flag.String("server", "", "agentbox base URL, e.g. https://box.example.com")
-		user     = flag.String("user", "", "agentbox username")
-		password = flag.String("password", "", "password (or set ABOX_PASSWORD)")
-		token    = flag.String("token", "", "session token (skips login)")
-		insecure = flag.Bool("insecure", false, "skip TLS certificate verification")
-		daemon   = flag.Bool("daemon", false, "run the control panel without opening a browser")
-		addr     = flag.String("addr", linkapp.DefaultAddr, "control panel listen address (loopback only)")
-		allow    stringList
-		mapFlags stringList
+		server      = flag.String("server", "", "agentbox base URL, e.g. https://box.example.com")
+		user        = flag.String("user", "", "agentbox username")
+		password    = flag.String("password", "", "password (or set ABOX_PASSWORD)")
+		token       = flag.String("token", "", "session token (skips login)")
+		transparent = flag.Bool("transparent", true, "transparent TCP intranet access (default; use --transparent=false for legacy proxy mode, not recommended)")
+		insecure    = flag.Bool("insecure", false, "skip TLS certificate verification")
+		daemon      = flag.Bool("daemon", false, "run the control panel without opening a browser")
+		addr        = flag.String("addr", linkapp.DefaultAddr, "control panel listen address (loopback only)")
+		allow       stringList
+		mapFlags    stringList
 	)
 	flag.Var(&allow, "allow", "allowed target: CIDR, host, or host:port (repeatable; default-deny)")
 	flag.Var(&mapFlags, "map", "expose a fixed server port for one intranet target: PORT=HOST:PORT, e.g. 3306=10.0.1.5:3306 (repeatable)")
@@ -79,12 +80,12 @@ func main() {
 		}
 		return
 	}
-	runHeadless(*server, *user, *password, *token, *insecure, allow, mapFlags)
+	runHeadless(*server, *user, *password, *token, *insecure, allow, mapFlags, *transparent)
 }
 
 // runHeadless is the original flag-driven mode: build a config from the command
 // line, connect, and stay in the foreground printing the audit log.
-func runHeadless(server, user, password, token string, insecure bool, allow, maps stringList) {
+func runHeadless(server, user, password, token string, insecure bool, allow, maps stringList, transparent bool) {
 	if token == "" && user == "" {
 		fatal("--user is required (or pass --token)")
 	}
@@ -101,12 +102,13 @@ func runHeadless(server, user, password, token string, insecure bool, allow, map
 	}
 
 	cfg := linkapp.Config{
-		Server:   server,
-		User:     user,
-		Token:    token,
-		Insecure: insecure,
-		Allow:    allow,
-		Maps:     maps,
+		Transparent: transparent,
+		Server:      server,
+		User:        user,
+		Token:       token,
+		Insecure:    insecure,
+		Allow:       allow,
+		Maps:        maps,
 	}
 	if _, _, err := cfg.Validate(); err != nil {
 		fatal(err.Error())

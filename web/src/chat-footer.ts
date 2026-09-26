@@ -1,0 +1,179 @@
+/* Per-turn context uses persisted request settings, never the current picker. */
+import type { AgentEvent, ChatTurnMetadata, ChatTurnCost } from "./types.js";
+import { answerSources, copyText } from "./chat-render.js";
+import { svgIcon } from "./icons.js";
+import { EFFORT_LABELS } from "./reasoning.js";
+import { S } from "./state.js";
+import { setTip } from "./tip.js";
+import { toast } from "./util.js";
+
+export interface AnswerContext {
+  turn?: ChatTurnMetadata;
+  ts?: string;
+  reportedModel?: string;
+  cost?: ChatTurnCost;
+  legacyCost?: number;
+  historical?: boolean;
+}
+
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** Old Claude logs can supply a model; missing effort remains unknown. */
+export function observeAnswer(context: AnswerContext, ev?: AgentEvent, ts?: string) {
+  if (!ev || ev.parent_tool_use_id) return;
+  // Old transcripts have no turn ID to join with the ledger. Preserve the
+  // CLI's reported amount, explicitly labelled, without pricing old tokens now.
+  if (ev.type === "result" && !context.turn) {
+    const models = ev.modelUsage as Record<string, { costUSD?: number }> | undefined;
+    const costs = models && typeof models === "object" ? Object.values(models).map(m => m?.costUSD) : [];
+    const value = costs.length && costs.every(n => typeof n === "number" && Number.isFinite(n) && n >= 0)
+      ? costs.reduce<number>((sum, n) => sum + Math.round(n! * 1e6), 0)
+      : typeof ev.total_cost_usd === "number" && Number.isFinite(ev.total_cost_usd) ? Math.round(ev.total_cost_usd * 1e6) : 0;
+    context.legacyCost = value > 0 ? value : undefined;
+  }
+  if (ev.type === "stream_event" && ev.event?.delta?.type === "text_delta" && ts) context.ts = ts;
+  const model = ev.type === "assistant" ? ev.message?.model
+    : ev.type === "system" && ev.subtype === "init" ? ev.model : undefined;
+  if (typeof model === "string" && model && !model.startsWith("<")) context.reportedModel = model;
+  const text = ev.type === "assistant" && Array.isArray(ev.message?.content)
+    ? ev.message.content.some(block => block.type === "text" && block.text)
+    : ev.type === "item.completed" && ev.item?.type === "agent_message"
+      || ev.msg?.type === "agent_message" || ev.type === "agent_message";
+  if (text && ts) context.ts = ts;
+}
+
+function reasoningText(turn?: ChatTurnMetadata): string {
+  if (!turn) return "推理未记录";
+  if (turn.unsupported) return "不支持调整";
+  if (!turn.effort) return "推理 · 跟随默认";
+  if (turn.control === "budget") {
+    return turn.budget_tokens ? `思考预算 ${turn.budget_tokens.toLocaleString("en-US")}`
+      : `思考预算 · ${EFFORT_LABELS[turn.effort] || turn.effort}`;
+  }
+  return `推理 · ${EFFORT_LABELS[turn.effort] || turn.effort}`;
+}
+
+function costView(context: AnswerContext): { label: string; detail: string; priced: boolean } {
+  const money = (micro: number) => "$" + (micro / 1e6).toFixed(micro > 0 && micro < 100 ? 6 : 4);
+  const cost = context.cost;
+  if (cost && cost.source !== "unknown") {
+    if (cost.source === "unpriced") return { label: "未定价", detail: "本轮已记录用量，但没有匹配的价目表；这不表示模型服务免费。", priced: false };
+    const source = cost.source === "table" ? "价目表" : cost.source === "provider" ? "CLI 报告" : "混合计价";
+    return {
+      label: `${money(cost.cost_micro_usd)} · ${cost.partial ? "部分未定价" : source}`,
+      detail: `本轮对话用量成本：${money(cost.cost_micro_usd)}（${source}），与使用记录一致，包含本轮子模型，不含自动起标题。${cost.partial ? "部分模型未定价，金额不完整。" : ""}不代表订阅额外扣费或中转站实际账单。`,
+      priced: true,
+    };
+  }
+  if (!context.turn && context.legacyCost !== undefined) return {
+    label: `${money(context.legacyCost)} · CLI 报告`,
+    detail: "历史回答中 CLI 报告的用量成本；无法关联当时的入账记录，不代表订阅额外扣费或中转站实际账单。", priced: true,
+  };
+  const pending = !cost && !context.historical;
+  return { label: pending ? "费用待结算" : "费用未记录", detail: pending ? "回合结束后显示已入账的用量成本。" : "未找到这轮回答对应的费用记录，未按当前价格重算历史。", priced: false };
+}
+
+export function answerFooter(body: HTMLElement, context: AnswerContext) {
+  const el = document.createElement("div");
+  el.className = "answer-footer";
+  el.setAttribute("role", "group");
+  el.setAttribute("aria-label", "回答信息与操作");
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.className = "answer-copy";
+  copy.setAttribute("aria-label", "复制回答");
+  copy.append(svgIcon("copy", 16));
+  setTip(copy, "复制回答（Markdown）");
+  const actions = document.createElement("div");
+  actions.className = "answer-actions";
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "answer-copy answer-more";
+  more.setAttribute("aria-label", "回答详情");
+  more.setAttribute("aria-expanded", "false");
+  more.append(svgIcon("info", 16));
+  setTip(more, "回答详情");
+  const details = document.createElement("div");
+  details.className = "answer-details";
+  details.hidden = true;
+  const provenance = document.createElement("div");
+  const reasoning = document.createElement("div");
+  const costDetail = document.createElement("div");
+  const receipt = document.createElement("div");
+  receipt.className = "answer-receipt";
+  details.append(provenance, reasoning, costDetail, receipt);
+  more.addEventListener("click", () => {
+    details.hidden = !details.hidden;
+    more.setAttribute("aria-expanded", String(!details.hidden));
+  });
+  actions.append(copy, more);
+  const info = document.createElement("div");
+  info.className = "answer-context";
+  const date = document.createElement("time");
+  date.className = "answer-time";
+  const model = document.createElement("span");
+  model.className = "answer-model";
+  const effort = document.createElement("span");
+  effort.className = "answer-effort";
+  const cost = document.createElement("span");
+  cost.className = "answer-cost";
+  info.append(date, model, effort, cost);
+  el.append(actions, info, details);
+  copy.addEventListener("click", async () => {
+    const source = [...body.querySelectorAll<HTMLElement>(".msg.agent")]
+      .map(node => answerSources.get(node) || "").filter(Boolean).join("\n\n");
+    if (!source) return;
+    try { await copyText(source); }
+    catch (_) { toast("复制失败，请选择回答后手动复制", true); return; }
+    copy.replaceChildren(svgIcon("check", 16));
+    copy.classList.add("copied");
+    copy.setAttribute("aria-label", "已复制回答");
+    setTip(copy, "已复制");
+    copy.disabled = true;
+    setTimeout(() => {
+      copy.replaceChildren(svgIcon("copy", 16));
+      copy.classList.remove("copied");
+      copy.setAttribute("aria-label", "复制回答");
+      setTip(copy, "复制回答（Markdown）");
+      copy.disabled = false;
+    }, 1400);
+  });
+  function update() {
+    el.hidden = ![...body.querySelectorAll<HTMLElement>(".msg.agent")].some(node => answerSources.has(node));
+    const turn = context.turn;
+    model.textContent = context.reportedModel || turn?.model || "模型未记录";
+    setTip(model, context.reportedModel
+      ? `模型返回：${context.reportedModel}${turn ? `；请求模型：${turn.model}` : ""}`
+      : turn ? `请求模型：${turn.model}；服务未返回实际模型` : "这条历史回答未记录模型");
+    effort.textContent = reasoningText(turn);
+    setTip(effort, !turn ? "这条历史回答未记录推理设置"
+      : turn.unsupported ? "本轮模型配置为不支持调整推理强度"
+      : !turn.effort ? "本轮未指定强度，沿用 CLI / 模型默认；实际强度未返回"
+      : turn.control === "budget" ? `本轮请求的思考预算上限：${turn.budget_tokens || turn.effort} tokens，并非实际消耗`
+      : `本轮请求的推理强度：${turn.effort}`);
+    const d = context.ts ? new Date(context.ts) : null;
+    if (d && Number.isFinite(d.getTime())) {
+      const zone = S.timeZone || "Asia/Shanghai";
+      let fmt = dateFormats.get(zone);
+      if (!fmt) {
+        fmt = new Intl.DateTimeFormat("sv-SE", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+        dateFormats.set(zone, fmt);
+      }
+      date.textContent = fmt.format(d);
+      date.dateTime = d.toISOString();
+      setTip(date, `回答时间：${fmt.format(d)}（${zone}）`);
+    } else {
+      date.textContent = "时间未记录";
+      date.removeAttribute("datetime");
+      setTip(date, "这条回答未记录时间");
+    }
+    provenance.textContent = model.dataset.tip || "";
+    reasoning.textContent = effort.dataset.tip || "";
+    const price = costView(context);
+    cost.textContent = price.label;
+    cost.classList.toggle("priced", price.priced);
+    setTip(cost, price.detail);
+    costDetail.textContent = price.detail;
+  }
+  return { el, update, setReceipt: (node: HTMLElement) => receipt.replaceChildren(node) };
+}

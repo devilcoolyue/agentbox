@@ -19,6 +19,9 @@
     "network": "bridge"
   },
   "tunnel": {
+    "transparent": true,
+    "network_bind": "172.17.0.1:1082",
+    "network_image": "agentbox-network:latest",
     "enabled": false,
     "proxy_bind": "172.17.0.1:1080"
   },

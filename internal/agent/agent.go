@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"agentbox/internal/config"
@@ -27,13 +28,13 @@ const PidFile = "/tmp/.agentbox-chat.pid"
 var modelRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[1m\])?$`)
 
 // claudeThinking maps the abstract effort level chosen in the UI to a
-// MAX_THINKING_TOKENS budget; Claude Code has no CLI flag for this.
+// MAX_THINKING_TOKENS budget. This legacy mode is distinct from native --effort.
 var claudeThinking = map[string]string{
 	"low": "4096", "medium": "13000", "high": "24000", "xhigh": "31999",
 }
 
 var codexEfforts = map[string]bool{
-	"minimal": true, "low": true, "medium": true, "high": true, "xhigh": true,
+	"none": true, "minimal": true, "low": true, "medium": true, "high": true, "xhigh": true, "max": true, "ultra": true,
 }
 
 // ChatCommand returns the argv for one headless conversation turn. The prompt
@@ -41,7 +42,7 @@ var codexEfforts = map[string]bool{
 // command is wrapped in `sh -c` solely to record the PID for interrupts.
 // model and effort are optional per-turn overrides ("" keeps the account /
 // CLI default); effort is an abstract level (low|medium|high|xhigh).
-func ChatCommand(agentType, permissionMode, resumeID, model, effort string) ([]string, error) {
+func ChatCommand(agentType, permissionMode, resumeID, model, effort string, control ...string) ([]string, error) {
 	if model != "" && !modelRe.MatchString(model) {
 		return nil, fmt.Errorf("模型名 %q 无效", model)
 	}
@@ -59,12 +60,18 @@ func ChatCommand(agentType, permissionMode, resumeID, model, effort string) ([]s
 		if model != "" {
 			args = append(args, "--model", model)
 		}
-		if effort != "" {
+		if effort != "" && len(control) > 0 && control[0] == "effort" {
+			if !slices.Contains(config.ReasoningLevels(config.AgentClaude, "effort"), effort) {
+				return nil, fmt.Errorf("推理强度 %q 无效", effort)
+			}
+			prelude = "unset MAX_THINKING_TOKENS CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING; "
+			args = append(args, "--effort", effort)
+		} else if effort != "" {
 			tokens, ok := claudeThinking[effort]
 			if !ok {
 				return nil, fmt.Errorf("思考强度 %q 无效", effort)
 			}
-			prelude = "export MAX_THINKING_TOKENS=" + tokens + "; "
+			prelude = "export CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1 MAX_THINKING_TOKENS=" + tokens + "; "
 		}
 		if resumeID != "" {
 			args = append(args, "--resume", resumeID)
@@ -309,6 +316,20 @@ const intranetHintBody = `## 访问用户内网 / 局域网（agentbox 内网隧
 // managed block is delimited by markers and replaced in place; any surrounding
 // user content is preserved.
 func SeedIntranetHint(agentType, homeDir string, uid, gid int) error {
+	return seedNetworkHint(agentType, homeDir, uid, gid, intranetHintBody)
+}
+
+// SeedTransparentHint replaces legacy proxy instructions without touching user
+// instructions. Networking works independently of whether the CLI reads this.
+func SeedTransparentHint(agentType, homeDir string, uid, gid int) error {
+	return seedNetworkHint(agentType, homeDir, uid, gid, `## 内网访问
+
+此工作空间由系统提供透明内网访问。对用户配置的内网 IPv4 地址和域名，直接使用原地址发起 TCP 连接即可；不需要代理参数或专用环境变量。可用目标与连接状态见控制台「内网隧道」。隧道离线或目标未放行时请求会失败。
+
+若使用兼容客户端并且存在 AGENTBOX_INTRANET_PROXY，可对兼容模式目标显式使用该代理。公网与模型 API 沿用已有出口设置。`)
+}
+
+func seedNetworkHint(agentType, homeDir string, uid, gid int, body string) error {
 	var path string
 	switch agentType {
 	case config.AgentClaude:
@@ -326,7 +347,7 @@ func SeedIntranetHint(agentType, homeDir string, uid, gid int) error {
 	if err := root.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	block := intranetHintBegin + "\n" + intranetHintBody + "\n" + intranetHintEnd
+	block := intranetHintBegin + "\n" + body + "\n" + intranetHintEnd
 
 	existing, err := root.ReadAll(path, 4<<20)
 	if err != nil && !os.IsNotExist(err) {

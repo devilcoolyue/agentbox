@@ -422,3 +422,8 @@ dialog label.check input { margin: 0; flex: none; }
   .auth-keyrow { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .dlg-auth .auth-modes .seg { transition: none; } }
+
+/* 模型能力编辑：沿用统一弹窗与勾选控件。 */
+.reasoning-dialog fieldset { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; }
+.reasoning-dialog fieldset > div { display: grid; gap: 8px; }
+.reasoning-dialog .field-hint { margin: 0; }

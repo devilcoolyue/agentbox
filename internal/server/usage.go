@@ -1,11 +1,25 @@
 package server
 
 import (
+	"log"
 	"time"
 
 	"agentbox/internal/store"
 	"agentbox/internal/usage"
 )
+
+// Publish only after the settlement transaction commits. Historical views read
+// this same amount from SQLite, so editing pricing cannot change old answers.
+func (r *chatRoom) publishTurnCost(threadID, turnID string) {
+	cost := store.ChatTurnCost{TurnID: turnID, Source: "unknown"}
+	values, err := r.srv.store.ChatTurnCosts(r.sessID, threadID, []string{turnID})
+	if err != nil {
+		log.Printf("chat cost %s: %v", r.sessID, err)
+	} else if value, ok := values[turnID]; ok {
+		cost = value
+	}
+	r.broadcast(map[string]any{"type": "turn_cost", "cost": cost})
+}
 
 type usageTally = usage.Tally
 

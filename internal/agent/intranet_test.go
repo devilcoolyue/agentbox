@@ -61,3 +61,20 @@ func TestSeedIntranetHintCodexPath(t *testing.T) {
 		t.Fatalf("codex hint not written: %v", err)
 	}
 }
+
+func TestTransparentHintReplacesLegacyGuidance(t *testing.T) {
+	home := t.TempDir()
+	if err := SeedIntranetHint("codex", home, os.Getuid(), os.Getgid()); err != nil {
+		t.Fatal(err)
+	}
+	if err := SeedTransparentHint("codex", home, os.Getuid(), os.Getgid()); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(home, ".codex", "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "勿尝试代理") || !strings.Contains(string(raw), "直接使用原地址") {
+		t.Fatal(string(raw))
+	}
+}

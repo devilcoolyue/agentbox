@@ -196,7 +196,10 @@ func (s *Server) bridgeConnect(w http.ResponseWriter, r *http.Request, p config.
 	if target == "" {
 		target = r.Host
 	}
-	up, err := dialThrough(r.Context(), p, target)
+	up, captured, err := s.bridgeIntranet(r, target)
+	if !captured {
+		up, err = dialThrough(r.Context(), p, target)
+	}
 	if err != nil {
 		log.Printf("proxy bridge: CONNECT %s via %s: %v", target, proxyLabel(p), err)
 		http.Error(w, "agentbox proxy bridge: "+err.Error(), http.StatusBadGateway)
@@ -251,6 +254,17 @@ func (s *Server) bridgeForward(w http.ResponseWriter, r *http.Request, p config.
 	out.Header.Del("Proxy-Connection")
 
 	tr := proxyTransport(p)
+	if s.cfg.GetTunnel().Transparent {
+		// Use per-request routing; HTTP targets reaching this bridge do not pass
+		// through the workspace's direct-IP capture path.
+		tr = &http.Transport{Proxy: nil, DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			conn, captured, err := s.bridgeIntranet(r, address)
+			if captured {
+				return conn, err
+			}
+			return dialThrough(ctx, p, address)
+		}}
+	}
 	defer tr.CloseIdleConnections()
 	resp, err := tr.RoundTrip(out)
 	if err != nil {

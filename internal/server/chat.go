@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"agentbox/internal/agent"
+	"agentbox/internal/config"
 	"agentbox/internal/dockerx"
 	"agentbox/internal/store"
 )
@@ -140,13 +141,36 @@ func (r *chatRoom) end() {
 // transcript (chats/<threadID>.jsonl, see threads.go) so the UI can restore
 // the conversation after the session (or server) restarts ---
 
+// Immutable request settings, saved only after validation. An empty effort is
+// CLI inheritance, not a claim about the provider's effective reasoning level.
+type chatTurnMetadata struct {
+	ID           string `json:"id"`
+	Model        string `json:"model"`
+	Effort       string `json:"effort"`
+	Control      string `json:"control"`
+	Unsupported  bool   `json:"unsupported,omitempty"`
+	BudgetTokens int    `json:"budget_tokens,omitempty"`
+}
+
 type logEntry struct {
-	TS    time.Time       `json:"ts"`
-	Kind  string          `json:"kind"` // "user" | "event" | "status" | "chat_session" | "title" | "divider"(旧)
-	Text  string          `json:"text,omitempty"`
-	Event json.RawMessage `json:"event,omitempty"`
-	State string          `json:"state,omitempty"`
-	Error string          `json:"error,omitempty"`
+	TS    time.Time         `json:"ts"`
+	Kind  string            `json:"kind"` // "user" | "event" | "status" | "chat_session" | "title" | "divider"(旧)
+	Text  string            `json:"text,omitempty"`
+	Event json.RawMessage   `json:"event,omitempty"`
+	State string            `json:"state,omitempty"`
+	Error string            `json:"error,omitempty"`
+	Turn  *chatTurnMetadata `json:"turn,omitempty"`
+}
+
+// History and live clients see the same timestamp and settings snapshot.
+func (r *chatRoom) recordChat(e logEntry, messageType string, retryText string) {
+	e.TS = time.Now()
+	r.appendLog(e)
+	r.broadcast(struct {
+		logEntry
+		Type      string `json:"type"`
+		RetryText string `json:"retry_text,omitempty"`
+	}{e, messageType, retryText})
 }
 
 func (r *chatRoom) appendLog(e logEntry) {
@@ -165,7 +189,9 @@ func (r *chatRoom) appendLog(e logEntry) {
 		log.Printf("chat threads %s: %v", r.sessID, err)
 		return
 	}
-	e.TS = time.Now()
+	if e.TS.IsZero() {
+		e.TS = time.Now()
+	}
 	raw, err := json.Marshal(e)
 	if err != nil {
 		return
@@ -225,10 +251,11 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 
 	for {
 		var msg struct {
-			Type   string `json:"type"`
-			Text   string `json:"text"`
-			Model  string `json:"model"`
-			Effort string `json:"effort"`
+			Type          string `json:"type"`
+			Text          string `json:"text"`
+			Model         string `json:"model"`
+			Effort        string `json:"effort"`
+			EffortControl string `json:"effort_control"`
 		}
 		if err := conn.ReadJSON(&msg); err != nil {
 			return
@@ -252,7 +279,7 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 				_ = cw.send(map[string]any{"type": "error", "error": "上一条消息仍在处理中，请等待或先中断"})
 				continue
 			}
-			if !s.spawn(func() { room.runTurn(msg.Text, msg.Model, msg.Effort) }) {
+			if !s.spawn(func() { room.runTurn(msg.Text, msg.Model, msg.Effort, msg.EffortControl) }) {
 				room.end()
 				return
 			}
@@ -265,7 +292,7 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 // runTurn executes one headless agent turn: start container if needed, feed
 // the prompt on stdin, stream JSONL events to every attached client, record
 // the provider session id for resume.
-func (r *chatRoom) runTurn(text, model, effort string) {
+func (r *chatRoom) runTurn(text, model, effort string, controls ...string) {
 	defer r.end()
 	s := r.srv
 
@@ -275,8 +302,11 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 	defer s.workspaces().Activity().Release(r.sessID)
 
 	fail := func(msg string) {
-		r.appendLog(logEntry{Kind: "status", State: "error", Error: msg})
-		r.broadcast(map[string]any{"type": "status", "state": "error", "error": msg})
+		r.recordChat(logEntry{Kind: "status", State: "error", Error: msg}, "status", "")
+	}
+
+	rejectOptions := func(message string) {
+		r.recordChat(logEntry{Kind: "status", State: "error", Error: message}, "status", text)
 	}
 
 	ctx, cancel := context.WithTimeout(s.workContext(), turnTimeout)
@@ -297,6 +327,21 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		model = sess.DefaultModel
 	}
 
+	control := ""
+	if len(controls) > 0 {
+		control = controls[0]
+	}
+	acct, err := s.sessionAccount(sess)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+	options, err := agent.ResolveTurnOptions(sess.Agent, model, effort, control, s.cfg.ConfiguredReasoning(acct, model))
+	if err != nil {
+		rejectOptions(err.Error())
+		return
+	}
+
 	// 记录发消息前该线程的状态：首条消息且尚无标题时，回合成功后据首条
 	// 消息让模型生成一个简洁标题。房间占用期间线程不会被切换，tid 稳定，
 	// 用量流水也挂在它上面。
@@ -314,15 +359,49 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 	var turnStart time.Time
 	var ttftMS int64
 
-	r.appendLog(logEntry{Kind: "user", Text: text})
-	r.broadcast(map[string]any{"type": "user_message", "text": text})
 	r.broadcast(map[string]any{"type": "status", "state": "running"})
-
 	sess, err = s.startSession(ctx, sess)
 	if err != nil {
 		fail("启动容器失败: " + err.Error())
 		return
 	}
+	// Re-resolve after startup: credentials/profile may have changed, and only
+	// a running container can supply catalog metadata. No inference is started.
+	acct, err = s.sessionAccount(sess)
+	if err != nil {
+		fail(err.Error())
+		return
+	}
+	capability := s.cfg.ConfiguredReasoning(acct, model)
+	if capability == nil && effort != "" {
+		discovered, _ := s.discoverReasoning(ctx, sess, acct)
+		if value, ok := discovered[model]; ok {
+			capability = &value
+		}
+	}
+	options, err = agent.ResolveTurnOptions(sess.Agent, model, effort, control, capability)
+	if err != nil {
+		rejectOptions(err.Error())
+		return
+	}
+	if err := agent.CheckReasoningInheritance(sess.Agent, s.homeDir(sess), s.workspaceDir(sess), acct.Env, options); err != nil {
+		rejectOptions(err.Error())
+		return
+	}
+	if sess.Agent == config.AgentClaude && effort != "" && options.Control == "effort" {
+		helpCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		help, probeErr := s.dock.ExecCapture(helpCtx, sess.ContainerID, []string{"claude", "--help"}, nil, "")
+		cancel()
+		if probeErr != nil || !strings.Contains(help, "--effort") {
+			rejectOptions("当前容器 Claude Code 未确认支持原生 --effort，请更新镜像后重试，或配置为兼容的思考预算模式")
+			return
+		}
+	}
+
+	r.recordChat(logEntry{Kind: "user", Text: text, Turn: &chatTurnMetadata{
+		ID: turnID, Model: model, Effort: effort, Control: options.Control,
+		Unsupported: options.Unsupported, BudgetTokens: options.BudgetTokens,
+	}}, "user_message", "")
 	turnStart = time.Now()
 
 	// 容器起来之后才可能产生消耗，之后无论回合正常收尾、报错还是被中断，已经
@@ -332,6 +411,7 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		if r.flushUsage(&tally, time.Since(turnStart)) == 0 {
 			log.Printf("usage: 会话 %s 回合结束但未记到用量（agent=%s），该回合消耗不会进报表", r.sessID, sess.Agent)
 		}
+		r.publishTurnCost(tid, turnID)
 	}()
 
 	// 两条路径共用的行处理：JSON 事件落盘并广播（增量只广播），
@@ -350,11 +430,10 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 			}
 			if event.Partial {
 				// 增量 delta 只广播不落盘：随后的完整事件会带全文再来一份
-				r.broadcast(map[string]any{"type": "agent_event", "event": ev})
+				r.broadcast(map[string]any{"type": "agent_event", "event": ev, "ts": time.Now()})
 				return
 			}
-			r.appendLog(logEntry{Kind: "event", Event: ev})
-			r.broadcast(map[string]any{"type": "agent_event", "event": ev})
+			r.recordChat(logEntry{Kind: "event", Event: ev}, "agent_event", "")
 			// 回合收尾事件带 token/费用，先并进 tally，回合结束统一落库。
 			tally.Observe(store.UsageEvent{
 				User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: turnID,
@@ -378,7 +457,7 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 	// 握手失败的情况回退传统 exec 路径（无增量，前端整段回放兜底）。
 	handled := false
 	if adapter.Capabilities().AppServer {
-		fallback, err := r.appServerTurn(ctx, sess, text, model, effort, onLine)
+		fallback, err := r.appServerTurn(ctx, sess, text, model, effort, onLine, options.Unsupported)
 		switch {
 		case err == nil:
 			handled = true
@@ -390,7 +469,11 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 		}
 	}
 	if !handled {
-		cmd, err := adapter.Chat(s.cfg.GetPermissionMode(), chatID, model, effort)
+		if options.Unsupported {
+			fail("当前 CLI 无法确认已省略默认或历史线程中的推理参数；请使用兼容该模型的 CLI / 中转配置，验证后再更新模型能力")
+			return
+		}
+		cmd, err := adapter.Chat(s.cfg.GetPermissionMode(), chatID, model, effort, options.Control)
 		if err != nil {
 			fail(err.Error())
 			return
@@ -400,8 +483,7 @@ func (r *chatRoom) runTurn(text, model, effort string) {
 			return
 		}
 	}
-	r.appendLog(logEntry{Kind: "status", State: "idle"})
-	r.broadcast(map[string]any{"type": "status", "state": "idle"})
+	r.recordChat(logEntry{Kind: "status", State: "idle"}, "status", "")
 
 	// 首条消息的对话：异步用模型总结出一个标题，不阻塞对话流。
 	if firstTurn && tid != "" {
@@ -461,7 +543,7 @@ func (r *chatRoom) execTurn(ctx context.Context, sess store.Session, cmd []strin
 // appServerTurn 经 codex app-server 协议跑一回合，事件由协议驱动器翻译后
 // 进 onLine（含打字机用的流式增量）。返回 fallback=true 表示回合尚未开始
 // （握手/开线程失败），可安全改走传统 exec 路径。
-func (r *chatRoom) appServerTurn(ctx context.Context, sess store.Session, text, model, effort string, onLine func([]byte)) (fallback bool, err error) {
+func (r *chatRoom) appServerTurn(ctx context.Context, sess store.Session, text, model, effort string, onLine func([]byte), unsupported ...bool) (fallback bool, err error) {
 	s := r.srv
 	env, err := s.execEnv(sess)
 	if err != nil {
@@ -495,7 +577,7 @@ func (r *chatRoom) appServerTurn(ctx context.Context, sess store.Session, text, 
 	err = agent.RunCodexTurn(ctx, stream, pr,
 		func() { _ = stream.CloseWrite() }, // 硬断兜底：app-server 随 stdin EOF 退出
 		ich,
-		agent.CodexTurn{Prompt: text, ThreadID: sess.ChatSession, Model: model, Effort: effort, Cwd: dockerx.WorkspaceMount},
+		agent.CodexTurn{Prompt: text, ThreadID: sess.ChatSession, Model: model, Effort: effort, Cwd: dockerx.WorkspaceMount, RejectInheritedEffort: len(unsupported) > 0 && unsupported[0]},
 		onLine)
 	if err != nil {
 		if errors.Is(err, agent.ErrAppServerUnavailable) {

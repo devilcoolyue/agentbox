@@ -8,8 +8,11 @@
 package server
 
 import (
+	"agentbox/internal/netaccess"
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -47,8 +50,9 @@ type tunnelHub struct {
 
 // connInfo is what the status API shows about a live tunnel connection.
 type connInfo struct {
-	Since  time.Time
-	Remote string
+	Since       time.Time
+	Remote      string
+	Transparent bool
 }
 
 func newTunnelHub() *tunnelHub {
@@ -503,6 +507,28 @@ func (s *Server) handleTunnelWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := reqUser(r).Name
+	var networkRules []string
+	transparent := r.Header.Get(netaccess.CapabilityHeader) == netaccess.Protocol
+	if transparent {
+		if !s.cfg.GetTunnel().Transparent {
+			writeErr(w, 409, "服务端未启用透明内网访问")
+			return
+		}
+		encoded := r.Header.Get(netaccess.RulesHeader)
+		if len(encoded) > 65536 {
+			writeErr(w, 400, "too many network rules")
+			return
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(encoded)
+		if err != nil || json.Unmarshal(raw, &networkRules) != nil {
+			writeErr(w, 400, "invalid network rules")
+			return
+		}
+		if _, err = netaccess.NormalizeRules(networkRules); err != nil {
+			writeErr(w, 400, err.Error())
+			return
+		}
+	}
 	specs, err := tunnel.ParseMapSpecs(r.Header.Get(tunnel.MapsHeader))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -512,6 +538,9 @@ func (s *Server) handleTunnelWS(w http.ResponseWriter, r *http.Request) {
 	// handshake response for the link to log.
 	statuses, releaseMaps := s.bindUserMaps(user, specs)
 	respHdr := http.Header{}
+	if transparent {
+		respHdr.Set(netaccess.CapabilityHeader, netaccess.Protocol)
+	}
 	if len(statuses) > 0 {
 		respHdr.Set(tunnel.MapStatusHeader, strings.Join(statuses, ","))
 	}
@@ -535,7 +564,23 @@ func (s *Server) handleTunnelWS(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		return
 	}
+	s.network.connectMu.Lock()
+	if transparent {
+		if err := s.saveNetworkRules(user, networkRules); err != nil {
+			s.network.connectMu.Unlock()
+			releaseMaps()
+			sess.Close()
+			conn.Close()
+			return
+		}
+	}
 	_, unregister := s.tunnels.register(user, sess, r.RemoteAddr)
+	s.tunnels.mu.Lock()
+	info := s.tunnels.info[user]
+	info.Transparent = transparent
+	s.tunnels.info[user] = info
+	s.tunnels.mu.Unlock()
+	s.network.connectMu.Unlock()
 	log.Printf("tunnel up for user %q from %s (%d port maps)", user, r.RemoteAddr, len(specs))
 	<-sess.CloseChan()
 	unregister()
@@ -566,6 +611,11 @@ func (s *Server) tunnelEnvList(sess store.Session) []string {
 	tc := s.cfg.GetTunnel()
 	if !tc.Enabled {
 		return nil
+	}
+	if tc.Transparent {
+		if info, ok := s.tunnels.connInfoFor(sess.User); ok && info.Transparent {
+			return nil
+		}
 	}
 	secret, up := s.tunnels.proxyCreds(sess.User)
 	if !up {
@@ -606,6 +656,7 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		out["connected"] = true
 		out["since"] = ci.Since.UnixMilli()
 		out["remote"] = ci.Remote
+		out["client_transparent"] = ci.Transparent
 	}
 	maps := s.tunnels.mapsFor(u.Name)
 	views := make([]map[string]any, 0, len(maps))
@@ -616,6 +667,22 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	out["maps"] = views
+	out["transparent"] = tc.Transparent
+	if tc.Transparent {
+		p, err := s.networkPolicy(u.Name)
+		if err != nil {
+			out["network_error"] = "无法读取网络规则"
+		} else {
+			out["rules"] = p.Rules
+			workspaces := []workspaceNetworkView{}
+			for _, sess := range s.store.List(u.Name) {
+				if sess.Status == store.StatusRunning {
+					workspaces = append(workspaces, s.networkStatus(sess, p))
+				}
+			}
+			out["workspaces"] = workspaces
+		}
+	}
 	if u.Role == store.RoleAdmin {
 		out["online_users"] = s.tunnels.onlineUsers()
 	}

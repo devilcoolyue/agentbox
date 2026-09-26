@@ -23,6 +23,7 @@ import { loadProxies, mountProxyPicker, openProxiesSection, refreshProxyCount } 
 import type { ProxyPicker } from "./proxies.js";
 import { openPricingSection, refreshPriceCount } from "./pricing.js";
 import { setTip } from "./tip.js";
+import { accountReasoningButton, editReasoning, reasoningLabel } from "./reasoning-editor.js";
 import { accountAccessButton } from "./account-access.js";
 
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
@@ -167,7 +168,7 @@ function acctRow(a: Account) {
   } else {
     del.addEventListener("click", () => openAcctDel(a));
   }
-  acts.append(auth, edit, accountAccessButton(a), del);
+  acts.append(auth, edit, accountAccessButton(a), accountReasoningButton(a), del);
 
   row.append(idBox, state, acts);
   return row;
@@ -423,6 +424,9 @@ function fillSettingsForms() {
     ? "监听地址已修改，重启 agentbox 服务后生效"
     : "权限模式与上传上限即时生效；监听地址需重启 agentbox 服务";
   $<HTMLInputElement>("set-tunnel-on").checked = !!(st.tunnel && st.tunnel.enabled);
+ $<HTMLInputElement>("set-tunnel-transparent").checked = !!st.tunnel?.transparent;
+ $<HTMLInputElement>("set-network-bind").value = st.tunnel?.network_bind || "";
+ $<HTMLInputElement>("set-network-image").value = st.tunnel?.network_image || "";
   $<HTMLInputElement>("set-tunnel-bind").value = (st.tunnel && st.tunnel.proxy_bind) || "";
   $<HTMLInputElement>("set-tunnel-host").value = (st.tunnel && st.tunnel.proxy_host) || "";
   $<HTMLInputElement>("set-bridge-bind").value = (st.proxy_bridge && st.proxy_bridge.bind) || "";
@@ -445,7 +449,7 @@ export async function putSettings(
   try {
     settingsState.value = await api<Settings>("/settings", { method: "PUT", body: JSON.stringify(patch) });
     fillSettingsForms();
-    if (settingsState.value.models) S.models = settingsState.value.models; // 对话框的模型菜单同步更新
+    if (settingsState.value.models) { S.models = settingsState.value.models; emit("models-updated"); } // 对话框的模型菜单同步更新
     if (settingsState.value.terminal_tips) { // 终端顶栏轮播实时刷新
       S.termTips = settingsState.value.terminal_tips;
       emit("tips-updated");
@@ -508,7 +512,19 @@ function renderModels() {
         const next = { ...models, [agent]: (models[agent] || []).filter((x) => x.id !== m.id) };
         putSettings({ models: next }, rm, "已移除 " + m.label);
       });
-      row.append(label, id, rm);
+      const reasoning = document.createElement("button");
+      reasoning.className = "btn btn-sm btn-ghost";
+      reasoning.textContent = reasoningLabel(m.reasoning);
+      reasoning.addEventListener("click", async () => {
+        const policy = await editReasoning(agent, m.label + " · 模型能力", m.reasoning);
+        if (policy === null) return;
+        try {
+          const fresh = await api<Settings>("/settings");
+          const next = { ...fresh.models, [agent]: fresh.models[agent].map(x => x.id === m.id ? { ...x, reasoning: policy } : x) };
+          await putSettings({ models: next }, reasoning, "已保存模型能力");
+        } catch (error) { toast((error as Error).message, true); }
+      });
+      row.append(label, id, reasoning, rm);
       box.appendChild(row);
     }
   }
@@ -863,6 +879,9 @@ $("btn-save-tunnel").addEventListener("click", async () => {
   const ok = await putSettings({
     tunnel: {
       enabled: $<HTMLInputElement>("set-tunnel-on").checked,
+ transparent: $<HTMLInputElement>("set-tunnel-transparent").checked,
+ network_bind: $<HTMLInputElement>("set-network-bind").value.trim(),
+ network_image: $<HTMLInputElement>("set-network-image").value.trim(),
       proxy_bind: $<HTMLInputElement>("set-tunnel-bind").value.trim(),
       proxy_host: $<HTMLInputElement>("set-tunnel-host").value.trim(),
     },

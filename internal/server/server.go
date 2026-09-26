@@ -55,6 +55,7 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
+	network     networkState
 	updates     updateState
 	storage     storageState
 	runtimeOnce sync.Once
@@ -202,6 +203,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/login", s.handleLogin)
+	mux.Handle("POST /api/tunnel/probe", s.auth(http.HandlerFunc(s.handleNetworkProbe)))
 	mux.HandleFunc("GET /api/ping", s.handlePing)
 	mux.Handle("POST /api/logout", s.auth(http.HandlerFunc(s.handleLogout)))
 	mux.Handle("GET /api/me", s.auth(http.HandlerFunc(s.handleMe)))
@@ -247,6 +249,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/sessions/{id}/stop", s.auth(s.withSession(s.handleStopSession)))
 	mux.Handle("PATCH /api/sessions/{id}", s.auth(s.withSession(s.handleRenameSession)))
 	mux.Handle("DELETE /api/sessions/{id}", s.auth(s.withSession(s.handleDeleteSession)))
+	mux.Handle("GET /api/sessions/{id}/models", s.auth(s.withSession(s.handleSessionModels)))
 	mux.Handle("GET /api/sessions/{id}/account/usage", s.auth(s.withSession(s.handleAccountUsage)))
 	mux.Handle("POST /api/sessions/{id}/upload", s.auth(s.withSession(s.handleUpload)))
 	mux.Handle("GET /api/sessions/{id}/archive", s.auth(s.withSession(s.handleArchive)))
@@ -332,6 +335,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.spawn(s.termUsageLoop)
 	s.spawn(s.termWatchLoop)
 	s.spawn(s.tokenJanitor)
+	s.spawn(s.networkLoop)
 	if err := s.applyTunnel(); err != nil {
 		log.Printf("tunnel disabled: %v", err)
 	}
@@ -487,26 +491,27 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 }
 
 type acctView struct {
-	Access     *config.AccountAccess `json:"access,omitempty"`
-	ID         string                `json:"id"`
-	Type       string                `json:"type"`
-	Label      string                `json:"label"`
-	Sessions   int                   `json:"sessions"`
-	CredStatus string                `json:"cred_status"`          // ok | norefresh | missing
-	ExpiresAt  int64                 `json:"expires_at,omitempty"` // claude access token 到期(ms)
-	AuthMode   string                `json:"auth_mode,omitempty"`  // oauth | apikey
-	BaseURL    string                `json:"base_url,omitempty"`   // 中转站地址（codex 读 config.toml，claude 读 env）
-	WireAPI    string                `json:"wire_api,omitempty"`   // codex：responses | chat
-	Env        map[string]string     `json:"env,omitempty"`
-	ProxyID    string                `json:"proxy_id,omitempty"` // 绑定的出口 IP 代理
-	ProxyLabel string                `json:"proxy_label,omitempty"`
+	ModelReasoning map[string]config.ReasoningCapability `json:"model_reasoning,omitempty"`
+	Access         *config.AccountAccess                 `json:"access,omitempty"`
+	ID             string                                `json:"id"`
+	Type           string                                `json:"type"`
+	Label          string                                `json:"label"`
+	Sessions       int                                   `json:"sessions"`
+	CredStatus     string                                `json:"cred_status"`          // ok | norefresh | missing
+	ExpiresAt      int64                                 `json:"expires_at,omitempty"` // claude access token 到期(ms)
+	AuthMode       string                                `json:"auth_mode,omitempty"`  // oauth | apikey
+	BaseURL        string                                `json:"base_url,omitempty"`   // 中转站地址（codex 读 config.toml，claude 读 env）
+	WireAPI        string                                `json:"wire_api,omitempty"`   // codex：responses | chat
+	Env            map[string]string                     `json:"env,omitempty"`
+	ProxyID        string                                `json:"proxy_id,omitempty"` // 绑定的出口 IP 代理
+	ProxyLabel     string                                `json:"proxy_label,omitempty"`
 }
 
 func (s *Server) accountView(a config.Account, sessions int) acctView {
 	st, exp := credentials.Status(a)
 	v := acctView{
 		ID: a.ID, Type: a.Type, Label: a.Label, Sessions: sessions,
-		CredStatus: st, ExpiresAt: exp, Env: a.Env, ProxyID: a.ProxyID, Access: a.Access,
+		CredStatus: st, ExpiresAt: exp, Env: a.Env, ProxyID: a.ProxyID, Access: a.Access, ModelReasoning: a.ModelReasoning,
 	}
 	if p, bound := s.cfg.AccountProxy(a.ID); bound {
 		v.ProxyLabel = p.Name + " · " + p.DisplayURL()
@@ -586,6 +591,7 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 			// 普通用户建会话只需要账号列表本身，env/base_url 里可能有密钥，
 			// 出口 IP 也属于运维信息，一并摘掉。
 			v.Access = nil
+			v.ModelReasoning = nil
 			v.Env, v.BaseURL = nil, ""
 			v.ProxyID, v.ProxyLabel = "", ""
 		}
@@ -597,6 +603,7 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) workspaces() *workspace.Service {
 	s.workspaceOnce.Do(func() {
 		s.workspace = workspace.New(s.cfg, s.store, s.dock, s.sessionAccount, s.credentialService().Sync)
+		s.workspace.SetNetworkHook(s.ensureNetwork)
 	})
 	return s.workspace
 }

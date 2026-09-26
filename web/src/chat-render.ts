@@ -3,7 +3,7 @@
  * 全部通过 DOM 构建输出，模型文本永远走 textContent，不存在注入面。 */
 "use strict";
 
-import { openLightbox, fmtTime } from "./util.js";
+import { openLightbox, fmtTime, toast } from "./util.js";
 import { imgURLFromPath } from "./api.js";
 import type {
   AgentEvent, ContentBlock, HistoryEntry, LiveNode, RateLimitInfo,
@@ -16,17 +16,22 @@ import { setTip } from "./tip.js";
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
 
 /* 复制到剪贴板：clipboard API 优先，非安全上下文回退 execCommand */
-async function copyText(text: string) {
+export async function copyText(text: string) {
   try {
     await navigator.clipboard.writeText(text);
   } catch (_) {
+    const focused = document.activeElement as HTMLElement | null;
     const ta = document.createElement("textarea");
     ta.value = text;
     ta.style.cssText = "position:fixed;opacity:0";
     document.body.appendChild(ta);
     ta.select();
-    try { document.execCommand("copy"); } catch (_) {}
-    ta.remove();
+    try {
+      if (!document.execCommand("copy")) throw new Error("copy failed");
+    } finally {
+      ta.remove();
+      focused?.focus({ preventScroll: true });
+    }
   }
 }
 
@@ -121,10 +126,15 @@ function fileLink(containerPath: string, title: string) {
   return a;
 }
 
+// Keep source Markdown independently of rendered DOM (code line numbers,
+// toolbar labels and KaTeX accessibility text must never enter the clipboard).
+export const answerSources = new WeakMap<HTMLElement, string>();
+
 function agentText(text: string) {
   const d = document.createElement("div");
   d.className = "msg agent";
   d.appendChild(formatText(text));
+  answerSources.set(d, text);
   return d;
 }
 
@@ -232,7 +242,8 @@ function codeBlock(lang: string, body: string) {
   btn.className = "cb-copy";
   btn.append(svgIcon("copy", 12), document.createTextNode("复制"));
   btn.addEventListener("click", async () => {
-    await copyText(body);
+    try { await copyText(body); }
+    catch (_) { toast("复制失败，请选择内容后手动复制", true); return; }
     btn.replaceChildren(svgIcon("check", 12), document.createTextNode("已复制"));
     btn.disabled = true;
     setTimeout(() => {
@@ -637,8 +648,9 @@ export function renderEvent(ev: AgentEvent | undefined) {
   if (ev.type === "result") {
     if (ev.subtype === "success") {
       const secs = ev.duration_ms ? (ev.duration_ms / 1000).toFixed(1) + "s" : "";
-      const cost = typeof ev.total_cost_usd === "number" ? "$" + ev.total_cost_usd.toFixed(4) : "";
-      out.push(chip(["✓ 回合完成", secs, cost].filter(Boolean).join(" · "), "result"));
+      // Cost is shown in the footer from committed usage, including table-priced
+      // Codex/Claude fallbacks. Raw CLI totals could disagree with settlement.
+      out.push(chip(["✓ 回合完成", secs].filter(Boolean).join(" · "), "result"));
     } else {
       out.push(chip("✗ " + (ev.result || ev.subtype || "回合失败"), "err"));
     }

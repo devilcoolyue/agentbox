@@ -83,7 +83,7 @@ function render() {
 
 function subtitle(st) {
   if (st.state === "online") {
-    const parts = ["已连接 " + uptime(Date.now() - st.since)];
+    const parts = [st.transparent ? "透明访问" : "兼容代理", "已连接 " + uptime(Date.now() - st.since)];
     if (typeof st.ping_ms === "number" && st.ping_ms >= 0) {
       parts.push("延迟 " + fmtLatency(st.ping_ms));
     }
@@ -102,6 +102,7 @@ function view() {
     allow: state.allow.slice(),
     maps: state.maps.slice(),
     auto_connect: state.auto_connect,
+ transparent: !!state.transparent,
     insecure: state.insecure,
   };
 }
@@ -204,6 +205,7 @@ function mapRow(port, target, onCommit, onRemove) {
 function renderOptions() {
   const v = view();
   $("opt-auto").checked = v.auto_connect;
+ $("opt-transparent").checked = !!v.transparent;
   $("opt-insecure").checked = v.insecure;
 
   const boot = state.autostart || {};
@@ -270,6 +272,7 @@ $("btn-toggle").addEventListener("click", async () => {
 $("btn-add-allow").addEventListener("click", () => edit((d) => d.allow.push("")));
 $("btn-add-map").addEventListener("click", () => edit((d) => d.maps.push("=")));
 
+$("opt-transparent").addEventListener("change", (e) => edit((d) => { d.transparent = e.target.checked; }));
 $("opt-auto").addEventListener("change", (e) => edit((d) => { d.auto_connect = e.target.checked; }));
 $("opt-insecure").addEventListener("change", (e) => edit((d) => { d.insecure = e.target.checked; }));
 
@@ -293,6 +296,7 @@ $("btn-save").addEventListener("click", async () => {
     allow: v.allow.filter((s) => s.trim()),
     maps: v.maps.filter((s) => s.trim() && s !== "="),
     auto_connect: v.auto_connect,
+ transparent: !!v.transparent,
     insecure: v.insecure,
   };
   await withBusy($("btn-save"), async () => {

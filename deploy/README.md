@@ -344,3 +344,18 @@ sudo systemctl start agentbox
 journald 是否跨重启持久化取决于宿主机配置，不能默认存在历史 boot 日志；需长期追踪时保留文件日志并核对 logrotate。更多症状见[常见问题](../docs/troubleshooting.md)。
 
 服务停止会中断正在处理的网页回合并等待本地收尾，断开 WebSocket、隧道和代理连接；会话容器与终端 tmux 保留。后台退出超时会报错，不能将服务停止当作完整备份所需的“容器已停”条件。
+
+
+### 透明内网访问的部署与回退
+
+该功能额外需要网络辅助镜像与 Linux Docker bridge 网络，详见[透明访问说明](../docs/networking.md#透明内网访问)。
+
+1. 本地完成 Go 校验与前端构建，按通常流程准备服务端更新。
+2. 在 Docker 所在服务器运行 `./scripts/build-network-image.sh`；也可在相同 CPU 架构构建后通过镜像仓库分发。镜像更新后停止再启动测试工作空间，使辅助容器使用新镜像。
+3. 发布新版服务端，再构建和分发新版 abox-link。确认容器可达配置的 `tunnel.network_bind` 端口（默认网桥地址 `1082`），不要将控制端口暴露到公网。
+4. 开启服务端透明模式，本机新版客户端也勾选透明访问；先用测试空间核对域名、IP、账号出口和断线状态，再推广到用户。
+5. 回退前停止运行空间、关闭透明模式，再启动空间。禁止直接删除运行中的辅助容器或清空网络规则来恢复联网，否则可能让内网请求绕到服务器侧网络。旧二进制不会管理新网络辅助容器，必须先完成上述退出流程。
+
+辅助容器无 workspace/home/shared 挂载，使用 `NET_ADMIN` / `NET_RAW` 设置所属工作空间内的规则；不要给 Agent 容器增加特权，也不要把 Docker socket 挂入辅助容器。当前支持 rootful Linux Docker bridge，host、none 和共享其他容器网络的模式会被配置校验拒绝。
+
+真实验证脚本 `scripts/test-transparent-network.py` 使用独立命名卷、合成账号及目标，覆盖双用户隔离、域名与原生 TCP、账号出口共存、撤销／重连／重启与删除清理，不调用模型服务。按 Docker daemon 架构交叉编译 `cmd/agentbox`、`cmd/abox-link`、`internal/netaccess/testdata/fixture.go` 后，分别通过 `--server`、`--client`、`--fixture` 传入，辅助镜像通过 `--network-image` 指定。

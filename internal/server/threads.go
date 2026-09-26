@@ -368,15 +368,47 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		return
 	}
 	entries := parseEntries(raw)
+	var contextLine json.RawMessage
 	if len(entries) > maxHistory {
-		entries = entries[len(entries)-maxHistory:]
+		start := len(entries) - maxHistory
+		// A long turn can outlive the history window. Preserve its request
+		// snapshot without returning the potentially large original prompt.
+		if entries[start].meta.Kind != "user" {
+			for i := start - 1; i >= 0; i-- {
+				if entries[i].meta.Kind == "user" {
+					var user logEntry
+					if json.Unmarshal(entries[i].raw, &user) == nil && user.Turn != nil {
+						contextLine, _ = json.Marshal(logEntry{TS: user.TS, Kind: "turn_context", Turn: user.Turn})
+					}
+					break
+				}
+			}
+		}
+		entries = entries[start:]
 	}
-	lines := make([]json.RawMessage, len(entries))
-	for i, e := range entries {
-		lines[i] = e.raw
+	lines := make([]json.RawMessage, 0, len(entries)+1)
+	if contextLine != nil {
+		lines = append(lines, contextLine)
+	}
+	for _, e := range entries {
+		lines = append(lines, e.raw)
+	}
+	var turnIDs []string
+	for _, line := range lines {
+		var entry struct {
+			Turn *chatTurnMetadata `json:"turn"`
+		}
+		if json.Unmarshal(line, &entry) == nil && entry.Turn != nil {
+			turnIDs = append(turnIDs, entry.Turn.ID)
+		}
+	}
+	costs, err := s.store.ChatTurnCosts(sess.ID, tid, turnIDs)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 	meta, _ := s.scanThread(sess, tid)
-	writeJSON(w, http.StatusOK, map[string]any{"entries": lines, "thread": meta})
+	writeJSON(w, http.StatusOK, map[string]any{"entries": lines, "thread": meta, "costs": costs})
 }
 
 func (s *Server) handleThreadList(w http.ResponseWriter, r *http.Request, sess store.Session) {

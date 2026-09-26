@@ -62,3 +62,15 @@
   .tun-body { padding: 14px 16px 28px; }
   .tun-pair-copy { width: 44px; height: 44px; }
 }
+
+#tun-network { margin-bottom: 12px; }
+#tun-network-rules, #tun-network-workspaces { overflow-wrap: anywhere; }
+#tun-network .field-row { align-items: end; }
+#tun-probe { flex: none; min-height: 40px; }
+#chat-network { flex: none; font-size: 11px; }
+@media (max-width: 600px) {
+  #chat-network { max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+#tun-modes { margin-bottom: 12px; }
+#tun-modes p { font-size: 13px; line-height: 1.7; color: var(--muted); }

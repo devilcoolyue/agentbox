@@ -45,11 +45,12 @@ func AppServerCommand() []string {
 
 // CodexTurn 描述经 app-server 跑的一个无头对话回合。
 type CodexTurn struct {
-	Prompt   string
-	ThreadID string // 要续聊的 provider thread id；空则新开线程
-	Model    string // 可选的每回合模型覆盖
-	Effort   string // 可选的推理强度（minimal|low|medium|high|xhigh）
-	Cwd      string // agent 的工作根目录（容器内路径）
+	Prompt                string
+	ThreadID              string // 要续聊的 provider thread id；空则新开线程
+	Model                 string // 可选的每回合模型覆盖
+	Effort                string // 可选的推理强度（minimal|low|medium|high|xhigh）
+	Cwd                   string // agent 的工作根目录（容器内路径）
+	RejectInheritedEffort bool   // unsupported model: refuse retained thread settings
 }
 
 type rpcError struct {
@@ -150,28 +151,38 @@ func RunCodexTurn(ctx context.Context, w io.Writer, r io.Reader, abort func(), i
 
 	var threadRes json.RawMessage
 	if t.ThreadID != "" {
-		res, err := c.call(2, "thread/resume", map[string]any{"threadId": t.ThreadID})
+		params := map[string]any{"threadId": t.ThreadID}
+		if t.Model != "" {
+			params["model"] = t.Model
+		}
+		res, err := c.call(2, "thread/resume", params)
 		if err == nil {
 			threadRes = res
 		}
 		// 续不上（rollout 丢失等）就静默新开线程，对话还能继续只是丢上下文
 	}
 	if threadRes == nil {
-		res, err := c.call(3, "thread/start", map[string]any{
-			"cwd": t.Cwd, "sandbox": "danger-full-access", "approvalPolicy": "never",
-		})
+		params := map[string]any{"cwd": t.Cwd, "sandbox": "danger-full-access", "approvalPolicy": "never"}
+		if t.Model != "" {
+			params["model"] = t.Model
+		}
+		res, err := c.call(3, "thread/start", params)
 		if err != nil {
 			return fmt.Errorf("%w: thread/start: %v", ErrAppServerUnavailable, err)
 		}
 		threadRes = res
 	}
 	var tr struct {
-		Thread struct {
+		ReasoningEffort string `json:"reasoningEffort"`
+		Thread          struct {
 			ID string `json:"id"`
 		} `json:"thread"`
 	}
 	if json.Unmarshal(threadRes, &tr); tr.Thread.ID == "" {
 		return fmt.Errorf("%w: 线程响应缺 id", ErrAppServerUnavailable)
+	}
+	if t.RejectInheritedEffort && tr.ReasoningEffort != "" {
+		return fmt.Errorf("模型 %s 不支持调整推理强度，但 CLI / 线程仍使用 %s；请清除 CLI 配置或新建对话后重试", t.Model, tr.ReasoningEffort)
 	}
 	c.mu.Lock()
 	c.thread = tr.Thread.ID
@@ -196,7 +207,7 @@ func RunCodexTurn(ctx context.Context, w io.Writer, r io.Reader, abort func(), i
 	}
 	turnRes, err := c.call(4, "turn/start", turnParams)
 	if err != nil {
-		return fmt.Errorf("%w: turn/start: %v", ErrAppServerUnavailable, err)
+		return fmt.Errorf("turn/start: %w", err)
 	}
 	var ur struct {
 		Turn struct {

@@ -1,9 +1,11 @@
 package linkapp
 
 import (
+	"agentbox/internal/netaccess"
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,6 +130,15 @@ func dialTunnel(ctx context.Context, cfg Config, maps []tunnel.MapSpec) (*yamux.
 	}
 	hdr := http.Header{}
 	hdr.Set("Authorization", "Bearer "+cfg.Token)
+	if cfg.Transparent {
+		rules, err := netaccess.NormalizeRules(cfg.Allow)
+		if err != nil {
+			return nil, nil, err
+		}
+		raw, _ := json.Marshal(rules)
+		hdr.Set(netaccess.CapabilityHeader, netaccess.Protocol)
+		hdr.Set(netaccess.RulesHeader, base64.RawURLEncoding.EncodeToString(raw))
+	}
 	if h := tunnel.EncodeMapSpecs(maps); h != "" {
 		hdr.Set(tunnel.MapsHeader, h)
 	}
@@ -147,6 +158,10 @@ func dialTunnel(ctx context.Context, cfg Config, maps []tunnel.MapSpec) (*yamux.
 		return nil, nil, fmt.Errorf("连接 %s: %w", target, err)
 	}
 
+	if cfg.Transparent && resp.Header.Get(netaccess.CapabilityHeader) != netaccess.Protocol {
+		conn.Close()
+		return nil, nil, fmt.Errorf("服务端不支持透明访问，请升级服务端或关闭客户端透明访问")
+	}
 	ycfg := yamux.DefaultConfig()
 	ycfg.KeepAliveInterval = 15 * time.Second
 	ycfg.ConnectionWriteTimeout = 15 * time.Second

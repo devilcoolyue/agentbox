@@ -7,14 +7,17 @@ import { buttonLabel } from "./icons.js";
 import { S, bus } from "./state.js";
 import type { Pick } from "./state.js";
 import type {
-  AgentEvent, ChatMessage, History, LiveNode, ModelOption, StreamEvent,
+  AgentEvent, ChatMessage, History, LiveNode, ModelOption, StreamEvent, ReasoningCapability, SessionModels,
 } from "./types.js";
-import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt } from "./util.js";
+import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
-import { chip, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon } from "./chat-render.js";
+import { chip, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon, answerSources } from "./chat-render.js";
+import { answerFooter, observeAnswer } from "./chat-footer.js";
+import type { AnswerContext } from "./chat-footer.js";
 import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
+import { BUDGETS, EFFORT_LABELS, allowedLevels, defaultReasoning, canKeepEffort } from "./reasoning.js";
 import { setTip } from "./tip.js";
 
 /* ---------------- 对话通道 ----------------
@@ -65,11 +68,16 @@ export function connectChat() {
 let chatEpoch = 0;
 export function chatTeardown() {
   ++chatEpoch;
+  modelsAbort?.abort();
+  pendingPick = null;
+  sessionModels = null;
+  manualEffort = false;
   waking = false;
   connection.dispose();
   setChatConn("connected");
   cancelHistoryLoad();
   replayReset();
+  resetAnswerContext();
   setChatStatus("idle");
 }
 
@@ -125,6 +133,7 @@ function streamSettle() {
   for (const el of liveEls) el.classList.remove("streaming");
   liveEls = [];
   liveBlock = null;
+  turnFooter?.update();
 }
 
 function liveClear() {
@@ -207,6 +216,7 @@ function replayFinish() {
   b.el.classList.remove("streaming", "live-text");
   if (b.kind === "thinking") (b.el as HTMLDetailsElement).open = false; // 与正式渲染一致：思考默认折叠
   liveBlock = null;
+  turnFooter?.update();
   replayPump();
 }
 
@@ -356,7 +366,11 @@ function updateScrollBottomButton() {
 function liveRender(b: LiveBlock) {
   const log = $("chat-log");
   const stick = nearBottom(log);
-  if (b.kind === "text") b.body.replaceChildren(formatText(b.shown));
+  if (b.kind === "text") {
+    b.body.replaceChildren(formatText(b.shown));
+    answerSources.set(b.el, b.shown);
+    if (turnFooter && b.shown) turnFooter.el.hidden = false;
+  }
   else b.body.textContent = b.shown; // thinking 与最终渲染一致，保持纯文本
   if (stick) log.scrollTop = log.scrollHeight;
 }
@@ -367,12 +381,21 @@ function handleChatMsg(msg: ChatMessage) {
       replayFlush(); // 上一回合的回放立刻放完，不让新消息插到它前面
       noteThreadTitle(msg.text!);
       appendChat(renderUserMsg(msg.text));
+      answerContext.turn = msg.turn;
       break;
     case "agent_event":
+      observeAnswer(answerContext, msg.event, msg.ts);
       handleAgentEvent(msg.event);
+      turnFooter?.update();
       break;
     case "agent_raw":
       replayAppend(chip(msg.text!)); // 回放中则排队，保持时间线顺序
+      break;
+    case "turn_cost":
+      if (msg.cost && msg.cost.turn_id === answerContext.turn?.id) {
+        answerContext.cost = msg.cost;
+        turnFooter?.update();
+      }
       break;
     case "thread":
       // 另一个页面切换 / 新建 / 删除了对话线程；本端发起的操作已通过
@@ -384,7 +407,22 @@ function handleChatMsg(msg: ChatMessage) {
       applyThreadTitle(msg.id!, msg.title!);
       break;
     case "status":
+      if (!answerContext.ts && msg.ts) answerContext.ts = msg.ts;
       setChatStatus(msg.state!, msg.error);
+      if (msg.state === "error" && msg.retry_text) {
+        const input = $<HTMLTextAreaElement>("chat-input");
+        if (!input.value.trim()) { input.value = msg.retry_text; autoGrow(); }
+        const retry = document.createElement("button");
+        retry.className = "btn btn-sm"; retry.textContent = "恢复默认并重试";
+        retry.addEventListener("click", () => {
+          S.pick.effort = ""; pendingPick = null; manualEffort = false; savePick(); renderPickPill();
+          if (input.value.trim() && input.value.trim() !== msg.retry_text) {
+            toast("已恢复默认，请确认当前输入后发送"); return;
+          }
+          input.value = msg.retry_text!; autoGrow(); retry.remove(); sendChat();
+        }, { once: true });
+        appendChat(retry);
+      }
       if (msg.state === "idle" || msg.state === "error") refreshAll();
       break;
     case "error":
@@ -462,7 +500,7 @@ export function sendChat() {
   }
   connection.send(JSON.stringify({
     type: "user_message", text,
-    model: S.pick.model, effort: S.pick.effort,
+    model: S.pick.model, effort: S.pick.effort, effort_control: currentReasoning().control,
   }));
   $<HTMLTextAreaElement>("chat-input").value = "";
   autoGrow();
@@ -625,19 +663,55 @@ interface EffortOpt {
   l: string;
   sub?: string;
 }
-const EFFORT_OPTS: EffortOpt[] = [
-  { v: "", l: "默认强度" },
-  { v: "low", l: "轻度" },
-  { v: "medium", l: "中" },
-  { v: "high", l: "高" },
-  { v: "xhigh", l: "极高", sub: "更快消耗使用额度" },
-];
+let sessionModels: SessionModels | null = null;
+let modelsAbort: AbortController | null = null;
+let manualEffort = false;
+let pendingPick: { effort: string; control?: string } | null = null;
+function currentReasoning(): ReasoningCapability {
+  const capability = modelOpts().find(m => m.id === S.pick.model)?.reasoning || sessionModels?.default_reasoning;
+  return { ...defaultReasoning(pickStyle()), ...capability };
+}
+function effortOpts(): EffortOpt[] {
+  const r = currentReasoning();
+  const opts: EffortOpt[] = [{ v: "", l: "跟随 CLI 默认", sub: "沿用 CLI 配置或线程设置，不等于关闭推理" }];
+  if (r.support === "unsupported" || (r.support === "unknown" && !manualEffort)) return opts;
+  const levels = r.support === "supported" ? r.levels || [] : allowedLevels(pickStyle(), r.control);
+  return [...opts, ...levels.map(v => ({ v, l: EFFORT_LABELS[v] || v, sub: r.control === "budget" ? `预算上限 ${BUDGETS[v].toLocaleString()} tokens` : v }))];
+}
+async function refreshModelCapabilities() {
+  const id = S.current?.id, epoch = chatEpoch;
+  if (!id) return;
+  modelsAbort?.abort();
+  const abort = new AbortController(); modelsAbort = abort;
+  try {
+    const value = await api<SessionModels>(`/sessions/${id}/models`, { signal: abort.signal });
+    if (abort.signal.aborted || epoch !== chatEpoch || S.current?.id !== id) return;
+    if (!Array.isArray(value.models)) throw new Error("模型能力响应无效");
+    let previous = currentReasoning();
+    sessionModels = value;
+    if (pendingPick) {
+      const saved = pendingPick; pendingPick = null;
+      const r = currentReasoning();
+      manualEffort = !!saved.effort && saved.control === r.control;
+      if (manualEffort && effortOpts().some(o => o.v === saved.effort)) S.pick.effort = saved.effort;
+      previous = r;
+    }
+    const next = currentReasoning();
+    if (S.pick.effort && !(next.support === "unknown" && previous.control === next.control && manualEffort) && !canKeepEffort(previous, next, S.pick.effort)) {
+      S.pick.effort = ""; manualEffort = false;
+      toast("模型能力已变化，已恢复为跟随 CLI 默认");
+    }
+    savePick(); renderPickPill(); closePickMenu();
+  } catch (error) {
+    if (!abort.signal.aborted && epoch === chatEpoch) toast("读取模型能力失败：" + (error as Error).message, true);
+  }
+}
 /* 尾部 [1m] 是 Claude Code 的 1M 上下文后缀（opus[1m] 等），与后端 modelRe 保持一致 */
 export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[1m\])?$/;
 
 function modelOpts(): ModelOption[] {
   const agent = (S.current && S.current.agent) as string;
-  const fromSrv = S.models && S.models[agent];
+  const fromSrv = sessionModels?.models || (S.models && S.models[agent]);
   const opts = [...(fromSrv?.length ? fromSrv : FALLBACK_MODELS[agent] || FALLBACK_MODELS.claude)];
   const initial = S.current?.default_model;
   if (initial && !opts.some((o) => o.id === initial)) {
@@ -651,24 +725,30 @@ function modelLabel(v: string) {
   const hit = modelOpts().find((o) => o.id === v);
   return hit ? hit.label : v; // 自定义 ID 直接展示
 }
-function effortLabel(v: string) { return (EFFORT_OPTS.find((o) => o.v === v) || EFFORT_OPTS[0]).l; }
+function effortLabel(v: string) {
+  if (currentReasoning().support === "unsupported") return "不支持调整";
+  return (effortOpts().find(o => o.v === v) || effortOpts()[0]).l;
+}
 
 function workspaceModel() {
   return S.current?.default_model || (S.current?.agent === "codex" ? "gpt-5.5" : "claude-opus-5");
 }
 
 export function loadPick() {
-  let p: Partial<Pick> = {};
+  sessionModels = null;
+  let p: Partial<Pick> & { version?: number; control?: string } = {};
   try { p = JSON.parse(localStorage.getItem(pickKey())!) || {}; } catch (_) {}
-  S.pick = {
-    model: typeof p.model === "string" && MODEL_ID_RE.test(p.model) ? p.model : workspaceModel(),
-    effort: EFFORT_OPTS.some((o) => o.v === p.effort) ? p.effort! : "",
-  };
-  renderPickPill();
-  closePickMenu();
+  S.pick = { model: typeof p.model === "string" && MODEL_ID_RE.test(p.model) ? p.model : workspaceModel(), effort: "" };
+  const r = currentReasoning();
+  pendingPick = p.version === 2 && p.effort ? { effort: p.effort, control: p.control } : null;
+  // v1 Claude choices were budgets. Never silently migrate them to native effort.
+  manualEffort = p.version === 2 && !!p.effort;
+  if (p.version === 2 && p.control === r.control && effortOpts().some(o => o.v === p.effort)) S.pick.effort = p.effort!;
+  renderPickPill(); closePickMenu();
+  void refreshModelCapabilities();
 }
 
-function savePick() { localStorage.setItem(pickKey(), JSON.stringify(S.pick)); }
+function savePick() { localStorage.setItem(pickKey(), JSON.stringify({ ...S.pick, version: 2, control: currentReasoning().control })); }
 function closePickMenu() { $("pick-menu").classList.add("hidden"); hideFly(); }
 
 function renderPickPill() {
@@ -689,13 +769,22 @@ function renderPickPill() {
  * 两者都：点击选项即选中并收起，点击外部收起整个面板。
  * 移动端无悬停，退回「点击进二级 + 返回」的抽屉式。 */
 function pickStyle() { return S.current && S.current.agent === "codex" ? "codex" : "claude"; }
-function effortTitle() { return pickStyle() === "codex" ? "推理强度" : "思考强度"; }
+function effortTitle() { return currentReasoning().control === "budget" ? "思考预算" : "推理强度"; }
 function customModel() {
   return S.pick.model && !modelOpts().some((o) => o.id === S.pick.model) ? S.pick.model : "";
 }
 
 function choose(kind: string, v: string) {
-  if (kind === "model") S.pick.model = v || workspaceModel(); else S.pick.effort = v;
+  pendingPick = null;
+  if (kind === "model") {
+    const before = currentReasoning();
+    S.pick.model = v || workspaceModel();
+    if (!canKeepEffort(before, currentReasoning(), S.pick.effort)) {
+      S.pick.effort = "";
+      toast("新模型的支持范围不同，已恢复为跟随 CLI 默认");
+    }
+    manualEffort = false;
+  } else S.pick.effort = v;
   savePick();
   renderPickPill();
   closePickMenu();
@@ -717,7 +806,22 @@ async function askCustomModel() {
 /* 某属性的完整选项列表，浮层与移动端二级面板共用 */
 function optList(kind: string) {
   if (kind === "effort") {
-    return EFFORT_OPTS.map((o) => pickOpt(o.l, o.sub || "", S.pick.effort === o.v, () => choose("effort", o.v)));
+    const r = currentReasoning();
+    if (r.support === "unsupported") {
+      const info = document.createElement("p"); info.className = "muted";
+      info.textContent = "此模型不支持调整。CLI 中已配置的强度可能仍需清除。";
+      return [info];
+    }
+    const opts: HTMLElement[] = effortOpts().map(o => pickOpt(o.l, o.sub || "", S.pick.effort === o.v, () => choose("effort", o.v)));
+    if (r.support === "unknown") {
+      const note = document.createElement("p"); note.className = "muted";
+      note.textContent = "支持情况未知，手动指定可能被模型或中转服务拒绝。";
+      opts.unshift(note);
+      if (!manualEffort) opts.push(pickOpt("手动指定…", "仅在确认服务支持时使用", false, () => {
+        manualEffort = true; hideFly(); buildPickSub("effort");
+      }));
+    }
+    return opts;
   }
   const out: HTMLElement[] = [];
   for (const o of modelOpts()) {
@@ -926,11 +1030,23 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
   try {
     // 只返回当前对话线程的全文；其余线程在历史对话面板（chat-threads.js）
     // 里列表展示，切换后经 reloadThread 重新加载
-    const { entries, thread } = await api<History>(`/sessions/${sess.id}/history`, { signal: ctrl.signal });
+    const { entries, thread, costs } = await api<History>(`/sessions/${sess.id}/history`, { signal: ctrl.signal });
     if (historyLoadIsStale(sess.id, gen)) return;
     setThreadBar(thread);
-    if (silent) log.replaceChildren(); // 整体替换，避免与已渲染内容重复
-    for (const raw of entries) for (const n of renderEntry(raw)) appendChat(n);
+    replayReset();
+    log.replaceChildren(); // 重连与首次加载都以服务端记录为准
+    resetAnswerContext();
+    for (const raw of entries) {
+      if (raw.kind === "event") observeAnswer(answerContext, raw.event, raw.ts);
+      for (const n of renderEntry(raw)) appendChat(n);
+      if (raw.kind === "user" || raw.kind === "turn_context") {
+        answerContext.turn = raw.turn;
+        answerContext.cost = raw.turn ? costs?.[raw.turn.id] : undefined;
+      }
+      answerContext.historical = true;
+      if (raw.kind === "status" && !answerContext.ts) answerContext.ts = raw.ts;
+      turnFooter?.update();
+    }
     loaded = true;
   } catch (e) {
     if (historyLoadIsStale(sess.id, gen)) return;
@@ -959,6 +1075,7 @@ export async function reloadThread() {
   if (!S.current) return;
   histGen++; // 立刻作废在途加载，clear 之后它们不得再往里追加
   replayReset(); // 回放动画与积压一并丢弃，历史里有完整内容
+  resetAnswerContext();
   $("chat-log").replaceChildren();
   setThreadBar(null);
   await loadHistory();
@@ -970,6 +1087,14 @@ export async function reloadThread() {
  * 归入同一个 .turn 容器，左侧挂品牌头像（OpenWebUI 式对话流）。
  * 用户消息与分割线打断分组；切会话清空 log 后 isConnected 失效自动重开。 */
 let agentTurn: HTMLElement | null = null; // 当前回合的内容列（.turn-body）
+let answerContext: AnswerContext = {};
+let turnFooter: ReturnType<typeof answerFooter> | null = null;
+
+function resetAnswerContext() {
+  agentTurn = null;
+  turnFooter = null;
+  answerContext = {};
+}
 
 function turnBody() {
   if (agentTurn && agentTurn.isConnected) return agentTurn;
@@ -980,6 +1105,8 @@ function turnBody() {
   av.appendChild(agentIcon(S.current ? S.current.agent : "claude", 24));
   const body = document.createElement("div");
   body.className = "turn-body";
+  turnFooter = answerFooter(body, answerContext);
+  body.appendChild(turnFooter.el);
   turn.append(av, body);
   $("chat-log").appendChild(turn);
   agentTurn = body;
@@ -992,10 +1119,14 @@ export function appendChat(node: HTMLElement | null | undefined) {
   const stick = nearBottom(log);
   const breaks = node.classList.contains("user") || node.classList.contains("chat-divider");
   if (breaks) {
-    agentTurn = null;
+    resetAnswerContext();
     log.appendChild(node);
   } else {
-    turnBody().appendChild(node);
+    const body = turnBody();
+    if (node.classList.contains("result") && body.querySelector(".msg.agent")) {
+      turnFooter!.setReceipt(node);
+    } else body.insertBefore(node, turnFooter!.el);
+    turnFooter!.update();
   }
   ensureWorking(); // 新内容后把执行指示重新压回末尾（仅运行中生效）
   updateHero();
@@ -1100,6 +1231,7 @@ $("picker").addEventListener("mouseleave", scheduleHideFly, { signal: lifetime.s
 document.addEventListener("click", (e) => {
   if (!(e.target as Element).closest(".picker")) closePickMenu();
 }, { signal: lifetime.signal });
+bus.addEventListener("models-updated", () => { void refreshModelCapabilities(); }, { signal: lifetime.signal });
 bus.addEventListener("thread-changed", () => { reloadThread(); }, { signal: lifetime.signal });
 $("chat-loading-retry").addEventListener("click", reloadThread, { signal: lifetime.signal });
  disposeChat = () => { lifetime.abort(); chatTeardown(); };

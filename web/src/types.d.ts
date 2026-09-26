@@ -36,6 +36,7 @@ export interface AccountAccess {
 
 /** GET /api/accounts 的账号池条目（server.acctView）。 */
 export interface Account {
+  model_reasoning?: Record<string, ReasoningCapability>;
   /** 仅管理员可见；缺省表示全体用户共享。 */
   access?: AccountAccess;
   id: string;
@@ -326,9 +327,20 @@ export interface Me {
 /* ---------------- 系统设置 ---------------- */
 
 /** config.ModelOption：对话选择器里的一个可选模型。 */
+export interface ReasoningCapability {
+  support: "unknown" | "supported" | "unsupported";
+  control?: "effort" | "budget";
+  levels?: string[];
+}
+export interface SessionModels {
+  models: ModelOption[];
+  default_reasoning: ReasoningCapability;
+  discovery: "available" | "unavailable" | "stopped";
+}
 export interface ModelOption {
   id: string;
   label: string;
+  reasoning?: ReasoningCapability;
 }
 
 /** config.TerminalTips：终端页顶栏轮播提示语。interval_sec <= 0 关闭轮播。 */
@@ -349,6 +361,9 @@ export interface ContainerLimits {
 
 /** config.TunnelConfig：反向隧道（容器经用户机器出网）配置。 */
 export interface TunnelConfig {
+ transparent?: boolean;
+ network_bind?: string;
+ network_image?: string;
   enabled: boolean;
   /** SOCKS5 代理监听的 host:port，需容器可达 */
   proxy_bind?: string;
@@ -631,6 +646,11 @@ export interface TunnelMap {
 
 /** GET /api/tunnel/status：调用者自己的隧道状态。 */
 export interface TunnelStatus {
+ transparent?: boolean;
+ client_transparent?: boolean;
+ network_error?: string;
+ rules?: string[];
+ workspaces?: {session: string; name: string; ready: boolean; error?: string}[];
   enabled: boolean;
   /** SOCKS5 代理是否在监听 */
   proxy_up: boolean;
@@ -674,7 +694,24 @@ export interface Thread {
 }
 
 /** GET /api/sessions/{id}/history 的一条落盘记录。 */
+export interface ChatTurnMetadata {
+  id: string;
+  model: string;
+  effort: string;
+  control: string;
+  unsupported?: boolean;
+  budget_tokens?: number;
+}
+
+export interface ChatTurnCost {
+  turn_id: string;
+  cost_micro_usd: number;
+  source: "provider" | "table" | "mixed" | "unpriced" | "unknown";
+  partial?: boolean;
+}
+
 export interface HistoryEntry {
+  turn?: ChatTurnMetadata;
   ts: string;
   /** "user" | "event" | "status" | "chat_session" | "title" | "divider"(旧) */
   kind: string;
@@ -688,6 +725,7 @@ export interface HistoryEntry {
 export interface History {
   entries: HistoryEntry[];
   thread: Thread | null;
+  costs?: Record<string, ChatTurnCost>;
 }
 
 /** GET /api/sessions/{id}/chat/threads */
@@ -824,6 +862,11 @@ export interface StreamEvent {
 /** 对话通道服务端 → 前端。type 决定其余字段，用可选字段而非联合类型，
  *  与 handleChatMsg 的 switch 写法直接对应。 */
 export interface ChatMessage {
+  cost?: ChatTurnCost;
+  ts?: string;
+  turn?: ChatTurnMetadata;
+  /** 参数校验失败，回合未提交；可由用户修改后重试。 */
+  retry_text?: string;
   type: string;
   /** user_message / agent_raw 的文本 */
   text?: string;

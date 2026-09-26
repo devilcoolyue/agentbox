@@ -21,7 +21,7 @@ type Event struct {
 type Adapter interface {
 	Type() string
 	Capabilities() Capabilities
-	Chat(permission, resume, model, effort string) ([]string, error)
+	Chat(permission, resume, model, effort string, control ...string) ([]string, error)
 	Title() ([]string, error)
 	ParseTitle(string) (string, []byte)
 	Decode([]byte) (Event, bool)
@@ -39,8 +39,8 @@ func (a cliAdapter) Type() string { return string(a) }
 func (a cliAdapter) Capabilities() Capabilities {
 	return Capabilities{AppServer: string(a) == config.AgentCodex, TerminalUsage: true}
 }
-func (a cliAdapter) Chat(permission, resume, model, effort string) ([]string, error) {
-	return ChatCommand(string(a), permission, resume, model, effort)
+func (a cliAdapter) Chat(permission, resume, model, effort string, control ...string) ([]string, error) {
+	return ChatCommand(string(a), permission, resume, model, effort, control...)
 }
 func (a cliAdapter) Title() ([]string, error)               { return TitleCommand(string(a)) }
 func (a cliAdapter) ParseTitle(out string) (string, []byte) { return TitleOutput(string(a), out) }

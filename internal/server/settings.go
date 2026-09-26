@@ -71,6 +71,14 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
+	if patch.Tunnel != nil && s.cfg.GetTunnel().Transparent && !patch.Tunnel.Transparent {
+		for _, sess := range s.store.All() {
+			if sess.Status == store.StatusRunning {
+				writeErr(w, 409, "切换回兼容代理模式前，请先停止运行中的工作空间")
+				return
+			}
+		}
+	}
 	if err := s.cfg.ApplySettings(patch); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -80,6 +88,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		// 隧道开关热生效：配置已落盘，这里同步启停 SOCKS 代理；绑定失败不算
 		// 保存失败，把原因回给前端展示。
 		if err := s.applyTunnel(); err != nil {
+			view.TunnelError = err.Error()
+		}
+		if err := s.applyNetwork(); err != nil {
 			view.TunnelError = err.Error()
 		}
 		view.TunnelActive = s.tunnels.proxyUp.Load()
@@ -122,12 +133,13 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 // 创建后前端随即引导进入登录（OAuth / API Key）流程。
 func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ID      string                `json:"id"`
-		Type    string                `json:"type"`
-		Label   string                `json:"label"`
-		Env     map[string]string     `json:"env"`
-		ProxyID string                `json:"proxy_id"`
-		Access  *config.AccountAccess `json:"access"`
+		ID             string                                 `json:"id"`
+		Type           string                                 `json:"type"`
+		Label          string                                 `json:"label"`
+		Env            map[string]string                      `json:"env"`
+		ProxyID        string                                 `json:"proxy_id"`
+		Access         *config.AccountAccess                  `json:"access"`
+		ModelReasoning *map[string]config.ReasoningCapability `json:"model_reasoning"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
@@ -159,6 +171,9 @@ func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 		ID: req.ID, Type: req.Type, Label: req.Label,
 		CredentialsDir: credDir, Env: req.Env, Access: req.Access, ProxyID: req.ProxyID,
 	}
+	if req.ModelReasoning != nil {
+		acct.ModelReasoning = *req.ModelReasoning
+	}
 	if err := s.cfg.AddAccount(acct); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -173,10 +188,11 @@ func (s *Server) handleAccountPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Label   *string               `json:"label"`
-		Env     *map[string]string    `json:"env"`
-		ProxyID *string               `json:"proxy_id"`
-		Access  *config.AccountAccess `json:"access"`
+		Label          *string                                `json:"label"`
+		Env            *map[string]string                     `json:"env"`
+		ProxyID        *string                                `json:"proxy_id"`
+		Access         *config.AccountAccess                  `json:"access"`
+		ModelReasoning *map[string]config.ReasoningCapability `json:"model_reasoning"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
@@ -186,7 +202,7 @@ func (s *Server) handleAccountPatch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	patch := config.AccountPatch{Access: req.Access}
+	patch := config.AccountPatch{Access: req.Access, ModelReasoning: req.ModelReasoning}
 	if req.Label != nil {
 		label := strings.TrimSpace(*req.Label)
 		if label == "" {

@@ -27,10 +27,11 @@ const (
 
 // Status is the supervisor snapshot the panel renders.
 type Status struct {
-	State  State       `json:"state"`
-	Detail string      `json:"detail"`
-	Since  int64       `json:"since"` // unix millis the current session came online, 0 if not online
-	Maps   []MapStatus `json:"maps"`
+	Transparent bool        `json:"transparent"`
+	State       State       `json:"state"`
+	Detail      string      `json:"detail"`
+	Since       int64       `json:"since"` // unix millis the current session came online, 0 if not online
+	Maps        []MapStatus `json:"maps"`
 	// PingMS is the tunnel round-trip latency in milliseconds (one decimal), or
 	// -1 when offline or not yet sampled.
 	PingMS float64 `json:"ping_ms"`
@@ -40,6 +41,7 @@ type Status struct {
 // be started and stopped from the panel, with its state and log observable
 // while it runs.
 type Supervisor struct {
+	transparent bool
 	// Relogin, when set, is called after the server rejects the stored token
 	// and returns a fresh one. The headless CLI sets it (it holds a password);
 	// the panel leaves it nil, because pairing deliberately keeps no password —
@@ -82,7 +84,7 @@ func (s *Supervisor) MirrorTo(fn func(string)) {
 func (s *Supervisor) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st := Status{State: s.state, Detail: s.detail, Maps: s.maps, PingMS: -1}
+	st := Status{Transparent: s.transparent, State: s.state, Detail: s.detail, Maps: s.maps, PingMS: -1}
 	if s.state == StateOnline && !s.since.IsZero() {
 		st.Since = s.since.UnixMilli()
 		if s.pingOK {
@@ -227,6 +229,7 @@ func (s *Supervisor) serveOnce(ctx context.Context, link *tunnel.Link, cfg Confi
 	}
 
 	s.mu.Lock()
+	s.transparent = cfg.Transparent
 	s.state, s.detail, s.since, s.maps, s.pingOK = StateOnline, "", time.Now(), mapStatus, false
 	s.mu.Unlock()
 	s.log.Printf("隧道已建立，容器现在可以访问你的内网了")
@@ -270,6 +273,7 @@ func (s *Supervisor) setState(st State, detail string) {
 	defer s.mu.Unlock()
 	s.state, s.detail = st, detail
 	if st != StateOnline {
+		s.transparent = false
 		s.since, s.maps, s.pingOK = time.Time{}, nil, false
 	}
 }

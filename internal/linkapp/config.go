@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"agentbox/internal/netaccess"
 	"agentbox/internal/tunnel"
 )
 
@@ -21,6 +22,7 @@ import (
 // deliberately absent: pairing exchanges it once for a token, and only the
 // token is stored.
 type Config struct {
+	Transparent bool     `json:"transparent"`
 	Server      string   `json:"server"`       // agentbox base URL
 	User        string   `json:"user"`         // agentbox username
 	Token       string   `json:"token"`        // session token from pairing/login
@@ -39,8 +41,15 @@ func (c Config) Paired() bool {
 // meant to be shown verbatim in the UI. It also reports the parsed forms so
 // callers do not parse twice.
 func (c Config) Validate() (tunnel.Whitelist, []tunnel.MapSpec, error) {
-	var maps []tunnel.MapSpec
 	allow := append([]string(nil), c.Allow...)
+	if c.Transparent {
+		var err error
+		allow, err = netaccess.NormalizeRules(allow)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	var maps []tunnel.MapSpec
 	for _, m := range c.Maps {
 		spec, err := tunnel.ParseMapSpec(m)
 		if err != nil {
@@ -77,7 +86,7 @@ func configPath() string { return filepath.Join(ConfigDir(), "config.json") }
 // LoadConfig reads the stored config; a missing file yields a zero Config and
 // no error, which the panel renders as the first-run pairing screen.
 func LoadConfig() (Config, error) {
-	var c Config
+	c := Config{Transparent: true}
 	raw, err := os.ReadFile(configPath())
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -18,7 +18,7 @@ let lastFetch = 0;
 const onPage = () => S.view === "tunnel";
 
 async function refreshStatus(force: boolean) {
-  if (!force && Date.now() - lastFetch < 15000) return;
+  if (!force && Date.now() - lastFetch < 15000) { renderChatNetwork(); return; }
   lastFetch = Date.now();
   try {
     st = await api<TunnelStatus>("/tunnel/status");
@@ -26,6 +26,7 @@ async function refreshStatus(force: boolean) {
     return; // 网络抖动保持现状
   }
   renderSideItem();
+  renderChatNetwork();
   if (onPage()) renderPage();
 }
 
@@ -46,6 +47,23 @@ function renderSideItem() {
   btn.setAttribute("aria-label", label);
 }
 
+function renderChatNetwork() {
+ const btn = $("chat-network");
+ btn.classList.toggle("hidden", !st?.enabled);
+ if (!st?.enabled) return;
+ const current = st.workspaces?.find(w => w.session === S.current?.id);
+ btn.textContent = !st.connected ? "内网：离线" : !st.transparent || !st.client_transparent ? "内网：兼容代理" : current?.ready ? "内网：可直接访问" : "内网：网络待就绪";
+}
+$("chat-network").addEventListener("click", openTunnelView);
+$("tun-probe").addEventListener("click", async () => {
+ const btn = $<HTMLButtonElement>("tun-probe"); btn.disabled = true;
+ try {
+  const result = await api<{elapsed_ms:number}>("/tunnel/probe", {method:"POST",body:JSON.stringify({target:$<HTMLInputElement>("tun-probe-target").value.trim()})});
+  $("tun-probe-result").textContent = "客户端到目标连接成功 · " + result.elapsed_ms + " ms（工作空间就绪状态见上方）";
+ } catch (err) { $("tun-probe-result").textContent = String((err as Error).message); }
+ finally { btn.disabled = false; }
+});
+
 /* ---- 页面 ---- */
 
 function renderPage() {
@@ -55,13 +73,24 @@ function renderPage() {
   $("tun-st-title").textContent = !st.enabled ? "功能未启用" : (conn ? "隧道在线" : "等待接入");
   let sub = "";
   if (conn) {
-    sub = "来自 " + (st.remote || "?") + " · 已连接 " + fmtUptime(Date.now() - st.since!);
+    sub = "来自 " + (st.remote || "?") + " · 已连接 " + fmtUptime(Date.now() - (st.since || Date.now()));
   } else if (st.enabled) {
     sub = "SOCKS5 代理 " + st.proxy + (st.proxy_up ? " 就绪" : " 未监听");
   }
   $("tun-st-sub").textContent = sub;
+  $("tun-mode-current").textContent = !st.enabled ? "隧道未启用" : !st.transparent ? "服务端当前：兼容代理模式（暂不推荐）" : !conn ? "服务端默认：透明模式（推荐），等待客户端连接" : st.client_transparent ? "当前连接：透明模式（推荐）" : "当前连接：兼容代理模式（暂不推荐）；服务端已支持透明模式";
 
-  // 端口映射列表
+  $("tun-guide-mode").textContent = st.transparent ? "新版客户端默认使用透明模式；旧配置请勾选「透明内网访问」，保存并启动。等待工作空间显示「网络就绪」后，对话与终端可直接使用放行的内网地址。" : "客户端在线后，Agent 可通过代理或端口映射访问放行目标；断开后暂停访问。";
+ $("tun-network").classList.toggle("hidden", !st.transparent);
+ $("tun-network-note").textContent = st.network_error || (!st.connected ? "隧道离线，已配置的内网目标暂停访问。" : !st.client_transparent ? "客户端使用兼容模式；在新版 abox-link 中开启透明内网访问。" : "对话与终端可直接访问下列目标，无需配置代理。支持 IPv4 / TCP。" );
+ $("tun-network-rules").textContent = (st.rules || []).join(" · ") || "尚未配置透明访问目标";
+ const workspaces = $("tun-network-workspaces"); workspaces.replaceChildren();
+ for (const item of st.workspaces || []) {
+  const row = document.createElement("p");
+  row.textContent = item.name + "：" + (item.ready ? "网络就绪" : item.error || "正在准备网络"); workspaces.appendChild(row);
+ }
+
+ // 端口映射列表
   const mapsBox = $("tun-maps");
   mapsBox.replaceChildren();
   const maps = st.maps || [];
@@ -199,3 +228,5 @@ setInterval(() => {
 
 bus.addEventListener("data-updated", () => refreshStatus(false));
 bus.addEventListener("open-tunnel", openTunnelView);
+
+bus.addEventListener("open-session", () => { renderChatNetwork(); void refreshStatus(true); });
