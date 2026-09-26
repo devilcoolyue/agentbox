@@ -63,6 +63,14 @@
   .tun-pair-copy { width: 44px; height: 44px; }
 }
 
+/* Card gap owns vertical spacing; browser paragraph margins must not stack
+   with it. Empty live results and workspace lists should not reserve a row. */
+.tun-body > .card { gap: 10px; }
+.tun-body > .card p { margin: 0; line-height: 1.6; }
+.tun-body > .card .card-desc { margin: 0; }
+#tun-network-workspaces:empty, #tun-probe-result:empty { display: none; }
+#tun-network-workspaces:not(:empty) { display: grid; gap: 6px; }
+#tun-probe-result { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
 #tun-network { margin-bottom: 12px; }
 #tun-network-rules, #tun-network-workspaces { overflow-wrap: anywhere; }
 #tun-network .field-row { align-items: end; }
@@ -73,4 +81,4 @@
 }
 
 #tun-modes { margin-bottom: 12px; }
-#tun-modes p { font-size: 13px; line-height: 1.7; color: var(--muted); }
+#tun-modes p { font-size: 13px; line-height: 1.6; color: var(--muted); }
