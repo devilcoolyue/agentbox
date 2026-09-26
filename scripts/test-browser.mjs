@@ -378,7 +378,16 @@ export async function smoke(page) {
   await page.locator('#pick-menu .pick-opt').filter({hasText:'极高'}).click();
   await page.reload();
   await page.locator('#btn-pick').filter({hasText:'极高'}).waitFor();
-  await page.evaluate(()=>localStorage.setItem('agentbox_pick_fixture-space',JSON.stringify({model:'fixture-lite',effort:'xhigh'})));
+  // Seed the legacy fixture before the next document's application scripts.
+  // The pill can render before /models finishes; writing in the live page
+  // races with refreshModelCapabilities saving its current v2 selection.
+  await page.addInitScript(origin => {
+   if (window !== window.top || location.origin !== origin) return;
+   const seeded = 'agentbox_test_legacy_pick_seeded';
+   if (sessionStorage.getItem(seeded)) return;
+   localStorage.setItem('agentbox_pick_fixture-space',JSON.stringify({model:'fixture-lite',effort:'xhigh'}));
+   sessionStorage.setItem(seeded,'1');
+  },base);
   await page.reload();
   await page.locator('#btn-pick').filter({hasText:'Fixture Lite'}).waitFor();
   assert.match(await page.locator('#btn-pick').innerText(),/跟随 CLI 默认/,'v1 persisted choice must migrate safely');
