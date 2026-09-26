@@ -30,6 +30,7 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/vendor/katex/katex.min.css">
 <!-- 模块化样式：base 先行（令牌/通用组件），其余按功能域拆分 -->
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/base.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/toast.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/select.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/shell.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/updates.css">
@@ -1729,8 +1730,6 @@
   <span class="t-dot bad"></span>
   <span id="offline-text">与服务器的连接已断开，正在重连…</span>
 </div>
-
-<div id="toast" class="toast"></div>
 
 <!-- 全站悬浮提示的单例气泡，由 js/tip.js 驱动；popover 让它能浮在原生 <dialog> 之上 -->
 <div id="tip" class="tip" role="tooltip" popover="manual"></div>

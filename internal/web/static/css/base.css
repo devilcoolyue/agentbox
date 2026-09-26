@@ -319,23 +319,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 }
 .offline-banner.hidden { display: none; }
 
-.toast {
-  position: fixed; left: 50%; bottom: 26px; z-index: 100;
-  transform: translateX(-50%) translateY(8px);
-  background: var(--panel);
-  border: 1px solid var(--amber-dim); border-radius: 8px;
-  color: var(--text);
-  font-size: 12.5px;
-  padding: 9px 16px;
-  box-shadow: var(--shadow-md);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s ease, transform 0.18s ease;
-  max-width: min(520px, 88vw);
-}
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast.err { border-color: var(--red-line); color: var(--red); }
-
 /* ---- 悬浮提示 ---- */
 /* 全站单例气泡，js/tip.js 负责定位与显隐；页面里只写 data-tip="文本"。
  * [popover] 的 UA 样式会强塞 inset/margin/padding/border/overflow，这里逐条盖掉——
@@ -383,6 +366,5 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   .boxi-bob, .boxi-eye, .boxi-glow { animation: none; }
   .led.on { animation: none; }
   .spin { animation: none; }
-  .toast { transition: none; }
   .tip { transition: none; }
 }

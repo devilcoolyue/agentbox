@@ -1,0 +1,63 @@
+/* 全站 Toast：页面中上方居中，窄屏留边，颜色跟随主题。 */
+.toast {
+  --toast-tone: var(--green);
+  --toast-duration: 2.6s;
+  position: fixed; inset: auto; left: 50%;
+  top: max(env(safe-area-inset-top, 0px), clamp(72px, 18vh, 180px));
+  z-index: 200;
+  display: none;
+  margin: 0;
+  width: max-content; max-width: min(560px, calc(100vw - 32px));
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 14px 22px 14px 60px;
+  transform: translateX(-50%);
+  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--toast-tone) 32%, var(--line));
+  border-radius: 14px;
+  color: var(--text);
+  font-family: var(--sans); font-size: 14px; font-weight: 500; line-height: 1.6;
+  white-space: pre-line; overflow-wrap: anywhere;
+  box-shadow: inset 3px 0 0 var(--toast-tone), var(--shadow-md);
+  backdrop-filter: blur(14px) saturate(125%);
+  pointer-events: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+.toast-icon {
+  position: absolute; left: 17px; top: 50%;
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  transform: translateY(-50%);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--toast-tone) 16%, transparent);
+  color: var(--toast-tone);
+}
+.toast::after {
+  content: "";
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 2px;
+  border-radius: 0 0 14px 14px;
+  background: var(--toast-tone);
+  opacity: .65;
+  transform: scaleX(1); transform-origin: left;
+}
+.toast.show { display: block; animation: toast-in 0.24s cubic-bezier(.2,.8,.2,1); }
+.toast.show::after { animation: toast-progress var(--toast-duration) linear forwards; }
+.toast.err { --toast-tone: var(--red); }
+.toast::backdrop { background: transparent; pointer-events: none; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(.96); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes toast-progress { to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .toast.show, .toast.show::after { animation: none; }
+  .toast.show::after { transform: scaleX(1); }
+}
+
+@media (max-width: 560px) {
+  .toast { max-width: calc(100vw - 24px); padding-right: 16px; }
+}

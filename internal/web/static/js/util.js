@@ -2,6 +2,8 @@
 "use strict";
 import { buttonLabel } from "./icons.js";
 import { S } from "./state.js";
+// 保留统一入口，已有业务调用无需感知 Toast 组件的拆分。
+export { toast } from "./toast.js";
 /* $ 按 id 取元素，返回类型断言成非空：这些 id 全部写死在 index.html 里，取不到
  * 就是模板被改坏了，属于开发期错误，不值得让每个调用点都写一遍空值判断。需要
  * input/dialog 等具体接口时用类型参数收窄，例如 $<HTMLInputElement>("login-user")。
@@ -129,16 +131,6 @@ export function startDownload(url) {
     a.href = url;
     a.download = "";
     a.click();
-}
-/* ---- 操作反馈气泡 ---- */
-let toastTimer;
-export function toast(msg, isErr) {
-    const t = $("toast");
-    t.textContent = msg;
-    t.classList.toggle("err", !!isErr);
-    t.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove("show"), isErr ? 4200 : 2600);
 }
 /* ---- 通用确认 / 输入对话框 ----
  * 替代原生 alert/confirm/prompt：原生弹窗阻塞 JS、样式与深色主题割裂，
