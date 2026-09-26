@@ -8,6 +8,7 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 
 | 你的目标 | 建议阅读顺序 |
 | --- | --- |
+| 先看界面 | [截图与功能概览](../README.md#界面预览) |
 | 第一次部署 | [快速开始](../README.md#快速开始) → [账号与模型](accounts-and-models.md) → [部署与运维](../deploy/README.md) |
 | 使用已有实例 | [工作空间使用指南](user-guide.md) → [技能与 MCP](skills-and-mcp.md) → [使用记录](usage-and-quotas.md) |
 | 管理用户和成本 | [配置参考](configuration.md) → [账号与模型](accounts-and-models.md) → [额度与价目表](usage-and-quotas.md) |
@@ -19,11 +20,12 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 ## 文档地图
 
 ```text
-README.md                        功能、快速开始、能力边界
+README.md                        界面截图、功能、快速开始、能力边界
 docs/
   README.md                      当前文档导航
   user-guide.md                  工作空间、对话、终端、文件与 Git
   accounts-and-models.md          账号接入、凭证与默认模型
+  images/                        README 界面截图（合成数据）
   configuration.md               配置字段、默认值与数据目录
   skills-and-mcp.md               技能、市场、home 模板与 MCP
   usage-and-quotas.md              使用记录、价格、额度与结算

@@ -46,12 +46,14 @@
 
 | 字段 | 结构 | 用途 |
 | --- | --- | --- |
-| `accounts` | 账号数组，可为空 | `id`、`type`、`label`、`credentials_dir`、`env`、`proxy_id` |
-| `models` | 按 `claude` / `codex` 分组的数组 | 每项含 `id` 与 `label`，维护对话候选模型 |
+| `accounts` | 账号数组，可为空 | `id`、`type`、`label`、`credentials_dir`、`env`、`proxy_id`、`access`、`model_reasoning` |
+| `models` | 按 `claude` / `codex` 分组的数组 | 每项含 `id`、`label` 与可选 `reasoning` 能力，维护对话候选模型 |
 | `default_models` | 按 Agent 分组的模型 ID | 初始为 `claude-opus-5` / `gpt-5.5`，必须在对应候选列表中 |
 | `pricing` | 模型 ID / Agent 名到单价的映射 | provider 不报价时用于 token 折算；省略则无价格表 |
 
 `accounts[].type` 仅接受 `claude` 或 `codex`。账号 ID 与代理 ID 为 2–32 位小写字母、数字、`-`、`_`，首位为字母或数字，且在各自列表内唯一。账号引用的 `proxy_id` 必须存在于代理池。
+
+`access` 配置 `all` / `users` / `admin` 使用范围，省略时全体共享；`users` 模式用 `users` 数组列出用户名。`model_reasoning` 按模型 ID 覆盖推理能力，字段与示例见[账号与模型](accounts-and-models.md#推理强度与思考预算)。
 
 `env` 是字符串键值映射，常用于 API Key 和 provider 地址，属于敏感配置。网页创建账号时会使用 `<data_dir>/creds/<id>/` 作为凭证目录。
 
@@ -81,7 +83,10 @@
 | `proxy_bridge.bind` | `172.17.0.1:1081` | 容器访问的本地 HTTP 代理桥接监听地址 |
 | `proxy_bridge.host` | 从 bind 提取主机 | 注入容器代理 URL 的主机；监听通配地址时应显式给出可达地址 |
 | `tunnel.enabled` | `false` | 是否接受 abox-link 内网连接 |
-| `tunnel.proxy_bind` | 启用且未填写时为 `172.17.0.1:1080` | 内网 SOCKS5 代理监听地址 |
+| `tunnel.transparent` | `true` | 默认选择透明模式；总开关仍由 `enabled` 独立控制，显式 `false` 保留兼容代理模式 |
+| `tunnel.network_bind` | `proxy_bind` 主机的 `1082` 端口 | 透明网络控制监听地址，仅向容器网络开放 |
+| `tunnel.network_image` | `agentbox-network:latest` | 透明网络辅助镜像，使用前需构建 |
+| `tunnel.proxy_bind` | 隧道启用或透明模式为 true 且未填写时为 `172.17.0.1:1080` | 内网 SOCKS5 代理监听地址 |
 | `tunnel.proxy_host` | 从 proxy_bind 提取主机 | 容器实际连接的主机；bind 为通配地址时必须显式配置 |
 
 桥接和隧道地址应为宿主机上可绑定、且容器可达的地址。可在 Linux 上查看默认网桥网关：
@@ -112,7 +117,9 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 | --- | --- |
 | 在网页修改空闲时间、价格、候选模型和时区 | 保存后供后续操作读取 |
 | 系统默认模型 | 随后新建的空间；已有空间保留自己的值 |
-| 账号 env、代理和隧道 | 后续 CLI 执行；已运行终端需重连并新建窗口 |
+| 账号 env、出口代理与兼容隧道环境变量 | 后续 CLI 执行；已运行终端需重连并新建窗口 |
+| 透明隧道放行规则 | 约 2 秒同步，以空间网络就绪状态为准；既有 Shell 的新连接生效 |
+| 透明模式开关 | 影响容器网络布局；切换前停止空间，再按[网络手册](networking.md#透明内网访问)重启 |
 | home 模板 | 下次启动路径执行时同步；技能也可手动装到当前空间 |
 | 镜像 | 运行中空间不打断，停止后再次启动识别新镜像 |
 | 容器资源和网络 | 新建 / 重建容器时；旧容器可能继续复用 |
@@ -130,7 +137,7 @@ data/                               实际根目录由 data_dir 决定
   state.db-wal / state.db-shm       SQLite 运行期间的辅助文件
   creds/<id>/                      网页创建账号的凭证
   home-template/                   全体用户的 home 模板
-  marketplace/repo/                官方插件目录缓存
+  marketplace/repo/                官方插件缓存（设置 cache_dir 后移到该目录下）
   abox-link/                       网页提供下载的客户端二进制
   backups/                         内置脚本生成的备份包
   users/<user>/

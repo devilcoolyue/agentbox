@@ -13,26 +13,57 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)](package.json)
 [![Docker](https://img.shields.io/badge/Docker-工作空间-2496ED?logo=docker&logoColor=white)](images/agent/Dockerfile)
 [![SQLite](https://img.shields.io/badge/SQLite-持久化-003B57?logo=sqlite&logoColor=white)](internal/store)
-[![CI](https://github.com/devilcoolyue/agentbox/actions/workflows/ci.yml/badge.svg)](https://github.com/devilcoolyue/agentbox/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache--2.0-D99A2B)](LICENSE)
 
-[快速开始](#快速开始) · [使用文档](#使用文档) · [部署与运维](deploy/README.md) · [反馈问题](https://github.com/devilcoolyue/agentbox/issues)
+[界面预览](#界面预览) · [快速开始](#快速开始) · [使用文档](#使用文档) · [部署与运维](deploy/README.md) · [反馈问题](https://github.com/devilcoolyue/agentbox/issues)
 
 </div>
 
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/chat-light.png" />
+  <img src="docs/images/chat-dark.png" alt="agentbox 工作台：多个工作空间、AI 编码对话、模型选择与回合费用" width="1440" />
+</picture>
+
+<p align="center"><sub>从一句任务，到可审查的代码。对话、终端、文件与 Git，都在同一个工作空间。</sub></p>
+
 ## 为什么使用 agentbox？
 
-- **编码环境随时可用。** 浏览器连接云端工作空间，CLI、依赖和代码都留在服务器；工作空间停止后，文件、home 配置和对话历史仍然保留。
-- **对话与终端自由切换。** 通过流式对话下发任务，也能打开原版 Claude Code / Codex CLI 的交互终端。终端使用 tmux，网络断线后可重新连接。
-- **交付过程集中在一处。** 上传项目、预览和编辑文件、查看 Git diff、提交改动、下载产物，不必反复切换工具。
-- **操作反馈清晰可见。** 主控制台的操作提示统一在页面中上方显示，带状态图标、颜色标记和自动消失的倒计时细线，错误提示停留更久；打开对话框时也能看到反馈，手机窄屏自动换行。
-- **多个工作空间共用资源。** 每位用户拥有自己的 `/shared`，可在不同项目间传递文件；home 模板让技能、MCP 与常用配置复用到多个空间。
-- **账号统一管理。** 管理员维护订阅账号、API Key、中转配置和出口代理，用户创建空间时选择对应账号。
-- **模型参数按能力选择。** 模型与账号可配置支持的推理档位；切换模型时清除不兼容的选择，Claude 原生推理强度与旧思考预算分别适配。详见[账号与模型](docs/accounts-and-models.md#推理强度与思考预算)。
-- **回答信息可追溯。** 每轮回答底部显示时间、模型和当时的推理设置，支持一键复制回答正文（保留 Markdown，不含思考过程与工具日志）。新回合保存设置快照；旧记录缺失的字段标为未记录，未指定强度时显示跟随默认。时间使用系统设置的时区。
-- **回答费用默认可见。** Claude 和 Codex 都显示本轮已入账的用量成本，与「使用记录」一致；CLI 报告费用或按系统价目表计价的来源会一并标注，未配价格显示「未定价」。该金额不代表订阅额外扣费或中转站实际账单。历史按当时的入账金额展示，不随价目表调整而重算；无回合关联的旧 Claude 记录只展示 CLI 报告值，旧 Codex 缺失的费用不猜算。
-- **用量有据可查。** 按用户、空间、模型查看 token 与费用，导出 CSV；管理员可配置价目表、充值和余额拦截。
-- **需要时连回内网。** 本机运行 `abox-link`，让云端 Agent 访问白名单内的局域网服务、数据库与内部代码仓库。默认使用[透明访问](docs/networking.md#透明内网访问)，服务端与客户端启用后，对话与终端直接使用内网 IPv4 地址和域名，无需 Agent 配置代理。
-- **部署依赖清晰。** 服务端是嵌入前端的 Go 单二进制，使用 SQLite 存储状态，通过 Docker 管理空间，配套 systemd 发布和备份脚本。
+| 你要做的事 | agentbox 提供的工作方式 |
+| --- | --- |
+| **随时继续编码** | 浏览器连接持久化工作空间；代码、home 配置和对话历史留在自己的服务器 |
+| **用熟悉的 Agent** | Claude Code 与 Codex CLI，网页流式对话和原版 CLI 终端自由切换 |
+| **完成交付闭环** | 上传项目 → 下发任务 → 预览文件 → 审查 Git diff → 提交或下载 |
+| **复用环境和资源** | 用户级 `/shared`、双层 home 模板、Claude 技能管理与 MCP 配置 |
+| **集中管理账号与成本** | OAuth / API Key / 中转账号池、按用户授权、用量明细、价格快照和额度账本 |
+| **访问自己的内网** | 可选 abox-link，让云端 Agent 直接访问白名单内的代码仓库、数据库和服务 |
+
+服务端是嵌入前端的 **Go 单二进制**，以 SQLite 保存状态、Docker 隔离工作空间，配套 systemd 部署与备份工具。
+
+## 界面预览
+
+以下为**当前源码界面的浏览器截图**，使用合成项目、对话、终端输出与用量数据，不包含真实账号或业务记录；不代表模型实测结果。已发布版本可能与当前源码有所不同。点击图片查看大图。
+
+| 从任务到代码 | 从代码到交付 |
+| --- | --- |
+| [![浏览器终端：Shell、测试输出与持久 tmux 会话](docs/images/terminal.png)](docs/images/terminal.png) | [![Git 变更审查：文件列表与彩色 diff](docs/images/changes.png)](docs/images/changes.png) |
+| **终端 · 保留你的工作现场**<br>执行命令，使用原版 CLI，断线后重新附着 tmux。 | **变更 · 看清每一处修改**<br>浏览 diff 与完整文件，审查后提交。 |
+| [![项目文件：目录树、上传和下载操作](docs/images/files.png)](docs/images/files.png) | [![使用记录：筛选、token、费用来源与延迟](docs/images/usage.png)](docs/images/usage.png) |
+| **文件 · 管理源码与产物**<br>项目目录与用户共享目录，支持编辑、预览和打包下载。 | **用量 · 费用有据可查**<br>按用户、模型和时间筛选，查看计价来源与回合延迟。 |
+| [![账号池：Claude 与 Codex 账号、授权范围和接入方式](docs/images/accounts.png)](docs/images/accounts.png) | [![内网隧道：连接状态、工作空间就绪状态与白名单](docs/images/tunnel.png)](docs/images/tunnel.png) |
+| **账号 · 统一接入与授权**<br>维护 Claude / Codex 账号，控制用户使用范围。 | **内网 · 连接本机可达的服务**<br>透明访问已放行目标，查看客户端与工作空间网络状态。 |
+
+<details>
+<summary><strong>浅色主题与手机界面</strong></summary>
+
+支持跟随系统、浅色和深色主题；窄屏提供抽屉导航，触屏终端另有快捷键栏。
+
+<img src="docs/images/chat-light.png" alt="浅色主题下的 AI 编码工作台" width="960" />
+
+<img src="docs/images/chat-mobile.png" alt="手机上的对话界面与输入区" width="320" />
+
+</details>
+
+截图的复现方法见[开发指南](docs/development.md#文档截图)。
 
 ## 选择适合你的入口
 
@@ -62,17 +93,7 @@ flowchart LR
 
 一个工作空间对应一个容器和一组持久目录；同一空间可以有多条对话线程，但同一时刻只运行一个网页对话回合。用户级共享目录在该用户的所有空间中挂载为 `/shared`。
 
-控制台通过 URL 记录当前页面，例如 `#/usage`（使用记录）、`#/settings/container`（容器设置）、`#/sessions/<空间ID>/files`（空间文件页）。刷新、浏览器前进/后退或收藏链接后重开，都会恢复对应页面、设置分区和空间标签；未登录时先登录再恢复。链接仍受账号权限校验，失效空间或无权访问的页面返回首页。路径使用 `#`，无需额外配置服务端或反向代理。
-
-登录和身份读取限时 15 秒，失败显示可重试的错误；登录完成后进入目标页面，不需手动刷新。登录页提供账号、密码图标；密码默认隐藏，点击眼睛按钮可显示或隐藏输入内容，重新进入登录页时恢复隐藏。
-
-侧栏底部的图表图标打开使用记录，位于内网隧道图标前；输入框旁的回形针图标用于添加图片或文件附件。
-
-使用记录、系统设置和内网隧道采用铺满主内容区的布局，桌面标题栏与左侧菜单顶部等高；设置内容与隧道指引在各自内容区内滚动。主控制台滚动条统一使用透明轨道与圆角滑块，随深浅主题切换；终端区域始终采用深色滚动条。
-
-手机或触屏设备的终端底部提供快捷键栏：Esc、Tab、Shift+Tab、Ctrl+C、方向键和常用符号，横滑可查看更多按键。Ctrl / Alt 点亮后作用于下一次输入，再点可取消；右侧键盘按钮可显示或收起软键盘。快捷键栏随可视区域调整，在软键盘上方保留；断线或图片上传期间暂时禁用。
-
-内网隧道的模式说明采用紧凑段落间距；工作空间列表与连接检查结果为空时不占位。内网隧道生成配对码后会尝试自动复制，也可点击配对码右侧的复制图标再次复制；配对码过期后自动隐藏。
+控制台支持页面深链接、深浅主题和手机访问。对话可选模型与推理强度，每轮回答显示时间、模型、设置快照与已入账费用；完整操作见[工作空间使用指南](docs/user-guide.md)。
 
 ## 快速开始
 
@@ -94,7 +115,10 @@ Oracle Linux / RHEL 等启用 SELinux 的系统，若旧版安装包启动时报
 
 可在命令末尾加 `-s -- --listen 127.0.0.1:8180`，只允许本机或反向代理访问。配置、数据分别存放在 `/etc/agentbox`、`/var/lib/agentbox`。已有部署会停止安装并保留原文件；升级、失败恢复和完整选项见[一键安装说明](deploy/README.md#一键安装)。
 
-以下是开发者从源码安装的步骤。
+<details>
+<summary><strong>开发者：从源码构建与部署</strong></summary>
+
+以下步骤面向已取得源码访问权限的维护者。源码仓库当前为私有；普通用户请使用上方公开发布包入口。
 
 ### 1. 准备 Linux 服务器
 
@@ -184,11 +208,13 @@ sudo ./deploy/install.sh
 sudo ./deploy/deploy.sh
 ```
 
-管理员登录后，侧栏 AGENTBOX 名称下方显示服务端版本。点击版本可查看更新状态，并跳转「系统设置 → 关于与更新」。页面可见且联网时每 4 小时自动检查 GitHub 正式发布；发现更高版本时徽标和提示变为黄色。手动检查共用服务端缓存，最短间隔 1 分钟；检查失败会保留上次结果并提示错误。开发构建（`dev` / dirty）不推断可升级状态，也不显示“已是最新”。这里只检查并提示，实际升级按[发布说明](docs/releases.md#升级与回退)由管理员完成。
+管理员可在侧栏版本入口或「系统设置 → 关于与更新」查看新版本提示；控制台只检查版本，升级由管理员执行，见[版本发布与升级](docs/releases.md#控制台更新提示)。
 
-`install.sh` 安装服务、镜像更新与备份定时器；`deploy.sh` 构建、替换二进制、重启并探活。远程长期访问请配置 HTTPS 与 WebSocket 反向代理，完整步骤见[部署与运维](deploy/README.md)。
+`install.sh` 安装服务与定时器，镜像自动追新默认关闭；`deploy.sh` 构建、替换二进制、重启并探活。远程长期访问请配置 HTTPS 与 WebSocket 反向代理，完整步骤见[部署与运维](deploy/README.md)。
 
 一键卸载与重新安装见[下载与安装说明](deploy/downloads/README.md#一键卸载与重新安装)。卸载默认保留全部文件到私有备份目录；`--purge` 才彻底删除。v0.1.1 起发布包附带五个平台的 abox-link，安装/升级自动放置客户端下载文件。
+
+</details>
 
 ## 用户与权限
 
@@ -227,6 +253,12 @@ sudo ./deploy/deploy.sh
 - **Git 审查在会话容器内执行。** 进入审查会按需启动空间，并遵循终端相同的额度入口限制；网页提交不执行 Git hook 或签名，需要这些功能时请在终端提交。
 - **网页文件操作不沿符号链接访问。** 工作区、共享目录、技能和凭证文件使用受限目录句柄；上传先在临时目录验证，编辑器保存以原子替换方式写入。模板中的链接仍可由容器内 CLI 使用。
 
+## 独立部署与运行维护
+
+新安装可使用版本化发布目录，配置、数据和市场缓存分别放在 `/etc/agentbox`、`/var/lib/agentbox`、`/var/cache/agentbox`；仓库内部署继续兼容。[部署目录与迁移手册](docs/architecture/deployment-layout.md) 包含安装、升级、回退、离线迁移与备份步骤。
+
+系统设置的「容器与资源」支持全局/每用户运行容器上限、数据盘保留空间、后台磁盘统计、市场缓存清理与脱敏诊断下载。用量页读取已入账记录并显示终端扫描时间，补记在后台完成。
+
 ## 使用文档
 
 详细文档均为中文，也可以从[文档目录](docs/README.md)按角色开始阅读。
@@ -242,7 +274,7 @@ sudo ./deploy/deploy.sh
 | [部署与运维](deploy/README.md) | systemd、HTTPS、更新、备份恢复、迁移与日志 |
 | [API 参考](docs/api.md) | 登录、工作空间、文件、聊天、用量与管理接口 |
 | [开发指南](docs/development.md) | 仓库结构、构建、前端热加载、测试与贡献约定 |
-| [开源重构设计](docs/architecture/opensource-refactor.md) | 模块边界、目录迁移、分阶段实施与验收进度 |
+| [版本与兼容性](docs/releases.md) | 发布包安装、升级回退与 [CLI 固定基线](docs/compatibility.md) |
 | [常见问题](docs/troubleshooting.md) | 启动、登录、容器、代理、用量、备份与前端排障 |
 
 ## 技术栈与本地开发
@@ -275,17 +307,3 @@ npm run build
 ## 许可证
 
 Agentbox 采用 [Apache-2.0](LICENSE)，版权声明见 [NOTICE](NOTICE)。第三方组件保留各自许可；模型服务和运行时 CLI 的使用与再分发遵循其上游条款，详见 [第三方说明](third_party/README.md)。
-
-服务收到 SIGINT/SIGTERM 后停止接收新任务，给在途聊天回合最多 2 秒请求中断并收尾，然后取消后台任务、断开 WebSocket/代理/隧道连接，等待已接收用量落库后释放数据库和数据目录锁。重启不会停止会话容器或终端 tmux；不能将服务退出等同于容器内进程全部终止。
-
-工作空间的创建、启停、删除与空闲回收由统一工作区服务协调；容器停止或删除失败会返回错误并保留记录，避免界面显示成功但容器仍在运行。
-
-凭证刷新、同步与保存由独立凭证服务管理，并按账号串行。成功续期后立即播发到有授权的已有会话，不再被日常同步的时间戳容差跳过。
-
-用量归一化、定价与终端扫描已集中到 `internal/usage`。新记录保存入账价格快照；SQLite 使用事务化版本迁移，遇到更高 schema 版本会拒绝打开。升级前请验证备份，旧二进制回退限制见 [数据库迁移说明](docs/architecture/database-migrations.md)。
-
-## 独立部署与运行维护
-
-新安装可使用版本化发布目录，配置、数据和市场缓存分别放在 `/etc/agentbox`、`/var/lib/agentbox`、`/var/cache/agentbox`；仓库内部署继续兼容。[部署目录与迁移手册](docs/architecture/deployment-layout.md) 包含安装、升级、回退、离线迁移与备份步骤。
-
-系统设置的「容器与资源」支持全局/每用户运行容器上限、数据盘保留空间、后台磁盘统计、市场缓存清理与脱敏诊断下载。用量页读取已入账记录并显示终端扫描时间，补记在后台完成。

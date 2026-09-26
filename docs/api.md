@@ -26,6 +26,8 @@
 ```text
 GET    /api/sessions                工作空间列表
 GET    /api/sessions/{id}           单个工作空间详情
+GET    /api/sessions/{id}/models    当前空间的候选模型、推理能力与发现状态（不保证上游调用权限）
+GET    /api/sessions/{id}/account/usage  当前空间账号的订阅额度（校验账号使用权限）
 POST   /api/sessions                新建 {name, agent, account_id}
 POST   /api/sessions/{id}/start     启动容器（幂等）
 POST   /api/sessions/{id}/stop      停止容器（数据保留）
@@ -49,8 +51,9 @@ POST   /api/sessions/{id}/files/rename 重命名文件或目录 {scope,path,name
 GET    /api/sessions/{id}/file      读单个文件 ?path=；dl=1 强制下载
 PUT    /api/sessions/{id}/file      保存文件内容（body 即内容，上限 16MB）
 GET    /api/sessions/{id}/preview   ?path=&scope= 签发短时只读预览链接
-POST   /api/sessions/{id}/images    粘贴图片上传（multipart file，上限 20MB），
-                                    存入 /shared/.images/；48 小时后清理未被历史引用的图片
+POST   /api/sessions/{id}/images    图片 / 聊天附件上传（multipart file，上限 20MB），
+                                    图片存入 /shared/.images/，其他文件存入 /shared/.file/；
+                                    48 小时后清理未被历史引用的附件
 （通用文件 / 上传 / 下载接口支持 ?scope=shared；图片上传固定落在用户共享目录）
 ```
 
@@ -105,7 +108,7 @@ GET    /api/usage                   消耗汇总（按用户/模型；普通用�
 GET    /api/usage/events            消耗明细流水（使用记录页）；同上筛选，另加
                                     &agent=&model=&limit=（默认 50，上限 500）&offset=&order=asc|desc
                                     明细时间支持 RFC3339 或系统时区 YYYY-MM-DDTHH:mm
-                                    返回 rows + 整个筛选范围的 total + 筛选可选值 facets
+                                    返回 rows + 整个筛选范围的 total + 筛选可选值 facets + 异步补记状态 sync
 ```
 
 ## 账号与出口代理
@@ -114,14 +117,14 @@ GET    /api/usage/events            消耗明细流水（使用记录页）；�
 
 ```text
 GET    /api/accounts                已登录用户可读账号概要，普通用户返回值隐藏敏感配置
-POST   /api/accounts                新增账号 {id, type, label, env?}
+POST   /api/accounts                新增账号 {id, type, label, env?, proxy_id?, access?, model_reasoning?}
 DELETE /api/accounts/{id}           删除账号（仍被空间使用则拒绝，凭证目录保留）
-POST   /api/accounts/{id}/oauth/start  Claude：生成授权链接
-POST   /api/accounts/{id}/oauth/finish Claude：提交 {code}
+POST   /api/accounts/{id}/oauth/start  Claude / Codex：生成对应 OAuth 授权链接
+POST   /api/accounts/{id}/oauth/finish 提交 {code}；Claude 为授权码，Codex 为完整 localhost 回调 URL
 POST   /api/accounts/{id}/apikey    保存 {api_key, base_url?, wire_api?}
 DELETE /api/accounts/{id}/apikey    清除 Claude 中转配置
 POST   /api/accounts/{id}/apikey/test  探测账号 API Key 配置
-PATCH  /api/accounts/{id}           改账号 {label?, env?, proxy_id?}（proxy_id 空串=解绑）
+PATCH  /api/accounts/{id}           改账号 {label?, env?, proxy_id?, access?, model_reasoning?}（proxy_id 空串=解绑）
 GET    /api/proxies                 IP 代理池 + 桥接状态
 POST   /api/proxies                 新增代理 {name,scheme,host,port,username?,password?,disabled?}
 PATCH  /api/proxies/{id}            改代理（password 留空=不改）
@@ -135,7 +138,8 @@ GET    /api/proxies/export          导出为可再导入的文本（含密码�
 
 ```text
 WS     /api/tunnel                  内网反向隧道（abox-link 客户端拨入；yamux over WSS）
-GET    /api/tunnel/status           本用户隧道状态（在线/映射；管理员另见在线用户列表）
+GET    /api/tunnel/status           本用户隧道状态（在线/映射/透明规则/空间网络就绪状态）
+POST   /api/tunnel/probe            检查本用户客户端到目标的 TCP 连通性 {target:"host:port"}
 POST   /api/tunnel/pair             生成配对码（一次性，10 分钟有效）
 POST   /api/tunnel/pair/redeem      用配对码换会话令牌（无需登录：码本身即凭证）
 GET    /api/tunnel/clients          可下载的 abox-link 预编译客户端列表
@@ -159,6 +163,11 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `PUT /api/settings` | 配置 patch；`pricing` 是整表替换 |
 | `GET /api/system` | 服务、Docker、数据目录与数量概览 |
 | `GET /api/monitor` | 运维监控数据 |
+| `GET /api/storage` | 数据 / 缓存磁盘容量与分类统计 |
+| `DELETE /api/cache/marketplace` | 清理可重建的技能市场缓存 |
+| `GET /api/diagnostics` | 导出按字段白名单生成的诊断信息 |
+| `GET /api/updates` | 当前构建信息与上次版本检查缓存 |
+| `POST /api/updates/check` | 检查正式发布；`?force=1` 手动触发，仍受 1 分钟间隔限制 |
 
 ## 调用示例
 
@@ -237,13 +246,13 @@ curl --fail-with-body -sS "$ABOX_URL/api/users/alice/credits" \
 {"type":"user_message","text":"解释这个项目的结构"}
 ```
 
-可选字段为 `model` 与 `effort`；省略模型时使用空间保存的默认值。中断当前回合：
+可选字段为 `model` 与 `effort`；省略模型时使用空间保存的默认值，推理选项须与模型能力匹配。中断当前回合：
 
 ```json
 {"type":"interrupt"}
 ```
 
-服务端发送 `status`、`user_message`、`agent_event`、`agent_raw`、`thread_title`、`error` 等消息。`agent_event.event` 内含 provider 事件；实时增量只广播，完整事件保存到线程 JSONL。调用方应保留对未知事件的兼容，不把某个 CLI 版本的字段当成永远不变的协议。
+服务端发送 `status`、`user_message`、`agent_event`、`agent_raw`、`thread_title`、`turn_cost`、`error` 等消息。`turn_cost` 按 `turn_id` 返回已结算金额及来源，历史接口的 `costs` 提供对应回合费用，`entries[].turn` 保存模型和推理设置快照。`agent_event.event` 内含 provider 事件；实时增量只广播，完整事件保存到线程 JSONL。调用方应保留对未知事件的兼容，不把某个 CLI 版本的字段当成永远不变的协议。
 
 终端连接为 `/api/sessions/<id>/term?mode=shell&token=<token>`，也可选 `mode=agent`。**二进制帧**承载原始 PTY 输入 / 输出，文本帧仅用于调整尺寸：
 
@@ -251,7 +260,7 @@ curl --fail-with-body -sS "$ABOX_URL/api/users/alice/credits" \
 {"type":"resize","cols":120,"rows":36}
 ```
 
-额度拦截使用关闭码 `4003`，客户端应显示 reason 并停止无意义的自动重连。配对隧道则使用 yamux over WebSocket，由 abox-link 处理，不属于聊天 JSON 协议。
+额度拦截使用关闭码 `4003`，账号撤权使用 `4004`；客户端应显示 reason 并停止无意义的自动重连。配对隧道则使用 yamux over WebSocket，由 abox-link 处理，不属于聊天 JSON 协议。
 
 ## 接口依据
 

@@ -14,15 +14,22 @@
 ```text
 agentbox/
 ├── cmd/
-│   ├── agentbox/            服务端入口与数据目录锁
+│   ├── agentbox/            服务端入口；internal/app 管理启动与数据锁
 │   └── abox-link/           本机面板 / 无头隧道入口
 ├── internal/
 │   ├── agent/              CLI 命令、凭证、home 模板、Codex app-server
+│   ├── app/                启动、独占锁与依赖清理
+│   ├── workspace/          空间生命周期、活动引用与回收
+│   ├── credentials/        账号凭证同步、续期与账号锁
+│   ├── usage/              用量解析、定价快照与终端补记
+│   ├── backup/             在线快照、备份校验与恢复
+│   ├── safefs/             基于 os.Root 的受限文件操作
+│   ├── gitx/               容器内 Git 执行策略
 │   ├── archivex/           压缩包解压与目录打包
 │   ├── config/             配置加载、校验和原子写回
 │   ├── dockerx/            容器、exec、PTY、镜像和资源数据
 │   ├── linkapp/            abox-link 面板、重连与开机自启
-│   ├── server/             API、鉴权、聊天、文件、用量、代理和隧道
+│   ├── server/             HTTP/WS、鉴权、响应转换、代理与隧道
 │   ├── store/              SQLite、迁移、用量与额度账本
 │   ├── tunnel/             yamux、白名单与 TCP 映射
 │   └── web/static/         主控制台 HTML / CSS / JS 与资源
@@ -123,6 +130,16 @@ go build -o abox-link ./cmd/abox-link
 
 主控制台和 abox-link 各自包含 logo / 吉祥物「盒仔」资源。修改品牌素材时，同步核对 `internal/web/static/img/`、`internal/linkapp/static/img/` 和主页面内联模板。
 
+### 服务生命周期与模块边界
+
+服务收到 SIGINT/SIGTERM 后停止接收新任务，给在途聊天回合最多 2 秒请求中断并收尾，然后取消后台任务、断开 WebSocket/代理/隧道连接，等待已接收用量落库后释放数据库和数据目录锁。重启不会停止会话容器或终端 tmux；不能将服务退出等同于容器内进程全部终止。
+
+工作空间的创建、启停、删除与空闲回收由统一工作区服务协调；容器停止或删除失败会返回错误并保留记录，避免界面显示成功但容器仍在运行。
+
+凭证刷新、同步与保存由独立凭证服务管理，并按账号串行。成功续期后立即播发到有授权的已有会话，不再被日常同步的时间戳容差跳过。
+
+用量归一化、定价与终端扫描已集中到 `internal/usage`。新记录保存入账价格快照；SQLite 使用事务化版本迁移，遇到更高 schema 版本会拒绝打开。升级前请验证备份，旧二进制回退限制见 [数据库迁移说明](architecture/database-migrations.md)。
+
 ## CI 与提交
 
 文件安全改动需执行 `go test -race ./internal/safefs ./internal/archivex ./internal/agent ./internal/server`。macOS 上还可运行 Linux 容器回归：
@@ -166,3 +183,19 @@ PR 描述说明触发场景、行为变化和验证结果。涉及 Linux Docker�
 脚本临时构建服务端，创建纯测试数据库和凭证，实际调用 backup / backup-verify / restore 以及定时脚本，检查恢复结果与轮转；不读取真实配置、不连接生产、不调用模型。
 
 设置 `AGENTBOX_BACKUP_DOCKER_TEST=1` 额外验证完整备份命令及工作区恢复，需要可达的 Docker daemon（非默认 context 设置 `DOCKER_HOST`）。该验证只读取 Docker 挂载列表，不操作已有容器；CI 默认开启。
+
+## 文档截图
+
+README 的截图由 [`scripts/capture-readme.mjs`](../scripts/capture-readme.mjs) 渲染当前 `internal/web/static/` 生成，使用本机临时 HTTP 服务和合成 API / WebSocket 数据，不连接生产、不调用模型、不需要 Docker。终端输出、对话、用户与费用均为演示数据，不是实际模型或性能测试结果。
+
+使用与浏览器回归相同的 Playwright 环境（依赖放在仓库外，不修改项目依赖）：
+
+```bash
+npm install --prefix /tmp/agentbox-docs-browser playwright
+AGENTBOX_PLAYWRIGHT_MODULE=/tmp/agentbox-docs-browser/node_modules/playwright/index.mjs \
+  AGENTBOX_BROWSER_CHANNEL=chrome node scripts/capture-readme.mjs
+```
+
+以上使用本机 Chrome；也可先执行 `/tmp/agentbox-docs-browser/node_modules/.bin/playwright install chromium`，再省略 `AGENTBOX_BROWSER_CHANNEL` 使用 Playwright Chromium。仅安装所需浏览器，不需要账号登录。
+
+脚本生成桌面 1440 × 960 和手机 390 × 844 截图到 `output/playwright/readme/`，检查页面异常与遗漏的 API 夹具。逐张检查后将 PNG 复制到 `docs/images/`，随文档一起提交。变更页面布局时重拍受影响页面，不能手工修改截图伪造界面。截图中的时间按生成当天计算，避免“当天”用量筛选与演示记录冲突。
