@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
 
 export async function smoke(page) {
@@ -45,6 +46,8 @@ export async function smoke(page) {
   let body={};
   if (path === '/api/login') body={token:'synthetic-browser-token'};
   else if(path === '/api/me') body=me;
+  else if(path === '/api/git/connections') body=[];
+  else if(path === '/api/me/git/default') body={connection_id:''};
   else if(path === '/api/updates') { updateReads++; body=release; }
   else if(path === '/api/updates/check') {
    assert.equal(route.request().method(),'POST'); updateChecks++;
@@ -470,6 +473,7 @@ export async function smoke(page) {
   sessions = [];
   await page.reload();
   await at('#/','#empty'); // Deleted or inaccessible workspace.
+  await pricingSmoke(page);
   const checksBeforeUser=updateChecks, readsBeforeUser=updateReads;
   me.role = 'user';
   await page.reload();

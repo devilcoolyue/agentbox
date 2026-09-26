@@ -230,6 +230,10 @@ export interface UsageEventRow {
 
 /** 一行消耗对应的单价（已按档位选好），美元 / 百万 token。 */
 export interface UsageRate extends TokenRates {
+  pricing_revision?: string;
+  catalog_version?: string;
+  source_url?: string;
+  verified_at?: string;
   /** true 表示入账时保存的价目表快照；缺省为旧数据的当前参考价。 */
   snapshot?: boolean;
   /** 命中的价目表键：模型 ID，或作为兜底的 agent 名 */
@@ -310,6 +314,14 @@ export interface User {
   /** 毫秒时间戳 */
   created_at: number;
   quota: Quota;
+}
+
+/** GET/PUT /api/me/git：当前用户的网页 Git 提交身份。 */
+export interface GitProfile {
+  user: string;
+  name: string;
+  email: string;
+  updated_at: string;
 }
 
 /** GET /api/me */
@@ -397,6 +409,41 @@ export interface Settings {
   pricing: Record<string, ModelPrice>;
   /** listen 改过但未重启 */
   restart_required: boolean;
+}
+
+/** Admin price catalog API. Candidate prices never become active implicitly. */
+export interface PriceOrigin {
+  version: string;
+  source_url: string;
+  verified_at?: string;
+}
+export interface PricingCatalogConfig { url: string; auto_check: boolean }
+export interface PricingRevision {
+  id: string; saved_at: number; reason: string;
+  prices: Record<string, ModelPrice>; managed: Record<string, PriceOrigin>;
+}
+export interface PricingState {
+  revision: string; prices: Record<string, ModelPrice>; managed: Record<string, PriceOrigin>;
+  catalog: PricingCatalogConfig; history: PricingRevision[];
+}
+export interface PriceCatalogEntry {
+  price: ModelPrice; source_url: string; verified_at?: string; notes?: string;
+}
+export interface PriceCatalog {
+  schema: number; version: string; published_at: string; entries: Record<string, PriceCatalogEntry>;
+}
+export interface PriceCatalogStatus {
+  catalog: PriceCatalog; revision: string; url: string; bundled: boolean;
+  checked_at: number; attempted_at: number; error: string;
+}
+export interface PriceChange {
+  model: string; kind: "new" | "update" | "custom" | "current" | "removed";
+  current?: ModelPrice; candidate?: PriceCatalogEntry;
+}
+export interface PricingView {
+  active: PricingState; candidate: PriceCatalogStatus; changes: PriceChange[];
+  warnings: { agent: string; model: string; kind: "unpriced" | "fallback"; key: string }[];
+  warnings_truncated: boolean; warning_error?: string;
 }
 
 /** 一档单价，美元 / 百万 token。0 表示这一桶免费。 */
@@ -535,6 +582,15 @@ export interface GitStatus {
   /** 工作区里发现的全部仓库（含 repo 自己） */
   repos?: string[];
   branch?: string;
+  head?: string;
+  detached?: boolean;
+  unborn?: boolean;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+  tracking_known?: boolean;
+  last_fetch?: {target:string;at:string}|null;
+  remotes?: { name: string; url: string; push: boolean }[];
   files?: ChangeEntry[];
   /** 变更太多被截断（未跟踪的大目录会撑爆列表），files 只是前一部分 */
   truncated?: boolean;
@@ -543,6 +599,9 @@ export interface GitStatus {
 /** POST /api/sessions/{id}/git/commit */
 export interface GitCommitResult {
   output: string;
+  sha: string;
+  pushed: false;
+  warning?: string;
 }
 
 /** 技能页的两个范围：这个会话的 ~/.claude/skills，或用户模板。 */
@@ -883,3 +942,37 @@ export interface ChatMessage {
 }
 
 export interface ResourceLimits { max_running: number; max_running_per_user: number; min_free_bytes: number; }
+
+/** User-owned HTTPS Git credential metadata. Secret never leaves the server. */
+export interface GitConnection {
+  id:string; owner:string; managed?:boolean; label:string; provider:"github"|"gitlab"|"generic";
+  base_url:string; oauth_app_id?:string; auth_type:"pat"|"oauth"|"ssh"; network?:GitNetworkPolicy; public_key?:string; host_fingerprint?:string; username:string; read_only:boolean; enabled:boolean;
+  revision:number; created_at:string; updated_at:string;
+}
+export interface GitBinding {
+  session_id:string; repo:string; remote:string; url:string; connection_id:string; revision:number;
+}
+export interface GitPushPreview {
+  repo:string; remote:string; url:string; connection:string; ref:string;
+  expected_head:string; expected_remote_head:string; commits:string; new_branch:boolean;
+}
+
+export interface GitOperation {
+ id:number; started_at:string; finished_at:string; actor:string; session_id:string;
+ repo:string; connection_id:string; operation:string; target:string; result:string;
+}
+export interface GitLiveOperation {
+ request_id:string; id:number; operation:string; session_id:string; started_at:string;
+ elapsed_ms:number; phase:string; received_bytes:number; sent_bytes:number; cancel_requested:boolean;
+}
+export interface GitOperationPage {rows:GitOperation[]; active:GitLiveOperation[]; next_before:number;}
+
+export interface GitNetworkPolicy {route?:""|"direct"|"tunnel";ca_pem?:string;}
+export interface GitOAuthApp {network?:GitNetworkPolicy;id:string;label:string;provider:"github"|"gitlab";base_url:string;enabled:boolean;client_id?:string;redirect_url?:string;revision?:number;}
+
+export interface GitBranch {name:string;head:string;upstream:string;current:boolean;remote:boolean;}
+export interface GitBranches {branches:GitBranch[];state:{branch:string;head:string;detached:boolean;unborn:boolean};dirty:boolean;truncated:boolean;}
+
+export interface GitReview {number:number;title:string;url:string;source:string;target:string;state:string;draft:boolean;}
+export interface GitReviewPage {provider:string;project:string;connection_id:string;read_only:boolean;rows:GitReview[];has_more:boolean;page:number;default_branch:string;source_branch:string;head:string;}
+export interface GitReviewPreview {provider:string;project:string;connection_id:string;source:{name:string;sha:string;protected:boolean};target:{name:string;sha:string;protected:boolean};title:string;body:string;draft:boolean;existing:GitReview[];}

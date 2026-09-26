@@ -77,9 +77,10 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request, sess s
 
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name      string `json:"name"`
-		Agent     string `json:"agent"`
-		AccountID string `json:"account_id"`
+		Name            string  `json:"name"`
+		Agent           string  `json:"agent"`
+		AccountID       string  `json:"account_id"`
+		GitConnectionID *string `json:"git_connection_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body")
@@ -107,6 +108,28 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	gitConnection := ""
+	if req.GitConnectionID != nil {
+		gitConnection = *req.GitConnectionID
+	} else {
+		var err error
+		gitConnection, err = s.store.GitDefault(reqUser(r).Name, "")
+		if err != nil {
+			writeGitStoreErr(w, err)
+			return
+		}
+	}
+	if gitConnection != "" {
+		c, err := s.store.GitConnectionFor(reqUser(r).Name, gitConnection)
+		if err != nil {
+			writeGitStoreErr(w, err)
+			return
+		}
+		if !c.Enabled {
+			writeErr(w, 409, "默认 Git 连接已停用，请选择其他连接或不绑定")
+			return
+		}
+	}
 	sess := store.Session{
 		ID:           store.NewID(),
 		User:         reqUser(r).Name,
@@ -117,7 +140,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		Status:       store.StatusStopped,
 		CreatedAt:    time.Now(),
 	}
-	if err := s.workspaces().Create(sess); err != nil {
+	if err := s.workspaces().CreateWithGitConnection(sess, gitConnection); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}

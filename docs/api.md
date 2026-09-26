@@ -74,7 +74,11 @@ POST   /api/sessions/{id}/skills/{name}/copy    在范围间复制 {to:"session"
 
 ## Git 变更
 
-Git 命令在会话容器内执行，会按需启动空间；额度拦截返回 `403`。Git 执行模块未配置返回 `503`，其他启动/运行错误按接口返回错误，不回退宿主机 Git，也不以空 diff 隐藏失败。单条命令限时 15 秒（随后最多 2 秒强制终止），stdout 上限 4 MiB；超过限制返回错误。网页提交禁用 hook 与签名。`git/file` 是普通文件读取，不执行 Git。
+网页本地提交采用用户级 Git 身份（缺省为用户名与 `用户名@localhost`），不会推送到远程。身份 API 对所有登录用户开放，只能读写本人。commit/discard 在同一仓库内串行；终端和 Agent 并发操作仍由 Git 自身锁协调。
+
+status 额外返回 `head/detached/unborn/upstream/ahead/behind/tracking_known/remotes`。ahead/behind 仅在 tracking_known=true 时有效，是本地远程跟踪引用的缓存值；请求不会 fetch。remotes 为 `{name,url,push}` 数组，地址去除 userinfo/query/fragment，未识别的地址隐藏；远程操作需显式调用下文的连接与 fetch/pull/push 接口。
+
+Git 命令在会话容器内执行，会按需启动空间；额度拦截返回 `403`。Git 执行模块未配置返回 `503`，其他启动/运行错误按接口返回错误，不回退宿主机 Git，也不以空 diff 隐藏失败。本地单条命令限时 15 秒（随后最多 2 秒强制终止），stdout 上限 4 MiB；超过限制返回错误。网页提交禁用 hook 与签名。`git/file` 是普通文件读取，不执行 Git。
 
 ```text
 GET    /api/sessions/{id}/git/status  变更列表（repos=工作区里发现的仓库、repo=当前那个、
@@ -83,7 +87,9 @@ GET    /api/sessions/{id}/git/status  变更列表（repos=工作区里发现的
 GET    /api/sessions/{id}/git/diff    unified diff（?path= 查看单文件，相对仓库根）?repo=
 GET    /api/sessions/{id}/git/file    ?path= 文件当前完整内容（新文件没有 diff，看的就是它；
                                       纯文本，超 512KB 或二进制拒绝）?repo=
-POST   /api/sessions/{id}/git/commit  git add -A 后提交 {message, repo?}
+GET    /api/me/git                    当前用户网页 Git 身份 {user, name, email, updated_at}
+PUT    /api/me/git                    保存自己的身份 {name, email}，不接受 user 字段
+POST   /api/sessions/{id}/git/commit  git add -A 后本地提交 {message, repo?}；返回 {output, sha, pushed:false, warning}
 POST   /api/sessions/{id}/git/discard 丢弃改动 {path?, repo?}（省略 path=全部，恢复到 HEAD）
 ```
 
@@ -161,6 +167,11 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `POST /api/users/{name}/credits` | `{micro_usd, ref?, note?}`，正数充值、负数冲正 |
 | `GET /api/settings` | 当前配置视图；不返回管理员初始密码 |
 | `PUT /api/settings` | 配置 patch；`pricing` 是整表替换 |
+| `GET /api/pricing` | 管理员：生效价格/修订、候选目录、差异、缺价与兜底提示、版本历史 |
+| `PUT /api/pricing` | 管理员：`revision` 必填；`prices` 整表编辑、`custom_models` 设为自定义、`catalog: {url, auto_check}` 修改来源 |
+| `POST /api/pricing/check` | 管理员：检查候选更新，间隔至少 1 分钟；失败保留旧价并在响应 `candidate.error` 描述 |
+| `POST /api/pricing/apply` | 管理员：`revision`、`catalog_revision`、`models`；覆盖自定义需逐项列入 `adopt_custom`；修订冲突返回 409 |
+| `POST /api/pricing/restore` | 管理员：`revision`、历史版本 `id`；恢复价格与跟随状态 |
 | `GET /api/system` | 服务、Docker、数据目录与数量概览 |
 | `GET /api/monitor` | 运维监控数据 |
 | `GET /api/storage` | 数据 / 缓存磁盘容量与分类统计 |
@@ -269,3 +280,153 @@ curl --fail-with-body -sS "$ABOX_URL/api/users/alice/credits" \
 预览入口 `/preview/<grant>/...` 使用短时通行证读取文件，不需要常规 Bearer 头；应先调用已鉴权的 `GET /api/sessions/{id}/preview` 取得 URL，不能将其当作长期公开文件托管地址。
 
 用量明细的 `rate.snapshot=true` 表示单价来自该行入账时保存的快照；缺省或 false 表示旧记录的当前参考价。`billing` 对新记录使用持久化来源 provider/table/none，不再按 Agent 名猜测；接口路径与原字段保持兼容。
+
+### Git 远程连接（HTTPS Token）
+
+所有 `/git/connections` 路由需登录，返回本人连接和明确授予的共享连接；管理写入仍按所有者隔离，管理员不会因此取得其他用户的私有连接。Token 仅写入，响应只含元数据。更新/删除携带 `revision`，陈旧修订返回 409。
+
+```text
+GET    /api/git/connections
+POST   /api/git/connections               {label, provider:github|gitlab|generic, base_url, username?, token, read_only?}
+POST   /api/git/connections/{connection}/test {url}；验证指定仓库读取能力，不推断写权限
+PATCH  /api/git/connections/{connection}  {revision, label?, token?, read_only?, enabled?}
+DELETE /api/git/connections/{connection}  {revision}
+GET    /api/me/git/default
+PUT    /api/me/git/default                {connection_id}；空串清除默认
+GET    /api/sessions/{id}/git/default
+PUT    /api/sessions/{id}/git/default      {connection_id}
+GET    /api/sessions/{id}/git/bindings
+PUT    /api/sessions/{id}/git/bindings     {repo, remote, connection_id, revision}；revision=0 新建，空 connection_id 解除
+POST   /api/sessions/{id}/git/clone        {connection_id, url, directory}；新目录克隆，不覆盖已有目录
+POST   /api/sessions/{id}/git/fetch        {repo, remote}
+POST   /api/sessions/{id}/git/pull         {repo, remote}；仅上游分支、工作区干净、fast-forward
+POST   /api/sessions/{id}/git/push-preview {repo, remote}
+POST   /api/sessions/{id}/git/push         {repo, remote, ref, expected_head, expected_remote_head}
+```
+
+创建空间新增可选 `git_connection_id`：省略采用用户默认，显式空串不绑定，非空必须是当前用户可用连接。默认连接作为绑定表单的建议值，不会授权用户未选中的仓库。绑定时校验仓库真实 remote 与连接地址，操作时再次核对；地址变化返回 409 要求重新绑定。
+
+`base_url` 限 HTTPS，支持服务子路径，不接受 userinfo/query/fragment。连接创建后 provider/base_url/username 不可改；换服务需新建连接。GitHub 缺省 username 为 x-access-token，GitLab 为 oauth2，通用服务需填写。缺省 read_only=true；这只是 Agentbox 的限制，上游仍需赋予对应权限。
+
+push-preview 返回目标 URL、连接标签、完整 ref、本地和远程 SHA 以及最多 20 条提交摘要；push 必须带回三个校验值。当前仅推送当前分支到远程同名分支，禁止强推、删除、多 ref 和隐式标签推送。远端提前推进或本地 HEAD 变化返回 409。网络中断后结果可能未知，应重新核对远端，而非重复本地提交。
+
+网络传输通过按次的网桥 HTTP grant 转发，只允许所选仓库的 upload-pack 或 receive-pack。长效 Token 留在服务端，receive-pack 校验 ref/old/new；拒绝重定向，不把调用方 Cookie 或任意 Header 发往上游。Git 仍在容器运行，单条网络命令最长 120 秒。网桥使用 `proxy_bridge.bind` 的监听主机及动态端口，容器通过 `proxy_bridge.host` 访问，需允许容器到该网桥的连接。上游缺省由服务端直连 HTTPS；可按下文配置公司 CA、用户隧道或 SSH。
+
+连接、绑定、默认值及 fetch/pull/push 写入 `git_operations` 审计（不记录 Token 和原始网络错误）。个人 Git 连接中的「操作记录」可查询并取消活动操作。正在传输的请求无法撤回；停用/修改连接会拒绝后续 grant 请求。
+
+### Git 操作状态与取消
+
+`GET /api/git/operations?before=<id>` 返回当前用户的 `{rows, active, next_before}`，每页 50 条，使用 ID 游标。管理员也不因此看到他人私有 Git 操作。历史包含启动/结束时间、空间/仓库、操作类型、目标和结果；不记录 Token、提交信息或原始远程错误。
+
+前端可在 Git 操作 POST 中传 `X-Git-Request-ID`（16–80 位字母、数字、`_`、`-`）；活动列表中的 request_id 可用于 `POST /api/git/operations/{operation}/cancel`。同时最多 4 个活动操作/用户；活动列表提供阶段、耗时和实际传输字节，不伪造完成百分比。取消请求返回 202，最终结果仍来自原操作响应/历史。远程已接受的推送不能回滚，`cancelled_unknown` / `interrupted_unknown` 必须重新核对远程。
+
+服务重启将残留 running 行标记 interrupted_unknown。SQLite schema 6 增加 finished_at，历史没有结束时间的不伪造。status 的 `last_fetch` 为最近成功网页 fetch/pull 的 `{target,at}`；不代表终端最近的 fetch 时间。
+
+Git Docker exec 使用镜像已有的 `/usr/bin/python3 -I` 监督器；stdin EOF 请求结束独立进程组，TERM 后最多 2 秒再 KILL。Docker 连接不可用时仍受原 timeout 限制，不能把失联当作远端回滚。自定义 Agent 镜像需包含 python3。
+
+### GitHub / GitLab OAuth
+
+```text
+GET  /api/git/oauth/apps                     登录用户可见已启用应用；管理员额外读取配置元数据
+PUT  /api/git/oauth/apps                     admin；{id?,revision,label,provider,base_url,client_id,client_secret?,redirect_url,enabled}
+POST /api/git/oauth/start                    {app_id,label?,read_only?,connection_id?}；read_only 缺省 true
+GET  /api/git/oauth/callback                 平台回调；校验 state、Cookie、PKCE、应用修订与原登录会话
+POST /api/git/connections/{connection}/revoke {revision}；OAuth 连接专用
+```
+
+管理员在 Git 连接 → OAuth 应用配置平台应用。`git_oauth_apps` 经 Config.mutate 原子保存，Client Secret 使用 Git 主密钥加密，GET 不返回密文或明文；修改应用带 revision。服务地址、Client ID、回调地址创建后固定，更换需注册新应用。回调必须为当前 Agentbox 域名的 `/api/git/oauth/callback`，要求 HTTPS，仅 loopback 开发允许 HTTP。
+
+授权 state、PKCE verifier、浏览器 nonce 和原登录令牌关联在服务端短时内存中，10 分钟到期、每用户最多 4 个、重启后需重试。回调同时要求 HttpOnly / SameSite=Lax Cookie，原登录失效或应用停用/修改后不保存授权（凭证写入事务再次验证原登录令牌，防止删除/重建同名用户的并发串号）；授权码单次消费，回调页面不反射上游错误/令牌。
+
+GitHub 请求 `repo read:user`（repo 本身包含写权限，Agentbox 的只读策略在服务端执行）；GitLab 只读请求 `read_user read_repository`，可写再加 `write_repository`。自建 GitLab 可使用规范 HTTPS 服务前缀。网络缺省服务端直连并验证系统 CA；应用的 network 可选择用户隧道与公司 CA。
+
+OAuth Access/Refresh Token 均在连接密文内。使用前按连接串行续期，保留未重新返回的刷新令牌/范围；刷新失败不回落其他账号。`connection_id` 用于保留原连接 ID 的重新授权，不影响已有绑定；需使用原 OAuth 应用并核对连接修订。
+
+撤销先停用本地连接，再请求上游；响应区分 `local_disabled` 与 `remote_revoked`，网络失败时明确提示上游撤销未确认。删除连接仍只删除本地记录；上游可能按同一用户/应用授权整体撤销，影响同一应用的其他连接。
+
+### 企业网络与 SSH
+
+连接和 OAuth 应用新增 `network: {route?: "direct"|"tunnel", ca_pem?: string}`；缺省保持服务端直连。`tunnel` 使用连接属主自己的 abox-link 隧道，目标 DNS 在客户端解析，仍受该客户端白名单控制；总开关关闭、用户离线、白名单拒绝均报错，绝不回落直连。兼容和透明客户端均可用于显式 Git 隧道。
+
+`ca_pem` 限 32 KiB，只接受 PEM 根 CA/中间 CA，不接受私钥或非 CA 证书。追加到此连接专用系统信任池，保留域名验证和 TLS >= 1.2，不更改系统全局 CA。路由和 CA 是连接/应用不可变身份的一部分，并加入密文认证数据；更换需新建连接/应用。旧无 network 行仍按原认证数据解密。SQLite schema 7 保存 network；备份兼容旧库并验证新的认证数据。
+
+OAuth 应用配置的路由/CA 贯穿授权码交换、续期、撤销与随后 Git 传输；请求使用授权用户自己的隧道，浏览器也必须能打开平台授权页。GitHub Enterprise API 与 GitLab 子路径通过同一策略访问。
+
+创建 SSH 连接：
+
+```json
+{
+  "label": "公司 GitLab SSH",
+  "provider": "gitlab",
+  "auth_type": "ssh",
+  "base_url": "ssh://git.example.com:2222",
+  "username": "git",
+  "private_key": "PEM / OpenSSH 私钥",
+  "passphrase": "可选解密口令",
+  "host_key": "ssh-ed25519 AAAA... 管理员提供的服务器主机公钥",
+  "read_only": true,
+  "network": {"route": "tunnel"}
+}
+```
+
+SSH 用户名缺省 git。仓库接受 `ssh://git@host:port/group/repo.git` 或默认端口的 `git@host:group/repo.git`；绑定时规范化并严格匹配连接主机、端口、服务路径及用户名。当前仓库路径各段支持 ASCII 字母/数字/点/下划线/连字符，拒绝路径跳转和 shell 元字符；不支持 SSH 主机证书或交互式密码认证。
+
+`host_key` 是从管理员可信渠道确认的服务器公钥（单行算法 + base64），功能上相当于对该连接唯一目标固定 known_hosts 条目；不自动接受首次见到的主机。私钥、口令和主机公钥一起加密，列表只显示连接公钥与服务器 SHA256 指纹，不提供私钥导出。PATCH 可通过 `private_key/passphrase/host_key` 更换密钥或主机 pin，仍需 revision；旧 grant 会因修订变化拒绝后续连接。
+
+服务端用 Go SSH 客户端建立认证连接，只运行远端 git-upload-pack/git-receive-pack，不在宿主机运行 Git。容器使用按次 native Git TCP grant，网桥转发至固定 SSH 仓库。只读不开放 receive-pack；推送继续校验 old/new/ref 且不允许多 ref/删除。SSH 连接可复用现有克隆、测试读取、fetch/pull/push 和审计入口。当前不把 SSH 私钥播种到终端 home。
+
+### Git 分支管理
+
+```text
+GET  /api/sessions/{id}/git/branches?repo=...
+POST /api/sessions/{id}/git/branches
+```
+
+GET 返回 `{branches,state,dirty,truncated}`，本地和远程跟踪分支最多显示 500 条，跳过 symbolic remote HEAD。每行包含 name/head/upstream/current/remote，state 包含当前分支和 HEAD。列表不联网。
+
+POST 请求为 `{repo,action,name,expected_head,expected_branch,target_head?,start?}`。action 支持 create/switch/delete/upstream。create 在当前 HEAD 或 `start=refs/heads/...|refs/remotes/...` 创建并切换；指定起点需要 target_head。switch/delete 的 name 为本地分支名，upstream 的 name 为远程跟踪分支短名（如 origin/main）；这些动作均需提供列表中的 target_head。若当前或目标提交变化返回 409。
+
+切换/创建要求干净工作区；删除拒绝当前分支、拒绝当前 HEAD 未包含的提交，并使用 `git branch -d` 再检查 Git 自身上游/worktree 约束。无 force、reset、自动 stash 或自动变基。设置上游要求本地正常分支及已获取的远程跟踪引用。操作写入个人 Git 审计。
+
+### GitHub PR / GitLab MR
+
+```text
+GET  /api/sessions/{id}/git/reviews?repo=...&remote=origin&api_connection_id=...&page=1
+POST /api/sessions/{id}/git/review-preview
+POST /api/sessions/{id}/git/reviews
+```
+
+GET 查询打开的 PR/MR（每页 50 条，上限 1000 页），返回 provider/project/connection_id/read_only/rows/has_more/page/default_branch/source_branch/head。URL 由服务器推导到当前平台 API，GitHub 公网使用 api.github.com，Enterprise 使用 /api/v3，GitLab 使用 /api/v4/projects/{编码仓库路径}，支持服务子路径。禁止跟随 API 重定向、拒绝外域或异常平台链接；上游错误正文不直接显示或记录。
+
+预览请求：`{repo,remote,api_connection_id?,title,body,source,target,draft,expected_head}`。校验当前本地分支、远程来源 SHA 与已推送提交一致，并读取目标分支 SHA/保护状态和已有同源/目标 PR/MR。响应包含 source/target（name/sha/protected）、标题、描述、草稿、已有请求。创建时携带相同字段并加 `expected_target`，再次核对；存在相同打开请求时返回 existing=true 及已有链接，不重复 POST。标题最多 240 字节，描述最多 32 KiB。
+
+此入口只创建同一仓库内的 PR/MR，不自动推送、合并、审批或删除来源分支；跨 fork 的请求仍到平台处理。创建为显式确认动作；超时/平台响应不完整返回结果未知，不自动重试，需刷新平台列表。平台 API 按分支创建，预检之后仍可能发生外部并发提交，因此不宣称对上游分支构成锁定事务。
+
+HTTPS 使用已绑定的 PAT/OAuth 连接。SSH 仓库需显式选择同平台、同主机的 HTTPS API 连接；SSH 密钥不具备 REST API 权限。创建要求有效写权限，GitHub Fine-grained PAT 需 Pull requests 写权限，GitLab PAT 需 api；只读连接可查询，不能创建。
+
+GitLab OAuth start 新增 `api_access`（缺省 false），用户勾选后只读申请 read_api，可写申请 api；原 read_repository/write_repository 仅覆盖 Git，不冒充平台管理权限。权限不足返回明确错误，需重新授权或更换合适的 Token。
+
+### 远程配置
+
+`POST /api/sessions/{id}/git/remotes` 接受 `{repo,name,action:add|update|remove,url?,expected_url?,connection_id?}`。新增/修改地址必须匹配所选连接平台；修改/删除需提交当前页面看到的脱敏地址作为并发检查。已绑定的 remote 先解除绑定；修改地址不自动绑定凭证。多个 URL 或独立 pushurl 需明确处理，不静默保留旧推送目标。删除只移除本地 remote 配置和跟踪引用，不删除服务器仓库。
+
+### 共享 Git 服务账号
+
+```text
+GET /api/git/connections/{connection}/shares
+PUT /api/git/connections/{connection}/shares  {revision,users:[{user,write:false}]}
+```
+
+仅管理员可配置自己拥有的 PAT/SSH 连接共享（专用服务账号或部署密钥）；个人 OAuth 不共享。管理员权限本身不能读取/使用其他用户的私有连接。名单整表更新，每人明确只读/可写，最多 500 人；连接自身 read_only=true 时所有消费者均只读。权限判断在服务端执行，覆盖创建空间默认、绑定、测试读取、clone/fetch/pull/push、PR/MR；HTTP/TCP grant 每次开始上游请求重查修订及当前授权。
+
+连接列表包含私有和被授权连接，`managed` 表示是否允许维护。普通消费者不能编辑、删除、改密钥、撤销 OAuth 或修改共享名单，列表不下发密钥或其他被授权用户名。共享连接的网络路由使用实际操作者自己的隧道；审计记录实际操作者。
+
+撤权增加连接修订并清理被撤销用户的默认建议；仓库绑定保留为不可用，需手工重新绑定，不能静默换账号。正在上游执行的请求不能收回，必要时在上游撤销 Token/密钥。删除用户同时清理授予名单，重建同名用户不会继承旧授权。SQLite schema 8 增加 git_connection_shares。
+
+### 终端 Git 短期授权
+
+- `GET /api/sessions/{id}/git/terminal`：列出本人空间中尚未过期/撤销的授权，返回 `id,repo,remote,write,expires_at,command`，不返回令牌。
+- `POST /api/sessions/{id}/git/terminal`：`{repo,remote,write:false}`；需已绑定且可访问的 remote，`write:true` 额外要求有效写权限。授权固定 30 分钟，响应 201，字段同上。安装命令到空间 home，不自动执行 Git。
+- `DELETE /api/sessions/{id}/git/terminal/{grant}`：撤销本人该空间授权并取消其活动请求。
+
+短期控制网桥复用 `proxy_bridge.bind` 主机与 `proxy_bridge.host`，使用临时端口，仅接受独立能力令牌；不能用作通用用户 API。原生 Git 不继承此授权，请使用响应 `command` 加 `status/fetch/pull/push-preview/push`。状态、获取、快进拉取不包含远程写权限。推送确认使用预览的精确提交编号，不支持 force。登录失效、连接修订变化、解绑、撤权或实例重启后需重新签发。相同空间的程序共享该能力，长期凭证仍保留在服务端。

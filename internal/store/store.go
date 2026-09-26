@@ -237,8 +237,17 @@ func (s *Store) Update(id string, fn func(*Session)) (Session, error) {
 }
 
 func (s *Store) Delete(id string) error {
-	_, err := s.db.Exec("DELETE FROM sessions WHERE id = ?", id)
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, query := range []string{"DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
+		if _, err := tx.Exec(query, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // All returns every session regardless of user (used for startup reconcile).
@@ -341,6 +350,21 @@ func (s *Store) DeleteUser(name string) error {
 	}
 	if _, err := tx.Exec("DELETE FROM quotas WHERE user = ?", name); err != nil {
 		return err
+	}
+	if _, err := tx.Exec("DELETE FROM git_profiles WHERE user = ?", name); err != nil {
+		return err
+	}
+	for _, query := range []string{
+		"DELETE FROM git_bindings WHERE connection_id IN (SELECT id FROM git_connections WHERE owner=?)",
+		"DELETE FROM git_defaults WHERE user=?",
+		"DELETE FROM git_defaults WHERE connection_id IN (SELECT id FROM git_connections WHERE owner=?)",
+		"DELETE FROM git_connection_shares WHERE user=?",
+		"DELETE FROM git_connection_shares WHERE connection_id IN (SELECT id FROM git_connections WHERE owner=?)",
+		"DELETE FROM git_connections WHERE owner=?",
+	} {
+		if _, err := tx.Exec(query, name); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.Exec("DELETE FROM users WHERE name = ?", name); err != nil {
 		return err

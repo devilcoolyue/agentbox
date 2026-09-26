@@ -97,6 +97,16 @@ func Restore(ctx context.Context, archive, target string) (*Manifest, error) {
 	if err = checkDB(ctx, filepath.Join(stage, "data/state.db")); err != nil {
 		return nil, err
 	}
+	if err = checkGitSecrets(filepath.Join(stage, "data/state.db"), filepath.Join(stage, "data")); err != nil {
+		return nil, err
+	}
+	configRaw, readErr := root.ReadAll("config.json", 4<<20)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if err = checkGitOAuthSecrets(configRaw, filepath.Join(stage, "data")); err != nil {
+		return nil, err
+	}
 	if err = rewriteConfig(root, m); err != nil {
 		return nil, err
 	}

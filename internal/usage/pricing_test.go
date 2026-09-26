@@ -8,6 +8,32 @@ import (
 	"agentbox/internal/store"
 )
 
+func TestTurnPinsPricesBeforeEventsIncludingSubmodels(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.cfg.Pricing = map[string]config.ModelPrice{"main": {TokenRates: config.TokenRates{Input: 2}}, "child": {TokenRates: config.TokenRates{Input: 3}}}
+	s.cfg.PricingManaged = map[string]config.PriceOrigin{"main": {Version: "v1"}}
+	tally := s.NewTally()
+	s.cfg.Pricing = map[string]config.ModelPrice{"main": {TokenRates: config.TokenRates{Input: 99}}, "child": {TokenRates: config.TokenRates{Input: 99}}}
+	s.cfg.PricingManaged = map[string]config.PriceOrigin{"main": {Version: "v2"}}
+	tally.Observe(store.UsageEvent{User: "alice", Agent: "claude", TurnID: "pinned"}, []byte(`{"type":"result","modelUsage":{"main":{"inputTokens":10,"costUSD":0},"child":{"inputTokens":10,"costUSD":0}}}`))
+	if n := s.Flush(&tally, time.Second); n != 2 {
+		t.Fatal(n)
+	}
+	rows := s.store.ListUsage(store.UsageFilter{User: "alice"})
+	for _, row := range rows {
+		want := int64(20)
+		if row.Model == "child" {
+			want = 30
+		}
+		if row.CostMicroUSD != want || row.Price.PricingRevision == "" {
+			t.Fatal(row)
+		}
+		if row.Model == "main" && row.Price.CatalogVersion != "v1" {
+			t.Fatal("lost catalog provenance")
+		}
+	}
+}
+
 func TestPriceSnapshotsSurviveEditsAndTerminalGrowth(t *testing.T) {
 	s, _ := newTestServer(t)
 	s.cfg.Pricing = map[string]config.ModelPrice{"codex": {TokenRates: config.TokenRates{Input: 2, Output: 3}, LongContextOver: 100, Long: &config.TokenRates{Input: 4, Output: 6}}}

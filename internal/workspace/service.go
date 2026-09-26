@@ -19,6 +19,7 @@ var ErrSessionGone = errors.New("session no longer exists")
 type Store interface {
 	Get(string) (store.Session, bool)
 	Put(store.Session) error
+	PutWithGitDefault(store.Session, string) error
 	Update(string, func(*store.Session)) (store.Session, error)
 	Delete(string) error
 	All() []store.Session
@@ -214,6 +215,10 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 }
 
 func (s *Service) Create(sess store.Session) error {
+	return s.CreateWithGitConnection(sess, "")
+}
+
+func (s *Service) CreateWithGitConnection(sess store.Session, connection string) error {
 	root, err := safefs.Open(s.cfg.DataDir)
 	if err != nil {
 		return err
@@ -231,7 +236,7 @@ func (s *Service) Create(sess store.Session) error {
 			return err
 		}
 	}
-	return s.store.Put(sess)
+	return s.store.PutWithGitDefault(sess, connection)
 }
 func (s *Service) Stop(ctx context.Context, id string) (store.Session, error) {
 	l := s.lock(id)

@@ -9,13 +9,19 @@ import (
 
 // SchemaVersion changes only with a committed, ordered migration. Versions
 // predating this framework use user_version=0, including partially upgraded DBs.
-const SchemaVersion = 3
+const SchemaVersion = 8
 
 //go:embed migrations/001_baseline.sql
 var baselineSQL string
 
 //go:embed migrations/002_usage_price.sql
 var usagePriceSQL string
+
+//go:embed migrations/004_git_profile.sql
+var gitProfileSQL string
+
+//go:embed migrations/005_git_connections.sql
+var gitConnectionsSQL string
 
 type migration struct {
 	version int
@@ -27,6 +33,35 @@ func migrations() []migration {
 		{1, baselineMigration},
 		{2, func(tx *sql.Tx) error { _, err := tx.Exec(usagePriceSQL); return err }},
 		{3, normalizeUsageTimestamps},
+		{4, func(tx *sql.Tx) error { _, err := tx.Exec(gitProfileSQL); return err }},
+		{5, func(tx *sql.Tx) error { _, err := tx.Exec(gitConnectionsSQL); return err }},
+		{6, func(tx *sql.Tx) error {
+			var found int
+			if err := tx.QueryRow("SELECT COUNT(*) FROM pragma_table_info('git_operations') WHERE name='finished_at'").Scan(&found); err != nil {
+				return err
+			}
+			if found == 0 {
+				if _, err := tx.Exec("ALTER TABLE git_operations ADD COLUMN finished_at TEXT NOT NULL DEFAULT ''"); err != nil {
+					return err
+				}
+			}
+			return nil
+		}},
+		{7, func(tx *sql.Tx) error {
+			var found int
+			if err := tx.QueryRow("SELECT COUNT(*) FROM pragma_table_info('git_connections') WHERE name='network'").Scan(&found); err != nil {
+				return err
+			}
+			if found == 0 {
+				_, err := tx.Exec("ALTER TABLE git_connections ADD COLUMN network TEXT NOT NULL DEFAULT '{}'")
+				return err
+			}
+			return nil
+		}},
+		{8, func(tx *sql.Tx) error {
+			_, err := tx.Exec(`CREATE TABLE IF NOT EXISTS git_connection_shares(connection_id TEXT NOT NULL,user TEXT NOT NULL,can_write INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(connection_id,user)); CREATE INDEX IF NOT EXISTS idx_git_shares_user ON git_connection_shares(user);`)
+			return err
+		}},
 	}
 }
 func migrate(db *sql.DB) error { return runMigrations(db, migrations()) }

@@ -66,7 +66,9 @@ def install(package, listen, layout):
             or not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?', version)
             or '+dirty' in meta.get('revision', '')):
         raise ValueError('Expected a clean Linux release matching this machine')
-    for relative in ('agentbox', 'deploy/release.py', 'scripts/build-image.sh', 'images/agent/versions.env'):
+    for relative in ('agentbox', 'deploy/release.py', 'scripts/build-image.sh',
+                     'images/agent/versions.env', 'images/agent/Dockerfile',
+                     'images/agent/tmux.conf', 'images/agent/bashrc', 'images/agent/vimrc'):
         if not (package / relative).is_file():
             raise ValueError('Incomplete release: ' + relative)
 

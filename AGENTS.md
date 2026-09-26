@@ -290,6 +290,13 @@ data/
 - `duration_ms` / `wall_ms` / `ttft_ms` 都是**回合级**指标，在同回合拆出的各行上重复；
   聚合时只能按 `turn_id` 取一份，绝不能 SUM。`store.UsageTotals` 因此故意不含这几项。
 
+### 价格目录维护
+
+- `internal/pricecatalog` 管理独立、版本化 JSON 候选与缓存；拉取不修改生效价格。旧前端快照迁入 `catalog.json`，明确未重新核验，不能填虚假的核验时间。远程目录要求四项显式单价、HTTPS 来源与核验时间；维护流程见 `docs/pricing-catalog.md`。
+- 管理接口 `/api/pricing`、`/check`、`/apply`、`/restore` 均为 admin；应用/编辑/回退带修订号防并发覆盖。旧配置行默认自定义；手动改价转自定义，目录应用不能静默覆盖自定义或删除消失模型。
+- `pricing_catalog`、`pricing_managed`、`pricing_history` 必须一起进入 Config 的 mutate/persist；价格历史最多 10 次，回退不改历史用量或目录地址。后台每日检查通过 server 生命周期运行，默认不联网、不自动应用。
+- 网页回合与起标题用 `usage.Service.NewTally()` 在 CLI 调用前锁定整张表，Flush 不得重新读新价；终端仍首次入账锁定。用量 JSON 快照增补修订与目录来源，schema 无需加列。
+
 ### 额度与扣减
 
 `internal/store/quota.go`（账本）+ `internal/server/quota.go`（定价、拦截、管理接口）。
@@ -484,6 +491,24 @@ data/
   成功后才 `clean -fd -- <path>`；仅未跟踪文件跳过 checkout。破坏性操作，
   前端有二次确认。
 
+### Git 远程连接
+
+- 用户私有 HTTPS 连接独立于 Agent 账号池；入口 `/api/git/connections`，账号与绑定持久化在 SQLite schema 5。创建空间可选 `git_connection_id`，省略采用用户默认，空串表示不绑定。
+- Token 由 `internal/gitaccess.Vault` 加密保存；主密钥在 `data/git-secrets/master.key`，不可放进会话挂载或模板。系统备份/恢复必须验证密文能由配套密钥解开，不可把缺密钥当成自动生成新密钥的机会。
+- Git 执行留在容器；HTTPS smart HTTP 通过 `gitaccess.Grant` 按次转发，长效 Token 不交付容器。只读仅 upload-pack；写 grant 校验 old/new/ref，禁止多 ref/删除，且每次请求重查连接修订和启用状态。
+- `push-preview` 与 `push` 分开；推送必须核对预览的分支/本地 SHA/远端 SHA，并检查快进关系。`pull` 只快进、要求工作区干净；不自动 stash/rebase。绑定 URL 改变需重新绑定，不能按域名轮试账号。
+- 当前网桥复用 proxy_bridge 主机配置并分配临时端口；network 指定直连/用户隧道和专用 CA，绝不回落其他路由。SSH 使用服务端 Go SSH + 固定主机公钥，长效私钥不交付容器；native Git grant 继续约束 push old/new/ref。完整进展见 `docs/architecture/git-management.md`；本机 Git smart HTTP fixture 不等于 Linux Docker 验收。
+
+- Git OAuth 应用在 config.git_oauth_apps，经 mutate/persist 同步保存；secret 为 Vault 密文，不能通过 GET 下发。state/PKCE/verifier/Cookie/原登录 token 短时绑定，回调不能用查询参数指定用户。刷新按连接串行，重新授权需原应用/修订且保留连接 ID；撤销区分本地停用与上游成功。
+- Git 审计 schema 6 增加 finished_at，重启残留 running 标记 interrupted_unknown；历史未量过的结束时间留空。活动查询/取消按 actor 硬隔离。Docker Git 使用 python3 -I 监督进程组，取消先 EOF，再等待 TERM/KILL 收尾；不能以网络断开证明远端回滚。
+
+- Git network 是连接/OAuth 应用不可变身份，schema 7 保存并加入密文认证数据；备份必须按 schema 兼容验证，不能用新 AAD 去解旧无 network 的密文。公司 CA 只影响该连接的 TLS trust，不能关闭域名/证书验证。OAuth 交换/续期/撤销使用授权用户自己的路由。
+
+- 分支动作必须核对 expected_head/expected_branch/target_head，创建/切换要求工作区干净；删除先检查目标是当前 HEAD 祖先，再用 branch -d，禁止 force 删除或自动 stash/rebase。分支列表取 for-each-ref，最多 500 条，纯本地不 fetch。
+
+- PR/MR 客户端只根据已绑定仓库构造 GitHub/GitLab API URL，不跟随 redirect；查询/预览不创建，确认再 POST，未知结果不得自动重试。GitLab API scope 由用户单独勾选，SSH 需同平台 HTTPS API 连接。当前只支持同仓库分支，服务端重新核对 HEAD/目标 SHA 和重复请求。
+- Git 共享 ACL（schema 8）仅管理员自己的 PAT/SSH，可按用户只读/写；OAuth 私有。使用入口走 GitConnectionFor，管理仍走所有者 GitConnection；不得因为 admin 角色绕过私有账号。共享执行 actor 和凭证 owner 分开，路由/审计按 actor，AEAD 身份按 owner。撤权增修订、清默认但保留失效绑定；删除用户清名单，重建同名不继承。
+
 ### 附件与清理
 
 - 粘贴图片/附件落在用户共享目录的 `.images/`、`.file/`，48 小时 TTL。
@@ -634,7 +659,7 @@ data/
 
 - `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度，终端 UpsertTerminalUsage 绝不扣额度。
 - 新行 `PriceSnapshot` 包含来源、价格键、普通/长上下文档和阈值。终端 upsert 在同一事务读取首份快照，续写不能改用新价；旧行没有快照时不要伪造历史单价。Claude 0 费用按表补算时保存 table 来源。
-- 当前 SQLite schema=2，user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
+- 当前 SQLite schema=8（迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
 - `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。
 - 协议样本放在 agent/usage 的 testdata，全部为合成脱敏数据。Linux 测试脚本必须复制这些 testdata；禁止读取真实用户 rollout 当测试夹具。
 
@@ -647,3 +672,9 @@ data/
 - 新运维接口均为 admin：storage、diagnostics、DELETE cache/marketplace。诊断严格字段白名单，不能拼接配置、环境、原始日志或 Docker inspect。
 - chat/settings 通过 app/lifecycle 显式初始化和清理；聊天连接、设置缓存与轮询 timer 不得放回全局 S。新嵌套 TS 模块仍保留原生相对 .js 导入及哈希前缀。
 - 浏览器测试 `scripts/test-browser.mjs` 使用合成 API；部署测试 systemctl 是模拟调用，记录时不得声称真实 systemd 已通过。
+
+### Git 密钥与终端授权补充
+
+- Git V2 密文嵌入 key ID，`git-secrets/keyring.json` 与旧 master.key 必须成套备份。`git-key-rotate` 只在停服并取得 data_dir 锁后执行，先全量验证再新增密钥，DB 事务/Config.mutate 重写；`--resume` 续写，保留旧密钥，不宣称销毁泄露密钥。
+- `git_terminal.go` 的能力网桥固定用户登录/空间/仓库/remote/连接与绑定修订；长期凭证不进 home。只开放 status/fetch/pull/push-preview/push/cancel；命令必须复用原 Git handler 的准入/锁/审计。锁内和传输准入再检查 scope，不能只在控制请求开始时检查一次。
+- 终端控制监听由 server 生命周期管理，到期/撤销取消所有下游请求。Python helper 用隔离模式、禁用环境代理/重定向，取消 ID 限定该授权；交互确认不是权限边界，同空间程序可使用已授予的写能力。只在容器执行 Git，不回退宿主机。

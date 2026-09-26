@@ -1,0 +1,276 @@
+{
+  "schema": 1,
+  "version": "legacy-2026-08-11",
+  "published_at": "2026-08-11T00:00:00Z",
+  "entries": {
+    "claude-fable-5": {
+      "price": {
+        "input": 10,
+        "output": 50,
+        "cache_read": 1,
+        "cache_write": 20
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-mythos-5": {
+      "price": {
+        "input": 10,
+        "output": 50,
+        "cache_read": 1,
+        "cache_write": 20
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-opus-5": {
+      "price": {
+        "input": 5,
+        "output": 25,
+        "cache_read": 0.5,
+        "cache_write": 10
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-opus-4-8": {
+      "price": {
+        "input": 5,
+        "output": 25,
+        "cache_read": 0.5,
+        "cache_write": 10
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-opus-4-7": {
+      "price": {
+        "input": 5,
+        "output": 25,
+        "cache_read": 0.5,
+        "cache_write": 10
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-opus-4-6": {
+      "price": {
+        "input": 5,
+        "output": 25,
+        "cache_read": 0.5,
+        "cache_write": 10
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-opus-4-5": {
+      "price": {
+        "input": 5,
+        "output": 25,
+        "cache_read": 0.5,
+        "cache_write": 10
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-opus-4-1": {
+      "price": {
+        "input": 15,
+        "output": 75,
+        "cache_read": 1.5,
+        "cache_write": 30
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-sonnet-5": {
+      "price": {
+        "input": 2,
+        "output": 10,
+        "cache_read": 0.2,
+        "cache_write": 4
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-sonnet-4-6": {
+      "price": {
+        "input": 3,
+        "output": 15,
+        "cache_read": 0.3,
+        "cache_write": 6
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-sonnet-4-5": {
+      "price": {
+        "input": 3,
+        "output": 15,
+        "cache_read": 0.3,
+        "cache_write": 6
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-haiku-4-5": {
+      "price": {
+        "input": 1,
+        "output": 5,
+        "cache_read": 0.1,
+        "cache_write": 2
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "claude-haiku-3-5": {
+      "price": {
+        "input": 0.8,
+        "output": 4,
+        "cache_read": 0.08,
+        "cache_write": 1.6
+      },
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。缓存写入取 1 小时档。"
+    },
+    "gpt-5.6-sol": {
+      "price": {
+        "input": 5,
+        "output": 30,
+        "cache_read": 0.5,
+        "cache_write": 6.25,
+        "long_context_over": 272000,
+        "long": {
+          "input": 10,
+          "output": 45,
+          "cache_read": 1,
+          "cache_write": 12.5
+        }
+      },
+      "source_url": "https://openai.com/api/pricing/",
+      "notes": "迁移自 2026-08-11 预置快照，单价与长上下文阈值尚未重新核验。"
+    },
+    "gpt-5.6-terra": {
+      "price": {
+        "input": 2,
+        "output": 12,
+        "cache_read": 0.2,
+        "cache_write": 2.5,
+        "long_context_over": 272000,
+        "long": {
+          "input": 4,
+          "output": 18,
+          "cache_read": 0.4,
+          "cache_write": 5
+        }
+      },
+      "source_url": "https://openai.com/api/pricing/",
+      "notes": "迁移自 2026-08-11 预置快照，单价与长上下文阈值尚未重新核验。"
+    },
+    "gpt-5.6-luna": {
+      "price": {
+        "input": 0.2,
+        "output": 1.2,
+        "cache_read": 0.02,
+        "cache_write": 0.25,
+        "long_context_over": 272000,
+        "long": {
+          "input": 0.4,
+          "output": 1.8,
+          "cache_read": 0.04,
+          "cache_write": 0.5
+        }
+      },
+      "source_url": "https://openai.com/api/pricing/",
+      "notes": "迁移自 2026-08-11 预置快照，单价与长上下文阈值尚未重新核验。"
+    },
+    "gpt-5.5": {
+      "price": {
+        "input": 5,
+        "output": 30,
+        "cache_read": 0.5,
+        "cache_write": 0,
+        "long_context_over": 272000,
+        "long": {
+          "input": 10,
+          "output": 45,
+          "cache_read": 1,
+          "cache_write": 0
+        }
+      },
+      "source_url": "https://openai.com/api/pricing/",
+      "notes": "迁移自 2026-08-11 预置快照，单价与长上下文阈值尚未重新核验。"
+    },
+    "gpt-5.5-pro": {
+      "price": {
+        "input": 30,
+        "output": 180,
+        "cache_read": 0,
+        "cache_write": 0,
+        "long_context_over": 272000,
+        "long": {
+          "input": 60,
+          "output": 270,
+          "cache_read": 0,
+          "cache_write": 0
+        }
+      },
+      "source_url": "https://openai.com/api/pricing/",
+      "notes": "迁移自 2026-08-11 预置快照，单价与长上下文阈值尚未重新核验。"
+    },
+    "gpt-5.4": {
+      "price": {
+        "input": 2.5,
+        "output": 15,
+        "cache_read": 0.25,
+        "cache_write": 0,
+        "long_context_over": 272000,
+        "long": {
+          "input": 5,
+          "output": 22.5,
+          "cache_read": 0.5,
+          "cache_write": 0
+        }
+      },
+      "source_url": "https://openai.com/api/pricing/",
+      "notes": "迁移自 2026-08-11 预置快照，单价与长上下文阈值尚未重新核验。"
+    },
+    "gpt-5.4-pro": {
+      "price": {
+        "input": 30,
+        "output": 180,
+        "cache_read": 0,
+        "cache_write": 0,
+        "long_context_over": 272000,
+        "long": {
+          "input": 60,
+          "output": 270,
+          "cache_read": 0,
+          "cache_write": 0
+        }
+      },
+      "source_url": "https://openai.com/api/pricing/",
+      "notes": "迁移自 2026-08-11 预置快照，单价与长上下文阈值尚未重新核验。"
+    },
+    "gpt-5.4-mini": {
+      "price": {
+        "input": 0.75,
+        "output": 4.5,
+        "cache_read": 0.075,
+        "cache_write": 0
+      },
+      "source_url": "https://openai.com/api/pricing/",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。"
+    },
+    "gpt-5.4-nano": {
+      "price": {
+        "input": 0.2,
+        "output": 1.25,
+        "cache_read": 0.02,
+        "cache_write": 0
+      },
+      "source_url": "https://openai.com/api/pricing/",
+      "notes": "迁移自 2026-08-11 预置快照，尚未重新核验。"
+    }
+  }
+}

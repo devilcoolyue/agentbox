@@ -2,6 +2,7 @@ package dockerx
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -91,4 +92,42 @@ chmod +x .git/hooks/pre-commit
 	if err != nil || !strings.Contains(diff, "+changed") {
 		t.Fatalf("diff=%q err=%v", diff, err)
 	}
+	cancelCtx, cancelCommand := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	script := "import os,signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); open('/workspace/cancel-pid','w').write(str(os.getpid())); time.sleep(60)"
+	go func() {
+		_, err := m.ExecCancelableCommand(cancelCtx, created.ID, []string{"/usr/bin/python3", "-I", "-c", script})
+		done <- err
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	ready := false
+	for time.Now().Before(deadline) {
+		if _, err = m.ExecCommand(ctx, created.ID, []string{"/usr/bin/test", "-f", "/workspace/cancel-pid"}); err == nil {
+			ready = true
+			break
+		}
+		select {
+		case <-ctx.Done():
+			cancelCommand()
+			t.Fatal(ctx.Err())
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	if !ready {
+		cancelCommand()
+		t.Fatal("supervised process did not start")
+	}
+	cancelCommand()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancel: %v", err)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("cancel did not finish")
+	}
+	if _, err = m.ExecCommand(ctx, created.ID, []string{"/usr/bin/python3", "-I", "-c", "import os; pid=int(open('/workspace/cancel-pid').read()); assert not os.path.exists('/proc/'+str(pid))"}); err != nil {
+		t.Fatalf("cancelled child still alive: %v", err)
+	}
+
 }

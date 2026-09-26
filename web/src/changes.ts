@@ -1,3 +1,4 @@
+import { openGitBranches } from "./git-branches.js";
 /* changes：Git 变更审查页 —— 列出 workspace 相对上次提交的改动，查看 diff，
  * 提交或丢弃。让「下发任务 → 审查改动 → 提交/回滚」的闭环不必切到终端。 */
 "use strict";
@@ -6,9 +7,11 @@ import { buttonLabel } from "./icons.js";
 
 import { setSelectValue } from "./select.js";
 
-import { S } from "./state.js";
-import type { ChangeEntry, GitCommitResult, GitStatus } from "./types.js";
-import { $, spinEl, toast, btnBusy, btnDone } from "./util.js";
+import { S, bus } from "./state.js";
+import "./git-profile.js";
+import { openGitRemote, openGitClone } from "./git-connections.js";
+import type { ChangeEntry, GitCommitResult, GitStatus, GitProfile } from "./types.js";
+import { $, spinEl, toast, btnBusy, btnDone, fmtTime } from "./util.js";
 import { api } from "./api.js";
 import { setTip } from "./tip.js";
 
@@ -19,9 +22,13 @@ const CH: {
   files: ChangeEntry[]; selected: string; repo: string; repos: string[];
   truncated: boolean; view: "diff" | "full";
 } = { files: [], selected: "", repo: "", repos: [], truncated: false, view: "diff" };
+let loadGeneration = 0;
+let gitStatus: GitStatus | null = null;
 
 /** 会话切换时清掉上一个会话的仓库选择，别把它带进新会话。 */
 export function resetChangesRepo() {
+  gitStatus = null;
+  loadGeneration++;
   CH.repo = "";
   CH.repos = [];
   CH.selected = "";
@@ -52,6 +59,12 @@ function diffMsg(msg: string) {
 export async function loadChanges() {
   const sess = S.current;
   if (!sess) return;
+  const generation = ++loadGeneration;
+  const token = S.token;
+  const stale = () => generation !== loadGeneration || sess.id !== S.current?.id || token !== S.token;
+  setActions(false);
+  $<HTMLButtonElement>("btn-changes-remote").disabled = $<HTMLButtonElement>("btn-changes-branches").disabled = true;
+  $("changes-remote-state").classList.add("hidden");
   $("changes-branch").textContent = "";
   $("changes-list").replaceChildren(loadingRow("读取变更中…"));
   $("changes-diff").replaceChildren();
@@ -61,10 +74,13 @@ export async function loadChanges() {
     const q = CH.repo ? "?repo=" + encodeURIComponent(CH.repo) : "";
     data = await api<GitStatus>(`/sessions/${sess.id}/git/status${q}`);
   } catch (e) {
+    if (stale()) return;
     listMsg("读取变更失败：" + (e as Error).message);
     setActions(false);
     return;
   }
+  if (stale()) return;
+  gitStatus = data;
   // 服务端返回的 repo 是权威值：本地记的仓库可能已经被删了，以它为准。
   CH.repo = data.repo || "";
   CH.repos = data.repos || [];
@@ -75,11 +91,19 @@ export async function loadChanges() {
     return;
   }
   CH.files = data.files || [];
+  $<HTMLButtonElement>("btn-changes-remote").disabled = $<HTMLButtonElement>("btn-changes-branches").disabled = false;
   CH.truncated = !!data.truncated;
-  const branch = data.branch ? "分支 " + data.branch : "";
+  const branch = data.detached ? "游离 HEAD · " + (data.head || "").slice(0, 12) : "分支 " + (data.branch || "—") + (data.unborn ? "（尚无提交）" : "");
   // 仓库下拉已经显示路径时就不再重复；只有一个仓库且它在子目录里才带上路径。
   const prefix = CH.repos.length > 1 || !CH.repo ? "" : CH.repo + " · ";
   $("changes-branch").textContent = prefix + branch;
+  const remoteState = $("changes-remote-state");
+  const tracking = data.upstream
+    ? `${data.upstream} · ${data.tracking_known ? `本地领先 ${data.ahead} / 落后 ${data.behind}` : "跟踪分支尚未获取或已删除"}（本地缓存）`
+    : "当前分支未设置上游";
+  const remotes = (data.remotes || []).map(r => `${r.name}${r.push ? "（推送）" : ""}: ${r.url}`);
+  remoteState.textContent = [tracking, ...remotes, ...(data.last_fetch ? [`上次网页获取 ${data.last_fetch.target} · ${fmtTime(Date.parse(data.last_fetch.at))}`] : []), "刷新仅检查本地状态，不会获取或推送远程提交。"].join("\n");
+  remoteState.classList.remove("hidden");
   renderList();
   if (CH.selected) renderView(); // 刷新后重新读一遍当前文件，别留着旧内容
 }
@@ -264,7 +288,10 @@ function setErr(id: string, msg: string) {
   el.classList.toggle("hidden", !msg);
 }
 
+$("btn-changes-branches").addEventListener("click",()=>openGitBranches(CH.repo,loadChanges));
 $("btn-changes-refresh").addEventListener("click", loadChanges);
+$("btn-changes-clone").addEventListener("click", () => openGitClone(async repo => { CH.repo = repo; await loadChanges(); }));
+$("btn-changes-remote").addEventListener("click", () => { if (gitStatus) void openGitRemote(CH.repo, gitStatus, loadChanges); });
 $("changes-repo").addEventListener("change", (e) => {
   CH.repo = (e.target as HTMLSelectElement).value;
   CH.selected = "";
@@ -281,35 +308,64 @@ $("btn-view-full").addEventListener("click", () => setView("full"));
 
 /* ---- 提交 ---- */
 
-$("btn-changes-commit").addEventListener("click", () => {
+let commitTarget: { session: string; repo: string; token: string } | null = null;
+let committing = false;
+$("btn-changes-commit").addEventListener("click", async () => {
+  if (!S.current || committing) return;
+  const target = { session: S.current.id, repo: CH.repo, token: S.token };
+  commitTarget = target;
   $<HTMLTextAreaElement>("git-commit-msg").value = "";
+  $("git-commit-target").textContent = `${S.current.name} · ${CH.repo || "空间文件根目录"}`;
+  $("git-commit-identity").textContent = "读取提交身份中…";
+  $<HTMLButtonElement>("git-commit-ok").disabled = true;
   setErr("git-commit-error", "");
   $<HTMLDialogElement>("dlg-git-commit").showModal();
   $("git-commit-msg").focus();
+  try {
+    const profile = await api<GitProfile>("/me/git");
+    if (commitTarget !== target || target.token !== S.token) return;
+    $("git-commit-identity").textContent = `提交身份：${profile.name} <${profile.email}>`;
+    $<HTMLButtonElement>("git-commit-ok").disabled = false;
+  } catch (e) {
+    if (commitTarget === target) setErr("git-commit-error", "读取提交身份失败：" + (e as Error).message);
+  }
 });
+$("dlg-git-commit").addEventListener("close", () => { commitTarget = null; });
+$("dlg-git-commit").addEventListener("cancel", e => { if (committing) e.preventDefault(); });
 $("git-commit-close").addEventListener("click", () => $<HTMLDialogElement>("dlg-git-commit").close());
 $("git-commit-cancel").addEventListener("click", () => $<HTMLDialogElement>("dlg-git-commit").close());
 $("git-commit-ok").addEventListener("click", async () => {
-  const sess = S.current;
-  if (!sess) return;
+  const target = commitTarget;
+  if (!target || committing || target.token !== S.token) return;
   const msg = $<HTMLTextAreaElement>("git-commit-msg").value.trim();
   if (!msg) { setErr("git-commit-error", "提交信息不能为空"); return; }
   setErr("git-commit-error", "");
+  committing = true;
+  $<HTMLButtonElement>("git-commit-cancel").disabled = $<HTMLButtonElement>("git-commit-close").disabled = true;
   btnBusy($<HTMLButtonElement>("git-commit-ok"), "提交中…");
   try {
-    const res = await api<GitCommitResult>(`/sessions/${sess.id}/git/commit`, {
+    const res = await api<GitCommitResult>(`/sessions/${target.session}/git/commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: msg, repo: CH.repo }),
+      body: JSON.stringify({ message: msg, repo: target.repo }),
     });
     $<HTMLDialogElement>("dlg-git-commit").close();
-    toast(res.output ? "已提交：" + res.output.split("\n")[0] : "已提交");
-    loadChanges();
+    if (target.token !== S.token) return;
+    toast(res.warning || `已提交到本地${res.sha ? " · " + res.sha.slice(0, 12) : ""}，未推送到远程`);
+    if (target.session === S.current?.id && target.repo === CH.repo) loadChanges();
   } catch (e) {
-    setErr("git-commit-error", "提交失败：" + (e as Error).message);
+    if (target.token === S.token) setErr("git-commit-error", "提交失败：" + (e as Error).message);
   } finally {
+    committing = false;
+    $<HTMLButtonElement>("git-commit-cancel").disabled = $<HTMLButtonElement>("git-commit-close").disabled = false;
     btnDone($<HTMLButtonElement>("git-commit-ok"));
   }
+});
+
+bus.addEventListener("signed-out", () => {
+  resetChangesRepo();
+  $<HTMLDialogElement>("dlg-git-commit").close();
+  $<HTMLDialogElement>("dlg-git-discard").close();
 });
 
 /* ---- 丢弃 ---- */

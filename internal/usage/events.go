@@ -19,6 +19,7 @@ package usage
 // 撞在一起就是重复扣款，见 Tally。
 
 import (
+	"agentbox/internal/config"
 	"encoding/json"
 	"math"
 	"sort"
@@ -167,7 +168,8 @@ func ParseUsage(line []byte, base store.UsageEvent) (evs []store.UsageEvent, cum
 // 所以累计式事件（claude result）后一个覆盖前一个，只认最后那个总数；增量式
 // 事件（codex turn.completed）才相加。
 type Tally struct {
-	evs []store.UsageEvent
+	pricing *config.PricingState
+	evs     []store.UsageEvent
 }
 
 // observe 把一行事件并进汇总；不是用量事件就什么也不做。

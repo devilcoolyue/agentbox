@@ -19,6 +19,15 @@ dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 13px;
 dialog input[type="text"], dialog input[type="number"], dialog input[type="password"],
 dialog select, dialog .select-trigger, dialog textarea { width: 100%; }
 dialog textarea { resize: vertical; }
+#dlg-git-profile fieldset { display: grid; gap: 14px; border: 0; padding: 0; min-width: 0; }
+#dlg-git-profile input { width: 100%; }
+.dlg-git-connections { width: min(720px, 94vw); }
+.dlg-git-connections p { overflow-wrap: anywhere; white-space: pre-line; }
+.dlg-git-connections input { width: 100%; }
+.dlg-git-connections input[type="checkbox"] { width: auto; }
+.dlg-git-connections pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; font-size: 12px; }
+.git-connection-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.git-connection-row { padding: 14px 0; border-bottom: 1px solid var(--line); }
 
 /* 并排两列（主机+端口、用户名+密码）：窄屏落回单列 */
 .dlg-row { display: flex; gap: 12px; }

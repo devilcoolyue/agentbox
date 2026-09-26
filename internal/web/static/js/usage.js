@@ -438,6 +438,8 @@ function openCost(r) {
     }
     if (rate && !rate.snapshot)
         lines.push("旧记录没有保存入账价格，当前单价仅供参考。");
+    if (rate?.catalog_version)
+        lines.push(`价格目录版本：${rate.catalog_version}；${rate.verified_at ? "核验于 " + fmtTime(Date.parse(rate.verified_at)) : "来源为尚未重新核验的预置快照"}。`);
     if (rate?.long) {
         lines.push(`输入 + 缓存读取超过 ${num(rate.long_context_over || 0)} token，整个回合走的是长上下文档单价。`);
     }

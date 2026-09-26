@@ -26,7 +26,9 @@ import (
 	"agentbox/internal/config"
 	"agentbox/internal/credentials"
 	"agentbox/internal/dockerx"
+	"agentbox/internal/gitaccess"
 	"agentbox/internal/gitx"
+	"agentbox/internal/pricecatalog"
 	"agentbox/internal/store"
 	"agentbox/internal/usage"
 	"agentbox/internal/web"
@@ -55,6 +57,17 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
+	gitOperations gitOperationRegistry
+	gitTerminal   gitTerminalRegistry
+	gitOAuth      gitOAuthState
+
+	gitVaultOnce  sync.Once
+	gitSecrets    *gitaccess.Vault
+	gitHTTPClient func(context.Context, store.GitConnection) (*http.Client, func(), error)
+
+	priceCatalogOnce sync.Once
+	prices           *pricecatalog.Service
+
 	network     networkState
 	updates     updateState
 	storage     storageState
@@ -118,6 +131,10 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 		return nil, err
 	}
 	if err := st.InitDefaultModels(cfg.GetDefaultModels()); err != nil {
+		st.Close()
+		return nil, err
+	}
+	if err := st.RecoverGitOperations(); err != nil {
 		st.Close()
 		return nil, err
 	}
@@ -208,6 +225,28 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/logout", s.auth(http.HandlerFunc(s.handleLogout)))
 	mux.Handle("GET /api/me", s.auth(http.HandlerFunc(s.handleMe)))
 	mux.Handle("POST /api/me/password", s.auth(http.HandlerFunc(s.handleChangePassword)))
+	mux.Handle("GET /api/me/git", s.auth(http.HandlerFunc(s.handleGitProfile)))
+	mux.Handle("GET /api/git/connections", s.auth(http.HandlerFunc(s.handleGitConnections)))
+	mux.Handle("GET /api/git/connections/{connection}/shares", s.admin(http.HandlerFunc(s.handleGitShares)))
+	mux.Handle("PUT /api/git/connections/{connection}/shares", s.admin(http.HandlerFunc(s.handleGitShares)))
+	mux.Handle("GET /api/git/oauth/apps", s.auth(http.HandlerFunc(s.handleGitOAuthApps)))
+	mux.Handle("PUT /api/git/oauth/apps", s.admin(http.HandlerFunc(s.handleGitOAuthApps)))
+	mux.Handle("POST /api/git/oauth/start", s.auth(http.HandlerFunc(s.handleGitOAuthStart)))
+	mux.Handle("POST /api/git/connections/{connection}/revoke", s.auth(s.gitOperation("oauth.revoke", http.HandlerFunc(s.handleGitOAuthRevoke))))
+	mux.HandleFunc("GET /api/git/oauth/callback", s.handleGitOAuthCallback)
+	mux.Handle("GET /api/git/operations", s.auth(http.HandlerFunc(s.handleGitOperations)))
+	mux.Handle("POST /api/git/operations/{operation}/cancel", s.auth(http.HandlerFunc(s.handleGitOperationCancel)))
+	mux.Handle("POST /api/git/connections", s.auth(http.HandlerFunc(s.handleGitConnections)))
+	mux.Handle("PATCH /api/git/connections/{connection}", s.auth(http.HandlerFunc(s.handleGitConnection)))
+	mux.Handle("POST /api/git/connections/{connection}/test", s.auth(s.gitOperation("connection.test", http.HandlerFunc(s.handleGitConnectionTest))))
+	mux.Handle("DELETE /api/git/connections/{connection}", s.auth(http.HandlerFunc(s.handleGitConnection)))
+	mux.Handle("GET /api/me/git/default", s.auth(http.HandlerFunc(s.handleGitDefault)))
+	mux.Handle("PUT /api/me/git/default", s.auth(http.HandlerFunc(s.handleGitDefault)))
+	mux.Handle("GET /api/sessions/{id}/git/default", s.auth(s.withSession(s.handleSessionGitDefault)))
+	mux.Handle("PUT /api/sessions/{id}/git/default", s.auth(s.withSession(s.handleSessionGitDefault)))
+	mux.Handle("GET /api/sessions/{id}/git/bindings", s.auth(s.withSession(s.handleGitBindings)))
+	mux.Handle("PUT /api/sessions/{id}/git/bindings", s.auth(s.withSession(s.handleGitBindings)))
+	mux.Handle("PUT /api/me/git", s.auth(http.HandlerFunc(s.handleGitProfile)))
 	mux.Handle("GET /api/users", s.admin(http.HandlerFunc(s.handleUserList)))
 	mux.Handle("POST /api/users", s.admin(http.HandlerFunc(s.handleUserCreate)))
 	mux.Handle("DELETE /api/users/{name}", s.admin(http.HandlerFunc(s.handleUserDelete)))
@@ -233,6 +272,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/proxies/export", s.admin(http.HandlerFunc(s.handleProxyExport)))
 	mux.Handle("PATCH /api/proxies/{id}", s.admin(http.HandlerFunc(s.handleProxyPatch)))
 	mux.Handle("DELETE /api/proxies/{id}", s.admin(http.HandlerFunc(s.handleProxyDelete)))
+	mux.Handle("GET /api/pricing", s.admin(http.HandlerFunc(s.handlePricing)))
+	mux.Handle("PUT /api/pricing", s.admin(http.HandlerFunc(s.handlePricingSave)))
+	mux.Handle("POST /api/pricing/check", s.admin(http.HandlerFunc(s.handlePricingCheck)))
+	mux.Handle("POST /api/pricing/apply", s.admin(http.HandlerFunc(s.handlePricingApply)))
+	mux.Handle("POST /api/pricing/restore", s.admin(http.HandlerFunc(s.handlePricingRestore)))
 	mux.Handle("GET /api/settings", s.admin(http.HandlerFunc(s.handleGetSettings)))
 	mux.Handle("PUT /api/settings", s.admin(http.HandlerFunc(s.handlePutSettings)))
 	mux.Handle("GET /api/storage", s.admin(http.HandlerFunc(s.handleStorage)))
@@ -271,10 +315,24 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/sessions/{id}/skills/{name}", s.auth(s.withSession(s.handleSkillDelete)))
 	mux.Handle("POST /api/sessions/{id}/skills/{name}/copy", s.auth(s.withSession(s.handleSkillCopy)))
 	mux.Handle("GET /api/sessions/{id}/git/status", s.auth(s.withSession(s.handleGitStatus)))
+	mux.Handle("GET /api/sessions/{id}/git/branches", s.auth(s.withSession(s.handleGitBranches)))
+	mux.Handle("POST /api/sessions/{id}/git/remotes", s.auth(s.gitOperation("remote.edit", s.withSession(s.handleGitRemoteEdit))))
+	mux.Handle("GET /api/sessions/{id}/git/reviews", s.auth(s.gitOperation("review.list", s.withSession(s.handleGitReviews))))
+	mux.Handle("POST /api/sessions/{id}/git/review-preview", s.auth(s.gitOperation("review.preview", s.withSession(s.handleGitReviewPreview))))
+	mux.Handle("POST /api/sessions/{id}/git/reviews", s.auth(s.gitOperation("review.create", s.withSession(s.handleGitReviewCreate))))
+	mux.Handle("POST /api/sessions/{id}/git/branches", s.auth(s.gitOperation("branch", s.withSession(s.handleGitBranchAction))))
 	mux.Handle("GET /api/sessions/{id}/git/diff", s.auth(s.withSession(s.handleGitDiff)))
 	mux.Handle("GET /api/sessions/{id}/git/file", s.auth(s.withSession(s.handleGitFile)))
-	mux.Handle("POST /api/sessions/{id}/git/commit", s.auth(s.withSession(s.handleGitCommit)))
-	mux.Handle("POST /api/sessions/{id}/git/discard", s.auth(s.withSession(s.handleGitDiscard)))
+	mux.Handle("POST /api/sessions/{id}/git/commit", s.auth(s.gitOperation("commit", s.withSession(s.handleGitCommit))))
+	mux.Handle("GET /api/sessions/{id}/git/terminal", s.auth(s.withSession(s.handleGitTerminal)))
+	mux.Handle("POST /api/sessions/{id}/git/terminal", s.auth(s.gitOperation("terminal.authorize", s.withSession(s.handleGitTerminal))))
+	mux.Handle("DELETE /api/sessions/{id}/git/terminal/{grant}", s.auth(s.withSession(s.handleGitTerminal)))
+	mux.Handle("POST /api/sessions/{id}/git/fetch", s.auth(s.gitOperation("fetch", s.withSession(s.handleGitFetch))))
+	mux.Handle("POST /api/sessions/{id}/git/clone", s.auth(s.gitOperation("clone", s.withSession(s.handleGitClone))))
+	mux.Handle("POST /api/sessions/{id}/git/pull", s.auth(s.gitOperation("pull", s.withSession(s.handleGitPull))))
+	mux.Handle("POST /api/sessions/{id}/git/push-preview", s.auth(s.gitOperation("push-preview", s.withSession(s.handleGitPushPreview))))
+	mux.Handle("POST /api/sessions/{id}/git/push", s.auth(s.gitOperation("push", s.withSession(s.handleGitPush))))
+	mux.Handle("POST /api/sessions/{id}/git/discard", s.auth(s.gitOperation("discard", s.withSession(s.handleGitDiscard))))
 	mux.Handle("GET /api/sessions/{id}/history", s.auth(s.withSession(s.handleHistory)))
 	mux.Handle("GET /api/sessions/{id}/term", s.auth(s.withSession(s.handleTermWS)))
 	mux.Handle("GET /api/sessions/{id}/chat", s.auth(s.withSession(s.handleChatWS)))
@@ -332,6 +390,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.spawn(s.credSyncLoop)
 	s.spawn(s.idleReaper)
 	s.spawn(s.storageLoop)
+	s.spawn(s.pricingLoop)
 	s.spawn(s.termUsageLoop)
 	s.spawn(s.termWatchLoop)
 	s.spawn(s.tokenJanitor)

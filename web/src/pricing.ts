@@ -1,79 +1,23 @@
 import { settingsState } from "./features/settings/state.js";
-/* pricing：系统设置「价目表」分区 —— 按 token 折算费用的单价表。
- *
- * 这张表只在 **provider 不自报价格** 时用得上：Codex 的全部回合，以及从 CLI 记录里
- * 补记的终端消耗（transcript 只给 token 不给美元）。网页对话里 Claude 自报
- * total_cost_usd 的行不查这张表——所以给 claude 配了价，也不会改变已有对话行的金额。
- *
- * 单位统一是「美元 / 百万 token」，与两家官方价目表的写法一致，管理员照抄即可，
- * 不必自己换算。服务端拿它乘 token 数得到微美元整数（见 quota.go 的 priceEvent）。
- *
- * 编辑是「整表提交」而不是逐行保存：删行没法用增量表达，而且价目表是要整体核对的
- * 东西，一次看完一次存更不容易漏。 */
-"use strict";
-
 import { buttonLabel } from "./icons.js";
-
 import { S } from "./state.js";
-import type { ModelPrice, TokenRates } from "./types.js";
-import { $, toast } from "./util.js";
-// settings.ts 也会 import 本模块（进分区时调 openPricingSection），构成一个环。
-// 这里只在点击回调里用 putSettings，而它是函数声明（提升），环里取到的绑定
-// 一定已经就位；两个模块的顶层代码都不碰对方，所以这个环是安全的。
-import { putSettings } from "./settings.js";
+import type { ModelPrice, TokenRates, PricingView, PriceChange } from "./types.js";
+import { $, toast, askConfirm, fmtTime } from "./util.js";
+import { api } from "./api.js";
 import { setTip } from "./tip.js";
 
-/* Claude 官方价目快照，抄自 platform.claude.com/docs/en/about-claude/pricing
- * （2026-08-11）。四个数依次是 输入 / 输出 / 缓存读取 / 缓存写入，美元每百万 token。
- *
- * 缓存写入取 **1 小时** 档（= 2× 输入价）而不是 5 分钟档（1.25×）：Claude Code 用的
- * 就是 1h 缓存，实测 transcript 里 cache_creation.ephemeral_1h_input_tokens 有值、
- * 5m 那项是 0。我们的用量只有一个「缓存写入」桶，两档合不了，取实际用的那档。
- *
- * Claude 4.6 及之后的模型 1M 上下文按标准价计费，所以都不带长上下文档位。 */
-const CLAUDE_OFFICIAL: Record<string, [number, number, number, number]> = {
-  "claude-fable-5": [10, 50, 1, 20],
-  "claude-mythos-5": [10, 50, 1, 20],
-  "claude-opus-5": [5, 25, 0.5, 10],
-  "claude-opus-4-8": [5, 25, 0.5, 10],
-  "claude-opus-4-7": [5, 25, 0.5, 10],
-  "claude-opus-4-6": [5, 25, 0.5, 10],
-  "claude-opus-4-5": [5, 25, 0.5, 10],
-  "claude-opus-4-1": [15, 75, 1.5, 30],
-  "claude-sonnet-5": [2, 10, 0.2, 4],
-  "claude-sonnet-4-6": [3, 15, 0.3, 6],
-  "claude-sonnet-4-5": [3, 15, 0.3, 6],
-  "claude-haiku-4-5": [1, 5, 0.1, 2],
-  "claude-haiku-3-5": [0.8, 4, 0.08, 1.6],
-};
+let view: PricingView | null = null;
+let dirty = false;
+let busy = false;
+let generation = 0;
+const customModels = new Set<string>();
 
-/* OpenAI 官方价目快照（2026-08-11）。短上下文四个数 + 长上下文四个数，
- * 顺序同上。官方表里的「-」一律记 0——我们的约定就是「0 = 这一桶免费/不适用」。
- * null 表示该模型没有长上下文档位。
- *
- * 阈值 OAI_LONG_OVER 不在官方那张表上（它只写「Short / Long context」两列），
- * 沿用项目里一直在用的 272000 input token。换模型时记得核对这个数。 */
-const OAI_LONG_OVER = 272000;
-type Quad = [number, number, number, number];
-const OPENAI_OFFICIAL: Record<string, [Quad, Quad | null]> = {
-  "gpt-5.6-sol": [[5, 30, 0.5, 6.25], [10, 45, 1, 12.5]],
-  "gpt-5.6-terra": [[2, 12, 0.2, 2.5], [4, 18, 0.4, 5]],
-  "gpt-5.6-luna": [[0.2, 1.2, 0.02, 0.25], [0.4, 1.8, 0.04, 0.5]],
-  "gpt-5.5": [[5, 30, 0.5, 0], [10, 45, 1, 0]],
-  "gpt-5.5-pro": [[30, 180, 0, 0], [60, 270, 0, 0]],
-  "gpt-5.4": [[2.5, 15, 0.25, 0], [5, 22.5, 0.5, 0]],
-  "gpt-5.4-mini": [[0.75, 4.5, 0.075, 0], null],
-  "gpt-5.4-nano": [[0.2, 1.25, 0.02, 0], null],
-  "gpt-5.4-pro": [[30, 180, 0, 0], [60, 270, 0, 0]],
-};
-
-/* agent 名当键时是「这个 agent 的兜底价」，比具体模型行管得宽，标出来免得看混。 */
 const FALLBACK_KEYS = new Set(["claude", "codex"]);
 
 /** 编辑中的表。进分区时从 settingsState.value 灌一次，保存前从 DOM 读回来。 */
 let draft: Record<string, ModelPrice> = {};
 
-const num = (v: number | undefined) => (v ? String(v) : "");
+const num = (v: number | undefined) => v === undefined ? "" : String(v);
 
 function rateInput(cls: string, value: number | undefined, title: string) {
   const el = document.createElement("input");
@@ -97,7 +41,17 @@ function renderRows() {
 
     const k = document.createElement("td");
     k.className = "pt-key" + (FALLBACK_KEYS.has(key) ? " fallback" : "");
-    k.textContent = key;
+    k.append(document.createTextNode(key));
+    const meta = document.createElement("small");
+    const origin = view?.active.managed[key];
+    meta.textContent = origin && !customModels.has(key) ? `跟随目录 · ${origin.version}` : "自定义";
+    k.appendChild(meta);
+    if (origin && !customModels.has(key)) {
+      const custom = document.createElement("button"); custom.type = "button"; custom.className = "price-mode";
+      custom.textContent = "设为自定义";
+      custom.addEventListener("click", () => { readDraft(); customModels.add(key); dirty = true; renderRows(); });
+      k.appendChild(custom);
+    }
     setTip(k, FALLBACK_KEYS.has(key)
       ? `${key} 的兜底价：这个 agent 下没有单独配价的模型都按它算`
       : key);
@@ -143,6 +97,7 @@ function renderRows() {
     btn.addEventListener("click", () => {
       readDraft();          // 先把别的行的改动收进来，别让删除顺手回滚它们
       delete draft[key];
+      dirty = true;
       renderRows();
     });
     del.appendChild(btn);
@@ -176,12 +131,9 @@ function readDraft() {
       input: get("long-input"), output: get("long-output"),
       cache_read: get("long-cache_read"), cache_write: get("long-cache_write"),
     };
-    // 长上下文档只有「阈值和单价都填了」才成立：只填阈值等于没配价，
-    // 只填价则永远命中不到，两种都是安静失效，不如不写进去。
-    if (over > 0 && (long.input || long.output || long.cache_read || long.cache_write)) {
-      p.long_context_over = over;
-      p.long = long;
-    }
+    // 保留显式 0 档与独立阈值；缺少阈值的长档交给服务端拒绝，不能静默丢价。
+    if (over > 0) p.long_context_over = over;
+    if (["long-input", "long-output", "long-cache_read", "long-cache_write"].some(cls => tr.querySelector<HTMLInputElement>("input." + cls)!.value.trim() !== "")) p.long = long;
     next[key] = p;
   }
   draft = next;
@@ -193,23 +145,10 @@ function badCells() {
   for (const tr of document.querySelectorAll<HTMLElement>("#price-rows tr")) {
     for (const el of tr.querySelectorAll<HTMLInputElement>("input.rate")) {
       const t = el.value.trim();
-      if (t && !(Number(t) >= 0)) bad.push(tr.dataset.key!); // NaN / 负数都进这里
+      if (t && (!Number.isFinite(Number(t)) || Number(t) < 0)) bad.push(tr.dataset.key!); // NaN / 负数都进这里
     }
   }
   return [...new Set(bad)];
-}
-
-/** 进入价目表分区：用服务端的当前配置重灌编辑区，丢弃上次没存的改动。 */
-export function openPricingSection() {
-  draft = {};
-  const src = settingsState.value?.pricing || {};
-  for (const [k, v] of Object.entries(src)) draft[k] = { ...v, long: v.long ? { ...v.long } : undefined };
-  renderRows();
-}
-
-/** 左侧导航的条数：停在别的分区时也该是真的。 */
-export function refreshPriceCount() {
-  $("price-count").textContent = String(Object.keys(settingsState.value?.pricing || {}).length);
 }
 
 $("price-add").addEventListener("click", () => {
@@ -222,6 +161,7 @@ $("price-add").addEventListener("click", () => {
   }
   readDraft();
   if (draft[key]) { toast(`${key} 已经在表里了`, true); return; }
+  dirty = true;
   draft[key] = { input: 0, output: 0, cache_read: 0, cache_write: 0 };
   el.value = "";
   renderRows();
@@ -231,48 +171,184 @@ $("price-add").addEventListener("click", () => {
   row?.querySelector<HTMLInputElement>("input.input")?.focus();
 });
 
-const quad = (q: Quad): TokenRates =>
-  ({ input: q[0], output: q[1], cache_read: q[2], cache_write: q[3] });
-
-/* 两个「填入官方价」按钮共用：只补表里没有的键，**已有的行一律不覆盖**——
- * 管理员可能是按自己的折扣改过的，一键把它冲掉是最难查的那种 bug。 */
-function fillOfficial(rows: Record<string, ModelPrice>, who: string) {
-  readDraft();
-  const added: string[] = [];
-  for (const [k, p] of Object.entries(rows)) {
-    if (draft[k]) continue;
-    draft[k] = p;
-    added.push(k);
-  }
-  renderRows();
-  toast(added.length
-    ? `填入 ${added.length} 个${who}模型的官方价，核对后点「保存价目表」`
-    : `${who}官方价目里的模型都已经在表里了，没有新增`);
+export function initPricing() {
+  const reset = () => {
+    generation++; busy = false; dirty = false; view = null; draft = {}; customModels.clear();
+    for (const id of ["price-rows", "price-changes", "price-history", "price-warnings"]) $(id).replaceChildren();
+    $("price-diff").classList.add("hidden");
+    $("price-catalog-status").textContent = "读取中…";
+    $("price-catalog-error").textContent = "";
+    $<HTMLInputElement>("price-source").value = "";
+    $<HTMLInputElement>("price-auto").checked = false;
+    setBusy(false);
+  };
+  reset();
+  return reset;
 }
 
-$("price-fill").addEventListener("click", () => {
-  const rows: Record<string, ModelPrice> = {};
-  for (const [k, q] of Object.entries(CLAUDE_OFFICIAL)) rows[k] = quad(q);
-  fillOfficial(rows, "Claude ");
-});
+function setBusy(value: boolean) {
+  busy = value;
+  for (const el of document.querySelectorAll<HTMLInputElement | HTMLButtonElement>("#sec-pricing button, #sec-pricing input")) el.disabled = value;
+  // Retired catalog rows have no candidate to select.
+  for (const el of document.querySelectorAll<HTMLInputElement>("#price-changes input[data-removed]")) el.disabled = true;
+}
 
-$("price-fill-oai").addEventListener("click", () => {
-  const rows: Record<string, ModelPrice> = {};
-  for (const [k, [short, long]] of Object.entries(OPENAI_OFFICIAL)) {
-    const p: ModelPrice = quad(short);
-    if (long) { p.long_context_over = OAI_LONG_OVER; p.long = quad(long); }
-    rows[k] = p;
+function accept(next: PricingView) {
+  view = next; dirty = false; customModels.clear();
+  draft = structuredClone(next.active.prices);
+  if (settingsState.value) settingsState.value.pricing = structuredClone(draft);
+  $<HTMLInputElement>("price-source").value = next.active.catalog.url;
+  $<HTMLInputElement>("price-auto").checked = next.active.catalog.auto_check;
+  renderRows(); renderCatalog();
+}
+
+export async function openPricingSection(force = false) {
+  if (S.role !== "admin" || busy || (!force && (dirty || sourceDirty()))) return;
+  const ticket = ++generation;
+  setBusy(true);
+  try {
+    const next = await api<PricingView>("/pricing");
+    if (ticket === generation) accept(next);
+  } catch (e) { if (ticket === generation) toast("读取价目表失败：" + (e as Error).message, true); }
+  finally { if (ticket === generation) setBusy(false); }
+}
+
+export function refreshPriceCount() {
+  $("price-count").textContent = String(Object.keys(view?.active.prices || settingsState.value?.pricing || {}).length);
+}
+
+function renderCatalog() {
+  if (!view) return;
+  const c = view.candidate;
+  const count = view.changes.filter(row => row.kind === "new" || row.kind === "update").length;
+  $("price-catalog-status").textContent = `${c.bundled ? "内置旧快照（尚未重新核验）" : "远程候选目录"} · ${c.catalog.version} · ${count} 个新增 / 调价候选` +
+    (c.checked_at ? ` · 最近成功检查 ${fmtTime(c.checked_at)}` : " · 尚未成功联网检查");
+  const error = c.error || (!view.active.catalog.url ? "尚未配置远程目录。内置数据仅供核对，不代表最新官方价格。" : "");
+  $("price-catalog-error").textContent = error;
+  $("price-catalog-error").classList.toggle("hidden", !error);
+  renderChanges();
+  const warnings = $("price-warnings"); warnings.replaceChildren();
+  if (view.warnings.length) {
+    const title = document.createElement("b"); title.textContent = "需要核对的模型价格"; warnings.appendChild(title);
+    const hint = document.createElement("p"); hint.textContent = "来自默认模型、现有空间及最近 30 天使用记录；以下为当前定价状态，不会改写历史账单。"; warnings.appendChild(hint);
+    const list = document.createElement("ul");
+    for (const row of view.warnings) {
+      const item = document.createElement("li");
+      item.textContent = `${row.agent} / ${row.model || "未提供模型名"}：${row.kind === "fallback" ? `使用 ${row.key} 兜底价` : "未定价（费用记 0）"}`;
+      list.appendChild(item);
+    }
+    warnings.appendChild(list);
   }
-  fillOfficial(rows, "OpenAI ");
-});
+  if (view.warnings_truncated || view.warning_error) {
+    const note = document.createElement("p"); note.textContent = view.warning_error || "最近使用模型超过 200 种，仅检查前 200 种。"; warnings.appendChild(note);
+  }
+  warnings.classList.toggle("hidden", !warnings.childElementCount);
+  const history = $("price-history"); history.replaceChildren();
+  if (!view.active.history.length) history.textContent = "尚无价格变更记录。";
+  for (const item of view.active.history) {
+    const row = document.createElement("div"); row.className = "price-history-row";
+    const text = document.createElement("span"); text.textContent = `${fmtTime(item.saved_at)} · ${item.reason}前 · ${Object.keys(item.prices).length} 条`;
+    const restore = document.createElement("button"); restore.type = "button"; restore.className = "btn btn-sm"; restore.textContent = "恢复此版本";
+    restore.addEventListener("click", async () => {
+      if (!view || busy || !requireClean()) return;
+      const revision = view.active.revision;
+      if (!await askConfirm("将恢复该次修改前的全部价格及跟随状态。历史账单和已开始的网页回合保持原价。", { title: "恢复价格版本", okLabel: "恢复" })) return;
+      await mutate("/pricing/restore", "POST", { revision, id: item.id }, "价格版本已恢复");
+    });
+    row.append(text, restore); history.appendChild(row);
+  }
+}
 
+const labels: Record<PriceChange["kind"], string> = { new: "新增", update: "调价", custom: "自定义 · 默认保留", current: "价格一致", removed: "目录已移除 · 保留现价" };
+const buckets = [["input", "输入"], ["output", "输出"], ["cache_read", "缓存读"], ["cache_write", "缓存写"]] as const;
+function rateChange(old: number | undefined, next: number) {
+  if (old === undefined) return String(next);
+  const percent = old > 0 && old !== next ? ` (${next > old ? "+" : ""}${((next / old - 1) * 100).toFixed(1)}%)` : "";
+  return `${old} → ${next}${percent}`;
+}
+function renderChanges() {
+  if (!view) return;
+  const box = $("price-changes"); box.replaceChildren();
+  for (const row of view.changes) {
+    const item = document.createElement("div"); item.className = "price-change";
+    const label = document.createElement("label");
+    const check = document.createElement("input"); check.type = "checkbox"; check.value = row.model;
+    check.checked = row.kind === "new" || row.kind === "update";
+    if (!row.candidate) { check.disabled = true; check.dataset.removed = "true"; }
+    const name = document.createElement("strong"); name.textContent = row.model;
+    const kind = document.createElement("span"); kind.textContent = labels[row.kind];
+    label.append(check, name, kind); item.appendChild(label);
+    if (row.candidate) {
+      const candidate = row.candidate;
+      const rates = document.createElement("p"); rates.className = "price-change-rates";
+      rates.textContent = buckets.map(([key, label]) => `${label} ${rateChange(row.current?.[key], candidate.price[key])}`).join(" · ");
+      item.appendChild(rates);
+      if (row.current?.long || candidate.price.long || row.current?.long_context_over || candidate.price.long_context_over) {
+        const long = document.createElement("p"); long.className = "price-change-rates";
+        long.textContent = `长上下文阈值 ${row.current?.long_context_over || "无"} → ${candidate.price.long_context_over || "无"}；` +
+          (candidate.price.long ? buckets.map(([key, label]) => `${label} ${rateChange(row.current?.long?.[key], candidate.price.long![key])}`).join(" · ") : "取消长上下文档");
+        item.appendChild(long);
+      }
+      const source = document.createElement("p"); source.className = "card-desc";
+      const link = document.createElement("a"); link.href = candidate.source_url; link.target = "_blank"; link.rel = "noopener noreferrer"; link.textContent = "价格来源";
+      source.append(link, document.createTextNode(` · ${candidate.verified_at ? "核验于 " + fmtTime(Date.parse(candidate.verified_at)) : "尚未重新核验"}${candidate.notes ? " · " + candidate.notes : ""}`));
+      item.appendChild(source);
+    }
+    box.appendChild(item);
+  }
+}
+
+function sourceDirty() {
+  return !!view && ($<HTMLInputElement>("price-source").value.trim() !== view.active.catalog.url || $<HTMLInputElement>("price-auto").checked !== view.active.catalog.auto_check);
+}
+function requireClean() {
+  if (dirty || sourceDirty()) { toast("请先保存编辑中的价格或目录来源，再执行此操作", true); return false; }
+  return true;
+}
+async function mutate(path: string, method: string, body: unknown, message: string) {
+  if (busy) return;
+  const ticket = ++generation;
+  setBusy(true);
+  try { const next = await api<PricingView>(path, { method, body: JSON.stringify(body) }); if (ticket === generation) { accept(next); toast(message); } }
+  catch (e) { if (ticket === generation) toast((e as Error).message, true); }
+  finally { if (ticket === generation) setBusy(false); }
+}
+
+$("price-rows").addEventListener("input", () => { dirty = true; });
 $("price-save").addEventListener("click", async () => {
+  if (!view || busy) return;
   const bad = badCells();
-  if (bad.length) {
-    toast(`这些行的单价不是合法数字：${bad.join("、")}`, true);
-    return;
-  }
+  if (bad.length) { toast(`这些行的单价不是合法数字：${bad.join("、")}`, true); return; }
   readDraft();
-  const btn = $<HTMLButtonElement>("price-save");
-  if (await putSettings({ pricing: draft }, btn, "价目表已保存")) openPricingSection();
+  await mutate("/pricing", "PUT", { revision: view.active.revision, prices: draft, custom_models: [...customModels], catalog: { url: $<HTMLInputElement>("price-source").value.trim(), auto_check: $<HTMLInputElement>("price-auto").checked } }, "价目表已保存，修改的模型已设为自定义");
+});
+$("price-source-save").addEventListener("click", async () => {
+  if (!view || busy) return;
+  if (dirty) { toast("请先保存价目表", true); return; }
+  await mutate("/pricing", "PUT", { revision: view.active.revision, catalog: { url: $<HTMLInputElement>("price-source").value.trim(), auto_check: $<HTMLInputElement>("price-auto").checked } }, "目录来源已保存");
+});
+$("price-refresh").addEventListener("click", async () => {
+  if (busy) return;
+  if ((dirty || sourceDirty()) && !await askConfirm("将丢弃当前尚未保存的价格和来源编辑。", { title: "重新读取价目表", okLabel: "重新读取" })) return;
+  await openPricingSection(true);
+});
+$("price-preview").addEventListener("click", () => { $("price-diff").classList.toggle("hidden"); });
+$("price-check").addEventListener("click", async () => {
+  if (!view || busy || !requireClean()) return;
+  const ticket = ++generation;
+  setBusy(true);
+  try { const next = await api<PricingView>("/pricing/check", { method: "POST" }); if (ticket === generation) { accept(next); $("price-diff").classList.remove("hidden"); } }
+  catch (e) { if (ticket === generation) toast((e as Error).message, true); }
+  finally { if (ticket === generation) setBusy(false); }
+});
+$("price-apply").addEventListener("click", async () => {
+  if (!view || busy || !requireClean()) return;
+  const models = [...document.querySelectorAll<HTMLInputElement>("#price-changes input:checked")].map(el => el.value);
+  if (!models.length) { toast("请选择需要应用的模型", true); return; }
+  const adopt = models.filter(key => !!view!.active.prices[key] && !view!.active.managed[key]);
+  const request = { revision: view.active.revision, catalog_revision: view.candidate.revision, models, adopt_custom: adopt };
+  const note = `将应用 ${models.length} 个模型的候选价格。` + (adopt.length ? `其中 ${adopt.length} 个自定义模型将替换价格并恢复跟随目录。` : "") +
+    (view.candidate.bundled ? "当前为尚未重新核验的旧快照，请先核对来源。" : "") + "历史账单及已开始的网页回合保持原价。";
+  if (!await askConfirm(note, { title: "应用价格变更", okLabel: "应用" })) return;
+  await mutate("/pricing/apply", "POST", request, "所选价格已应用");
 });

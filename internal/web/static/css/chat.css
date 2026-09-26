@@ -410,6 +410,31 @@ details.think.streaming .think-body::after {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .thread-cur svg { flex: none; display: block; }
+/* 内网是对话的辅助状态入口，与历史标题同级，避免做成主操作按钮。 */
+.chat-network {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; flex: none;
+  min-height: 32px; margin-left: 4px; padding: 5px 8px;
+  border: 0; border-radius: 6px; background: transparent;
+  color: var(--muted); font: 400 12px/1.5 var(--sans);
+  white-space: nowrap; transition: background 140ms ease, color 140ms ease;
+}
+.chat-network::before {
+  content: ""; position: absolute; left: -7px; top: 10px; bottom: 10px;
+  width: 1px; background: var(--line);
+}
+.chat-network:hover, .chat-network:focus-visible { background: var(--panel); color: var(--text); }
+.chat-network-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.chat-network-status { color: var(--muted); }
+.chat-network[data-state="ready"] .chat-network-dot { background: var(--green); }
+.chat-network[data-state="ready"] .chat-network-status { color: var(--green); }
+.chat-network[data-state="pending"] .chat-network-dot { background: var(--amber); }
+.chat-network[data-state="pending"] .chat-network-status { color: var(--amber); }
+.chat-network[data-state="proxy"] .chat-network-dot { background: var(--green); }
+.chat-network-arrow { flex: none; opacity: .5; transition: opacity 140ms ease, transform 140ms ease; }
+.chat-network:hover .chat-network-arrow, .chat-network:focus-visible .chat-network-arrow { opacity: 1; transform: translateX(2px); }
+@media (prefers-reduced-motion: reduce) {
+  .chat-network, .chat-network-arrow { transition: none; }
+}
 .thread-new {
   flex: none; margin-left: auto;
   background: none;
@@ -777,6 +802,8 @@ details.think.streaming .think-body::after {
   .msg.user { max-width: 88%; }
   .thread-bar { padding: 6px 8px 0; }
   .thread-cur { padding: 6px 10px; }
+  .chat-network { min-height: 36px; padding-inline: 6px; gap: 5px; }
+  .chat-network::before { top: 12px; bottom: 12px; }
   /* 窄屏历史面板与左侧菜单抽屉同宽 */
   .thread-panel { width: min(300px, 84vw); }
   .turn { gap: 9px; }

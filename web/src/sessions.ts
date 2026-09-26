@@ -4,7 +4,8 @@
 
 import { S, bus, emit } from "./state.js";
 import type { Tab } from "./state.js";
-import type { Session } from "./types.js";
+import type { Session, GitConnection } from "./types.js";
+import { setSelectValue } from "./select.js";
 import { $, btnBusy, btnDone, wbBusy, wbIdle, toast, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
@@ -285,10 +286,21 @@ export function openHome() {
 }
 $("btn-home").addEventListener("click", openHome);
 
-$("btn-new").addEventListener("click", () => {
+$("btn-new").addEventListener("click", async () => {
   fillAccountSelect();
   $("new-error").classList.add("hidden");
   $<HTMLDialogElement>("dlg-new").showModal();
+  const token = S.token;
+  const picker = $<HTMLSelectElement>("new-git-connection");
+  picker.replaceChildren(Object.assign(document.createElement("option"), {value:"",textContent:"不绑定"}));
+  picker.disabled = true;
+  try {
+    const [cs, def] = await Promise.all([api<GitConnection[]>("/git/connections"),api<{connection_id:string}>("/me/git/default")]);
+    if (token !== S.token || !$<HTMLDialogElement>("dlg-new").open) return;
+    for (const c of cs) if (c.enabled) picker.append(Object.assign(document.createElement("option"),{value:c.id,textContent:c.label}));
+    setSelectValue(picker,def.connection_id);
+  } catch (e) { if(token === S.token) toast("读取 Git 连接失败，可选择不绑定后创建："+(e as Error).message,true); }
+  finally { picker.disabled = false; }
 });
 $("new-cancel").addEventListener("click", () => $<HTMLDialogElement>("dlg-new").close());
 
@@ -321,6 +333,7 @@ $("new-form").addEventListener("submit", async (e) => {
     name: $<HTMLInputElement>("new-name").value.trim(),
     agent,
     account_id: $<HTMLSelectElement>("new-account").value,
+    git_connection_id: $<HTMLSelectElement>("new-git-connection").value,
   };
   btnBusy($("new-ok"), "创建中…");
   $<HTMLButtonElement>("new-cancel").disabled = true;

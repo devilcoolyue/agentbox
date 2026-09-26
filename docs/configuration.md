@@ -49,6 +49,8 @@
 | `accounts` | 账号数组，可为空 | `id`、`type`、`label`、`credentials_dir`、`env`、`proxy_id`、`access`、`model_reasoning` |
 | `models` | 按 `claude` / `codex` 分组的数组 | 每项含 `id`、`label` 与可选 `reasoning` 能力，维护对话候选模型 |
 | `default_models` | 按 Agent 分组的模型 ID | 初始为 `claude-opus-5` / `gpt-5.5`，必须在对应候选列表中 |
+| `pricing_catalog` | `url` + `auto_check` | 独立 HTTPS 价格目录；默认不联网，自动检查只生成候选，详见 [维护流程](pricing-catalog.md) |
+| `pricing_managed` / `pricing_history` | 跟随目录元数据 / 最近 10 次价格版本 | 由价格管理接口维护，随配置原子持久化 |
 | `pricing` | 模型 ID / Agent 名到单价的映射 | provider 不报价时用于 token 折算；省略则无价格表 |
 
 `accounts[].type` 仅接受 `claude` 或 `codex`。账号 ID 与代理 ID 为 2–32 位小写字母、数字、`-`、`_`，首位为字母或数字，且在各自列表内唯一。账号引用的 `proxy_id` 必须存在于代理池。
@@ -157,3 +159,5 @@ data/                               实际根目录由 data_dir 决定
 `cache_dir` 相对配置文件目录解析；空值/省略时沿用 `data_dir`，市场位于其 `marketplace/` 子目录。缓存目录是部署配置，修改后需重启；设置 API 不修改路径，其他设置保存会保留它。恢复备份时缓存重定位到恢复目录的 `cache/`，不写回原实例缓存。
 
 `resources` 支持 `max_running`、`max_running_per_user` 和 `min_free_bytes`，均为非负整数，0 禁用。可从管理员设置 API/界面原子保存并立即影响新启动。限制与磁盘统计口径见[运行维护](architecture/deployment-layout.md#容量与回收)。
+
+Git 连接与 OAuth 应用可在网页选择 `network.route=tunnel` 及 `network.ca_pem`；路由固定为连接属主的 abox-link 隧道，断开时不直连，客户端需放行目标域名/端口。公司 CA 仅附加到该连接 TLS 信任池。SSH 连接需配置可信的服务器主机公钥并核对 SHA256 指纹，私钥不下发容器。详见 [Git API](api.md#企业网络与-ssh)。

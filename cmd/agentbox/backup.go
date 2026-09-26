@@ -30,6 +30,8 @@ func maintenance(args []string) error {
 	defer stop()
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	switch args[0] {
+	case "git-key-rotate":
+		return rotateGitKeys(ctx, args[1:])
 	case "check-config":
 		path := flags.String("config", "config.json", "configuration path")
 		if err := flags.Parse(args[1:]); err != nil {

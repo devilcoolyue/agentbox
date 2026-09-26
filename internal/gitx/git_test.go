@@ -5,12 +5,42 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 )
 
 type executorFunc func(context.Context, string, []string) (string, error)
 
 func (f executorFunc) ExecCommand(ctx context.Context, id string, cmd []string) (string, error) {
 	return f(ctx, id, cmd)
+}
+
+func TestRepositoryLockCancellationAndScope(t *testing.T) {
+	r := New(executorFunc(func(context.Context, string, []string) (string, error) { return "", nil }),
+		func(context.Context, string) (string, func(), error) { return "c", func() {}, nil })
+	release, err := r.Lock(t.Context(), "s1", "project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+	if _, err := r.Lock(ctx, "s1", "./project"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("waiting lock=%v", err)
+	}
+	other, err := r.Lock(t.Context(), "s2", "project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other()
+	release()
+	release() // cleanup is idempotent
+	next, err := r.Lock(t.Context(), "s1", "project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next()
+	if len(r.locks) != 0 {
+		t.Fatalf("leaked locks: %d", len(r.locks))
+	}
 }
 
 func TestRunnerRejectsTraversalBeforeStartingSession(t *testing.T) {

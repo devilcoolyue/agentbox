@@ -8,6 +8,7 @@ import (
 	"errors"
 	"path"
 	"strings"
+	"sync"
 )
 
 var ErrUnavailable = errors.New("Git 容器执行服务不可用")
@@ -30,6 +31,53 @@ type Prepare func(context.Context, string) (containerID string, release func(), 
 type Runner struct {
 	exec    Executor
 	prepare Prepare
+	mu      sync.Mutex
+	locks   map[string]*repoLock
+}
+
+type repoLock struct {
+	token chan struct{}
+	refs  int
+}
+
+// Lock serializes compound web mutations. Git's own index.lock only covers a
+// single command, not add+commit+read-SHA. CLI processes still use Git's locks.
+func (r *Runner) Lock(ctx context.Context, sessionID, repo string) (func(), error) {
+	if r == nil || r.exec == nil || r.prepare == nil {
+		return nil, ErrUnavailable
+	}
+	if _, err := command(repo, nil); err != nil {
+		return nil, err
+	}
+	key := sessionID + "\x00" + path.Clean(repo)
+	r.mu.Lock()
+	if r.locks == nil {
+		r.locks = map[string]*repoLock{}
+	}
+	l := r.locks[key]
+	if l == nil {
+		l = &repoLock{token: make(chan struct{}, 1)}
+		l.token <- struct{}{}
+		r.locks[key] = l
+	}
+	l.refs++
+	r.mu.Unlock()
+	drop := func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		l.refs--
+		if l.refs == 0 {
+			delete(r.locks, key)
+		}
+	}
+	select {
+	case <-ctx.Done():
+		drop()
+		return nil, ctx.Err()
+	case <-l.token:
+		var once sync.Once
+		return func() { once.Do(func() { l.token <- struct{}{}; drop() }) }, nil
+	}
 }
 
 func New(exec Executor, prepare Prepare) *Runner {
@@ -37,12 +85,25 @@ func New(exec Executor, prepare Prepare) *Runner {
 }
 
 func (r *Runner) Run(ctx context.Context, sessionID, repo string, args ...string) (string, error) {
+	return r.run(ctx, sessionID, repo, false, args...)
+}
+
+// RunNetwork uses a longer in-container timeout for bounded network transfers.
+// The URL must be an operation-scoped transport grant, never a provider token.
+func (r *Runner) RunNetwork(ctx context.Context, sessionID, repo string, args ...string) (string, error) {
+	return r.run(ctx, sessionID, repo, true, args...)
+}
+
+func (r *Runner) run(ctx context.Context, sessionID, repo string, network bool, args ...string) (string, error) {
 	if r == nil || r.exec == nil || r.prepare == nil {
 		return "", ErrUnavailable
 	}
 	cmd, err := command(repo, args)
 	if err != nil {
 		return "", err
+	}
+	if network {
+		cmd[3] = "120s"
 	}
 	containerID, release, err := r.prepare(ctx, sessionID)
 	if err != nil {
@@ -54,6 +115,11 @@ func (r *Runner) Run(ctx context.Context, sessionID, repo string, args ...string
 	defer release()
 	if containerID == "" {
 		return "", ErrUnavailable
+	}
+	if executor, ok := r.exec.(interface {
+		ExecCancelableCommand(context.Context, string, []string) (string, error)
+	}); ok {
+		return executor.ExecCancelableCommand(ctx, containerID, cmd)
 	}
 	return r.exec.ExecCommand(ctx, containerID, cmd)
 }

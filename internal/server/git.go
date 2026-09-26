@@ -55,6 +55,14 @@ func (s *Server) runGit(ctx context.Context, sess store.Session, dir string, arg
 	return s.git.Run(ctx, sess.ID, filepath.ToSlash(rel), args...)
 }
 
+func (s *Server) lockGit(ctx context.Context, sess store.Session, dir string) (func(), error) {
+	rel, err := filepath.Rel(s.workspaceDir(sess), dir)
+	if err != nil || !filepath.IsLocal(rel) {
+		return nil, errors.New("invalid Git repository path")
+	}
+	return s.git.Lock(ctx, sess.ID, filepath.ToSlash(rel))
+}
+
 func writeGitErr(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	if errors.Is(err, errGitQuota) || errors.Is(err, errAccountAccess) {
@@ -94,10 +102,10 @@ func (s *Server) repoRoots(ws string) []string {
 		info, err := dir.Lstat(".git")
 		return err == nil && (info.IsDir() || info.Mode().IsRegular())
 	}
-	if hasGit(root) {
-		return []string{""}
-	}
 	out := []string{}
+	if hasGit(root) {
+		out = append(out, "")
+	}
 	var walk func(*safefs.Root, string, int)
 	walk = func(dir *safefs.Root, rel string, depth int) {
 		if depth > repoScanDepth || len(out) >= repoScanMax {
@@ -176,25 +184,6 @@ type gitFile struct {
 	Untracked bool   `json:"untracked"`
 }
 
-// parsePorcelain turns `git status --porcelain=v1` lines into entries. Rename
-// lines ("R  old -> new") report the new path.
-func parsePorcelain(out string) []gitFile {
-	files := []gitFile{}
-	for _, line := range strings.Split(out, "\n") {
-		if len(line) < 4 {
-			continue
-		}
-		xy := line[:2]
-		path := strings.TrimSpace(line[3:])
-		if i := strings.Index(path, " -> "); i >= 0 {
-			path = path[i+4:]
-		}
-		path = strings.Trim(path, `"`)
-		files = append(files, gitFile{Path: path, Status: xy, Untracked: xy == "??"})
-	}
-	return files
-}
-
 // handleGitStatus reports the repos found in the workspace plus the status of
 // the selected one. Unlike the write paths an unknown ?repo= falls back to the
 // default: it is a read, and the response carries the authoritative repo list
@@ -213,27 +202,45 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request, sess st
 	dir := filepath.Join(ws, filepath.FromSlash(rel))
 	ctx, cancel := gitCtx(r)
 	defer cancel()
-	branch, _ := s.runGit(ctx, sess, dir, "rev-parse", "--abbrev-ref", "HEAD")
 	// --untracked-files=all: the default collapses a wholly-untracked directory
 	// into one "dir/" entry, so a new .claude/settings.local.json shows up as
 	// ".claude/" with no way to diff or discard the file itself.
-	out, err := s.runGit(ctx, sess, dir, "status", "--porcelain=v1", "--untracked-files=all")
+	out, err := s.runGit(ctx, sess, dir, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
 	if err != nil {
 		writeGitErr(w, err)
 		return
 	}
-	files := parsePorcelain(out)
+	branch, files := parseGitState(out)
+	remoteOut, err := s.runGit(ctx, sess, dir, "config", "--local", "--null", "--get-regexp", `^remote\..*\.(url|pushurl)$`)
+	if err != nil && !gitx.IsExit(err, 1) {
+		writeGitErr(w, err)
+		return
+	}
+	lastFetch, err := s.store.LastGitFetch(sess.ID, rel)
+	if err != nil {
+		writeGitStoreErr(w, err)
+		return
+	}
 	truncated := len(files) > maxStatusFiles
 	if truncated {
 		files = files[:maxStatusFiles]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"is_repo":   true,
-		"repo":      rel,
-		"repos":     roots,
-		"branch":    strings.TrimSpace(branch),
-		"files":     files,
-		"truncated": truncated,
+		"is_repo":        true,
+		"repo":           rel,
+		"repos":          roots,
+		"branch":         branch.Branch,
+		"head":           branch.Head,
+		"detached":       branch.Detached,
+		"unborn":         branch.Unborn,
+		"upstream":       branch.Upstream,
+		"ahead":          branch.Ahead,
+		"behind":         branch.Behind,
+		"tracking_known": branch.TrackingKnown,
+		"last_fetch":     lastFetch,
+		"remotes":        parseGitRemotes(remoteOut),
+		"files":          files,
+		"truncated":      truncated,
 	})
 }
 
@@ -346,12 +353,33 @@ func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request, sess st
 	}
 	ctx, cancel := gitCtx(r)
 	defer cancel()
+	profile, err := s.store.GetGitProfile(sess.User)
+	if err != nil {
+		writeErr(w, 500, "读取 Git 身份失败")
+		return
+	}
+	unlock, err := s.lockGit(ctx, sess, dir)
+	if err != nil {
+		writeGitErr(w, err)
+		return
+	}
+	defer unlock()
+	rel, _ := filepath.Rel(s.workspaceDir(sess), dir)
+	op, err := s.beginGitOperation(ctx, sess.User, sess.ID, filepath.ToSlash(rel), "", "commit", "HEAD")
+	if err != nil {
+		writeGitStoreErr(w, err)
+		return
+	}
+	result := "failed"
+	defer func() { s.finishGitOperation(ctx, op, result) }()
 	if _, err := s.runGit(ctx, sess, dir, "add", "-A"); err != nil {
 		writeGitErr(w, err)
 		return
 	}
 	out, err := s.runGit(ctx, sess, dir,
-		"-c", "user.name=agentbox", "-c", "user.email=agentbox@localhost",
+		"-c", "user.name="+profile.Name, "-c", "user.email="+profile.Email,
+		"-c", "author.name="+profile.Name, "-c", "author.email="+profile.Email,
+		"-c", "committer.name="+profile.Name, "-c", "committer.email="+profile.Email,
 		"commit", "-m", msg)
 	if err != nil {
 		if errors.Is(err, errGitQuota) || errors.Is(err, errAccountAccess) || errors.Is(err, gitx.ErrUnavailable) {
@@ -361,7 +389,16 @@ func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request, sess st
 		writeErr(w, http.StatusBadRequest, "提交失败："+strings.TrimSpace(out+" "+err.Error()))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"output": strings.TrimSpace(out)})
+	result = "success"
+	sha, shaErr := s.runGit(ctx, sess, dir, "rev-parse", "--verify", "HEAD")
+	// A successful commit must not become a failed request merely because the
+	// metadata read failed; retrying the commit would be misleading.
+	warning := ""
+	if shaErr != nil {
+		sha = ""
+		warning = "本地提交已成功，但读取提交编号失败，请刷新确认"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"output": strings.TrimSpace(out), "sha": strings.TrimSpace(sha), "pushed": false, "warning": warning})
 }
 
 // handleGitDiscard reverts working-tree changes (one path, or all). Tracked
@@ -390,6 +427,20 @@ func (s *Server) handleGitDiscard(w http.ResponseWriter, r *http.Request, sess s
 		}
 		target = p
 	}
+	unlock, err := s.lockGit(ctx, sess, dir)
+	if err != nil {
+		writeGitErr(w, err)
+		return
+	}
+	defer unlock()
+	rel, _ := filepath.Rel(s.workspaceDir(sess), dir)
+	op, err := s.beginGitOperation(ctx, sess.User, sess.ID, filepath.ToSlash(rel), "", "discard", target)
+	if err != nil {
+		writeGitStoreErr(w, err)
+		return
+	}
+	result := "failed"
+	defer func() { s.finishGitOperation(ctx, op, result) }()
 	// Untracked-only selections don't need checkout. For tracked paths, a
 	// failed restore must stop the operation before cleaning unrelated files.
 	tracked, err := s.runGit(ctx, sess, dir, "ls-files", "-z", "--", target)
@@ -407,5 +458,6 @@ func (s *Server) handleGitDiscard(w http.ResponseWriter, r *http.Request, sess s
 		writeGitErr(w, err)
 		return
 	}
+	result = "success"
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

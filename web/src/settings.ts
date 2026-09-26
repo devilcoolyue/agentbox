@@ -503,8 +503,9 @@ function renderModels() {
       const id = document.createElement("span");
       id.className = "m-id";
       id.textContent = m.id;
+      id.title = m.id;
       const rm = document.createElement("button");
-      rm.className = "btn btn-sm btn-ghost";
+      rm.className = "btn btn-sm btn-ghost m-remove";
       buttonLabel(rm, m.id === selected ? "默认" : "移除", m.id === selected ? "check" : "close");
       rm.disabled = m.id === selected;
       rm.title = m.id === selected ? "移除前请先选择其他默认模型" : "";
@@ -513,7 +514,7 @@ function renderModels() {
         putSettings({ models: next }, rm, "已移除 " + m.label);
       });
       const reasoning = document.createElement("button");
-      reasoning.className = "btn btn-sm btn-ghost";
+      reasoning.className = "btn btn-sm btn-ghost m-reasoning";
       reasoning.textContent = reasoningLabel(m.reasoning);
       reasoning.addEventListener("click", async () => {
         const policy = await editReasoning(agent, m.label + " · 模型能力", m.reasoning);

@@ -145,11 +145,16 @@
 .changes-repo {
   flex-shrink: 0; max-width: 260px; font-size: 12px; padding: 4px 8px;
 }
+.changes-remote-state {
+  flex: none; padding: 8px 20px; border-bottom: 1px solid var(--line);
+  color: var(--muted); font-size: 12px; line-height: 1.6;
+  white-space: pre-line; overflow-wrap: anywhere; max-height: 140px; overflow-y: auto;
+}
 .changes-branch {
   color: var(--muted); font-size: 12px; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.changes-actions { display: flex; gap: 8px; }
+.changes-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .changes-body { flex: 1; min-height: 0; display: flex; }
 .changes-list {
   width: 300px; flex-shrink: 0; overflow-y: auto;

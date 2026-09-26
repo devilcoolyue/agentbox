@@ -34,8 +34,8 @@
 | **用熟悉的 Agent** | Claude Code 与 Codex CLI，网页流式对话和原版 CLI 终端自由切换 |
 | **完成交付闭环** | 上传项目 → 下发任务 → 预览文件 → 审查 Git diff → 提交或下载 |
 | **复用环境和资源** | 用户级 `/shared`、双层 home 模板、Claude 技能管理与 MCP 配置 |
-| **集中管理账号与成本** | OAuth / API Key / 中转账号池、按用户授权、用量明细、价格快照和额度账本 |
-| **访问自己的内网** | 可选 abox-link，让云端 Agent 直接访问白名单内的代码仓库、数据库和服务 |
+| **集中管理账号与成本** | OAuth / API Key / 中转账号池、按用户授权、用量明细、价格目录更新、历史价格快照和额度账本 |
+| **访问自己的内网** | 可选 abox-link，让云端 Agent 直接访问白名单内的代码仓库、数据库和服务；对话栏显示连接状态，点击查看详情 |
 
 服务端是嵌入前端的 **Go 单二进制**，以 SQLite 保存状态、Docker 隔离工作空间，配套 systemd 部署与备份工具。
 
@@ -48,7 +48,7 @@
 | [![浏览器终端：Shell、测试输出与持久 tmux 会话](docs/images/terminal.png)](docs/images/terminal.png) | [![Git 变更审查：文件列表与彩色 diff](docs/images/changes.png)](docs/images/changes.png) |
 | **终端 · 保留你的工作现场**<br>执行命令，使用原版 CLI，断线后重新附着 tmux。 | **变更 · 看清每一处修改**<br>浏览 diff 与完整文件，审查后提交。 |
 | [![项目文件：目录树、上传和下载操作](docs/images/files.png)](docs/images/files.png) | [![使用记录：筛选、token、费用来源与延迟](docs/images/usage.png)](docs/images/usage.png) |
-| **文件 · 管理源码与产物**<br>项目目录与用户共享目录，支持编辑、预览和打包下载。 | **用量 · 费用有据可查**<br>按用户、模型和时间筛选，查看计价来源与回合延迟。 |
+| **文件 · 管理源码与产物**<br>项目目录与用户共享目录，支持编辑、预览和打包下载；源码视图提供行号、语法着色、当前行高亮、行列定位和全屏查看。 | **用量 · 费用有据可查**<br>按用户、模型和时间筛选，查看计价来源与回合延迟。 |
 | [![账号池：Claude 与 Codex 账号、授权范围和接入方式](docs/images/accounts.png)](docs/images/accounts.png) | [![内网隧道：连接状态、工作空间就绪状态与白名单](docs/images/tunnel.png)](docs/images/tunnel.png) |
 | **账号 · 统一接入与授权**<br>维护 Claude / Codex 账号，控制用户使用范围。 | **内网 · 连接本机可达的服务**<br>透明访问已放行目标，查看客户端与工作空间网络状态。 |
 
@@ -105,7 +105,7 @@ flowchart LR
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash
 ```
 
-当前正式版本为 [v0.1.1](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.1)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.1`。
+当前正式版本为 [v0.1.3](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.3)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.3`。
 
 Oracle Linux / RHEL 等启用 SELinux 的系统，若旧版安装包启动时报 `203/EXEC` / `Permission denied`，按[SELinux 安装恢复](deploy/README.md#selinux-安装恢复)修复程序标签后重试激活。
 
@@ -251,11 +251,14 @@ sudo ./deploy/deploy.sh
 - **生产发布会短暂断开连接。** 当前采用单机、单服务进程与本机 Docker，同一 `data_dir` 只允许一个 agentbox 进程。
 - **容器允许 Agent 执行代码。** 默认权限模式为 `bypassPermissions`。容器以非 root 用户运行，设置资源限制与 `no-new-privileges`；服务端具有 Docker 权限，适合由可信管理员部署和维护。
 - **Git 审查在会话容器内执行。** 进入审查会按需启动空间，并遵循终端相同的额度入口限制；网页提交不执行 Git hook 或签名，需要这些功能时请在终端提交。
+- **网页「提交到本地」不会推送到远程。** 用户菜单或变更页的「Git 身份」可设置你所有空间共用的网页提交姓名/邮箱；缺省使用当前用户名和 `用户名@localhost`。远程分支领先/落后数量来自本地缓存，刷新不会 fetch。用户菜单的「Git 连接」支持 HTTPS Token 和 SSH 私钥，变更页可克隆仓库，「远程」可绑定连接、获取、快进拉取和预览后推送。管理员可注册 GitHub/GitLab OAuth 应用，用户网页授权后复用连接；操作记录支持进度查看与取消。企业 Git 可配置公司 CA 和用户内网隧道；SSH 固定服务器主机公钥。网页分支管理支持创建、切换、上游与删除已合并分支。GitHub/GitLab 支持 PR/MR 预览创建；管理员可共享专用服务账号并按用户限制读写。另提供 30 分钟终端授权；长期凭证保留在服务端。连接按用户管理，空间选默认、仓库按 remote 绑定；实施边界见[Git 管理记录](docs/architecture/git-management.md)，离线密钥轮换见[维护说明](docs/development.md#git-密钥维护与容器网桥验收)。
 - **网页文件操作不沿符号链接访问。** 工作区、共享目录、技能和凭证文件使用受限目录句柄；上传先在临时目录验证，编辑器保存以原子替换方式写入。模板中的链接仍可由容器内 CLI 使用。
 
 ## 独立部署与运行维护
 
 新安装可使用版本化发布目录，配置、数据和市场缓存分别放在 `/etc/agentbox`、`/var/lib/agentbox`、`/var/cache/agentbox`；仓库内部署继续兼容。[部署目录与迁移手册](docs/architecture/deployment-layout.md) 包含安装、升级、回退、离线迁移与备份步骤。
+
+系统设置的「价目表」支持独立 HTTPS 价格目录、每日检查、差异确认应用、自定义价格保护与版本回退。新模型和旧模型调价可通过发布目录 JSON 维护，无需升级服务端；远程来源需自行配置，内置旧快照不代表最新价格。见[价格目录维护](docs/pricing-catalog.md)。
 
 系统设置的「容器与资源」支持全局/每用户运行容器上限、数据盘保留空间、后台磁盘统计、市场缓存清理与脱敏诊断下载。用量页读取已入账记录并显示终端扫描时间，补记在后台完成。
 

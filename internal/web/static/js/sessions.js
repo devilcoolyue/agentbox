@@ -2,6 +2,7 @@
  * 新建会话弹窗、工作台标签页。 */
 "use strict";
 import { S, bus, emit } from "./state.js";
+import { setSelectValue } from "./select.js";
 import { $, btnBusy, btnDone, wbBusy, wbIdle, toast, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
@@ -303,10 +304,30 @@ export function openHome() {
     renderSidebar();
 }
 $("btn-home").addEventListener("click", openHome);
-$("btn-new").addEventListener("click", () => {
+$("btn-new").addEventListener("click", async () => {
     fillAccountSelect();
     $("new-error").classList.add("hidden");
     $("dlg-new").showModal();
+    const token = S.token;
+    const picker = $("new-git-connection");
+    picker.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "不绑定" }));
+    picker.disabled = true;
+    try {
+        const [cs, def] = await Promise.all([api("/git/connections"), api("/me/git/default")]);
+        if (token !== S.token || !$("dlg-new").open)
+            return;
+        for (const c of cs)
+            if (c.enabled)
+                picker.append(Object.assign(document.createElement("option"), { value: c.id, textContent: c.label }));
+        setSelectValue(picker, def.connection_id);
+    }
+    catch (e) {
+        if (token === S.token)
+            toast("读取 Git 连接失败，可选择不绑定后创建：" + e.message, true);
+    }
+    finally {
+        picker.disabled = false;
+    }
 });
 $("new-cancel").addEventListener("click", () => $("dlg-new").close());
 for (const r of document.querySelectorAll('#new-form input[name="agent"]')) {
@@ -336,6 +357,7 @@ $("new-form").addEventListener("submit", async (e) => {
         name: $("new-name").value.trim(),
         agent,
         account_id: $("new-account").value,
+        git_connection_id: $("new-git-connection").value,
     };
     btnBusy($("new-ok"), "创建中…");
     $("new-cancel").disabled = true;

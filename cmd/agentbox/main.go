@@ -31,7 +31,7 @@ func main() {
 	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "backup", "backup-verify", "restore", "check-config":
+		case "backup", "backup-verify", "restore", "check-config", "git-key-rotate":
 			if err := maintenance(os.Args[1:]); err != nil {
 				log.Fatal(err)
 			}

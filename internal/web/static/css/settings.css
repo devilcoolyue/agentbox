@@ -191,17 +191,22 @@
 .model-default .select-trigger, .model-default select:not(.select-native) { flex: 1; min-width: 180px; }
 .model-rows { display: flex; flex-direction: column; }
 .model-row {
-  display: flex; align-items: center; gap: 12px;
+  display: grid; align-items: center; gap: 12px;
+  grid-template-columns: minmax(90px, 1fr) minmax(0, 1.6fr) minmax(140px, 1.3fr) 76px;
   padding: 8px 2px;
   border-bottom: 1px solid var(--line-soft);
 }
 .model-row:last-child { border-bottom: none; }
-.model-row .m-label { font-size: 13.5px; flex: none; }
+.model-row .m-label { min-width: 0; font-size: 13.5px; overflow-wrap: anywhere; }
 .model-row .m-id {
   font-family: var(--mono); font-size: 11.5px; color: var(--muted);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.model-row .btn { margin-left: auto; flex: none; }
+.model-row .m-reasoning {
+  min-width: 0; justify-content: flex-start; text-align: left;
+  white-space: normal; overflow-wrap: anywhere;
+}
+.model-row .m-remove { justify-self: end; }
 .model-add { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
 .model-add input { flex: 1; min-width: 120px; }
 
@@ -342,6 +347,11 @@
   .acct-row { grid-template-columns: minmax(0, 1fr); }
   .acct-actions { grid-row: auto; grid-column: 1; padding-top: 4px; flex-wrap: wrap; }
   .acct-proxy { max-width: 100%; }
+  .model-row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding-block: 12px; }
+  .model-row .m-label { grid-column: 1; grid-row: 1; }
+  .model-row .m-id { grid-column: 1; grid-row: 2; }
+  .model-row .m-reasoning { grid-column: 1; grid-row: 3; justify-self: start; max-width: 100%; margin-left: -11px; }
+  .model-row .m-remove { grid-column: 2; grid-row: 1 / 4; }
   /* 代理表有 7 列，窄屏必然横向滚动；操作列的按钮别再被挤成两行 */
   .px-actions { justify-content: flex-start; }
   .px-head-actions { width: 100%; }
@@ -369,3 +379,58 @@
 .user-row .u-quota.off { color: var(--muted); opacity: 0.75; }
 .user-row .u-quota.track { color: var(--muted); border-style: dashed; }
 .user-row .u-quota.blocked { color: var(--red); border-color: var(--red-line); }
+
+/* Price catalog: status, reviewable changes and protected custom rates. */
+.price-catalog { gap: 16px; }
+.price-catalog-head { display: grid; gap: 6px; }
+.price-catalog-head p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.price-catalog .card-desc, .price-editor .card-desc, .price-history .card-desc { margin: 0; line-height: 1.6; }
+.price-catalog .field-row { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto auto; align-items: end; gap: 12px; }
+.price-catalog .field { min-width: 0; }
+.price-catalog .field input, .price-catalog .field-row > .btn { height: 36px; }
+.price-catalog .field input { padding-block: 7px; font-size: 13px; line-height: 20px; }
+.price-auto { display: flex; align-items: center; gap: 6px; min-height: 36px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.price-auto input { margin: 0; }
+.price-notice { padding: 10px 12px; margin: 0; border-left: 3px solid var(--amber); background: color-mix(in srgb, var(--amber) 7%, transparent); font-size: 12.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.price-notice p { margin: 6px 0; }
+.price-notice ul { margin: 8px 0; padding-left: 20px; max-height: 180px; overflow-y: auto; }
+.price-changes { max-height: 460px; overflow-y: auto; margin: 12px 0; border-top: 1px solid var(--line); }
+#price-diff { padding-top: 16px; border-top: 1px solid var(--line); }
+#price-diff > p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.price-change { padding: 12px 0; border-bottom: 1px solid var(--line-soft); overflow-wrap: anywhere; }
+.price-change label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.price-change label span { font-size: 12px; color: var(--amber); }
+.price-change p { margin: 7px 0 0 24px; }
+.price-change .card-desc { margin: 7px 0 0 24px; line-height: 1.5; }
+.price-change a { color: var(--amber); text-underline-offset: 2px; }
+.price-change-rates { font-size: 12px; font-variant-numeric: tabular-nums; }
+.price-table .pt-key small { display: block; margin-top: 4px; font: 11px/1.4 var(--font-sans, sans-serif); color: var(--muted); }
+.price-mode { display: block; padding: 4px 0; font-size: 11px; color: var(--amber); background: none; border: 0; cursor: pointer; }
+.price-history { display: block; padding: 0; }
+.price-history summary {
+  display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 14px 18px;
+  border-radius: inherit; list-style: none; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; line-height: 24px;
+}
+.price-history summary::-webkit-details-marker { display: none; }
+.price-history summary::before {
+  content: ""; width: 6px; height: 6px; flex: none;
+  border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg); transition: transform 140ms ease;
+}
+.price-history[open] summary::before { transform: rotate(45deg); }
+.price-history summary:hover { background: var(--panel-2); }
+.price-history summary:focus-visible { outline: 2px solid var(--amber); outline-offset: -3px; }
+.price-history-body { display: grid; gap: 12px; padding: 0 18px 16px; }
+.price-history-body p { margin: 0; }
+.price-history-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+@media (max-width: 1200px) {
+  .price-catalog .field-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .price-catalog .field { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .price-catalog .field-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .price-auto { grid-column: 1 / -1; }
+  .price-history-row { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { .price-history summary::before { transition: none; } }

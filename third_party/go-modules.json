@@ -309,6 +309,17 @@
     ]
   },
   {
+    "module": "golang.org/x/crypto",
+    "version": "v0.54.0",
+    "source": "https://golang.org/x/crypto",
+    "files": [
+      {
+        "path": "third_party/go/golang.org_x_crypto@v0.54.0/LICENSE",
+        "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+      }
+    ]
+  },
+  {
     "module": "golang.org/x/net",
     "version": "v0.57.0",
     "source": "https://golang.org/x/net",

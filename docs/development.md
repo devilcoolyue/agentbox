@@ -184,6 +184,19 @@ PR 描述说明触发场景、行为变化和验证结果。涉及 Linux Docker�
 
 设置 `AGENTBOX_BACKUP_DOCKER_TEST=1` 额外验证完整备份命令及工作区恢复，需要可达的 Docker daemon（非默认 context 设置 `DOCKER_HOST`）。该验证只读取 Docker 挂载列表，不操作已有容器；CI 默认开启。
 
+## 真实终端回归
+
+`scripts/test-terminal.mjs` 将当前网页的 xterm 接到临时 Docker 容器，验证空 home 下的 Shell 默认配置、vi/Vim 的插入、退格、方向键、冒号命令、保存、窗口缩放与 tmux 重连。API 使用合成数据，不读取账号或调用模型；需要本机 Docker Unix socket 和 Playwright，结束后删除测试容器。
+
+```bash
+docker build -t agentbox-agent:terminal-test images/agent
+AGENTBOX_TERMINAL_IMAGE=agentbox-agent:terminal-test \
+  AGENTBOX_PLAYWRIGHT_MODULE=/tmp/agentbox-docs-browser/node_modules/playwright/index.mjs \
+  AGENTBOX_BROWSER_CHANNEL=chrome node scripts/test-terminal.mjs
+```
+
+Playwright 安装方法见下节，截图保存在 `output/playwright/`。这项测试使用真实 Docker PTY，但 API 和 WebSocket 桥接由测试脚本提供，不覆盖 Go 服务端鉴权或会话生命周期。
+
 ## 文档截图
 
 README 的截图由 [`scripts/capture-readme.mjs`](../scripts/capture-readme.mjs) 渲染当前 `internal/web/static/` 生成，使用本机临时 HTTP 服务和合成 API / WebSocket 数据，不连接生产、不调用模型、不需要 Docker。终端输出、对话、用户与费用均为演示数据，不是实际模型或性能测试结果。
@@ -199,3 +212,24 @@ AGENTBOX_PLAYWRIGHT_MODULE=/tmp/agentbox-docs-browser/node_modules/playwright/in
 以上使用本机 Chrome；也可先执行 `/tmp/agentbox-docs-browser/node_modules/.bin/playwright install chromium`，再省略 `AGENTBOX_BROWSER_CHANNEL` 使用 Playwright Chromium。仅安装所需浏览器，不需要账号登录。
 
 脚本生成桌面 1440 × 960 和手机 390 × 844 截图到 `output/playwright/readme/`，检查页面异常与遗漏的 API 夹具。逐张检查后将 PNG 复制到 `docs/images/`，随文档一起提交。变更页面布局时重拍受影响页面，不能手工修改截图伪造界面。截图中的时间按生成当天计算，避免“当天”用量筛选与演示记录冲突。
+
+## Git 密钥维护与容器网桥验收
+
+先备份配置、数据库及 `data/git-secrets/`，停止服务，再运行：
+
+```bash
+agentbox git-key-rotate --config /path/to/config.json
+# 若轮换中断，用当前活动密钥继续重加密，不再新增密钥
+agentbox git-key-rotate --config /path/to/config.json --resume
+```
+
+命令检查 data_dir 锁并验证现有密文；不会自动停止服务。输出只有密钥版本 ID 与处理数量。旧密钥保留用于中断/历史数据恢复，不能将此命令当作泄露密钥销毁流程。完成后应另做一份完整配套系统备份。旧二进制不能解密 V2 密文，不可直接回退。
+
+真实 Linux 容器网桥测试（临时容器，无宿主挂载、真实凭证或外部仓库）：
+
+```bash
+docker build -f internal/dockerx/testdata/git.Dockerfile -t agentbox-git-test:local .
+AGENTBOX_DOCKER_TEST_IMAGE=agentbox-git-test:local go test ./internal/server -run '^TestGitBridgeContainerLive$' -count=1 -v
+```
+
+测试使用合成 TLS Git smart HTTP 与 SSH 服务，经过真实容器 Git、宿主能力网桥、公司 CA/SSH pin 校验，验证 clone/fetch/ff-only pull、网页预览与显式 push、容器 Python 终端授权命令。默认网桥地址为 `host.docker.internal`，Linux 可用 `AGENTBOX_DOCKER_BRIDGE_HOST` 指定容器可达的服务端地址；服务端测试临时监听 `0.0.0.0`。此测试不替代真实 GitHub/GitLab 注册应用、企业 SSO 和实际内网的现场联调。

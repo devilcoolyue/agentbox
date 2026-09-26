@@ -8,6 +8,10 @@ import (
 // PriceSnapshot records the decision used when a row was first priced. Both
 // tiers are retained so a growing terminal turn keeps its original price table.
 type PriceSnapshot struct {
+	PricingRevision string      `json:"pricing_revision,omitempty"`
+	CatalogVersion  string      `json:"catalog_version,omitempty"`
+	SourceURL       string      `json:"source_url,omitempty"`
+	VerifiedAt      string      `json:"verified_at,omitempty"`
 	Version         int         `json:"version"`
 	Source          string      `json:"source"` // provider | table | unpriced
 	Key             string      `json:"key,omitempty"`

@@ -78,7 +78,8 @@ class Installation(unittest.TestCase):
         self.package = root / 'package'; self.package.mkdir()
         (self.package / 'build.json').write_text(json.dumps(dict(program='agentbox', os='linux', arch='amd64', version='v1.2.3', revision='clean')))
         (self.package / 'config.example.json').write_text((ROOT / 'config.example.json').read_text())
-        for path in ['agentbox', 'deploy/release.py', 'scripts/build-image.sh', 'images/agent/versions.env']:
+        for path in ['agentbox', 'deploy/release.py', 'scripts/build-image.sh', 'images/agent/versions.env',
+                     'images/agent/Dockerfile', 'images/agent/tmux.conf', 'images/agent/bashrc', 'images/agent/vimrc']:
             file = self.package / path; file.parent.mkdir(exist_ok=True, parents=True); file.touch()
         self.calls = []
 
@@ -127,6 +128,18 @@ class Installation(unittest.TestCase):
             path.rmdir()
         with self.assertRaises(ValueError): self.execute(run=lambda *a, **kw: '/legacy/agentbox.service')
         self.assertFalse(self.layout.config.exists())
+
+    def test_missing_terminal_resources_rejected_before_install(self):
+        for name in ('Dockerfile', 'tmux.conf', 'bashrc', 'vimrc'):
+            path = self.package / 'images/agent' / name
+            path.unlink()
+            self.calls.clear()
+            with self.subTest(resource=name), self.assertRaisesRegex(ValueError, 'Incomplete release'):
+                self.execute()
+            self.assertFalse(any(call[:1] == ('docker',) for call in self.calls))
+            for target in (self.layout.app, self.layout.config.parent, self.layout.data, self.layout.cache):
+                self.assertFalse(target.exists())
+            path.touch()
 
     def test_build_failure_does_not_leave_installation_paths(self):
         with self.assertRaises(subprocess.CalledProcessError):

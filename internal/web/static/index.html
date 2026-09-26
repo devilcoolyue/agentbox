@@ -241,6 +241,8 @@
           <div id="sidebar-user-menu" class="side-user-menu" role="dialog" aria-label="当前用户" aria-describedby="sidebar-user-name sidebar-user-role" tabindex="-1" inert>
             <div class="side-user-info"><span id="sidebar-user-name" class="side-user-name"></span><span id="sidebar-user-role" class="side-user-role"></span></div>
             <div id="my-quota" class="my-quota hidden" tabindex="0"><span class="mq-label">余额</span><span id="my-quota-num" class="mq-num mono">—</span></div>
+            <button id="btn-git-profile" type="button" class="btn btn-sm btn-ghost" data-icon="commit">我的 Git 身份</button>
+            <button id="btn-git-connections" type="button" class="btn btn-sm btn-ghost" data-icon="key">Git 连接</button>
             <button id="btn-logout" type="button" class="side-logout"><span class="glyph">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v9"/><path d="M18.36 7.64a9 9 0 1 1-12.73 0"/></svg>
             </span><span>退出登录</span></button>
@@ -305,7 +307,11 @@
               <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话">
                 <span id="thread-title" class="t">新对话</span>
               </button>
-              <button id="chat-network" type="button" class="btn btn-sm hidden">内网状态</button>
+              <button id="chat-network" type="button" class="chat-network hidden" aria-label="内网状态，查看连接详情">
+                <span class="chat-network-dot" aria-hidden="true"></span>
+                <span>内网</span><span id="chat-network-status" class="chat-network-status">离线</span>
+                <svg class="chat-network-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+              </button>
               <button id="btn-thread-new" class="thread-new" data-tip="在当前工作空间中新建对话，原对话保留在历史中" data-icon="plus">新建对话</button>
             </div>
             <!-- 对话通道连接状态：仅在非正常连接时出现，避免占用常态空间 -->
@@ -477,11 +483,16 @@
               <select id="changes-repo" class="changes-repo mono hidden" aria-label="仓库"></select>
               <div id="changes-branch" class="changes-branch mono"></div>
               <div class="changes-actions">
+                <button id="btn-changes-clone" class="btn btn-sm" data-icon="download">克隆仓库</button>
+                <button id="btn-changes-profile" class="btn btn-sm btn-ghost" data-icon="commit">Git 身份</button>
+                <button id="btn-changes-branches" class="btn btn-sm" disabled data-icon="commit">分支</button>
+                <button id="btn-changes-remote" class="btn btn-sm" disabled data-icon="network">远程</button>
                 <button id="btn-changes-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
                 <button id="btn-changes-discard-all" class="btn btn-sm btn-ghost btn-danger" disabled data-icon="undo">全部丢弃</button>
-                <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled data-icon="commit">提交</button>
+                <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled data-icon="commit">提交到本地</button>
               </div>
             </div>
+            <div id="changes-remote-state" class="changes-remote-state hidden" aria-live="polite"></div>
             <div class="changes-body">
               <div id="changes-list" class="changes-list"></div>
               <div class="changes-view">
@@ -741,12 +752,33 @@
                   <p class="sec-hint">键可以是<b>模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b>agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p>
                 </div>
                 <div class="sec-actions">
-                  <button id="price-fill" class="btn btn-sm" data-tip="把官方公布的 Claude 价格填进表里；已有的行不会被覆盖" data-icon="download">填入 Claude 官方价</button>
-                  <button id="price-fill-oai" class="btn btn-sm" data-tip="把官方公布的 OpenAI 价格填进表里；已有的行不会被覆盖" data-icon="download">填入 OpenAI 官方价</button>
+                  <button id="price-refresh" class="btn btn-sm" data-icon="refresh">重新读取</button>
+                  <button id="price-check" class="btn btn-sm" data-icon="download">检查更新</button>
                   <button id="price-save" class="btn btn-sm btn-primary" data-icon="save">保存价目表</button>
                 </div>
               </div>
-              <div class="card">
+              <div class="card price-catalog">
+                <div class="price-catalog-head">
+                  <h3>价格目录</h3>
+                  <p id="price-catalog-status" role="status">读取中…</p>
+                </div>
+                <p id="price-catalog-error" class="price-notice hidden" role="status"></p>
+                <div class="field-row">
+                  <label class="field"><span>远程目录地址（HTTPS）</span><input id="price-source" type="url" placeholder="填写已发布的价格目录 JSON 地址"></label>
+                  <label class="price-auto"><input id="price-auto" type="checkbox">每天自动检查</label>
+                  <button id="price-source-save" class="btn btn-sm">保存来源</button>
+                  <button id="price-preview" class="btn btn-sm">查看候选差异</button>
+                </div>
+                <p class="card-desc">自动检查只提示变化，确认后才应用。自定义价格默认保留；目录移除的模型继续使用已保存的价格。</p>
+                <div id="price-diff" class="hidden">
+                  <p>勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。</p>
+                  <div id="price-changes" class="price-changes"></div>
+                  <button id="price-apply" class="btn btn-sm btn-primary">应用所选价格</button>
+                </div>
+              </div>
+              <div id="price-warnings" class="price-notice hidden" role="status"></div>
+              <div class="card price-editor">
+                <p id="price-edit-note" class="card-desc">手动修改单价后，该模型将转为自定义。网页回合开始时锁定价格，调价只影响之后的回合。</p>
                 <div class="price-table-wrap">
                   <table class="price-table">
                     <thead>
@@ -770,6 +802,13 @@
                   <button id="price-add" class="btn btn-sm" data-icon="plus">添加一行</button>
                 </div>
               </div>
+              <details class="card price-history">
+                <summary>价格版本记录（最近 10 次）</summary>
+                <div class="price-history-body">
+                  <p class="card-desc">可恢复修改前的价格及跟随状态；回退不改变历史账单或远程目录地址。</p>
+                  <div id="price-history"></div>
+                </div>
+              </details>
             </section>
 
             <!-- 界面与提示 -->
@@ -1212,6 +1251,10 @@
     <label>使用账号
       <select id="new-account"></select>
     </label>
+    <label>默认 Git 连接（可选）
+      <select id="new-git-connection"><option value="">不绑定</option></select>
+    </label>
+    <p class="field-hint">Git 连接用于远程仓库；创建后仍需为具体仓库绑定 remote。</p>
     <p id="new-error" class="login-error hidden"></p>
     <div class="dlg-actions">
       <button type="submit" id="new-ok" class="btn btn-primary" data-icon="plus">创建工作空间</button>
@@ -1250,7 +1293,17 @@
       </div>
     </header>
     <div class="fv-body">
-      <textarea id="fv-editor" class="fv-editor mono hidden" spellcheck="false" wrap="off"></textarea>
+      <div id="fv-source" class="fv-source hidden">
+        <div class="fv-codearea">
+          <div id="fv-gutter" class="fv-gutter" aria-hidden="true"></div>
+          <div class="fv-codepane">
+            <div id="fv-current-line" class="fv-current-line" aria-hidden="true"></div>
+            <pre id="fv-highlight" class="fv-highlight" aria-hidden="true"></pre>
+            <textarea id="fv-editor" class="fv-editor" aria-label="文件源码" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+          </div>
+        </div>
+        <div class="fv-source-status"><span id="fv-language"></span><span id="fv-position" class="mono"></span></div>
+      </div>
       <div id="fv-framewrap" class="fv-framewrap hidden">
         <!-- sandbox 不含 allow-same-origin：原型脚本照跑，但读不到控制台的令牌 -->
         <iframe id="fv-frame" class="fv-frame" title="HTML 预览" referrerpolicy="no-referrer"
@@ -1311,9 +1364,12 @@
 <!-- Git 提交 -->
 <dialog id="dlg-git-commit">
   <div class="dlg-head">
-    <h2>提交变更</h2>
+    <h2>提交到本地</h2>
     <button type="button" id="git-commit-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
   </div>
+  <p id="git-commit-target" class="field-hint"></p>
+  <p id="git-commit-identity" class="field-hint"></p>
+  <p class="field-hint">提交当前仓库的全部未忽略改动，包含已暂存和未暂存文件。此操作不会推送到远程。</p>
   <div class="file-name-field">
     <label for="git-commit-msg">提交信息</label>
     <textarea id="git-commit-msg" class="mono" rows="3" placeholder="描述这次改动…"></textarea>
@@ -1321,7 +1377,7 @@
   <p id="git-commit-error" class="login-error hidden"></p>
   <div class="dlg-actions">
     <button type="button" id="git-commit-cancel" class="btn btn-ghost">取消</button>
-    <button type="button" id="git-commit-ok" class="btn btn-primary" data-icon="commit">提交</button>
+    <button type="button" id="git-commit-ok" class="btn btn-primary" data-icon="commit">提交到本地</button>
   </div>
 </dialog>
 
@@ -1738,6 +1794,7 @@
 <script src="/_v/{{BUILD}}/vendor/addon-fit.js"></script>
 <script src="/_v/{{BUILD}}/vendor/addon-webgl.js"></script>
 <script src="/_v/{{BUILD}}/vendor/katex/katex.min.js"></script>
+<script src="/_v/{{BUILD}}/vendor/prism.js" data-manual></script>
 <script type="module" src="/_v/{{BUILD}}/js/main.js"></script>
 </body>
 </html>

@@ -37,6 +37,7 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/browser-tools" --no-package-lock --no-audit --no-fund playwright@1.58.2
           "$RUNNER_TEMP/browser-tools/node_modules/.bin/playwright" install --with-deps chromium
           AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-browser.mjs
+          AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-git.mjs
 
   build-test:
     runs-on: ubuntu-latest
@@ -64,6 +65,7 @@ jobs:
         run: |
           docker build -t agentbox-git-test:ci -f internal/dockerx/testdata/git.Dockerfile internal/dockerx/testdata
           AGENTBOX_DOCKER_TEST_IMAGE=agentbox-git-test:ci go test ./internal/dockerx -run '^TestGitContainerLive$' -count=1 -v
+          AGENTBOX_DOCKER_TEST_IMAGE=agentbox-git-test:ci go test ./internal/server -run '^TestGitBridgeContainerLive$' -count=1 -v
       - name: cross-compile abox-link (smoke)
         run: |
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do

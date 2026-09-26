@@ -25,7 +25,10 @@ import (
 	"time"
 
 	"agentbox/internal/buildinfo"
+	"agentbox/internal/config"
+	"agentbox/internal/gitaccess"
 	"agentbox/internal/safefs"
+	"agentbox/internal/store"
 	"modernc.org/sqlite"
 )
 
@@ -135,7 +138,7 @@ func Create(ctx context.Context, opts Options) (_ *Manifest, err error) {
 		return nil, err
 	}
 	// Output must not become part of a tree being archived.
-	for _, root := range append(protected[1:], filepath.Join(data, "users"), filepath.Join(data, "creds"), filepath.Join(data, "home-template"), filepath.Join(filepath.Dir(configPath), "accounts")) {
+	for _, root := range append(protected[1:], filepath.Join(data, "users"), filepath.Join(data, "creds"), filepath.Join(data, "git-secrets"), filepath.Join(data, "home-template"), filepath.Join(filepath.Dir(configPath), "accounts")) {
 		if rel, e := filepath.Rel(root, output); e == nil && filepath.IsLocal(rel) {
 			return nil, errors.New("backup output cannot be inside an included directory")
 		}
@@ -147,6 +150,12 @@ func Create(ctx context.Context, opts Options) (_ *Manifest, err error) {
 	defer os.RemoveAll(stage)
 	snapshot := filepath.Join(stage, "state.db")
 	if err = snapshotDB(ctx, filepath.Join(data, "state.db"), snapshot); err != nil {
+		return nil, err
+	}
+	if err = checkGitOAuthSecrets(raw, data); err != nil {
+		return nil, err
+	}
+	if err = checkGitSecrets(snapshot, data); err != nil {
 		return nil, err
 	}
 	m := &Manifest{Version: FormatVersion, Mode: "system", Consistency: "online-database-snapshot-files-sequential", Created: time.Now().UTC(), Credentials: map[string]string{}, Entries: []Entry{}}
@@ -173,7 +182,7 @@ func Create(ctx context.Context, opts Options) (_ *Manifest, err error) {
 	if err = add(stage, "state.db", "data/state.db", false); err != nil {
 		return nil, err
 	}
-	for _, name := range []string{"creds", "home-template"} {
+	for _, name := range []string{"creds", "home-template", "git-secrets"} {
 		if err = add(data, name, "data/"+name, true); err != nil {
 			return nil, err
 		}
@@ -581,4 +590,64 @@ func verify(ctx context.Context, r io.Reader) (*Manifest, error) {
 		}
 	}
 	return m, nil
+}
+
+// Validate against the already-created snapshot, without store.Open/migration.
+// A successful backup must not silently omit the key for encrypted credentials.
+func checkGitSecrets(snapshot, data string) error {
+	db, err := openDB(snapshot)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var n int
+	if err = db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='git_connections'").Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		return nil
+	}
+	networkColumn := "'{}'"
+	if err = db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('git_connections') WHERE name='network'").Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		networkColumn = "network"
+	}
+	rows, err := db.Query("SELECT id,owner,provider,base_url,auth_type,username,secret," + networkColumn + " FROM git_connections")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	vault := gitaccess.Vault{DataDir: data}
+	for rows.Next() {
+		var c store.GitConnection
+		var network string
+		if err = rows.Scan(&c.ID, &c.Owner, &c.Provider, &c.BaseURL, &c.AuthType, &c.Username, &c.Secret, &network); err != nil {
+			return err
+		}
+		if err = json.Unmarshal([]byte(network), &c.Network); err != nil {
+			return err
+		}
+		if _, err = vault.Open(c.Secret, c.AssociatedData()); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+func checkGitOAuthSecrets(raw []byte, data string) error {
+	var cfg struct {
+		Apps []config.GitOAuthApp `json:"git_oauth_apps"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return err
+	}
+	vault := gitaccess.Vault{DataDir: data}
+	for _, app := range cfg.Apps {
+		if _, err := vault.Open(app.Secret, app.AssociatedData()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
