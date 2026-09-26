@@ -20,6 +20,9 @@ regexes = [
   '''^80msg1\.02\.0cwd15sSETinf$''',
   # amd64 uses the public ADX CPU feature name at the same constant boundary.
   '''^80msg1\.02\.0cwd15sADX$''',
+  # arm64 v0.1.2 linked public constants after "80apimsg1.02.0cwd0:":
+  # "0", "ALL", "15s", "SET", "inf"; reviewed in the executable string table.
+  '''^0ALL15sSETinf$''',
   # Codex OAuth httptest fixture: empty JWT header, account_id="fixture", and
   # literal "signature" (not signed by any provider and never a real credential).
   '''^e30\.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiZml4dHVyZSJ9fQ\.signature$''',
