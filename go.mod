@@ -9,7 +9,7 @@ require (
 	github.com/hashicorp/yamux v0.1.2
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/things-go/go-socks5 v0.1.1
-	golang.org/x/crypto v0.54.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.54.0
