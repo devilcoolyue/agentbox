@@ -170,7 +170,7 @@ def install_clients(package, data):
             os.replace(Path(tmp) / name, target / name)
 
 
-def activate(app, version, config, backup_dir, unit_dir):
+def activate(app, version, config, backup_dir, unit_dir, progress=lambda phase: None):
     # Only manage a unit created for this layout. Never hijack a repository install.
     if (unit_dir / 'agentbox.service').read_text() != unit(app, config):
         raise ValueError('unit belongs to another installation; migrate/install explicitly first')
@@ -179,10 +179,13 @@ def activate(app, version, config, backup_dir, unit_dir):
     # Also repairs versions staged by older installers, before stopping service.
     restore_context(binary.parent)
     cfg = read(config); data = resolve(config.parent, cfg.get('data_dir', 'data'))
+    progress('checking')
     compatible(binary, config, data)
+    progress('stopping')
     run('systemctl', 'stop', 'agentbox.service')
     # Inspect again after stop, then back up with the currently installed binary.
     # No automatic rollback: the new binary might already have migrated SQLite.
+    progress('backup')
     compatible(binary, config, data)
     old = app / 'current'
     if old.is_symlink() and (data / 'state.db').exists():
@@ -192,9 +195,12 @@ def activate(app, version, config, backup_dir, unit_dir):
         run(binary, 'backup-verify', archive)
     with locked(data / 'agentbox.lock'):
         compatible(binary, config, data)
+        progress('switching')
         switch(app, version)
     install_clients(binary.parent, data)
+    progress('restarting')
     run('systemctl', 'start', 'agentbox.service')
+    progress('health')
     listen = cfg.get('listen', '127.0.0.1:8080')
     host, port = listen.rsplit(':', 1)
     if host in ('', '0.0.0.0'): host = '127.0.0.1'

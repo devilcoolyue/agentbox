@@ -669,6 +669,8 @@ data/
 
 ### 阶段 D 维护约定
 
+- 在线升级入口为 `internal/server/upgrade.go` + `deploy/update.py` + `web/src/updates.ts`。只支持经过探测的正式 Linux/systemd 发布布局；管理员只能提交已检查的版本号，不能传 URL/路径/命令。独立 systemd 临时服务执行下载与激活，复用 `.deploy.lock`、`release.stage/activate` 和兼容检查，状态落 `<app>/.update/state.json`；禁止在主服务子进程里直接停自身单元。发布包必须携带 update.py。校验和必需，归档拒绝链接/穿越/超限；版本切换后不自动回退数据库。`scripts/test-update.py` 模拟 systemd/下载，不代表真实 systemd 验收。
+
 - 独立部署入口 `deploy/release.py`；路径、迁移停机与回退条件见 `docs/architecture/deployment-layout.md`。install 不覆盖其他布局单元或已有版本；activate 先查 schema 和 compatibility_epoch，再备份/停机/切换。不能对旧库调用 store.Open 来做只读兼容检查。
 - cache_dir 缺省兼容 data_dir，配置 mutate/persist 必须保留原始路径；备份恢复重写 cache_dir，避免恢复实例碰原实例缓存。
 - workspace 的启动闸门串行容量检查与容器创建，检查实际 Docker 运行状态；resources 的 0 为不限，不强杀已运行任务。

@@ -94,7 +94,7 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
                 shutil.copy2(ROOT / 'scripts' / script, folder / 'scripts' / script)
             (folder / 'deploy').mkdir()
             shutil.copy2(ROOT / 'deploy/downloads/README.md', folder / 'deploy/README.md')
-            for deploy_file in ['release.py', 'bootstrap.py']:
+            for deploy_file in ['release.py', 'bootstrap.py', 'update.py']:
                 shutil.copy2(ROOT / 'deploy' / deploy_file, folder / 'deploy' / deploy_file)
         metadata = {'program': program, 'version': a.version, 'revision': revision,
                     'built_at': built, 'os': system, 'arch': arch,

@@ -155,7 +155,7 @@ func TestUpdateEndpointsRequireAdmin(t *testing.T) {
 	}
 	s.updates.info.AttemptedAt = time.Now().UnixMilli() // Never contact a real release server.
 	handler := s.Handler()
-	for _, path := range []string{"/api/updates", "/api/updates/check"} {
+	for _, path := range []string{"/api/updates", "/api/updates/check", "/api/updates/upgrade"} {
 		method := http.MethodGet
 		if strings.HasSuffix(path, "/check") {
 			method = http.MethodPost
@@ -184,5 +184,24 @@ func TestUpdateEndpointsRequireAdmin(t *testing.T) {
 	handler.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("query token accepted: %d", w.Code)
+	}
+	for _, token := range []string{"", "user-token", "query"} {
+		path := "/api/updates/upgrade"
+		if token == "query" {
+			path += "?token=admin-token"
+		}
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"version":"v1.2.3"}`))
+		if token == "user-token" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		want := http.StatusUnauthorized
+		if token == "user-token" {
+			want = http.StatusForbidden
+		}
+		if w.Code != want {
+			t.Fatalf("upgrade %s: got %d want %d", token, w.Code, want)
+		}
 	}
 }

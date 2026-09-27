@@ -285,6 +285,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/system", s.admin(http.HandlerFunc(s.handleSystem)))
 	mux.Handle("GET /api/updates", s.admin(http.HandlerFunc(s.handleUpdates)))
 	mux.Handle("POST /api/updates/check", s.admin(http.HandlerFunc(s.handleUpdateCheck)))
+	mux.Handle("GET /api/updates/upgrade", s.admin(http.HandlerFunc(s.handleUpgradeStatus)))
+	mux.Handle("POST /api/updates/upgrade", s.admin(http.HandlerFunc(s.handleUpgradeStart)))
 	mux.Handle("GET /api/monitor", s.admin(http.HandlerFunc(s.handleMonitor)))
 	mux.Handle("GET /api/sessions", s.auth(http.HandlerFunc(s.handleListSessions)))
 	mux.Handle("POST /api/sessions", s.auth(http.HandlerFunc(s.handleCreateSession)))

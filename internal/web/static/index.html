@@ -980,12 +980,18 @@
                   <div><h3>AGENTBOX</h3><p>服务端 <span data-update-version>—</span></p><p id="update-build" class="update-meta"></p></div>
                 </div>
                 <div class="update-detail">
-                  <div><h3>软件更新</h3><p>自动检查正式发布版本。升级由管理员在服务器完成。</p></div>
+                  <div><h3>软件更新</h3><p>检查正式发布版本，升级前自动备份。重启服务会短暂断开连接。</p></div>
                   <div class="update-detail-main">
-                    <div class="update-actions"><button type="button" class="btn" data-update-check data-icon="refresh">检查更新</button><a data-update-release target="_blank" rel="noopener noreferrer" data-icon="external">发行记录</a></div>
+                    <div class="update-actions"><button type="button" class="btn" data-update-check data-icon="refresh">检查更新</button><button type="button" id="update-install" class="btn btn-primary hidden" data-icon="download">升级并重启</button><a data-update-release target="_blank" rel="noopener noreferrer" data-icon="external">发行记录</a></div>
                     <p class="update-status" data-update-status role="status">尚未检查更新</p>
                     <p class="update-error hidden" data-update-error></p>
                     <p class="update-meta" data-update-time></p>
+                    <p id="upgrade-support" class="update-meta"></p>
+                    <div id="upgrade-progress" class="upgrade-progress hidden" role="status" aria-live="polite">
+                      <p id="upgrade-message"></p><p id="upgrade-error" class="update-error hidden"></p>
+                      <p id="upgrade-log" class="update-meta"></p>
+                      <div class="update-actions"><button type="button" id="upgrade-refresh" class="btn btn-sm" data-icon="refresh">刷新升级状态</button><button type="button" id="upgrade-reload" class="btn btn-sm hidden" data-icon="refresh">刷新页面</button></div>
+                    </div>
                     <a class="update-guide" href="https://github.com/devilcoolyue/agentbox-releases#手工安装与升级" target="_blank" rel="noopener noreferrer">查看升级说明 <span aria-hidden="true">↗</span></a>
                     <details id="update-notes-wrap" class="update-notes hidden"><summary>版本说明</summary><pre id="update-notes"></pre></details>
                   </div>

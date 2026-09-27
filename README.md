@@ -208,7 +208,7 @@ sudo ./deploy/install.sh
 sudo ./deploy/deploy.sh
 ```
 
-管理员可在侧栏版本入口或「系统设置 → 关于与更新」查看新版本提示；控制台只检查版本，升级由管理员执行，见[版本发布与升级](docs/releases.md#控制台更新提示)。
+管理员可在侧栏版本入口或「系统设置 → 关于与更新」查看新版本提示。标准 Linux/systemd 发布安装支持「升级并重启」，自动校验、备份并显示升级进度；源码安装仍使用部署脚本，见[版本发布与升级](docs/releases.md#控制台更新提示)。
 
 `install.sh` 安装服务与定时器，镜像自动追新默认关闭；`deploy.sh` 构建、替换二进制、重启并探活。远程长期访问请配置 HTTPS 与 WebSocket 反向代理，完整步骤见[部署与运维](deploy/README.md)。
 

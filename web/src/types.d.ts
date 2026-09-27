@@ -476,6 +476,12 @@ export interface UpdateInfo {
   checked_at: number; attempted_at: number; error: string;
 }
 
+export interface UpgradeInfo {
+  supported: boolean; reason: string; current_version: string;
+  job: { id: string; version: string; from_version: string; phase: string;
+    message: string; error: string; started_at: number; updated_at: number } | null;
+}
+
 /** GET /api/system（关于页）。 */
 export interface SystemInfo {
  version?: string; revision?: string; built_at?: string; schema_version?: number;

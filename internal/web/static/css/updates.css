@@ -67,6 +67,8 @@
 .update-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 22px; }
 .update-actions a, .update-guide { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; text-decoration: none; }
 .update-meta { color: var(--muted); font-size: 11px !important; overflow-wrap: anywhere; }
+.upgrade-progress { padding: 14px; margin: 14px 0; border: 1px solid var(--line); border-radius: 8px; }
+.upgrade-progress p { margin: 0 0 10px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .update-notes { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 12px; }
 .update-notes summary { cursor: pointer; color: var(--muted); }
 .update-notes pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 var(--sans); max-height: 320px; overflow-y: auto; }

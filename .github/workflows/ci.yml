@@ -56,6 +56,7 @@ jobs:
       - name: Deployment policy
         run: |
           python3 scripts/test-deployment.py
+          python3 scripts/test-update.py
           bash -n install.sh
           python3 scripts/test-install.py
           python3 scripts/test-uninstall.py

@@ -38,6 +38,7 @@ jobs:
           python3 scripts/test-install.py
           python3 scripts/test-uninstall.py
           python3 scripts/test-deployment.py
+          python3 scripts/test-update.py
       - name: Build candidates
         env:
           RELEASE_TAG: ${{ github.ref_name }}

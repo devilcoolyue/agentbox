@@ -29,6 +29,8 @@ export async function smoke(page) {
  let settingsWrites = 0, monitorCalls = 0, updateChecks = 0, updateReads = 0;
  let release = {current_version:'v0.1.0-rc.2-updates2',revision:'0123456789abcdef',built_at:'2026-09-24T08:00:00Z',latest_version:'',available:false,comparable:true,release_url:'https://github.com/devilcoolyue/agentbox-releases/releases',notes:'',checked_at:0,attempted_at:0,error:''};
  let nextRelease = {latest_version:'v0.2.0',available:true,notes:'新增版本提醒。\n<script>untrusted release notes</script>'};
+ let upgrade = {supported:true,reason:'',current_version:release.current_version,job:null};
+ let upgradeStarts = 0, upgradeReads = 0, loseUpgradeResponse = false, upgradeOffline = false;
  const accounts = []; let accountCreates = 0, failOAuthOnce = true, oauthFinishes = 0, keyWrites = 0;
  let settings = { listen:'127.0.0.1:8180', agent_image:'fixture', permission_mode:'bypassPermissions', max_upload_mb:10,
   idle_timeout_min:30, timezone:'UTC', container:{memory_mb:512,cpus:1,pids_limit:128,network:'none'},
@@ -54,6 +56,18 @@ export async function smoke(page) {
   else if(path === '/api/pricing') body={active:{revision:'1',prices:{},managed:{},history:[],catalog:{url:'',auto_check:false}},candidate:null,changes:[],warnings:[]};
   else if(path === '/api/me/git/default') body={connection_id:''};
   else if(path === '/api/updates') { updateReads++; body=release; }
+  else if(path === '/api/updates/upgrade') {
+   if(route.request().method()==='POST') {
+    upgradeStarts++;
+    assert.equal(route.request().postDataJSON().version,'v0.2.0');
+    upgrade.job={id:'a'.repeat(32),version:'v0.2.0',from_version:release.current_version,phase:'downloading',message:'正在下载发布包',error:'',started_at:Date.now(),updated_at:Date.now()};
+    if(loseUpgradeResponse) { loseUpgradeResponse=false; await route.abort(); return; }
+   } else {
+    upgradeReads++;
+    if(upgradeOffline) { await route.abort(); return; }
+   }
+   body=upgrade;
+  }
   else if(path === '/api/updates/check') {
    assert.equal(route.request().method(),'POST'); updateChecks++;
    release={...release,...nextRelease,checked_at:Date.now(),attempted_at:Date.now()};body=release;
@@ -190,6 +204,48 @@ export async function smoke(page) {
   nextRelease={current_version:'dev',latest_version:'v0.2.0',comparable:false};
   await check(); await status('开发构建，无法比较版本');
   nextRelease={current_version:'v0.1.0-rc.2-updates2',latest_version:'v0.2.0',comparable:true,available:true};
+  await check(); await status('v0.2.0 可用');
+  // Upgrade confirmation, lost submission response, reload recovery and actual-version verification.
+  const upgradeMessage = text => page.locator('#upgrade-message').filter({hasText:text}).waitFor();
+  await page.locator('#update-install').click();
+  await page.locator('#ask-cancel').click();
+  assert.equal(upgradeStarts,0,'cancelled confirmation submitted an upgrade');
+  loseUpgradeResponse=true;
+  await page.locator('#update-install').click();
+  await page.locator('#ask-ok').click();
+  await upgradeMessage('正在下载发布包');
+  assert.equal(upgradeStarts,1,'lost response repeated POST');
+  assert.equal(await page.locator('#update-install').isDisabled(),true);
+  await screenshot('upgrading');
+  await page.setViewportSize({width:390,height:844});
+  await screenshot('upgrading-mobile');
+  assert.equal(await page.locator('#sec-about').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'mobile upgrade progress overflows');
+  await page.setViewportSize({width:1440,height:960});
+  await page.reload();
+  await page.locator('#sec-about').waitFor({state:'visible'});
+  await upgradeMessage('正在下载发布包');
+  assert.equal(upgradeStarts,1,'page reload restarted upgrade');
+  upgradeOffline=true;
+  await page.locator('#upgrade-refresh').click();
+  await page.locator('#upgrade-error').filter({hasText:'等待恢复'}).waitFor();
+  upgradeOffline=false;
+  upgrade.job={...upgrade.job,phase:'failed',message:'升级失败',error:'校验发布包失败'};
+  await page.locator('#upgrade-refresh').click();
+  await page.locator('#upgrade-error').filter({hasText:'校验发布包失败'}).waitFor();
+  assert.equal(await page.locator('#update-install').isEnabled(),true);
+  upgrade.job={...upgrade.job,phase:'succeeded',message:'升级完成',error:''};
+  await page.locator('#upgrade-refresh').click();
+  await upgradeMessage('当前运行版本与目标不一致');
+  assert.equal(await page.locator('#upgrade-reload').isVisible(),false,'claimed success before actual version matched');
+  upgrade.current_version='v0.2.0';
+  await page.locator('#upgrade-refresh').click();
+  await upgradeMessage('当前运行 v0.2.0');
+  assert.equal(await page.locator('#upgrade-reload').isVisible(),true);
+  upgrade={supported:false,reason:'当前部署请使用手工升级。',current_version:release.current_version,job:null};
+  await page.locator('#upgrade-refresh').click();
+  await page.locator('#upgrade-support').filter({hasText:'手工升级'}).waitFor();
+  assert.equal(await page.locator('#update-install').isVisible(),false);
+  upgrade={supported:true,reason:'',current_version:release.current_version,job:null};
   await check(); await status('v0.2.0 可用');
   await page.locator('#btn-sidebar-toggle').click();
   await page.locator('#version-badge').click();
@@ -483,7 +539,7 @@ export async function smoke(page) {
   await at('#/','#empty'); // Deleted or inaccessible workspace.
   await responsiveSmoke(page, base);
   await pricingSmoke(page);
-  const checksBeforeUser=updateChecks, readsBeforeUser=updateReads;
+  const checksBeforeUser=updateChecks, readsBeforeUser=updateReads, upgradesBeforeUser=upgradeReads;
   me.role = 'user';
   await page.reload();
   await page.locator('#app').waitFor({state:'visible'});
@@ -494,6 +550,7 @@ export async function smoke(page) {
   assert.equal(await page.locator('#version-badge').isVisible(),false);
   assert.equal(updateChecks,checksBeforeUser,'ordinary user initiated update check');
   assert.equal(updateReads,readsBeforeUser,'ordinary user fetched update metadata');
+  assert.equal(upgradeReads,upgradesBeforeUser,'ordinary user fetched upgrade status');
   assert.deepEqual(errors,[]);
   console.log('Browser: model capabilities/editor/account overrides/safe selection migration, update status/cache/permissions, responsive update popover, unified account creation, Codex OAuth retry, Claude/Codex API keys, mobile account form, login, capacity save, repeated init, usage sync, monitor cleanup, socket generation, mobile re-login, URL refresh/history/deep links/permissions passed');
  } finally { await page.unroute('**/api/**'); server.closeAllConnections(); await new Promise(r=>server.close(r)); }

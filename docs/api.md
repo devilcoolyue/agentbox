@@ -179,6 +179,8 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `GET /api/diagnostics` | 导出按字段白名单生成的诊断信息 |
 | `GET /api/updates` | 当前构建信息与上次版本检查缓存 |
 | `POST /api/updates/check` | 检查正式发布；`?force=1` 手动触发，仍受 1 分钟间隔限制 |
+| `GET /api/updates/upgrade` | 管理员：查询在线升级支持情况、当前运行版本及持久化任务；支持结果为 `supported/reason`，任务为 `job` 或 null |
+| `POST /api/updates/upgrade` | 管理员：提交 `{"version":"vX.Y.Z"}`，须匹配成功检查到的新版本；返回 202 与任务。同一进行中目标复用任务，不接受 URL/路径；不支持的部署或过期版本返回 409，提交结果不确定返回 503，应先查询任务再重试 |
 
 ## 调用示例
 
