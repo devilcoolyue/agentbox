@@ -229,7 +229,7 @@ async function delThread(t: Thread) {
   if (isCur && busy()) return;
   const name = previewText(t.title);
   const ok = await askConfirm(`删除对话「${name.length > 24 ? name.slice(0, 24) + "…" : name}」？`, {
-    title: "删除对话", hint: "该对话的全部消息记录不可恢复。", okLabel: "删除", danger: true,
+    title: "删除对话", hint: "该对话的全部消息记录不可恢复。", okLabel: "删除", icon: "trash", danger: true,
   });
   if (!ok) return;
   try {

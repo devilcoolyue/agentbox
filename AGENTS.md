@@ -104,6 +104,8 @@ source deploy/production.env   # 提供 PROD_SSH / PROD_DIR / PROD_LISTEN / PROD
 
 systemd 服务名固定为 `agentbox.service`。
 
+发布前用 `systemctl show agentbox -p WorkingDirectory -p ExecStart` 核对实际布局。下文 `deploy.sh` 仅适用于服务直接运行在源码仓库内的旧布局；若启动路径是 `/opt/agentbox/current/agentbox`，使用独立发布目录与 `deploy/release.py` 的暂存、激活流程（见 `docs/architecture/deployment-layout.md`），不要为了适配源码目录重写现有 systemd 单元。
+
 只有用户明确要求部署到生产时才执行以下操作。发布会重启服务并短暂断开现有
 HTTP/WebSocket 连接，不是滚动发布。
 
@@ -492,6 +494,8 @@ data/
   前端有二次确认。
 
 ### Git 远程连接
+
+- 用户菜单统一进入独立 Git 管理页（`#/git/guide|profile|connections`）。`git-management.ts` 管分区与说明，`git-surface.ts` 管页内详情及清理；工作空间的远程操作仍留在空间内。切换分区、离页或退出登录时清理表单和记录轮询；身份、连接异步响应需校验登录 token 与挂载状态。
 
 - 用户私有 HTTPS 连接独立于 Agent 账号池；入口 `/api/git/connections`，账号与绑定持久化在 SQLite schema 5。创建空间可选 `git_connection_id`，省略采用用户默认，空串表示不绑定。
 - Token 由 `internal/gitaccess.Vault` 加密保存；主密钥在 `data/git-secrets/master.key`，不可放进会话挂载或模板。系统备份/恢复必须验证密文能由配套密钥解开，不可把缺密钥当成自动生成新密钥的机会。

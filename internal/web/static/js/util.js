@@ -33,7 +33,10 @@ export function btnBusy(btn, label) {
     btn.disabled = true;
     btn.setAttribute("aria-busy", "true");
     btn.classList.add("loading");
-    btn.replaceChildren(spinEl(), document.createTextNode(label));
+    const caption = document.createElement("span");
+    caption.className = "action-label";
+    caption.textContent = label;
+    btn.replaceChildren(spinEl(), caption);
 }
 export function btnDone(btn) {
     if (!btn.classList.contains("loading"))
@@ -155,8 +158,8 @@ export function askConfirm(text, opts = {}) {
     hint.textContent = opts.hint || "";
     hint.classList.toggle("hidden", !opts.hint);
     const ok = $("ask-ok");
-    actionButton(ok, opts.okLabel || "确定", opts.danger ? "trash" : "check");
     ok.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
+    actionButton(ok, opts.okLabel || "确定", opts.icon || "check");
     return dlgOnce($("dlg-ask"), (v) => v === "ok");
 }
 $("ask-ok").addEventListener("click", () => $("dlg-ask").close("ok"));

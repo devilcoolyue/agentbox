@@ -418,7 +418,7 @@ function renderDetail(det: SkillDetail) {
   actions.className = "skill-head-actions";
   const move = document.createElement("button");
   move.className = "btn btn-sm";
-  actionButton(move, SK.scope === "session" ? "复制" : "安装", SK.scope === "session" ? "copy" : "download", SK.scope === "session" ? "复制技能到我的模板" : "安装技能到本空间");
+  actionButton(move, SK.scope === "session" ? "复制" : "安装", SK.scope === "session" ? "copy" : "package-plus", SK.scope === "session" ? "复制技能到我的模板" : "安装技能到本空间");
   setTip(move, SK.scope === "session"
     ? "复制进模板后，你名下每个工作空间启动时都会带上它"
     : "把模板里的这个技能立刻装进当前工作空间，不必等下次启动");
@@ -587,7 +587,7 @@ async function removeSkill(name: string) {
   const ok = await askConfirm(`确认从${where}删除技能「${name}」？`, {
     title: "删除技能",
     danger: true,
-    okLabel: "删除",
+    okLabel: "删除", icon: "trash",
     hint: SK.scope === "session"
       ? "若它来自模板，下次工作空间启动还会被铺回来；要彻底去掉请到「我的模板」里删。"
       : "已经铺进各个工作空间的副本不会跟着消失，需要各自删除。",
@@ -775,7 +775,7 @@ function renderMarket() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "btn btn-sm";
-    buttonLabel(btn, "安装", "download");
+    buttonLabel(btn, "安装", "package-plus");
     btn.addEventListener("click", () => installFromMarket(p.name, btn));
 
     row.append(info, btn);

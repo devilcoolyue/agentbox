@@ -4,9 +4,12 @@ import { openHome, openSession } from "../sessions.js";
 import { SET_SECS } from "../settings.js";
 import { toast } from "../util.js";
 
+const GIT_SECS = ["guide", "profile", "connections"];
+
 const TABS: Tab[] = ["chat", "term", "files", "changes", "skills"];
 
 function currentHash() {
+  if (S.view === "git") return `#/git/${S.gitSec}`;
   if (S.view === "settings") return `#/settings/${S.sec}`;
   if (S.view !== "work") return `#/${S.view}`;
   return S.current ? `#/sessions/${encodeURIComponent(S.current.id)}/${S.tab}` : "#/";
@@ -36,6 +39,8 @@ export function initRouter() {
       const [page, id, tab] = parts;
       if ((page === "usage" || page === "tunnel") && parts.length === 1) {
         emit(`open-${page}`);
+      } else if (page === "git" && parts.length <= 2) {
+        emit("open-git", GIT_SECS.includes(id) ? id : "guide");
       } else if (page === "settings" && parts.length <= 2 && S.role === "admin") {
         S.sec = SET_SECS.includes(id) ? id : "accounts";
         emit("open-settings");

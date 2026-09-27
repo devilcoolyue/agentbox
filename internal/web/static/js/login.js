@@ -15,7 +15,7 @@ function setPasswordVisible(visible) {
     const label = visible ? "隐藏密码" : "显示密码";
     toggle.setAttribute("aria-label", label);
     toggle.dataset.tip = label;
-    buttonLabel(toggle, "", visible ? "eye" : "eye-off");
+    buttonLabel(toggle, "", visible ? "eye-off" : "eye");
 }
 $("login-password-toggle").addEventListener("click", () => {
     setPasswordVisible($("login-pass").type === "password");

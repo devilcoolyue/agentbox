@@ -149,13 +149,7 @@
   border: 0; background: none; line-height: 0;
   color: var(--muted); opacity: 0.45;
 }
-.u-sort-b::before {
-  content: "";
-  display: block;
-  border-left: 4px solid transparent; border-right: 4px solid transparent;
-}
-.u-sort-b.asc::before { border-bottom: 5px solid currentColor; }
-.u-sort-b.desc::before { border-top: 5px solid currentColor; }
+.u-sort-b .ui-icon { width: 12px; height: 9px; }
 .u-sort-b:hover { color: var(--text); opacity: 1; }
 .u-sort-b.on { color: var(--amber); opacity: 1; }
 .u-sort-b:focus-visible { opacity: 1; }
@@ -199,9 +193,10 @@
 
 /* 问号全亮会盖过金额本身：平时压淡，指到这一行才浮出来。 */
 .u-why {
+  display: inline-flex; align-items: center; justify-content: center;
   margin-left: 6px; padding: 0;
   width: 15px; height: 15px;
-  border: 1px solid var(--line); border-radius: 50%;
+  border: 0; border-radius: 50%;
   background: none; color: var(--muted);
   font-family: var(--mono); font-size: 10px; line-height: 1;
   vertical-align: middle;

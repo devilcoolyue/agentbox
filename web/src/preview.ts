@@ -1,3 +1,4 @@
+import "./responsive.js";
 /* preview：文件预览 / 在线编辑弹窗（HTML 实时渲染、Markdown 渲染、文本编辑、
  * 图片查看、二进制/超大文件提示）。
  *
@@ -430,7 +431,7 @@ $("fv-reload").addEventListener("click", async () => {
     if (FV.dirty) {
       const ok = await askConfirm("重新载入会丢弃未保存的修改，确定继续？", {
         title: "重新载入", hint: "弹窗里改的内容会被磁盘上的版本覆盖。",
-        okLabel: "丢弃并重载", danger: true,
+        okLabel: "丢弃并重载", icon: "refresh", danger: true,
       });
       if (!ok) return;
     }
@@ -461,7 +462,7 @@ $("fv-download").addEventListener("click", () => {
 async function closePreview() {
   if (FV.dirty) {
     const ok = await askConfirm("有未保存的修改，确定关闭？", {
-      title: "放弃修改", hint: "关闭后未保存的内容会丢失。", okLabel: "放弃并关闭", danger: true,
+      title: "放弃修改", hint: "关闭后未保存的内容会丢失。", okLabel: "放弃并关闭", icon: "close", danger: true,
     });
     if (!ok) return;
   }

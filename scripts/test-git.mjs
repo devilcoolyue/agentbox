@@ -20,6 +20,7 @@ export async function smoke(page) {
  });
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const base=`http://127.0.0.1:${server.address().port}`;
+ const backToWorkspace=async()=>{await page.goto(base+'/#/sessions/fixture/changes');await page.locator('#tab-changes').waitFor({state:'visible'});};
  const errors=[];page.on('pageerror',e=>errors.push(e.stack || e.message));
  let role='user',oauthStarts=0,oauthWrites=0;let oauthApps=[{id:'oauth-fixture',label:'Company GitLab OAuth',provider:'gitlab',base_url:'https://git.example.com',enabled:true,client_id:'fixture-client',redirect_url:base+'/api/git/oauth/callback',revision:1}];
  let profile={user:'fixture',name:'fixture',email:'fixture@localhost',updated_at:'0001-01-01T00:00:00Z'};
@@ -126,6 +127,7 @@ export async function smoke(page) {
   else if(path.endsWith('/git/review-preview')){
    const request=route.request().postDataJSON();body={provider:'github',project:'team/project',connection_id:'git-fixture',source:{name:request.source,sha:'1'.repeat(40),protected:false},target:{name:request.target,sha:'2'.repeat(40),protected:true},title:request.title,body:request.body,draft:request.draft,existing:[]};
   }
+  else if(path.endsWith('/git/diff') || path.endsWith('/git/file')) { await route.fulfill({body:'diff --git a/example.txt b/example.txt\n@@ -1 +1 @@\n-old value\n+new value\n',contentType:'text/plain'});return; }
   else if(path.endsWith('/git/status')) body=state;
   else if(path.endsWith('/git/branches')) {
    if(route.request().method()==='POST') {
@@ -154,11 +156,45 @@ export async function smoke(page) {
   await page.locator('#btn-changes-commit:not([disabled])').waitFor();
   assert.match(await page.locator('#changes-remote-state').innerText(),/领先 2 \/ 落后 1.*本地缓存/);
   assert.equal(await page.locator('#btn-settings').isVisible(),false);
-  await page.locator('#btn-changes-profile').click();
-  const profileDialog=page.locator('#dlg-git-profile');
+  await mkdir('output/playwright',{recursive:true});
+  for (const width of [360,390,430,768,1280,1440]) {
+   await page.setViewportSize({width,height:900});
+   for (const theme of ['light','dark']) {
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    assert.ok(await page.locator('.changes-bar').evaluate(e=>e.scrollWidth<=e.clientWidth),'changes toolbar overflow');
+    await page.screenshot({animations:'disabled',path:`output/playwright/responsive-changes-${width}-${theme}.png`});
+    if(width<=760) {
+     await page.locator('#changes-tracking').click();
+     assert.equal(await page.locator('#changes-remote-detail').isVisible(),true);
+     await page.locator('#changes-tracking').click();
+     await page.locator('#changes-more').click();
+     assert.equal(await page.locator('#btn-changes-discard-all').isVisible(),true);
+     await page.keyboard.press('Escape');
+     assert.equal(await page.locator('#changes-more-panel').isVisible(),false);
+     await page.locator('.change-row').first().click();
+     await page.locator('#changes-diff .diff').waitFor();
+     assert.equal(await page.locator('#changes-list').isVisible(),false);
+     assert.equal(await page.locator('.changes-bar').isVisible(),false);
+     await page.screenshot({animations:'disabled',path:`output/playwright/responsive-diff-${width}-${theme}.png`});
+     await page.locator('#changes-back').click();
+     assert.equal(await page.locator('#changes-list').isVisible(),true);
+    }
+   }
+  }
+  await page.setViewportSize({width:1440,height:960});
+  await page.locator('#btn-user-menu').click();
+  await page.locator('#btn-git-management').click();
+  await page.locator('#view-git').waitFor({state:'visible'});
+  assert.match(page.url(), /#\/git\/guide$/);
+  assert.equal(await page.locator('dialog[open]').count(),0,'Git management opened a modal');
+  await page.locator('[data-git-go=profile]').click();
+  await page.goBack();await page.locator('.git-guide').waitFor();
+  await page.goForward();
+  const profileDialog=page.locator('#git-profile');
   await profileDialog.locator('fieldset:not([disabled])').waitFor();
   await profileDialog.locator('[name=name]').fill('Alice Example');await profileDialog.locator('[name=email]').fill('alice@example.com');
-  await profileDialog.locator('[type=submit]').click();await profileDialog.waitFor({state:'detached'});
+  await profileDialog.locator('[type=submit]').click();await profileDialog.locator('[role=status]').filter({hasText:'已保存'}).waitFor();
+  await backToWorkspace();
   assert.equal(writes,1);
   await page.locator('#btn-changes-commit').click();
   await page.locator('#git-commit-ok:not([disabled])').waitFor();
@@ -178,23 +214,29 @@ export async function smoke(page) {
   await branchesDialog.locator('[data-current]').filter({hasText:'feature/browser'}).waitFor();
   assert.equal(branchActions,1);await assertActionIcons(page);
   await branchesDialog.locator('[data-close]').click();
+  if (await page.locator('#changes-more').isVisible()) await page.locator('#changes-more').click();
   await page.locator('#btn-changes-profile').click();await profileDialog.locator('fieldset:not([disabled])').waitFor();
   assert.equal(await profileDialog.locator('[name=email]').inputValue(),'alice@example.com');
   await mkdir('output/playwright',{recursive:true});
-  await page.screenshot({path:'output/playwright/git-profile-desktop.png'});
-  await profileDialog.locator('[data-cancel]').click();
+  await page.screenshot({animations:'disabled',path:'output/playwright/git-profile-desktop.png'});
+  await backToWorkspace();
   await page.setViewportSize({width:390,height:844});
+  if (await page.locator('#changes-more').isVisible()) await page.locator('#changes-more').click();
   await page.locator('#btn-changes-profile').click();await profileDialog.locator('fieldset:not([disabled])').waitFor();
-  assert.equal(await profileDialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true,'profile dialog horizontal overflow');
-  await page.screenshot({path:'output/playwright/git-profile-mobile.png'});
-  await profileDialog.locator('[data-cancel]').click();
+  assert.equal(await profileDialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true,'profile page horizontal overflow');
+  await page.screenshot({animations:'disabled',path:'output/playwright/git-profile-mobile.png'});
+  await backToWorkspace();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'page horizontal overflow');
   await page.setViewportSize({width:1440,height:960});
   await page.locator('#btn-changes-remote').click();
   const remoteDialog=page.locator('#dlg-git-remote');
   await remoteDialog.locator('[data-manage]:not([disabled])').waitFor();
   await remoteDialog.locator('[data-manage]').click();
-  const manager=page.locator('#dlg-git-connections');
+  const manager=page.locator('#git-connections');
+  assert.equal(await page.locator('dialog[open]').count(),0,'workspace remote dialog remained over Git page');
+  await page.reload();
+  await manager.waitFor();
+  assert.match(page.url(), /#\/git\/connections$/);
   await manager.locator('[data-list]').filter({hasText:'尚未添加'}).waitFor();
   assert.equal(await manager.locator('[data-oauth-apps]').isVisible(),false,'ordinary user sees OAuth application editing');
   await manager.locator('[data-oauth]').click();
@@ -207,6 +249,7 @@ export async function smoke(page) {
   await oauthDialog.locator('[data-close]').click();
   await manager.locator('[data-add]').click();
   const editor=page.locator('#dlg-git-connection-edit');
+  assert.equal(await page.locator('dialog[open]').count(),0,'connection editor opened a modal');
   await editor.locator('[name=label]').fill('Company Git');
   await editor.locator('[name=base_url]').fill('https://git.example.com');
   await editor.locator('[name=token]').fill('synthetic-browser-token');
@@ -216,7 +259,7 @@ export async function smoke(page) {
   assert.equal(await manager.innerText().then(t=>t.includes('synthetic-browser-token')),false);
   await manager.getByRole('button',{name:'设为默认',exact:true}).click();
   await manager.locator('strong').filter({hasText:'默认'}).waitFor();
-  await page.screenshot({path:'output/playwright/git-connections-desktop.png'});
+  await page.screenshot({animations:'disabled',path:'output/playwright/git-connections-desktop.png'});
   await manager.locator('[data-add]').click();
   await editor.locator('[name=label]').fill('Company SSH');
   await editor.locator('.select-trigger').first().click();
@@ -227,13 +270,14 @@ export async function smoke(page) {
   await editor.locator('label').filter({has:page.locator('select[name=route]')}).locator('.select-trigger').click();
   await page.getByRole('option',{name:'我的内网隧道',exact:true}).click();
   await page.setViewportSize({width:390,height:844});
-  await page.screenshot({path:'output/playwright/git-ssh-editor-mobile.png'});
+  await page.screenshot({animations:'disabled',path:'output/playwright/git-ssh-editor-mobile.png'});
   await editor.locator('[type=submit]').click();await editor.waitFor({state:'detached'});
   await manager.locator('strong').filter({hasText:'Company SSH'}).waitFor();
   assert.equal((await manager.innerText()).includes('synthetic-private-key'),false);
   assert.match(await manager.innerText(),/SHA256:fixture/);
   await page.setViewportSize({width:1440,height:960});
-  await manager.locator('[data-close]').click();
+  await backToWorkspace();
+  await page.locator('#btn-changes-remote').click();
   await remoteDialog.locator('[data-reload]').click();
   await remoteDialog.locator('[data-bind]:not([disabled])').waitFor();
   await remoteDialog.locator('[data-bind]').click();
@@ -270,7 +314,7 @@ export async function smoke(page) {
   assert.doesNotMatch(await terminalDialog.locator('pre').innerText(),/abox-git push/);
   await page.setViewportSize({width:390,height:844});
   assert.equal(await terminalDialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true);
-  await page.screenshot({path:'output/playwright/git-terminal-mobile.png'});
+  await page.screenshot({animations:'disabled',path:'output/playwright/git-terminal-mobile.png'});
   await terminalDialog.getByRole('button',{name:'撤销授权'}).click();
   await terminalDialog.locator('[data-list]').filter({hasText:'当前没有终端授权'}).waitFor();
   await terminalDialog.locator('[data-close]').click();
@@ -285,15 +329,16 @@ export async function smoke(page) {
   assert.match(await reviewDialog.locator('[data-summary]').innerText(),/受保护目标分支/);
   assert.equal(await reviewDialog.locator('script').count(),0);
   await page.setViewportSize({width:390,height:844});
-  await page.screenshot({path:'output/playwright/git-review-preview-mobile.png'});
+  await page.screenshot({animations:'disabled',path:'output/playwright/git-review-preview-mobile.png'});
   assert.equal(await reviewDialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true);
   await reviewDialog.locator('[data-create]').click();
   await reviewDialog.locator('[data-list]').filter({hasText:'PR <script>literal</script>'}).waitFor();assert.equal(reviewCreates,1);
   await reviewDialog.locator('[data-close]').click();
   await page.setViewportSize({width:390,height:844});
-  await page.screenshot({path:'output/playwright/git-remote-mobile.png'});
+  await page.screenshot({animations:'disabled',path:'output/playwright/git-remote-mobile.png'});
   assert.equal(await remoteDialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true);
   await remoteDialog.locator('[data-close]').click();
+  await page.locator('#changes-more').click();
   await page.locator('#btn-changes-clone').click();
   const cloneDialog=page.locator('#dlg-git-clone');
   await cloneDialog.locator('[type=submit]:not([disabled])').waitFor();
@@ -302,9 +347,10 @@ export async function smoke(page) {
   await cloneDialog.locator('[type=submit]').click();await cloneDialog.waitFor({state:'detached'});
   await page.waitForFunction(()=>document.querySelector('#changes-repo').value==='cloned-project');
   failProfile=true;
+  if (await page.locator('#changes-more').isVisible()) await page.locator('#changes-more').click();
   await page.locator('#btn-changes-profile').click();await profileDialog.locator('[role=alert]').filter({hasText:'fixture profile failure'}).waitFor();
   assert.equal(await profileDialog.locator('[type=submit]').isDisabled(),true);
-  await profileDialog.locator('[data-cancel]').click();
+  await backToWorkspace();
   role='admin';failProfile=false;
   await page.setViewportSize({width:1440,height:960});await page.reload();
   await page.locator('#btn-changes-remote:not([disabled])').waitFor();await page.locator('#btn-changes-remote').click();
@@ -320,9 +366,9 @@ export async function smoke(page) {
   await appsDialog.locator('strong').filter({hasText:'Personal GitHub OAuth'}).waitFor();assert.equal(oauthWrites,1);
   assert.equal((await appsDialog.innerText()).includes('synthetic-app-secret'),false);
   await page.setViewportSize({width:390,height:844});
-  await page.screenshot({path:'output/playwright/git-oauth-apps-mobile.png'});
+  await page.screenshot({animations:'disabled',path:'output/playwright/git-oauth-apps-mobile.png'});
   assert.equal(await appsDialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true);
-  await appsDialog.locator('[data-close]').click();await manager.locator('[data-close]').click();await page.locator('#dlg-git-remote [data-close]').click();
+  await appsDialog.locator('[data-close]').click();await backToWorkspace();
   role='user';connections[0].owner='service-admin';connections[0].managed=false;connections[0].read_only=true;
   await page.setViewportSize({width:1440,height:960});await page.reload();
   await page.locator('#btn-changes-remote:not([disabled])').waitFor();await page.locator('#btn-changes-remote').click();
@@ -331,9 +377,27 @@ export async function smoke(page) {
   await page.locator('#dlg-git-remote [data-manage]').click();
   const sharedRow=manager.locator('.git-connection-row').filter({hasText:'共享自 service-admin'});await sharedRow.waitFor();
   for(const label of ['编辑','停用','删除','使用授权'])assert.equal(await sharedRow.getByRole('button',{name:label,exact:true}).count(),0,'shared recipient can manage '+label);
-  await manager.locator('[data-close]').click();await page.locator('#dlg-git-remote [data-close]').click();
+  await backToWorkspace();
+  await page.locator('#btn-user-menu').click();await page.locator('#btn-git-management').click();
+  for(const width of [1440,390]) {
+   await page.setViewportSize({width,height:900});
+   await page.screenshot({animations:'disabled',path:`output/playwright/git-guide-${width}.png`});
+   assert.equal(await page.locator('#git-content').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'guide horizontal overflow');
+  }
+  await page.setViewportSize({width:1440,height:960});
+  await page.locator('#git-nav [data-git-sec=connections]').click();
+  await manager.locator('[data-operations]').click();
+  assert.equal(await page.locator('dialog[open]').count(),0,'operation history opened a modal');
+  await page.locator('#git-nav [data-git-sec=profile]').click();
+  assert.equal(await page.locator('#dlg-git-operations').count(),0,'history survives section navigation');
+  await page.locator('#git-nav [data-git-sec=connections]').click();
+  await manager.locator('[data-add]').click();
+  await editor.locator('[name=token]').fill('discard-on-navigation');
+  await page.locator('#git-nav [data-git-sec=guide]').click();
+  assert.equal(await editor.count(),0,'credential form survives section navigation');
+  await assertActionIcons(page);
   assert.deepEqual(errors,[]);
-  console.log('Git UI: ordinary-user profile, persistence, local commit identity and scope, failure retry, clean tree, cached remote status, mobile layout, HTTPS connection creation/default/binding/fetch, explicit push preview/confirmation, live cancellation/history, ordinary-user OAuth, admin OAuth applications, PR/MR explicit creation, shared ACL and consumer restrictions passed');
+  console.log('Git UI: independent management page, guide, history navigation, reload, inline editors and cleanup, ordinary-user profile, persistence, local commit identity and scope, failure retry, clean tree, cached remote status, mobile layout, HTTPS connection creation/default/binding/fetch, explicit push preview/confirmation, live cancellation/history, ordinary-user OAuth, admin OAuth applications, PR/MR explicit creation, shared ACL and consumer restrictions passed');
  } finally { await page.unroute('**/api/**');server.closeAllConnections();await new Promise(r=>server.close(r)); }
 }
 if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

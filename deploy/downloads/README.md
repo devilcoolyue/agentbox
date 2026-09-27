@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.3 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.4 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.3
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash -s -- --version v0.1.4
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.3_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.4_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.3_linux_arm64/install.sh --version v0.1.3
+sudo bash agentbox_v0.1.4_linux_arm64/install.sh --version v0.1.4
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,17 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### v0.1.3 升级至 v0.1.4
+
+本版优化 Git 独立管理页、手机布局与操作图标，沿用 schema 8，不新增数据库迁移。保留原配置、用户、工作空间、历史与工作空间镜像，下载校验后使用新包升级：
+
+```bash
+sudo python3 /绝对路径/agentbox_v0.1.4_linux_arm64/deploy/release.py install --package /绝对路径/agentbox_v0.1.4_linux_arm64
+sudo python3 /绝对路径/agentbox_v0.1.4_linux_arm64/deploy/release.py activate --version v0.1.4
+```
+
+以上示例为 arm64，amd64 主机请选择对应包。首次安装脚本不会升级已有安装。
 
 ### v0.1.2 升级至 v0.1.3
 

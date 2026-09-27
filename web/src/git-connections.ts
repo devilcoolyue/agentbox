@@ -1,3 +1,5 @@
+import { openGitManagement } from "./git-management.js";
+import { createGitSurface } from "./git-surface.js";
 import { openGitTerminal } from "./git-terminal.js";
 import { openGitShares } from "./git-shares.js";
 import { openGitReviews } from "./git-reviews.js";
@@ -5,7 +7,7 @@ import { openGitOAuth, openGitOAuthApps } from "./git-oauth.js";
 import { gitRequest, openGitOperations } from "./git-operations.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
-import { $, askConfirm, askPrompt, toast } from "./util.js";
+import { askConfirm, askPrompt, toast } from "./util.js";
 import { actionButton, decorateIcons } from "./icons.js";
 import { enhanceSelects, setSelectValue } from "./select.js";
 import type { GitConnection, GitBinding, GitStatus, GitPushPreview } from "./types.js";
@@ -21,7 +23,7 @@ function dialog(title: string, markup: string) {
   document.body.append(d); dialogs.add(d); decorateIcons(d); enhanceSelects(d); d.showModal();
   return d;
 }
-function errorText(d: HTMLDialogElement, error: unknown) { d.querySelector<HTMLElement>("[data-error]")!.textContent = (error as Error).message; }
+function errorText(d: HTMLElement, error: unknown) { d.querySelector<HTMLElement>("[data-error]")!.textContent = (error as Error).message; }
 function option(value: string, label: string) { return Object.assign(document.createElement("option"), {value, textContent: label}); }
 function action(label: string, icon: string, run: () => Promise<void>, tip = label, managedOnly = false) {
   const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-sm"; actionButton(b, label, icon, tip);
@@ -31,17 +33,27 @@ function action(label: string, icon: string, run: () => Promise<void>, tip = lab
   return b;
 }
 
-export function openGitConnections() {
+export function openGitConnections() { openGitManagement("connections"); }
+
+function renderGitConnections(host: HTMLElement) {
   const token = S.token;
-  const d = dialog("我的 Git 连接", `<p class="field-hint">连接用于远程仓库认证，可在多个空间复用。保存后到空间「远程」绑定仓库并获取更新，验证实际访问权限。</p>
-    <div class="git-connection-tools"><button class="btn btn-primary btn-sm" data-add data-icon="plus" data-tip="添加 Git 连接">添加</button><button class="btn btn-sm" data-oauth data-icon="shield" data-tip="授权 GitHub / GitLab">授权</button><button class="btn btn-sm" data-oauth-apps data-icon="key" data-tip="管理 Git OAuth 应用">OAuth 应用</button><button class="btn btn-sm" data-refresh data-icon="refresh">刷新</button><button class="btn btn-sm" data-operations data-icon="activity" data-tip="查看 Git 操作记录">记录</button></div>
-    <p data-error role="alert" class="login-error"></p><div data-list>读取中…</div>`);
-  d.id = "dlg-git-connections";
+  const d = document.createElement("section");
+  d.className = "git-surface";
+  d.id = "git-connections";
+  d.innerHTML = `<div class="sec-intro"><div><h2>仓库连接</h2><p>连接可在你的多个工作空间复用。添加后，到空间「变更 → 远程」绑定仓库。</p></div></div>
+    <div class="git-connection-tools"><button class="btn btn-primary btn-sm" data-add data-icon="plus">添加连接</button><button class="btn btn-sm" data-oauth data-icon="shield">网页授权</button><button class="btn btn-sm" data-oauth-apps data-icon="key">OAuth 应用</button><button class="btn btn-sm" data-refresh data-icon="refresh">刷新</button><button class="btn btn-sm" data-operations data-icon="history">操作记录</button></div>
+    <p class="git-note">默认连接用于新空间和未绑定仓库的默认选择；已有绑定保持不变。保存连接后可先「测试」仓库读取权限。</p>
+    <p data-error role="alert" class="login-error"></p><div data-list aria-live="polite">读取中…</div>`;
+  host.append(d);
+  decorateIcons(d);
+  let generation = 0;
   const load = async () => {
+    const gen = ++generation;
+    d.querySelector("[data-error]")!.textContent = "";
     const [connections, def] = await Promise.all([api<GitConnection[]>("/git/connections"), api<{connection_id:string}>("/me/git/default")]);
-    if (!d.open || token !== S.token) return;
+    if (!d.isConnected || token !== S.token || gen !== generation) return;
     const list = d.querySelector<HTMLElement>("[data-list]")!; list.replaceChildren();
-    if (!connections.length) list.textContent = "尚未添加 Git 连接。";
+    if (!connections.length) list.innerHTML = '<div class="git-empty"><h3>尚未添加 Git 连接</h3><p>已有 Token 或 SSH 私钥？点击「添加连接」。也可以通过「网页授权」登录代码平台。</p><p>只做本地提交时，无需添加连接。</p></div>';
     for (const c of connections) {
       const managed=c.managed ?? c.owner===S.user;
       const row = document.createElement("div"); row.className = "git-connection-row";
@@ -58,16 +70,16 @@ export function openGitConnections() {
       }, c.enabled ? "停用" : "启用", true), action(def.connection_id === c.id ? "取消默认" : "设为默认", def.connection_id === c.id ? "undo" : "check", async () => {
         await api("/me/git/default", {method:"PUT", body:JSON.stringify({connection_id:def.connection_id === c.id ? "" : c.id})}); await load();
       }), action("", "trash", async () => {
-        if (!await askConfirm(`删除连接「${c.label}」？`, {title:"删除 Git 连接", hint:"已绑定的连接需先解除引用。删除不会撤销上游平台的 Token。", danger:true, okLabel:"删除"})) return;
+        if (!await askConfirm(`删除连接「${c.label}」？`, {title:"删除 Git 连接", hint:"已绑定的连接需先解除引用。删除不会撤销上游平台的 Token。", danger:true, okLabel:"删除", icon: "trash"})) return;
         await api(`/git/connections/${c.id}`, {method:"DELETE", body:JSON.stringify({revision:c.revision})}); await load();
       }, "删除", true));
       if(!managed) buttons.querySelectorAll("[data-managed-action]").forEach(child=>child.remove());
       if(managed && S.role==="admin" && c.auth_type!=="oauth") buttons.append(action("使用授权","users",async()=>openGitShares(c,load)));
       if(c.public_key) buttons.append(action("公钥","key",async()=>{
-        const key=dialog("连接公钥",'<p class="field-hint">将此公钥登记到上游 Git 服务账号或部署密钥；私钥不提供导出。</p><pre data-public-key></pre>');key.querySelector("[data-public-key]")!.textContent=c.public_key!;
+        const key=createGitSurface("连接公钥",'<p class="field-hint">将此公钥登记到上游 Git 服务账号或部署密钥；私钥不提供导出。</p><pre data-public-key></pre>');key.querySelector("[data-public-key]")!.textContent=c.public_key!;
       }, "查看 SSH 公钥"));
-      if(managed && c.auth_type === "oauth") buttons.append(action("重新授权","shield",async()=>openGitOAuth(c)),action("撤销授权","undo",async()=>{
-        if(!await askConfirm(`撤销「${c.label}」的 OAuth 授权？`,{title:"撤销 Git 授权",hint:"会先停用本地连接，再请求上游撤销。上游可能同时影响使用同一应用授权的其他连接。",danger:true,okLabel:"撤销"}))return;
+      if(managed && c.auth_type === "oauth") buttons.append(action("重新授权","shield",async()=>openGitOAuth(c)),action("撤销授权","shield-off",async()=>{
+        if(!await askConfirm(`撤销「${c.label}」的 OAuth 授权？`,{title:"撤销 Git 授权",hint:"会先停用本地连接，再请求上游撤销。上游可能同时影响使用同一应用授权的其他连接。",danger:true,okLabel:"撤销",icon:"shield-off"}))return;
         const result=await gitRequest<{warning:string;remote_revoked:boolean}>(`/git/connections/${c.id}/revoke`,{revision:c.revision},d);
         toast(result.warning||"本地已停用，上游授权已撤销",!result.remote_revoked);await load();
       }));
@@ -85,7 +97,7 @@ export function openGitConnections() {
 
 function editConnection(c: GitConnection | null, saved: () => Promise<void>) {
   const token = S.token;
-  const d = dialog(c ? "编辑 Git 连接" : "添加 Git 连接", `<form>
+  const d = createGitSurface(c ? "编辑 Git 连接" : "添加 Git 连接", `<form>
     <label>认证方式<select name="auth_type"><option value="pat">HTTPS Token</option><option value="ssh">SSH 私钥</option></select></label>
     <label>连接名称<input type="text" name="label" maxlength="128" required placeholder="例如：公司 GitLab"></label>
     <div class="dlg-row"><label>平台<select name="provider"><option value="github">GitHub</option><option value="gitlab">GitLab / 自建 GitLab</option><option value="generic">其他 HTTPS Git</option></select></label>
@@ -145,8 +157,8 @@ export async function openGitRemote(repo: string, status: GitStatus, refreshed: 
   const d = dialog("仓库远程", `<p data-repo class="field-hint"></p>
     <div class="dlg-row"><label>Remote<select data-remote></select></label><label>Git 连接<select data-connection></select></label></div>
     <p data-target class="field-hint"></p><p class="field-hint">获取更新只更新远程跟踪分支，不合并工作文件。推送前会展示目标和提交；不会强制覆盖远程分支。</p>
-    <div class="git-connection-tools"><button class="btn btn-sm" data-manage data-icon="key" data-tip="管理 Git 连接">连接</button><button class="btn btn-sm" data-reload data-icon="refresh" data-tip="刷新 Git 连接与远程状态">刷新</button><button class="btn btn-sm" data-add-remote data-icon="plus" data-tip="添加远程仓库地址">添加远程</button><button class="btn btn-sm" data-edit-remote data-icon="rename" data-tip="编辑所选远程仓库地址">编辑</button><button class="btn btn-sm" data-remove-remote data-icon="trash" data-tip="删除所选远程配置，不删除服务器仓库">删除</button><button class="btn btn-sm" data-bind disabled data-icon="save" data-tip="保存当前仓库 remote 与 Git 连接的绑定">绑定</button><button class="btn btn-sm" data-default disabled data-icon="check" data-tip="设为空间默认 Git 连接">默认</button><button class="btn btn-sm" data-operations data-icon="activity" data-tip="查看 Git 操作记录">记录</button><button class="btn btn-sm" data-terminal disabled data-icon="key" data-tip="管理当前仓库的终端 Git 授权">终端授权</button><button class="btn btn-sm" data-reviews disabled data-icon="external" data-tip="查看或创建 Pull Request / Merge Request">PR / MR</button><button class="btn btn-sm" data-fetch disabled data-icon="download" data-tip="获取远程更新，不合并工作文件（fetch）">获取</button><button class="btn btn-sm" data-pull disabled data-icon="refresh" data-tip="获取并快进合并上游提交，更新工作文件">拉取</button><button class="btn btn-sm btn-primary" data-preview disabled data-icon="eye" data-tip="预览待推送提交，确认后才推送">预览推送</button></div>
-    <p data-error role="alert" class="login-error"></p><p data-state role="status" class="field-hint"></p><div data-preview-box class="hidden"><pre data-commits></pre><button class="btn btn-primary" data-push data-icon="upload" data-tip="确认推送已预览的提交到远程仓库">推送</button></div>`);
+    <div class="git-connection-tools"><button class="btn btn-sm" data-manage data-icon="link" data-tip="管理 Git 连接">连接</button><button class="btn btn-sm" data-reload data-icon="refresh" data-tip="刷新 Git 连接与远程状态">刷新</button><button class="btn btn-sm" data-add-remote data-icon="plus" data-tip="添加远程仓库地址">添加远程</button><button class="btn btn-sm" data-edit-remote data-icon="rename" data-tip="编辑所选远程仓库地址">编辑</button><button class="btn btn-sm" data-remove-remote data-icon="trash" data-tip="删除所选远程配置，不删除服务器仓库">删除</button><button class="btn btn-sm" data-bind disabled data-icon="plug" data-tip="保存当前仓库 remote 与 Git 连接的绑定">绑定</button><button class="btn btn-sm" data-default disabled data-icon="check" data-tip="设为空间默认 Git 连接">默认</button><button class="btn btn-sm" data-operations data-icon="history" data-tip="查看 Git 操作记录">记录</button><button class="btn btn-sm" data-terminal disabled data-icon="key" data-tip="管理当前仓库的终端 Git 授权">终端授权</button><button class="btn btn-sm" data-reviews disabled data-icon="git-pr" data-tip="查看或创建 Pull Request / Merge Request">PR / MR</button><button class="btn btn-sm" data-fetch disabled data-icon="git-fetch" data-tip="获取远程更新，不合并工作文件（fetch）">获取</button><button class="btn btn-sm" data-pull disabled data-icon="git-pull" data-tip="获取并快进合并上游提交，更新工作文件">拉取</button><button class="btn btn-sm btn-primary" data-preview disabled data-icon="eye" data-tip="预览待推送提交，确认后才推送">预览推送</button></div>
+    <p data-error role="alert" class="login-error"></p><p data-state role="status" class="field-hint"></p><div data-preview-box class="hidden"><pre data-commits></pre><button class="btn btn-primary" data-push data-icon="git-push" data-tip="确认推送已预览的提交到远程仓库">推送</button></div>`);
   d.id = "dlg-git-remote";
   const remote = d.querySelector<HTMLSelectElement>("[data-remote]")!, connection = d.querySelector<HTMLSelectElement>("[data-connection]")!;
   const state = d.querySelector<HTMLElement>("[data-state]")!, previewBox = d.querySelector<HTMLElement>("[data-preview-box]")!;
@@ -191,7 +203,7 @@ export async function openGitRemote(repo: string, status: GitStatus, refreshed: 
   };
   d.addEventListener("cancel",e=>{if(busy)e.preventDefault();});
   remote.addEventListener("change",selected);connection.addEventListener("change",()=>{preview=null;previewBox.classList.add("hidden");sync();});
-  button("manage").addEventListener("click",openGitConnections);
+  button("manage").addEventListener("click",()=>{ d.close(); openGitConnections(); });
   button("operations").addEventListener("click",openGitOperations);
   button("reviews").addEventListener("click",()=>{const c=connections.find(c=>c.id===activeBinding()?.connection_id);if(c)openGitReviews(repo,remote.value,c,connections);});
   button("default").addEventListener("click",()=>void run(async()=>{
@@ -204,7 +216,7 @@ export async function openGitRemote(repo: string, status: GitStatus, refreshed: 
     if(kind==="add") {const chosen=await askPrompt({title:"添加远程",label:"Remote 名称",value:"origin",validate:v=>/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(v)?"":"名称仅支持字母、数字、点、下划线和连字符"});if(chosen===null)return;name=chosen;}
     const existing=(status.remotes||[]).find(r=>r.name===name&&!r.push)?.url||"";
     let url="";
-    if(kind==="remove"){if(!await askConfirm(`删除 remote「${name}」？`,{title:"删除远程配置",hint:"移除本地远程配置和跟踪引用，不会删除服务器仓库。",danger:true,okLabel:"删除"}))return;}
+    if(kind==="remove"){if(!await askConfirm(`删除 remote「${name}」？`,{title:"删除远程配置",hint:"移除本地远程配置和跟踪引用，不会删除服务器仓库。",danger:true,okLabel:"删除", icon: "trash"}))return;}
     else {const chosen=await askPrompt({title:kind==="add"?"添加远程地址":"修改远程地址",label:"仓库地址",value:existing||connections.find(c=>c.id===connection.value)?.base_url+"/",hint:"地址必须属于所选连接的平台。保存地址后需单独保存绑定。"});if(chosen===null)return;url=chosen;}
     await gitRequest(prefix+"/remotes",{repo,name,action:kind==="edit"?"update":kind,url,expected_url:existing,connection_id:connection.value},d);
     state.textContent="远程配置已保存，请核对后绑定连接。";await load();if(S.current?.id===session)await refreshed();
@@ -221,7 +233,7 @@ export async function openGitRemote(repo: string, status: GitStatus, refreshed: 
     if(result.fetched_at && S.current?.id===session) await refreshed();
   }));
   button("pull").addEventListener("click",()=>void run(async()=>{
-    if(!await askConfirm("获取并快进合并当前分支的上游提交？",{title:"快进拉取",hint:"这会更新工作文件；需要工作区干净，分叉时停止。",okLabel:"拉取"}))return;
+    if(!await askConfirm("获取并快进合并当前分支的上游提交？",{title:"快进拉取",hint:"这会更新工作文件；需要工作区干净，分叉时停止。",okLabel:"拉取",icon:"git-pull"}))return;
     preview=null;previewBox.classList.add("hidden");state.textContent="正在快进拉取…";
     await gitRequest(prefix+"/pull",{repo,remote:remote.value},d);
     state.textContent="已快进更新当前分支。";if(S.current?.id===session)await refreshed();
@@ -241,7 +253,10 @@ export async function openGitRemote(repo: string, status: GitStatus, refreshed: 
   await run(load);
 }
 
-$("btn-git-connections").addEventListener("click",openGitConnections);
+bus.addEventListener("git-section", e => {
+  const { section, host } = (e as CustomEvent<{ section: string; host: HTMLElement }>).detail;
+  if (section === "connections") renderGitConnections(host);
+});
 bus.addEventListener("signed-out",()=>{for(const d of dialogs)d.close();});
 
 export function openGitClone(done: (repo:string)=>Promise<void>) {
@@ -249,9 +264,9 @@ export function openGitClone(done: (repo:string)=>Promise<void>) {
   const d=dialog("克隆仓库",`<form><label>Git 连接<select name="connection" disabled></select></label>
     <label>仓库地址<input name="url" type="text" required placeholder="https://git.example.com/team/project.git"></label>
     <label>新文件夹名称<input name="directory" type="text" required maxlength="128" placeholder="project"></label>
-    <p class="field-hint">克隆到当前空间根目录下的新文件夹；不会覆盖已有目录。先在用户菜单的「Git 连接」添加 Token。</p>
+    <p class="field-hint">克隆到当前空间根目录下的新文件夹；不会覆盖已有目录。先在用户菜单的「Git 管理 → 仓库连接」添加连接。</p>
     <p data-error role="alert" class="login-error"></p><p data-state role="status" class="field-hint">读取连接中…</p>
-    <div class="dlg-actions"><button class="btn btn-primary" type="submit" disabled data-icon="download">克隆</button></div></form>`);
+    <div class="dlg-actions"><button class="btn btn-primary" type="submit" disabled data-icon="git-clone">克隆</button></div></form>`);
   d.id="dlg-git-clone";
   const form=d.querySelector("form")!,picker=form.elements.namedItem("connection") as HTMLSelectElement;
   const field=(name:string)=>form.elements.namedItem(name) as HTMLInputElement;

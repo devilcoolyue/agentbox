@@ -18,6 +18,7 @@ let loadGeneration = 0;
 let gitStatus = null;
 /** 会话切换时清掉上一个会话的仓库选择，别把它带进新会话。 */
 export function resetChangesRepo() {
+    $("tab-changes").classList.remove("show-diff");
     gitStatus = null;
     loadGeneration++;
     CH.repo = "";
@@ -50,6 +51,7 @@ export async function loadChanges() {
     const generation = ++loadGeneration;
     const token = S.token;
     const stale = () => generation !== loadGeneration || sess.id !== S.current?.id || token !== S.token;
+    $("tab-changes").classList.add("changes-empty");
     setActions(false);
     $("btn-changes-remote").disabled = $("btn-changes-branches").disabled = true;
     $("changes-remote-state").classList.add("hidden");
@@ -78,6 +80,11 @@ export async function loadChanges() {
     renderRepoPick();
     if (!data.is_repo) {
         listMsg("当前空间没有 Git 仓库。在终端中初始化或克隆项目后，即可查看改动。");
+        const clone = document.createElement("button");
+        clone.className = "btn btn-primary";
+        buttonLabel(clone, "克隆仓库", "git-clone");
+        clone.addEventListener("click", () => $("btn-changes-clone").click());
+        $("changes-list").append(clone);
         setActions(false);
         return;
     }
@@ -93,7 +100,8 @@ export async function loadChanges() {
         ? `${data.upstream} · ${data.tracking_known ? `本地领先 ${data.ahead} / 落后 ${data.behind}` : "跟踪分支尚未获取或已删除"}（本地缓存）`
         : "当前分支未设置上游";
     const remotes = (data.remotes || []).map(r => `${r.name}${r.push ? "（推送）" : ""}: ${r.url}`);
-    remoteState.textContent = [tracking, ...remotes, ...(data.last_fetch ? [`上次网页获取 ${data.last_fetch.target} · ${fmtTime(Date.parse(data.last_fetch.at))}`] : []), "刷新仅检查本地状态，不会获取或推送远程提交。"].join("\n");
+    $("changes-tracking").textContent = tracking;
+    $("changes-remote-detail").textContent = [...remotes, ...(data.last_fetch ? [`上次网页获取 ${data.last_fetch.target} · ${fmtTime(Date.parse(data.last_fetch.at))}`] : []), "刷新仅检查本地状态，不会获取或推送远程提交。"].join("\n");
     remoteState.classList.remove("hidden");
     renderList();
     if (CH.selected)
@@ -137,6 +145,7 @@ function statusKind(xy) {
     return "mod";
 }
 function renderList() {
+    $("tab-changes").classList.toggle("changes-empty", !CH.files.length);
     // 上次选中的文件可能已经提交或被丢弃，右侧跟着一起清掉。
     if (CH.selected && !CH.files.some((f) => f.path === CH.selected)) {
         CH.selected = "";
@@ -190,6 +199,7 @@ const isNew = (f) => f.untracked || f.status.trim() === "A";
 const isDeleted = (f) => !f.untracked && f.status.includes("D");
 function selectFile(f) {
     CH.selected = f.path;
+    $("tab-changes").classList.add("show-diff");
     // 按文件类型定默认视图，不沿用上一个文件的选择：新文件本来就没 diff 可看，
     // 改过的文件则是差异更有用。切文件时视图跟着重置，行为可预期。
     CH.view = isNew(f) ? "full" : "diff";
@@ -200,8 +210,10 @@ function selectFile(f) {
 function renderViewBar() {
     const f = currentFile();
     $("changes-view-bar").classList.toggle("hidden", !f);
-    if (!f)
+    if (!f) {
+        $("tab-changes").classList.remove("show-diff");
         return;
+    }
     $("changes-view-path").textContent = f.path;
     const diffBtn = $("btn-view-diff");
     const fullBtn = $("btn-view-full");
@@ -424,4 +436,8 @@ $("git-discard-ok").addEventListener("click", async () => {
     finally {
         btnDone($("git-discard-ok"));
     }
+});
+$("changes-back").addEventListener("click", () => {
+    $("tab-changes").classList.remove("show-diff");
+    $("changes-list").querySelector(".change-row.active")?.focus();
 });

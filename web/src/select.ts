@@ -55,7 +55,7 @@ class SelectControl {
     this.empty.setAttribute("role", "status");
     this.panel.append(this.search, this.list, this.empty);
     // 必须留在 dialog 内，否则顶层弹窗会把 body 上的菜单视为 inert。
-    (select.closest("dialog") || document.body).append(this.panel);
+    (select.closest("dialog, .git-surface") || document.body).append(this.panel);
     select.after(this.trigger);
     select.classList.add("select-native");
     select.tabIndex = -1;
@@ -104,7 +104,7 @@ class SelectControl {
       this.trigger.focus();
     });
     select.form?.addEventListener("reset", () => queueMicrotask(() => this.sync()));
-    select.closest("dialog")?.addEventListener("close", () => this.close(false));
+    select.closest("dialog, .git-surface")?.addEventListener("close", () => this.close(false));
     new MutationObserver(() => this.sync()).observe(select, {
       childList: true, subtree: true, characterData: true, attributes: true,
       attributeFilter: ["class", "hidden", "disabled", "selected", "label", "value", "required", "title", "aria-label", "aria-describedby", "data-tip"],

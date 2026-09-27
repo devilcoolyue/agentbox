@@ -275,7 +275,7 @@ function renderCatalog() {
             if (!view || busy || !requireClean())
                 return;
             const revision = view.active.revision;
-            if (!await askConfirm("将恢复该次修改前的全部价格及跟随状态。历史账单和已开始的网页回合保持原价。", { title: "恢复价格版本", okLabel: "恢复" }))
+            if (!await askConfirm("将恢复该次修改前的全部价格及跟随状态。历史账单和已开始的网页回合保持原价。", { title: "恢复价格版本", okLabel: "恢复", icon: "undo" }))
                 return;
             await mutate("/pricing/restore", "POST", { revision, id: item.id }, "价格版本已恢复");
         });
@@ -395,7 +395,7 @@ $("price-source-save").addEventListener("click", async () => {
 $("price-refresh").addEventListener("click", async () => {
     if (busy)
         return;
-    if ((dirty || sourceDirty()) && !await askConfirm("将丢弃当前尚未保存的价格和来源编辑。", { title: "重新读取价目表", okLabel: "重新读取" }))
+    if ((dirty || sourceDirty()) && !await askConfirm("将丢弃当前尚未保存的价格和来源编辑。", { title: "重新读取价目表", okLabel: "重新读取", icon: "refresh" }))
         return;
     await openPricingSection(true);
 });

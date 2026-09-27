@@ -208,7 +208,7 @@ function fileAction(label, icon, action, danger = false) {
     btn.className = "file-act" + (danger ? " danger" : "");
     setTip(btn, label);
     btn.setAttribute("aria-label", label);
-    btn.appendChild(svgIcon(icon, 17));
+    btn.appendChild(svgIcon(icon, 16));
     btn.addEventListener("click", action);
     return btn;
 }

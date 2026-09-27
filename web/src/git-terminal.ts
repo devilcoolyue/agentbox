@@ -27,7 +27,7 @@ export function openGitTerminal(repo:string,remote:string,readOnly:boolean){
    const label=document.createElement("p");label.className="field-hint";label.textContent=`${g.write?"允许推送":"只读远程"} · 到期 ${fmtTime(Date.parse(g.expires_at))}`;
    const commands=document.createElement("pre");commands.style.whiteSpace="pre-wrap";commands.style.overflowWrap="anywhere";
    commands.textContent=`${g.command} status\n${g.command} fetch\n${g.command} pull`+(g.write?`\n${g.command} push`:"");
-   const revoke=document.createElement("button");revoke.className="btn btn-sm";actionButton(revoke,"撤销","undo","撤销授权");
+   const revoke=document.createElement("button");revoke.className="btn btn-sm";actionButton(revoke,"撤销","shield-off","撤销授权");
    revoke.addEventListener("click",()=>void run(async()=>{await api(prefix+"/"+g.id,{method:"DELETE"});await load();}));
    row.append(label,commands,revoke);list.append(row);
   }
@@ -39,7 +39,7 @@ export function openGitTerminal(repo:string,remote:string,readOnly:boolean){
   finally{busy=false;for(const b of d.querySelectorAll<HTMLButtonElement>("button"))b.disabled=false;}
  }
  d.querySelector("[data-create]")!.addEventListener("click",()=>void run(async()=>{
-  if(write.checked&&!await askConfirm("允许空间内的程序推送此仓库？",{title:"终端推送授权",hint:"30 分钟内可推送当前仓库的分支，不允许强制推送或删除远程分支。命令的确认提示不能阻止空间内的其他程序使用授权。",okLabel:"创建授权"}))return;
+  if(write.checked&&!await askConfirm("允许空间内的程序推送此仓库？",{title:"终端推送授权",hint:"30 分钟内可推送当前仓库的分支，不允许强制推送或删除远程分支。命令的确认提示不能阻止空间内的其他程序使用授权。",okLabel:"创建授权",icon:"key"}))return;
   if(!d.open||token!==S.token)return;
   await gitRequest(prefix,{repo,remote,write:write.checked},d);await load();
  }));

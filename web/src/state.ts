@@ -23,7 +23,7 @@ export const emit = (type: string, detail?: unknown) =>
   bus.dispatchEvent(new CustomEvent(type, { detail }));
 
 /** 主区当前视图 */
-export type View = "work" | "settings" | "usage" | "tunnel";
+export type View = "work" | "settings" | "usage" | "tunnel" | "git";
 /** 工作台当前标签页 */
 export type Tab = "chat" | "term" | "files" | "changes" | "skills";
 /** 文件浏览范围（shared = 共享目录，同用户所有会话可见） */
@@ -54,6 +54,7 @@ export interface AppState {
   view: View;
   /** 设置页当前分区 */
   sec: string;
+  gitSec: string;
   tab: Tab;
   termWS: WebSocket | null;
   /** 终端连接代际：切换/收尾/手动重连时自增，作废旧连接的重连定时器 */
@@ -91,6 +92,7 @@ export const S: AppState = {
   current: null,
   view: "work",
   sec: "accounts",
+  gitSec: "guide",
   tab: "chat",
   termWS: null,
   termWSGen: 0,

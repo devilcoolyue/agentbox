@@ -4,7 +4,7 @@
 "use strict";
 import { openLightbox, fmtTime, toast } from "./util.js";
 import { imgURLFromPath } from "./api.js";
-import { svgIcon, buttonLabel } from "./icons.js";
+import { svgIcon, buttonLabel, actionButton } from "./icons.js";
 export { svgIcon } from "./icons.js";
 import { setTip } from "./tip.js";
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
@@ -57,7 +57,7 @@ export function toolChip(name, summary, htmlPath = "") {
         c.classList.add("has-open");
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "chip-open";
+        b.className = "btn chip-open";
         b.dataset.htmlPreview = htmlPath;
         buttonLabel(b, "预览", "eye");
         setTip(b, "在预览窗口渲染 " + htmlPath);
@@ -224,8 +224,8 @@ function codeBlock(lang, body) {
     });
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "cb-copy";
-    btn.append(svgIcon("copy", 12), document.createTextNode("复制"));
+    btn.className = "btn cb-copy";
+    actionButton(btn, "复制", "copy", "复制代码");
     btn.addEventListener("click", async () => {
         try {
             await copyText(body);
@@ -234,10 +234,10 @@ function codeBlock(lang, body) {
             toast("复制失败，请选择内容后手动复制", true);
             return;
         }
-        btn.replaceChildren(svgIcon("check", 12), document.createTextNode("已复制"));
+        actionButton(btn, "已复制", "check", "代码已复制");
         btn.disabled = true;
         setTimeout(() => {
-            btn.replaceChildren(svgIcon("copy", 12), document.createTextNode("复制"));
+            actionButton(btn, "复制", "copy", "复制代码");
             btn.disabled = false;
         }, 1400);
     });

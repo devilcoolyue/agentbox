@@ -44,7 +44,10 @@ export function btnBusy(btn: HTMLButtonElement, label: string) {
   btn.disabled = true;
   btn.setAttribute("aria-busy", "true");
   btn.classList.add("loading");
-  btn.replaceChildren(spinEl(), document.createTextNode(label));
+  const caption = document.createElement("span");
+  caption.className = "action-label";
+  caption.textContent = label;
+  btn.replaceChildren(spinEl(), caption);
 }
 
 export function btnDone(btn: HTMLButtonElement) {
@@ -164,6 +167,8 @@ export interface ConfirmOpts {
   title?: string;
   hint?: string;
   okLabel?: string;
+  /** Action meaning; danger only controls color. */
+  icon?: string;
   /** true = 确定按钮用红色危险样式 */
   danger?: boolean;
 }
@@ -176,8 +181,8 @@ export function askConfirm(text: string, opts: ConfirmOpts = {}) {
   hint.textContent = opts.hint || "";
   hint.classList.toggle("hidden", !opts.hint);
   const ok = $("ask-ok");
-  actionButton(ok, opts.okLabel || "确定", opts.danger ? "trash" : "check");
   ok.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
+  actionButton(ok, opts.okLabel || "确定", opts.icon || "check");
   return dlgOnce($<HTMLDialogElement>("dlg-ask"), (v) => v === "ok");
 }
 

@@ -213,7 +213,7 @@ function fileAction(label: string, icon: string, action: () => void, danger = fa
   btn.className = "file-act" + (danger ? " danger" : "");
   setTip(btn, label);
   btn.setAttribute("aria-label", label);
-  btn.appendChild(svgIcon(icon, 17));
+  btn.appendChild(svgIcon(icon, 16));
   btn.addEventListener("click", action);
   return btn;
 }

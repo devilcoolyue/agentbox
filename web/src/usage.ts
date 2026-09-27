@@ -1,3 +1,4 @@
+import { svgIcon } from "./icons.js";
 /* usage：使用记录（消耗流水明细）。
  *
  * **一行是什么**：一个回合 × 一个模型，不是一次 API 调用。容器里的 CLI 直接打
@@ -351,7 +352,7 @@ function renderRows(data: UsageEvents) {
     const why = document.createElement("button");
     why.type = "button";
     why.className = "u-why";
-    why.textContent = "?";
+    why.append(svgIcon("help", 14));
     setTip(why, "这笔钱是怎么算出来的");
     why.setAttribute("aria-label", "费用明细");
     why.addEventListener("click", () => openCost(r));

@@ -202,7 +202,7 @@ for (const radio of document.querySelectorAll<HTMLInputElement>('#dlg-quota inpu
         title: "解除限额",
         hint: "当前余额 " + fmtUSD(curQuota.balance_micro_usd) +
           " 将被清空（历史流水保留）。以后重新开启额度会从 0 开始。",
-        okLabel: "解除", danger: true,
+        okLabel: "解除", icon: "unlock", danger: true,
       });
       if (!ok) {
         for (const r of dlg().querySelectorAll<HTMLInputElement>('input[name="q-mode"]')) {

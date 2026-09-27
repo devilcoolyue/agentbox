@@ -174,7 +174,7 @@ window.addEventListener("keydown", (e) => {
 syncSidebar();
 /* ---- 顶栏：设置视图显示标题，工作台视图显示 状态灯+会话名+⋯菜单 ---- */
 const VIEW_TITLE = {
-    settings: "系统设置", usage: "使用记录", tunnel: "内网隧道",
+    git: "Git 管理", settings: "系统设置", usage: "使用记录", tunnel: "内网隧道",
 };
 export function updateTopbarTitle() {
     const inWork = S.view === "work" && !!S.current;
@@ -200,10 +200,11 @@ export function showView(name) {
     S.view = name;
     emit("view-changed", name);
     $("view-work").classList.toggle("hidden", name !== "work");
+    $("view-git").classList.toggle("hidden", name !== "git");
     $("view-settings").classList.toggle("hidden", name !== "settings");
     $("view-usage").classList.toggle("hidden", name !== "usage");
     $("view-tunnel").classList.toggle("hidden", name !== "tunnel");
-    for (const [id, view] of [["btn-settings", "settings"], ["btn-usagelog", "usage"], ["btn-tunnel", "tunnel"]]) {
+    for (const [id, view] of [["btn-git-management", "git"], ["btn-settings", "settings"], ["btn-usagelog", "usage"], ["btn-tunnel", "tunnel"]]) {
         $(id).classList.toggle("active", name === view);
         if (name === view)
             $(id).setAttribute("aria-current", "page");

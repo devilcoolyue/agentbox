@@ -2,7 +2,7 @@
 
 源码仓库保持私有；公开下载仓库为 `devilcoolyue/agentbox-releases`，仅提交安装脚本、用户说明和许可证，Release 附件为二进制安装包。打包只携带 `deploy/downloads/README.md` 用户说明，不复制内部架构、审计或开发文档。
 
-当前正式版本为 [v0.1.3](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.3)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
+当前正式版本为 [v0.1.4](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.4)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
 
 新用户的一键入口是仓库根目录 `install.sh`，使用方法见[一键安装](../deploy/README.md#一键安装)。维护者需推送该入口，并将新构建的 Linux 发布包和 `SHA256SUMS` 附到公开 Release：默认命令读取 latest 正式发布，只有预览包时必须指定 `--version`。仅创建 Actions artifact 不会让安装命令可用；支持一键安装的包必须包含 `deploy/bootstrap.py`。
 
@@ -12,7 +12,7 @@
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.3 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.4 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0

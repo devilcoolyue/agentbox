@@ -148,15 +148,15 @@ function acctRow(a: Account) {
   state.appendChild(px);
 
   const acts = document.createElement("div");
-  acts.className = "acct-actions";
+  acts.className = "acct-actions action-tools";
   const auth = document.createElement("button");
   const needAuth = a.cred_status !== "ok";
   auth.className = "btn btn-sm" + (needAuth ? " btn-primary" : "");
-  actionButton(auth, "认证", "key", needAuth ? "认证账号" : "管理认证");
+  actionButton(auth, "认证", "shield", needAuth ? "认证账号" : "管理认证");
   auth.addEventListener("click", () => openAuthDlg(a));
   const edit = document.createElement("button");
   edit.className = "btn btn-sm btn-ghost";
-  actionButton(edit, "", "rename", "编辑账号");
+  actionButton(edit, "", "edit", "编辑账号");
   edit.addEventListener("click", () => openAcctEdit(a));
   const del = document.createElement("button");
   del.className = "btn btn-sm btn-danger";
@@ -514,7 +514,7 @@ function renderModels() {
       });
       const reasoning = document.createElement("button");
       reasoning.className = "btn btn-sm btn-ghost m-reasoning";
-      actionButton(reasoning, "模型能力", "sliders", "模型能力 · " + reasoningLabel(m.reasoning));
+      actionButton(reasoning, "模型能力 · " + reasoningLabel(m.reasoning), "sliders");
       reasoning.addEventListener("click", async () => {
         const policy = await editReasoning(agent, m.label + " · 模型能力", m.reasoning);
         if (policy === null) return;
@@ -593,7 +593,7 @@ function userRow(u: User) {
   const quota = quotaChip(u.quota);
 
   const acts = document.createElement("div");
-  acts.className = "u-actions";
+  acts.className = "u-actions action-tools";
   const credit = document.createElement("button");
   credit.className = "btn btn-sm btn-ghost";
   actionButton(credit, "额度", "wallet", "查看和管理用户额度");
@@ -629,7 +629,7 @@ function userRow(u: User) {
       const ok = await askConfirm("删除用户「" + u.name + "」？", {
         title: "删除用户",
         hint: "该用户的全部工作空间和容器将一并移除，文件保留在服务器磁盘上。",
-        okLabel: "删除", danger: true,
+        okLabel: "删除", icon: "trash", danger: true,
       });
       if (!ok) return;
       btnBusy(del, "删除中…");
@@ -678,7 +678,7 @@ export function initSettings() {
   } catch (e) { toast((e as Error).message, true); }
  }, { signal: lifetime.signal });
  $("btn-clear-cache").addEventListener("click", async () => {
-  if (!await askConfirm("清理官方市场的下载缓存？下次打开市场会重新下载。")) return;
+  if (!await askConfirm("清理官方市场的下载缓存？下次打开市场会重新下载。", { icon: "trash", okLabel: "清理" })) return;
   try { await api("/cache/marketplace", {method: "DELETE"}); toast("缓存已清理"); } catch (e) { toast((e as Error).message, true); }
  }, { signal: lifetime.signal });
  bus.addEventListener("view-changed", () => { if (S.view !== "settings") stopMonitor(); }, { signal: lifetime.signal });

@@ -156,7 +156,7 @@ function proxyRow(p: Proxy) {
   }
 
   const acts = document.createElement("td");
-  acts.className = "px-actions";
+  acts.className = "px-actions action-tools";
   const test = document.createElement("button");
   test.className = "btn btn-sm btn-ghost";
   buttonLabel(test, "测试", "activity");
@@ -201,7 +201,7 @@ async function removeProxy(p: Proxy) {
     hint: bound
       ? `仍有 ${p.accounts} 个账号绑定它。删除后这些账号会解除绑定，改用服务器自身的 IP 直连官方接口。`
       : "该代理未被任何账号使用。",
-    okLabel: "删除", danger: true,
+    okLabel: "删除", icon: "trash", danger: true,
   });
   if (!ok) return;
   try {

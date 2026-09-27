@@ -19,8 +19,6 @@ dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 13px;
 dialog input[type="text"], dialog input[type="number"], dialog input[type="password"],
 dialog select, dialog .select-trigger, dialog textarea { width: 100%; }
 dialog textarea { resize: vertical; }
-#dlg-git-profile fieldset { display: grid; gap: 14px; border: 0; padding: 0; min-width: 0; }
-#dlg-git-profile input { width: 100%; }
 .dlg-git-connections { width: min(720px, 94vw); }
 .dlg-git-connections p { overflow-wrap: anywhere; white-space: pre-line; }
 .dlg-git-connections input { width: 100%; }

@@ -39,10 +39,13 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/term.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/files.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/settings.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/git-management.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/usage.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/date-range.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/tunnel.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/dialogs.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/responsive.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/actions.css">
 </head>
 <body>
 
@@ -101,17 +104,9 @@
 
 <!-- 主题切换图标：三枚都在 DOM 里，由 shell.css 按当前模式/按钮选项各露一枚 -->
 <template id="tpl-theme-ico">
-  <svg class="ic-theme ic-system" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <rect x="2" y="3.5" width="20" height="13.5" rx="2"/>
-    <path d="M8 20.5h8M12 17v3.5"/>
-  </svg>
-  <svg class="ic-theme ic-sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="4.2"/>
-    <path d="M12 2.4v2.4M12 19.2v2.4M4.2 12H1.8M22.2 12h-2.4M6.5 6.5 4.8 4.8M19.2 19.2l-1.7-1.7M17.5 6.5l1.7-1.7M4.8 19.2l1.7-1.7"/>
-  </svg>
-  <svg class="ic-theme ic-moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M20.5 14.3A8.6 8.6 0 1 1 9.7 3.5a6.8 6.8 0 0 0 10.8 10.8Z"/>
-  </svg>
+  <svg class="ic-theme ic-system" width="17" height="17" data-icon="desktop" aria-hidden="true"></svg>
+  <svg class="ic-theme ic-sun" width="17" height="17" data-icon="sun" aria-hidden="true"></svg>
+  <svg class="ic-theme ic-moon" width="17" height="17" data-icon="moon" aria-hidden="true"></svg>
 </template>
 
 <div id="version-menu" class="version-menu" popover="auto" role="dialog" aria-label="版本与更新">
@@ -119,7 +114,7 @@
   <div class="version-menu-body">
     <div class="version-number"><span data-update-version>—</span><span id="version-current" class="version-current hidden" data-icon="check" aria-label="已是最新版本"></span></div>
     <p class="update-status" data-update-status role="status">尚未检查更新</p>
-    <button id="version-upgrade" type="button" class="btn btn-primary hidden" data-update-about data-icon="download">查看更新</button>
+    <button id="version-upgrade" type="button" class="btn btn-primary hidden" data-update-about data-icon="info">查看更新</button>
     <a class="version-release" data-update-release target="_blank" rel="noopener noreferrer" data-icon="external">查看发布</a>
     <p class="update-error hidden" data-update-error></p>
   </div>
@@ -139,7 +134,7 @@
     <div class="login-field login-password">
       <span class="login-field-icon" data-icon="lock" aria-hidden="true"></span>
       <input id="login-pass" type="password" placeholder="密码" aria-label="密码" autocomplete="current-password" required>
-      <button id="login-password-toggle" class="login-password-toggle" type="button" data-icon="eye-off" aria-label="显示密码" aria-controls="login-pass" data-tip="显示密码"></button>
+      <button id="login-password-toggle" class="login-password-toggle" type="button" data-icon="eye" aria-label="显示密码" aria-controls="login-pass" data-tip="显示密码"></button>
     </div>
     <button type="submit" id="login-btn" class="btn btn-primary" data-icon="login">登录</button>
     <p id="login-error" class="login-error hidden"></p>
@@ -151,15 +146,14 @@
   <!-- 顶栏：仅窄屏出现。☰ 抽屉 + 状态灯/工作空间名（工作台）或页面标题（设置）+ ⋯ 工作空间操作 -->
   <header class="topbar">
     <button id="btn-menu" class="menu-btn" aria-label="打开菜单" aria-expanded="false" aria-controls="sidebar">
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-        <path d="M2.5 4.5h13M2.5 9h13M2.5 13.5h13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-      </svg>
+      <svg width="18" height="18" data-icon="menu" aria-hidden="true"></svg>
     </button>
     <div class="tb-title">
       <span id="tb-led" class="led hidden"></span>
       <span id="tb-ico" class="tb-ico hidden"></span>
       <span id="topbar-title" class="topbar-title"></span>
     </div>
+    <div id="mobile-section" class="mobile-section hidden"><select id="mobile-section-select" aria-label="切换子菜单"></select></div>
     <div id="kebab-wrap" class="kebab-wrap hidden">
       <button id="btn-kebab" class="menu-btn" aria-label="工作空间操作" data-icon="more"></button>
       <div id="kebab-menu" class="kebab-menu hidden">
@@ -181,17 +175,17 @@
         <button id="btn-home" type="button" class="wordmark wordmark-sm side-brand" data-tip="回到工作台首页" aria-label="AGENTBOX 工作台首页"><span class="side-mark"><span data-mark></span></span><span class="side-brand-name">AGENTBOX</span></button>
         <button id="version-badge" type="button" data-icon="info" data-tip="查看版本与更新" class="version-badge hidden" aria-label="版本与更新" aria-haspopup="dialog" aria-expanded="false" aria-controls="version-menu"><span id="version-label">版本</span><span class="version-dot" aria-hidden="true"></span></button>
         <button id="btn-sidebar-toggle" type="button" class="side-collapse" aria-label="收起侧栏" aria-expanded="true" aria-controls="sidebar" data-tip="收起侧栏">
-          <span class="glyph"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18m7-13-4 4 4 4"/></svg></span>
+          <span class="glyph"><svg width="18" height="18" data-icon="panel-left" aria-hidden="true"></svg></span>
         </button>
         <button id="btn-sidebar-close" type="button" class="side-close" aria-label="关闭菜单">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>
+          <svg width="18" height="18" data-icon="close" aria-hidden="true"></svg>
         </button>
       </div>
 
       <div class="side-create">
-        <button id="btn-new" class="side-new" aria-label="新建工作空间" data-tip="新建工作空间">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-          <span class="side-item-label">新建工作空间</span>
+        <button id="btn-new" class="btn btn-primary side-new" aria-label="新建工作空间" data-tip="新建工作空间">
+          <svg width="18" height="18" data-icon="plus" aria-hidden="true"></svg>
+          <span class="side-item-label action-label">新建工作空间</span>
         </button>
       </div>
 
@@ -209,22 +203,13 @@
               <span id="conn-text" class="conn-text mono">连接中…</span>
             </div>
             <button id="btn-usagelog" aria-label="使用记录" data-tip="使用记录" class="side-item side-tool"><span class="glyph">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 3v16a2 2 0 0 0 2 2h16"/>
-                <path d="M7 15l3.5-4 3 2.5L20 7"/>
-              </svg>
+              <svg width="17" height="17" data-icon="list" aria-hidden="true"></svg>
             </span><span class="side-item-label">使用记录</span></button>
             <button id="btn-tunnel" aria-label="内网隧道" data-tip="内网隧道" class="side-item side-tool hidden"><span class="glyph">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-              </svg>
+              <svg width="17" height="17" data-icon="link" aria-hidden="true"></svg>
             </span><span class="side-item-label">内网隧道</span><span id="tunnel-state" class="tunnel-state mono"><span id="tunnel-dot" class="t-dot"></span><span id="tunnel-text">离线</span></span></button>
             <button id="btn-settings" aria-label="系统设置" data-tip="系统设置" class="side-item side-tool"><span class="glyph">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="3.2"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
-              </svg>
+              <svg width="17" height="17" data-icon="settings" aria-hidden="true"></svg>
             </span><span class="side-item-label">系统设置</span></button>
           </div>
         </nav>
@@ -236,15 +221,14 @@
           </div>
           <button type="button" class="side-item side-tool side-theme-cycle" data-theme-cycle aria-label="切换主题"><span class="glyph" data-theme-ico></span></button>
           <button id="btn-user-menu" type="button" class="side-item side-tool side-user" aria-label="用户菜单" aria-haspopup="dialog" aria-expanded="false" aria-controls="sidebar-user-menu">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
+            <svg width="18" height="18" data-icon="user" aria-hidden="true"></svg>
           </button>
           <div id="sidebar-user-menu" class="side-user-menu" role="dialog" aria-label="当前用户" aria-describedby="sidebar-user-name sidebar-user-role" tabindex="-1" inert>
             <div class="side-user-info"><span id="sidebar-user-name" class="side-user-name"></span><span id="sidebar-user-role" class="side-user-role"></span></div>
             <div id="my-quota" class="my-quota hidden" tabindex="0"><span class="mq-label">余额</span><span id="my-quota-num" class="mq-num mono">—</span></div>
-            <button id="btn-git-profile" type="button" class="btn btn-sm btn-ghost" data-icon="commit">我的 Git 身份</button>
-            <button id="btn-git-connections" type="button" class="btn btn-sm btn-ghost" data-icon="key">Git 连接</button>
+            <button id="btn-git-management" type="button" class="btn btn-sm btn-ghost" data-icon="branch">Git 管理</button>
             <button id="btn-logout" type="button" class="side-logout"><span class="glyph">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v9"/><path d="M18.36 7.64a9 9 0 1 1-12.73 0"/></svg>
+              <svg width="17" height="17" data-icon="logout" aria-hidden="true"></svg>
             </span><span>退出登录</span></button>
           </div>
         </div>
@@ -269,7 +253,7 @@
               <h1 id="wb-name"></h1>
               <span id="wb-meta" class="wb-meta mono"></span>
             </div>
-            <div class="wb-actions">
+            <div class="wb-actions action-tools">
               <button id="btn-start" class="btn btn-sm btn-ico" aria-label="启动工作空间" data-tip="启动工作空间">启动</button>
               <button id="btn-stop" class="btn btn-sm btn-ico" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话">停止</button>
               <button id="btn-usage" class="btn btn-sm btn-ico hidden" data-tip="查看该账号的订阅额度">额度</button>
@@ -279,25 +263,15 @@
 
           <nav class="tabs">
             <button class="tab active" data-tab="chat">
-              <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-              </svg><span class="t">对话</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="message" aria-hidden="true"></svg><span class="t">对话</span></button>
             <button class="tab" data-tab="term">
-              <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-              </svg><span class="t">终端</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="tool" aria-hidden="true"></svg><span class="t">终端</span></button>
             <button class="tab" data-tab="files">
-              <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-              </svg><span class="t">文件</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="folder" aria-hidden="true"></svg><span class="t">文件</span></button>
             <button class="tab" data-tab="changes">
-              <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7"/><circle cx="18" cy="7" r="2.5"/><path d="M18 9.5c0 5-6 3-6 6.5"/>
-              </svg><span class="t">变更</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="branch" aria-hidden="true"></svg><span class="t">变更</span></button>
             <button class="tab" data-tab="skills" id="tab-btn-skills">
-              <svg class="tab-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M11 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/>
-              </svg><span class="t">技能</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="sparkles" aria-hidden="true"></svg><span class="t">技能</span></button>
           </nav>
 
           <!-- 对话 -->
@@ -310,9 +284,9 @@
               <button id="chat-network" type="button" class="chat-network hidden" aria-label="内网状态，查看连接详情">
                 <span class="chat-network-dot" aria-hidden="true"></span>
                 <span>内网</span><span id="chat-network-status" class="chat-network-status">离线</span>
-                <svg class="chat-network-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                <svg class="chat-network-arrow" width="12" height="12" data-icon="chevron-right" aria-hidden="true"></svg>
               </button>
-              <button id="btn-thread-new" class="thread-new" data-tip="在当前工作空间中新建对话，原对话保留在历史中" data-icon="plus">新建对话</button>
+              <button id="btn-thread-new" class="btn thread-new" data-tip="在当前工作空间中新建对话，原对话保留在历史中" data-icon="plus">新建对话</button>
             </div>
             <!-- 对话通道连接状态：仅在非正常连接时出现，避免占用常态空间 -->
             <div id="chat-conn" class="chat-conn hidden">
@@ -347,23 +321,17 @@
             <div class="composer-wrap">
               <button id="chat-scroll-bottom" class="chat-scroll-bottom" type="button"
                 data-tip="滚动到最新消息" aria-label="滚动到最新消息" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                  <path d="M9 3.75v10.5m-4-4 4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+                <svg width="18" height="18" data-icon="arrow-down" aria-hidden="true"></svg>
               </button>
               <div class="composer">
                 <div id="chat-attach" class="chat-attach hidden"></div>
                 <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）"></textarea>
                 <div class="composer-bar">
                   <button id="btn-attach" class="icon-btn" aria-label="添加附件" data-tip="添加附件（图片或文件，48 小时后过期）">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l10-10a4 4 0 0 1 5.66 5.66L9.41 17.41a2 2 0 0 1-2.83-2.83l9.2-9.19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
+                    <svg width="18" height="18" data-icon="paperclip" aria-hidden="true"></svg>
                   </button>
                   <button id="btn-voice" class="icon-btn" aria-label="语音输入" data-tip="语音输入：点击说话，再点一次停止并发送">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
+                    <svg width="18" height="18" data-icon="mic" aria-hidden="true"></svg>
                   </button>
                   <input id="attach-input" type="file" multiple class="hidden">
                   <div id="picker" class="picker">
@@ -372,12 +340,8 @@
                     <div id="pick-fly" class="pick-fly hidden"></div>
                   </div>
                   <button id="chat-send" class="send-btn" aria-label="发送" data-tip="发送">
-                    <svg class="ic-send" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M22 2 11 13M22 2l-7 20-4-9-9-4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <svg class="ic-stop" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
-                      <rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/>
-                    </svg>
+                    <svg class="ic-send" width="17" height="17" data-icon="send" aria-hidden="true"></svg>
+                    <svg class="ic-stop" width="17" height="17" data-icon="stop" aria-hidden="true"></svg>
                   </button>
                 </div>
               </div>
@@ -389,9 +353,7 @@
             <div class="term-bar">
               <!-- 左侧提示轮播：条目与频率/动画在系统设置「界面与提示」里配置，term.js 驱动 -->
               <div id="term-tip-wrap" class="term-tip-wrap hidden">
-                <svg class="term-tip-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M9 18h6M10 22h4M15.09 14c.18-.64.66-1.14 1.16-1.64A6 6 0 1 0 7.75 12.36c.48.47.97.99 1.16 1.64Z"/>
-                </svg>
+                <svg class="term-tip-icon" width="15" height="15" data-icon="bulb" aria-hidden="true"></svg>
                 <div id="term-tips" class="term-tips" aria-live="off"></div>
               </div>
               <!-- 本空间已花：对话 + 终端 + 起标题的总和，term.js 轮询 -->
@@ -400,11 +362,8 @@
               <div class="term-conn">
                 <span id="term-conn-dot" class="t-dot"></span>
                 <span id="term-state" class="term-state mono"></span>
-                <button id="term-reconnect" class="term-reconnect" type="button" data-tip="重新连接" aria-label="重新连接">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
-                    <polyline points="21 3 21 8 16 8"/>
-                  </svg>
+                <button id="term-reconnect" class="btn term-reconnect" type="button" data-tip="重新连接" aria-label="重新连接">
+                  <svg width="1.9" height="1.9" data-icon="refresh" aria-hidden="true"></svg>
                 </button>
               </div>
             </div>
@@ -431,10 +390,7 @@
                 <button type="button" data-term-key="-">-</button>
               </div>
               <button type="button" id="term-keyboard" aria-label="显示或收起键盘">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-                  <rect x="2" y="4" width="20" height="14" rx="2"/>
-                  <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 11h.01M10 11h.01M14 11h.01M18 11h.01M7 14h10M9 21h6"/>
-                </svg>
+                <svg width="22" height="22" data-icon="keyboard" aria-hidden="true"></svg>
               </button>
             </fieldset>
             <div id="term-overlay" class="term-overlay hidden">
@@ -448,7 +404,7 @@
               <div class="files-left">
                 <div class="scope-switch" role="tablist">
                   <button id="scope-ws" class="scope-btn active" data-icon="folder">空间文件</button>
-                  <button id="scope-shared" class="scope-btn" data-icon="users">共享目录</button>
+                  <button id="scope-shared" class="scope-btn" data-icon="folder-shared">共享目录</button>
                   <span class="help" tabindex="0" aria-label="共享目录说明">?
                     <span class="help-tip" role="tooltip">
                       <b>空间文件</b>（<code>/workspace</code>）仅属于当前工作空间。<br>
@@ -459,7 +415,7 @@
                 </div>
                 <div id="files-crumb" class="files-crumb mono"></div>
               </div>
-              <div class="files-actions">
+              <div class="files-actions action-tools">
                 <label class="check"><input type="checkbox" id="upload-clear"> <span id="upload-clear-label">上传前清空空间文件</span></label>
                 <button id="btn-mkdir" class="btn btn-sm" data-icon="folder-plus" data-tip="新建文件夹">新建</button>
                 <button id="btn-upload" class="btn btn-sm" data-icon="upload" data-tip="上传代码包">上传</button>
@@ -482,9 +438,9 @@
             <div class="changes-bar">
               <select id="changes-repo" class="changes-repo mono hidden" aria-label="仓库"></select>
               <div id="changes-branch" class="changes-branch mono"></div>
-              <div class="changes-actions">
-                <button id="btn-changes-clone" class="btn btn-sm" data-icon="download" data-tip="克隆远程仓库到当前空间">克隆</button>
-                <button id="btn-changes-profile" class="btn btn-sm btn-ghost" data-icon="commit">Git 身份</button>
+              <div class="changes-actions action-tools">
+                <button id="btn-changes-clone" class="btn btn-sm" data-icon="git-clone" data-tip="克隆远程仓库到当前空间">克隆</button>
+                <button id="btn-changes-profile" class="btn btn-sm btn-ghost" data-icon="user">Git 身份</button>
                 <button id="btn-changes-branches" class="btn btn-sm" disabled data-icon="branch" data-tip="管理 Git 分支">分支</button>
                 <button id="btn-changes-remote" class="btn btn-sm" disabled data-icon="network">远程</button>
                 <button id="btn-changes-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
@@ -492,11 +448,12 @@
                 <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled data-icon="commit" data-tip="将当前改动提交到本地">提交</button>
               </div>
             </div>
-            <div id="changes-remote-state" class="changes-remote-state hidden" aria-live="polite"></div>
+            <details id="changes-remote-state" class="changes-remote-state hidden"><summary id="changes-tracking"></summary><div id="changes-remote-detail"></div></details>
             <div class="changes-body">
               <div id="changes-list" class="changes-list"></div>
               <div class="changes-view">
                 <div id="changes-view-bar" class="changes-view-bar hidden">
+                  <button id="changes-back" class="btn btn-sm mobile-only" data-icon="arrow-left" aria-label="返回文件列表" data-tip="返回文件列表"></button>
                   <span id="changes-view-path" class="mono"></span>
                   <div class="changes-view-tabs">
                     <button type="button" id="btn-view-diff" class="seg" data-icon="diff">差异</button>
@@ -514,7 +471,7 @@
               <div class="skills-left">
                 <div class="scope-switch" role="tablist">
                   <button id="skill-scope-session" class="scope-btn active" data-icon="box">本空间</button>
-                  <button id="skill-scope-template" class="scope-btn" data-icon="users">我的模板</button>
+                  <button id="skill-scope-template" class="scope-btn" data-icon="template">我的模板</button>
                   <span class="help" tabindex="0" aria-label="技能范围说明">?
                     <span class="help-tip" role="tooltip">
                       <b>本空间</b>的技能仅供当前工作空间使用。<br>
@@ -525,9 +482,9 @@
                 </div>
                 <div id="skills-count" class="skills-count"></div>
               </div>
-              <div class="skills-actions">
+              <div class="skills-actions action-tools">
                 <button id="btn-skills-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
-                <button id="btn-skill-install" class="btn btn-sm btn-primary" data-icon="plus" data-tip="安装技能到当前范围">安装</button>
+                <button id="btn-skill-install" class="btn btn-sm btn-primary" data-icon="package-plus" data-tip="安装技能到当前范围">安装</button>
                 <input id="skill-install-input" type="file" class="hidden" accept=".md,.zip,.tar,.tgz,.gz">
               </div>
             </div>
@@ -545,6 +502,22 @@
               <span class="wb-busy-text"><span id="wb-busy-label">正在启动</span><span class="wb-busy-dots" aria-hidden="true"></span></span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- 个人 Git 管理：与系统设置同级，普通用户也可进入 -->
+      <div id="view-git" class="view hidden">
+        <header class="set-head">
+          <h1>Git 管理</h1>
+          <p>管理你的提交身份和仓库连接，在多个工作空间复用。</p>
+        </header>
+        <div class="set-body">
+          <nav id="git-nav" class="set-nav" aria-label="Git 管理分区">
+            <button data-git-sec="guide" data-icon="info">使用指南</button>
+            <button data-git-sec="profile" data-icon="user">提交身份</button>
+            <button data-git-sec="connections" data-icon="link">仓库连接</button>
+          </nav>
+          <div id="git-content" class="set-content" tabindex="-1"></div>
         </div>
       </div>
 
@@ -588,7 +561,7 @@
                   <h2>IP 代理</h2>
                   <p>账号级别的出口代理池。账号绑定其中一个后，它的全部官方请求——容器里 agent 发的，以及服务端代发的登录与探测——都从这个 IP 出去。在「账号池 → 编辑」里绑定。</p>
                 </div>
-                <div class="px-head-actions">
+                <div class="px-head-actions action-tools">
                   <button id="btn-proxy-reload" class="btn btn-sm btn-ghost" data-icon="refresh">刷新</button>
                   <button id="btn-proxy-import" class="btn btn-sm btn-ghost" data-icon="upload">导入</button>
                   <button id="btn-proxy-export" class="btn btn-sm btn-ghost" data-icon="download">导出</button>
@@ -751,7 +724,7 @@
                   <p>按 token 折算费用的单价，美元 / 百万 token。<b>只用于 provider 不自报价格的消耗</b>：Codex 的全部回合，以及从 CLI 记录里补记的终端消耗。网页对话里 Claude 自报价格的行不查这张表。查不到价的行记为「未定价」，只记用量、不扣额度。</p>
                   <p class="sec-hint">键可以是<b>模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b>agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p>
                 </div>
-                <div class="sec-actions">
+                <div class="sec-actions action-tools">
                   <button id="price-refresh" class="btn btn-sm" data-icon="refresh" data-tip="重新读取当前生效价目表">读取</button>
                   <button id="price-check" class="btn btn-sm" data-icon="download" data-tip="检查远程价目目录更新">检查</button>
                   <button id="price-save" class="btn btn-sm btn-primary" data-icon="save" data-tip="保存价目表">保存</button>
@@ -1075,12 +1048,12 @@
               <div class="uf-item uf-date">
                 <span>时间范围</span>
                 <button type="button" id="uf-date-range" class="date-range-trigger">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18m-14 5h3m4 0h3"/></svg>
+                  <svg width="1.6" height="1.6" data-icon="calendar" aria-hidden="true"></svg>
                   <span data-range-label>当天</span>
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+                  <svg width="1.6" height="1.6" data-icon="chevron" aria-hidden="true"></svg>
                 </button>
               </div>
-              <div class="uf-actions">
+              <div class="uf-actions action-tools">
                 <button id="uf-reset" class="btn btn-ghost btn-sm" data-icon="undo">重置</button>
                   <button id="uf-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
                   <button id="uf-export" class="btn btn-sm" data-icon="download" data-tip="导出当前筛选范围的 CSV">导出</button>
@@ -1110,10 +1083,10 @@
                         <span class="u-sort-btns">
                           <button type="button" id="usage-sort-asc" class="u-sort-b asc"
                                   aria-pressed="false" data-tip="正序：最早的在最前"
-                                  aria-label="按时间正序排列"></button>
+                                  aria-label="按时间正序排列" data-icon="chevron-up"></button>
                           <button type="button" id="usage-sort-desc" class="u-sort-b desc on"
                                   aria-pressed="true" data-tip="倒序：最新的在最前"
-                                  aria-label="按时间倒序排列"></button>
+                                  aria-label="按时间倒序排列" data-icon="chevron"></button>
                         </span>
                       </span>
                     </th>
@@ -1142,11 +1115,11 @@
             </div>
             <nav class="usage-page-nav" aria-label="使用记录分页">
               <button type="button" id="usage-prev" class="usage-page-button" aria-label="上一页" disabled>
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m10 3-5 5 5 5"/></svg>
+                <svg width="1.5" height="1.5" data-icon="chevron-left" aria-hidden="true"></svg>
               </button>
               <div id="usage-pages" class="usage-page-numbers"></div>
               <button type="button" id="usage-next" class="usage-page-button" aria-label="下一页" disabled>
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>
+                <svg width="1.5" height="1.5" data-icon="chevron-right" aria-hidden="true"></svg>
               </button>
             </nav>
           </footer>
@@ -1193,7 +1166,7 @@
             <p>隧道功能未启用。启用后，你可以在自己的电脑上运行 abox-link 客户端，
             让云端容器里的智能体访问「只有你本机能连」的内网（公司内网、局域网设备、本地数据库）。</p>
             <div>
-                  <button id="tun-goto-settings" class="btn btn-primary btn-sm" data-icon="sliders" data-tip="前往系统设置启用内网隧道">设置</button>
+                  <button id="tun-goto-settings" class="btn btn-primary btn-sm" data-icon="settings" data-tip="前往系统设置启用内网隧道">设置</button>
             </div>
           </div>
 
@@ -1268,9 +1241,9 @@
     <header class="fv-head">
       <div class="fv-title">
         <span id="fv-name" class="fv-name mono"></span>
-        <span id="fv-meta" class="fv-meta mono"></span>
+        <span id="fv-state" class="fv-state mono" role="status"></span>
       </div>
-      <div class="fv-actions">
+      <div class="fv-actions action-tools">
         <div id="fv-modes" class="scope-switch hidden" role="tablist" aria-label="查看方式">
           <button type="button" id="fv-mode-view" class="scope-btn active" data-icon="eye">预览</button>
           <button type="button" id="fv-mode-src" class="scope-btn" data-icon="code">源码</button>
@@ -1286,11 +1259,13 @@
         <button id="fv-reload" class="btn btn-sm hidden" data-icon="refresh">刷新</button>
         <button id="fv-newtab" class="btn btn-sm hidden" data-tip="在新标签页打开预览" data-icon="external">新标签页</button>
         <button id="fv-full" class="btn btn-sm hidden" data-tip="铺满窗口" data-icon="expand">全屏</button>
-        <span id="fv-state" class="fv-state mono"></span>
+
         <button id="fv-save" class="btn btn-sm btn-primary" disabled data-icon="save">保存</button>
         <button id="fv-download" class="btn btn-sm" data-icon="download">下载</button>
-        <button id="fv-close" class="dlg-x" aria-label="关闭" data-tip="关闭" data-icon="close"></button>
+
       </div>
+      <button id="fv-close" class="dlg-x" aria-label="关闭" data-tip="关闭" data-icon="close"></button>
+      <div id="fv-meta" class="fv-meta mono"></div>
     </header>
     <div class="fv-body">
       <div id="fv-source" class="fv-source hidden">
@@ -1330,7 +1305,7 @@
   <div class="file-move-nav">
     <div class="scope-switch" role="tablist" aria-label="目标范围">
       <button type="button" id="file-move-ws" class="scope-btn" data-icon="folder">空间文件</button>
-      <button type="button" id="file-move-shared" class="scope-btn" data-icon="users">共享目录</button>
+      <button type="button" id="file-move-shared" class="scope-btn" data-icon="folder-shared">共享目录</button>
     </div>
     <div id="file-move-crumb" class="file-move-crumb mono"></div>
   </div>
@@ -1391,7 +1366,7 @@
   <div class="skill-src-bar">
     <div class="scope-switch" role="tablist">
       <button type="button" id="skill-src-local" class="scope-btn active" data-icon="upload">本地上传</button>
-      <button type="button" id="skill-src-market" class="scope-btn" data-icon="box">官方市场</button>
+      <button type="button" id="skill-src-market" class="scope-btn" data-icon="store">官方市场</button>
     </div>
     <span class="skill-target">装到：<b id="skill-install-target">本空间</b></span>
   </div>

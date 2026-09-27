@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { responsiveSmoke } from './test-responsive.mjs';
 import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
@@ -24,7 +25,7 @@ export async function smoke(page) {
  });
  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
  const base = `http://127.0.0.1:${server.address().port}`;
- const errors = []; page.on('pageerror', e => errors.push(e.message));
+ const errors = []; page.on('pageerror', e => { errors.push(e.stack || e.message); console.error('Browser page error:', e.stack || e.message); });
  let settingsWrites = 0, monitorCalls = 0, updateChecks = 0, updateReads = 0;
  let release = {current_version:'v0.1.0-rc.2-updates2',revision:'0123456789abcdef',built_at:'2026-09-24T08:00:00Z',latest_version:'',available:false,comparable:true,release_url:'https://github.com/devilcoolyue/agentbox-releases/releases',notes:'',checked_at:0,attempted_at:0,error:''};
  let nextRelease = {latest_version:'v0.2.0',available:true,notes:'新增版本提醒。\n<script>untrusted release notes</script>'};
@@ -48,6 +49,9 @@ export async function smoke(page) {
   if (path === '/api/login') body={token:'synthetic-browser-token'};
   else if(path === '/api/me') body=me;
   else if(path === '/api/git/connections') body=[];
+  else if(path === '/api/me/git') body={user:'fixture',name:'Fixture',email:'fixture@example.com'};
+  else if(path === '/api/proxies') body={proxies:[],bridge_up:false,bridge_host:'127.0.0.1'};
+  else if(path === '/api/pricing') body={active:{revision:'1',prices:{},managed:{},history:[],catalog:{url:'',auto_check:false}},candidate:null,changes:[],warnings:[]};
   else if(path === '/api/me/git/default') body={connection_id:''};
   else if(path === '/api/updates') { updateReads++; body=release; }
   else if(path === '/api/updates/check') {
@@ -92,10 +96,12 @@ export async function smoke(page) {
   await page.locator('#login-user').fill('fixture');await page.locator('#login-pass').fill('fixture-password');
   const password = page.locator('#login-pass'), reveal = page.locator('#login-password-toggle');
   assert.equal(await password.getAttribute('type'),'password');
+  assert.equal(await reveal.getAttribute('data-icon'),'eye','hidden password offers the reveal action');
   assert.equal(await page.locator('.login-field-icon .ui-icon').count(),2);
   await reveal.click();
   assert.equal(await password.getAttribute('type'),'text');
   assert.equal(await reveal.getAttribute('aria-label'),'隐藏密码');
+  assert.equal(await reveal.getAttribute('data-icon'),'eye-off','visible password offers the hide action');
   assert.equal(await password.inputValue(),'fixture-password');
   assert.equal(await page.locator('#login').isVisible(),true,'reveal must not submit login');
   await reveal.press('Space');
@@ -475,6 +481,7 @@ export async function smoke(page) {
   sessions = [];
   await page.reload();
   await at('#/','#empty'); // Deleted or inaccessible workspace.
+  await responsiveSmoke(page, base);
   await pricingSmoke(page);
   const checksBeforeUser=updateChecks, readsBeforeUser=updateReads;
   me.role = 'user';

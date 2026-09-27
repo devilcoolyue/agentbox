@@ -1,24 +1,21 @@
+import { createGitSurface } from "./git-surface.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { toast } from "./util.js";
-import { decorateIcons } from "./icons.js";
 let active = null;
 export function openGitShares(c, saved) {
     if (S.role !== "admin" || active)
         return;
-    const token = S.token, d = document.createElement("dialog");
-    active = d;
-    d.id = "dlg-git-shares";
-    d.className = "dlg-git-connections";
-    d.innerHTML = `<div class="dlg-head"><h2></h2><button class="dlg-x" data-close aria-label="关闭" data-icon="close"></button></div>
+    const token = S.token, d = createGitSurface(c.label + " · 使用授权", `
  <p class="field-hint">仅对明确选中的用户开放连接。只读用户不能推送或创建 PR/MR；连接本身设为只读时，所有用户都只读。私钥和 Token 不向用户提供，个人 OAuth 不共享。</p>
  <p class="field-hint">撤权阻止后续请求，已经发到上游的操作可能继续完成。用户使用各自隧道，不会借用管理员内网。</p>
- <div data-users>读取用户中…</div><p data-error role="alert" class="login-error"></p><div class="dlg-actions"><button class="btn btn-primary" data-save disabled data-icon="save" data-tip="保存 Git 连接的用户使用授权">保存</button></div>`;
+ <div data-users>读取用户中…</div><p data-error role="alert" class="login-error"></p><div class="dlg-actions"><button class="btn btn-primary" data-save disabled data-icon="save" data-tip="保存 Git 连接的用户使用授权">保存</button></div>`);
+    active = d;
+    d.id = "dlg-git-shares";
     d.querySelector("h2").textContent = c.label + " · 使用授权";
     const error = d.querySelector("[data-error]"), save = d.querySelector("[data-save]"), close = d.querySelector("[data-close]");
     let revision = 0, busy = false;
     const picks = new Map();
-    close.addEventListener("click", () => d.close());
     d.addEventListener("cancel", e => { if (busy)
         e.preventDefault(); });
     d.addEventListener("close", () => { active = null; d.remove(); });
@@ -51,9 +48,6 @@ export function openGitShares(c, saved) {
             save.disabled = close.disabled = false;
         }
     });
-    document.body.append(d);
-    decorateIcons(d);
-    d.showModal();
     void Promise.all([api("/users"), api(`/git/connections/${c.id}/shares`)]).then(([users, access]) => {
         if (!d.open || token !== S.token)
             return;

@@ -6,14 +6,15 @@ const $ = (id) => document.getElementById(id);
 
 // This panel is embedded in its own binary, so its small icon set is standalone.
 const actionIcons = {
-  link: "M10 13a5 5 0 0 0 7 .5l3-3a5 5 0 0 0-7-7L11 5M14 11a5 5 0 0 0-7-.5l-3 3a5 5 0 0 0 7 7l2-1.5",
-  plus: "M12 5v14M5 12h14",
-  play: "M6.5 3.5 20 12 6.5 20.5Z",
-  stop: "M5.5 5.5h13v13h-13Z",
-  close: "m6 6 12 12M6 18 18 6",
-  undo: "M9 4 4 9l5 5M4 9h10a6 6 0 0 1 0 12",
-  save: "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2ZM7 3v6h10V3M7 21v-8h10v8",
-  trash: "M3 6h18M8 6V3h8v3M5.5 6l1 14.5h11L18.5 6",
+  "link": "m10 13 4-4M8 16l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0m2 8a3.5 3.5 0 0 0 5 0l4-4a3.5 3.5 0 0 0-5-5l-1 1",
+  "plus": "M12 5v14M5 12h14",
+  "play": "M6.5 3.5 20 12 6.5 20.5Z",
+  "stop": "M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z",
+  "close": "m6 6 12 12M6 18 18 6",
+  "undo": "M9 4 4 9l5 5M4 9h10a6 6 0 0 1 0 12",
+  "save": "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2ZM7 3v6h10V3M7 21v-8h10v8",
+  "trash": "M3 6h18M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6M5.5 6l1 14.5h11L18.5 6",
+  "unlink": "m9 15-2 2a3.5 3.5 0 0 1-5-5l2-2m11-1 2-2a3.5 3.5 0 0 1 5 5l-2 2M3 3l18 18M9 3v3M3 9h3m12 0h3m-12 9v3",
 };
 function actionLabel(button, label, icon) {
   const ns = "http://www.w3.org/2000/svg";

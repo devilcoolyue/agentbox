@@ -40,7 +40,7 @@ export function openGitBranches(repo:string,refreshed:()=>Promise<void>){
  }
  async function act(action:string,b?:GitBranch){
   if(!data)return;const state=data.state;
-  if(action==="delete"&&!await askConfirm(`删除本地分支「${b!.name}」？`,{title:"删除本地分支",hint:"仅删除已合并分支，不删除远程分支，不允许强制删除。",danger:true,okLabel:"删除"}))return;
+  if(action==="delete"&&!await askConfirm(`删除本地分支「${b!.name}」？`,{title:"删除本地分支",hint:"仅删除已合并分支，不删除远程分支，不允许强制删除。",danger:true,okLabel:"删除", icon: "trash"}))return;
   const base=data.branches.find(branch=>(branch.remote?"refs/remotes/":"refs/heads/")+branch.name===start.value);
   await gitRequest(prefix+"/branches",{repo,action,name:b?.name||(form.elements.namedItem("name") as HTMLInputElement).value.trim(),expected_head:state.head,expected_branch:state.branch,target_head:b?.head||base?.head||"",start:action==="create"?start.value:""},d);
   toast("分支操作已完成");if(action==="create")(form.elements.namedItem("name") as HTMLInputElement).value="";

@@ -1,0 +1,47 @@
+/* Personal Git management shares the settings navigation and theme tokens. */
+#git-content { padding-right: 8px; }
+#git-content:focus, .git-surface:focus { outline: none; }
+.git-covered { display: none !important; }
+.git-surface, .git-guide { max-width: 920px; font-size: 13px; line-height: 1.7; }
+.git-surface h2, .git-guide h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.git-surface h3, .git-guide h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.git-surface p, .git-guide p { overflow-wrap: anywhere; }
+.git-surface > .sec-intro { margin-bottom: 20px; }
+.git-surface form { display: flex; flex-direction: column; gap: 16px; max-width: 680px; }
+.git-surface fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 16px; }
+.git-surface label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 13px; }
+.git-surface label.check { flex-direction: row; align-items: center; }
+.git-surface :is(input, textarea, select, .select-trigger) { width: 100%; }
+.git-surface input[type="checkbox"] { width: auto; }
+.git-surface textarea { resize: vertical; }
+.git-surface pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.git-surface .field-hint { margin: 0; }
+.git-surface .git-connection-row .field-hint { margin: 6px 0 12px; white-space: pre-line; }
+.git-surface .git-connection-row strong { overflow-wrap: anywhere; }
+.git-surface .login-error:empty { display: none; }
+.git-surface .dlg-actions { justify-content: flex-start; }
+.git-note { padding: 12px 16px; margin: 18px 0; border-left: 2px solid var(--amber-dim); background: var(--panel); color: var(--muted); font-size: 12.5px; }
+.git-empty { padding: 36px 0; }
+.git-empty p { color: var(--muted); margin: 8px 0 0; }
+.git-steps { list-style: none; counter-reset: git-step; padding: 0; margin: 24px 0 32px; }
+.git-steps li { counter-increment: git-step; display: flex; gap: 18px; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.git-steps li::before { content: "0" counter(git-step); font: 16px var(--mono); color: var(--amber); padding-top: 2px; }
+.git-steps p { color: var(--muted); margin: 6px 0 12px; max-width: 60em; }
+.git-guide-section { margin-top: 28px; }
+.git-methods { margin: 12px 0 0; }
+.git-methods > div { display: grid; grid-template-columns: 160px 1fr; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.git-methods dt { font-weight: 600; }
+.git-methods dt span { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+.git-methods dd { color: var(--muted); margin: 0; }
+.git-guide details { border-bottom: 1px solid var(--line); }
+.git-guide summary { cursor: pointer; padding: 14px 0; font-weight: 500; }
+.git-guide summary:hover { color: var(--amber); }
+.git-guide details p { color: var(--muted); margin: 0 0 16px; }
+.git-guide code { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  #git-content { padding-right: 0; }
+  #git-nav { flex-wrap: nowrap; overflow-x: auto; }
+  .git-methods > div { grid-template-columns: 1fr; gap: 6px; }
+  .git-methods dt span { display: inline; margin-left: 8px; }
+  .git-steps li { gap: 12px; }
+}

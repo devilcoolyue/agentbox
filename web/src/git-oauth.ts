@@ -1,17 +1,12 @@
+import { createGitSurface } from "./git-surface.js";
 import { api } from "./api.js";
-import { S, bus } from "./state.js";
-import { enhanceSelects, setSelectValue } from "./select.js";
+import { S } from "./state.js";
+import { setSelectValue } from "./select.js";
 import { toast } from "./util.js";
 import type { GitOAuthApp, GitConnection } from "./types.js";
-import { actionButton, decorateIcons } from "./icons.js";
+import { actionButton } from "./icons.js";
 
-const dialogs=new Set<HTMLDialogElement>();
-function modal(title:string,markup:string){
- const d=document.createElement("dialog");d.className="dlg-git-connections";
- d.innerHTML=`<div class="dlg-head"><h2></h2><button type="button" class="dlg-x" data-close aria-label="关闭" data-icon="close"></button></div>`+markup;
- d.querySelector("h2")!.textContent=title;d.querySelector("[data-close]")!.addEventListener("click",()=>d.close());
- d.addEventListener("close",()=>{dialogs.delete(d);d.remove();});dialogs.add(d);document.body.append(d);decorateIcons(d);enhanceSelects(d);d.showModal();return d;
-}
+const modal = createGitSurface;
 function option(value:string,textContent:string){return Object.assign(document.createElement("option"),{value,textContent});}
 export function openGitOAuth(connection?:GitConnection){
  const token=S.token,d=modal("授权 GitHub / GitLab",`<form><label>服务<select name="app" disabled></select></label>
@@ -91,4 +86,3 @@ function editApp(app:GitOAuthApp|null,done:()=>Promise<void>){
   finally{busy=false;save.disabled=close.disabled=false;}
  });
 }
-bus.addEventListener("signed-out",()=>{for(const d of dialogs)d.close();});

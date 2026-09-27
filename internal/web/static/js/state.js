@@ -24,6 +24,7 @@ export const S = {
     current: null,
     view: "work",
     sec: "accounts",
+    gitSec: "guide",
     tab: "chat",
     termWS: null,
     termWSGen: 0,

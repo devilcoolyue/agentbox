@@ -150,6 +150,28 @@ export async function smoke(page) {
   assert.equal(await page.evaluate(()=>window.previewInjected),undefined);
   await page.locator('#fv-mode-view').click();
   assert.equal(await page.locator('#fv-mdwrap').isVisible(),true);
+  for (const width of [360,390,430,768,1280,1440]) {
+   await page.setViewportSize({width,height:900});
+   for (const theme of ['dark','light']) {
+    await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+    assert.ok(await page.locator('.fv-head').evaluate(e=>e.scrollWidth<=e.clientWidth),'preview toolbar overflow');
+    if(width<=760) {
+     assert.ok((await page.locator('.fv-head').boundingBox()).height<=124,'mobile preview header too tall');
+     await page.locator('#fv-more').click();
+     assert.equal(await page.locator('#fv-download').isVisible(),true);
+     assert.equal(await page.locator('#fv-auto').isVisible(),true);
+     await page.locator('#fv-auto').uncheck();
+     await page.keyboard.press('Escape');
+     assert.equal(await page.locator('#dlg-file').isVisible(),true,'Escape in menu closed preview');
+     await page.locator('#fv-more').click();
+     assert.equal(await page.locator('#fv-auto').isChecked(),false);
+     await page.locator('#fv-auto').check();
+     await page.locator('#fv-name').click();
+     assert.equal(await page.locator('#fv-more-panel').isVisible(),false);
+    }
+    await page.screenshot({animations:'disabled',path:`output/playwright/responsive-preview-${width}-${theme}.png`});
+   }
+  }
   await close();
   await open('large.json','{\n'+ '  "value": 1,\n'.repeat(20000)+'}\n');
   assert.match(await page.locator('#fv-language').innerText(),/已简化着色/);
