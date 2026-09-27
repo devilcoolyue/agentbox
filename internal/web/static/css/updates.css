@@ -21,6 +21,7 @@
   transition: background .16s ease, color .16s ease;
 }
 #version-label { overflow: hidden; text-overflow: ellipsis; }
+.version-badge > .ui-icon { width: 12px; height: 12px; }
 .version-badge:hover { color: var(--text); border-color: var(--line); }
 .version-badge.has-update { color: var(--amber); border-color: var(--amber-dim); background: color-mix(in srgb, var(--amber) 17%, var(--panel)); }
 .version-dot { display: none; width: 5px; height: 5px; border-radius: 50%; background: var(--amber); flex: none; }

@@ -2,11 +2,12 @@ import { api } from "./api.js";
 import { refreshAll } from "./data.js";
 import { enhanceSelects, setSelectValue } from "./select.js";
 import { toast } from "./util.js";
+import { actionButton, decorateIcons } from "./icons.js";
 const labels = { all: "全体用户", users: "指定用户", admin: "仅管理员" };
 export function accountAccessButton(account) {
     const button = document.createElement("button");
     button.className = "btn btn-sm btn-ghost";
-    button.textContent = "使用范围 · " + labels[account.access?.mode || "all"];
+    actionButton(button, "使用范围", "users", "使用范围 · " + labels[account.access?.mode || "all"]);
     button.addEventListener("click", async () => {
         button.disabled = true;
         try {
@@ -39,7 +40,7 @@ function openAccess(account) {
     <label data-users>用户名<textarea name="users" rows="4" placeholder="每行一个用户名，也可用逗号分隔"></textarea></label>
     <p class="muted">保存后阻止未授权用户发起新操作，并停止向其空间同步凭证。已发起的操作和容器进程可能继续运行，已交付的凭证无法收回；如需彻底撤销，请停止相关容器并在上游轮换凭证。</p>
     <p role="alert"></p>
-    <div class="dlg-actions"><button type="button" class="btn" data-cancel>取消</button><button type="submit" class="btn btn-primary">保存</button></div>
+    <div class="dlg-actions"><button type="button" class="btn" data-cancel data-icon="close">取消</button><button type="submit" class="btn btn-primary" data-icon="save">保存</button></div>
   </form>`;
     dialog.querySelector("h2").textContent = account.label + " · 使用范围";
     const form = dialog.querySelector("form");
@@ -92,6 +93,7 @@ function openAccess(account) {
         }
     });
     document.body.append(dialog);
+    decorateIcons(dialog);
     enhanceSelects(dialog);
     dialog.showModal();
 }

@@ -5,6 +5,7 @@ import { api } from "./api.js";
 import { askPrompt, toast } from "./util.js";
 import { emit } from "./state.js";
 import { refreshAll } from "./data.js";
+import { actionButton, decorateIcons } from "./icons.js";
 
 export function reasoningLabel(r?: ReasoningCapability): string {
   if (!r) return "自动识别";
@@ -23,7 +24,7 @@ export function editReasoning(agent: string, title: string, current?: ReasoningC
       <label data-control>调整方式<select name="control"><option value="effort">推理强度（原生档位）</option><option value="budget">思考预算（旧模式）</option></select></label>
       <fieldset data-levels><legend>允许的档位</legend><div></div></fieldset>
       <p class="field-hint">按当前接入服务的实际支持范围配置。跟随默认并不等于关闭推理；未知模型允许用户手动尝试。旧预算模式要求模型支持固定 thinking 预算。</p>
-      <p role="alert"></p><div class="dlg-actions"><button type="button" class="btn" data-cancel>取消</button><button type="submit" class="btn btn-primary">保存</button></div></form>`;
+      <p role="alert"></p><div class="dlg-actions"><button type="button" class="btn" data-cancel data-icon="close">取消</button><button type="submit" class="btn btn-primary" data-icon="save">保存</button></div></form>`;
     dlg.querySelector("h2")!.textContent = title;
     const form = dlg.querySelector("form")!;
     const support = form.elements.namedItem("support") as HTMLSelectElement;
@@ -61,13 +62,13 @@ export function editReasoning(agent: string, title: string, current?: ReasoningC
       };
       dlg.close();
     });
-    document.body.append(dlg); enhanceSelects(dlg); dlg.showModal();
+    document.body.append(dlg); decorateIcons(dlg); enhanceSelects(dlg); dlg.showModal();
   });
 }
 
 export function accountReasoningButton(account: Account): HTMLButtonElement {
   const button = document.createElement("button");
-  button.className = "btn btn-sm btn-ghost"; button.textContent = "模型能力";
+  button.className = "btn btn-sm btn-ghost"; actionButton(button, "模型能力", "sliders", "模型能力");
   button.addEventListener("click", async () => {
     try {
       const accounts = await api<Account[]>("/accounts");

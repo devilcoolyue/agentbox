@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Git UI regression against synthetic API responses. No Docker or real Git credentials.
 import assert from 'node:assert/strict';
+import { assertActionIcons } from './test-actions.mjs';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
@@ -175,7 +176,7 @@ export async function smoke(page) {
   await branchesDialog.locator('[name=name]').fill('feature/browser');
   await branchesDialog.locator('[type=submit]').click();
   await branchesDialog.locator('[data-current]').filter({hasText:'feature/browser'}).waitFor();
-  assert.equal(branchActions,1);
+  assert.equal(branchActions,1);await assertActionIcons(page);
   await branchesDialog.locator('[data-close]').click();
   await page.locator('#btn-changes-profile').click();await profileDialog.locator('fieldset:not([disabled])').waitFor();
   assert.equal(await profileDialog.locator('[name=email]').inputValue(),'alice@example.com');
@@ -239,7 +240,7 @@ export async function smoke(page) {
   await remoteDialog.locator('[data-fetch]:not([disabled])').waitFor();
   await remoteDialog.locator('[data-fetch]').click();
   await remoteDialog.locator('[data-state]').filter({hasText:'已获取最新远程分支'}).waitFor();
-  assert.equal(fetches,1);assert.equal(pushes,0,'fetch unexpectedly pushed');
+  assert.equal(fetches,1);assert.equal(pushes,0,'fetch unexpectedly pushed');await assertActionIcons(page);
   holdNextFetch=true;
   await remoteDialog.locator('[data-fetch]').click();
   await remoteDialog.locator('.git-operation-progress button:not([disabled])').waitFor();
@@ -265,7 +266,7 @@ export async function smoke(page) {
   await terminalDialog.locator('[data-create]:not([disabled])').waitFor();
   assert.equal(await terminalDialog.locator('[data-write]').isChecked(),false);
   await terminalDialog.locator('[data-create]').click();await terminalDialog.locator('pre').waitFor();
-  assert.equal(terminalCreates,1);assert.match(await terminalDialog.locator('pre').innerText(),/abox-git fetch/);
+  await assertActionIcons(page);assert.equal(terminalCreates,1);assert.match(await terminalDialog.locator('pre').innerText(),/abox-git fetch/);
   assert.doesNotMatch(await terminalDialog.locator('pre').innerText(),/abox-git push/);
   await page.setViewportSize({width:390,height:844});
   assert.equal(await terminalDialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true);
@@ -310,7 +311,7 @@ export async function smoke(page) {
   await page.locator('#dlg-git-remote [data-manage]:not([disabled])').waitFor();await page.locator('#dlg-git-remote [data-manage]').click();
   await manager.locator('.git-connection-row').filter({hasText:'Company Git'}).getByRole('button',{name:'使用授权',exact:true}).click();
   const sharesDialog=page.locator('#dlg-git-shares');await sharesDialog.locator('[data-save]:not([disabled])').waitFor();
-  await sharesDialog.getByLabel('alice',{exact:true}).check();await sharesDialog.locator('[data-save]').click();await sharesDialog.waitFor({state:'detached'});assert.equal(shareWrites,1);
+  await sharesDialog.getByLabel('alice',{exact:true}).check();await sharesDialog.locator('[data-save]').click();await sharesDialog.waitFor({state:'detached'});assert.equal(shareWrites,1);await assertActionIcons(page);
   await manager.locator('[data-oauth-apps]').click();
   const appsDialog=page.locator('#dlg-git-oauth-apps');await appsDialog.locator('[data-add]').click();
   const appEditor=page.locator('#dlg-git-oauth-app-edit');

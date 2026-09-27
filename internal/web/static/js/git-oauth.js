@@ -2,16 +2,18 @@ import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { enhanceSelects, setSelectValue } from "./select.js";
 import { toast } from "./util.js";
+import { actionButton, decorateIcons } from "./icons.js";
 const dialogs = new Set();
 function modal(title, markup) {
     const d = document.createElement("dialog");
     d.className = "dlg-git-connections";
-    d.innerHTML = `<div class="dlg-head"><h2></h2><button type="button" class="dlg-x" data-close aria-label="关闭">×</button></div>` + markup;
+    d.innerHTML = `<div class="dlg-head"><h2></h2><button type="button" class="dlg-x" data-close aria-label="关闭" data-icon="close"></button></div>` + markup;
     d.querySelector("h2").textContent = title;
     d.querySelector("[data-close]").addEventListener("click", () => d.close());
     d.addEventListener("close", () => { dialogs.delete(d); d.remove(); });
     dialogs.add(d);
     document.body.append(d);
+    decorateIcons(d);
     enhanceSelects(d);
     d.showModal();
     return d;
@@ -23,7 +25,7 @@ export function openGitOAuth(connection) {
  <label class="check"><input name="read_only" type="checkbox" checked>仅允许 Agentbox 读取仓库</label>
  <label class="check"><input name="api_access" type="checkbox">允许平台 API（GitLab PR/MR 需要；会申请更广的 api 或 read_api 范围）</label>
  <p class="field-hint">由服务管理员预先注册 OAuth 应用。GitHub 的 repo 授权范围包含写权限；勾选只读后，Agentbox 仍会限制此连接不能推送。GitLab 会按所选模式申请读取或写入范围。</p>
- <p data-error role="alert" class="login-error"></p><div class="dlg-actions"><button type="submit" class="btn btn-primary" disabled>生成授权链接</button></div></form>
+ <p data-error role="alert" class="login-error"></p><div class="dlg-actions"><button type="submit" class="btn btn-primary" disabled data-icon="link" data-tip="生成 GitHub / GitLab 授权链接">生成链接</button></div></form>
  <p data-link class="hidden"><a target="_blank" rel="noopener noreferrer">前往服务平台授权</a></p><p data-help class="field-hint"></p>`);
     d.id = "dlg-git-oauth";
     const form = d.querySelector("form"), app = form.elements.namedItem("app"), save = d.querySelector('[type="submit"]'), error = d.querySelector("[data-error]");
@@ -73,7 +75,7 @@ export function openGitOAuthApps() {
     if (S.role !== "admin")
         return;
     const token = S.token, d = modal("Git OAuth 应用", `<p class="field-hint">在 GitHub OAuth Apps 或公司 GitLab Applications 注册应用，回调地址填写当前 Agentbox 域名加 /api/git/oauth/callback。Client Secret 加密保存，不下发给浏览器。</p>
- <button class="btn btn-sm btn-primary" data-add>添加应用</button><p data-error role="alert" class="login-error"></p><div data-list>读取中…</div>`);
+ <button class="btn btn-sm btn-primary" data-add data-icon="plus" data-tip="添加 OAuth 应用">添加</button><p data-error role="alert" class="login-error"></p><div data-list>读取中…</div>`);
     d.id = "dlg-git-oauth-apps";
     const load = async () => {
         const apps = await api("/git/oauth/apps");
@@ -93,7 +95,7 @@ export function openGitOAuthApps() {
             info.textContent = `${app.provider} · ${app.base_url}\n${app.redirect_url}`;
             const edit = document.createElement("button");
             edit.className = "btn btn-sm";
-            edit.textContent = "编辑应用";
+            actionButton(edit, "编辑", "rename", "编辑 OAuth 应用");
             edit.addEventListener("click", () => editApp(app, load));
             row.append(title, info, edit);
             list.append(row);
@@ -115,7 +117,7 @@ function editApp(app, done) {
  <label>回调地址<input name="redirect_url" type="url" required></label>
  <label class="check"><input name="enabled" type="checkbox" checked>启用应用</label>
  <p class="field-hint">停用会阻止新的授权与后续凭证使用。服务地址、Client ID、回调地址创建后固定；更换这些信息请注册新应用。域名需与用户实际访问 Agentbox 的域名一致。</p>
- <p data-error role="alert" class="login-error"></p><div class="dlg-actions"><button type="submit" class="btn btn-primary">保存</button></div></form>`);
+ <p data-error role="alert" class="login-error"></p><div class="dlg-actions"><button type="submit" class="btn btn-primary" data-icon="save">保存</button></div></form>`);
     d.id = "dlg-git-oauth-app-edit";
     const form = d.querySelector("form"), field = (name) => form.elements.namedItem(name);
     const provider = form.elements.namedItem("provider");

@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { fmtBytes, fmtTime } from "./util.js";
 import type { GitOperationPage, GitLiveOperation } from "./types.js";
+import { actionButton, decorateIcons } from "./icons.js";
 
 const phaseNames:Record<string,string>={preparing:"准备与检查",transferring:"传输数据",checking:"核对工作区",merging:"快进合并",checkout:"检出文件",publishing:"发布仓库目录"};
 const names:Record<string,string>={"review.list":"查询 PR/MR","review.preview":"预览 PR/MR","review.create":"创建 PR/MR","connection.share":"共享授权","remote.add":"添加远程","remote.update":"修改远程","remote.remove":"删除远程",commit:"本地提交",discard:"丢弃改动","oauth.revoke":"撤销 OAuth",fetch:"获取",pull:"快进拉取",push:"推送","push-preview":"推送预览",clone:"克隆","connection.test":"测试读取","connection.create":"添加连接","connection.update":"编辑连接","connection.delete":"删除连接","binding.update":"修改绑定","default.update":"修改默认连接"};
@@ -21,7 +22,7 @@ export async function gitRequest<T>(path:string,body:unknown,host:HTMLElement):P
   const id=requestID(),token=S.token;
   const box=document.createElement("div");box.className="git-operation-progress";
   const label=document.createElement("p");label.className="field-hint";label.setAttribute("role","status");label.textContent="准备 Git 操作…";
-  const cancel=document.createElement("button");cancel.type="button";cancel.className="btn btn-sm btn-danger";cancel.textContent="取消操作";cancel.disabled=true;
+  const cancel=document.createElement("button");cancel.type="button";cancel.className="btn btn-sm btn-danger";actionButton(cancel,"取消","close","取消 Git 操作");cancel.disabled=true;
   box.append(label,cancel);host.append(box);
   let ended=false,requested=false,timer:ReturnType<typeof setTimeout>|undefined;
   const cancelRequest=async()=>{
@@ -50,10 +51,10 @@ let activeDialog:HTMLDialogElement|null=null;
 export function openGitOperations(){
   if(activeDialog)return;
   const token=S.token,d=document.createElement("dialog");activeDialog=d;d.className="dlg-git-connections";d.id="dlg-git-operations";
-  d.innerHTML=`<div class="dlg-head"><h2>Git 操作记录</h2><button class="dlg-x" aria-label="关闭" data-close>×</button></div>
+  d.innerHTML=`<div class="dlg-head"><h2>Git 操作记录</h2><button class="dlg-x" aria-label="关闭" data-close data-icon="close"></button></div>
     <p class="field-hint">仅显示你发起的操作。中断或未确认不代表远程回滚，需核对仓库状态。活动操作每秒刷新。</p>
     <p data-error role="alert" class="login-error"></p><div data-active></div><div data-history></div>
-    <div class="dlg-actions"><button class="btn btn-sm" data-refresh>回到最新</button><button class="btn btn-sm" data-more disabled>更早记录</button></div>`;
+    <div class="dlg-actions"><button class="btn btn-sm" data-refresh data-icon="refresh" data-tip="回到最新 Git 操作记录">最新</button><button class="btn btn-sm" data-more disabled data-icon="arrow-left" data-tip="查看更早的 Git 操作记录">更早</button></div>`;
   const history=d.querySelector<HTMLElement>("[data-history]")!,live=d.querySelector<HTMLElement>("[data-active]")!,error=d.querySelector<HTMLElement>("[data-error]")!;
   const more=d.querySelector<HTMLButtonElement>("[data-more]")!;
   let next=0,generation=0,timer:ReturnType<typeof setTimeout>|undefined;
@@ -78,7 +79,7 @@ export function openGitOperations(){
     for(const op of operations){
       const row=document.createElement("div"),label=document.createElement("p"),cancel=document.createElement("button");
       row.className="git-connection-row";label.className="field-hint";label.textContent=progress(op);
-      cancel.className="btn btn-sm btn-danger";cancel.textContent="取消操作";cancel.disabled=op.cancel_requested;
+      cancel.className="btn btn-sm btn-danger";actionButton(cancel,"取消","close","取消 Git 操作");cancel.disabled=op.cancel_requested;
       cancel.addEventListener("click",async()=>{cancel.disabled=true;try{await api(`/git/operations/${op.request_id}/cancel`,{method:"POST"});}catch(e){error.textContent=(e as Error).message;}});
       row.append(label,cancel);live.append(row);
     }
@@ -91,6 +92,6 @@ export function openGitOperations(){
   d.querySelector("[data-refresh]")!.addEventListener("click",()=>void load());
   more.addEventListener("click",()=>void load(next));
   d.addEventListener("close",()=>{clearTimeout(timer);generation++;d.remove();activeDialog=null;});
-  document.body.append(d);d.showModal();void load();timer=setTimeout(()=>void poll(),1000);
+  document.body.append(d);decorateIcons(d);d.showModal();void load();timer=setTimeout(()=>void poll(),1000);
 }
 bus.addEventListener("signed-out",()=>activeDialog?.close());

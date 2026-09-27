@@ -405,7 +405,7 @@
 .price-change a { color: var(--amber); text-underline-offset: 2px; }
 .price-change-rates { font-size: 12px; font-variant-numeric: tabular-nums; }
 .price-table .pt-key small { display: block; margin-top: 4px; font: 11px/1.4 var(--font-sans, sans-serif); color: var(--muted); }
-.price-mode { display: block; padding: 4px 0; font-size: 11px; color: var(--amber); background: none; border: 0; cursor: pointer; }
+.price-mode { display: flex; justify-content: flex-start; padding: 4px 0; font-size: 11px; color: var(--amber); background: none; border: 0; cursor: pointer; }
 .price-history { display: block; padding: 0; }
 .price-history summary {
   display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 14px 18px;

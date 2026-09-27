@@ -3,7 +3,7 @@ import { settingsState } from "./features/settings/state.js";
 /* settings：系统设置视图 —— 账号池维护（含 OAuth / API Key 登录弹窗）、
  * 容器与资源、模型管理、安全与访问、关于。 */
 "use strict";
-import { buttonLabel } from "./icons.js";
+import { actionButton } from "./icons.js";
 import { setSelectValue } from "./select.js";
 import { S, bus, emit } from "./state.js";
 import { $, btnBusy, btnDone, toast, fmtTime, fmtBytes, askConfirm, askPrompt } from "./util.js";
@@ -143,16 +143,15 @@ function acctRow(a) {
     const auth = document.createElement("button");
     const needAuth = a.cred_status !== "ok";
     auth.className = "btn btn-sm" + (needAuth ? " btn-primary" : "");
-    auth.textContent = needAuth ? "认证账号" : "管理认证";
-    buttonLabel(auth, auth.textContent || "", "key");
+    actionButton(auth, "认证", "key", needAuth ? "认证账号" : "管理认证");
     auth.addEventListener("click", () => openAuthDlg(a));
     const edit = document.createElement("button");
     edit.className = "btn btn-sm btn-ghost";
-    buttonLabel(edit, "编辑", "rename");
+    actionButton(edit, "", "rename", "编辑账号");
     edit.addEventListener("click", () => openAcctEdit(a));
     const del = document.createElement("button");
     del.className = "btn btn-sm btn-danger";
-    buttonLabel(del, "删除", "trash");
+    actionButton(del, "", "trash", "删除账号");
     if (a.sessions > 0) {
         del.disabled = true;
         setTip(del, "有工作空间在用，请先删除对应工作空间");
@@ -245,8 +244,8 @@ function updateAuthType() {
     $("auth-key-hint").textContent = "填写官方或中转服务的 API Key。Base URL 留空使用官方接口，填写时请使用服务商提供的完整 API 地址。";
     $("auth-test").classList.toggle("hidden", !authAcct);
     $("auth-clearkey").classList.toggle("hidden", !(claude && authAcct?.auth_mode === "apikey"));
-    buttonLabel($("auth-gen"), authCreating && !authAcct ? "保存账号并生成授权链接" : "生成授权链接", "link");
-    buttonLabel($("auth-savekey"), authCreating ? "保存并完成" : "保存", "save");
+    actionButton($("auth-gen"), "生成链接", "link", authCreating && !authAcct ? "保存账号并生成授权链接" : "生成授权链接");
+    actionButton($("auth-savekey"), "保存", "save", authCreating ? "保存账号并完成认证" : "保存认证");
 }
 export function openAuthDlg(a) {
     if (authBusy)
@@ -346,7 +345,7 @@ function renderAuthModels(models) {
         const chip = document.createElement("button");
         chip.type = "button";
         chip.className = "auth-model-chip mono" + (have.has(id) ? " in" : "");
-        chip.textContent = id;
+        actionButton(chip, id, have.has(id) ? "check" : "plus", have.has(id) ? `${id} · 已在模型列表中` : `将 ${id} 加入模型列表`);
         setTip(chip, have.has(id) ? "已在模型列表中" : "点击加入模型列表");
         chip.addEventListener("click", () => {
             const models = (settingsState.value && settingsState.value.models) || {};
@@ -358,7 +357,7 @@ function renderAuthModels(models) {
             putSettings({ models: next }, chip, "已添加 " + id).then((ok) => {
                 if (ok) {
                     chip.classList.add("in");
-                    setTip(chip, "已在模型列表中");
+                    actionButton(chip, id, "check", `${id} · 已在模型列表中`);
                 }
             });
         });
@@ -467,16 +466,16 @@ function renderModels() {
             id.title = m.id;
             const rm = document.createElement("button");
             rm.className = "btn btn-sm btn-ghost m-remove";
-            buttonLabel(rm, m.id === selected ? "默认" : "移除", m.id === selected ? "check" : "close");
+            actionButton(rm, m.id === selected ? "默认" : "移除", m.id === selected ? "check" : "close", m.id === selected ? "当前默认模型" : "移除模型");
             rm.disabled = m.id === selected;
-            rm.title = m.id === selected ? "移除前请先选择其他默认模型" : "";
+            setTip(rm, m.id === selected ? "移除前请先选择其他默认模型" : "移除模型");
             rm.addEventListener("click", () => {
                 const next = { ...models, [agent]: (models[agent] || []).filter((x) => x.id !== m.id) };
                 putSettings({ models: next }, rm, "已移除 " + m.label);
             });
             const reasoning = document.createElement("button");
             reasoning.className = "btn btn-sm btn-ghost m-reasoning";
-            reasoning.textContent = reasoningLabel(m.reasoning);
+            actionButton(reasoning, "模型能力", "sliders", "模型能力 · " + reasoningLabel(m.reasoning));
             reasoning.addEventListener("click", async () => {
                 const policy = await editReasoning(agent, m.label + " · 模型能力", m.reasoning);
                 if (policy === null)
@@ -560,12 +559,12 @@ function userRow(u) {
     acts.className = "u-actions";
     const credit = document.createElement("button");
     credit.className = "btn btn-sm btn-ghost";
-    buttonLabel(credit, "额度", "wallet");
+    actionButton(credit, "额度", "wallet", "查看和管理用户额度");
     credit.addEventListener("click", () => openQuota(u.name, loadUsers));
     acts.appendChild(credit);
     const pw = document.createElement("button");
     pw.className = "btn btn-sm btn-ghost";
-    buttonLabel(pw, "重置密码", "key");
+    actionButton(pw, "密码", "key", "重置用户密码");
     pw.addEventListener("click", async () => {
         const next = await askPrompt({
             title: "重置密码",
@@ -590,7 +589,7 @@ function userRow(u) {
     if (u.role !== "admin") {
         const del = document.createElement("button");
         del.className = "btn btn-sm btn-danger";
-        buttonLabel(del, "删除", "trash");
+        actionButton(del, "", "trash", "删除用户");
         del.addEventListener("click", async () => {
             const ok = await askConfirm("删除用户「" + u.name + "」？", {
                 title: "删除用户",

@@ -2,7 +2,7 @@
  * 模型与思考强度选择、空会话引导。渲染管线在 chat-render.ts。 */
 "use strict";
 
-import { buttonLabel } from "./icons.js";
+import { actionButton, buttonLabel } from "./icons.js";
 
 import { S, bus } from "./state.js";
 import type { Pick } from "./state.js";
@@ -413,7 +413,7 @@ function handleChatMsg(msg: ChatMessage) {
         const input = $<HTMLTextAreaElement>("chat-input");
         if (!input.value.trim()) { input.value = msg.retry_text; autoGrow(); }
         const retry = document.createElement("button");
-        retry.className = "btn btn-sm"; retry.textContent = "恢复默认并重试";
+        retry.className = "btn btn-sm"; actionButton(retry, "重试", "refresh", "恢复默认设置并重试本轮对话");
         retry.addEventListener("click", () => {
           S.pick.effort = ""; pendingPick = null; manualEffort = false; savePick(); renderPickPill();
           if (input.value.trim() && input.value.trim() !== msg.retry_text) {
@@ -873,7 +873,7 @@ function pickRow(label: string, value: string, kind: string) {
   const b = document.createElement("button");
   b.className = "pick-row";
   const l = document.createElement("span");
-  l.textContent = label;
+  buttonLabel(l, label, kind === "model" ? "cpu" : "sliders");
   const r = document.createElement("span");
   r.className = "val mono";
   r.textContent = value + " ›";

@@ -1,5 +1,5 @@
 import { settingsState } from "./features/settings/state.js";
-import { buttonLabel } from "./icons.js";
+import { actionButton, buttonLabel } from "./icons.js";
 import { S } from "./state.js";
 import type { ModelPrice, TokenRates, PricingView, PriceChange } from "./types.js";
 import { $, toast, askConfirm, fmtTime } from "./util.js";
@@ -48,7 +48,7 @@ function renderRows() {
     k.appendChild(meta);
     if (origin && !customModels.has(key)) {
       const custom = document.createElement("button"); custom.type = "button"; custom.className = "price-mode";
-      custom.textContent = "设为自定义";
+      actionButton(custom, "自定义", "rename", "设为自定义价格");
       custom.addEventListener("click", () => { readDraft(); customModels.add(key); dirty = true; renderRows(); });
       k.appendChild(custom);
     }
@@ -248,7 +248,7 @@ function renderCatalog() {
   for (const item of view.active.history) {
     const row = document.createElement("div"); row.className = "price-history-row";
     const text = document.createElement("span"); text.textContent = `${fmtTime(item.saved_at)} · ${item.reason}前 · ${Object.keys(item.prices).length} 条`;
-    const restore = document.createElement("button"); restore.type = "button"; restore.className = "btn btn-sm"; restore.textContent = "恢复此版本";
+    const restore = document.createElement("button"); restore.type = "button"; restore.className = "btn btn-sm"; actionButton(restore, "恢复", "undo", "恢复此价格版本");
     restore.addEventListener("click", async () => {
       if (!view || busy || !requireClean()) return;
       const revision = view.active.revision;

@@ -9,7 +9,7 @@
  * （chat-render.formatText）画在弹窗里，画的是编辑器里的当前内容，所以改一行
  * 切过去就能看到，不必先保存。 */
 "use strict";
-import { buttonLabel } from "./icons.js";
+import { actionButton } from "./icons.js";
 import { S } from "./state.js";
 import { $, withSpin, fmtSize, askConfirm, startDownload } from "./util.js";
 import { api, fileDownloadURL } from "./api.js";
@@ -461,7 +461,7 @@ $("fv-newtab").addEventListener("click", () => {
 });
 $("fv-full").addEventListener("click", () => {
     const full = $("dlg-file").classList.toggle("fv-max");
-    buttonLabel($("fv-full"), full ? "还原" : "全屏", full ? "collapse" : "expand");
+    actionButton($("fv-full"), full ? "还原" : "全屏", full ? "collapse" : "expand", full ? "退出全屏，恢复预览窗口" : "全屏预览");
 });
 $("fv-vps").addEventListener("click", (e) => {
     const b = e.target.closest("[data-vp]");
@@ -493,7 +493,7 @@ async function closePreview() {
     $("fv-md").replaceChildren();
     $("fv-frame").src = "about:blank"; // 别让原型在后台继续跑
     $("dlg-file").classList.remove("fv-max");
-    buttonLabel($("fv-full"), "全屏", "expand");
+    actionButton($("fv-full"), "全屏", "expand", "全屏预览");
     $("dlg-file").close();
 }
 $("fv-close").addEventListener("click", closePreview);

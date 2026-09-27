@@ -1,7 +1,7 @@
 /* util：DOM / 格式化 / 加载态 / 气泡 / 灯箱等无业务依赖的小工具。 */
 "use strict";
 
-import { buttonLabel } from "./icons.js";
+import { actionButton } from "./icons.js";
 
 import { S } from "./state.js";
 
@@ -176,7 +176,7 @@ export function askConfirm(text: string, opts: ConfirmOpts = {}) {
   hint.textContent = opts.hint || "";
   hint.classList.toggle("hidden", !opts.hint);
   const ok = $("ask-ok");
-  buttonLabel(ok, opts.okLabel || "确定", opts.danger ? "trash" : "check");
+  actionButton(ok, opts.okLabel || "确定", opts.danger ? "trash" : "check");
   ok.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
   return dlgOnce($<HTMLDialogElement>("dlg-ask"), (v) => v === "ok");
 }

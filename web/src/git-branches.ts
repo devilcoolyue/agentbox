@@ -4,15 +4,16 @@ import { askConfirm,toast } from "./util.js";
 import { enhanceSelects,setSelectValue } from "./select.js";
 import { gitRequest } from "./git-operations.js";
 import type { GitBranches,GitBranch } from "./types.js";
+import { actionButton, decorateIcons } from "./icons.js";
 let active:HTMLDialogElement|null=null;
 export function openGitBranches(repo:string,refreshed:()=>Promise<void>){
  if(active||!S.current)return;const session=S.current.id,token=S.token,d=document.createElement("dialog");active=d;
  d.id="dlg-git-branches";d.className="dlg-git-connections";
- d.innerHTML=`<div class="dlg-head"><h2>分支管理</h2><button class="dlg-x" data-close aria-label="关闭">×</button></div>
+ d.innerHTML=`<div class="dlg-head"><h2>分支管理</h2><button class="dlg-x" data-close aria-label="关闭" data-icon="close"></button></div>
  <p data-current class="field-hint"></p><p data-error role="alert" class="login-error"></p>
  <form><div class="dlg-row"><label>新分支名称<input name="name" type="text" required maxlength="240" placeholder="feature/my-task"></label><label>创建起点<select name="start"></select></label></div>
- <div class="dlg-actions"><button type="submit" class="btn btn-primary btn-sm" disabled>创建并切换</button></div></form>
- <div data-list></div><div class="dlg-actions"><button class="btn btn-sm" data-refresh>刷新</button></div>`;
+ <div class="dlg-actions"><button type="submit" class="btn btn-primary btn-sm" disabled data-icon="plus" data-tip="创建新分支并切换到该分支">创建</button></div></form>
+ <div data-list></div><div class="dlg-actions"><button class="btn btn-sm" data-refresh data-icon="refresh">刷新</button></div>`;
  const form=d.querySelector("form")!,start=form.elements.namedItem("start") as HTMLSelectElement,error=d.querySelector<HTMLElement>("[data-error]")!,list=d.querySelector<HTMLElement>("[data-list]")!;
  let data:GitBranches|null=null,busy=false;
  const prefix=`/sessions/${session}/git`;
@@ -29,9 +30,9 @@ export function openGitBranches(repo:string,refreshed:()=>Promise<void>){
    const title=document.createElement("strong");title.textContent=b.name+(b.current?" · 当前":"")+(b.remote?" · 远程跟踪":"");
    const meta=document.createElement("p");meta.className="field-hint";meta.textContent=b.head.slice(0,12)+(b.upstream?" → "+b.upstream:"");
    const buttons=document.createElement("div");buttons.className="git-connection-tools";
-   const button=(label:string,action:string,disabled:boolean)=>{const btn=document.createElement("button");btn.className="btn btn-sm";btn.textContent=label;btn.disabled=disabled;btn.addEventListener("click",()=>void run(()=>act(action,b)));return btn;};
-   if(b.remote)buttons.append(button("设为当前分支上游","upstream",state.detached||state.unborn));
-   else buttons.append(button("切换","switch",b.current||data.dirty),button("删除已合并分支","delete",b.current));
+   const button=(label:string,action:string,disabled:boolean,tip=label)=>{const btn=document.createElement("button");btn.className="btn btn-sm";actionButton(btn,label,action==="delete"?"trash":action==="switch"?"arrow-right":"branch",tip);btn.disabled=disabled;btn.addEventListener("click",()=>void run(()=>act(action,b)));return btn;};
+   if(b.remote)buttons.append(button("设为上游","upstream",state.detached||state.unborn,"设为当前分支上游"));
+   else buttons.append(button("切换","switch",b.current||data.dirty),button("删除","delete",b.current,"删除已合并的本地分支"));
    row.append(title,meta,buttons);list.append(row);
   }
   if(data.truncated){const msg=document.createElement("p");msg.className="field-hint";msg.textContent="最多显示 500 个分支，请在终端管理更多分支。";list.append(msg);}
@@ -55,6 +56,6 @@ export function openGitBranches(repo:string,refreshed:()=>Promise<void>){
  form.addEventListener("submit",e=>{e.preventDefault();void run(()=>act("create"));});
  d.querySelector("[data-refresh]")!.addEventListener("click",()=>void run(load));close.addEventListener("click",()=>d.close());
  d.addEventListener("cancel",e=>{if(busy)e.preventDefault();});d.addEventListener("close",()=>{active=null;d.remove();});
- document.body.append(d);enhanceSelects(d);d.showModal();void run(load);
+ document.body.append(d);decorateIcons(d);enhanceSelects(d);d.showModal();void run(load);
 }
 bus.addEventListener("signed-out",()=>active?.close());

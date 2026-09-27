@@ -7,6 +7,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
+import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 
 export async function smoke(page) {
  page.setDefaultTimeout(15000);
@@ -255,7 +256,7 @@ export async function smoke(page) {
   const overrideDialog=page.locator('dialog[open]').filter({has:page.locator('select[name="support"]')});
   await overrideDialog.locator('label').filter({hasText:'支持范围'}).getByRole('combobox').click();
   await overrideDialog.getByRole('option',{name:'不支持调整',exact:true}).click();
-  await overrideDialog.getByRole('button',{name:'保存',exact:true}).click();
+  await assertActionIcons(page);await overrideDialog.getByRole('button',{name:'保存',exact:true}).click();
   await page.waitForTimeout(150);
   assert.equal(accounts.find(a=>a.id==='codex-key-fixture').model_reasoning.fixture.support,'unsupported');
 
@@ -324,12 +325,12 @@ export async function smoke(page) {
   assert.equal(await capabilityDialog.evaluate(el=>el.scrollWidth<=el.clientWidth),true,'capability dialog overflows');
   await mkdir(resolve('output/playwright'),{recursive:true});
   await page.screenshot({path:resolve('output/playwright/reasoning-editor-mobile.png')});
-  await capabilityDialog.getByRole('button',{name:'保存',exact:true}).click();
-  await capabilityRow.getByRole('button',{name:'推理强度 · high',exact:true}).waitFor();
+  await assertActionIcons(page);await capabilityDialog.getByRole('button',{name:'保存',exact:true}).click();
+  await capabilityRow.getByRole('button',{name:'模型能力 · 推理强度 · high',exact:true}).waitFor();
   assert.deepEqual(settings.models.codex.find(m=>m.id==='fixture-lite').reasoning.levels,['high']);
-  await capabilityRow.getByRole('button',{name:'推理强度 · high',exact:true}).click();
+  await capabilityRow.getByRole('button',{name:'模型能力 · 推理强度 · high',exact:true}).click();
   await capabilityDialog.locator('input[value="low"]').check();
-  await capabilityDialog.getByRole('button',{name:'保存',exact:true}).click();
+  await assertActionIcons(page);await capabilityDialog.getByRole('button',{name:'保存',exact:true}).click();
   await capabilityRow.getByRole('button',{name:'推理强度 · low / high'}).waitFor();
   await page.setViewportSize({width:1280,height:900});
   await page.goBack();
@@ -407,6 +408,7 @@ export async function smoke(page) {
   await at('#/sessions/fixture-space/files','#tab-files');
   await page.reload();
   await at('#/sessions/fixture-space/files','#tab-files');
+  await fileActionSmoke(page);
   await page.locator('#btn-home').click();
   await at('#/','#empty');
   await page.goBack();

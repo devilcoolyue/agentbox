@@ -9,6 +9,8 @@ interface IconSpec {
 
 /* ---- 行内小图标：stroke 线稿，颜色随 currentColor ---- */
 const ICONS: Record<string, string | IconSpec> = {
+  branch: { d: "M6 8v8M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM8 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM20 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM18 8v2a8 8 0 0 1-8 8H8", box: 24, width: 1.8 },
+  calendar: { d: "M3 5h18v16H3ZM7 3v4m10-4v4M3 11h18", box: 24, width: 1.8 },
   user: { d: "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-2a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v2", box: 24, width: 1.8 },
   lock: { d: "M5 10h14v11H5ZM8 10V7a4 4 0 0 1 8 0v3M12 14v3", box: 24, width: 1.8 },
   "eye-off": { d: "m3 3 18 18M10.6 5.6 12 5.5c6.4 0 10 6.5 10 6.5a21 21 0 0 1-3 3.8M6.2 6.2A21 21 0 0 0 2 12s3.6 6.5 10 6.5a13 13 0 0 0 5.8-1.7M9.4 9.4a3.7 3.7 0 0 0 5.2 5.2", box: 24, width: 1.8 },
@@ -97,6 +99,13 @@ export function svgIcon(name: string, size = 13) {
 export function decorateIcons(root: ParentNode = document) {
   for (const el of root.querySelectorAll<HTMLElement>("[data-icon]")) {
     if (!el.querySelector(":scope > .ui-icon")) el.prepend(svgIcon(el.dataset.icon!, 16));
+    if (el.matches("button, a")) {
+      const label = el.dataset.tip || el.getAttribute("aria-label") || el.textContent?.trim();
+      if (label) {
+        el.dataset.tip ||= label;
+        if (!el.hasAttribute("aria-label")) el.setAttribute("aria-label", label);
+      }
+    }
   }
 }
 
@@ -104,4 +113,14 @@ export function decorateIcons(root: ParentNode = document) {
 export function buttonLabel(el: HTMLElement, label: string, icon: string) {
   el.dataset.icon = icon;
   el.replaceChildren(svgIcon(icon, 16), document.createTextNode(label));
+}
+
+export function actionButton<T extends HTMLElement>(el: T, label: string, icon: string, tip = label): T {
+  buttonLabel(el, label, icon);
+  el.classList.toggle("action-icon", !label);
+  el.setAttribute("aria-label", tip || label);
+  el.removeAttribute("title");
+  if (tip) el.dataset.tip = tip;
+  else delete el.dataset.tip;
+  return el;
 }

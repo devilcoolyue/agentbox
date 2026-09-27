@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { $, toast } from "./util.js";
+import { decorateIcons } from "./icons.js";
 let active = null;
 export async function openGitProfile() {
     if (active)
@@ -19,7 +20,7 @@ export async function openGitProfile() {
     </fieldset>
     <p role="status" class="field-hint">读取中…</p>
     <p role="alert" class="login-error"></p>
-    <div class="dlg-actions"><button type="button" class="btn btn-ghost" data-cancel>取消</button><button type="submit" class="btn btn-primary" disabled>保存</button></div>
+    <div class="dlg-actions"><button type="button" class="btn btn-ghost" data-cancel data-icon="close">取消</button><button type="submit" class="btn btn-primary" disabled data-icon="save">保存</button></div>
   </form>`;
     const form = dialog.querySelector("form");
     const name = form.elements.namedItem("name");
@@ -59,6 +60,7 @@ export async function openGitProfile() {
         }
     });
     document.body.append(dialog);
+    decorateIcons(dialog);
     dialog.showModal();
     try {
         const profile = await api("/me/git");

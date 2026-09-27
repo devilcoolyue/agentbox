@@ -4,20 +4,21 @@ import { enhanceSelects,setSelectValue } from "./select.js";
 import { gitRequest } from "./git-operations.js";
 import { toast } from "./util.js";
 import type { GitConnection,GitReview,GitReviewPage,GitReviewPreview } from "./types.js";
+import { decorateIcons } from "./icons.js";
 let active:HTMLDialogElement|null=null;
 export function openGitReviews(repo:string,remote:string,connection:GitConnection,connections:GitConnection[]){
  if(active||!S.current)return;const session=S.current.id,token=S.token,d=document.createElement("dialog");active=d;
  d.id="dlg-git-reviews";d.className="dlg-git-connections";
- d.innerHTML=`<div class="dlg-head"><h2>Pull Request / Merge Request</h2><button class="dlg-x" data-close aria-label="关闭">×</button></div>
+ d.innerHTML=`<div class="dlg-head"><h2>Pull Request / Merge Request</h2><button class="dlg-x" data-close aria-label="关闭" data-icon="close"></button></div>
  <p data-project class="field-hint"></p><label data-api-label>平台 API 连接<select data-api></select></label>
  <p class="field-hint">先推送当前分支。此处创建同一仓库内的 PR/MR，不自动推送、合并或删除分支。GitLab Token/OAuth 需要 api 权限；GitHub 需要仓库 Pull requests 写权限。</p>
- <div class="git-connection-tools"><button class="btn btn-sm" data-refresh>刷新列表</button><button class="btn btn-sm" data-next disabled>下一页</button></div>
+ <div class="git-connection-tools"><button class="btn btn-sm" data-refresh data-icon="refresh">刷新</button><button class="btn btn-sm" data-next disabled data-icon="arrow-right">下一页</button></div>
  <p data-error role="alert" class="login-error"></p><div data-list></div>
  <form><div class="dlg-row"><label>来源分支<input name="source" type="text" readonly></label><label>目标分支<input name="target" type="text" required maxlength="240" placeholder="main"></label></div>
  <label>标题<input name="title" type="text" required maxlength="240"></label><label>描述<textarea name="body" rows="4" maxlength="32000"></textarea></label>
  <label class="check"><input name="draft" type="checkbox" checked>创建为草稿</label>
- <div class="dlg-actions"><button class="btn btn-primary" type="submit" disabled>预览创建</button></div></form>
- <div data-preview class="hidden"><p data-summary class="field-hint"></p><pre data-body></pre><div data-existing></div><button class="btn btn-primary" data-create>确认创建</button></div>`;
+ <div class="dlg-actions"><button class="btn btn-primary" type="submit" disabled data-icon="eye" data-tip="预览将创建的 PR/MR，确认后才提交">预览</button></div></form>
+ <div data-preview class="hidden"><p data-summary class="field-hint"></p><pre data-body></pre><div data-existing></div><button class="btn btn-primary" data-create data-icon="plus" data-tip="确认创建已预览的 PR/MR">创建</button></div>`;
  const form=d.querySelector("form")!,field=(name:string)=>form.elements.namedItem(name) as HTMLInputElement;
  const apiSelect=d.querySelector<HTMLSelectElement>("[data-api]")!,error=d.querySelector<HTMLElement>("[data-error]")!,list=d.querySelector<HTMLElement>("[data-list]")!,previewBox=d.querySelector<HTMLElement>("[data-preview]")!;
  const button=(name:string)=>d.querySelector<HTMLButtonElement>(`[data-${name}]`)!;
@@ -69,6 +70,6 @@ export function openGitReviews(repo:string,remote:string,connection:GitConnectio
   toast(result.existing?"已存在相同 PR/MR":"PR/MR 已创建");await load();
  }));
  button("refresh").addEventListener("click",()=>void run(()=>load()));button("next").addEventListener("click",()=>void run(()=>load((page?.page||1)+1)));button("close").addEventListener("click",()=>d.close());
- d.addEventListener("cancel",e=>{if(busy)e.preventDefault();});d.addEventListener("close",()=>{active=null;d.remove();});document.body.append(d);enhanceSelects(d);d.showModal();void run(()=>load());
+ d.addEventListener("cancel",e=>{if(busy)e.preventDefault();});d.addEventListener("close",()=>{active=null;d.remove();});document.body.append(d);decorateIcons(d);enhanceSelects(d);d.showModal();void run(()=>load());
 }
 bus.addEventListener("signed-out",()=>active?.close());

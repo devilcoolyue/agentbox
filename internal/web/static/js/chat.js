@@ -1,7 +1,7 @@
 /* chat：对话通道（WS）、历史加载、composer（发送/中断/附件/自增高）、
  * 模型与思考强度选择、空会话引导。渲染管线在 chat-render.ts。 */
 "use strict";
-import { buttonLabel } from "./icons.js";
+import { actionButton, buttonLabel } from "./icons.js";
 import { S, bus } from "./state.js";
 import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
@@ -420,7 +420,7 @@ function handleChatMsg(msg) {
                 }
                 const retry = document.createElement("button");
                 retry.className = "btn btn-sm";
-                retry.textContent = "恢复默认并重试";
+                actionButton(retry, "重试", "refresh", "恢复默认设置并重试本轮对话");
                 retry.addEventListener("click", () => {
                     S.pick.effort = "";
                     pendingPick = null;
@@ -896,7 +896,7 @@ function pickRow(label, value, kind) {
     const b = document.createElement("button");
     b.className = "pick-row";
     const l = document.createElement("span");
-    l.textContent = label;
+    buttonLabel(l, label, kind === "model" ? "cpu" : "sliders");
     const r = document.createElement("span");
     r.className = "val mono";
     r.textContent = value + " ›";

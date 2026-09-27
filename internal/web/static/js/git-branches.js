@@ -3,6 +3,7 @@ import { S, bus } from "./state.js";
 import { askConfirm, toast } from "./util.js";
 import { enhanceSelects, setSelectValue } from "./select.js";
 import { gitRequest } from "./git-operations.js";
+import { actionButton, decorateIcons } from "./icons.js";
 let active = null;
 export function openGitBranches(repo, refreshed) {
     if (active || !S.current)
@@ -11,11 +12,11 @@ export function openGitBranches(repo, refreshed) {
     active = d;
     d.id = "dlg-git-branches";
     d.className = "dlg-git-connections";
-    d.innerHTML = `<div class="dlg-head"><h2>分支管理</h2><button class="dlg-x" data-close aria-label="关闭">×</button></div>
+    d.innerHTML = `<div class="dlg-head"><h2>分支管理</h2><button class="dlg-x" data-close aria-label="关闭" data-icon="close"></button></div>
  <p data-current class="field-hint"></p><p data-error role="alert" class="login-error"></p>
  <form><div class="dlg-row"><label>新分支名称<input name="name" type="text" required maxlength="240" placeholder="feature/my-task"></label><label>创建起点<select name="start"></select></label></div>
- <div class="dlg-actions"><button type="submit" class="btn btn-primary btn-sm" disabled>创建并切换</button></div></form>
- <div data-list></div><div class="dlg-actions"><button class="btn btn-sm" data-refresh>刷新</button></div>`;
+ <div class="dlg-actions"><button type="submit" class="btn btn-primary btn-sm" disabled data-icon="plus" data-tip="创建新分支并切换到该分支">创建</button></div></form>
+ <div data-list></div><div class="dlg-actions"><button class="btn btn-sm" data-refresh data-icon="refresh">刷新</button></div>`;
     const form = d.querySelector("form"), start = form.elements.namedItem("start"), error = d.querySelector("[data-error]"), list = d.querySelector("[data-list]");
     let data = null, busy = false;
     const prefix = `/sessions/${session}/git`;
@@ -40,11 +41,11 @@ export function openGitBranches(repo, refreshed) {
             meta.textContent = b.head.slice(0, 12) + (b.upstream ? " → " + b.upstream : "");
             const buttons = document.createElement("div");
             buttons.className = "git-connection-tools";
-            const button = (label, action, disabled) => { const btn = document.createElement("button"); btn.className = "btn btn-sm"; btn.textContent = label; btn.disabled = disabled; btn.addEventListener("click", () => void run(() => act(action, b))); return btn; };
+            const button = (label, action, disabled, tip = label) => { const btn = document.createElement("button"); btn.className = "btn btn-sm"; actionButton(btn, label, action === "delete" ? "trash" : action === "switch" ? "arrow-right" : "branch", tip); btn.disabled = disabled; btn.addEventListener("click", () => void run(() => act(action, b))); return btn; };
             if (b.remote)
-                buttons.append(button("设为当前分支上游", "upstream", state.detached || state.unborn));
+                buttons.append(button("设为上游", "upstream", state.detached || state.unborn, "设为当前分支上游"));
             else
-                buttons.append(button("切换", "switch", b.current || data.dirty), button("删除已合并分支", "delete", b.current));
+                buttons.append(button("切换", "switch", b.current || data.dirty), button("删除", "delete", b.current, "删除已合并的本地分支"));
             row.append(title, meta, buttons);
             list.append(row);
         }
@@ -104,6 +105,7 @@ export function openGitBranches(repo, refreshed) {
         e.preventDefault(); });
     d.addEventListener("close", () => { active = null; d.remove(); });
     document.body.append(d);
+    decorateIcons(d);
     enhanceSelects(d);
     d.showModal();
     void run(load);

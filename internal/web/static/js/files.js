@@ -1,7 +1,7 @@
 /* files：文件页 —— 工作区/共享目录切换、懒加载目录树、上传/下载。
  * 单文件预览/编辑弹窗在 preview.ts。 */
 "use strict";
-import { buttonLabel } from "./icons.js";
+import { actionButton, buttonLabel } from "./icons.js";
 import { S, emit } from "./state.js";
 import { $, spinEl, btnBusy, btnDone, fmtSize, isMobile, onMobileChange, startDownload, toast } from "./util.js";
 import { api, archiveDownloadURL, fileDownloadURL, scopeQS } from "./api.js";
@@ -300,7 +300,7 @@ function renderMoveCrumb() {
     crumb.replaceChildren();
     const root = document.createElement("button");
     root.type = "button";
-    root.textContent = scopeRoot(fileOp.moveScope);
+    actionButton(root, scopeRoot(fileOp.moveScope), "folder", "进入 " + scopeRoot(fileOp.moveScope));
     root.addEventListener("click", () => { fileOp.movePath = ""; loadMoveDirs(); });
     crumb.appendChild(root);
     let acc = "";
@@ -310,7 +310,7 @@ function renderMoveCrumb() {
         const next = document.createElement("button");
         const target = acc;
         next.type = "button";
-        next.textContent = part;
+        actionButton(next, part, "folder", "进入 " + fullScopePath(fileOp.moveScope, target));
         next.addEventListener("click", () => { fileOp.movePath = target; loadMoveDirs(); });
         crumb.appendChild(next);
     }
@@ -652,11 +652,10 @@ function renderCrumb() {
 export function scopeLabel() {
     return S.fileScope === "shared" ? "共享目录" : "空间文件";
 }
-/* 工具条按钮文案：窄屏用短词（上传 / 下载 zip / 上传前清空） */
 function updateFileLabels() {
     const short = isMobile();
-    buttonLabel($("btn-upload"), short ? "上传" : "上传代码包", "upload");
-    buttonLabel($("btn-download"), short ? "下载 zip" : `下载${scopeLabel()} (zip)`, "download");
+    actionButton($("btn-upload"), "上传", "upload", `上传代码包并解压到${scopeLabel()}`);
+    actionButton($("btn-download"), "下载", "download", `下载全部${scopeLabel()}（ZIP）`);
     $("upload-clear-label").textContent = short ? "上传前清空" : "上传前清空" + scopeLabel();
 }
 onMobileChange(updateFileLabels);

@@ -5,7 +5,7 @@
  * 和服务端自己发的 OAuth / Key 探测。所以这里的「停用」是硬开关，不是「绕过
  * 它走直连」——直连等于把服务器真实 IP 交出去，正是绑代理要避免的事。 */
 "use strict";
-import { buttonLabel } from "./icons.js";
+import { actionButton, buttonLabel, svgIcon } from "./icons.js";
 import { setSelectValue } from "./select.js";
 import { $, btnBusy, btnDone, toast, askConfirm, fmtLatency } from "./util.js";
 import { api } from "./api.js";
@@ -110,7 +110,8 @@ function proxyRow(p) {
     const addrBtn = document.createElement("button");
     addrBtn.type = "button";
     addrBtn.className = "px-copy mono";
-    addrBtn.textContent = p.host + ":" + p.port;
+    actionButton(addrBtn, p.host + ":" + p.port, "copy", "复制代理地址");
+    addrBtn.setAttribute("aria-label", "复制代理地址");
     setTip(addrBtn, "点击复制");
     addrBtn.addEventListener("click", async () => {
         try {
@@ -151,11 +152,11 @@ function proxyRow(p) {
     test.addEventListener("click", () => runProbe(p, test));
     const edit = document.createElement("button");
     edit.className = "btn btn-sm btn-ghost";
-    buttonLabel(edit, "编辑", "rename");
+    actionButton(edit, "", "rename", "编辑代理");
     edit.addEventListener("click", () => openProxyDlg(p));
     const del = document.createElement("button");
     del.className = "btn btn-sm btn-danger";
-    buttonLabel(del, "删除", "trash");
+    actionButton(del, "", "trash", "删除代理");
     del.addEventListener("click", () => removeProxy(p));
     acts.append(test, edit, del);
     tr.append(name, scheme, addr, auth, acct, probe, acts);
@@ -371,6 +372,8 @@ export function mountProxyPicker(root) {
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "pp-trigger";
+    trigger.appendChild(svgIcon("network", 15));
+    trigger.setAttribute("aria-label", "选择出口代理");
     const label = document.createElement("span");
     label.className = "pp-label";
     const caret = document.createElement("span");

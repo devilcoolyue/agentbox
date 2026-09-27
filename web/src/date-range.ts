@@ -1,6 +1,6 @@
 /* 日期范围组件：草稿与已应用值分离。所有值都是指定时区的墙上时间，
  * 不交给浏览器本地时区解析；只有快捷范围的相对时长按绝对时刻计算。 */
-import { decorateIcons } from "./icons.js";
+import { buttonLabel, decorateIcons } from "./icons.js";
 
 export interface DateRangeValue {
   since: string;
@@ -70,7 +70,7 @@ export class DateRangePicker {
             <div class="dr-caption">日期与时间 <span data-dr="zone"></span></div>
             ${(["since", "until"] as const).map(which => `
               <section class="dr-bound" data-dr="${which}-box">
-                <button class="dr-bound-title" type="button" data-dr="${which}-select">${which === "since" ? "开始时间" : "结束时间"}</button>
+                <button class="dr-bound-title" type="button" data-icon="clock" data-dr="${which}-select">${which === "since" ? "开始时间" : "结束时间"}</button>
                 <div class="dr-inputs">
                   <input data-dr="${which}-day" type="text" inputmode="numeric" placeholder="YYYY/MM/DD"
                     autocomplete="off" aria-label="${which === "since" ? "开始" : "结束"}日期" maxlength="10">
@@ -84,7 +84,7 @@ export class DateRangePicker {
             <label class="dr-follow"><input data-dr="follow" type="checkbox">结束时间跟随当前时刻</label>
             <p class="dr-error" data-dr="error" role="alert"></p>
             <div class="dr-actions">
-              <button type="button" class="btn btn-ghost" data-dr="cancel">取消</button>
+              <button type="button" class="btn btn-ghost" data-dr="cancel" data-icon="close">取消</button>
               <button type="submit" class="btn btn-primary" data-icon="check">确定</button>
             </div>
           </div>
@@ -134,7 +134,7 @@ export class DateRangePicker {
     for (const [key, label] of presets) {
       const b = document.createElement("button");
       b.type = "button";
-      b.textContent = label;
+      buttonLabel(b, label, "calendar");
       b.dataset.preset = key;
       b.addEventListener("click", () => {
         this.draft = this.rangeFor(key);

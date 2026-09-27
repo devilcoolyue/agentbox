@@ -1,5 +1,5 @@
 import { settingsState } from "./features/settings/state.js";
-import { buttonLabel } from "./icons.js";
+import { actionButton, buttonLabel } from "./icons.js";
 import { S } from "./state.js";
 import { $, toast, askConfirm, fmtTime } from "./util.js";
 import { api } from "./api.js";
@@ -42,7 +42,7 @@ function renderRows() {
             const custom = document.createElement("button");
             custom.type = "button";
             custom.className = "price-mode";
-            custom.textContent = "设为自定义";
+            actionButton(custom, "自定义", "rename", "设为自定义价格");
             custom.addEventListener("click", () => { readDraft(); customModels.add(key); dirty = true; renderRows(); });
             k.appendChild(custom);
         }
@@ -270,7 +270,7 @@ function renderCatalog() {
         const restore = document.createElement("button");
         restore.type = "button";
         restore.className = "btn btn-sm";
-        restore.textContent = "恢复此版本";
+        actionButton(restore, "恢复", "undo", "恢复此价格版本");
         restore.addEventListener("click", async () => {
             if (!view || busy || !requireClean())
                 return;

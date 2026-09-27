@@ -37,7 +37,7 @@
 .dr-bound { border: 1px solid var(--line); border-radius: 10px; padding: 12px; transition: border-color 140ms, background 140ms; }
 .dr-bound.active { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 5%, var(--panel)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 18%, transparent); }
 .dr-bound.disabled { opacity: 0.5; background: color-mix(in srgb, var(--panel-2) 30%, transparent); }
-.dr-bound-title { display: block; padding: 0; margin-bottom: 12px; background: none; border: 0; color: var(--muted); font-size: 12px; text-align: left; width: 100%; }
+.dr-bound-title { display: flex; justify-content: flex-start; padding: 0; margin-bottom: 12px; background: none; border: 0; color: var(--muted); font-size: 12px; text-align: left; width: 100%; }
 .dr-bound.active .dr-bound-title { color: var(--amber); }
 .dr-inputs { display: flex; align-items: center; gap: 8px; }
 .dr-inputs > input { width: 100%; min-width: 0; padding: 4px 0; border: 0; border-radius: 3px; background: none; font-size: 15px; font-variant-numeric: tabular-nums; }

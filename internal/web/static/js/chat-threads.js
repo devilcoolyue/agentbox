@@ -121,6 +121,7 @@ function threadItem(t, on) {
     const open = document.createElement("button");
     open.type = "button";
     open.className = "tp-open";
+    open.appendChild(svgIcon("clock", 15));
     setTip(open, on ? "当前对话" : "切换到这条对话继续");
     const title = document.createElement("span");
     title.className = "tp-title";
@@ -137,12 +138,14 @@ function threadItem(t, on) {
     const ren = document.createElement("button");
     ren.type = "button";
     ren.className = "tp-del"; // 与删除同一套图标按钮样式
+    ren.setAttribute("aria-label", "重命名这条对话");
     setTip(ren, "重命名这条对话");
     ren.appendChild(svgIcon("rename", 15));
     ren.addEventListener("click", (e) => { e.stopPropagation(); renameThread(t); });
     const del = document.createElement("button");
     del.type = "button";
     del.className = "tp-del";
+    del.setAttribute("aria-label", "删除这条对话");
     setTip(del, "删除这条对话");
     del.appendChild(svgIcon("trash", 15));
     del.addEventListener("click", (e) => { e.stopPropagation(); delThread(t); });

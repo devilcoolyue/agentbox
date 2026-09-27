@@ -226,6 +226,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .btn-ghost.btn-danger { background: transparent; border-color: transparent; }
 .btn-ghost.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 10%, transparent); border-color: transparent; }
 .btn-sm { min-height: 32px; padding: 5px 10px; font-size: 12.5px; }
+.btn.action-icon { min-width: 32px; padding-inline: 7px; }
 /* 图标按钮：图标随文字取色（danger 变体自动跟着变红），大小固定不被挤压 */
 .btn-ico { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .btn-ico svg { flex: none; }

@@ -495,10 +495,12 @@ details.think.streaming .think-body::after {
 .tp-item.on { background: color-mix(in srgb, var(--amber) 9%, transparent); }
 .tp-open {
   flex: 1; min-width: 0; text-align: left;
-  display: flex; flex-direction: column; gap: 3px;
+  display: grid; grid-template-columns: 15px minmax(0, 1fr); gap: 3px 7px;
   background: none; border: none; border-radius: 10px 0 0 10px;
   padding: 9px 4px 9px 10px;
 }
+.tp-open > .ui-icon { grid-row: 1 / 3; align-self: center; color: var(--muted); }
+.tp-open > .tp-meta { grid-column: 2; }
 .tp-title {
   color: var(--text); font-size: 13.5px; line-height: 1.5;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

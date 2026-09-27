@@ -10,7 +10,7 @@
  * 切过去就能看到，不必先保存。 */
 "use strict";
 
-import { buttonLabel } from "./icons.js";
+import { actionButton } from "./icons.js";
 
 import { S } from "./state.js";
 import type { FileScope } from "./state.js";
@@ -445,7 +445,7 @@ $("fv-newtab").addEventListener("click", () => {
 });
 $("fv-full").addEventListener("click", () => {
   const full = $("dlg-file").classList.toggle("fv-max");
-  buttonLabel($("fv-full"), full ? "还原" : "全屏", full ? "collapse" : "expand");
+  actionButton($("fv-full"), full ? "还原" : "全屏", full ? "collapse" : "expand", full ? "退出全屏，恢复预览窗口" : "全屏预览");
 });
 $("fv-vps").addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-vp]");
@@ -474,7 +474,7 @@ async function closePreview() {
   $("fv-md").replaceChildren();
   $<HTMLIFrameElement>("fv-frame").src = "about:blank"; // 别让原型在后台继续跑
   $("dlg-file").classList.remove("fv-max");
-  buttonLabel($("fv-full"), "全屏", "expand");
+  actionButton($("fv-full"), "全屏", "expand", "全屏预览");
   $<HTMLDialogElement>("dlg-file").close();
 }
 
