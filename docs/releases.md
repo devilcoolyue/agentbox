@@ -4,6 +4,8 @@
 
 二进制包携带 `deploy/downloads/README.md` 用户说明；架构、审计和开发文档在源码仓库查阅。
 
+2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
+
 当前正式版本为 [v0.1.4](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.4)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
 
 新用户的一键入口是仓库根目录 `install.sh`，使用方法见[一键安装](../deploy/README.md#一键安装)。维护者需推送该入口，并将新构建的 Linux 发布包和 `SHA256SUMS` 附到公开 Release：默认命令读取 latest 正式发布，只有预览包时必须指定 `--version`。仅创建 Actions artifact 不会让安装命令可用；支持一键安装的包必须包含 `deploy/bootstrap.py`。

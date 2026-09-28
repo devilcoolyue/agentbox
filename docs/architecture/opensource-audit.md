@@ -6,7 +6,9 @@
 
 额外按本机生产参数比对所有可达 Git 对象：当前跟踪文件没有生产地址，历史 `deploy/agentbox.service` 与 `scripts/enable-domain.sh` 含旧生产域名。负责人选择先清理历史再公开。已在仓库外备份本地与远端 Git bundle，在隔离镜像中把域名替换为 `agentbox.example.com`，并使用原引用 SHA 作为 lease 原子更新全部 4 个远端分支与 3 个标签。清理后的历史域名比对及 gitleaks 复扫均无命中，主分支当前文件树未改变；本地普通分支、标签与跟踪引用已同步。旧克隆不能直接合并或推回，以免重新引入旧历史。
 
-GitHub 的已合并 PR #1 仍保留 `refs/pull/1/head`，其历史包含上述两个文件。实测 GitHub 拒绝替换该引用，返回 `deny updating a hidden ref`；旧提交的服务端缓存也不能靠强推保证移除。仓库因此暂时保持私有，尚未完成公开。彻底移除 PR 引用与缓存需按 [GitHub 历史清理说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository#fully-removing-the-data-from-github) 联系 Support；GitHub 不承诺为非敏感数据提供清理。也可由负责人另行决定保留旧库私有，以清理后的历史建立公开仓库。
+GitHub 的已合并 PR #1 保留 `refs/pull/1/head`，其历史包含上述两个文件。实测 GitHub 拒绝替换该引用，返回 `deny updating a hidden ref`；旧提交的服务端缓存也不能靠强推保证移除。按 [GitHub 历史清理说明](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository#fully-removing-the-data-from-github)，彻底移除 PR 引用与缓存需联系 Support，且 GitHub 不承诺为非敏感数据提供清理。
+
+负责人因此选择将旧库改名为私有历史归档，再以原名 `devilcoolyue/agentbox` 建立新的公开源码仓库。新库仅接收已清理的 4 个分支与 3 个标签，不迁移旧 PR、Actions 历史或缓存引用。原始 bundle、提交映射及旧工作副本保留在维护者私有存储中，不进入公开仓库。旧二进制包的构建提交仍对应清理前哈希，已发布附件与校验和保持不变，安装和升级继续走独立下载仓库。
 
 本地 `go build ./...`、`go test ./...`、`go vet ./...`、前端类型检查与重新构建后的产物一致性检查、第三方清单/哈希校验及固定镜像策略检查均通过。本次没有运行生产部署或真实模型调用；已有 CI 的 `c19245a` 运行成功。README 与发布文档改为 Apache-2.0 源码入口说明，二进制安装与自动更新继续使用 `devilcoolyue/agentbox-releases`。
 

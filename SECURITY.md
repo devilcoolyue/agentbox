@@ -12,7 +12,7 @@
 
 https://github.com/devilcoolyue/agentbox/security/advisories/new
 
-维护者需在首次公开发布前启用 GitHub Private vulnerability reporting。如果该入口不可用，请勿将漏洞细节或凭证放进公开 Issue；可仅请求维护者提供私密联系渠道，不描述利用步骤。请提供受影响的版本/提交、最小复现、影响范围与合成数据样例，不发送真实模型密钥、数据库或用户工作区。
+仓库通过 GitHub Private vulnerability reporting 接收私密报告。如果该入口不可用，请勿将漏洞细节或凭证放进公开 Issue；可仅请求维护者提供私密联系渠道，不描述利用步骤。请提供受影响的版本/提交、最小复现、影响范围与合成数据样例，不发送真实模型密钥、数据库或用户工作区。
 
 目前没有保证响应时间或漏洞赏金计划。报告处理包括确认影响、协作修复、添加回归测试和发布修复说明；公开细节前与报告者协调。
 
