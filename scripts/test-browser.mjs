@@ -27,7 +27,7 @@ export async function smoke(page) {
  const base = `http://127.0.0.1:${server.address().port}`;
  const errors = []; page.on('pageerror', e => { errors.push(e.stack || e.message); console.error('Browser page error:', e.stack || e.message); });
  let settingsWrites = 0, monitorCalls = 0, updateChecks = 0, updateReads = 0;
- let release = {current_version:'v0.1.0-rc.2-updates2',revision:'0123456789abcdef',built_at:'2026-09-24T08:00:00Z',latest_version:'',available:false,comparable:true,release_url:'https://github.com/devilcoolyue/agentbox-releases/releases',notes:'',checked_at:0,attempted_at:0,error:''};
+ let release = {current_version:'v0.1.0-rc.2-updates2',revision:'0123456789abcdef',built_at:'2026-09-24T08:00:00Z',latest_version:'',available:false,comparable:true,release_url:'https://github.com/devilcoolyue/agentbox/releases',notes:'',checked_at:0,attempted_at:0,error:''};
  let nextRelease = {latest_version:'v0.2.0',available:true,notes:'新增版本提醒。\n<script>untrusted release notes</script>'};
  let upgrade = {supported:true,reason:'',current_version:release.current_version,job:null};
  let upgradeStarts = 0, upgradeReads = 0, loseUpgradeResponse = false, upgradeOffline = false;

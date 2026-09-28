@@ -102,10 +102,10 @@ flowchart LR
 在 Linux 服务器上执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox-releases/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
 ```
 
-当前正式版本为 [v0.1.4](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.4)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.4`。
+当前正式版本为 [v0.1.5](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.5)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.5`。
 
 Oracle Linux / RHEL 等启用 SELinux 的系统，若旧版安装包启动时报 `203/EXEC` / `Permission denied`，按[SELinux 安装恢复](deploy/README.md#selinux-安装恢复)修复程序标签后重试激活。
 

@@ -1,12 +1,28 @@
 # 版本发布与二进制安装
 
-源码仓库 [devilcoolyue/agentbox](https://github.com/devilcoolyue/agentbox) 采用 Apache-2.0 许可证，提供完整源码、开发文档与贡献入口。二进制下载继续使用独立仓库 [devilcoolyue/agentbox-releases](https://github.com/devilcoolyue/agentbox-releases)，其中包含安装脚本、用户说明、许可证及 Release 安装包。安装与自动更新统一从该下载仓库获取正式版本。
+主仓库 [devilcoolyue/agentbox](https://github.com/devilcoolyue/agentbox) 采用 Apache-2.0 许可证，统一提供源码、文档、正式 Release 和安装包。自 v0.1.5 起，安装器、控制台更新检查与升级下载均使用主仓库。
+
+旧仓库 [devilcoolyue/agentbox-releases](https://github.com/devilcoolyue/agentbox-releases) 保留历史下载和兼容镜像：旧版二进制的检查地址无法通过修改网页变更，需同步同一份新发布附件，让旧用户能发现并安装过渡版本。v0.1.5 安装后转向主仓库检查后续更新。旧仓库不单独构建、不删除旧附件；未来发版仍同步兼容镜像，退役前另行公告。
 
 二进制包携带 `deploy/downloads/README.md` 用户说明；架构、审计和开发文档在源码仓库查阅。
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前正式版本为 [v0.1.4](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.4)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
+当前正式版本为 [v0.1.5](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.5)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
+
+### 历史版本与源码
+
+v0.1.0～v0.1.4 的七个平台包、`release.json` 和 `SHA256SUMS` 从旧仓库原样迁入，不重新编译。表中的原构建提交来自包内发布清单，清理后提交对应主仓库版本标签。
+
+| 版本 | 包内原构建提交 | 清理后源码提交 |
+| --- | --- | --- |
+| v0.1.0 | `2a916ccbdc17` | `19c7678494a0` |
+| v0.1.1 | `e4555ab841de` | `5d1266f986f7` |
+| v0.1.2 | `4855187dfe3b` | `8ef557ed4595` |
+| v0.1.3 | `4f21454474b8` | `639d038aebca` |
+| v0.1.4 | `6576d45a2e3b` | `adaad57a4551` |
+
+迁移补齐 v0.1.1、v0.1.2 标签，并将原 v0.1.0 标签从 `69f839756c47` 校正到公开包的实际构建源码 `19c7678494a0`（两者相差一次安装入口与打包调整）。已克隆旧标签的维护者需核对后单独刷新该标签。v0.1.2 来自保留的发布分支，其功能后来并入 main，不能用 main 上任意相近提交代替该发布源码。
 
 新用户的一键入口是仓库根目录 `install.sh`，使用方法见[一键安装](../deploy/README.md#一键安装)。维护者需推送该入口，并将新构建的 Linux 发布包和 `SHA256SUMS` 附到公开 Release：默认命令读取 latest 正式发布，只有预览包时必须指定 `--version`。仅创建 Actions artifact 不会让安装命令可用；支持一键安装的包必须包含 `deploy/bootstrap.py`。
 
@@ -16,7 +32,7 @@
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.4 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.5 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0
@@ -28,6 +44,8 @@ python3 scripts/scan-secrets.py --artifacts /tmp/agentbox-release --output /tmp/
 发布脚本拒绝已有输出目录、缺失 LICENSE 或脏工作区。`--allow-dirty` 仅供本地候选验证，版本信息会标记 dirty，不可公开发布。发布前须重新从干净提交构建。
 
 `v*` 标签触发 `.github/workflows/release.yml`，执行验证、构建、Linux 包冒烟及敏感信息扫描，上传供评审的工作流候选 artifact（可见性跟随仓库及 Actions 权限，不保证私密）。它不自动公开 GitHub Release，也不推送含 Claude Code 的镜像。维护者审阅检查结果、变更说明及许可证后，再手工创建 Release 并附上候选文件；预览版本标记为 prerelease。创建/推送标签与公开发布需要项目负责人的明确决定。
+
+正式发布先在主仓库创建 draft 并上传通过验证的完整附件，核对远端附件清单与 SHA-256 后发布；再把**同一目录中的原始文件**上传到旧仓库的同版本 draft，验证一致后发布兼容镜像。只构建一次，不能给两个仓库分别构建同版本。旧仓库仅同步安装入口和用户说明，不复制主项目源码；镜像说明链接到主仓库的正式 Release。两边都验证 `/releases/latest` 和下载地址，避免只更新说明却没有实际安装包。
 
 ## 从包安装（无需 Go/Node 编译服务端）
 
@@ -65,7 +83,7 @@ CLI 镜像独立于服务端包，版本与回退见 [兼容矩阵](compatibilit
 
 管理员侧栏版本徽标和「关于与更新」页显示运行中二进制的构建信息。`GET /api/updates` 读取本地版本与检查缓存，`POST /api/updates/check` 检查上游正式发布（两者均需管理员权限）；`?force=1` 可手动检查，仍有 1 分钟防重复请求间隔。自动检查由已登录、可见且联网的控制台每 4 小时触发，服务端缓存由所有页面共享，重启后重新检查。
 
-数据源是公开下载仓库 `devilcoolyue/agentbox-releases` 的 GitHub Releases latest 接口，不包含 draft/prerelease，也不单独检查会话镜像或 abox-link。没有正式发布、开发构建无法比较、网络失败均单独显示；不会把检查失败当成最新版本。版本号由发布构建注入，普通 `go build` 为 `dev`。
+数据源是公开下载仓库 `devilcoolyue/agentbox` 的 GitHub Releases latest 接口，不包含 draft/prerelease，也不单独检查会话镜像或 abox-link。没有正式发布、开发构建无法比较、网络失败均单独显示；不会把检查失败当成最新版本。版本号由发布构建注入，普通 `go build` 为 `dev`。
 
 标准 Linux/systemd 发布安装支持管理员点击「升级并重启」。首次使用需要先通过原有手工流程升级到包含此功能的发布包；旧版二进制不会自行获得新按钮。支持条件包括 root 运行、正式构建、版本目录与 current 链接一致、原始 agentbox.service 单元及无自定义 drop-in、Python 3 和 systemd-run。源码安装、开发构建、自定义服务布局继续显示手工升级说明。
 

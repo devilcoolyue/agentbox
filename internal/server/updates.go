@@ -15,8 +15,8 @@ import (
 	"agentbox/internal/buildinfo"
 )
 
-const releasesURL = "https://github.com/devilcoolyue/agentbox-releases/releases"
-const latestReleaseURL = "https://api.github.com/repos/devilcoolyue/agentbox-releases/releases/latest"
+const releasesURL = "https://github.com/devilcoolyue/agentbox/releases"
+const latestReleaseURL = "https://api.github.com/repos/devilcoolyue/agentbox/releases/latest"
 const updateInterval = 4 * time.Hour
 
 // Only public release metadata is returned; this API never installs a binary.

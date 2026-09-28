@@ -61,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-test-') as tmp:
         if {path.name for path in folder.iterdir()} - allowed:
             raise SystemExit('Unexpected files in public binary package')
         if any(path.suffix in ('.go', '.ts') or path.name in ('AGENTS.md', '.git') for path in folder.rglob('*')):
-            raise SystemExit('Private project sources in public binary package')
+            raise SystemExit('Unexpected project sources in binary package')
         meta=json.loads((folder/'build.json').read_text())
         for key in ['version','revision','os','arch']:
             if meta[key]!=r[key]:raise SystemExit('Metadata mismatch')

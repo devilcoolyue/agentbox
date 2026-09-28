@@ -632,6 +632,7 @@ data/
 ### 开源发布约定
 
 - 项目采用 Apache-2.0；保留 LICENSE、NOTICE 和 `third_party/` 中第三方许可。内置资源哈希及 Go 链接模块清单经 `scripts/verify-third-party.py` 校验；更新 Go 依赖后运行 `scripts/collect-go-licenses.py` 并审查变化。
+- v0.1.5 起正式发布、安装与更新统一到 `devilcoolyue/agentbox`；`agentbox-releases` 保留为旧版更新兼容镜像，同版本只构建一次、同步相同附件和 SHA256SUMS。历史包原样迁移，构建提交映射及发布顺序见 `docs/releases.md`，不能仅更新旧库说明或删除旧发布地址。
 - `scripts/build-release.py` 在干净 checkout 构建 7 个平台包，含 `--version`/build.json/校验和。Tag 工作流只生成候选 artifact，不自动公开 Release 或包含 Claude Code 的镜像。
 - 发布包验证用 `scripts/test-release.py`；真实 Linux Docker 会话冒烟用 `scripts/test-release-server.py --image <已构建镜像>`，仅合成数据，不发模型请求。两者创建自己的容器并清理。
 - `scripts/scan-secrets.py` 扫描全部已获取 refs、当前跟踪文件和解包产物（含二进制 printable strings）；报告必须保存在仓库外，内容脱敏。扫描前先 fetch 分支和标签；扫描通过不是不存在敏感信息的证明，生产域名等仍需人工审查。

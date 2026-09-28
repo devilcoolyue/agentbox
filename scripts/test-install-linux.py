@@ -42,7 +42,7 @@ def inside():
         'curl': '''import shutil,sys
 from pathlib import Path
 url=next(arg for arg in sys.argv if arg.startswith('https://'))
-assert url.startswith(('https://api.github.com/repos/devilcoolyue/agentbox-releases/releases/', 'https://github.com/devilcoolyue/agentbox-releases/releases/')), url
+assert url.startswith(('https://api.github.com/repos/devilcoolyue/agentbox/releases/', 'https://github.com/devilcoolyue/agentbox/releases/')), url
 name='latest.json' if url.endswith('/latest') else url.rsplit('/',1)[1]
 shutil.copyfile(Path('/tmp/install-test/fixture')/name,sys.argv[sys.argv.index('-o')+1])
 ''',

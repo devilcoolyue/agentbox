@@ -5,7 +5,7 @@ import { hideTip } from "./tip.js";
 import type { UpdateInfo, UpgradeInfo } from "./types.js";
 
 const interval = 4 * 60 * 60 * 1000;
-const releasesURL = "https://github.com/devilcoolyue/agentbox-releases/releases";
+const releasesURL = "https://github.com/devilcoolyue/agentbox/releases";
 const versionLabel = (version: string) => /^\d/.test(version) ? "v" + version : version;
 
 /** App-owned state: logout aborts requests, listeners and scheduled checks. */

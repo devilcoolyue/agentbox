@@ -3,7 +3,7 @@ import { S, emit } from "./state.js";
 import { $, askConfirm } from "./util.js";
 import { hideTip } from "./tip.js";
 const interval = 4 * 60 * 60 * 1000;
-const releasesURL = "https://github.com/devilcoolyue/agentbox-releases/releases";
+const releasesURL = "https://github.com/devilcoolyue/agentbox/releases";
 const versionLabel = (version) => /^\d/.test(version) ? "v" + version : version;
 /** App-owned state: logout aborts requests, listeners and scheduled checks. */
 export function initUpdates() {

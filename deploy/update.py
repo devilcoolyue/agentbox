@@ -25,7 +25,7 @@ spec = importlib.util.spec_from_file_location('release', Path(__file__).with_nam
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
-REPO = 'devilcoolyue/agentbox-releases'
+REPO = 'devilcoolyue/agentbox'
 STABLE = re.compile(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)')
 TERMINAL = ('succeeded', 'failed')
 MAX_ARCHIVE = 1024 * 1024 * 1024
