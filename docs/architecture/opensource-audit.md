@@ -1,5 +1,15 @@
 # 开源发布审查记录（2026-09-23）
 
+## 主仓库公开准备复核（2026-09-28）
+
+在 `c19245a` 基础上重新获取 origin 分支与标签；扫描时全部本地 refs 可达 108 个提交，当前跟踪 656 个文件。使用仓库既有 gitleaks 配置复扫历史、跟踪文件，以及从主仓库下载的已发布 v0.1.0 附件（解包并提取二进制 printable strings），均为 0 个未审查命中。报告位于仓库外；没有扩大扫描豁免。
+
+额外按本机生产参数比对所有可达 Git 对象：当前跟踪文件没有生产地址，历史 `deploy/agentbox.service` 与 `scripts/enable-domain.sh` 仍含旧生产域名。公开前需负责人确认接受这段历史，或另行清理后重新扫描；本次准备没有改写历史。
+
+本地 `go build ./...`、`go test ./...`、`go vet ./...`、前端类型检查与重新构建后的产物一致性检查、第三方清单/哈希校验及固定镜像策略检查均通过。本次没有运行生产部署或真实模型调用；已有 CI 的 `c19245a` 运行成功。README 与发布文档改为 Apache-2.0 源码入口说明，二进制安装与自动更新继续使用 `devilcoolyue/agentbox-releases`。
+
+以下保留 2026-09-23 的候选审查记录，版本及待办描述对应当时状态。
+
 ## 许可证与来源
 
 项目负责人已选择 Apache-2.0。LICENSE 使用 Apache 官方全文，NOTICE 标注 Agentbox contributors，并链接第三方声明。源代码内置的 xterm、KaTeX、字体与 claude-hud 已核对上游包/提交，逐文件比较并记录哈希；webgl 唯一差异是移除 sourceMappingURL 注释。33 个跨平台实际链接的 Go 模块携带上游许可/版权/NOTICE 全文，标准库附 Go LICENSE。

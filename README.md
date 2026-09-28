@@ -118,7 +118,7 @@ Oracle Linux / RHEL 等启用 SELinux 的系统，若旧版安装包启动时报
 <details>
 <summary><strong>开发者：从源码构建与部署</strong></summary>
 
-以下步骤面向已取得源码访问权限的维护者。源码仓库当前为私有；普通用户请使用上方公开发布包入口。
+项目采用 [Apache-2.0](LICENSE) 许可证，欢迎从源码构建、修改和贡献。希望直接使用的用户可选择上方预编译安装包；参与开发请参阅[贡献指南](CONTRIBUTING.md)。
 
 ### 1. 准备 Linux 服务器
 

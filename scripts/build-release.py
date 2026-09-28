@@ -78,8 +78,8 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
             shutil.copy2(binary, clients / (f'abox-link-{system}-{arch}' + ('.exe' if system == 'windows' else '')))
         for doc in ['LICENSE', 'NOTICE']:
             shutil.copy2(ROOT / doc, folder / doc)
-        # Public binary distribution contains operator instructions only. Never
-        # copy the private repository's architecture/audit/development documents.
+        # Binary packages contain operator instructions; architecture, audit,
+        # and development documents remain available in the source repository.
         shutil.copy2(ROOT / 'deploy/downloads/README.md', folder / 'README.md')
         copy_tracked_tree('third_party', folder / 'third_party')
         if program == 'agentbox':

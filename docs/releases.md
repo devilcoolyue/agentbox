@@ -1,6 +1,8 @@
 # 版本发布与二进制安装
 
-源码仓库保持私有；公开下载仓库为 `devilcoolyue/agentbox-releases`，仅提交安装脚本、用户说明和许可证，Release 附件为二进制安装包。打包只携带 `deploy/downloads/README.md` 用户说明，不复制内部架构、审计或开发文档。
+源码仓库 [devilcoolyue/agentbox](https://github.com/devilcoolyue/agentbox) 采用 Apache-2.0 许可证，提供完整源码、开发文档与贡献入口。二进制下载继续使用独立仓库 [devilcoolyue/agentbox-releases](https://github.com/devilcoolyue/agentbox-releases)，其中包含安装脚本、用户说明、许可证及 Release 安装包。安装与自动更新统一从该下载仓库获取正式版本。
+
+二进制包携带 `deploy/downloads/README.md` 用户说明；架构、审计和开发文档在源码仓库查阅。
 
 当前正式版本为 [v0.1.4](https://github.com/devilcoolyue/agentbox-releases/releases/tag/v0.1.4)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
 
