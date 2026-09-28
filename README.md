@@ -264,6 +264,8 @@ Pricing in System settings supports a separate HTTPS pricing catalog, daily chec
 
 Containers and resources in System settings provides global / per-user running container limits, reserved disk space, background disk usage statistics, marketplace cache cleanup, and sanitized diagnostic downloads. The usage page reads recorded entries and shows the terminal scan time; backfill runs in the background.
 
+Claude web chat deduplicates usage by message ID, completes usage from new transcript records, and prices each request using the table pinned at turn start. Resumed session totals are never charged again. Message identities and credit deductions commit together (database schema 9). Existing history is not automatically repriced. Usage details and CSV include cache hit rate: cache reads / (uncached input + cache reads + cache writes); no input displays “—”.
+
 ## Documentation
 
 The English and Chinese READMEs cover the same features and setup steps. Detailed guides are currently available in **Chinese**. Start with the [documentation index](docs/README.md) for guidance by role.

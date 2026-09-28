@@ -403,7 +403,7 @@ func (r *chatRoom) runTurn(text, model, effort string, controls ...string) {
 		Unsupported: options.Unsupported, BudgetTokens: options.BudgetTokens,
 	}}, "user_message", "")
 	turnStart = time.Now()
-	tally = s.usageService().NewTally()
+	tally = s.usageService().NewChatTally(sess)
 
 	// 容器起来之后才可能产生消耗，之后无论回合正常收尾、报错还是被中断，已经
 	// 报上来的用量都要落库——钱花了就得记。一行都没记到说明这个 agent/版本报
@@ -429,18 +429,19 @@ func (r *chatRoom) runTurn(text, model, effort string, controls ...string) {
 			if ttftMS == 0 && event.Output {
 				ttftMS = time.Since(turnStart).Milliseconds()
 			}
+			// Claude message_delta carries final output counts; meter it before
+			// partial events take the broadcast-only return below.
+			tally.Observe(store.UsageEvent{
+				User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: turnID,
+				Agent: sess.Agent, AccountID: sess.AccountID, Model: model,
+				Kind: store.UsageKindChat, TTFTMs: ttftMS,
+			}, line)
 			if event.Partial {
 				// 增量 delta 只广播不落盘：随后的完整事件会带全文再来一份
 				r.broadcast(map[string]any{"type": "agent_event", "event": ev, "ts": time.Now()})
 				return
 			}
 			r.recordChat(logEntry{Kind: "event", Event: ev}, "agent_event", "")
-			// 回合收尾事件带 token/费用，先并进 tally，回合结束统一落库。
-			tally.Observe(store.UsageEvent{
-				User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: turnID,
-				Agent: sess.Agent, AccountID: sess.AccountID, Model: model,
-				Kind: store.UsageKindChat, TTFTMs: ttftMS,
-			}, line)
 			if id := event.SessionID; id != "" && id != chatID {
 				chatID = id
 				if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.ChatSession = id }); err != nil {

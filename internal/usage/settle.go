@@ -20,6 +20,9 @@ func (s *Service) NewTally() Tally {
 // wall 是本回合在我们这边的墙钟耗时，只有到这里回合才真的结束、才量得到，所以
 // 由调用方在 flush 的时刻算好传进来（见 chat.go 的 defer）。0 表示没量。
 func (s *Service) Flush(t *Tally, wall time.Duration) int {
+	if t.claude != nil {
+		return s.flushClaudeMessages(t, wall)
+	}
 	if len(t.evs) == 0 {
 		return 0
 	}

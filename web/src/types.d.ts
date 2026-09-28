@@ -230,6 +230,7 @@ export interface UsageEventRow {
 
 /** 一行消耗对应的单价（已按档位选好），美元 / 百万 token。 */
 export interface UsageRate extends TokenRates {
+  per_request?: boolean;
   pricing_revision?: string;
   catalog_version?: string;
   source_url?: string;

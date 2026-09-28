@@ -249,9 +249,7 @@ data/
 
 - 回合收尾事件里的 token/费用落进 `usage_events` 表（`internal/usage/events.go` 解析，
   `runTurn` 的 `onLine` 里挂钩），并在**同一个事务**里从用户额度扣掉（见下节）。
-- Claude 的 `type:"result"` 按 `modelUsage` **每个模型出一行**（含子 agent 用的 haiku），
-  同回合各行共享 `turn_id`。实测 `total_cost_usd` 等于各行 `costUSD` 之和，而顶层 `usage`
-  只覆盖主模型——计费别用顶层 `usage`，会漏记。
+- Claude 网页对话在 `internal/usage/claude_messages.go` 按 `message.id` 去重：优先有 `stop_reason` 的记录，同等完整度取 output 最大者。`message_delta` 必须在 partial 早返回前交给 tally；回合启动前保存 transcript 文件边界，收尾只读同一 provider 会话及子 Agent 的新增记录补齐用量。`modelUsage` / `total_cost_usd` 可能包含续聊历史，绝不用于网页扣款；仅独立、不 resume 的起标题进程允许 result 计量。按回合开始锁定的价目表逐请求计价，再按模型聚合。`usage_messages` 按空间/message ID 持久去重，认领、写流水、扣额度同事务，重启或重放不能重复扣款。
 - Codex 的 `type:"turn.completed"` 只有 token、**不报费用**（`cost_micro_usd` 记 0，
   待定价表就位后按 token 折算）。两处形状已对 codex-cli 0.145.0 实测核对过，
   app-server 翻译出的事件与 `codex exec --json` 自己吐的完全一致，`parseUsage` 一套
@@ -314,7 +312,7 @@ data/
   没有可靠累计值，所以拦截只发生在**回合开始前**（`handleChatWS` 的 `user_message`
   分支），余额见底的那个回合允许超支。宁可多花一个回合，也不把用户跑到一半的任务
   腰斩。起标题这趟服务端自发的消耗在余额见底时直接跳过。
-- **claude 对话行的价以 provider 报的为准**；不报价的走 `config.json` 的 `pricing`
+- **Claude 网页对话按独立消息用量查价目表**，独立起标题才可用 CLI 报价；不报价的走 `config.json` 的 `pricing`
   按 token 折算——codex 的全部回合，以及从 transcript 补记的**终端行**（那里只有
   token 没有美元，claude 也一样要查表）。价目表单位是「每百万 token 多少美元」，
   微美元成本正好等于 `tokens × rate`（两个 1e6 约掉）。查表顺序：**精确模型名 →
@@ -380,13 +378,12 @@ data/
   页面由筛选/合计、独立滚动的明细、常驻底部分页组成，不能把滚动放回 `.usage-body`。
   默认每页 20 条，可选 50 / 100 条；翻页/改筛选重置列表滚动位置，自动轮询保留位置。
   页大小只影响明细请求，合计与 CSV 仍按整个筛选范围计算。
-  计费方式并入费用列；窄屏明细纵向展示，字段名来自 `<td>` 的 `data-l`。
+  计费方式并入费用列；窄屏明细纵向展示，字段名来自 `<td>` 的 `data-l`。缓存命中率与 CSV 共用 `usage-math.ts`，分母为未缓存输入 + 缓存读 + 缓存写，无输入显示 —，输出不进分母。
 - **每行「费用」旁的 `?` 是费用明细弹窗**（`usage.ts` 的 `openCost` + `dlg-cost`）：把
   四个 token 桶各自的 `token × 单价` 摊开，末尾对上实收金额，脚注写清计价算法。单价
   由服务端随行下发（`usageRowView.Rate` ← `rateFor` ← `config.PriceLookup`，顺带给出
   命中的键与档位），**别改成前端自己查价目表**——普通用户根本拿不到 `settings`。两件事
-  不能含糊：① 新行使用入账价格快照（rate.snapshot=true），旧行才回退当前参考价并明确提示；② claude 对话行的钱是 provider 自报的一个总额、
-  拆不出分项，这类行的 `basis` 是 `reference`，表里那份只是照价目表推的参考值。
+  不能含糊：① 新行使用入账价格快照（rate.snapshot=true），旧行才回退当前参考价并明确提示；② CLI 报价的起标题/历史行总额拆不出分项，`basis=reference`；新 Claude 网页行 `per_request=true`，逐请求计价后汇总，不能拿整行输入判长上下文档。
 - **终端消耗靠事后扫 transcript 补记**（`internal/usage/terminal.go`，`kind=terminal`）。
   终端里的 CLI 是容器内进程、输出直接进 PTY，`runTurn` 看不见；但 Claude Code 把完整
   记录落在 `<会话home>/.claude/projects/<cwd目录>/<provider会话id>.jsonl`，而会话 home
@@ -397,8 +394,7 @@ data/
     `output_tokens` 占位——所以这条路其实看得见单次 API 调用，但仍按回合聚合落库，
     好让两种来源的行粒度一致。回合边界用最近一条 `user` 记录的 `uuid`（老版本 CLI 的
     `promptId` 是 null，不能用）。
-  - 同一个 `requestId` 会在文件里出现多次（流式中途一遍、收尾一遍）：**用量取最后一份，
-    时间取最早一份**，累加会把一次调用算两遍。
+  - 按 `message.id` 去重（旧日志缺 ID 才回退 requestId）：优先完整 stop_reason，再选 output 较大者；时间取最早一份。不能让晚到占位记录覆盖最终用量。
   - 去重靠 `usage_events.req_id`（回合首个 requestId）上的**部分唯一索引**
     （`WHERE req_id != ''`，对话行的空串必须排除）。`UpsertTerminalUsage` 的
     `ON CONFLICT` 必须把这个 WHERE 原样带上，否则 SQLite 认不出这条约束。upsert 而非
@@ -664,7 +660,7 @@ data/
 
 - `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度，终端 UpsertTerminalUsage 绝不扣额度。
 - 新行 `PriceSnapshot` 包含来源、价格键、普通/长上下文档和阈值。终端 upsert 在同一事务读取首份快照，续写不能改用新价；旧行没有快照时不要伪造历史单价。Claude 0 费用按表补算时保存 table 来源。
-- 当前 SQLite schema=8（迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
+- 当前 SQLite schema=9（迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
 - `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。
 - 协议样本放在 agent/usage 的 testdata，全部为合成脱敏数据。Linux 测试脚本必须复制这些 testdata；禁止读取真实用户 rollout 当测试夹具。
 

@@ -1,4 +1,5 @@
 import { svgIcon } from "./icons.js";
+import { cacheHitText } from "./usage-math.js";
 /* usage：使用记录（消耗流水明细）。
  *
  * **一行是什么**：一个回合 × 一个模型，不是一次 API 调用。容器里的 CLI 直接打
@@ -197,7 +198,7 @@ const KIND_HINT = {
     title: "服务端自动为新对话生成标题的那趟消耗，不是用户发起的",
 };
 const BILLING = {
-    provider: { text: "官方报价", title: "费用由 provider 在回合收尾时自己报出，我们原样记账" },
+    provider: { text: "CLI 报价", title: "CLI 报告的估算成本，不代表订阅账号的实际扣款" },
     table: { text: "价目表", title: "provider 不报价，按系统设置里的价目表按 token 折算" },
     none: { text: "未定价", title: "provider 不报价且没有配置价目表，这一行只记用量、不扣额度" },
 };
@@ -307,6 +308,9 @@ function renderRows(data) {
         bchip.textContent = b.text;
         setTip(bchip, b.title);
         tr.appendChild(tokenCell(r));
+        const hit = cell("缓存命中率", cacheHitText(r), "num u-hit");
+        setTip(hit, "缓存读取 ÷（未缓存输入 + 缓存读取 + 缓存写入）；不含输出 token，无输入时显示 —");
+        tr.appendChild(hit);
         // 金额后面挂一个「?」：点开是这一行的分项算式（输入/输出/缓存各花了多少）。
         // 金额本身看不出为什么是这个数，尤其是缓存读取常常比输入贵不了几分钱、
         // 却占了大头。
@@ -437,6 +441,8 @@ function openCost(r) {
         if (off)
             lines.push(rate.snapshot ? "拆分与实收有差异，请以已入账金额为准。" : "这条历史记录没有价格快照，展示当前参考价；实收金额以入账记录为准。");
     }
+    if (rate?.per_request)
+        lines.push("本行按消息 ID 去重后逐请求计价，再按模型汇总；上表按标准单价展示，逐请求舍入或长上下文档可能使合计有差异。长上下文阈值按各请求判断，不按整行累计输入判断。");
     if (rate && !rate.snapshot)
         lines.push("旧记录没有保存入账价格，当前单价仅供参考。");
     if (rate?.catalog_version)
@@ -446,7 +452,7 @@ function openCost(r) {
     }
     lines.push("计价算法：查价顺序为 模型 ID → 去掉 -20251001 这类日期后缀再查 → agent 名兜底；" +
         "费用 = 各桶 token × 该桶单价 ÷ 100 万（单价单位是美元 / 百万 token），四舍五入到微美元；" +
-        "配了长上下文档时，输入 + 缓存读取超过阈值的回合整体改用超阈值那档单价。");
+        (rate?.per_request ? "配了长上下文档时，每个请求分别判断输入 + 缓存读取是否超过阈值。" : "配了长上下文档时，输入 + 缓存读取超过阈值的回合整体改用超阈值那档单价。"));
     for (const t of lines) {
         const p = document.createElement("p");
         p.textContent = t;
@@ -626,7 +632,7 @@ async function exportCSV() {
                 "请缩小时间范围后分批导出", true);
         }
         const head = [`时间（${usageTimeZone}）`, "用户", "工作空间", "工作空间ID", "账号", "Agent", "模型", "类型", "计费",
-            "输入", "输出", "缓存读取", "缓存写入", "合计Token", "费用USD",
+            "输入", "输出", "缓存读取", "缓存写入", "缓存命中率", "合计Token", "费用USD",
             "首字ms", "总耗时ms", "模型耗时ms", "回合ID"];
         const lines = [head.join(",")];
         for (const r of data.rows) {
@@ -634,7 +640,7 @@ async function exportCSV() {
                 fmtUsageTime(r.ts, true),
                 r.user, r.session_name || "", r.session_id, r.account_label || "",
                 r.agent, r.model || "", KIND_LABEL[r.kind] || r.kind, (BILLING[r.billing] || { text: r.billing }).text,
-                r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_tokens, r.total_tokens,
+                r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_tokens, cacheHitText(r), r.total_tokens,
                 // 导出给人算账，这里才把微美元换成美元；六位小数才装得下一次便宜回合。
                 (r.cost_micro_usd / 1e6).toFixed(6),
                 r.ttft_ms, r.wall_ms, r.duration_ms, r.turn_id,

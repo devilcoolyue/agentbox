@@ -13,6 +13,7 @@ SQLite 使用 `PRAGMA user_version` 记录 schema。迁移按 `internal/store/mi
 | 6 | Git 操作结束时间 |
 | 7 | Git 连接的不可变网络路由与公司 CA |
 | 8 | 共享 Git 服务账号的用户读写授权 |
+| 9 | usage_messages 按工作空间和 Claude 消息 ID 持久去重；与用量、额度同事务提交，不改历史费用 |
 
 v0.1.3 使用 schema 8，可从 v0.1.2 的 schema 3 自动升级；新建 Git 表和索引，不删除已有空间、用户、用量和额度。迁移后旧版本不能直接打开数据库。Git 密钥目录须与配置、数据库一起备份，执行过密钥轮换后还须保留配套版本化 keyring。
 

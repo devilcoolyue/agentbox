@@ -39,6 +39,7 @@ export async function smoke(page) {
  const me = {user:'fixture',role:'admin',timezone:'UTC',models:{claude:[],codex:[]},quota:{metered:false}};
  let sessions = [{id:'fixture-space',name:'Fixture workspace',agent:'codex',account_id:'fixture',account_label:'Fixture',status:'stopped',default_model:'fixture'}];
  const chatMessages = []; let chatSocket, historyEntries = [], historyCosts = {};
+ let usageRows = [];
  await page.routeWebSocket('**/api/sessions/*/chat?*', ws => { chatSocket=ws; ws.onMessage(data => chatMessages.push(JSON.parse(data))); });
  const terminalInput = []; let terminalSocket;
  await page.routeWebSocket('**/api/sessions/*/term?*', ws => {
@@ -102,7 +103,7 @@ export async function smoke(page) {
   } else if(path==='/api/monitor') {
    monitorCalls++;
    body={now:Date.now(),window_ms:0,process:{rss:0,heap_alloc:0,goroutines:1,uptime_ms:100},host:{cpu_count:1,load1:0,mem_total:0,mem_used:0},summary:{total:0,running:0,cpu_percent:0,mem_usage:0},containers:[]};
-  } else if(path==='/api/usage/events') body={rows:[],total:{rows:0,turns:0,input_tokens:0,output_tokens:0,cache_read_tokens:0,cache_write_tokens:0,cost_micro_usd:0},facets:{users:[],agents:[],models:[]},scope:'all',timezone:'UTC',order:'desc',limit:20,offset:0,sync:{last_scan_at:Date.now(),last_success_at:Date.now(),scanning:false,errors:0}};
+  } else if(path==='/api/usage/events') body={rows:usageRows,total:{rows:usageRows.length,turns:usageRows.length,input_tokens:0,output_tokens:0,cache_read_tokens:0,cache_write_tokens:0,cost_micro_usd:0},facets:{users:[],agents:[],models:[]},scope:'all',timezone:'UTC',order:'desc',limit:20,offset:0,sync:{last_scan_at:Date.now(),last_success_at:Date.now(),scanning:false,errors:0}};
   await route.fulfill({json:body});
  });
  try {
@@ -334,9 +335,35 @@ export async function smoke(page) {
   await page.setViewportSize({width:1280,height:900});
   await page.locator('#set-nav [data-sec="monitor"]').click();
   await page.waitForTimeout(100);assert.equal(monitorCalls,1);
+  usageRows = [
+    {input_tokens:10,cache_read_tokens:80,cache_write_tokens:10},
+    {input_tokens:100,cache_read_tokens:0,cache_write_tokens:0},
+    {input_tokens:0,cache_read_tokens:0,cache_write_tokens:0},
+  ].map((tokens,i)=>({id:i+1,ts:Date.now(),user:'fixture',session_id:'fixture-space',session_name:'Fixture workspace',thread_id:'thread',turn_id:'turn-'+i,agent:'claude',account_id:'fixture',model:'fixture-model',kind:'chat',billing:'table',output_tokens:1000,total_tokens:1100,cost_micro_usd:1000,ttft_ms:100,wall_ms:1000,duration_ms:900,...tokens}));
   await page.evaluate(async()=>{ const {emit}=await import('/_v/{{BUILD}}/js/state.js');emit('open-usage'); });
   await page.locator('#view-usage').waitFor({state:'visible'});
   await page.locator('#usage-sub').filter({hasText:'终端全量扫描'}).waitFor();
+  await page.locator('#usage-rows .u-hit').first().waitFor();
+  assert.deepEqual(await page.locator('#usage-rows .u-hit .u-v').allTextContents(),['80.0%','0.0%','—']);
+  const downloaded=page.waitForEvent('download');
+  await page.locator('#uf-export').click();
+  const csv=await readFile(await (await downloaded).path(),'utf8');
+  const csvLines=csv.trim().split('\r\n'), hitColumn=csvLines[0].split(',').indexOf('缓存命中率');
+  assert.ok(hitColumn>=0);
+  assert.deepEqual(csvLines.slice(1).map(line=>line.split(',')[hitColumn]),['80.0%','0.0%','—']);
+  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) {
+    await mkdir('output/playwright',{recursive:true});
+    await page.screenshot({path:'output/playwright/usage-cache-desktop.png',animations:'disabled'});
+  }
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.locator('#usage-rows .u-hit').first().getAttribute('data-l'),'缓存命中率');
+  if(await page.locator('#uf-toggle').getAttribute('aria-expanded')==='true') await page.locator('#uf-toggle').click();
+  await page.locator('#usage-rows .u-hit').first().scrollIntoViewIfNeeded();
+  assert.equal(await page.locator('#usage-rows .u-hit .u-v').first().innerText(),'80.0%');
+  assert.equal(await page.locator('#view-usage').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'usage page overflows on mobile');
+  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-cache-mobile.png',animations:'disabled'});
+  await page.setViewportSize({width:1280,height:900});
+  usageRows=[];
   await page.evaluate(async()=>{ const {emit}=await import('/_v/{{BUILD}}/js/state.js');emit('unauthorized'); });
   await page.locator('#login').waitFor({state:'visible'});
   await page.waitForTimeout(5200);assert.equal(monitorCalls,1,'monitor leaked after leaving view/login');

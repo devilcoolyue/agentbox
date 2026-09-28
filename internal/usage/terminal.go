@@ -60,9 +60,10 @@ type termTranscriptRec struct {
 	RequestID  string `json:"requestId"`
 	Timestamp  string `json:"timestamp"`
 	Message    struct {
-		ID    string `json:"id"`
-		Model string `json:"model"`
-		Usage struct {
+		ID         string `json:"id"`
+		Model      string `json:"model"`
+		StopReason string `json:"stop_reason"`
+		Usage      struct {
 			Input      int64 `json:"input_tokens"`
 			Output     int64 `json:"output_tokens"`
 			CacheRead  int64 `json:"cache_read_input_tokens"`
@@ -353,19 +354,20 @@ func (s *Service) syncTermWatches(w *fsnotify.Watcher, watched map[string]string
 // parseTerminalTranscript 从一个 transcript 文件里读出终端回合。
 //
 // 按文件顺序流式聚合：遇到 user 记录就开一个新回合，其后的 assistant 记录按模型
-// 累加进去。同一个 requestId 会在文件里出现多次（流式中途写一遍、收尾再写一遍），
-// 只认最后一次，否则同一次调用会被加两遍。
+// 累加进去。同一个 message.id 会在文件里出现多次，优先完整 stop_reason，
+// 同等完整度取 output 较大者，避免累加或用晚到占位覆盖最终记录。
 func parseTerminalReader(f io.Reader) ([]termTurn, error) {
 	// 按 (回合, 模型) 归并，同时记住出场顺序——报表里回合按时间排，靠这个稳定。
 	type key struct{ turn, model string }
 	acc := map[key]*termTurn{}
 	var order []key
-	// 同一个 requestId 的最后一份用量，等文件读完再累加（中途那份是不完整的）。
+	// 同一消息选一份最终用量，读完文件后再累加。
 	type reqUsage struct {
-		k     key
-		ev    store.UsageEvent
-		reqID string
-		ts    time.Time
+		k       key
+		ev      store.UsageEvent
+		reqID   string
+		ts      time.Time
+		message claudeMessage
 	}
 	reqs := map[string]*reqUsage{}
 	var reqOrder []string
@@ -394,20 +396,32 @@ func parseTerminalReader(f io.Reader) ([]termTurn, error) {
 			}
 		case "assistant":
 			u := rec.Message.Usage
-			if rec.RequestID == "" || strings.HasPrefix(rec.Message.Model, "<") {
-				continue // 没有 requestId 去不了重；<synthetic> 是本地合成的空回复
+			id := rec.Message.ID
+			if id == "" {
+				id = rec.RequestID
+			} // legacy transcript compatibility
+			if id == "" || strings.HasPrefix(rec.Message.Model, "<") {
+				continue
 			}
 			if u.Input == 0 && u.Output == 0 && u.CacheRead == 0 && u.CacheWrite == 0 {
 				continue
 			}
 			k := key{turn: turnUUID, model: rec.Message.Model}
-			r, ok := reqs[rec.RequestID]
+			message := claudeMessage{ID: id, Model: rec.Message.Model, StopReason: rec.Message.StopReason, Usage: claudeTokens{Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}}
+			r, ok := reqs[id]
 			if !ok {
 				r = &reqUsage{k: k, reqID: rec.RequestID}
-				reqs[rec.RequestID] = r
-				reqOrder = append(reqOrder, rec.RequestID)
+				if r.reqID == "" {
+					r.reqID = id
+				}
+				reqs[id] = r
+				reqOrder = append(reqOrder, id)
 			}
-			// 用量覆盖而非累加：同一次调用的重复记录取最后一份（收尾那份才全）。
+			if ok && !preferClaudeMessage(message, r.message) {
+				continue
+			}
+			r.message = message
+			// Final snapshots win; a later placeholder cannot reduce usage.
 			r.ev = store.UsageEvent{
 				InputTokens: u.Input, OutputTokens: u.Output,
 				CacheReadTokens: u.CacheRead, CacheWriteTokens: u.CacheWrite,

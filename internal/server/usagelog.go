@@ -80,6 +80,7 @@ type usageRowView struct {
 
 // usageRateView 交代一行的钱是按价目表里的哪一条、哪一档算的。
 type usageRateView struct {
+	PerRequest      bool   `json:"per_request,omitempty"`
 	PricingRevision string `json:"pricing_revision,omitempty"`
 	CatalogVersion  string `json:"catalog_version,omitempty"`
 	SourceURL       string `json:"source_url,omitempty"`
@@ -142,7 +143,11 @@ func (s *Server) rateFor(e store.UsageEvent) *usageRateView {
 		if e.Price.Source == "provider" {
 			basis = rateBasisReference
 		}
-		return &usageRateView{PricingRevision: e.Price.PricingRevision, CatalogVersion: e.Price.CatalogVersion, SourceURL: e.Price.SourceURL, VerifiedAt: e.Price.VerifiedAt, Key: e.Price.Key, Basis: basis, Snapshot: true, Long: long, Over: e.Price.LongContextOver, Input: rates.Input, Output: rates.Output, CacheRead: rates.CacheRead, CacheWrite: rates.CacheWrite}
+		if e.Price.PerRequest {
+			// Aggregate token counts cannot determine individual request tiers.
+			rates, long = e.Price.Standard, false
+		}
+		return &usageRateView{PerRequest: e.Price.PerRequest, PricingRevision: e.Price.PricingRevision, CatalogVersion: e.Price.CatalogVersion, SourceURL: e.Price.SourceURL, VerifiedAt: e.Price.VerifiedAt, Key: e.Price.Key, Basis: basis, Snapshot: true, Long: long, Over: e.Price.LongContextOver, Input: rates.Input, Output: rates.Output, CacheRead: rates.CacheRead, CacheWrite: rates.CacheWrite}
 	}
 
 	p, key, ok := s.cfg.PriceLookup(e.Agent, e.Model)

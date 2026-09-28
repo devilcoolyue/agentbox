@@ -22,10 +22,11 @@ func TestChatCostMatchesSettlementLiveAndHistory(t *testing.T) {
 		partial                   bool
 	}{
 		{"codex cached and reasoning", "codex", `{"type":"turn.completed","usage":{"input_tokens":1000,"cached_input_tokens":800,"output_tokens":100,"reasoning_output_tokens":90}}`, "table", true, 1800, false},
-		{"claude submodels", "claude", `{"type":"result","total_cost_usd":0.999,"modelUsage":{"main":{"inputTokens":100,"costUSD":0.02},"child":{"inputTokens":20,"costUSD":0.005}}}`, "provider", true, 25000, false},
-		{"claude table fallback", "claude", `{"type":"result","usage":{"input_tokens":100,"output_tokens":100}}`, "table", true, 1200, false},
+		{"claude submodels", "claude", `{"type":"assistant","message":{"id":"msg-main","model":"main","usage":{"input_tokens":100}}}
+{"type":"assistant","message":{"id":"msg-child","model":"child","usage":{"input_tokens":20}}}`, "table", true, 240, false},
+		{"claude message pricing", "claude", `{"type":"assistant","message":{"id":"msg-main","model":"main","usage":{"input_tokens":100,"output_tokens":100}}}`, "table", true, 1200, false},
 		{"codex unpriced", "codex", `{"type":"turn.completed","usage":{"input_tokens":100}}`, "unpriced", false, 0, true},
-		{"mixed unpriced", "claude", `{"type":"result","modelUsage":{"main":{"inputTokens":100,"costUSD":0.02},"child":{"inputTokens":20}}}`, "mixed", false, 20000, true},
+		{"claude unpriced", "claude", `{"type":"assistant","message":{"id":"msg-main","model":"main","usage":{"input_tokens":100}}}`, "unpriced", false, 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, sess := newTestServer(t)
@@ -44,10 +45,12 @@ func TestChatCostMatchesSettlementLiveAndHistory(t *testing.T) {
 			tid := s.activeThread(sess)
 			base := store.UsageEvent{User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: "turn", Agent: tc.agent, Model: "fixture", Kind: store.UsageKindChat}
 			var tally usageTally
-			tally.Observe(base, []byte(tc.line))
-			if tc.agent == "claude" {
-				tally.Observe(base, []byte(tc.line))
-			} // cumulative results replace, not double-charge
+			for _, line := range strings.Split(tc.line, "\n") {
+				tally.Observe(base, []byte(line))
+				if tc.agent == "claude" {
+					tally.Observe(base, []byte(line))
+				}
+			} // Repeated message IDs must not double-charge.
 			if room.flushUsage(&tally, time.Second) == 0 {
 				t.Fatal("no settlement")
 			}

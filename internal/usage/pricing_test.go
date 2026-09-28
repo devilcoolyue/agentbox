@@ -15,7 +15,9 @@ func TestTurnPinsPricesBeforeEventsIncludingSubmodels(t *testing.T) {
 	tally := s.NewTally()
 	s.cfg.Pricing = map[string]config.ModelPrice{"main": {TokenRates: config.TokenRates{Input: 99}}, "child": {TokenRates: config.TokenRates{Input: 99}}}
 	s.cfg.PricingManaged = map[string]config.PriceOrigin{"main": {Version: "v2"}}
-	tally.Observe(store.UsageEvent{User: "alice", Agent: "claude", TurnID: "pinned"}, []byte(`{"type":"result","modelUsage":{"main":{"inputTokens":10,"costUSD":0},"child":{"inputTokens":10,"costUSD":0}}}`))
+	for _, model := range []string{"main", "child"} {
+		tally.Observe(store.UsageEvent{User: "alice", SessionID: "s1", Agent: "claude", TurnID: "pinned", Kind: store.UsageKindChat}, []byte(`{"type":"assistant","message":{"id":"msg-`+model+`","model":"`+model+`","usage":{"input_tokens":10}}}`))
+	}
 	if n := s.Flush(&tally, time.Second); n != 2 {
 		t.Fatal(n)
 	}

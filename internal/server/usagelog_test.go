@@ -273,6 +273,12 @@ func TestFlushUsageStampsWallClock(t *testing.T) {
 			"claude-haiku-4-5":{"inputTokens":532,"outputTokens":18,"costUSD":0.0006}}}`)
 
 	var tally usageTally
+	for _, message := range []string{
+		`{"type":"assistant","message":{"id":"msg-sonnet","model":"claude-sonnet-5","usage":{"input_tokens":2,"output_tokens":26}}}`,
+		`{"type":"assistant","message":{"id":"msg-haiku","model":"claude-haiku-4-5","usage":{"input_tokens":532,"output_tokens":18}}}`,
+	} {
+		tally.Observe(store.UsageEvent{User: "alice", SessionID: "s1", TurnID: "t9", Agent: "claude", Kind: store.UsageKindChat, TTFTMs: ttft}, []byte(message))
+	}
 	tally.Observe(store.UsageEvent{User: "alice", SessionID: "s1", TurnID: "t9",
 		Agent: "claude", Kind: store.UsageKindChat, TTFTMs: ttft}, line)
 	if n := r.flushUsage(&tally, wall*time.Millisecond); n != 2 {

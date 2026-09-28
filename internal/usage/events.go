@@ -11,12 +11,9 @@ package usage
 //   codex   {"type":"turn.completed", "usage":{input_tokens, cached_input_tokens,
 //            output_tokens}}
 //
-// claude 的 modelUsage 按模型分列，且包含子 agent 用掉的模型（起标题的 haiku
-// 等），实测 total_cost_usd 恰好等于各模型 costUSD 之和，而顶层 usage 只覆盖
-// 主模型。计费必须以 modelUsage 为准，拿顶层 usage 会漏记。
-//
-// 一个回合不保证只有一个收尾事件，而 claude 的 result 报的是累计值——两件事
-// 撞在一起就是重复扣款，见 Tally。
+// Claude 网页对话走 claude_messages.go 的消息 ID 去重及 transcript 补全。
+// result.modelUsage / total_cost_usd 在续聊时可能累计整段会话，不能用于单轮扣款。
+// 只有不 resume 的独立起标题进程可以直接使用其 result。
 
 import (
 	"agentbox/internal/config"
@@ -72,9 +69,7 @@ func microUSD(usd float64) int64 { return int64(math.Round(usd * 1e6)) }
 // base 提供归属信息（用户/会话/线程/回合/agent/账号，以及回合请求的模型）,
 // 其余字段由事件本身填。纯函数，便于直接对着真实事件样本测试。
 //
-// cumulative 说明这些数是「本次进程运行至今的累计值」（claude）还是「本回合
-// 自己的增量」（codex）——同一回合收到多个收尾事件时，前者只能取最后一个，
-// 后者才该相加。见 Tally。
+// cumulative 仅用于独立 Claude 起标题进程；网页对话不能调用 result 回退。
 func ParseUsage(line []byte, base store.UsageEvent) (evs []store.UsageEvent, cumulative bool) {
 	var probe struct {
 		Type string `json:"type"`
@@ -85,6 +80,9 @@ func ParseUsage(line []byte, base store.UsageEvent) (evs []store.UsageEvent, cum
 
 	switch probe.Type {
 	case "result":
+		if base.Kind != store.UsageKindTitle {
+			return nil, false
+		}
 		var r claudeResult
 		if json.Unmarshal(line, &r) != nil {
 			return nil, false
@@ -159,21 +157,24 @@ func ParseUsage(line []byte, base store.UsageEvent) (evs []store.UsageEvent, cum
 
 // Tally 把一个回合里的所有收尾事件收敛成一份账，回合结束时一次落库。
 //
-// 一次 claude 进程运行会吐出不止一个 result：每个子代理跑完补一个完成通知
-// （origin.kind = task-notification），撞上 429 每次重试也补一个报错的。而
-// 它们带的 modelUsage 是本次运行至今的累计值，不是各自的增量——线上抓到过
-// 同一回合 14 个 result，modelUsage 一模一样（fable $25.8674），只有
-// total_cost_usd 从 $12.6 递增到 $25.9。当时逐个记账，同一笔钱扣了 14 遍。
-//
-// 所以累计式事件（claude result）后一个覆盖前一个，只认最后那个总数；增量式
-// 事件（codex turn.completed）才相加。
+// Claude 对话按消息 ID 收集，只有独立起标题保留 result 覆盖语义。
+// Codex turn.completed 保持原有增量语义。
 type Tally struct {
 	pricing *config.PricingState
 	evs     []store.UsageEvent
+	claude  *claudeMeter
 }
 
 // observe 把一行事件并进汇总；不是用量事件就什么也不做。
 func (t *Tally) Observe(base store.UsageEvent, line []byte) {
+	if base.Agent == config.AgentClaude && base.Kind != store.UsageKindTitle {
+		base.Kind = store.UsageKindChat
+		if t.claude == nil {
+			t.claude = newClaudeMeter()
+		}
+		t.claude.observe(base, line)
+		return
+	}
 	evs, cumulative := ParseUsage(line, base)
 	if len(evs) == 0 {
 		return

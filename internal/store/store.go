@@ -529,6 +529,13 @@ func (s *Store) InsertUsage(evs ...UsageEvent) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := insertUsageTx(tx, evs); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func insertUsageTx(tx *sql.Tx, evs []UsageEvent) error {
 	metered := map[string]bool{}
 	for _, e := range evs {
 		if e.TS.IsZero() {
@@ -577,7 +584,7 @@ func (s *Store) InsertUsage(evs ...UsageEvent) error {
 			return fmt.Errorf("charge usage %d: %w", id, err)
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // UpsertTerminalUsage records spend the user drove by hand in the terminal,

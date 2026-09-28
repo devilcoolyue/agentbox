@@ -9,7 +9,7 @@ import (
 
 // SchemaVersion changes only with a committed, ordered migration. Versions
 // predating this framework use user_version=0, including partially upgraded DBs.
-const SchemaVersion = 8
+const SchemaVersion = 9
 
 //go:embed migrations/001_baseline.sql
 var baselineSQL string
@@ -22,6 +22,9 @@ var gitProfileSQL string
 
 //go:embed migrations/005_git_connections.sql
 var gitConnectionsSQL string
+
+//go:embed migrations/009_usage_messages.sql
+var usageMessagesSQL string
 
 type migration struct {
 	version int
@@ -62,6 +65,7 @@ func migrations() []migration {
 			_, err := tx.Exec(`CREATE TABLE IF NOT EXISTS git_connection_shares(connection_id TEXT NOT NULL,user TEXT NOT NULL,can_write INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(connection_id,user)); CREATE INDEX IF NOT EXISTS idx_git_shares_user ON git_connection_shares(user);`)
 			return err
 		}},
+		{9, func(tx *sql.Tx) error { _, err := tx.Exec(usageMessagesSQL); return err }},
 	}
 }
 func migrate(db *sql.DB) error { return runMigrations(db, migrations()) }

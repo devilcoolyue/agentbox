@@ -160,7 +160,7 @@
 .u-model { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .u-model > span { display: block; max-width: 235px; overflow: hidden; text-overflow: ellipsis; }
 .u-model + .u-sub { padding-left: 21px; }
-.u-time, .u-lat, .u-tok { font-family: var(--mono); font-size: 12px; }
+.u-time, .u-lat, .u-tok, .u-hit { font-family: var(--mono); font-size: 12px; }
 .u-cost { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); }
 .u-cost.zero { color: var(--muted); }
 .u-billing { margin-top: 4px; font-family: var(--sans); font-weight: 400; }

@@ -13,10 +13,11 @@ type blockedScanStore struct {
 	release chan struct{}
 }
 
-func (b *blockedScanStore) All() []store.Session                        { close(b.entered); <-b.release; return nil }
-func (*blockedScanStore) Get(string) (store.Session, bool)              { return store.Session{}, false }
-func (*blockedScanStore) InsertUsage(...store.UsageEvent) error         { return nil }
-func (*blockedScanStore) UpsertTerminalUsage(...store.UsageEvent) error { return nil }
+func (b *blockedScanStore) All() []store.Session                               { close(b.entered); <-b.release; return nil }
+func (*blockedScanStore) Get(string) (store.Session, bool)                     { return store.Session{}, false }
+func (*blockedScanStore) InsertUsage(...store.UsageEvent) error                { return nil }
+func (*blockedScanStore) InsertUsageMessages(...store.UsageEvent) (int, error) { return 0, nil }
+func (*blockedScanStore) UpsertTerminalUsage(...store.UsageEvent) error        { return nil }
 func TestQueriesCanRequestSyncWhileScanIsBlocked(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

@@ -31,6 +31,7 @@ func baseEvent() store.UsageEvent {
 	return store.UsageEvent{
 		User: "boxadmin", SessionID: "sess1", ThreadID: "th1", TurnID: "turn1",
 		Agent: "claude", AccountID: "acct1", Model: "requested-model",
+		Kind: store.UsageKindTitle, // result parsing is restricted to non-resuming title processes
 	}
 }
 
