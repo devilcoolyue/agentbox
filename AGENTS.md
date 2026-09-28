@@ -1,6 +1,6 @@
 # AGENTS.md
 
-给代码助手/维护者的项目说明。用户向的部署与功能文档见 `README.md`；这里记录实际代码结构、开发命令和容易踩坑的约定。
+给代码助手/维护者的项目说明。用户向的部署与功能文档见 `README.md`（英文）和 `README_CN.md`（中文）；这里记录实际代码结构、开发命令和容易踩坑的约定。
 
 ## 项目是什么
 
@@ -613,7 +613,7 @@ data/
   `internal/web/static/css/base.css` 的约定一致。
 - 会话镜像内禁用 CLI 自升级（`DISABLE_AUTOUPDATER=1`）；Claude/Codex 版本由 `images/agent/Dockerfile` 与 `scripts/auto-update-image.sh` 管理。
 - `config.json`、`accounts/`、`data/` 含密钥和运行时状态，已在 `.gitignore`；不要提交。
-- 若改动影响用户可见行为、部署步骤、API 或配置字段，同步更新 `README.md`（必要时也更新 `deploy/README.md`）。
+- 若改动影响用户可见行为、部署步骤、API 或配置字段，同步更新 `README.md` 与 `README_CN.md`，保持中英文内容一致（必要时也更新 `deploy/README.md`）。
 
 ## 开源重构
 

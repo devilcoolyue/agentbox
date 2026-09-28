@@ -62,7 +62,7 @@ CODEX_LIVE_TEST=1 go test -run TestRunCodexTurnLive ./internal/agent/
 
 这个测试要求本机已安装并登录 Codex，会真实调用模型并消耗额度，不属于常规离线校验。
 
-Linux 上试跑使用[快速开始](../README.md#快速开始)的镜像和配置，保持与已有服务不同的监听端口与 `data_dir`。同一数据目录有进程锁，不能给两个实例共用。
+Linux 上试跑使用[快速开始](../README_CN.md#快速开始)的镜像和配置，保持与已有服务不同的监听端口与 `data_dir`。同一数据目录有进程锁，不能给两个实例共用。
 
 ## 主控制台前端
 

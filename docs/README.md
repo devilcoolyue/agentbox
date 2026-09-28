@@ -8,8 +8,8 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 
 | 你的目标 | 建议阅读顺序 |
 | --- | --- |
-| 先看界面 | [截图与功能概览](../README.md#界面预览) |
-| 第一次部署 | [快速开始](../README.md#快速开始) → [账号与模型](accounts-and-models.md) → [部署与运维](../deploy/README.md) |
+| 先看界面 | [截图与功能概览](../README_CN.md#界面预览) |
+| 第一次部署 | [快速开始](../README_CN.md#快速开始) → [账号与模型](accounts-and-models.md) → [部署与运维](../deploy/README.md) |
 | 使用已有实例 | [工作空间使用指南](user-guide.md) → [技能与 MCP](skills-and-mcp.md) → [使用记录](usage-and-quotas.md) |
 | 管理用户和成本 | [配置参考](configuration.md) → [账号与模型](accounts-and-models.md) → [额度与价目表](usage-and-quotas.md) |
 | 访问本地数据库或公司内网 | [出口代理与内网隧道](networking.md) |

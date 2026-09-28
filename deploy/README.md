@@ -75,7 +75,7 @@ sudo python3 -c 'import json; print(json.load(open("/etc/agentbox/config.json"))
 
 ## 首次部署
 
-按[快速开始](../README.md#快速开始)克隆源码、构建 `agentbox-agent:latest` 并准备 `config.json`。如果正在前台试跑，先正常退出该实例，再托管给 systemd：
+按[快速开始](../README_CN.md#快速开始)克隆源码、构建 `agentbox-agent:latest` 并准备 `config.json`。如果正在前台试跑，先正常退出该实例，再托管给 systemd：
 
 ```bash
 sudo ./deploy/install.sh
