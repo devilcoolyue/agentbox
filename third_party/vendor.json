@@ -403,5 +403,259 @@
         "sha256": "dba03cb384cb7308d2a7e8072078d109f0fa06cb6c062731faeb646f7e3340f4"
       }
     ]
+  },
+  {
+    "name": "noVNC",
+    "version": "1.6.0",
+    "source": "https://github.com/novnc/noVNC/tree/v1.6.0",
+    "license": "MPL-2.0 AND BSD-3-Clause AND BSD-2-Clause",
+    "license_files": [
+      "third_party/licenses/novnc/LICENSE.BSD-2-Clause",
+      "third_party/licenses/novnc/LICENSE.BSD-3-Clause",
+      "third_party/licenses/novnc/LICENSE.MPL-2.0",
+      "third_party/licenses/novnc/LICENSE.OFL-1.1",
+      "third_party/licenses/novnc/LICENSE.txt"
+    ],
+    "files": [
+      {
+        "path": "internal/web/static/vendor/novnc/core/base64.js",
+        "sha256": "76d6b7ec73aed8cbc72b49b8b865bcb334acc59a6b0e96b19bc39c9e8e053ae3"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/crypto/aes.js",
+        "sha256": "00b9a69185f913b882270c4cc7a076b4dd3a083981edb91c1e55db22f8ffcef3"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/crypto/bigint.js",
+        "sha256": "e7880d27af8bf439579f6fc40d7b81fd379a9babb1d13c83999effd8c64823ab"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/crypto/crypto.js",
+        "sha256": "e6006697ce1d195c951ef1e986172d17174e533909df19e07be583ac75dd344b"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/crypto/des.js",
+        "sha256": "91d8c8ed596d2beda7da9dd68c9ae1d325c673822e3ccfc8a4091e121c99a316"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/crypto/dh.js",
+        "sha256": "9102454282ba646ee4a4ce34c5db5d2a9979179f9d4606737fc6bb7a669e5ebe"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/crypto/md5.js",
+        "sha256": "364c0f0d44d3f8fd608c18a0e1253e5a77e9b8e4c48e3c6503a0f45c9bb2ff8d"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/crypto/rsa.js",
+        "sha256": "83875db9e5d978ea0eb2a1e2af8afbb7dedfb0f18eca2bab75c2756285037476"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/copyrect.js",
+        "sha256": "da3b571e10984438ea49559738e11034b5d0c85154a68eac1a6bf9ef10e5aa02"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/h264.js",
+        "sha256": "96d47901c5e26dc02256b152aa642490d936bbcc395f59ffd580356118edff84"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/hextile.js",
+        "sha256": "63eb86247bea83119af75f3d145a4515a2411ff28a72492d2d7b925268d50163"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/jpeg.js",
+        "sha256": "0644c6a81007bdeddcf08e2ac0015f9d683a342da167f6f3dd0598956e16c5bf"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/raw.js",
+        "sha256": "bc7d4517213dc1df8626e8198eadf32b2c1946f75228b31387d3916963af0727"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/rre.js",
+        "sha256": "b3380dbc75310769ef24e956e1fa1f13d8217f8b1d7d6f5c9d08db9a336a4c0d"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/tight.js",
+        "sha256": "a7f01df99922be812ea21c5e46597b76379a5d8267f99ec8bea9a202bec34130"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/tightpng.js",
+        "sha256": "38bd2fd200f5c8e9b0905eca2389fb8e6ad2151de886e4fa9a9c59cc1c7696f0"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/zlib.js",
+        "sha256": "1d1c05cdca4840ff46082103ab35aa7696b41504bec91ebd74fae9e0e5f61380"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/decoders/zrle.js",
+        "sha256": "6853c115f97a1d4de39ca71ab8b519a05916bb8c173aa8112ce4881cbb612cbd"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/deflator.js",
+        "sha256": "ceb6763eb3fcc53f34d08534a8d1df9b63af3a95c58f8d96d238ef5ce639ad1f"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/display.js",
+        "sha256": "257694ea2ad5634fcf0528cdb91eb5a76b3e4b3820ec55c7fa691d89fe4fa277"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/encodings.js",
+        "sha256": "4975904fe1da6dc22b53ecb8462ec7c9a43e99db72dba4aab9f625c4177e355d"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/inflator.js",
+        "sha256": "b1955cbd1608619911b8dfd451fae07f38c5767098f6f47e4a2a1682c11feb65"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/input/domkeytable.js",
+        "sha256": "5eb985e1a412d1be6b606ba0d7e912fc0842d873d252bd7ec8a363670dfc800c"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/input/fixedkeys.js",
+        "sha256": "6bb21b0a2d5f5d7ad73e75b80ddc1d844ac770c4426b312d5740f2443455f0c0"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/input/gesturehandler.js",
+        "sha256": "c04b67fdae6ac061c7d51cb5ee8ca296ee9c7c80aa246cee5751e74eefe61758"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/input/keyboard.js",
+        "sha256": "46f82adef772b726ae3db144fb9c12b3d03374b7c803b8a5106e422a10ddcdba"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/input/keysym.js",
+        "sha256": "4ddf0e21f07328358974d91aa2d7f839ba2116688b28e43d3f6f4e2eae8c45cf"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/input/keysymdef.js",
+        "sha256": "76f338d45fb73b7decb7d8b4ef6e95edf7ce9583722c5220642a9be85fc2cc89"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/input/util.js",
+        "sha256": "2e156ea656404afcb6cc54dd85cbe5dd2dd0ba209ae9a6fb1b78ec5db17d01ce"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/input/vkeys.js",
+        "sha256": "9a1ce4393e1aa4ace5dcdcf7e032f4a1c03a9cb964b4e0e7b7fcffd3a982eb84"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/input/xtscancodes.js",
+        "sha256": "f0fc982627e1c02feaac1bd50d7fdd3bcbb05f0062b910d8002f47d1b08967a6"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/ra2.js",
+        "sha256": "4aeffb60af9c163365170e2af392acb6f0a7c21a0cb6827f85dd776d33277bee"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/rfb.js",
+        "sha256": "563a8c8469dfb55d1deee05262a311637d0e6fe8f65ae34c8222ee22e34e8a93"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/util/browser.js",
+        "sha256": "e45d2a95c9b4388042e52e19f280edd791cc2be9749d93f851afb7d0a2d055bc"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/util/cursor.js",
+        "sha256": "adabe605d73f38e5f29abd302489d4b9e98a9e495823a06a2edbe7f6744856fa"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/util/element.js",
+        "sha256": "13845321fc5abccc1de25594082d8db15405af56c5f4fc32b3bdd0878bd891e3"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/util/events.js",
+        "sha256": "ec7f4da0407ea67f5d6f5ce53bd9b3342155feb9407707de3992c5261e460ead"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/util/eventtarget.js",
+        "sha256": "9481965aa6cee36ae2decdccc6ca5203c9371a8afc33346ad4170e471766e0da"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/util/int.js",
+        "sha256": "b1c4b7dec2e7767322b3464f3c186b13138cdf341c621db44ddd06ce78180c01"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/util/logging.js",
+        "sha256": "c3a49715c9f908d5bb385de5787e99b824faf34d26036d993eea4740bac9d482"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/util/strings.js",
+        "sha256": "77d0604c7bf9e95de780f8cb9764d918ae24c86811a0a1c5b08cd30e50ad2a3a"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/core/websock.js",
+        "sha256": "6abe99c285e775ee43dfdbfb73c0a24052e633491232ee90446f20ffea743f16"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/LICENSE",
+        "sha256": "3bc404ffa7888053253eedcc5a667619aa08dc1be0bea400e5ff28c51602180f"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/README.md",
+        "sha256": "f78ded7db9ffa4be474ce75020659f165d97adc4276ef5c7fcd698a3aa03e6ce"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/utils/common.js",
+        "sha256": "0749bc4661ed186714b90e7f2321c9625a8ce7c680563bfe3ac6df7aa332bf28"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/adler32.js",
+        "sha256": "7412dd3ecc015888b99292f45e4d4ba69abc77f208508c9a1c93e8dfe54ba6cd"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/constants.js",
+        "sha256": "9d2c0dd36349e6eec9d41a37f965b2ff7e7374fbf00fb139e3116d428b551898"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/crc32.js",
+        "sha256": "897fa9eabd2bb239ec632326dbff85bc72cc81d4da80265cde59520db339f405"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/deflate.js",
+        "sha256": "d2a498ad04bb5d1f67ba01696c31a2e88e8b88e4fc6c36c635294d1c445b22c1"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/gzheader.js",
+        "sha256": "9f9b2da72593769fcc97d397ceb771bb11d5b96f202759e2ed014c2be24d40d7"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/inffast.js",
+        "sha256": "ec1e0f7abeec681a0d5e3da46d06f499969cbf265eaaa5e21a135d2a9b878c16"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/inflate.js",
+        "sha256": "321582ddc4023e47aa981a71caed0e1dad8b58f0d9e93a0b0a34fe7e3c45e05f"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/inftrees.js",
+        "sha256": "94780cbdef562bcd0434c7e6f4faca1ff6be6980bf7305a200809d98d419d9c7"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/messages.js",
+        "sha256": "7860a8d3c873c28e4f5f92db9ca3e45006e21b084210d87b8b7775cddccf05ed"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/trees.js",
+        "sha256": "ad9cb5245b9e39edd164234d6ca19febb9dba683f1f99a67af48d62931d91426"
+      },
+      {
+        "path": "internal/web/static/vendor/novnc/vendor/pako/lib/zlib/zstream.js",
+        "sha256": "240917347c379b1ad33b8bf07cc6981557173bc3408f35e9875866a14b9967b2"
+      }
+    ]
+  },
+  {
+    "name": "Playwright Docker seccomp profile",
+    "version": "1.58.2",
+    "source": "https://github.com/microsoft/playwright/blob/v1.58.2/utils/docker/seccomp_profile.json",
+    "license": "Apache-2.0",
+    "license_files": [
+      "third_party/licenses/playwright-seccomp-LICENSE"
+    ],
+    "files": [
+      {
+        "path": "internal/dockerx/browser-seccomp.json",
+        "sha256": "cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849"
+      }
+    ]
   }
 ]

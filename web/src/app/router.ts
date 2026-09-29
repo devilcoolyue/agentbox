@@ -6,7 +6,7 @@ import { toast } from "../util.js";
 
 const GIT_SECS = ["guide", "profile", "connections"];
 
-const TABS: Tab[] = ["chat", "term", "files", "changes", "skills"];
+const TABS: Tab[] = ["chat", "term", "files", "changes", "skills", "browser"];
 
 function currentHash() {
   if (S.view === "git") return `#/git/${S.gitSec}`;

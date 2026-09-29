@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
             copy_tracked_tree('images', folder / 'images', required=(
                 'images/agent/bashrc', 'images/agent/vimrc'))
             (folder / 'scripts').mkdir()
-            for script in ['build-image.sh', 'backup.sh']:
+            for script in ['build-image.sh', 'build-browser-image.sh', 'backup.sh']:
                 shutil.copy2(ROOT / 'scripts' / script, folder / 'scripts' / script)
             (folder / 'deploy').mkdir()
             shutil.copy2(ROOT / 'deploy/downloads/README.md', folder / 'deploy/README.md')

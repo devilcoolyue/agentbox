@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.5 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.6 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.5
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.6
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.5_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.6_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.5_linux_arm64/install.sh --version v0.1.5
+sudo bash agentbox_v0.1.6_linux_arm64/install.sh --version v0.1.6
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,22 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### v0.1.5 升级至 v0.1.6
+
+标准独立部署可使用「关于与更新 → 升级并重启」，或下载并校验新包后使用上面的 `release.py install/activate`。数据库自动迁移至 schema 9；升级前保留备份，不能直接回退到仅支持 schema 8 的程序。升级不会自动重算历史费用或启用远程价格同步。
+
+### 启用远程浏览器
+
+服务端包附带可选浏览器镜像配方。在解包目录运行（基础镜像名按当前配置替换）：
+
+```bash
+AGENTBOX_BROWSER_BASE_IMAGE=agentbox-agent:v0.1.6 ./scripts/build-browser-image.sh
+```
+
+然后在「系统设置 → 容器」将镜像设为 `agentbox-agent:browser`，停止并重新启动需要浏览器的空间。Linux amd64 使用固定版本 Google Chrome for Testing，ARM 使用 Chromium。推荐每空间 2 GiB 内存、2 CPU、512 PID。服务器需允许非特权用户命名空间，Chrome 沙箱保持开启。
+
+进入空间「浏览器」页签连接桌面；网页登录资料按空间保留，下载进入工作区 `Downloads`，中文输入使用剪贴板。浏览器采用账号代理，网页登录与 CLI OAuth 授权相互独立。完整说明见 [远程浏览器](https://github.com/devilcoolyue/agentbox/blob/main/docs/remote-browser.md)。
 
 ### v0.1.4 升级至 v0.1.5
 

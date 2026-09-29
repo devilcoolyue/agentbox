@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-test-') as tmp:
         for path in ['LICENSE','NOTICE','third_party/README.md','third_party/vendor.json','third_party/go-modules.json']:
             if not (folder/path).is_file():raise SystemExit('Missing license inventory')
         if r['program']=='agentbox':
-            for path in ['images/agent/Dockerfile', 'images/agent/tmux.conf', 'images/agent/bashrc', 'images/agent/vimrc']:
+            for path in ['images/agent/Dockerfile', 'images/agent/tmux.conf', 'images/agent/bashrc', 'images/agent/vimrc', 'images/browser/Dockerfile', 'images/browser/browser.py', 'scripts/build-browser-image.sh']:
                 if not (folder/path).is_file():raise SystemExit('Missing terminal image resource: '+path)
             for path in ['uninstall.sh', 'clients/abox-link-linux-amd64', 'clients/abox-link-linux-arm64', 'clients/abox-link-darwin-amd64', 'clients/abox-link-darwin-arm64', 'clients/abox-link-windows-amd64.exe', 'install.sh','deploy/bootstrap.py','deploy/release.py','deploy/update.py','scripts/build-image.sh','images/agent/versions.env']:
                 if not (folder/path).is_file():raise SystemExit('Missing installer resource: '+path)

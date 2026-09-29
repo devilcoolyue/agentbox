@@ -16,6 +16,7 @@ import { loadChanges, resetChangesRepo } from "./changes.js";
 import { loadSkills } from "./skills.js";
 import { agentKey, agentName, agentIcon, agentAvatar, decorateAgentOpts } from "./brand.js";
 import { openAcctUsage, syncUsageBtn } from "./acct-usage.js";
+import { showBrowser, browserDisconnect } from "./remote-browser.js";
 import { setTip } from "./tip.js";
 /* ---------------- 打开 / 切换 ---------------- */
 export async function openSession(sess, tab) {
@@ -87,6 +88,7 @@ export function renderHead() {
     }
 }
 function closeChannels() {
+    browserDisconnect();
     chatTeardown();
     termTeardown();
     closeThreadPanel();
@@ -96,6 +98,8 @@ bus.addEventListener("data-updated", () => { if (S.current)
     renderHead(); });
 /* ---------------- 标签页 ---------------- */
 export function setTab(name) {
+    if (S.tab === "browser" && name !== "browser")
+        browserDisconnect();
     S.tab = name;
     emit("navigation-changed");
     for (const t of document.querySelectorAll(".tab")) {
@@ -106,6 +110,9 @@ export function setTab(name) {
     $("tab-files").classList.toggle("hidden", name !== "files");
     $("tab-changes").classList.toggle("hidden", name !== "changes");
     $("tab-skills").classList.toggle("hidden", name !== "skills");
+    $("tab-browser").classList.toggle("hidden", name !== "browser");
+    if (name === "browser")
+        void showBrowser();
     if (name === "files")
         loadFiles();
     if (name === "changes")
@@ -162,6 +169,7 @@ async function doStop() {
         const res = await api(`/sessions/${s.id}/stop`, { method: "POST" });
         if (S.current && S.current.id === s.id)
             S.current = res;
+        browserDisconnect();
         termDisconnect(); // 容器停了收掉连接，但保留终端画面
     }
     catch (e) {

@@ -35,6 +35,7 @@ jobs:
       - name: Validate installer
         run: |
           bash -n install.sh uninstall.sh
+          python3 scripts/test-browser-runtime.py
           python3 scripts/test-install.py
           python3 scripts/test-uninstall.py
           python3 scripts/test-deployment.py

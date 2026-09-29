@@ -681,3 +681,16 @@ data/
 - Git V2 密文嵌入 key ID，`git-secrets/keyring.json` 与旧 master.key 必须成套备份。`git-key-rotate` 只在停服并取得 data_dir 锁后执行，先全量验证再新增密钥，DB 事务/Config.mutate 重写；`--resume` 续写，保留旧密钥，不宣称销毁泄露密钥。
 - `git_terminal.go` 的能力网桥固定用户登录/空间/仓库/remote/连接与绑定修订；长期凭证不进 home。只开放 status/fetch/pull/push-preview/push/cancel；命令必须复用原 Git handler 的准入/锁/审计。锁内和传输准入再检查 scope，不能只在控制请求开始时检查一次。
 - 终端控制监听由 server 生命周期管理，到期/撤销取消所有下游请求。Python helper 用隔离模式、禁用环境代理/重定向，取消 ID 限定该授权；交互确认不是权限边界，同空间程序可使用已授予的写能力。只在容器执行 Git，不回退宿主机。
+
+
+### 远程浏览器
+
+- 工作空间浏览器入口为 `internal/server/browser.go` / `web/src/remote-browser.ts`；可选 `images/browser` 镜像叠加到 Agent 镜像，amd64 默认固定 Chrome for Testing，ARM 明确使用 Chromium。启用和边界见 `docs/remote-browser.md`。
+- VNC 仅监听容器回环，经 Docker exec 原始流和鉴权 WebSocket 转发，禁止发布 VNC/CDP 端口。所有操作按空间属主、账号授权和额度准入；长连接随 server 生命周期关闭并持有空间活动引用。
+- 使用 `workspaces.UseRunning` 串行浏览器启动/停止与空间停止/删除；不得在持锁回调里等待整个 WebSocket 生命周期。Python 控制端另用 flock 防止同空间重复启动。
+- Chrome 保留自身沙箱；仅带 `agentbox.browser=1` 镜像使用附带来源/许可的 user-namespace seccomp 配置，不加 privileged / SYS_ADMIN，不使用 `--no-sandbox`。
+- 只注入浏览器专用代理 env，不传账号 API Key。账号代理桥不可用须失败；Chrome 的本机适配器处理代理认证，网络配置改变须重新启动浏览器。网页 Cookie 与 CLI OAuth 凭证互不转换。
+- profile 存 `home/.agentbox-browser`，与空间同 UID；不承诺对同空间 Agent 隔离。备份须 `--full`。noVNC 使用原生 ES module，第三方哈希与许可证必须一起更新。UTF-8 剪贴板走单独接口，不依赖旧 VNC Latin-1。
+- 真实浏览器测试 `scripts/test-remote-browser-live.py` 用独立卷与合成站点，禁用空间外网，不访问真实用户网页或调用模型。`scripts/test-browser-runtime.py` 验证代理 HTTP/CONNECT/WebSocket 转发和失败不直连。
+
+- Chrome DNS 规则须显式 `EXCLUDE 127.0.0.1`，通配 `MAP * ~NOTFOUND` 也会阻止本地代理 IP。修改代理参数必须跑 `scripts/test-browser-proxy-live.py` 的真实浏览器回归，不能仅验证 Python 代理本身。

@@ -8,7 +8,7 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前正式版本为 [v0.1.5](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.5)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
+当前正式版本为 [v0.1.6](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.6)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
 
 ### 历史版本与源码
 
@@ -32,7 +32,7 @@ v0.1.0～v0.1.4 的七个平台包、`release.json` 和 `SHA256SUMS` 从旧仓�
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.5 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.6 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0

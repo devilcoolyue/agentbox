@@ -348,3 +348,29 @@ func (s *Service) RefreshNetwork(ctx context.Context, id string) error {
 	}
 	return s.network(ctx, sess)
 }
+
+// UseRunning serializes container operations against start/stop/delete. The
+// callback must be bounded: long-lived attachments are opened here, then served
+// after the lock is released. Explicit stop is still allowed to disconnect them.
+func (s *Service) UseRunning(ctx context.Context, id string, fn func(store.Session) error) error {
+	l := s.lock(id)
+	if err := l.acquire(ctx); err != nil {
+		return err
+	}
+	defer l.release()
+	sess, ok := s.store.Get(id)
+	if !ok {
+		return ErrSessionGone
+	}
+	if _, err := s.account(sess); err != nil {
+		return err
+	}
+	running, err := s.dock.Running(ctx, sess.ContainerID)
+	if err != nil {
+		return err
+	}
+	if !running {
+		return errors.New("工作空间未运行")
+	}
+	return fn(sess)
+}

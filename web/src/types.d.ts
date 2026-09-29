@@ -985,3 +985,11 @@ export interface GitBranches {branches:GitBranch[];state:{branch:string;head:str
 export interface GitReview {number:number;title:string;url:string;source:string;target:string;state:string;draft:boolean;}
 export interface GitReviewPage {provider:string;project:string;connection_id:string;read_only:boolean;rows:GitReview[];has_more:boolean;page:number;default_branch:string;source_branch:string;head:string;}
 export interface GitReviewPreview {provider:string;project:string;connection_id:string;source:{name:string;sha:string;protected:boolean};target:{name:string;sha:string;protected:boolean};title:string;body:string;draft:boolean;existing:GitReview[];}
+
+/** dockerx.BrowserInfo: private desktop status, no network credentials. */
+export interface BrowserInfo {
+ available: boolean;
+ running: boolean;
+ browser?: string;
+ proxy: boolean;
+}

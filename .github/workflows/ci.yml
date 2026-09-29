@@ -55,6 +55,7 @@ jobs:
         run: go test ./...
       - name: Deployment policy
         run: |
+          python3 scripts/test-browser-runtime.py
           python3 scripts/test-deployment.py
           python3 scripts/test-update.py
           bash -n install.sh

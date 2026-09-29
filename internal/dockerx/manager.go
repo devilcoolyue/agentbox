@@ -336,6 +336,10 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 		},
 	}
 
+	if img, err := m.cli.ImageInspect(ctx, m.cfg.GetAgentImage()); err == nil {
+		browserContainerOptions(cc, hc, img.Config.Labels)
+	}
+
 	name := "agentbox-" + sess.ID
 	resp, err := m.cli.ContainerCreate(ctx, cc, hc, nil, nil, name)
 	if err != nil {
@@ -355,6 +359,9 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 }
 
 func (m *Manager) Stop(ctx context.Context, containerID string) error {
+	if err := m.closeBrowser(ctx, containerID); err != nil {
+		return err
+	}
 	timeout := 10
 	err := m.cli.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
 	if err == nil || client.IsErrNotFound(err) {
@@ -364,6 +371,9 @@ func (m *Manager) Stop(ctx context.Context, containerID string) error {
 }
 
 func (m *Manager) Remove(ctx context.Context, containerID string) error {
+	if err := m.closeBrowser(ctx, containerID); err != nil {
+		return err
+	}
 	if err := m.removeNetwork(ctx, containerID); err != nil {
 		return err
 	}

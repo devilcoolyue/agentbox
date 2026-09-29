@@ -37,6 +37,7 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/work.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/chat.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/term.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/browser.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/files.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/settings.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/git-management.css">
@@ -266,6 +267,7 @@
               <svg class="tab-ic" width="15" height="15" data-icon="message" aria-hidden="true"></svg><span class="t">对话</span></button>
             <button class="tab" data-tab="term">
               <svg class="tab-ic" width="15" height="15" data-icon="tool" aria-hidden="true"></svg><span class="t">终端</span></button>
+            <button class="tab" data-tab="browser"><svg class="tab-ic" width="15" height="15" data-icon="globe" aria-hidden="true"></svg><span class="t">浏览器</span></button>
             <button class="tab" data-tab="files">
               <svg class="tab-ic" width="15" height="15" data-icon="folder" aria-hidden="true"></svg><span class="t">文件</span></button>
             <button class="tab" data-tab="changes">
@@ -348,7 +350,35 @@
             </div>
           </section>
 
-          <!-- 终端 -->
+          <!-- 远程浏览器 -->
+          <section id="tab-browser" class="pane hidden">
+            <div class="browser-toolbar" aria-label="远程浏览器工具栏">
+              <div class="browser-lifecycle" role="group" aria-label="浏览器连接">
+                <button id="browser-start" class="btn browser-tool" data-icon="play" aria-label="连接浏览器" data-tip="连接浏览器"></button>
+                <button id="browser-stop" class="btn browser-tool" data-icon="stop" aria-label="关闭浏览器" data-tip="关闭浏览器，保留登录状态"></button>
+              </div>
+              <form id="browser-address" class="browser-address">
+                <svg class="browser-address-icon" width="16" height="16" data-icon="globe" aria-hidden="true"></svg>
+                <input id="browser-url" type="text" aria-label="网页地址" placeholder="输入网址，在新标签页打开" autocomplete="off" spellcheck="false">
+                <button id="browser-open" class="btn browser-tool" data-icon="arrow-right" type="submit" aria-label="打开网页" data-tip="在远程浏览器新标签页打开"></button>
+              </form>
+              <div class="browser-shortcuts" role="group" aria-label="快捷网站">
+                <button class="browser-bookmark" data-browser-brand="claude" data-browser-url="https://claude.ai/" aria-label="打开 Claude" data-tip="在远程浏览器打开 Claude"><span>Claude</span></button>
+                <button class="browser-bookmark" data-browser-brand="codex" data-browser-url="https://chatgpt.com/" aria-label="打开 ChatGPT" data-tip="在远程浏览器打开 ChatGPT"><span>ChatGPT</span></button>
+              </div>
+              <div class="browser-display" role="group" aria-label="画面设置">
+                <div class="browser-quality"><svg width="15" height="15" data-icon="sliders" aria-hidden="true"></svg><select id="browser-quality" aria-label="浏览器画质"><option value="smooth">流畅</option><option value="balanced">均衡</option><option value="clear">清晰</option></select></div>
+                <button id="browser-fullscreen" class="btn browser-tool" data-icon="expand" aria-label="全屏" data-tip="全屏查看远程浏览器"></button>
+              </div>
+            </div>
+            <div class="browser-status"><span id="browser-dot" class="browser-dot" aria-hidden="true"></span><p id="browser-state" class="browser-state" role="status">浏览器未启动</p></div>
+            <div class="browser-desktop">
+              <div id="browser-screen"></div>
+              <div id="browser-empty"><h3>你的远程浏览器</h3><p>在服务器上浏览网页，登录 Claude、ChatGPT 或其他网站。<br>登录状态按工作空间保存，关闭后仍可继续。</p><p>下载文件可在「文件 → Downloads」查看。</p></div>
+            </div>
+            <details class="browser-clipboard"><summary>剪贴板 · 中文输入与复制</summary><div><textarea id="browser-clipboard" rows="2" maxlength="16000" aria-label="远程剪贴板" placeholder="在这里输入或粘贴文字，再发送到远程输入框；远程复制后点击「读取远程复制」。"></textarea><button id="browser-paste" class="btn btn-sm" data-icon="copy" disabled>发送并粘贴</button><button id="browser-copy" class="btn btn-sm" data-icon="copy" disabled>读取远程复制</button></div></details>
+          </section>
+
           <section id="tab-term" class="pane hidden">
             <div class="term-bar">
               <!-- 左侧提示轮播：条目与频率/动画在系统设置「界面与提示」里配置，term.js 驱动 -->
