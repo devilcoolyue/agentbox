@@ -133,6 +133,11 @@ export async function smoke(page) {
   await page.locator('#sec-container').waitFor({state:'visible'});
   assert.equal(new URL(page.url()).hash,'#/settings/container','login preserves destination');
   assert.equal(await page.locator('#login-btn').isDisabled(),false);
+  if (process.env.AGENTBOX_BROWSER_ONLY_PRICING === '1') {
+   await pricingSmoke(page);
+   assert.deepEqual(errors,[]);
+   return;
+  }
   // Transient /me errors must show a usable login form, including stored-token reload.
   await page.route('**/api/me',route=>route.fulfill({status:503,json:{error:'fixture unavailable'}}));
   await page.reload();

@@ -721,7 +721,7 @@
               <div class="sec-intro">
                 <div>
                   <h2>价目表</h2>
-                  <p>按 token 折算费用的单价，美元 / 百万 token。<b>只用于 provider 不自报价格的消耗</b>：Codex 的全部回合，以及从 CLI 记录里补记的终端消耗。网页对话里 Claude 自报价格的行不查这张表。查不到价的行记为「未定价」，只记用量、不扣额度。</p>
+                  <p>按 token 折算费用的单价，美元 / 百万 token。用于 Claude、Codex 网页对话及终端用量；Claude 网页对话按独立请求计价后汇总。独立起标题进程可使用 CLI 报价。查不到价的行记为「未定价」，只记用量、不扣额度。</p>
                   <p class="sec-hint">键可以是<b>模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b>agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p>
                 </div>
                 <div class="sec-actions action-tools">
@@ -738,11 +738,17 @@
                 <p id="price-catalog-error" class="price-notice hidden" role="status"></p>
                 <div class="field-row">
                   <label class="field"><span>远程目录地址（HTTPS）</span><input id="price-source" type="url" placeholder="填写已发布的价格目录 JSON 地址"></label>
-                  <label class="price-auto"><input id="price-auto" type="checkbox">每天自动检查</label>
+                  <button id="price-modelsdev" class="btn btn-sm" data-icon="download" data-tip="填入 models.dev 价格源并开启每日检查，保存后生效">使用 models.dev</button>
                   <button id="price-source-save" class="btn btn-sm" data-icon="save" data-tip="保存价格目录来源地址">保存来源</button>
                   <button id="price-preview" class="btn btn-sm" data-icon="diff" data-tip="预览候选目录与当前价目表的差异">预览差异</button>
                 </div>
-                <p class="card-desc">自动检查只提示变化，确认后才应用。自定义价格默认保留；目录移除的模型继续使用已保存的价格。</p>
+                <div class="price-sync-options">
+                  <label class="price-auto"><input id="price-auto" type="checkbox">每天自动检查</label>
+                  <label class="price-auto"><input id="price-auto-apply" type="checkbox">自动跟随已选模型</label>
+                </div>
+                <p class="card-desc">默认只检查变化，勾选模型并应用后建立跟随关系。可开启自动跟随：每日检查后更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型及目录缺失的模型不会自动修改。</p>
+                <p class="card-desc">models.dev 为第三方价格源，仅导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入转换为 1 小时口径；缺失价格不按 0 导入。检查按钮只获取候选，不触发自动应用。</p>
+                <div id="price-source-issues" class="price-notice hidden" role="status"></div>
                 <div id="price-diff" class="hidden">
                   <p>勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。</p>
                   <div id="price-changes" class="price-changes"></div>
@@ -778,7 +784,7 @@
               <details class="card price-history">
                 <summary>价格版本记录（最近 10 次）</summary>
                 <div class="price-history-body">
-                  <p class="card-desc">可恢复修改前的价格及跟随状态；回退不改变历史账单或远程目录地址。</p>
+                  <p class="card-desc">可恢复修改前的价格及跟随状态，并暂停自动跟随；回退不改变历史账单或远程目录地址。</p>
                   <div id="price-history"></div>
                 </div>
               </details>

@@ -170,13 +170,14 @@ export function initPricing() {
         view = null;
         draft = {};
         customModels.clear();
-        for (const id of ["price-rows", "price-changes", "price-history", "price-warnings"])
+        for (const id of ["price-rows", "price-changes", "price-history", "price-warnings", "price-source-issues"])
             $(id).replaceChildren();
         $("price-diff").classList.add("hidden");
         $("price-catalog-status").textContent = "读取中…";
         $("price-catalog-error").textContent = "";
         $("price-source").value = "";
         $("price-auto").checked = false;
+        $("price-auto-apply").checked = false;
         setBusy(false);
     };
     reset();
@@ -199,6 +200,7 @@ function accept(next) {
         settingsState.value.pricing = structuredClone(draft);
     $("price-source").value = next.active.catalog.url;
     $("price-auto").checked = next.active.catalog.auto_check;
+    $("price-auto-apply").checked = !!next.active.catalog.auto_apply;
     renderRows();
     renderCatalog();
 }
@@ -229,11 +231,26 @@ function renderCatalog() {
         return;
     const c = view.candidate;
     const count = view.changes.filter(row => row.kind === "new" || row.kind === "update").length;
-    $("price-catalog-status").textContent = `${c.bundled ? "内置旧快照（尚未重新核验）" : "远程候选目录"} · ${c.catalog.version} · ${count} 个新增 / 调价候选` +
+    $("price-catalog-status").textContent = `${c.bundled ? "内置旧快照（尚未重新核验）" : c.catalog.source === "models.dev" ? "models.dev 第三方候选（未人工核验）" : "远程候选目录"} · ${c.catalog.version} · ${count} 个新增 / 调价候选` +
         (c.checked_at ? ` · 最近成功检查 ${fmtTime(c.checked_at)}` : " · 尚未成功联网检查");
     const error = c.error || (!view.active.catalog.url ? "尚未配置远程目录。内置数据仅供核对，不代表最新官方价格。" : "");
     $("price-catalog-error").textContent = error;
     $("price-catalog-error").classList.toggle("hidden", !error);
+    const issues = $("price-source-issues");
+    issues.replaceChildren();
+    if (c.catalog.issues?.length) {
+        const title = document.createElement("b");
+        title.textContent = "以下模型暂未导入，保留现价";
+        issues.appendChild(title);
+        const list = document.createElement("ul");
+        for (const issue of c.catalog.issues) {
+            const row = document.createElement("li");
+            row.textContent = `${issue.model}：${issue.reason}`;
+            list.appendChild(row);
+        }
+        issues.appendChild(list);
+    }
+    issues.classList.toggle("hidden", !issues.childElementCount);
     renderChanges();
     const warnings = $("price-warnings");
     warnings.replaceChildren();
@@ -275,7 +292,7 @@ function renderCatalog() {
             if (!view || busy || !requireClean())
                 return;
             const revision = view.active.revision;
-            if (!await askConfirm("将恢复该次修改前的全部价格及跟随状态。历史账单和已开始的网页回合保持原价。", { title: "恢复价格版本", okLabel: "恢复", icon: "undo" }))
+            if (!await askConfirm("将恢复该次修改前的全部价格及跟随状态。自动跟随将暂停，避免下次检查再次覆盖。历史账单和已开始的网页回合保持原价。", { title: "恢复价格版本", okLabel: "恢复", icon: "undo" }))
                 return;
             await mutate("/pricing/restore", "POST", { revision, id: item.id }, "价格版本已恢复");
         });
@@ -314,6 +331,12 @@ function renderChanges() {
         kind.textContent = labels[row.kind];
         label.append(check, name, kind);
         item.appendChild(label);
+        if (row.auto_block_reason) {
+            const note = document.createElement("p");
+            note.className = "card-desc";
+            note.textContent = "暂不自动应用：" + row.auto_block_reason;
+            item.appendChild(note);
+        }
         if (row.candidate) {
             const candidate = row.candidate;
             const rates = document.createElement("p");
@@ -341,7 +364,7 @@ function renderChanges() {
     }
 }
 function sourceDirty() {
-    return !!view && ($("price-source").value.trim() !== view.active.catalog.url || $("price-auto").checked !== view.active.catalog.auto_check);
+    return !!view && (sourceDraft().url !== view.active.catalog.url || sourceDraft().auto_check !== view.active.catalog.auto_check || sourceDraft().auto_apply !== !!view.active.catalog.auto_apply);
 }
 function requireClean() {
     if (dirty || sourceDirty()) {
@@ -380,8 +403,10 @@ $("price-save").addEventListener("click", async () => {
         toast(`这些行的单价不是合法数字：${bad.join("、")}`, true);
         return;
     }
+    if (!await confirmAutoApply())
+        return;
     readDraft();
-    await mutate("/pricing", "PUT", { revision: view.active.revision, prices: draft, custom_models: [...customModels], catalog: { url: $("price-source").value.trim(), auto_check: $("price-auto").checked } }, "价目表已保存，修改的模型已设为自定义");
+    await mutate("/pricing", "PUT", { revision: view.active.revision, prices: draft, custom_models: [...customModels], catalog: sourceDraft() }, "价目表已保存，修改的模型已设为自定义");
 });
 $("price-source-save").addEventListener("click", async () => {
     if (!view || busy)
@@ -390,7 +415,9 @@ $("price-source-save").addEventListener("click", async () => {
         toast("请先保存价目表", true);
         return;
     }
-    await mutate("/pricing", "PUT", { revision: view.active.revision, catalog: { url: $("price-source").value.trim(), auto_check: $("price-auto").checked } }, "目录来源已保存");
+    if (!await confirmAutoApply())
+        return;
+    await mutate("/pricing", "PUT", { revision: view.active.revision, catalog: sourceDraft() }, "目录来源已保存");
 });
 $("price-refresh").addEventListener("click", async () => {
     if (busy)
@@ -436,4 +463,27 @@ $("price-apply").addEventListener("click", async () => {
     if (!await askConfirm(note, { title: "应用价格变更", okLabel: "应用" }))
         return;
     await mutate("/pricing/apply", "POST", request, "所选价格已应用");
+});
+function sourceDraft() {
+    return { url: $("price-source").value.trim(), auto_check: $("price-auto").checked, auto_apply: $("price-auto-apply").checked };
+}
+async function confirmAutoApply() {
+    if (!sourceDraft().auto_apply || view?.active.catalog.auto_apply)
+        return true;
+    return askConfirm("每日检查后，将自动调整已明确跟随当前来源的模型价格，仅影响新回合。自定义价格和新模型保持不变；单价变化超过 25%、零价格及长上下文规则变化需要手动核对。", { title: "开启自动跟随", okLabel: "开启" });
+}
+$("price-modelsdev").addEventListener("click", () => {
+    if (busy)
+        return;
+    $("price-source").value = "https://models.dev/api.json";
+    $("price-auto").checked = true;
+    $("price-auto-apply").checked = false;
+});
+$("price-auto").addEventListener("change", () => {
+    if (!$("price-auto").checked)
+        $("price-auto-apply").checked = false;
+});
+$("price-auto-apply").addEventListener("change", () => {
+    if ($("price-auto-apply").checked)
+        $("price-auto").checked = true;
 });

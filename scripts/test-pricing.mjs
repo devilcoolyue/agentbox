@@ -5,10 +5,10 @@ import { mkdir } from 'node:fs/promises';
 export async function pricingSmoke(page) {
  const rate = input => ({input,output:input*4,cache_read:input/10,cache_write:0});
  const entry = input => ({price:rate(input),source_url:'https://example.invalid/pricing',verified_at:'2026-09-26T08:00:00Z',notes:'标准档位 · <script>plain text</script>'});
- const origin = {version:'fixture-v1',source_url:'https://example.invalid/pricing',verified_at:'2026-09-25T08:00:00Z'};
+ const origin = {catalog_url:'https://example.invalid/catalog.json',version:'fixture-v1',source_url:'https://example.invalid/pricing',verified_at:'2026-09-25T08:00:00Z'};
  let revision=1,failNext=false,applied=[];
- let active={revision:'1',prices:{'fixture-custom':rate(9),'fixture-follow':rate(2),'fixture-removed':rate(3)},managed:{'fixture-follow':origin,'fixture-removed':origin},catalog:{url:'https://example.invalid/catalog.json',auto_check:true},history:[]};
- const candidate={revision:'candidate-v2',catalog:{schema:1,version:'fixture-v2',published_at:'2026-09-26T08:00:00Z',entries:{'fixture-custom':entry(1),'fixture-follow':entry(4),'fixture-new':entry(2)}},url:active.catalog.url,bundled:false,checked_at:Date.now(),attempted_at:Date.now(),error:''};
+ let active={revision:'1',prices:{'fixture-custom':rate(9),'fixture-follow':rate(2),'fixture-removed':rate(3)},managed:{'fixture-follow':origin,'fixture-removed':origin},catalog:{url:'https://example.invalid/catalog.json',auto_check:true,auto_apply:false},history:[]};
+ const candidate={revision:'candidate-v2',catalog:{schema:1,version:'fixture-v2',published_at:'2026-09-26T08:00:00Z',issues:[{model:'fixture-incomplete',reason:'缺少缓存读取单价，保留现价'}],entries:{'fixture-custom':entry(1),'fixture-follow':entry(4),'fixture-new':entry(2)}},url:active.catalog.url,bundled:false,checked_at:Date.now(),attempted_at:Date.now(),error:''};
  const response=()=>({active,candidate,changes:[...Object.entries(candidate.catalog.entries).map(([model,candidate])=>({model,candidate,current:active.prices[model],kind:!active.prices[model]?'new':!active.managed[model]?'custom':JSON.stringify(active.prices[model])===JSON.stringify(candidate.price)?'current':'update'})),{model:'fixture-removed',kind:'removed',current:active.prices['fixture-removed']}],warnings:[{agent:'codex',model:'fixture-missing',kind:'unpriced',key:''},{agent:'codex',model:'fixture-fallback',kind:'fallback',key:'codex'}],warnings_truncated:false});
  const snapshot=()=>({id:active.revision,saved_at:Date.now(),reason:'测试变更',prices:structuredClone(active.prices),managed:structuredClone(active.managed)});
  const handler=async route=>{
@@ -24,7 +24,7 @@ export async function pricingSmoke(page) {
      assert.equal(data.catalog_revision,candidate.revision);applied.push(data);
      for(const model of data.models){active.prices[model]=candidate.catalog.entries[model].price;active.managed[model]={...origin,version:'fixture-v2'};}
     } else if(path.endsWith('/restore')) {
-     const old=active.history.find(row=>row.id===data.id);active.prices=old.prices;active.managed=old.managed;
+     const old=active.history.find(row=>row.id===data.id);active.prices=old.prices;active.managed=old.managed;active.catalog.auto_apply=false;
     } else {
      if(data.prices){for(const [key,p] of Object.entries(data.prices)){if(JSON.stringify(p)!==JSON.stringify(active.prices[key]))delete active.managed[key];}active.prices=data.prices;}
      for(const key of data.custom_models||[])delete active.managed[key];
@@ -41,6 +41,7 @@ export async function pricingSmoke(page) {
   await page.locator('#price-rows tr[data-key="fixture-follow"]').waitFor();
   const row = key => page.locator(`#price-rows tr[data-key="${key}"]`);
   assert.equal(await page.locator('#price-count').innerText(),'3');
+  assert.match(await page.locator('#price-source-issues').innerText(),/fixture-incomplete.*缺少缓存/s);
   assert.match(await row('fixture-custom').innerText(),/自定义/);
   assert.match(await row('fixture-follow').innerText(),/跟随目录/);
   assert.match(await page.locator('#price-warnings').innerText(),/fixture-missing.*未定价/s);
@@ -97,6 +98,28 @@ export async function pricingSmoke(page) {
   await page.locator('#price-auto').uncheck();await page.locator('#price-source-save').click();
   await page.waitForFunction(()=>!document.querySelector('#price-source-save').disabled);
   assert.equal(active.catalog.auto_check,false);
+  await page.locator('#price-modelsdev').click();
+  assert.equal(await page.locator('#price-source').inputValue(),'https://models.dev/api.json');
+  assert.equal(await page.locator('#price-auto').isChecked(),true);
+  assert.equal(await page.locator('#price-auto-apply').isChecked(),false);
+  assert.notEqual(active.catalog.url,'https://models.dev/api.json','preset changed configuration before saving');
+  await page.locator('#price-source-save').click();
+  await page.waitForFunction(()=>!document.querySelector('#price-source-save').disabled);
+  assert.equal(active.catalog.url,'https://models.dev/api.json');
+  await page.locator('#price-auto-apply').check();
+  await page.locator('#price-source-save').click();
+  await page.locator('#ask-ok').waitFor({state:'visible'});
+  assert.equal(active.catalog.auto_apply,false,'auto-apply enabled before confirmation');
+  const autoSaved = page.waitForResponse(r=>new URL(r.url()).pathname==='/api/pricing' && r.request().method()==='PUT');
+  await page.locator('#ask-ok').click();
+  await autoSaved;
+  await page.waitForFunction(()=>!document.querySelector('#price-source-save').disabled);
+  assert.equal(active.catalog.auto_apply,true);
+  await page.locator('#price-history button').first().click();await page.locator('#ask-ok').click();
+  await page.waitForFunction(()=>!document.querySelector('#price-auto-apply').checked);
+  assert.equal(active.catalog.auto_apply,false,'rollback did not pause automatic updates');
+  await page.locator('#price-auto').uncheck();
+  assert.equal(await page.locator('#price-auto-apply').isChecked(),false);
   await page.evaluate(()=>document.documentElement.dataset.theme='light');
   console.log('Pricing: diff preview, custom protection/adoption, manual custom mode, failed check, conflicts, restore and responsive layout passed');
  } finally {await page.unroute('**/api/pricing**',handler);}

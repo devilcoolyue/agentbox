@@ -101,7 +101,7 @@ func TestPricingFollowManualEditRestoreAndPersistence(t *testing.T) {
 func TestPricingFailedSaveAndInvalidSourceDoNotMutate(t *testing.T) {
 	c := writeConfig(t, minimalConfig)
 	before := c.PricingState()
-	for _, source := range []PricingCatalogConfig{{AutoCheck: true}, {URL: "http://example.invalid"}, {URL: "https://user:secret@example.invalid"}} {
+	for _, source := range []PricingCatalogConfig{{URL: "https://models.dev/api.json", AutoApply: true}, {AutoCheck: true}, {URL: "http://example.invalid"}, {URL: "https://user:secret@example.invalid"}} {
 		if err := c.UpdatePricing(before.Revision, nil, nil, &source, ""); err == nil {
 			t.Fatal("accepted bad source")
 		}

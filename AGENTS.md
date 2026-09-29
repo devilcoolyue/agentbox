@@ -294,7 +294,7 @@ data/
 
 - `internal/pricecatalog` 管理独立、版本化 JSON 候选与缓存；拉取不修改生效价格。旧前端快照迁入 `catalog.json`，明确未重新核验，不能填虚假的核验时间。远程目录要求四项显式单价、HTTPS 来源与核验时间；维护流程见 `docs/pricing-catalog.md`。
 - 管理接口 `/api/pricing`、`/check`、`/apply`、`/restore` 均为 admin；应用/编辑/回退带修订号防并发覆盖。旧配置行默认自定义；手动改价转自定义，目录应用不能静默覆盖自定义或删除消失模型。
-- `pricing_catalog`、`pricing_managed`、`pricing_history` 必须一起进入 Config 的 mutate/persist；价格历史最多 10 次，回退不改历史用量或目录地址。后台每日检查通过 server 生命周期运行，默认不联网、不自动应用。
+- `pricing_catalog`、`pricing_managed`、`pricing_history` 必须一起进入 Config 的 mutate/persist；价格历史最多 10 次，回退不改历史用量或目录地址。后台每日检查通过 server 生命周期运行，默认不联网、不自动应用。`modelsdev.go` 为精确 URL `https://models.dev/api.json` 提供第三方转换：Claude 5m 写入价校验后转 1h、GPT 明确 context tiers；缺项/未知规则进入 issues，不能填假核验时间。`auto_apply` 显式启用后仅在每日新成功拉取时更新已绑定当前 URL 的跟随模型；单价变化超过 25%、零价切换或长档规则变化留待手动核对。手动检查只预览；回退价格暂停自动跟随。
 - 网页回合与起标题用 `usage.Service.NewTally()` 在 CLI 调用前锁定整张表，Flush 不得重新读新价；终端仍首次入账锁定。用量 JSON 快照增补修订与目录来源，schema 无需加列。
 
 ### 额度与扣减

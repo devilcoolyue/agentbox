@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"log"
+	"math"
 	"net/http"
 	"reflect"
 	"sort"
@@ -13,10 +15,11 @@ import (
 )
 
 type priceChange struct {
-	Model     string              `json:"model"`
-	Kind      string              `json:"kind"` // new | update | custom | current | removed
-	Current   *config.ModelPrice  `json:"current,omitempty"`
-	Candidate *pricecatalog.Entry `json:"candidate,omitempty"`
+	Model           string              `json:"model"`
+	Kind            string              `json:"kind"` // new | update | custom | current | removed
+	Current         *config.ModelPrice  `json:"current,omitempty"`
+	Candidate       *pricecatalog.Entry `json:"candidate,omitempty"`
+	AutoBlockReason string              `json:"auto_block_reason,omitempty"`
 }
 
 type pricingView struct {
@@ -58,6 +61,9 @@ func pricingChanges(active config.PricingState, candidate pricecatalog.Catalog) 
 				change.Kind = "current"
 			} else {
 				change.Kind = "update"
+			}
+			if change.Kind == "update" || change.Kind == "current" {
+				change.AutoBlockReason = automaticPriceBlock(active, key, entry.Price)
 			}
 		}
 		out = append(out, change)
@@ -194,7 +200,7 @@ func (s *Server) handlePricingApply(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		active.Prices[key] = entry.Price
-		active.Managed[key] = config.PriceOrigin{Version: candidate.Catalog.Version, SourceURL: entry.SourceURL, VerifiedAt: entry.VerifiedAt}
+		active.Managed[key] = catalogOrigin(candidate, entry)
 	}
 	if err := s.cfg.UpdatePricing(req.Revision, active.Prices, active.Managed, nil, "应用目录 "+candidate.Catalog.Version); err != nil {
 		pricingError(w, err)
@@ -222,10 +228,76 @@ func (s *Server) pricingLoop() {
 	for {
 		source := s.cfg.GetPricingCatalog()
 		if source.AutoCheck {
-			s.priceCatalog().Check(s.workContext(), source.URL, false)
+			before := s.priceCatalog().Snapshot(source.URL)
+			candidate := s.priceCatalog().Check(s.workContext(), source.URL, false)
+			// Apply only a newly fetched successful catalog, never a cached
+			// candidate after a rollback, failed fetch, or switch of source.
+			if candidate.CheckedAt > before.CheckedAt {
+				if err := s.applyAutomaticPricing(candidate); err != nil {
+					log.Printf("pricing: 自动跟随失败: %v", err)
+				}
+			}
 		}
 		if !waitInterval(s.workContext(), time.Minute) {
 			return
 		}
 	}
+}
+
+func catalogOrigin(candidate pricecatalog.Status, entry pricecatalog.Entry) config.PriceOrigin {
+	return config.PriceOrigin{Version: candidate.Catalog.Version, SourceURL: entry.SourceURL, VerifiedAt: entry.VerifiedAt, CatalogURL: candidate.URL}
+}
+
+// Automatic updates are deliberately narrower than manual adoption. A model
+// must already follow this exact source; additions and old unbound origins
+// require an explicit choice. The guard applies to every bucket and tier.
+func automaticPriceBlock(active config.PricingState, key string, next config.ModelPrice) string {
+	origin, follows := active.Managed[key]
+	old, exists := active.Prices[key]
+	if !exists || !follows {
+		return "尚未选择跟随此模型"
+	}
+	if origin.CatalogURL == "" || origin.CatalogURL != active.Catalog.URL {
+		return "需手动应用一次，确认跟随当前来源"
+	}
+	if old.LongContextOver != next.LongContextOver || (old.Long == nil) != (next.Long == nil) {
+		return "长上下文规则变化，需手动核对"
+	}
+	acceptable := func(a, b config.TokenRates) bool {
+		before := []float64{a.Input, a.Output, a.CacheRead, a.CacheWrite}
+		after := []float64{b.Input, b.Output, b.CacheRead, b.CacheWrite}
+		for i, value := range before {
+			if value == after[i] {
+				continue
+			}
+			if value <= 0 || after[i] <= 0 || math.Abs(after[i]/value-1) > .25+1e-9 {
+				return false
+			}
+		}
+		return true
+	}
+	if !acceptable(old.TokenRates, next.TokenRates) || (old.Long != nil && !acceptable(*old.Long, *next.Long)) {
+		return "单价变化超过 25% 或涉及零价格，需手动核对"
+	}
+	return ""
+}
+
+func (s *Server) applyAutomaticPricing(candidate pricecatalog.Status) error {
+	active := s.cfg.PricingState()
+	if !active.Catalog.AutoCheck || !active.Catalog.AutoApply || candidate.Bundled || candidate.Error != "" || candidate.CheckedAt == 0 || candidate.URL != active.Catalog.URL {
+		return nil
+	}
+	changed := false
+	for key, entry := range candidate.Catalog.Entries {
+		if automaticPriceBlock(active, key, entry.Price) != "" || reflect.DeepEqual(active.Prices[key], entry.Price) {
+			continue
+		}
+		active.Prices[key] = entry.Price
+		active.Managed[key] = catalogOrigin(candidate, entry)
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return s.cfg.UpdatePricing(active.Revision, active.Prices, active.Managed, nil, "自动跟随目录 "+candidate.Catalog.Version)
 }

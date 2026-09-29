@@ -412,13 +412,14 @@ export interface Settings {
   restart_required: boolean;
 }
 
-/** Admin price catalog API. Candidate prices never become active implicitly. */
+/** Admin price catalog API. Automatic application is explicitly opt-in. */
 export interface PriceOrigin {
   version: string;
   source_url: string;
   verified_at?: string;
+  catalog_url?: string;
 }
-export interface PricingCatalogConfig { url: string; auto_check: boolean }
+export interface PricingCatalogConfig { url: string; auto_check: boolean; auto_apply?: boolean }
 export interface PricingRevision {
   id: string; saved_at: number; reason: string;
   prices: Record<string, ModelPrice>; managed: Record<string, PriceOrigin>;
@@ -432,6 +433,7 @@ export interface PriceCatalogEntry {
 }
 export interface PriceCatalog {
   schema: number; version: string; published_at: string; entries: Record<string, PriceCatalogEntry>;
+  source?: string; issues?: { model: string; reason: string }[];
 }
 export interface PriceCatalogStatus {
   catalog: PriceCatalog; revision: string; url: string; bundled: boolean;
@@ -439,7 +441,7 @@ export interface PriceCatalogStatus {
 }
 export interface PriceChange {
   model: string; kind: "new" | "update" | "custom" | "current" | "removed";
-  current?: ModelPrice; candidate?: PriceCatalogEntry;
+  current?: ModelPrice; candidate?: PriceCatalogEntry; auto_block_reason?: string;
 }
 export interface PricingView {
   active: PricingState; candidate: PriceCatalogStatus; changes: PriceChange[];

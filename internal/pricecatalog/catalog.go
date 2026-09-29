@@ -37,6 +37,13 @@ type Catalog struct {
 	Version     string           `json:"version"`
 	PublishedAt string           `json:"published_at"`
 	Entries     map[string]Entry `json:"entries"`
+	Source      string           `json:"source,omitempty"`
+	Issues      []Issue          `json:"issues,omitempty"`
+}
+
+type Issue struct {
+	Model  string `json:"model"`
+	Reason string `json:"reason"`
 }
 
 func Parse(raw []byte, requireVerified bool) (Catalog, error) {
@@ -150,7 +157,8 @@ func New(cacheDir string) *Service {
 			var saved Status
 			if json.Unmarshal(raw, &saved) == nil && saved.URL != "" && config.ValidateCatalogURL(saved.URL) == nil {
 				data, _ := json.Marshal(saved.Catalog)
-				if catalog, err := Parse(data, true); err == nil {
+				thirdParty := saved.URL == ModelsDevURL && saved.Catalog.Source == "models.dev"
+				if catalog, err := Parse(data, !thirdParty); err == nil {
 					saved.Catalog = catalog
 					saved.Revision = catalog.Revision()
 					saved.Bundled = false
@@ -249,9 +257,19 @@ func (s *Service) fetch(ctx context.Context, url string) (Catalog, error) {
 	if res.StatusCode != http.StatusOK {
 		return Catalog{}, fmt.Errorf("catalog status %d", res.StatusCode)
 	}
-	raw, err := io.ReadAll(io.LimitReader(res.Body, MaxBytes+1))
+	limit := int64(MaxBytes)
+	if url == ModelsDevURL {
+		limit = ModelsDevMaxBytes
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
 	if err != nil {
 		return Catalog{}, err
+	}
+	if int64(len(raw)) > limit {
+		return Catalog{}, fmt.Errorf("价格源超过大小限制")
+	}
+	if url == ModelsDevURL {
+		return ParseModelsDev(raw, time.Now())
 	}
 	return Parse(raw, true)
 }

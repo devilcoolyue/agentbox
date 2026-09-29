@@ -7,10 +7,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	"agentbox/internal/config"
+	"agentbox/internal/pricecatalog"
 	"agentbox/internal/store"
 )
 
@@ -136,5 +138,118 @@ func TestPricingRoutesRequireAdmin(t *testing.T) {
 				t.Fatal("query token authorized mutation")
 			}
 		}
+	}
+}
+
+func TestAutomaticPricingProtectsCustomNewSourceAndAnomalies(t *testing.T) {
+	s := pricingTestServer(t)
+	source := config.PricingCatalogConfig{URL: pricecatalog.ModelsDevURL, AutoCheck: true, AutoApply: true}
+	rate := func(n float64) config.ModelPrice {
+		return config.ModelPrice{TokenRates: config.TokenRates{Input: n, Output: n * 4, CacheRead: n / 10, CacheWrite: 0}}
+	}
+	prices := map[string]config.ModelPrice{}
+	origins := map[string]config.PriceOrigin{}
+	for _, key := range []string{"follow", "custom", "removed", "large", "zero", "tier", "other-source", "legacy-origin"} {
+		prices[key] = rate(4)
+		if key != "custom" {
+			origins[key] = config.PriceOrigin{Version: "old", CatalogURL: source.URL}
+		}
+	}
+	origins["other-source"] = config.PriceOrigin{Version: "old", CatalogURL: "https://example.invalid/prices"}
+	origins["legacy-origin"] = config.PriceOrigin{Version: "old"}
+	initial := s.cfg.PricingState()
+	if err := s.cfg.UpdatePricing(initial.Revision, prices, origins, &source, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	before := s.cfg.PricingState()
+	candidate := pricecatalog.Status{URL: source.URL, CheckedAt: time.Now().UnixMilli(), Catalog: pricecatalog.Catalog{Version: "new", Entries: map[string]pricecatalog.Entry{}}}
+	for _, key := range []string{"follow", "custom", "new", "large", "zero", "tier", "other-source", "legacy-origin"} {
+		candidate.Catalog.Entries[key] = pricecatalog.Entry{Price: rate(5), SourceURL: source.URL}
+	}
+	candidate.Catalog.Entries["large"] = pricecatalog.Entry{Price: rate(6)}
+	candidate.Catalog.Entries["zero"] = pricecatalog.Entry{Price: rate(0)}
+	tier := rate(5)
+	tier.LongContextOver = 272000
+	tier.Long = &config.TokenRates{Input: 10}
+	candidate.Catalog.Entries["tier"] = pricecatalog.Entry{Price: tier}
+	for _, bad := range []pricecatalog.Status{{URL: source.URL, Bundled: true}, {URL: source.URL, Error: "failed"}, {URL: "https://example.invalid/catalog"}} {
+		bad.Catalog = candidate.Catalog
+		bad.CheckedAt = candidate.CheckedAt
+		if err := s.applyAutomaticPricing(bad); err != nil {
+			t.Fatal(err)
+		}
+		if s.cfg.PricingState().Revision != before.Revision {
+			t.Fatal("bad candidate changed prices")
+		}
+	}
+	if err := s.applyAutomaticPricing(candidate); err != nil {
+		t.Fatal(err)
+	}
+	after := s.cfg.PricingState()
+	if after.Prices["follow"].Input != 5 || after.Managed["follow"].Version != "new" {
+		t.Fatal("follow not updated")
+	}
+	for key, price := range before.Prices {
+		if key != "follow" && !reflect.DeepEqual(after.Prices[key], price) {
+			t.Fatal("protected price changed", key)
+		}
+	}
+	if _, ok := after.Prices["new"]; ok {
+		t.Fatal("new model auto-adopted")
+	}
+	if len(after.History) != len(before.History)+1 {
+		t.Fatal("missing history")
+	}
+	if err := s.applyAutomaticPricing(candidate); err != nil {
+		t.Fatal(err)
+	}
+	if s.cfg.PricingState().Revision != after.Revision {
+		t.Fatal("no-op update changed revision")
+	}
+	if err := s.cfg.RestorePricing(after.Revision, before.Revision); err != nil {
+		t.Fatal(err)
+	}
+	restored := s.cfg.PricingState()
+	if restored.Catalog.AutoApply || restored.Prices["follow"].Input != 4 {
+		t.Fatal("rollback not protected")
+	}
+	if err := s.applyAutomaticPricing(candidate); err != nil {
+		t.Fatal(err)
+	}
+	if s.cfg.PricingState().Revision != restored.Revision {
+		t.Fatal("rollback overwritten")
+	}
+	reloaded, err := config.Load(s.cfg.Path())
+	if err != nil || !reflect.DeepEqual(reloaded.PricingState(), restored) {
+		t.Fatal("lost auto-follow/source binding on restart", err)
+	}
+}
+
+func TestAutomaticPriceGuardChecksEveryTierAndThreshold(t *testing.T) {
+	source := "https://example.invalid/catalog"
+	old := config.ModelPrice{TokenRates: config.TokenRates{Input: 4, Output: 20, CacheRead: .4, CacheWrite: 8}, LongContextOver: 272000, Long: &config.TokenRates{Input: 8, Output: 30, CacheRead: .8, CacheWrite: 16}}
+	active := config.PricingState{Catalog: config.PricingCatalogConfig{URL: source}, Prices: map[string]config.ModelPrice{"fixture": old}, Managed: map[string]config.PriceOrigin{"fixture": {CatalogURL: source}}}
+	for _, tc := range []struct {
+		name    string
+		change  func(*config.ModelPrice)
+		blocked bool
+	}{
+		{"unchanged", func(p *config.ModelPrice) {}, false},
+		{"25 percent increase", func(p *config.ModelPrice) { p.Long.Output = 37.5 }, false},
+		{"25 percent decrease", func(p *config.ModelPrice) { p.Output = 15 }, false},
+		{"above limit", func(p *config.ModelPrice) { p.Long.CacheRead = 1.001 }, true},
+		{"free", func(p *config.ModelPrice) { p.CacheWrite = 0 }, true},
+		{"threshold", func(p *config.ModelPrice) { p.LongContextOver = 200000 }, true},
+		{"remove tier", func(p *config.ModelPrice) { p.Long = nil; p.LongContextOver = 0 }, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := old
+			long := *old.Long
+			p.Long = &long
+			tc.change(&p)
+			if got := automaticPriceBlock(active, "fixture", p); (got != "") != tc.blocked {
+				t.Fatal(got)
+			}
+		})
 	}
 }

@@ -11,16 +11,18 @@ import (
 	"time"
 )
 
-// Catalog checks only discover candidates. Applying prices is always explicit.
+// Checks discover candidates; automatic application requires an explicit opt-in.
 type PricingCatalogConfig struct {
 	URL       string `json:"url"`
 	AutoCheck bool   `json:"auto_check"`
+	AutoApply bool   `json:"auto_apply,omitempty"`
 }
 
 type PriceOrigin struct {
 	Version    string `json:"version"`
 	SourceURL  string `json:"source_url"`
 	VerifiedAt string `json:"verified_at,omitempty"`
+	CatalogURL string `json:"catalog_url,omitempty"`
 }
 
 type PricingRevision struct {
@@ -69,6 +71,9 @@ func (c *Config) validatePricing() error {
 	}
 	if c.PricingCatalog.AutoCheck && c.PricingCatalog.URL == "" {
 		return fmt.Errorf("自动检查需要配置价格目录地址")
+	}
+	if c.PricingCatalog.AutoApply && !c.PricingCatalog.AutoCheck {
+		return fmt.Errorf("自动跟随需要开启每天自动检查")
 	}
 	if _, err := sanitizePricing(c.Pricing); err != nil {
 		return err
@@ -195,6 +200,8 @@ func (c *Config) RestorePricing(expected, id string) error {
 		for _, h := range w.PricingHistory {
 			if h.ID == id {
 				w.replacePricing(h.Prices, h.Managed, "回退价格版本")
+				// A rollback must survive the next scheduled check.
+				w.PricingCatalog.AutoApply = false
 				return nil
 			}
 		}
