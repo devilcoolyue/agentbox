@@ -35,6 +35,7 @@ type Runtime interface {
 // Service owns workspace lifecycle, activity and per-session serialization.
 // Account resolution/synchronization are injected until credentials extraction.
 type Service struct {
+	mcp             func(context.Context, store.Session) error
 	network         func(context.Context, store.Session) error
 	cfg             *config.Config
 	store           Store
@@ -152,6 +153,7 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 				return store.Session{}, err
 			}
 		}
+		s.applyMCP(ctx, cur)
 		s.activity.Touch(cur.ID)
 		return cur, nil
 	}
@@ -211,6 +213,7 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 			return store.Session{}, err
 		}
 	}
+	s.applyMCP(ctx, cur)
 	return cur, nil
 }
 
@@ -371,6 +374,31 @@ func (s *Service) UseRunning(ctx context.Context, id string, fn func(store.Sessi
 	}
 	if !running {
 		return errors.New("工作空间未运行")
+	}
+	return fn(sess)
+}
+
+// MCP failures keep the terminal available for repair. Chat checks again before inference.
+func (s *Service) SetMCPHook(hook func(context.Context, store.Session) error) { s.mcp = hook }
+func (s *Service) applyMCP(ctx context.Context, sess store.Session) {
+	if s.mcp != nil {
+		if err := s.mcp(ctx, sess); err != nil {
+			log.Printf("MCP sync pending for session %s", sess.ID)
+		}
+	}
+}
+
+// WithSession protects control-data edits against concurrent purge, including
+// stopped workspaces. It does not start containers or require account access.
+func (s *Service) WithSession(ctx context.Context, id string, fn func(store.Session) error) error {
+	l := s.lock(id)
+	if err := l.acquire(ctx); err != nil {
+		return err
+	}
+	defer l.release()
+	sess, ok := s.store.Get(id)
+	if !ok {
+		return ErrSessionGone
 	}
 	return fn(sess)
 }

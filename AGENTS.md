@@ -694,3 +694,11 @@ data/
 - 真实浏览器测试 `scripts/test-remote-browser-live.py` 用独立卷与合成站点，禁用空间外网，不访问真实用户网页或调用模型。`scripts/test-browser-runtime.py` 验证代理 HTTP/CONNECT/WebSocket 转发和失败不直连。
 
 - Chrome DNS 规则须显式 `EXCLUDE 127.0.0.1`，通配 `MAP * ~NOTFOUND` 也会阻止本地代理 IP。修改代理参数必须跑 `scripts/test-browser-proxy-live.py` 的真实浏览器回归，不能仅验证 Python 代理本身。
+
+### Claude MCP 管理
+
+- `internal/mcpconfig` 管理用户/空间独立配置、脱敏、修订和原生配置同步。源文件在容器挂载外的 users/<user>/mcp.json、sessions/<id>/mcp.json，均进入系统备份。不得复用 home 模板的整文件 mtime 覆盖规则。
+- 工作空间 MCP hook 覆盖已运行分支；网页当前回合期间跳过附带启动同步，runTurn 在执行 CLI 前显式同步并阻止冲突回合。终端保留修复入口。空间编辑通过 WithSession 防止 purge 后重建目录。
+- 只接管明确授权的原生用户级条目，记录 Applied/Pending 后通过容器 Claude 原生配置命令修改，取消后可重试。未知字段不做有损接管。当前终端 CLI 不承诺热更新；项目批准与插件仍由 CLI 管理。
+- `helper.py` 嵌入服务端，通过 python3 -I -c 在目标容器执行，敏感载荷走 stdin。stdin EOF 取消，独立 28 秒闹钟兜底，清理检测进程组；禁止宿主机执行 MCP 或返回原始 stderr。HTTP 支持 Streamable HTTP 的 JSON/SSE 响应，不含旧 SSE transport；首版检测不读取 CLI OAuth 凭证。
+- 回归：`go test ./internal/mcpconfig ./internal/server ./internal/workspace ./internal/backup`；`scripts/test-mcp.mjs` 纳入浏览器合成 API 测试；`python3 scripts/test-mcp-live.py` 使用固定镜像、隔离临时 home、network=none 与本地模拟模型验证真实工具调用，不发付费请求。`scripts/test-mcp-server.py --binary <Linux binary>` 验证真实 Go API→Docker 同步与检测，使用独立卷并清理。

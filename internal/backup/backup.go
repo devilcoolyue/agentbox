@@ -232,6 +232,31 @@ func Create(ctx context.Context, opts Options) (_ *Manifest, err error) {
 			if !user.IsDir() {
 				continue
 			}
+
+			// MCP canonical configuration and reconciliation state are control
+			// data, not workspace content; include them in system backups too.
+			base := path.Join("users", user.Name())
+			if err = add(data, path.Join(base, "mcp.json"), "data/"+path.Join(base, "mcp.json"), true); err != nil {
+				return nil, err
+			}
+			root, e := safefs.Open(data)
+			if e != nil {
+				return nil, e
+			}
+			sessions, e := root.ReadDir(path.Join(base, "sessions"))
+			root.Close()
+			if e != nil && !os.IsNotExist(e) {
+				return nil, e
+			}
+			for _, session := range sessions {
+				if !session.IsDir() {
+					continue
+				}
+				rel := path.Join(base, "sessions", session.Name(), "mcp.json")
+				if err = add(data, rel, "data/"+rel, true); err != nil {
+					return nil, err
+				}
+			}
 			rel := path.Join("users", user.Name(), "home-template")
 			if err = add(data, rel, "data/"+rel, true); err != nil {
 				return nil, err

@@ -38,6 +38,7 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/chat.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/term.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/browser.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/mcp.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/files.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/settings.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/git-management.css">
@@ -274,7 +275,28 @@
               <svg class="tab-ic" width="15" height="15" data-icon="branch" aria-hidden="true"></svg><span class="t">变更</span></button>
             <button class="tab" data-tab="skills" id="tab-btn-skills">
               <svg class="tab-ic" width="15" height="15" data-icon="sparkles" aria-hidden="true"></svg><span class="t">技能</span></button>
+            <button class="tab" data-tab="mcp" id="tab-btn-mcp"><svg class="tab-ic" width="15" height="15" data-icon="plug" aria-hidden="true"></svg><span class="t">MCP</span></button>
           </nav>
+
+          <section id="tab-mcp" class="pane hidden">
+            <div class="mcp-toolbar">
+              <div class="mcp-scope-group">
+                <label for="mcp-scope">配置范围</label>
+                <select id="mcp-scope"><option value="session">当前空间</option><option value="user">我的 MCP</option></select>
+              </div>
+              <div class="mcp-toolbar-actions">
+                <button id="mcp-add" data-icon="plus" class="btn btn-primary btn-sm" aria-haspopup="dialog" aria-controls="mcp-editor">新增 MCP</button>
+                <button id="mcp-import" data-icon="upload" class="btn btn-sm">导入 JSON</button>
+                <button id="mcp-refresh" data-icon="refresh" class="btn btn-sm">刷新</button>
+              </div>
+              <input id="mcp-import-file" type="file" accept=".json,application/json" hidden>
+            </div>
+            <div id="mcp-content">
+              <p id="mcp-scope-hint" class="mcp-meta"></p>
+              <p class="mcp-meta mcp-usage-note">下次聊天或终端连接时应用 · 已运行的 Claude 需重启 · OAuth 在终端授权</p>
+              <div id="mcp-list" aria-live="polite"></div>
+            </div>
+          </section>
 
           <!-- 对话 -->
           <section id="tab-chat" class="pane">
@@ -1246,6 +1268,45 @@
     </main>
   </div>
 </div>
+
+<!-- MCP 配置：新增与编辑共用弹窗，避免挤占服务列表 -->
+<dialog id="mcp-editor" class="dlg-mcp" aria-labelledby="mcp-editor-title" aria-describedby="mcp-editor-context">
+  <form id="mcp-form">
+    <header class="mcp-dialog-head">
+      <div class="mcp-dialog-title">
+        <svg width="22" height="22" data-icon="plug" aria-hidden="true"></svg>
+        <div><h2 id="mcp-editor-title">新增 MCP</h2><p id="mcp-editor-context"></p></div>
+      </div>
+      <button id="mcp-close" type="button" class="dlg-x" data-icon="close" aria-label="关闭 MCP 配置" data-tip="关闭"></button>
+    </header>
+    <div class="mcp-form-body">
+      <div class="mcp-form-grid">
+        <label for="mcp-name">名称<input id="mcp-name" type="text" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" autocomplete="off" placeholder="例如 my-tools"></label>
+        <label for="mcp-type">连接方式<select id="mcp-type"><option value="stdio">stdio · 容器内进程</option><option value="http">HTTP · 远程服务</option></select></label>
+      </div>
+      <div id="mcp-stdio-fields" class="mcp-field-section">
+        <label for="mcp-command">启动命令<input id="mcp-command" type="text" placeholder="例如 npx 或 /home/agent/bin/my-mcp" autocomplete="off" aria-describedby="mcp-command-hint"></label>
+        <p id="mcp-command-hint" class="field-hint">命令在当前空间容器内运行，所需依赖需提前安装。</p>
+        <label for="mcp-args"><span>参数 <span class="mcp-field-format">JSON 数组</span></span><textarea id="mcp-args" rows="3" spellcheck="false" placeholder='["-y", "my-mcp-server"]'></textarea></label>
+      </div>
+      <div id="mcp-http-fields" class="mcp-field-section hidden">
+        <label for="mcp-url">服务地址<input id="mcp-url" type="url" placeholder="https://example.com/mcp" autocomplete="off"></label>
+      </div>
+      <div class="mcp-field-section">
+        <label for="mcp-secrets"><span><span id="mcp-secret-label">环境变量</span> <span class="mcp-field-format">JSON 对象 · 可选</span></span><textarea id="mcp-secrets" rows="3" spellcheck="false" autocomplete="off" aria-describedby="mcp-secret-hint"></textarea></label>
+        <p id="mcp-secret-hint" class="field-hint">•••••• 保留已保存的值；输入新值替换，删除键清除。</p>
+      </div>
+      <p id="mcp-form-error" class="mcp-error hidden" role="alert"></p>
+    </div>
+    <footer class="mcp-dialog-footer">
+      <span>保存后在下次使用时应用</span>
+      <div class="mcp-dialog-buttons">
+        <button id="mcp-cancel" data-icon="close" type="button" class="btn">取消</button>
+        <button id="mcp-save" type="submit" data-icon="save" class="btn btn-primary">保存配置</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
 
 <!-- 新建工作空间 -->
 <dialog id="dlg-new" aria-labelledby="new-title" aria-describedby="new-desc">

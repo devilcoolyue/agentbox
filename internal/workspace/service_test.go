@@ -198,3 +198,24 @@ func TestConcurrentStartThenDeleteCannotLeaveOrphanContainer(t *testing.T) {
 func (f *fakeRuntime) Running(ctx context.Context, id string) (bool, error) {
 	return f.RunningWithMount(ctx, id, ""), f.fail
 }
+
+func TestMCPHookRunsForRunningWorkspaceAndKeepsRepairAccess(t *testing.T) {
+	s, _, sess := fixture(t)
+	calls := 0
+	s.SetMCPHook(func(context.Context, store.Session) error { calls++; return errors.New("synthetic MCP conflict") })
+	for range 2 {
+		if _, err := s.Start(t.Context(), sess.ID); err != nil {
+			t.Fatal("MCP conflict blocked terminal repair", err)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("hook skipped running workspace: %d", calls)
+	}
+	if err := s.Delete(t.Context(), sess.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	invoked := false
+	if err := s.WithSession(t.Context(), sess.ID, func(store.Session) error { invoked = true; return nil }); !errors.Is(err, ErrSessionGone) || invoked {
+		t.Fatal("control mutation resurrected deleted workspace")
+	}
+}

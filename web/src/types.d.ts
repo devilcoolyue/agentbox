@@ -993,3 +993,18 @@ export interface BrowserInfo {
  browser?: string;
  proxy: boolean;
 }
+
+/** MCP canonical definition; env/header values use a keep-secret marker on GET. */
+export interface MCPDefinition {
+ type: "stdio" | "http";
+ command?: string; args?: string[]; env?: Record<string, string>;
+ url?: string; headers?: Record<string, string>;
+}
+export interface MCPEntry { config: MCPDefinition; disabled?: boolean; }
+export interface MCPItem extends MCPEntry {
+ name: string; source: "user" | "session" | "native";
+ status: "configured" | "pending" | "pending_delete" | "applied" | "conflict" | "unmanaged" | "disabled";
+ native_revision?: string; native?: MCPDefinition;
+}
+export interface MCPView { revision: number; user_revision: number; items: MCPItem[]; project_names: string[]; external?: {name: string; source: "local" | "plugin"}[]; }
+export interface MCPCheck { status: string; tools?: {name: string; description: string}[]; truncated?: boolean; checked_at: string; }

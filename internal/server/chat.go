@@ -365,6 +365,12 @@ func (r *chatRoom) runTurn(text, model, effort string, controls ...string) {
 		fail("启动容器失败: " + err.Error())
 		return
 	}
+	if sess.Agent == config.AgentClaude {
+		if err := s.workspaces().UseRunning(ctx, sess.ID, func(cur store.Session) error { return s.syncMCP(ctx, cur) }); err != nil {
+			fail("MCP 配置尚未应用：" + err.Error())
+			return
+		}
+	}
 	// Re-resolve after startup: credentials/profile may have changed, and only
 	// a running container can supply catalog metadata. No inference is started.
 	acct, err = s.sessionAccount(sess)

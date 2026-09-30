@@ -4,7 +4,7 @@
 
 ## home 模板
 
-agentbox 提供 Claude 技能文件的管理界面；完整插件与 MCP 仍由容器内原版 CLI 管理，可按其方式安装（`claude mcp add -s user …`、
+agentbox 提供 Claude 技能文件的管理界面；Claude MCP 另有独立管理页；完整插件仍由容器内原版 CLI 管理，也可按原生方式安装（`claude mcp add -s user …`、
 `~/.claude/skills/<名字>/SKILL.md`、`/plugin` 等）。但**新建工作空间的 home 从独立空目录开始**，
 装在工作空间里的东西只属于那个工作空间。要预置给多个工作空间，用 home 模板 —— 它在每次工作空间启动时
 叠加到 `/home/agent`，分两层，后者盖前者：
@@ -64,16 +64,54 @@ data/home-template/
 
 服务器模板不在界面里开放：它对全体用户可见，仍由管理员在宿主机上维护。
 
-## MCP 配置
+## MCP 管理
 
-- **Claude**：用户级 MCP 写在 `~/.claude.json`，服务端只在缺失时生成该文件，不会覆盖，
-  工作空间内 `claude mcp add -s user` 即可长期生效。项目级 `/workspace/.mcp.json` 在 headless
-  回合里默认不加载，需要在 `~/.claude/settings.json` 里加 `"enableAllProjectMcpServers": true`。
-- **Codex**：账号池目录存在 `config.toml` 时，每次启动会覆盖空间内的 `~/.codex/config.toml`，所以 `[mcp_servers.*]` 要写在
-  该账号实际的 `<credentials_dir>/config.toml` 里（例如 `accounts/<id>/` 或 `data/creds/<id>/`），写在工作空间内或 home 模板里可能被覆盖。控制台改中转站地址
-  是行级替换，不会破坏该文件里的其它段落。
-- 对话模式每回合都新起一次 CLI 进程，stdio 型 MCP server 每回合都会重新拉起；依赖
-  `npx -y` 现拉包的 server 会让每条消息都多等几秒，建议预装到 home 里。
+Claude 工作空间的 **MCP** 页签支持 stdio 和 HTTP（Streamable HTTP）服务，提供新增、编辑、启停、JSON 导入、连接检测和工具列表。新增和编辑在独立弹窗完成，支持 Esc 关闭，保存失败保留草稿；工具栏的范围选择与按钮保持等高。首版不管理 Codex、服务器全局配置、插件安装和网页 OAuth 授权。
+
+### 范围与生效时机
+
+- **我的 MCP**：当前用户自己的 Claude 空间默认继承；配置不与共享的 Claude 账号绑定。
+- **当前空间**：同名空间覆盖优先于用户配置。停用继承项只影响当前空间；删除覆盖恢复继承。删除用户配置不会删除空间独立覆盖。
+- 保存不立刻重启容器或 CLI。配置在下一回合聊天、新终端连接或空间启动时应用；已有网页回合运行时推迟同步，已运行的终端 Claude 需自行重新启动。
+- “已写入用户配置”表示原生文件已更新，不代表已有 CLI 已重载，也不代替连接检测。项目/local 配置、项目批准、插件和权限模式仍可能影响实际工具加载。
+- 每回合会重新启动 stdio MCP；`npx -y` 下载依赖可能增加延迟。命令和依赖必须在容器内存在，localhost 指空间容器本身。
+
+### 已有配置与冲突
+
+终端执行 `claude mcp add -s user …` 写入空间的 `~/.claude.json`，默认显示为“终端自装”。同名配置不会被网页静默覆盖，需选择“导入并接管终端配置”，将当前原生配置导入为空间覆盖，再按需编辑或复制到“我的 MCP”。
+
+接管后若终端再次修改条目，会提示冲突。可以重新导入接管，或选择“保留自装并解除管理”，保留原生条目并在该空间禁用同名继承。未解决的冲突阻止新网页回合使用不确定配置，终端仍可用于修复。仅停用一个未接管的继承项不会删除同名自装服务。
+
+同步只管理已接管的 MCP 条目，通过 Claude 原生配置命令修改，保留其他状态。应用意图先落盘，命令中断后可重试；删除受管配置会在下一次同步移除对应原生条目。不要再用 home 模板整份覆盖 `.claude.json` 来分发受管 MCP，否则会引起冲突。包含首版不支持字段的原生条目只能在终端管理，不会丢弃字段后强行导入。
+
+页面还列出 local 项目 MCP 名称和已安装插件名称（插件不一定提供 MCP），不接管它们。项目级 `/workspace/.mcp.json` 默认仍需批准，可在交互式 Claude 中批准，或在 `~/.claude/settings.json` 合并 `"enableAllProjectMcpServers": true`（允许全部项目 MCP）。管理页不自动批准项目服务。
+
+### 凭证、导入与检测
+
+- Header/env 值保存后只返回脱敏标记。编辑时 `••••••` 保留原值，输入新值替换，删除键清除。凭证放 Header/env，不放可见的命令参数和 URL；这些文件需按凭证保护，磁盘权限为 0600，并非加密存储。
+- 导入标准 `{"mcpServers":{"name":{"command":"node","args":["/home/agent/server.js"]}}}` JSON。先预览名称列表，确认后原子保存；已有同名配置和未知字段会报错，不会部分覆盖。每范围最多 100 项，导入文件最多 100 KB。
+- “测试连接”在当前空间容器执行，必要时启动空间，通过账号授权和额度准入。只做初始化与工具发现，不调用业务工具或模型；单次检测最多 30 秒，同空间只允许一个检测任务。HTTP 响应支持 JSON/SSE，但不支持旧版 SSE transport。
+- OAuth 仍在终端执行 `claude mcp login <名称>`。独立检测不复用 Claude 私有 OAuth 凭证，因此 OAuth 服务可能仍显示“需要授权”；以 CLI 的 `claude mcp list` 和实际调用为准。检测时间和工具列表在当前登录期间展示，不自动轮询。
+- 检测返回分类错误，不回传原始 stderr。取消和超时清理检测子进程；检测成功不等同于模型一定会调用工具。
+
+### 存储、接口和兼容
+
+用户配置位于 `data/users/<user>/mcp.json`，空间覆盖、上次应用记录和待完成操作位于 `data/users/<user>/sessions/<id>/mcp.json`。这些文件在容器挂载之外，进入系统备份和完整备份。运行时 `.claude.json`、OAuth 凭证仍随 home 进入完整备份。旧实例升级不自动接管已有配置；旧二进制不提供管理和后续同步，但保留的原生配置仍可能被 CLI 使用。
+
+API 均需登录，空间接口限定属主：
+
+| 接口 | 行为 |
+| --- | --- |
+| `GET /api/mcp`、`PUT/DELETE /api/mcp/{name}` | 当前用户配置 |
+| `GET /api/sessions/{id}/mcp`、`PUT/DELETE …/mcp/{name}` | 空间有效配置、覆盖与禁用 |
+| `POST /api/mcp/import`、`POST …/sessions/{id}/mcp/import` | 原子导入 `mcpServers` |
+| `POST …/mcp/{name}/adopt` | 接管原生条目；`release=true` 保留自装并解除管理 |
+| `POST …/mcp/{name}/copy` | 复制有效配置至自己的用户配置，不覆盖已有项 |
+| `POST …/mcp/{name}/check` | 容器内检测，返回分类状态、工具和检测时间 |
+
+配置写入携带 `revision`；单项 PUT 使用 `entry: {config, disabled}`，过期修订返回 409。接管还携带读取到的 `native_revision`；复制携带目标用户配置的修订。GET 的 Header/env 值用 `__AGENTBOX_KEEP_SECRET__` 表示已保存，PUT 原样传回可保留，删除键清除。完整定义支持 `type/command/args/env/url/headers`，`type` 缺省 stdio。
+
+Codex 仍使用原版 CLI 配置：账号池目录存在 `config.toml` 时，空间启动会覆盖 `~/.codex/config.toml`，所以 `[mcp_servers.*]` 应写在该账号实际的 `<credentials_dir>/config.toml`，空间和模板中的配置可能被覆盖。
 
 ## 准备一个可复用技能
 

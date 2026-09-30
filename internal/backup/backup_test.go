@@ -335,3 +335,30 @@ func TestBackupSnapshotDoesNotMigrateSource(t *testing.T) {
 		t.Fatalf("source schema changed: %d %v", n, err)
 	}
 }
+
+func TestMCPSystemBackupRestore(t *testing.T) {
+	cfg, data := fixture(t)
+	paths := []string{"users/alice/mcp.json", "users/alice/sessions/s1/mcp.json"}
+	for _, rel := range paths {
+		if err := os.WriteFile(filepath.Join(data, rel), []byte(`{"version":1,"entries":{},"revision":4}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	archive := filepath.Join(t.TempDir(), "mcp.tar.gz")
+	if _, err := Create(t.Context(), Options{Config: cfg, Output: archive}); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "restored")
+	if _, err := Restore(t.Context(), archive, target); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range paths {
+		raw, err := os.ReadFile(filepath.Join(target, "data", rel))
+		if err != nil || !strings.Contains(string(raw), `"revision":4`) {
+			t.Fatalf("MCP state missing: %s %v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(target, "data/users/alice/sessions/s1/home/.claude/.credentials.json")); !os.IsNotExist(err) {
+		t.Fatal("system backup included runtime home")
+	}
+}

@@ -25,7 +25,7 @@ import { setTip } from "./tip.js";
 /* ---------------- 打开 / 切换 ---------------- */
 
 export async function openSession(sess: Session, tab?: Tab) {
-  if (sess.agent !== "claude" && tab === "skills") tab = "chat";
+  if (sess.agent !== "claude" && (tab === "skills" || tab === "mcp")) tab = "chat";
   if (S.current && S.current.id === sess.id) {
     showView("work");
     if (tab && tab !== S.tab) setTab(tab);
@@ -70,7 +70,8 @@ export function renderHead() {
   // 技能是 Claude Code 的机制，codex 会话没有对应目录，页签直接藏掉
   const claude = agentKey(sess.agent) === "claude";
   $("tab-btn-skills").classList.toggle("hidden", !claude);
-  if (!claude && S.tab === "skills") setTab("chat");
+ $("tab-btn-mcp").classList.toggle("hidden", !claude);
+  if (!claude && (S.tab === "skills" || S.tab === "mcp")) setTab("chat");
   syncUsageBtn(sess.agent);
   if (sess.stop_reason === "idle" && sess.status !== "running") {
     const zzz = document.createElement("span");
@@ -112,6 +113,7 @@ export function setTab(name: Tab) {
   $("tab-files").classList.toggle("hidden", name !== "files");
   $("tab-changes").classList.toggle("hidden", name !== "changes");
   $("tab-skills").classList.toggle("hidden", name !== "skills");
+ $("tab-mcp").classList.toggle("hidden", name !== "mcp");
   $("tab-browser").classList.toggle("hidden", name !== "browser");
   if (name === "browser") void showBrowser();
   if (name === "files") loadFiles();

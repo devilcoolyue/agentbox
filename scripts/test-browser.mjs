@@ -6,6 +6,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { responsiveSmoke } from './test-responsive.mjs';
+import { mcpSmoke } from './test-mcp.mjs';
 import { remoteBrowserSmoke } from './test-remote-browser.mjs';
 import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
@@ -136,6 +137,12 @@ export async function smoke(page) {
   assert.equal(await page.locator('#login-btn').isDisabled(),false);
   if (process.env.AGENTBOX_BROWSER_ONLY_REMOTE === '1') {
    await remoteBrowserSmoke(page); assert.deepEqual(errors,[]); return;
+  }
+  if (process.env.AGENTBOX_BROWSER_ONLY_MCP === '1') {
+   sessions = [{...sessions[0], agent:'claude'}];
+   await mcpSmoke(page);
+   assert.deepEqual(errors,[]);
+   return;
   }
   if (process.env.AGENTBOX_BROWSER_ONLY_PRICING === '1') {
    await pricingSmoke(page);
@@ -571,6 +578,8 @@ export async function smoke(page) {
   await page.setViewportSize({width:1280,height:900});
   assert.equal(await page.locator('#term-keys').isVisible(),false,'desktop toolbar should stay hidden');
   await remoteBrowserSmoke(page);
+  sessions = [{...sessions[0], agent:"claude"}];
+  await mcpSmoke(page);
   sessions = [];
   await page.reload();
   await at('#/','#empty'); // Deleted or inaccessible workspace.

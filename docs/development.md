@@ -233,3 +233,20 @@ AGENTBOX_DOCKER_TEST_IMAGE=agentbox-git-test:local go test ./internal/server -ru
 ```
 
 测试使用合成 TLS Git smart HTTP 与 SSH 服务，经过真实容器 Git、宿主能力网桥、公司 CA/SSH pin 校验，验证 clone/fetch/ff-only pull、网页预览与显式 push、容器 Python 终端授权命令。默认网桥地址为 `host.docker.internal`，Linux 可用 `AGENTBOX_DOCKER_BRIDGE_HOST` 指定容器可达的服务端地址；服务端测试临时监听 `0.0.0.0`。此测试不替代真实 GitHub/GitLab 注册应用、企业 SSO 和实际内网的现场联调。
+
+## Claude MCP 回归
+
+```bash
+go test ./internal/mcpconfig ./internal/server ./internal/workspace ./internal/backup
+npm run check
+npm run build
+# 沿用上文安装在仓库外的 Playwright
+AGENTBOX_BROWSER_ONLY_MCP=1 \
+  AGENTBOX_PLAYWRIGHT_MODULE=/tmp/agentbox-docs-browser/node_modules/playwright/index.mjs \
+  AGENTBOX_BROWSER_CHANNEL=chrome node scripts/test-browser.mjs
+python3 scripts/test-mcp-live.py --image agentbox-agent:claude-2.1.280-codex-0.145.0
+# Go 服务端到 Docker 的 API 集成；binary 必须匹配 Docker daemon 的 Linux 架构
+python3 scripts/test-mcp-server.py --binary /tmp/agentbox-linux --image agentbox-agent:claude-2.1.280-codex-0.145.0
+```
+
+`test-mcp-live.py` 使用临时容器、空 home、禁用外网和本地模拟 Anthropic API，验证原生配置写入、stdio/HTTP JSON/SSE 工具发现、Claude 实际工具调用、取消与超时清理。`test-mcp-server.py` 用独立 Docker volume 启动真实 Go 服务，覆盖 HTTP 管理接口、已运行空间同步、冲突接管与删除，并清理自己的容器和卷。两者不读真实凭证、不发付费模型请求，也不代表生产第三方 MCP 的网络或 OAuth 已验收。

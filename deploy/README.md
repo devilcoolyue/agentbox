@@ -227,6 +227,7 @@ docker build -t agentbox-agent:latest \
 | 指定的配置文件、同目录 `accounts/` | 是 | 是 |
 | `data/creds/`、所有账号配置的外部 `credentials_dir` | 是 | 是 |
 | 服务器 home 模板、每个用户的 home 模板 | 是 | 是 |
+| 用户与空间 `mcp.json` 管理配置、同步记录 | 是 | 是 |
 | 用户 workspace、home、聊天记录、shared | 否 | 是 |
 | marketplace 缓存、已编译 abox-link、旧备份、锁文件 | 否，可重新生成 | 否 |
 
