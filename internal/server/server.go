@@ -28,6 +28,7 @@ import (
 	"agentbox/internal/dockerx"
 	"agentbox/internal/gitaccess"
 	"agentbox/internal/gitx"
+	"agentbox/internal/imageupdate"
 	"agentbox/internal/mcpconfig"
 	"agentbox/internal/pricecatalog"
 	"agentbox/internal/store"
@@ -58,6 +59,9 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
+	imageUpdatesOnce sync.Once
+	imageUpdates     *imageupdate.Service
+
 	mcpOnce       sync.Once
 	mcp           *mcpconfig.Service
 	mcpCheckMu    sync.Mutex
@@ -282,6 +286,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/pricing/check", s.admin(http.HandlerFunc(s.handlePricingCheck)))
 	mux.Handle("POST /api/pricing/apply", s.admin(http.HandlerFunc(s.handlePricingApply)))
 	mux.Handle("POST /api/pricing/restore", s.admin(http.HandlerFunc(s.handlePricingRestore)))
+	mux.Handle("GET /api/image-updates", s.admin(http.HandlerFunc(s.handleImageUpdates)))
+	mux.Handle("POST /api/image-updates/{action}", s.admin(http.HandlerFunc(s.handleImageUpdateAction)))
 	mux.Handle("GET /api/settings", s.admin(http.HandlerFunc(s.handleGetSettings)))
 	mux.Handle("PUT /api/settings", s.admin(http.HandlerFunc(s.handlePutSettings)))
 	mux.Handle("GET /api/storage", s.admin(http.HandlerFunc(s.handleStorage)))
@@ -415,6 +421,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.spawn(s.idleReaper)
 	s.spawn(s.storageLoop)
 	s.spawn(s.pricingLoop)
+	s.spawn(s.imageUpdateLoop)
 	s.spawn(s.termUsageLoop)
 	s.spawn(s.termWatchLoop)
 	s.spawn(s.tokenJanitor)

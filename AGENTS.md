@@ -607,7 +607,8 @@ data/
   只覆盖会变的令牌。琥珀分两支：`--amber` 画线与文字（浅色下压深才有对比度），
   `--accent` 是实心块底色（两个主题下都要够亮以托住 `--on-accent` 的深色文字），与
   `internal/web/static/css/base.css` 的约定一致。
-- 会话镜像内禁用 CLI 自升级（`DISABLE_AUTOUPDATER=1`）；Claude/Codex 版本由 `images/agent/Dockerfile` 与 `scripts/auto-update-image.sh` 管理。
+- 会话镜像内禁用 CLI 自升级（`DISABLE_AUTOUPDATER=1`）；默认版本由 `images/agent/Dockerfile` 管理。网页「客户端更新」由 `internal/imageupdate` + `internal/dockerx/image_update.go` 执行，服务端生命周期内按系统时区每日调度；旧 `scripts/auto-update-image.sh` / systemd timer 仅供旧部署手动选择，网页管理时保持停用。
+- `image_updates` / `previous_agent_image` 必须进入 Config 的 mutate/persist；更新以当前镜像不可变 ID 为基础保留浏览器层，验证 CLI 版本后通过 `SwitchAgentImage` 比较原镜像与策略再原子切换，不能覆盖构建期间的新设置。回退暂停自动更新。任务单飞、可取消、30 分钟超时，失败不切换、不自动 prune。状态落在 data_dir/image-update-state.json。
 - `config.json`、`accounts/`、`data/` 含密钥和运行时状态，已在 `.gitignore`；不要提交。
 - 若改动影响用户可见行为、部署步骤、API 或配置字段，同步更新 `README.md` 与 `README_CN.md`，保持中英文内容一致（必要时也更新 `deploy/README.md`）。
 
@@ -666,7 +667,7 @@ data/
 
 ### 阶段 D 维护约定
 
-- 在线升级入口为 `internal/server/upgrade.go` + `deploy/update.py` + `web/src/updates.ts`。只支持经过探测的正式 Linux/systemd 发布布局；管理员只能提交已检查的版本号，不能传 URL/路径/命令。独立 systemd 临时服务执行下载与激活，复用 `.deploy.lock`、`release.stage/activate` 和兼容检查，状态落 `<app>/.update/state.json`；禁止在主服务子进程里直接停自身单元。发布包必须携带 update.py。校验和必需，归档拒绝链接/穿越/超限；版本切换后不自动回退数据库。`scripts/test-update.py` 模拟 systemd/下载，不代表真实 systemd 验收。
+- 在线升级入口为 `internal/server/upgrade.go` + `deploy/update.py` + `web/src/updates.ts`。只支持经过探测的 Linux/systemd 版本目录布局；开发版（含预发布、dirty）可切换到最新正式版而不比较版本高低，正式版之间仍禁止降级/重装，配置与 schema 兼容检查不可跳过；管理员只能提交已检查的版本号，不能传 URL/路径/命令。独立 systemd 临时服务执行下载与激活，复用 `.deploy.lock`、`release.stage/activate` 和兼容检查，状态落 `<app>/.update/state.json`；禁止在主服务子进程里直接停自身单元。发布包必须携带 update.py。校验和必需，归档拒绝链接/穿越/超限；版本切换后不自动回退数据库。`scripts/test-update.py` 模拟 systemd/下载，不代表真实 systemd 验收。
 
 - 独立部署入口 `deploy/release.py`；路径、迁移停机与回退条件见 `docs/architecture/deployment-layout.md`。install 不覆盖其他布局单元或已有版本；activate 先查 schema 和 compatibility_epoch，再备份/停机/切换。不能对旧库调用 store.Open 来做只读兼容检查。
 - cache_dir 缺省兼容 data_dir，配置 mutate/persist 必须保留原始路径；备份恢复重写 cache_dir，避免恢复实例碰原实例缓存。

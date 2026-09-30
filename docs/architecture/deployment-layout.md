@@ -34,7 +34,7 @@ sudo python3 "$PACKAGE/deploy/release.py" activate --version v0.1.0
 
 对新包执行 `install`，再 `activate --version NEW`。版本切换由部署锁串行；激活前检查配置和只读 schema，停服务后再次检查，使用当前版本创建并验证系统备份，然后切换 `current`，启动并检查 `/api/ping` 和 systemd active。旧版本目录与旧镜像保留。
 
-包含在线升级功能的正式发布包可在「关于与更新」直接升级：`deploy/update.py` 下载并验证指定版本，通过独立 systemd 临时服务复用 `release.stage` / `release.activate`，全程持有同一 `.deploy.lock`。API 仅启动任务或读取持久化状态，不在主服务中执行停机操作。在线入口严格匹配原始服务单元、MainPID 与 current 目录；自定义布局继续手工发布。详情、失败恢复和首次启用要求见[控制台更新](../releases.md#控制台更新提示)。
+包含在线升级功能的版本目录安装可在「关于与更新」直接升级，开发构建也可切换到最新正式版（仍需通过配置与数据库兼容检查）：`deploy/update.py` 下载并验证指定版本，通过独立 systemd 临时服务复用 `release.stage` / `release.activate`，全程持有同一 `.deploy.lock`。API 仅启动任务或读取持久化状态，不在主服务中执行停机操作。在线入口严格匹配原始服务单元、MainPID 与 current 目录；自定义布局继续手工发布。详情、失败恢复和首次启用要求见[控制台更新](../releases.md#控制台更新提示)。
 
 回退也是 `activate --version OLD`，不直接手改 symlink。目标程序必须支持 `check-config`、同一 `compatibility_epoch`，且支持当前数据库 schema；否则拒绝。未来增加不兼容的配置/授权语义时须提升兼容代号，不能仅比较数据库列。
 

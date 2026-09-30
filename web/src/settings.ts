@@ -1,3 +1,4 @@
+import { initImageUpdates, fillImageUpdateSettings, startImageUpdates, stopImageUpdates } from "./features/settings/image-updates.js";
 import { loadSystem, startMonitor, stopMonitor } from "./features/settings/operations.js";
 import { settingsState } from "./features/settings/state.js";
 /* settings：系统设置视图 —— 账号池维护（含 OAuth / API Key 登录弹窗）、
@@ -63,6 +64,8 @@ function setSec(name: string) {
     $("sec-" + sec).classList.toggle("hidden", sec !== name);
   }
   $("set-content").scrollTop = 0;
+  stopImageUpdates();
+  if (name === "container") startImageUpdates();
   stopMonitor(); // 离开监控页就停轮询，任何切换都先关掉
   if (name === "about") loadSystem();
   if (name === "security") loadUsers();
@@ -397,6 +400,7 @@ function renderAuthModels(models: string[] | null) {
 function fillSettingsForms() {
   const st = settingsState.value;
   if (!st) return;
+  fillImageUpdateSettings(st.image_updates);
   $<HTMLInputElement>("set-image").value = st.agent_image;
   $<HTMLInputElement>("set-mem").value = String(st.container.memory_mb);
   $<HTMLInputElement>("set-cpus").value = String(st.container.cpus);
@@ -442,7 +446,7 @@ function fillSettingsForms() {
 }
 
 export async function putSettings(
-  patch: Partial<Settings>, btn: HTMLButtonElement | null, okMsg?: string,
+  patch: Partial<Settings> & { expected_agent_image?: string }, btn: HTMLButtonElement | null, okMsg?: string,
 ) {
   if (btn) btnBusy(btn, "保存中…");
   try {
@@ -658,6 +662,7 @@ let disposeSettings: (() => void) | undefined;
 export function initSettings() {
  disposeSettings?.();
  const lifetime = new AbortController();
+ initImageUpdates(lifetime.signal);
  $("btn-save-resources").addEventListener("click", () => {
   const global = $<HTMLInputElement>("set-running"), user = $<HTMLInputElement>("set-user-running"), free = $<HTMLInputElement>("set-free-gib");
   if (![global, user, free].every(x => x.reportValidity())) return;
@@ -681,7 +686,7 @@ export function initSettings() {
   if (!await askConfirm("清理官方市场的下载缓存？下次打开市场会重新下载。", { icon: "trash", okLabel: "清理" })) return;
   try { await api("/cache/marketplace", {method: "DELETE"}); toast("缓存已清理"); } catch (e) { toast((e as Error).message, true); }
  }, { signal: lifetime.signal });
- bus.addEventListener("view-changed", () => { if (S.view !== "settings") stopMonitor(); }, { signal: lifetime.signal });
+ bus.addEventListener("view-changed", () => { if (S.view !== "settings") { stopMonitor(); stopImageUpdates(); } }, { signal: lifetime.signal });
  $("set-nav").addEventListener("click", (e) => {
   const btn = (e.target as Element).closest<HTMLElement>("button[data-sec]");
   if (btn) setSec(btn.dataset.sec!);
@@ -847,6 +852,7 @@ $("auth-close").addEventListener("click", () => { if (!authBusy) $<HTMLDialogEle
 $("btn-save-container").addEventListener("click", () => {
   putSettings({
     agent_image: $<HTMLInputElement>("set-image").value.trim(),
+    expected_agent_image: settingsState.value?.agent_image,
     container: {
       memory_mb: Number($<HTMLInputElement>("set-mem").value),
       cpus: Number($<HTMLInputElement>("set-cpus").value),
@@ -952,6 +958,6 @@ $("btn-pw-save").addEventListener("click", async () => {
     btnDone($("btn-pw-save"));
   }
 }, { signal: lifetime.signal });
- disposeSettings = () => { lifetime.abort(); stopMonitor(); };
+ disposeSettings = () => { lifetime.abort(); stopMonitor(); stopImageUpdates(); };
  return disposeSettings;
 }

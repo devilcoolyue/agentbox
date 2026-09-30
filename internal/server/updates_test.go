@@ -21,13 +21,13 @@ func TestUpdateSnapshotDirtyRevision(t *testing.T) {
 	buildinfo.Version, buildinfo.Revision = "v0.1.0-rc.2", "synthetic+dirty"
 	state := updateState{info: updateInfo{LatestVersion: "v0.1.0"}}
 	info := state.snapshot()
-	if info.Available || info.Comparable {
-		t.Fatalf("uncommitted build treated as a release: %+v", info)
+	if !info.Available || info.Comparable {
+		t.Fatalf("uncommitted build cannot switch to stable: %+v", info)
 	}
 	buildinfo.Revision = "synthetic"
 	info = state.snapshot()
-	if !info.Available || !info.Comparable {
-		t.Fatalf("release candidate should compare with stable release: %+v", info)
+	if !info.Available || info.Comparable {
+		t.Fatalf("release candidate should offer a switch to stable: %+v", info)
 	}
 }
 
@@ -39,12 +39,15 @@ func TestNewerStableRelease(t *testing.T) {
 		{"v0.9.9", "v0.10.0", true, true},
 		{"1.2.3", "v1.2.3", false, true},
 		{"v2.0.0", "v1.99.99", false, true},
-		{"v1.0.0-rc.1", "v1.0.0", true, true},
-		{"v1.1.0-rc.1", "v1.0.0", false, true},
+		{"v1.0.0-rc.1", "v1.0.0", true, false},
+		{"v1.1.0-rc.1", "v1.0.0", true, false},
 		{"v1.0.0+build.123", "v1.0.0", false, true},
-		{"dev", "v1.0.0", false, false},
-		{"v1.0.0+dirty", "v1.0.1", false, false},
-		{"v1.0.0-3-gabcdef", "v1.0.1", true, true},
+		{"dev", "v1.0.0", true, false},
+		{"dev", "v1.0.0-rc.1", false, false},
+		{"dev", "", false, false},
+		{"dev", "v1.0.0+dirty", false, false},
+		{"v1.0.0+dirty", "v1.0.1", true, false},
+		{"v1.0.0-3-gabcdef", "v1.0.1", true, false},
 		{"v01.0.0", "v1.0.0", false, false},
 		{"v1.0.0", "v2.0.0-rc.1", false, false},
 		{"v1.0.0", "garbage", false, false},
@@ -56,6 +59,19 @@ func TestNewerStableRelease(t *testing.T) {
 				t.Fatalf("got %v %v, want %v %v", a, c, tc.available, tc.comparable)
 			}
 		})
+	}
+}
+
+func TestDirtyStableSnapshotOffersSameOrOlderStable(t *testing.T) {
+	version, revision := buildinfo.Version, buildinfo.Revision
+	t.Cleanup(func() { buildinfo.Version, buildinfo.Revision = version, revision })
+	buildinfo.Version, buildinfo.Revision = "v1.1.0", "fixture+dirty"
+	for _, latest := range []string{"v1.1.0", "v1.0.0", ""} {
+		state := updateState{info: updateInfo{LatestVersion: latest}}
+		info := state.snapshot()
+		if info.Comparable || info.Available != (latest != "") {
+			t.Fatalf("unexpected development transition: %+v", info)
+		}
 	}
 }
 

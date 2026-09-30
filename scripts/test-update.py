@@ -25,10 +25,10 @@ class Upgrades(unittest.TestCase):
             app = Path(tmp).resolve()
             data = app / 'data'; data.mkdir()
             with contextlib.closing(sqlite3.connect(data / 'state.db')) as db: db.execute('pragma user_version=1')
-            for version in ('v1.0.0', 'v1.1.0'):
+            for version in ('v2.0.0-dev.1', 'v1.1.0'):
                 folder = app / 'releases' / version; folder.mkdir(parents=True)
                 (folder / 'agentbox').write_text('fixture')
-            (app / 'current').symlink_to('releases/v1.0.0')
+            (app / 'current').symlink_to('releases/v2.0.0-dev.1')
             config = app / 'config.json'
             config.write_text(json.dumps({'data_dir': str(data)}))
             (app / 'agentbox.service').write_text(m.release.unit(app, config))
@@ -42,7 +42,7 @@ class Upgrades(unittest.TestCase):
                     Path(args[-1]).write_bytes(b'verified fixture backup')
                 if len(args) > 1 and args[1] == 'backup-verify':
                     self.assertEqual(Path(args[-1]).read_bytes(), b'verified fixture backup')
-                    self.assertEqual((app / 'current').resolve(), app / 'releases/v1.0.0')
+                    self.assertEqual((app / 'current').resolve(), app / 'releases/v2.0.0-dev.1')
                 if args == ('systemctl', 'start', 'agentbox.service'):
                     self.assertEqual((app / 'current').resolve(), app / 'releases/v1.1.0')
             with patch.object(m.release, 'run', side_effect=run), patch.object(m.release, 'restore_context'), \
@@ -61,15 +61,15 @@ class Upgrades(unittest.TestCase):
                 start = events.index(('systemctl', 'start', 'agentbox.service'))
                 self.assertTrue(stop < backup < verify < start)
 
-    def test_probe_checks_actual_service_and_layout(self):
+    def probe_fixture(self, current, revision):
         with tempfile.TemporaryDirectory() as tmp:
             app = Path(tmp).resolve()
-            package = app / 'releases/v1.0.0'
+            package = app / 'releases' / current
             package.mkdir(parents=True)
             (app / 'current').symlink_to(package)
             config = app / 'config.json'
-            (package / 'build.json').write_text(json.dumps({'program': 'agentbox', 'version': 'v1.0.0',
-                'os': 'linux', 'arch': 'amd64', 'revision': 'fixture'}))
+            (package / 'build.json').write_text(json.dumps({'program': 'agentbox', 'version': current,
+                'os': 'linux', 'arch': 'amd64', 'revision': revision}))
             unit_text = m.release.unit(app, config)
             props = 'MainPID=123\nFragmentPath=/etc/systemd/system/agentbox.service\nDropInPaths='
             original_read, original_is_dir = m.Path.read_text, m.Path.is_dir
@@ -81,18 +81,41 @@ class Upgrades(unittest.TestCase):
                  patch.object(m.Path, 'read_text', autospec=True, side_effect=read), \
                  patch.object(m.Path, 'resolve', autospec=True, side_effect=lambda path: package / 'agentbox' if str(path) == '/proc/123/exe' else Path(os.path.realpath(path))), \
                  patch.object(m, 'command', return_value=props) as command:
-                m.probe(app, config, 123, 'v1.0.0')
+                m.probe(app, config, 123, current)
                 command.return_value = props.replace('MainPID=123', 'MainPID=456')
-                with self.assertRaises(ValueError): m.probe(app, config, 123, 'v1.0.0')
+                with self.assertRaises(ValueError): m.probe(app, config, 123, current)
                 command.return_value = props + '/etc/systemd/system/agentbox.service.d/custom.conf'
-                with self.assertRaises(ValueError): m.probe(app, config, 123, 'v1.0.0')
+                with self.assertRaises(ValueError): m.probe(app, config, 123, current)
                 command.return_value = props
                 unit_text += '# custom service\n'
-                with self.assertRaises(ValueError): m.probe(app, config, 123, 'v1.0.0')
+                with self.assertRaises(ValueError): m.probe(app, config, 123, current)
                 unit_text = m.release.unit(app, config)
                 (app / 'current').unlink()
                 (app / 'current').symlink_to(app / 'releases/other')
-                with self.assertRaises(ValueError): m.probe(app, config, 123, 'v1.0.0')
+                with self.assertRaises(ValueError): m.probe(app, config, 123, current)
+
+    def test_probe_checks_actual_service_and_layout(self):
+        for current, revision in [('v1.0.0', 'fixture'), ('dev', 'fixture+dirty'),
+                                  ('v2.0.0-dev.1', 'fixture'), ('v1.0.0', 'fixture+dirty')]:
+            with self.subTest(current=current, revision=revision):
+                self.probe_fixture(current, revision)
+
+    def test_development_can_switch_to_stable(self):
+        for current, revision in [('dev', 'fixture'), ('v2.0.0-dev.1', 'fixture'),
+                                  ('v2.0.0-rc.1', 'fixture'), ('v2.0.0', 'fixture+dirty'),
+                                  ('v1.0.0', 'fixture+dirty'), ('v2.0.0+dirty', 'fixture')]:
+            with self.subTest(current=current, revision=revision), tempfile.TemporaryDirectory() as tmp, \
+                 patch.object(m, 'probe'), patch.object(m, 'command') as command:
+                app = Path(tmp)
+                for target in ('../../bad', 'v1.0.0-rc.1', 'https://evil.invalid'):
+                    with self.assertRaises(ValueError):
+                        m.start(app, app / 'config', 123, current, target, revision)
+                command.assert_not_called()
+                result = m.start(app, app / 'config', 123, current, 'v1.0.0', revision)
+                self.assertEqual(result['job']['from_version'], current)
+                self.assertEqual(result['job']['version'], 'v1.0.0')
+                self.assertEqual(result['job']['phase'], 'queued')
+                self.assertEqual(command.call_args.args[0], 'systemd-run')
 
     def test_download_hosts_and_redirects(self):
         for url in ('http://github.com/a', 'https://github.com.evil.invalid/a',
@@ -190,15 +213,15 @@ class Upgrades(unittest.TestCase):
             with patch.object(m, 'command', return_value='inactive'):
                 self.assertEqual(m.reconcile(app)['phase'], 'failed')
 
-    def run_fixture(self, fault=None):
+    def run_fixture(self, fault=None, current="v1.0.0"):
         with tempfile.TemporaryDirectory() as tmp:
             app = Path(tmp).resolve() / 'app'
-            old = app / 'releases/v1.0.0'
+            old = app / 'releases' / current
             old.mkdir(parents=True)
             (app / 'current').symlink_to(old)
             config = app / 'config.json'
             config.write_text(json.dumps({'data_dir': str(app / 'data')}))
-            job = {'id': 'a' * 32, 'version': 'v1.1.0', 'from_version': 'v1.0.0'}
+            job = {'id': 'a' * 32, 'version': 'v1.1.0', 'from_version': current}
             m.save(app, job, 'queued')
             name = 'agentbox_v1.1.0_linux_amd64'
             package = Path(tmp) / name
@@ -246,10 +269,10 @@ class Upgrades(unittest.TestCase):
                  patch.object(m.Path, 'resolve', autospec=True, side_effect=lambda path: app / 'releases/v1.1.0/agentbox' if str(path) == '/proc/123/exe' else Path(os.path.realpath(path))):
                 if fault:
                     with self.assertRaises(ValueError):
-                        m.perform(app, config, 100, 'v1.0.0', job['id'])
+                        m.perform(app, config, 100, current, job['id'])
                     self.assertEqual(m.read_job(app)['phase'], 'failed')
                 else:
-                    m.perform(app, config, 100, 'v1.0.0', job['id'])
+                    m.perform(app, config, 100, current, job['id'])
                     self.assertEqual(m.read_job(app)['phase'], 'succeeded')
                 if fault in ('checksum', 'asset', 'binary'):
                     activation.assert_not_called()
@@ -264,9 +287,10 @@ class Upgrades(unittest.TestCase):
                     self.assertEqual(phases, ['checking', 'stopping', 'backup', 'switching', 'restarting', 'health'])
 
     def test_verified_upgrade_and_failures(self):
-        for fault in (None, 'asset', 'checksum', 'binary', 'checking', 'backup', 'health'):
-            with self.subTest(fault=fault):
-                self.run_fixture(fault)
+        for current in ('v1.0.0', 'dev', 'v2.0.0-dev.1'):
+            for fault in (None, 'asset', 'checksum', 'binary', 'checking', 'backup', 'health'):
+                with self.subTest(current=current, fault=fault):
+                    self.run_fixture(fault, current)
 
     def test_staged_retry_never_overwrites_changed_release(self):
         with tempfile.TemporaryDirectory() as tmp:

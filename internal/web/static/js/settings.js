@@ -1,3 +1,4 @@
+import { initImageUpdates, fillImageUpdateSettings, startImageUpdates, stopImageUpdates } from "./features/settings/image-updates.js";
 import { loadSystem, startMonitor, stopMonitor } from "./features/settings/operations.js";
 import { settingsState } from "./features/settings/state.js";
 /* settings：系统设置视图 —— 账号池维护（含 OAuth / API Key 登录弹窗）、
@@ -54,6 +55,9 @@ function setSec(name) {
         $("sec-" + sec).classList.toggle("hidden", sec !== name);
     }
     $("set-content").scrollTop = 0;
+    stopImageUpdates();
+    if (name === "container")
+        startImageUpdates();
     stopMonitor(); // 离开监控页就停轮询，任何切换都先关掉
     if (name === "about")
         loadSystem();
@@ -369,6 +373,7 @@ function fillSettingsForms() {
     const st = settingsState.value;
     if (!st)
         return;
+    fillImageUpdateSettings(st.image_updates);
     $("set-image").value = st.agent_image;
     $("set-mem").value = String(st.container.memory_mb);
     $("set-cpus").value = String(st.container.cpus);
@@ -619,6 +624,7 @@ let disposeSettings;
 export function initSettings() {
     disposeSettings?.();
     const lifetime = new AbortController();
+    initImageUpdates(lifetime.signal);
     $("btn-save-resources").addEventListener("click", () => {
         const global = $("set-running"), user = $("set-user-running"), free = $("set-free-gib");
         if (![global, user, free].every(x => x.reportValidity()))
@@ -659,8 +665,10 @@ export function initSettings() {
             toast(e.message, true);
         }
     }, { signal: lifetime.signal });
-    bus.addEventListener("view-changed", () => { if (S.view !== "settings")
-        stopMonitor(); }, { signal: lifetime.signal });
+    bus.addEventListener("view-changed", () => { if (S.view !== "settings") {
+        stopMonitor();
+        stopImageUpdates();
+    } }, { signal: lifetime.signal });
     $("set-nav").addEventListener("click", (e) => {
         const btn = e.target.closest("button[data-sec]");
         if (btn)
@@ -857,6 +865,7 @@ export function initSettings() {
     $("btn-save-container").addEventListener("click", () => {
         putSettings({
             agent_image: $("set-image").value.trim(),
+            expected_agent_image: settingsState.value?.agent_image,
             container: {
                 memory_mb: Number($("set-mem").value),
                 cpus: Number($("set-cpus").value),
@@ -970,6 +979,6 @@ export function initSettings() {
             btnDone($("btn-pw-save"));
         }
     }, { signal: lifetime.signal });
-    disposeSettings = () => { lifetime.abort(); stopMonitor(); };
+    disposeSettings = () => { lifetime.abort(); stopMonitor(); stopImageUpdates(); };
     return disposeSettings;
 }

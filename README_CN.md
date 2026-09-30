@@ -107,7 +107,7 @@ flowchart LR
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
 ```
 
-当前正式版本为 [v0.1.5](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.5)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.5`。
+当前正式版本为 [v0.1.7](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.7)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.7`。
 
 Oracle Linux / RHEL 等启用 SELinux 的系统，若旧版安装包启动时报 `203/EXEC` / `Permission denied`，按[SELinux 安装恢复](deploy/README.md#selinux-安装恢复)修复程序标签后重试激活。
 
@@ -210,9 +210,12 @@ sudo ./deploy/install.sh
 sudo ./deploy/deploy.sh
 ```
 
-管理员可在侧栏版本入口或「系统设置 → 关于与更新」查看新版本提示。标准 Linux/systemd 发布安装支持「升级并重启」，自动校验、备份并显示升级进度；源码安装仍使用部署脚本，见[版本发布与升级](docs/releases.md#控制台更新提示)。
+管理员可在侧栏版本入口或「系统设置 → 关于与更新」查看新版本提示。标准 Linux/systemd 版本目录安装支持「升级并重启」，自动校验、备份并显示升级进度；此布局下的开发版、预发布版及带未提交改动的构建也可直接切换到最新正式版，即使正式版版本号较低，配置或数据库不兼容时会阻止切换；源码安装仍使用部署脚本，见[版本发布与升级](docs/releases.md#控制台更新提示)。
 
 `install.sh` 安装服务与定时器，镜像自动追新默认关闭；`deploy.sh` 构建、替换二进制、重启并探活。远程长期访问请配置 HTTPS 与 WebSocket 反向代理，完整步骤见[部署与运维](deploy/README.md)。
+
+管理员可在「系统设置 → 容器与资源 → 客户端更新」配置每日自动更新、Claude `stable` / `latest` 渠道与系统时区下的检查时间，也可立即检查、更新或回退上次镜像。默认关闭自动更新，Claude 默认 `stable`，Codex 默认保持当前版本；可单独选择同时更新 Codex 到 `latest`。服务端内置调度，无需 systemd 更新定时器或源码目录。更新基于当前镜像保留浏览器与自定义功能，通过 CLI 版本验证后才切换；运行中的空间不打断，停止再启动后使用新镜像。失败保留当前镜像，回退会暂停自动更新。详见[客户端镜像更新](deploy/README.md#客户端镜像更新)。
+
 
 一键卸载与重新安装见[下载与安装说明](deploy/downloads/README.md#一键卸载与重新安装)。卸载默认保留全部文件到私有备份目录；`--purge` 才彻底删除。v0.1.1 起发布包附带五个平台的 abox-link，安装/升级自动放置客户端下载文件。
 
@@ -260,7 +263,7 @@ sudo ./deploy/deploy.sh
 
 ### Claude MCP 管理
 
-工作空间的 **MCP** 页签通过弹窗新增和编辑（保存失败保留草稿），支持用户统一配置、空间覆盖、`mcpServers` JSON 导入及容器内 stdio/HTTP 连接检测。配置在下一回合聊天、终端连接或空间启动时应用；已运行的终端 Claude 需重启。已有原生条目必须显式接管。Header/env 凭证在接口中脱敏，磁盘配置为私有文件（0600），并非加密存储。OAuth 仍走终端，独立检测不复用 CLI OAuth 凭证。用户和空间 MCP 管理文件进入系统备份；运行时 home/OAuth 文件需完整备份。继承、冲突处理、API 与限制见[技能、插件与 MCP](docs/skills-and-mcp.md)。
+工作空间的 **MCP** 页签通过弹窗新增和编辑（保存失败保留草稿），支持用户统一配置、空间覆盖、`mcpServers` JSON 导入及容器内 stdio/HTTP 连接检测。列表将配置状态与操作分开：测试连接保留文字，编辑、复制、删除使用带提示的图标，开关控制启停。配置在下一回合聊天、终端连接或空间启动时应用；已运行的终端 Claude 需重启。已有原生条目必须显式接管。Header/env 凭证在接口中脱敏，磁盘配置为私有文件（0600），并非加密存储。OAuth 仍走终端，独立检测不复用 CLI OAuth 凭证。用户和空间 MCP 管理文件进入系统备份；运行时 home/OAuth 文件需完整备份。继承、冲突处理、API 与限制见[技能、插件与 MCP](docs/skills-and-mcp.md)。
 
 ## 独立部署与运行维护
 

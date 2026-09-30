@@ -24,9 +24,13 @@ AGENTBOX_CLI_TEST_IMAGE=agentbox-agent:claude-2.1.280-codex-0.145.0 \
 
 既有 `agentbox-agent:latest` 只是本地兼容别名，不代表构建脚本安装 npm latest。构建同时保留 `agentbox-agent:claude-<版本>-codex-<版本>` 标签，不自动清理旧层。镜像标签仍可被覆盖；需要保留精确镜像时记录 image ID 或自行 `docker save` 归档。
 
-## 实验性追新
+## 客户端镜像更新
 
-默认关闭。手动选择追新：
+v0.1.7 起，管理员可在「系统设置 → 容器与资源 → 客户端更新」手动检查、更新和回退，也可设置系统时区下的每日检查时间。自动更新默认关闭，Claude 默认 stable 渠道，Codex 默认保持当前版本；选择 latest 渠道或同时更新 Codex 需明确启用。基于当前镜像保留浏览器与自定义功能，通过 CLI 版本验证后才切换；更新后的版本不自动成为本表已验证的固定基线。回退会暂停自动更新，运行中的空间停止再启动后使用所选镜像。
+
+## 旧部署的实验性追新
+
+网页已管理镜像更新时，应保持旧 systemd 更新 timer 停用，避免两套调度同时改镜像。旧源码部署的手动追新仍默认关闭：
 
 ```bash
 AGENTBOX_AUTO_UPDATE=1 ./scripts/auto-update-image.sh

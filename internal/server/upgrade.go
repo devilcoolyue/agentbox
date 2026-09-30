@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
-	"strings"
 	"time"
 
 	"agentbox/internal/buildinfo"
@@ -69,8 +68,8 @@ func upgradeHelper(executable, version string) (app, script string, err error) {
 
 func (s *Server) upgradeCommand(ctx context.Context, action, version string) (upgradeInfo, error) {
 	info := upgradeInfo{CurrentVersion: buildinfo.Version}
-	if runtime.GOOS != "linux" || os.Geteuid() != 0 || !upgradeVersionRE.MatchString(buildinfo.Version) || strings.Contains(buildinfo.Commit(), "dirty") {
-		info.Reason = "一键升级需要以 root 运行的 Linux/systemd 正式发布安装；当前构建请手工升级。"
+	if runtime.GOOS != "linux" || os.Geteuid() != 0 {
+		info.Reason = "一键升级需要以 root 运行的 Linux/systemd 版本目录安装；当前环境请手工升级。"
 		return info, nil
 	}
 	executable, err := os.Executable()
@@ -89,7 +88,7 @@ func (s *Server) upgradeCommand(ctx context.Context, action, version string) (up
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	args := []string{"-I", script, "--app", app, "--config", s.cfg.Path(), "--pid", strconv.Itoa(os.Getpid()), "--current", buildinfo.Version, action}
+	args := []string{"-I", script, "--app", app, "--config", s.cfg.Path(), "--pid", strconv.Itoa(os.Getpid()), "--current", buildinfo.Version, "--revision", buildinfo.Commit(), action}
 	if action == "start" {
 		args = append(args, "--version", version)
 	}

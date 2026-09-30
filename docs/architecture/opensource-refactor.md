@@ -187,3 +187,7 @@ third_party/
 
 - 2026-09-24：完成首台真实 Linux/XFS + systemd 生产迁移，运行 `v0.1.0-rc.2`（`55a9624`）。真实数据约 8.1 GiB / 12.9 万条、可用盘约 5 GiB，先补充 `--reflink --snapshot-backup` 自包含恢复目录及逐文件 SHA-256/元数据验证，保留原目录和恢复点；同时修复发布脚本循环变量覆盖造成 Linux 包同名的问题，增加平台文件名/重复包检查。实际生产迁移前先在该主机合成目录验证 reflink 路径；未读取真实凭证内容进入本地夹具。
 - 生产验收：systemd 使用 `/opt/agentbox/current/agentbox -config /etc/agentbox/config.json`，数据与缓存分别位于 `/var/lib/agentbox`、`/var/cache/agentbox`；32 会话、5 用户、6 账号保留，密码/额度/账本逐行一致。通过既有登录、历史读取、临时无凭证空间的 UID/三处挂载/文件/Git/chat-term WebSocket 验证并清理测试资源。后台补齐 4 条终端用量且不扣额度。每日系统备份已成功执行，追新 timer 禁用，保留原运行镜像而不降级 CLI。原源码 tracked diff 未变；一个临时未跟踪 `.claude/` 条目在窗口内消失，记录在主机私有验收报告，迁移工具未清理源码目录。内网首页 200 / ping 204，公网首页 200、主机经公网域名 ping 204；开发机公网探活曾有间歇 TLS/HTTP2 传输错误，服务无重启或启动失败。
+
+- 2026-09-30：在线升级允许标准版本目录中的 dev、预发布和 dirty 构建切换到最新正式版，不要求目标版本号高于开发版；正式版间仍禁止降级，目标校验、备份与配置/schema 兼容检查保留。Go 全量 build/test、前端 check/build、`scripts/test-update.py` 和 `scripts/test-deployment.py` 及合成 API 的 Playwright 浏览器回归本地通过；升级脚本使用模拟下载/systemd，未执行生产切换或真实 Linux/systemd 验收。
+
+- 2026-09-30 生产补充验收：独立版本目录部署 `v0.1.6-dev-stable.20260930.090606`，复用 `release.stage/activate` 完成配置/schema 检查、系统备份及验证、真实 systemd 重启。服务 active、NRestarts=0、内外网 HTTP 200，启动日志正常，嵌入 updates.js 哈希与候选一致。管理员升级状态返回 supported=true；正式版本检查返回 latest_version=v0.1.6、available=true、comparable=false、无错误。当前仍运行开发构建，尚未执行开发版到正式版的实际下载与切换。

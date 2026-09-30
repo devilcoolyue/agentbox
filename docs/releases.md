@@ -8,7 +8,7 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前正式版本为 [v0.1.6](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.6)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
+当前正式版本为 [v0.1.7](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.7)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
 
 ### 历史版本与源码
 
@@ -32,7 +32,7 @@ v0.1.0～v0.1.4 的七个平台包、`release.json` 和 `SHA256SUMS` 从旧仓�
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.6 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.7 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0
@@ -83,9 +83,9 @@ CLI 镜像独立于服务端包，版本与回退见 [兼容矩阵](compatibilit
 
 管理员侧栏版本徽标和「关于与更新」页显示运行中二进制的构建信息。`GET /api/updates` 读取本地版本与检查缓存，`POST /api/updates/check` 检查上游正式发布（两者均需管理员权限）；`?force=1` 可手动检查，仍有 1 分钟防重复请求间隔。自动检查由已登录、可见且联网的控制台每 4 小时触发，服务端缓存由所有页面共享，重启后重新检查。
 
-数据源是公开下载仓库 `devilcoolyue/agentbox` 的 GitHub Releases latest 接口，不包含 draft/prerelease，也不单独检查会话镜像或 abox-link。没有正式发布、开发构建无法比较、网络失败均单独显示；不会把检查失败当成最新版本。版本号由发布构建注入，普通 `go build` 为 `dev`。
+数据源是公开下载仓库 `devilcoolyue/agentbox` 的 GitHub Releases latest 接口，不包含 draft/prerelease，也不单独检查会话镜像或 abox-link。没有正式发布、开发构建可切换到正式版、网络失败均单独显示；不会把检查失败当成最新版本。版本号由发布构建注入，普通 `go build` 为 `dev`。
 
-标准 Linux/systemd 发布安装支持管理员点击「升级并重启」。首次使用需要先通过原有手工流程升级到包含此功能的发布包；旧版二进制不会自行获得新按钮。支持条件包括 root 运行、正式构建、版本目录与 current 链接一致、原始 agentbox.service 单元及无自定义 drop-in、Python 3 和 systemd-run。源码安装、开发构建、自定义服务布局继续显示手工升级说明。
+标准 Linux/systemd 发布安装支持管理员点击「升级并重启」。首次使用需要先通过原有手工流程升级到包含此功能的发布包；旧版二进制不会自行获得新按钮。支持条件包括 root 运行、构建信息与版本目录及 current 链接一致、原始 agentbox.service 单元及无自定义 drop-in、Python 3 和 systemd-run。此布局下的 dev、预发布版和带未提交改动的构建均可点击「切换到正式版并重启」，无需目标版本号高于开发版；正式版之间仍只允许升级到更高版本。目标必须是检查结果中的最新正式发布，配置和数据库兼容检查仍在停服前执行。源码安装、自定义服务布局继续显示手工升级说明。开发实例需先安装包含此修复的二进制及 deploy/update.py，旧构建不会自动解除限制。
 
 升级固定管理员确认的版本，从该版本下载匹配架构的完整服务端包和 SHA256SUMS，强制验证哈希、下载域名与重定向、归档路径和体积、构建信息及客户端完整性。下载不会自动改追后来发布的新版本。执行前检查配置与数据库兼容性，停服后创建并验证系统备份，切换版本、安装配套 abox-link、启动并检查健康状态及实际运行程序。会话镜像不随服务端升级，备份也不包含工作区的一致性快照。
 

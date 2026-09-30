@@ -196,6 +196,17 @@ AGENTBOX_AUTO_UPDATE=1 ./scripts/auto-update-image.sh
 
 稳定安装默认禁用 `agentbox-image-update.timer`，镜像使用固定基线；手动启用 timer 后才每日运行最新版检查，日志在 `/var/log/agentbox-image-update.log`。运行中空间不被直接打断；镜像变化后，停止再启动空间时会使用新镜像。
 
+### 客户端镜像更新
+
+推荐使用「系统设置 → 容器与资源 → 客户端更新」。这是服务端内置的可取消后台任务，适用于独立发布目录与旧源码部署，不需要在服务器安装 Node、Go 或 Docker CLI；通过现有 Docker Engine API 构建。宿主机需能访问 npm 查询版本，Docker 构建网络需能下载 npm 包，当前镜像需包含 npm、Claude/Codex 及正确的 `agentbox.claude-code` / `agentbox.codex` 标签。支持标准 Agent 镜像与浏览器增强镜像；带 ONBUILD 指令的镜像拒绝更新。迁移到网页管理后，保持旧 `agentbox-image-update.timer` 停用，不再运行旧脚本追新。
+
+配置 `image_updates`：`enabled` 默认 false；`channel` 默认 `stable`（可选 `latest`，仅 Claude）；`time` 默认 `04:00`，按 `timezone`；`update_codex` 默认 false，开启后同时跟随 Codex `latest`。开启自动更新即允许每日检查并应用，不是仅提醒。每分钟检查调度，每个系统时区的自然日最多执行一次，启动时如已过当天检查时间且当天未执行则补跑；当天失败可手动重试，下一天再自动尝试。stable 可能落后 latest，渠道变化不会自动降级。
+
+“立即检查”只读取本地镜像标签并查询 npm，不构建；“立即更新”重新检查已保存的渠道后构建。以当前镜像不可变 ID 为基础，只安装需要更新的 CLI 包，保留浏览器、终端修复与自定义层。构建中运行两个 CLI 的版本命令校验，并检查浏览器文件；成功后通过配置原子写入切换到唯一的新标签，同时保存上次镜像 ID。运行中空间不停止，停止再启动时才采用新镜像，容器进程及 tmux 状态不会迁入新容器，工作区和 home 的持久文件保留。旧镜像不自动清理，需为累积镜像预留磁盘空间。
+
+管理员独占接口：`GET /api/image-updates` 查看设置、当前/上次镜像及任务状态；`POST /api/image-updates/check`、`/update`、`/rollback` 启动异步任务；更新策略通过 `PUT /api/settings` 的 `image_updates` 保存。同一时刻只运行一个任务；日志只展示最近任务末尾约 16 KB，任务状态保存在 `data_dir/image-update-state.json`。任务最长 30 分钟；服务退出取消任务，重启后显示中断状态。构建失败、版本验证失败或配置写入失败均不切换当前镜像。构建期间修改镜像或策略会阻止旧任务切换；已开始的构建可能继续完成并留下候选镜像。回退需要旧镜像仍在本机，并自动关闭自动更新，避免次日再次追新。
+
+
 固定版本及回退说明见 [兼容矩阵](../docs/compatibility.md)。需要覆盖基线时可显式传入 Dockerfile 构建参数：
 
 ```bash

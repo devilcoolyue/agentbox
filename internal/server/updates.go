@@ -41,11 +41,17 @@ type updateState struct {
 
 var releaseVersionRE = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$`)
 
-// Latest is always stable. Compare numeric segments without integer overflow;
-// a release candidate is older than the stable version with the same core.
+// Development builds may switch to any latest stable release, even when their
+// numeric core is ahead. Comparable only describes ordered release versions.
 func newerStableRelease(current, latest string) (available, comparable bool) {
 	c, l := releaseVersionRE.FindStringSubmatch(current), releaseVersionRE.FindStringSubmatch(latest)
-	if c == nil || l == nil || l[4] != "" || strings.Contains(current, "dirty") {
+	if l == nil || l[4] != "" || strings.Contains(latest, "dirty") {
+		return false, false
+	}
+	if current == "dev" || (c != nil && (c[4] != "" || strings.Contains(current, "dirty"))) {
+		return true, false
+	}
+	if c == nil {
 		return false, false
 	}
 	for i := 1; i <= 3; i++ {
@@ -56,19 +62,23 @@ func newerStableRelease(current, latest string) (available, comparable bool) {
 			return l[i] > c[i], true
 		}
 	}
-	return c[4] != "", true
+	return false, true
 }
 
 func (u *updateState) snapshot() updateInfo {
 	info := u.info
 	info.CurrentVersion, info.Revision, info.BuiltAt = buildinfo.Version, buildinfo.Commit(), buildinfo.BuiltAt
-	info.Comparable = releaseVersionRE.MatchString(buildinfo.Version) && !strings.Contains(buildinfo.Version, "dirty")
+	current := releaseVersionRE.FindStringSubmatch(buildinfo.Version)
+	info.Comparable = current != nil && current[4] == "" && !strings.Contains(buildinfo.Version, "dirty")
 	if info.LatestVersion != "" {
 		info.Available, info.Comparable = newerStableRelease(info.CurrentVersion, info.LatestVersion)
 	}
 	// Release builds mark uncommitted sources in Revision, not Version.
 	if strings.Contains(info.Revision, "+dirty") {
-		info.Available, info.Comparable = false, false
+		info.Comparable = false
+		if current != nil {
+			info.Available, _ = newerStableRelease("dev", info.LatestVersion)
+		}
 	}
 	if info.ReleaseURL == "" {
 		info.ReleaseURL = releasesURL

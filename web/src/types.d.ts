@@ -385,7 +385,10 @@ export interface TunnelConfig {
 }
 
 /** GET/PUT /api/settings（server.settingsView）。 */
+export interface ImageUpdateSettings { enabled: boolean; channel: "stable" | "latest"; time: string; update_codex: boolean }
+
 export interface Settings {
+  image_updates: ImageUpdateSettings;
  resources: ResourceLimits;
   listen: string;
   agent_image: string;

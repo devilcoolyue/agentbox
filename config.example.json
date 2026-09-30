@@ -9,6 +9,12 @@
     "min_free_bytes": 0
   },
   "agent_image": "agentbox-agent:latest",
+  "image_updates": {
+    "enabled": false,
+    "channel": "stable",
+    "time": "04:00",
+    "update_codex": false
+  },
   "permission_mode": "bypassPermissions",
   "max_upload_mb": 512,
   "timezone": "Asia/Shanghai",

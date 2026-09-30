@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { S, emit } from "./state.js";
 import { $, askConfirm } from "./util.js";
 import { hideTip } from "./tip.js";
+import { buttonLabel } from "./icons.js";
 import type { UpdateInfo, UpgradeInfo } from "./types.js";
 
 const interval = 4 * 60 * 60 * 1000;
@@ -36,6 +37,7 @@ export function initUpdates() {
     const job = upgrade?.job;
     const busy = submitting || awaitingSubmission || upgrading();
     const install = $<HTMLButtonElement>("update-install");
+    buttonLabel(install, info?.comparable === false ? "切换到正式版并重启" : "升级并重启", "download");
     install.classList.toggle("hidden", !upgrade?.supported || !info?.available);
     install.disabled = busy || readingUpgrade || checking || !!error;
     $("upgrade-support").textContent = upgrade ? upgrade.reason : "正在读取在线升级支持状态…";
@@ -78,6 +80,7 @@ export function initUpdates() {
         info.current_version = upgrade.current_version;
         // Clear stale build details until metadata is fetched from the new process.
         info.revision = "unknown"; info.built_at = "unknown";
+        info.comparable = true;
         if (info.latest_version === upgrade.current_version) info.available = false;
         render();
       }
@@ -94,11 +97,12 @@ export function initUpdates() {
   async function installUpdate() {
     if (!upgrade?.supported || !info?.available || submitting || readingUpgrade || upgrading() || awaitingSubmission) return;
     const version = info.latest_version;
+    const switching = !info.comparable;
     // Lock the UI while the dialog is open; duplicate clicks cannot stack it.
     submitting = true; renderUpgrade();
-    const confirmed = await askConfirm(`升级至 ${version} 并重启服务？`, {
-      title: "升级服务端", okLabel: "升级并重启", icon: "download",
-      hint: "升级前会备份系统数据。正在进行的对话可能中断，网页连接会短暂断开；工作空间文件保留，会话镜像单独管理。",
+    const confirmed = await askConfirm(switching ? `从开发构建 ${info.current_version} 切换至正式版 ${version} 并重启服务？` : `升级至 ${version} 并重启服务？`, {
+      title: switching ? "切换到正式版" : "升级服务端", okLabel: switching ? "切换并重启" : "升级并重启", icon: "download",
+      hint: (switching ? "正式版可能不包含当前开发功能；配置或数据库不兼容时会阻止切换。" : "") + "升级前会备份系统数据。正在进行的对话可能中断，网页连接会短暂断开；工作空间文件保留，会话镜像单独管理。",
     });
     if (signal.aborted) return;
     if (!confirmed) { submitting = false; renderUpgrade(); return; }
@@ -123,10 +127,11 @@ export function initUpdates() {
   function render() {
     const available = !!info?.available;
     const version = info ? versionLabel(info.current_version) : "—";
+    const availableStatus = info?.comparable ? `新版本 ${versionLabel(info.latest_version)} 可用` : `可切换至正式版 ${versionLabel(info?.latest_version || "")}`;
     let status = "尚未检查更新";
     if (checking) status = "正在检查更新…";
-    else if (error) status = available ? `新版本 ${versionLabel(info!.latest_version)} 可用（上次检查结果）` : "检查未完成，请重试";
-    else if (available) status = `新版本 ${versionLabel(info!.latest_version)} 可用`;
+    else if (error) status = available ? `${availableStatus}（上次检查结果）` : "检查未完成，请重试";
+    else if (available) status = availableStatus;
     else if (info?.checked_at) {
       status = !info.latest_version ? "暂无正式发布的版本" : !info.comparable ? "开发构建，无法比较版本" : "已是最新版本";
     }

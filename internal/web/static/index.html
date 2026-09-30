@@ -674,6 +674,27 @@
                   <span class="hint">重新构建镜像后无需改动此项，重启工作空间即可拉起新镜像。</span>
                 </label>
               </div>
+              <div class="card" id="image-update-card">
+                <h3>客户端更新</h3>
+                <p class="card-desc">更新工作空间里的 Claude Code，可选同时更新 Codex。保留当前镜像的浏览器与自定义功能；更新成功后，空间停止再启动时生效。</p>
+                <div class="field-row">
+                  <label class="field"><span>自动更新</span><select id="image-update-enabled"><option value="off">关闭 — 手动更新</option><option value="on">开启 — 每日检查并应用</option></select></label>
+                  <label class="field"><span>Claude 渠道</span><select id="image-update-channel"><option value="stable">stable — 稳定版</option><option value="latest">latest — 最新版</option></select></label>
+                  <label class="field"><span>每日检查时间</span><input id="image-update-time" type="time" value="04:00" required></label>
+                  <label class="field"><span>Codex</span><select id="image-update-codex"><option value="off">保持当前版本</option><option value="on">同时更新到 latest</option></select></label>
+                </div>
+                <p id="image-update-schedule" class="note">按系统时区调度；stable 可能落后于 latest。切换渠道不会自动降级。</p>
+                <div class="card-foot"><span id="image-update-dirty" class="note"></span><button id="image-update-save" class="btn btn-primary btn-sm" data-icon="save">保存更新设置</button></div>
+                <p id="image-update-status" class="note" role="status" aria-live="polite">尚未检查客户端版本</p>
+                <p id="image-update-versions" class="note"></p>
+                <p id="image-update-active" class="note image-update-ref"></p>
+                <div class="card-foot">
+                  <button id="image-update-check" class="btn btn-sm" data-icon="refresh">立即检查</button>
+                  <button id="image-update-update" class="btn btn-sm" data-icon="download">立即更新</button>
+                  <button id="image-update-rollback" class="btn btn-sm" data-icon="undo" disabled>回退上次镜像</button>
+                </div>
+                <details><summary>最近任务日志</summary><pre id="image-update-log" class="image-update-log">暂无日志</pre></details>
+              </div>
               <div class="card">
                 <h3>资源限制</h3>
                 <div class="field-row">

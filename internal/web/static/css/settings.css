@@ -435,3 +435,9 @@
   .price-history-row { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .price-history summary::before { transition: none; } }
+
+/* CLI update status stays readable on narrow settings panels. */
+#image-update-card > p { margin: 0; line-height: 1.6; }
+#image-update-card .note { font-size: 12px; color: var(--muted); }
+.image-update-log { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; font-size: 12px; }
+.image-update-ref { overflow-wrap: anywhere; }

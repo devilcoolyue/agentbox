@@ -27,6 +27,7 @@ spec.loader.exec_module(release)
 
 REPO = 'devilcoolyue/agentbox'
 STABLE = re.compile(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)')
+VERSION = re.compile(r'v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?')
 TERMINAL = ('succeeded', 'failed')
 MAX_ARCHIVE = 1024 * 1024 * 1024
 MAX_UNPACKED = 4 * MAX_ARCHIVE
@@ -51,8 +52,8 @@ def architecture():
 def probe(app, config, pid, current):
     if platform.system() != 'Linux' or os.geteuid() != 0 or not Path('/run/systemd/system').is_dir():
         raise ValueError('一键升级需要以 root 运行的 Linux/systemd 发布安装。')
-    if not architecture() or not STABLE.fullmatch(current):
-        raise ValueError('当前构建不支持一键升级，请使用正式发布包。')
+    if not architecture() or (current != 'dev' and not VERSION.fullmatch(current)):
+        raise ValueError('当前架构或版本标识不支持一键升级，请使用手工升级。')
     if not shutil.which('systemd-run'):
         raise ValueError('服务器缺少 systemd-run，请使用手工升级。')
     package = app / 'releases' / current
@@ -61,7 +62,7 @@ def probe(app, config, pid, current):
     meta = release.read(package / 'build.json')
     if (meta.get('version') != current or meta.get('program') != 'agentbox'
             or meta.get('os') != 'linux' or meta.get('arch') != architecture()
-            or not meta.get('revision') or 'dirty' in meta['revision']):
+            or not meta.get('revision')):
         raise ValueError('当前安装的构建信息不匹配，请使用手工升级。')
     unit = Path('/etc/systemd/system/agentbox.service')
     if unit.read_text() != release.unit(app, config):
@@ -115,9 +116,11 @@ def status(app, config, pid, current):
         return {'supported': True, 'reason': '', 'job': reconcile(app)}
 
 
-def start(app, config, pid, current, version):
+def start(app, config, pid, current, version, revision=''):
     probe(app, config, pid, current)
-    if not STABLE.fullmatch(version) or tuple(map(int, STABLE.fullmatch(version).groups())) <= tuple(map(int, STABLE.fullmatch(current).groups())):
+    source, target = VERSION.fullmatch(current), STABLE.fullmatch(version)
+    development = current == 'dev' or (source and (source[4] or 'dirty' in current or 'dirty' in revision))
+    if not target or (not development and (not source or tuple(map(int, target.groups())) <= tuple(map(int, source.groups()[:3])))):
         raise ValueError('只能升级到更新的正式版本，请重新检查更新。')
     with release.locked(app / '.update-control.lock'):
         previous = reconcile(app)
@@ -310,6 +313,7 @@ def main():
     parser.add_argument('--config', required=True)
     parser.add_argument('--pid', required=True, type=int)
     parser.add_argument('--current', required=True)
+    parser.add_argument('--revision', default='')
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('status')
     sub.add_parser('start').add_argument('--version', required=True)
@@ -321,7 +325,7 @@ def main():
     else:
         try:
             if args.command == 'start':
-                result = start(app, config, args.pid, args.current, args.version)
+                result = start(app, config, args.pid, args.current, args.version, args.revision)
             else:
                 result = status(app, config, args.pid, args.current)
         except BlockingIOError:

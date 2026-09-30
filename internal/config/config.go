@@ -322,6 +322,8 @@ type Config struct {
 	CacheDir       string                   `json:"cache_dir,omitempty"`
 	Resources      ResourceLimits           `json:"resources"`
 	AgentImage     string                   `json:"agent_image"`
+	ImageUpdates   ImageUpdateConfig        `json:"image_updates"`
+	PreviousImage  string                   `json:"previous_agent_image,omitempty"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
 	IdleTimeoutMin int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
@@ -444,6 +446,9 @@ func Load(path string) (*Config, error) {
 // validateLocked checks the whole config; callers must hold at least a read
 // lock (Load runs before the config is shared, which also counts).
 func (c *Config) validateLocked() error {
+	if err := c.ImageUpdates.normalized().validate(); err != nil {
+		return err
+	}
 	if err := c.validateGitOAuthApps(); err != nil {
 		return err
 	}
@@ -635,6 +640,8 @@ type persistConfig struct {
 	CacheDir       string                   `json:"cache_dir,omitempty"`
 	Resources      ResourceLimits           `json:"resources"`
 	AgentImage     string                   `json:"agent_image"`
+	ImageUpdates   ImageUpdateConfig        `json:"image_updates"`
+	PreviousImage  string                   `json:"previous_agent_image,omitempty"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
 	IdleTimeoutMin int64                    `json:"idle_timeout_min"`
@@ -664,6 +671,8 @@ func (c *Config) saveLocked() error {
 		CacheDir:       c.rawCacheDir,
 		Resources:      c.Resources,
 		AgentImage:     c.AgentImage,
+		ImageUpdates:   c.ImageUpdates,
+		PreviousImage:  c.PreviousImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
 		IdleTimeoutMin: c.IdleTimeoutMin,
@@ -979,6 +988,8 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Resources:      c.Resources,
 		rawCacheDir:    c.rawCacheDir,
 		AgentImage:     c.AgentImage,
+		ImageUpdates:   c.ImageUpdates,
+		PreviousImage:  c.PreviousImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
 		IdleTimeoutMin: c.IdleTimeoutMin,
@@ -1013,6 +1024,8 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.Listen = work.Listen
 	c.AuthToken = work.AuthToken
 	c.AgentImage = work.AgentImage
+	c.ImageUpdates = work.ImageUpdates
+	c.PreviousImage = work.PreviousImage
 	c.PermissionMode = work.PermissionMode
 	c.MaxUploadMB = work.MaxUploadMB
 	c.IdleTimeoutMin = work.IdleTimeoutMin
@@ -1036,6 +1049,9 @@ func (c *Config) mutate(fn func(*Config) error) error {
 
 // SettingsPatch carries a partial settings update; nil fields stay unchanged.
 type SettingsPatch struct {
+	ImageUpdates       *ImageUpdateConfig `json:"image_updates"`
+	ExpectedAgentImage *string            `json:"expected_agent_image"`
+
 	Resources      *ResourceLimits          `json:"resources"`
 	Listen         *string                  `json:"listen"`
 	AgentImage     *string                  `json:"agent_image"`
@@ -1056,6 +1072,12 @@ type SettingsPatch struct {
 
 func (c *Config) ApplySettings(p SettingsPatch) error {
 	return c.mutate(func(w *Config) error {
+		if p.ExpectedAgentImage != nil && *p.ExpectedAgentImage != w.AgentImage {
+			return fmt.Errorf("镜像已变化，请刷新设置后重试")
+		}
+		if p.ImageUpdates != nil {
+			w.ImageUpdates = *p.ImageUpdates
+		}
 		if p.Resources != nil {
 			w.Resources = *p.Resources
 		}

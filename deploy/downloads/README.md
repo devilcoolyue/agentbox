@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.6 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.7 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.6
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.7
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.6_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.7_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.6_linux_arm64/install.sh --version v0.1.6
+sudo bash agentbox_v0.1.7_linux_arm64/install.sh --version v0.1.7
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -83,6 +83,12 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
 
+### v0.1.6 / 开发版升级至 v0.1.7
+
+标准 Linux/systemd 版本目录安装可在「关于与更新」检查更新并升级至 v0.1.7。已包含开发版切换修复的 dev / 预发布 / dirty 构建会显示「切换到正式版并重启」，无需开发版版本号低于正式版；旧开发构建需先手工安装修复版服务端与升级脚本。源码或自定义布局继续使用部署工具。
+
+本版提供统一 Claude MCP 管理、客户端镜像更新与回退，并优化 MCP 手机布局。沿用 schema 9，不新增数据库迁移；升级会校验兼容性、备份并重启服务。客户端镜像的自动更新默认关闭，需管理员在「系统设置 → 容器与资源 → 客户端更新」启用；镜像更新成功后，空间停止再启动时生效。MCP 用户配置与空间覆盖进入系统备份，终端中已运行的 Claude 需重启以读取新配置。
+
 ### v0.1.5 升级至 v0.1.6
 
 标准独立部署可使用「关于与更新 → 升级并重启」，或下载并校验新包后使用上面的 `release.py install/activate`。数据库自动迁移至 schema 9；升级前保留备份，不能直接回退到仅支持 schema 8 的程序。升级不会自动重算历史费用或启用远程价格同步。
@@ -92,7 +98,7 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 服务端包附带可选浏览器镜像配方。在解包目录运行（基础镜像名按当前配置替换）：
 
 ```bash
-AGENTBOX_BROWSER_BASE_IMAGE=agentbox-agent:v0.1.6 ./scripts/build-browser-image.sh
+AGENTBOX_BROWSER_BASE_IMAGE=agentbox-agent:v0.1.7 ./scripts/build-browser-image.sh
 ```
 
 然后在「系统设置 → 容器」将镜像设为 `agentbox-agent:browser`，停止并重新启动需要浏览器的空间。Linux amd64 使用固定版本 Google Chrome for Testing，ARM 使用 Chromium。推荐每空间 2 GiB 内存、2 CPU、512 PID。服务器需允许非特权用户命名空间，Chrome 沙箱保持开启。

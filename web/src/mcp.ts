@@ -48,9 +48,10 @@ export function initMCP() {
   $("mcp-form-error").textContent = ""; $("mcp-form-error").classList.add("hidden");
  };
  const closeEditor = () => { if (editor.open) editor.close(); clearEditor(); };
- function button(text: string, fn: () => Promise<void>) {
+ function button(text: string, icon: string, fn: () => Promise<void>, compact = false) {
   const b = node("button", "", "btn btn-sm"); b.type = "button";
-  actionButton(b, text, text.includes("删除") ? "trash" : text.includes("复制") ? "copy" : text.includes("接管") ? "download" : text.includes("解除") ? "undo" : text.includes("测试") ? "activity" : text.includes("停用") ? "stop" : text.includes("启用") ? "play" : "edit");
+  actionButton(b, compact ? "" : text, icon, text);
+  if (icon === "trash") b.classList.add("btn-danger");
   b.addEventListener("click", () => { void action(fn); }); return b;
  }
  async function action(fn: () => Promise<void>) {
@@ -112,7 +113,13 @@ export function initMCP() {
   for (const item of data.items) {
    const row = node("article", "", "mcp-row");
    const heading = node("div", "", "mcp-row-heading");
-   heading.append(node("strong", item.name), node("span", `${item.config.type || "继承"} · ${sources[item.source]} · ${item.disabled ? "已停用 · " : ""}${status[item.status] || item.status}`, "mcp-meta")); row.append(heading);
+   const title = node("div", "", "mcp-row-title");
+   title.append(node("strong", item.name), node("span", item.config.type || "继承", "mcp-transport"));
+   const meta = node("div", "", "mcp-meta");
+   const state = node("span", `${item.disabled ? "已停用 · " : ""}${status[item.status] || item.status}`, "mcp-state");
+   state.dataset.state = item.disabled ? "disabled" : item.status;
+   meta.append(node("span", sources[item.source]), state);
+   heading.append(title, meta); row.append(heading);
    const actions = node("div", "", "mcp-actions");
    const base = endpoint(), id = S.current!.id, revision = data.revision, g = generation;
    const path = `${base}/${encodeURIComponent(item.name)}`;
@@ -120,37 +127,48 @@ export function initMCP() {
    if (item.status === "conflict" || item.source === "native") {
     const details = node("details"); details.append(node("summary", "查看配置差异（凭证已隐藏）"));
     details.append(node("pre", `网页配置\n${JSON.stringify(item.config, null, 2).replaceAll(KEEP, MASK)}\n终端配置\n${JSON.stringify(item.native, null, 2).replaceAll(KEEP, MASK)}`)); row.append(details);
-    if (item.native && ["stdio","http"].includes(item.native.type)) actions.append(button("导入并接管终端配置", async () => {
+    if (item.native && ["stdio","http"].includes(item.native.type)) actions.append(button("导入并接管终端配置", "download", async () => {
      if (!await askConfirm(`将 ${item.name} 的当前终端配置导入为空间覆盖，之后由网页管理。凭证会在服务端保留。`)) return;
      await send(`${path}/adopt`, "POST", {revision, native_revision:item.native_revision}); await refresh();
     }));
-    if (item.status === "conflict") actions.append(button("保留自装并解除管理", async () => {
+    if (item.status === "conflict") actions.append(button("保留自装并解除管理", "undo", async () => {
      if (!await askConfirm(`保留 ${item.name} 的终端配置，并在本空间禁用同名继承项？`)) return;
      await send(`${path}/adopt`, "POST", {revision, native_revision:item.native_revision, release:true}); await refresh();
     }));
    } else if(item.status !== "pending_delete") {
-    actions.append(button(scope() === "session" && item.source === "user" ? "编辑空间覆盖" : "编辑", async () => edit(item)));
-    actions.append(button(item.disabled ? "启用" : "停用", async () => {
+    const tools = node("div", "", "mcp-row-tools");
+    actions.append(tools);
+    tools.append(button(scope() === "session" && item.source === "user" ? "编辑空间覆盖" : "编辑", "edit", async () => edit(item), true));
+    const toggle = button(item.disabled ? "启用" : "停用", "play", async () => {
      if (item.disabled && !item.config.command && !item.config.url) await send(path,"DELETE",{revision});
      else await send(path,"PUT",{revision,entry:{config:item.config,disabled:!item.disabled}});
      await refresh();
-    }));
-    if (scope() === "user" || item.source === "session") actions.append(button(scope() === "session" ? "删除覆盖 / 恢复继承" : "删除", async () => {
+    });
+    toggle.className = "mcp-toggle";
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-checked", String(!item.disabled));
+    toggle.setAttribute("aria-label", `启用 ${item.name}`);
+    toggle.replaceChildren(node("span", "", "mcp-toggle-track"), node("span", item.disabled ? "已停用" : "已启用"));
+    actions.append(toggle);
+    let remove: HTMLButtonElement | undefined;
+    if (scope() === "user" || item.source === "session") remove = button(scope() === "session" ? "删除覆盖 / 恢复继承" : "删除", "trash", async () => {
      if (!await askConfirm(`删除 ${item.name} 的${scope() === "user" ? "用户配置" : "空间覆盖"}？`, {danger:true})) return;
      await send(path,"DELETE",{revision}); await refresh();
-    }));
+    }, true);
     if (scope() === "session" && !item.disabled) {
-     actions.append(button("复制到我的 MCP", async () => {
+     tools.append(button("复制到我的 MCP", "copy", async () => {
       const user = await api<MCPView>("/mcp",{signal:lifetime.signal});
       await send(`${path}/copy`,"POST",{revision:user.revision}); toast("已复制到我的 MCP");
-     }));
-     actions.append(button("测试连接", async () => {
+     }, true));
+     const test = button("测试连接", "activity", async () => {
       toast("正在容器内检测 MCP，最多等待 30 秒");
       checkRequest?.abort(); checkRequest = new AbortController();
       const result = await api<MCPCheck>(`/sessions/${encodeURIComponent(id)}/mcp/${encodeURIComponent(item.name)}/check`,{method:"POST",signal:checkRequest.signal});
       checks.set(`${id}/${item.name}`,result); if (current(g)) render();
-     }));
+     });
+     test.classList.add("mcp-test"); actions.prepend(test);
     }
+    if (remove) tools.append(remove);
    }
    row.append(actions);
    const check = checks.get(`${id}/${item.name}`);

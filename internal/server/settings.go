@@ -19,6 +19,7 @@ import (
 // --- 设置读写 ---
 
 type settingsView struct {
+	ImageUpdates   config.ImageUpdateConfig        `json:"image_updates"`
 	Resources      config.ResourceLimits           `json:"resources"`
 	Listen         string                          `json:"listen"`
 	AgentImage     string                          `json:"agent_image"`
@@ -41,7 +42,9 @@ type settingsView struct {
 }
 
 func (s *Server) settingsView() settingsView {
+	policy, _, _ := s.cfg.ImageUpdateState()
 	return settingsView{
+		ImageUpdates:    policy,
 		Resources:       s.cfg.GetResources(),
 		Listen:          s.cfg.GetListen(),
 		AgentImage:      s.cfg.GetAgentImage(),

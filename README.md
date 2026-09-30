@@ -107,7 +107,7 @@ Run on a Linux server:
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
 ```
 
-The current stable release is [v0.1.5](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.5). The installer selects the latest stable release by default. Append `-s -- --version v0.1.5` to pin this version.
+The current stable release is [v0.1.7](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.7). The installer selects the latest stable release by default. Append `-s -- --version v0.1.7` to pin this version.
 
 On SELinux systems such as Oracle Linux / RHEL, if an older package fails to start with `203/EXEC` / `Permission denied`, follow [SELinux installation recovery](deploy/README.md#selinux-安装恢复) to repair executable labels before retrying activation.
 
@@ -210,9 +210,12 @@ sudo ./deploy/install.sh
 sudo ./deploy/deploy.sh
 ```
 
-Administrators can check for new versions through the sidebar version entry or System settings → About and updates (`系统设置 → 关于与更新`). Standard Linux/systemd release installations support Upgrade and restart, with automatic verification, backups, and progress reporting. Source installations continue to use deployment scripts. See [releases and upgrades](docs/releases.md#控制台更新提示).
+Administrators can check for new versions through the sidebar version entry or System settings → About and updates (`系统设置 → 关于与更新`). Standard Linux/systemd versioned installations support Upgrade and restart, with automatic verification, backups, and progress reporting. Development, prerelease, and dirty builds in this layout can also switch directly to the latest stable release, even if its version number is lower; incompatible configuration or database schemas block the switch. Source installations continue to use deployment scripts. See [releases and upgrades](docs/releases.md#控制台更新提示).
 
 `install.sh` installs the service and timers; automatic workspace image updates are disabled by default. `deploy.sh` builds and replaces binaries, restarts the service, and checks its health. For ongoing remote access, configure HTTPS and a WebSocket reverse proxy. See [deployment and operations](deploy/README.md).
+
+Administrators can manage CLI image updates in **Settings → Containers & resources → Client updates**: daily automatic updates, Claude `stable` / `latest`, a check time in the site timezone, manual checks, updates, and rollback. Automatic updates are off by default; Claude defaults to `stable`, and Codex stays pinned unless updating it to `latest` is explicitly selected. Scheduling runs inside the server and needs neither a systemd update timer nor a source checkout. Updates extend the current image, preserve browser/custom functionality, and switch images only after CLI version checks pass. Running workspaces continue uninterrupted; stop and start them to use the new image. Failures retain the active image; rollback pauses automatic updates. See [CLI image updates](deploy/README.md#客户端镜像更新).
+
 
 For uninstalling and reinstalling, see [downloads and installation](deploy/downloads/README.md#一键卸载与重新安装). Uninstall preserves all files in a private backup directory by default; `--purge` deletes them permanently. Since v0.1.1, release packages include abox-link for five platforms, and installation / upgrades place the client downloads automatically.
 
@@ -260,7 +263,7 @@ A few operational boundaries:
 
 ### Claude MCP management
 
-The workspace **MCP** tab provides add/edit dialogs with draft retention on save errors, manages user defaults and workspace overrides, imports `mcpServers` JSON, and tests stdio/HTTP connections inside the container. Changes apply on the next chat turn, terminal connection, or workspace start; restart an already running terminal Claude to reload them. Existing native entries require explicit adoption. Header/env secrets are masked in API responses; on-disk configuration is private (0600), not encrypted. OAuth remains a terminal operation and the independent checker does not reuse CLI OAuth credentials. User and workspace MCP control files are included in system backups; runtime home/OAuth files require full backups. See [Skills, plugins, and MCP](docs/skills-and-mcp.md) for precedence, conflict handling, API details, and limits.
+The workspace **MCP** tab provides add/edit dialogs with draft retention on save errors, manages user defaults and workspace overrides, imports `mcpServers` JSON, and tests stdio/HTTP connections inside the container. The list separates configuration status from a compact action bar: connection checks keep their label, edit/copy/delete use icons with tooltips, and a switch controls enablement. Changes apply on the next chat turn, terminal connection, or workspace start; restart an already running terminal Claude to reload them. Existing native entries require explicit adoption. Header/env secrets are masked in API responses; on-disk configuration is private (0600), not encrypted. OAuth remains a terminal operation and the independent checker does not reuse CLI OAuth credentials. User and workspace MCP control files are included in system backups; runtime home/OAuth files require full backups. See [Skills, plugins, and MCP](docs/skills-and-mcp.md) for precedence, conflict handling, API details, and limits.
 
 ## Deployment layout and operations
 
