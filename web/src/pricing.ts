@@ -347,7 +347,7 @@ $("price-source-save").addEventListener("click", async () => {
 });
 $("price-refresh").addEventListener("click", async () => {
   if (busy) return;
-  if ((dirty || sourceDirty()) && !await askConfirm("将丢弃当前尚未保存的价格和来源编辑。", { title: "重新读取价目表", okLabel: "重新读取", icon: "refresh" })) return;
+  if ((dirty || sourceDirty()) && !await askConfirm("将丢弃当前尚未保存的价格和来源编辑。", { title: "重新读取价目表", okLabel: "放弃编辑并重新读取", icon: "undo", danger: true })) return;
   await openPricingSection(true);
 });
 $("price-preview").addEventListener("click", () => { $("price-diff").classList.toggle("hidden"); });

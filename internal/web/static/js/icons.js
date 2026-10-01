@@ -39,6 +39,11 @@ const ICONS = {
     "login": "M14 3h5v18h-5M3 12h12m-5-5 5 5-5 5",
     "shield": "M12 3 3 7v5c0 5 9 10 9 10s9-5 9-10V7ZM8 12l3 3 5-6",
     "network": "M8 3h8v6H8ZM3 17h6v4H3Zm12 0h6v4h-6ZM12 9v4M6 17v-4h12v4",
+    "cloud": "M7 19a5 5 0 0 1-.6-9.96A6 6 0 0 1 18 9.5a4.5 4.5 0 0 1-.5 9.5Z",
+    "file": "M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5ZM14 3v5h5",
+    "file-image": "M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5ZM14 3v5h5M8 18l3-4 2 2.5 1.5-1.5L17 18Z",
+    "file-archive": "M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5ZM14 3v5h5M10 4v2m0 2v2m0 2v2m-1 2h2v3H9Z",
+    "file-code": "M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5ZM14 3v5h5m-9 5-2 2.5 2 2.5m4-5 2 2.5-2 2.5",
     "sliders": "M4 7h7m4 0h5M4 17h11m4 0h1M11 4v6M15 14v6",
     "cpu": "M6 6h12v12H6ZM9 9h6v6H9ZM9 3v3m6-3v3m-6 12v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3",
     "wallet": "M20 8V5H5a2 2 0 0 0 0 4h16v12H5a2 2 0 0 1-2-2V7m18 6h-6v4h6",
@@ -55,7 +60,7 @@ const ICONS = {
     "arrow-right": "M4 12h16m-7-7 7 7-7 7",
     "chevron-left": "m15 6-6 6 6 6",
     "chevron-right": "m9 6 6 6-6 6",
-    "more": "M5 12h.01M12 12h.01M19 12h.01",
+    "more": "M6.2 12a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0Zm7 0a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0Zm7 0a1.2 1.2 0 1 1-2.4 0 1.2 1.2 0 0 1 2.4 0Z",
     "sparkles": "m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z",
     "bug": "M8 8h8v8a4 4 0 0 1-8 0ZM9 8V6a3 3 0 0 1 6 0v2M3 9l5 2m8 0 5-2M3 15h5m8 0h5M4 21l4-3m8 0 4 3M12 8v12",
     "list-check": "m3 6 1 1 2-2m-3 8 1 1 2-2m-3 8 1 1 2-2M10 6h11M10 13h11M10 20h11",
@@ -90,6 +95,24 @@ const ICONS = {
     "help": "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9 9a3 3 0 0 1 6 0c0 2-3 2-3 4m0 4h.01",
     "settings": "M15.2 12a3.2 3.2 0 1 1-6.4 0 3.2 3.2 0 0 1 6.4 0ZM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z",
 };
+/* 文件类型图标：文件列表与技能文件树共用。曾经用 ◨ ▣ ⌘ · 这些字符代替，
+ * 风格与其他 SVG 图标不一致，缺字体时还会显示成方块。 */
+const IMAGE_EXT = ["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp", "avif"];
+const ARCHIVE_EXT = ["zip", "tar", "gz", "tgz", "7z", "rar", "xz", "bz2", "zst"];
+const CODE_EXT = ["sh", "bash", "zsh", "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "go", "rs", "c", "h", "cc", "cpp", "hpp",
+    "java", "kt", "rb", "php", "pl", "swift", "lua", "sql", "css", "scss", "html", "htm", "vue", "svelte"];
+export function fileIconName(name) {
+    const ext = (name.split(".").pop() || "").toLowerCase();
+    if (name === "SKILL.md")
+        return "sparkles";
+    if (IMAGE_EXT.includes(ext))
+        return "file-image";
+    if (ARCHIVE_EXT.includes(ext))
+        return "file-archive";
+    if (CODE_EXT.includes(ext))
+        return "file-code";
+    return "file";
+}
 export function svgIcon(name, size = 13) {
     const d = ICONS[name];
     if (!d)

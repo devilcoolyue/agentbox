@@ -145,18 +145,18 @@ function proxyRow(p) {
         setTip(probe, res.error || "");
     }
     const acts = document.createElement("td");
-    acts.className = "px-actions action-tools";
+    acts.className = "px-actions"; // 只有三个动作：全部带字，删除放最后
     const test = document.createElement("button");
     test.className = "btn btn-sm btn-ghost";
     buttonLabel(test, "测试", "activity");
     test.addEventListener("click", () => runProbe(p, test));
     const edit = document.createElement("button");
     edit.className = "btn btn-sm btn-ghost";
-    actionButton(edit, "", "rename", "编辑代理");
+    actionButton(edit, "编辑", "rename", "编辑代理");
     edit.addEventListener("click", () => openProxyDlg(p));
     const del = document.createElement("button");
-    del.className = "btn btn-sm btn-danger";
-    actionButton(del, "", "trash", "删除代理");
+    del.className = "btn btn-sm btn-ghost btn-danger";
+    actionButton(del, "删除", "trash", "删除代理");
     del.addEventListener("click", () => removeProxy(p));
     acts.append(test, edit, del);
     tr.append(name, scheme, addr, auth, acct, probe, acts);

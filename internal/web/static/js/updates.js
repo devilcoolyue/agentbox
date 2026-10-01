@@ -1,6 +1,6 @@
 import { api } from "./api.js";
 import { S, emit } from "./state.js";
-import { $, askConfirm } from "./util.js";
+import { $, askConfirm, fmtDateTime, fmtTime } from "./util.js";
 import { hideTip } from "./tip.js";
 import { buttonLabel } from "./icons.js";
 const interval = 4 * 60 * 60 * 1000;
@@ -183,12 +183,12 @@ export function initUpdates() {
             const url = info?.release_url || releasesURL;
             el.href = url === releasesURL || url.startsWith(releasesURL + "/tag/") ? url : releasesURL;
         }
-        const checked = info?.checked_at ? "上次检查 " + new Date(info.checked_at).toLocaleString("zh-CN", { timeZone: S.timeZone || "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "尚未检查";
+        const checked = info?.checked_at ? "上次检查 " + fmtTime(info.checked_at) : "尚未检查";
         for (const el of document.querySelectorAll("[data-update-time]"))
             el.textContent = checked;
         $("version-current").classList.toggle("hidden", !(info?.checked_at && info.latest_version && info.comparable && !available && !error && !checking));
         $("version-upgrade").classList.toggle("hidden", !available);
-        $("update-build").textContent = info ? [info.built_at !== "unknown" ? "构建于 " + info.built_at : "", info.revision !== "unknown" ? "提交 " + info.revision.slice(0, 12) : ""].filter(Boolean).join(" · ") : "";
+        $("update-build").textContent = info ? [info.built_at !== "unknown" ? "构建于 " + (isNaN(Date.parse(info.built_at)) ? info.built_at : fmtDateTime(info.built_at, false)) : "", info.revision !== "unknown" ? "提交 " + info.revision.slice(0, 12) : ""].filter(Boolean).join(" · ") : "";
         $("update-notes").textContent = info?.notes || "";
         $("update-notes-wrap").classList.toggle("hidden", !info?.notes);
         positionMenu();

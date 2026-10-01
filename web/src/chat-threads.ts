@@ -138,7 +138,7 @@ function threadItem(t: Thread, on: boolean) {
   title.className = "tp-title";
   title.textContent = previewText(t.title);
   const meta = document.createElement("span");
-  meta.className = "tp-meta mono";
+  meta.className = "tp-meta";
   meta.textContent = [fmtTime(t.updated || t.ts), `${t.turns || 0} 轮`, on ? "当前" : ""]
     .filter(Boolean).join(" · ");
   open.append(title, meta);

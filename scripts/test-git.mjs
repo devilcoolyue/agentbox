@@ -182,8 +182,7 @@ export async function smoke(page) {
    }
   }
   await page.setViewportSize({width:1440,height:960});
-  await page.locator('#btn-user-menu').click();
-  await page.locator('#btn-git-management').click();
+  await page.locator('#btn-git-management').click(); // sidebar tool, next to usage and settings
   await page.locator('#view-git').waitFor({state:'visible'});
   assert.match(page.url(), /#\/git\/guide$/);
   assert.equal(await page.locator('dialog[open]').count(),0,'Git management opened a modal');
@@ -355,7 +354,10 @@ export async function smoke(page) {
   await page.setViewportSize({width:1440,height:960});await page.reload();
   await page.locator('#btn-changes-remote:not([disabled])').waitFor();await page.locator('#btn-changes-remote').click();
   await page.locator('#dlg-git-remote [data-manage]:not([disabled])').waitFor();await page.locator('#dlg-git-remote [data-manage]').click();
-  await manager.locator('.git-connection-row').filter({hasText:'Company Git'}).getByRole('button',{name:'使用授权',exact:true}).click();
+  // Low-frequency connection actions are in the row menu, with delete last.
+  await manager.locator('.git-connection-row').filter({hasText:'Company Git'}).locator('.more-btn').click();
+  assert.equal(await page.locator('.menu-pop [role=menuitem]').last().innerText(),'删除连接');
+  await page.getByRole('menuitem',{name:'使用授权',exact:true}).click();
   const sharesDialog=page.locator('#dlg-git-shares');await sharesDialog.locator('[data-save]:not([disabled])').waitFor();
   await sharesDialog.getByLabel('alice',{exact:true}).check();await sharesDialog.locator('[data-save]').click();await sharesDialog.waitFor({state:'detached'});assert.equal(shareWrites,1);await assertActionIcons(page);
   await manager.locator('[data-oauth-apps]').click();
@@ -377,8 +379,14 @@ export async function smoke(page) {
   await page.locator('#dlg-git-remote [data-manage]').click();
   const sharedRow=manager.locator('.git-connection-row').filter({hasText:'共享自 service-admin'});await sharedRow.waitFor();
   for(const label of ['编辑','停用','删除','使用授权'])assert.equal(await sharedRow.getByRole('button',{name:label,exact:true}).count(),0,'shared recipient can manage '+label);
+  // A recipient's row menu offers nothing that manages the owner's connection.
+  if(await sharedRow.locator('.more-btn').count()){
+   await sharedRow.locator('.more-btn').click();
+   for(const label of ['停用','删除连接','使用授权'])assert.equal(await page.getByRole('menuitem',{name:label,exact:true}).count(),0,'shared recipient menu offers '+label);
+   await page.keyboard.press('Escape');
+  }
   await backToWorkspace();
-  await page.locator('#btn-user-menu').click();await page.locator('#btn-git-management').click();
+  await page.locator('#btn-git-management').click();
   for(const width of [1440,390]) {
    await page.setViewportSize({width,height:900});
    await page.screenshot({animations:'disabled',path:`output/playwright/git-guide-${width}.png`});

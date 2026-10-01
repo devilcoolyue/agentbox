@@ -4,7 +4,7 @@ import { api } from "./api.js";
 import { askPrompt, toast } from "./util.js";
 import { emit } from "./state.js";
 import { refreshAll } from "./data.js";
-import { actionButton, decorateIcons } from "./icons.js";
+import { decorateIcons } from "./icons.js";
 export function reasoningLabel(r) {
     if (!r)
         return "自动识别";
@@ -46,7 +46,7 @@ export function editReasoning(agent, title, current) {
                 check.name = "level";
                 check.value = level;
                 check.checked = current?.control === control.value && !!current.levels?.includes(level);
-                label.append(check, document.createTextNode(" " + EFFORT_LABELS[level] + (control.value === "budget" ? `（${BUDGETS[level].toLocaleString()} tokens）` : `（${level}）`)));
+                label.append(check, document.createTextNode(" " + EFFORT_LABELS[level] + (control.value === "budget" ? `（${BUDGETS[level].toLocaleString("en-US")} tokens）` : `（${level}）`)));
                 return label;
             }));
         };
@@ -76,41 +76,35 @@ export function editReasoning(agent, title, current) {
         dlg.showModal();
     });
 }
-export function accountReasoningButton(account) {
-    const button = document.createElement("button");
-    button.className = "btn btn-sm btn-ghost";
-    actionButton(button, "模型能力", "sliders", "模型能力");
-    button.addEventListener("click", async () => {
-        try {
-            const accounts = await api("/accounts");
-            const current = accounts.find(a => a.id === account.id);
-            if (!current)
-                throw new Error("账号已不存在");
-            const model = await askPrompt({ title: current.label + " · 模型能力", label: "模型 ID", hint: "为这个账号覆盖模型能力。已配置：" + (Object.keys(current.model_reasoning || {}).join("、") || "无"), validate: value => /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[1m\])?$/.test(value.trim()) ? "" : "请输入有效的模型 ID" });
-            if (model === null)
-                return;
-            const id = model.trim();
-            const policy = await editReasoning(current.type, current.label + " · " + id, current.model_reasoning?.[id]);
-            if (policy === null)
-                return;
-            // Read again so editing one model does not overwrite concurrent changes
-            // to other entries that happened while the dialog was open.
-            const fresh = (await api("/accounts")).find(a => a.id === account.id);
-            if (!fresh)
-                throw new Error("账号已不存在");
-            const next = { ...fresh.model_reasoning };
-            if (policy)
-                next[id] = policy;
-            else
-                delete next[id];
-            await api(`/accounts/${encodeURIComponent(account.id)}`, { method: "PATCH", body: JSON.stringify({ model_reasoning: next }) });
-            await refreshAll();
-            emit("models-updated");
-            toast("已保存账号模型能力");
-        }
-        catch (error) {
-            toast(error.message, true);
-        }
-    });
-    return button;
+export async function editAccountReasoning(account) {
+    try {
+        const accounts = await api("/accounts");
+        const current = accounts.find(a => a.id === account.id);
+        if (!current)
+            throw new Error("账号已不存在");
+        const model = await askPrompt({ title: current.label + " · 模型能力", label: "模型 ID", hint: "为这个账号覆盖模型能力。已配置：" + (Object.keys(current.model_reasoning || {}).join("、") || "无"), validate: value => /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[1m\])?$/.test(value.trim()) ? "" : "请输入有效的模型 ID" });
+        if (model === null)
+            return;
+        const id = model.trim();
+        const policy = await editReasoning(current.type, current.label + " · " + id, current.model_reasoning?.[id]);
+        if (policy === null)
+            return;
+        // Read again so editing one model does not overwrite concurrent changes
+        // to other entries that happened while the dialog was open.
+        const fresh = (await api("/accounts")).find(a => a.id === account.id);
+        if (!fresh)
+            throw new Error("账号已不存在");
+        const next = { ...fresh.model_reasoning };
+        if (policy)
+            next[id] = policy;
+        else
+            delete next[id];
+        await api(`/accounts/${encodeURIComponent(account.id)}`, { method: "PATCH", body: JSON.stringify({ model_reasoning: next }) });
+        await refreshAll();
+        emit("models-updated");
+        toast("已保存账号模型能力");
+    }
+    catch (error) {
+        toast(error.message, true);
+    }
 }

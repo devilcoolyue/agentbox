@@ -46,7 +46,8 @@ export async function imageUpdateSmoke(page) {
   await page.locator('#image-update-time').fill('05:30');
   await page.locator('#image-update-time').blur();
   assert.equal(await page.locator('#image-update-check').isDisabled(),true,'unsaved policy used for check');
-  await page.locator('#image-update-save').click();
+  assert.match(await page.locator('#set-savebar-text').innerText(),/客户端自动更新/);
+  await page.locator('#set-save').click();
   await page.waitForFunction(()=>!document.querySelector('#image-update-check').disabled);
   assert.equal(saves,1);assert.equal(view.settings.channel,'latest');assert.equal(view.settings.time,'05:30');
   await page.locator('#image-update-check').click();

@@ -92,6 +92,8 @@ function describe(el: HTMLElement | null) {
 function show(el: HTMLElement) {
   const text = el.dataset.tip;
   if (!text) return;
+  // 展开着菜单 / 弹层的按钮不再提示「更多操作」，气泡会盖住刚弹出的第一项
+  if (el.getAttribute("aria-expanded") === "true") return;
   const b = tipBox();
   b.textContent = text;
   anchor = el;

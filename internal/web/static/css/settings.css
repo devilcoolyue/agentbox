@@ -89,14 +89,14 @@
 /* 生效时机标签：琥珀=需重启，绿=热生效 */
 .tag {
   display: inline-flex; align-items: center;
-  font-family: var(--mono); font-size: 10.5px;
+  font-size: 11px;
   border: 1px solid var(--line); border-radius: 4px;
   color: var(--muted);
   padding: 0 6px;
   letter-spacing: 0.06em;
   white-space: nowrap;
 }
-.tag.restart { color: var(--amber); border-color: var(--amber-dim); }
+.tag.restart { color: var(--warn); border-color: var(--warn-line); }
 .tag.live { color: var(--green); border-color: var(--green-line); }
 
 /* 账号池列表 */
@@ -129,7 +129,7 @@
 .acct-state {
   grid-column: 1;
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  font-size: 12px; color: var(--muted);
 }
 .acct-state .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); flex: none; display: inline-block; }
 .st { display: inline-flex; align-items: center; gap: 6px; }
@@ -139,7 +139,7 @@
 .st.warn .dot { background: var(--red); }
 .acct-actions {
   grid-row: 1 / 3; grid-column: 2;
-  display: flex; gap: 8px; align-items: center;
+  display: flex; gap: 6px; align-items: center;
 }
 .acct-empty { color: var(--muted); font-size: 13px; padding: 18px 4px; }
 
@@ -230,7 +230,7 @@
   white-space: nowrap; max-width: 230px; overflow: hidden; text-overflow: ellipsis;
 }
 /* agent 兜底价（claude / codex）与具体模型行区分开：它管的是一整类 */
-.price-table .pt-key.fallback { color: var(--amber); }
+.price-table .pt-key.fallback { color: var(--muted); font-style: italic; }
 .price-table input.rate {
   width: 78px; text-align: right;
   font-family: var(--mono); font-size: 12px;
@@ -257,16 +257,15 @@
 .user-row:last-child { border-bottom: none; }
 .user-row .u-name { font-size: 13.5px; font-weight: 600; flex: none; }
 .user-row .u-role {
-  font-family: var(--mono); font-size: 10.5px;
-  letter-spacing: 0.06em;
+  font-size: 11px;
   border: 1px solid var(--line); border-radius: 4px;
   color: var(--muted);
   padding: 1px 7px;
   flex: none;
 }
-.user-row .u-role.admin { color: var(--amber); border-color: var(--amber-dim); }
+.user-row .u-role.admin { color: var(--text); border-color: var(--muted); }
 .user-row .u-meta {
-  font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  font-size: 12px; color: var(--muted);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .user-row .u-actions { margin-left: auto; display: flex; gap: 8px; flex: none; }
@@ -295,11 +294,11 @@
   padding: 12px 14px;
 }
 .mt-label { color: var(--muted); font-size: 12px; }
-.mt-value { font-family: var(--mono); font-size: 21px; font-weight: 600; margin-top: 2px; color: var(--text-hi); }
+.mt-value { font-family: var(--mono); font-size: 21px; font-weight: 600; margin-top: 2px; color: var(--text-hi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mt-sub { color: var(--muted); font-size: 11.5px; margin-top: 4px; overflow-wrap: anywhere; }
 .mt-bar { height: 4px; border-radius: 999px; background: var(--panel-2); overflow: hidden; margin-top: 8px; }
 .mt-bar span { display: block; height: 100%; border-radius: 999px; background: var(--green); transition: width 0.4s ease; }
-.mt-bar span.warn { background: var(--amber); }
+.mt-bar span.warn { background: var(--warn); }
 .mt-bar span.hot { background: var(--red); }
 
 .mon-card { padding: 0; overflow: hidden; }
@@ -371,7 +370,7 @@
 
 /* ---- 用户行上的额度标签 ---- */
 .user-row .u-quota {
-  font-family: var(--mono); font-size: 11.5px;
+  font-size: 11.5px; font-variant-numeric: tabular-nums;
   border: 1px solid var(--line); border-radius: 4px;
   padding: 1px 7px; flex: none;
   color: var(--text);
@@ -392,7 +391,7 @@
 .price-sync-options { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 .price-auto { display: flex; align-items: center; gap: 6px; min-height: 36px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
 .price-auto input { margin: 0; }
-.price-notice { padding: 10px 12px; margin: 0; border-left: 3px solid var(--amber); background: color-mix(in srgb, var(--amber) 7%, transparent); font-size: 12.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.price-notice { padding: 10px 12px; margin: 0; border-left: 3px solid var(--warn); background: color-mix(in srgb, var(--warn) 7%, transparent); font-size: 12.5px; line-height: 1.6; overflow-wrap: anywhere; }
 .price-notice p { margin: 6px 0; }
 .price-notice ul { margin: 8px 0; padding-left: 20px; max-height: 180px; overflow-y: auto; }
 .price-changes { max-height: 460px; overflow-y: auto; margin: 12px 0; border-top: 1px solid var(--line); }
@@ -400,7 +399,7 @@
 #price-diff > p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 .price-change { padding: 12px 0; border-bottom: 1px solid var(--line-soft); overflow-wrap: anywhere; }
 .price-change label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
-.price-change label span { font-size: 12px; color: var(--amber); }
+.price-change label span { font-size: 12px; color: var(--warn); }
 .price-change p { margin: 7px 0 0 24px; }
 .price-change .card-desc { margin: 7px 0 0 24px; line-height: 1.5; }
 .price-change a { color: var(--amber); text-underline-offset: 2px; }
@@ -437,7 +436,38 @@
 @media (prefers-reduced-motion: reduce) { .price-history summary::before { transition: none; } }
 
 /* CLI update status stays readable on narrow settings panels. */
-#image-update-card > p { margin: 0; line-height: 1.6; }
-#image-update-card .note { font-size: 12px; color: var(--muted); }
+:is(#image-update-card, #image-update-ops) > p { margin: 0; line-height: 1.6; }
+:is(#image-update-card, #image-update-ops) .note { font-size: 12px; color: var(--muted); }
+#image-update-dirty:not([hidden]) { color: var(--warn); }
+#image-update-dirty[hidden] { display: none; }
 .image-update-log { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; font-size: 12px; }
 .image-update-ref { overflow-wrap: anywhere; }
+
+/* ---- 统一保存条：贴在设置内容区底部，有未保存的修改时出现 ---- */
+.set-savebar {
+  position: sticky; bottom: 12px; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 16px; padding: 10px 12px 10px 16px;
+  background: var(--panel); border: 1px solid var(--warn-line); border-radius: 10px;
+  box-shadow: var(--shadow-md);
+}
+.set-savebar[hidden] { display: none; }
+.set-savebar-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.set-savebar-text { flex: 1; min-width: 0; font-size: 13px; color: var(--text); overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .set-savebar { bottom: max(8px, env(safe-area-inset-bottom)); flex-wrap: wrap; padding: 10px 12px; }
+  .set-savebar-text { flex-basis: calc(100% - 20px); }
+  .set-savebar .btn { flex: 1; }
+}
+
+/* 「了解更多」：卡片说明只留一句话，实现细节收在这里 */
+.learn-more { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+.learn-more > summary { width: fit-content; cursor: pointer; color: var(--muted); list-style: none; display: inline-flex; align-items: center; gap: 4px; }
+.learn-more > summary::-webkit-details-marker { display: none; }
+.learn-more > summary::after { content: ""; width: 6px; height: 6px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: translateY(-2px) rotate(45deg); transition: transform 140ms ease; }
+.learn-more[open] > summary::after { transform: translateY(1px) rotate(-135deg); }
+.learn-more > summary:hover { color: var(--text); }
+.learn-more > p { margin: 6px 0 0; }
+.learn-more .sec-hint { margin: 6px 0 0; }
+@media (prefers-reduced-motion: reduce) { .learn-more > summary::after { transition: none; } }
+.card > .learn-more { margin-top: -8px; }

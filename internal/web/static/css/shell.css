@@ -81,7 +81,7 @@
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ⋯ 会话操作菜单（仅窄屏工作台视图出现） */
+/* ⋯ 操作菜单的外观：窄屏顶栏、工作台头部、列表行共用（弹层由 js/menu.js 生成） */
 .kebab-wrap { position: relative; flex: none; }
 .kebab-menu {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
@@ -108,6 +108,15 @@
   display: inline-flex; align-items: center; justify-content: center;
 }
 .kebab-menu .glyph svg { display: block; }
+/* js/menu.js 的通用「⋯」弹层：挂在 body 上 fixed 定位，坐标由脚本写入 */
+.kebab-menu.menu-pop {
+  position: fixed; right: auto; z-index: 140;
+  width: auto; min-width: 168px; max-width: calc(100vw - 16px);
+}
+.kebab-menu.menu-pop button { white-space: nowrap; }
+@media (pointer: coarse) {
+  .kebab-menu.menu-pop button { min-height: 44px; }
+}
 
 .shell { flex: 1; min-height: 0; display: flex; }
 
@@ -197,9 +206,10 @@
 .mq-num { font-size: 13px; color: var(--text); }
 .my-quota .mq-num.empty { color: var(--red); font-weight: 600; }
 #btn-usagelog.quota-blocked > .glyph { color: var(--red); }
-.side-tools { display: flex; align-items: center; gap: 2px; }
-.side-tool { flex: none; width: 34px; height: 34px; padding: 0; justify-content: center; }
-.side-tool .side-item-label, #tunnel-text { display: none; }
+/* 管理入口两列带字；收起侧栏时变成一列图标（见下方 data-sidebar-collapsed 规则） */
+.side-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.side-tool { height: 34px; padding: 0 8px; gap: 8px; font-size: 12.5px; }
+#tunnel-text { display: none; }
 .side-tool.active { box-shadow: none; }
 .side-collapse {
   display: inline-flex; align-items: center; justify-content: center;
@@ -218,12 +228,18 @@
 
 /* 底栏左侧主题、右侧头像；用户信息与退出放在头像弹层中。 */
 .side-preferences {
-  position: relative; display: flex; align-items: center; gap: 8px;
-  margin-top: 6px; padding: 6px 0 0 4px; border-top: 1px solid var(--line);
+  position: relative; display: flex; align-items: center; gap: 6px;
+  margin-top: 6px; padding: 6px 0 0; border-top: 1px solid var(--line);
 }
-.side-user { margin-left: auto; }
-.side-user:hover, .side-user[aria-expanded="true"] { background: transparent; }
-.side-user[aria-expanded="true"] { color: var(--amber); }
+/* 用户按钮：头像 + 用户名 + 余额，占满主题切换左侧的空间 */
+.side-user { flex: 1; width: auto; height: 40px; padding: 0 8px; min-width: 0; }
+.side-user[aria-expanded="true"] { color: var(--text); background: var(--side-hover); }
+.side-user-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.side-user-label { color: var(--text); font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.side-user-quota { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.side-user-quota.empty { color: var(--red); }
+.side-user-conn { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 4px 8px; }
+.side-user-conn .conn-latency { flex: none; padding: 0 0 0 8px; height: 28px; }
 .side-user-menu {
   position: fixed; z-index: 90; width: 232px; max-width: calc(100vw - 24px);
   padding: 6px; border: 1px solid var(--line); border-radius: 10px;
@@ -269,7 +285,7 @@
 
 /* ---- 内网隧道入口：右侧状态灯 + 文案（在线时点亮） ---- */
 #btn-tunnel { position: relative; }
-.tunnel-state { position: absolute; right: 5px; bottom: 5px; display: flex; }
+.tunnel-state { display: flex; margin-left: auto; }
 .tunnel-state .t-dot { width: 5px; height: 5px; box-shadow: 0 0 0 2px var(--panel); }
 .t-dot {
   width: 7px; height: 7px; border-radius: 50%;
@@ -282,8 +298,8 @@
   box-shadow: 0 0 6px color-mix(in srgb, var(--green) 55%, transparent);
 }
 .t-dot.warn {
-  background: var(--amber);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--amber) 55%, transparent);
+  background: var(--warn);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--warn) 55%, transparent);
 }
 .t-dot.bad {
   background: var(--red);
@@ -333,11 +349,12 @@
 .session-empty { margin: 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .session-empty-icon { display: none; }
 
-/* 休眠标记：空闲自动停机，与用户手动停止区分开 */
-.sc-sleep {
-  color: var(--amber);
-  opacity: 0.85;
-}
+/* 列表里的运行状态文字：运行中=绿，休眠=警告黄（空闲自动停机，与手动停止区分开）。
+ * 已停止的空间头像压暗，运行中的一眼就能挑出来。 */
+.sc-state.run { color: var(--green); }
+.sc-state.idle { color: var(--warn); }
+.session-card.st-off .agent-avatar .agent-ico { opacity: 0.55; }
+.sc-initial { display: none; }
 
 /* ---- 抽屉遮罩：仅窄屏显示 ---- */
 .scrim {
@@ -371,7 +388,8 @@
   .side-item { height: 42px; }
   .side-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
   .side-collapse { display: none; }
-  .side-tool { width: 40px; height: 40px; }
+  .side-tool { height: 42px; }
+  .side-user { height: 44px; }
   .theme-options button { width: 36px; height: 40px; }
   .side-logout { height: 44px; }
   .side-user-menu { position: absolute; width: auto; left: 0; right: 0; bottom: calc(100% + 8px); }
@@ -390,15 +408,21 @@
   :root[data-sidebar-collapsed="true"] .side-sessions { padding: 0 4px; }
   :root[data-sidebar-collapsed="true"] .session-list { padding: 2px 4px 6px; }
   :root[data-sidebar-collapsed="true"] .session-card { height: 46px; padding: 0; justify-content: center; }
+  :root[data-sidebar-collapsed="true"] .session-card .agent-ico { display: none; }
+  :root[data-sidebar-collapsed="true"] .sc-initial {
+    display: block; font-size: 14px; font-weight: 600; line-height: 1; color: var(--brand);
+  }
+  :root[data-sidebar-collapsed="true"] .session-card.st-off .sc-initial { opacity: 0.6; }
   :root[data-sidebar-collapsed="true"] .side-foot { padding-left: 8px; padding-right: 8px; }
   :root[data-sidebar-collapsed="true"] :is(.side-item, .conn-latency) { padding: 0; justify-content: center; }
-  :root[data-sidebar-collapsed="true"] .side-tools { flex-direction: column; }
+  :root[data-sidebar-collapsed="true"] .side-tools { grid-template-columns: 1fr; justify-items: center; }
   :root[data-sidebar-collapsed="true"] .conn-latency { flex: none; width: 100%; height: 20px; }
   :root[data-sidebar-collapsed="true"] .side-collapse { margin: 0; width: 36px; height: 36px; }
   :root[data-sidebar-collapsed="true"] .side-collapse svg { transform: rotate(180deg); }
   :root[data-sidebar-collapsed="true"] .side-tool { width: 38px; }
+  :root[data-sidebar-collapsed="true"] .tunnel-state { position: absolute; right: 5px; bottom: 5px; margin: 0; }
   :root[data-sidebar-collapsed="true"] .side-preferences { flex-direction: column; gap: 2px; padding: 4px 0 0; margin-top: 4px; }
-  :root[data-sidebar-collapsed="true"] .side-user { margin-left: 0; }
+  :root[data-sidebar-collapsed="true"] .side-user { flex: none; width: 38px; padding: 0; }
   :root[data-sidebar-collapsed="true"] .theme-options { display: none; }
   :root[data-sidebar-collapsed="true"] .side-theme-cycle { display: flex; }
   :root[data-sidebar-collapsed="true"] .session-empty { margin: 12px auto; }

@@ -5,7 +5,7 @@ import { api } from "./api.js";
 import { askPrompt, toast } from "./util.js";
 import { emit } from "./state.js";
 import { refreshAll } from "./data.js";
-import { actionButton, decorateIcons } from "./icons.js";
+import { decorateIcons } from "./icons.js";
 
 export function reasoningLabel(r?: ReasoningCapability): string {
   if (!r) return "自动识别";
@@ -43,7 +43,7 @@ export function editReasoning(agent: string, title: string, current?: ReasoningC
         const check = document.createElement("input");
         check.type = "checkbox"; check.name = "level"; check.value = level;
         check.checked = current?.control === control.value && !!current.levels?.includes(level);
-        label.append(check, document.createTextNode(" " + EFFORT_LABELS[level] + (control.value === "budget" ? `（${BUDGETS[level].toLocaleString()} tokens）` : `（${level}）`)));
+        label.append(check, document.createTextNode(" " + EFFORT_LABELS[level] + (control.value === "budget" ? `（${BUDGETS[level].toLocaleString("en-US")} tokens）` : `（${level}）`)));
         return label;
       }));
     };
@@ -66,10 +66,7 @@ export function editReasoning(agent: string, title: string, current?: ReasoningC
   });
 }
 
-export function accountReasoningButton(account: Account): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.className = "btn btn-sm btn-ghost"; actionButton(button, "模型能力", "sliders", "模型能力");
-  button.addEventListener("click", async () => {
+export async function editAccountReasoning(account: Account) {
     try {
       const accounts = await api<Account[]>("/accounts");
       const current = accounts.find(a => a.id === account.id);
@@ -88,6 +85,4 @@ export function accountReasoningButton(account: Account): HTMLButtonElement {
       await api(`/accounts/${encodeURIComponent(account.id)}`, { method: "PATCH", body: JSON.stringify({ model_reasoning: next }) });
       await refreshAll(); emit("models-updated"); toast("已保存账号模型能力");
     } catch (error) { toast((error as Error).message, true); }
-  });
-  return button;
 }

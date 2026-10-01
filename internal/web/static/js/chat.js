@@ -3,7 +3,7 @@
 "use strict";
 import { actionButton, buttonLabel } from "./icons.js";
 import { S, bus } from "./state.js";
-import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast } from "./util.js";
+import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
 import { chip, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon, answerSources } from "./chat-render.js";
@@ -482,7 +482,7 @@ export function setChatStatus(state, error) {
 }
 /* 占位提示：窄屏一行放不下长文案，且键盘快捷键提示在手机上无意义 */
 function updateChatPlaceholder() {
-    $("chat-input").placeholder = isMobile()
+    $("chat-input").placeholder = isMobile() || enterInsertsNewline()
         ? "向 Agent 下达任务…"
         : "随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）";
 }
@@ -677,11 +677,11 @@ function currentReasoning() {
 }
 function effortOpts() {
     const r = currentReasoning();
-    const opts = [{ v: "", l: "跟随 CLI 默认", sub: "沿用 CLI 配置或线程设置，不等于关闭推理" }];
+    const opts = [{ v: "", l: "默认强度", sub: "沿用模型和客户端的默认设置，不等于关闭推理" }];
     if (r.support === "unsupported" || (r.support === "unknown" && !manualEffort))
         return opts;
     const levels = r.support === "supported" ? r.levels || [] : allowedLevels(pickStyle(), r.control);
-    return [...opts, ...levels.map(v => ({ v, l: EFFORT_LABELS[v] || v, sub: r.control === "budget" ? `预算上限 ${BUDGETS[v].toLocaleString()} tokens` : v }))];
+    return [...opts, ...levels.map(v => ({ v, l: EFFORT_LABELS[v] || v, sub: r.control === "budget" ? `预算上限 ${BUDGETS[v].toLocaleString("en-US")} tokens` : v }))];
 }
 async function refreshModelCapabilities() {
     const id = S.current?.id, epoch = chatEpoch;
@@ -711,7 +711,7 @@ async function refreshModelCapabilities() {
         if (S.pick.effort && !(next.support === "unknown" && previous.control === next.control && manualEffort) && !canKeepEffort(previous, next, S.pick.effort)) {
             S.pick.effort = "";
             manualEffort = false;
-            toast("模型能力已变化，已恢复为跟随 CLI 默认");
+            toast("模型能力已变化，已恢复为默认强度");
         }
         savePick();
         renderPickPill();
@@ -798,7 +798,7 @@ function choose(kind, v) {
         S.pick.model = v || workspaceModel();
         if (!canKeepEffort(before, currentReasoning(), S.pick.effort)) {
             S.pick.effort = "";
-            toast("新模型的支持范围不同，已恢复为跟随 CLI 默认");
+            toast("新模型的支持范围不同，已恢复为默认强度");
         }
         manualEffort = false;
     }
@@ -898,7 +898,7 @@ function pickRow(label, value, kind) {
     const l = document.createElement("span");
     buttonLabel(l, label, kind === "model" ? "cpu" : "sliders");
     const r = document.createElement("span");
-    r.className = "val mono";
+    r.className = "val";
     r.textContent = value + " ›";
     b.append(l, r);
     if (isMobile()) {
@@ -930,7 +930,7 @@ function buildPickSub(kind) {
     const menu = $("pick-menu");
     menu.replaceChildren();
     const h = document.createElement("button");
-    h.className = "pick-back mono";
+    h.className = "pick-back";
     buttonLabel(h, kind === "model" ? "模型" : effortTitle(), "chevron-left");
     h.addEventListener("click", (e) => { e.stopPropagation(); buildPickMain(); });
     menu.append(h, ...optList(kind));
@@ -1213,7 +1213,7 @@ export function initChat() {
             sendChat();
     }, { signal: lifetime.signal });
     $("chat-input").addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
+        if (e.key === "Enter" && !e.shiftKey && !isImeEnter(e) && !enterInsertsNewline()) {
             e.preventDefault();
             sendChat();
         }

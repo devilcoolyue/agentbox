@@ -5,7 +5,6 @@
 .browser-lifecycle { padding-right:10px; border-right:1px solid var(--line); }
 :root #tab-browser .btn.browser-tool { --action-size:36px; --action-inset:0px; border-radius:8px; }
 :root #tab-browser .btn.browser-tool::before { border-radius:8px; }
-:root #browser-start { color:var(--amber); }
 :root #browser-stop:hover:not(:disabled) { color:var(--red); }
 .browser-address { min-width:0; display:flex; align-items:center; gap:8px; margin:0; padding:2px 3px 2px 12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); transition:border-color 140ms ease,box-shadow 140ms ease; }
 .browser-address:focus-within { border-color:var(--amber-dim); box-shadow:0 0 0 2px color-mix(in srgb,var(--amber) 10%,transparent); }
@@ -33,6 +32,7 @@
 #browser-empty { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:20px; pointer-events:none; }
 #browser-empty h3 { color:var(--text-hi); margin:0 0 12px; font-size:18px; font-weight:500; }
 #browser-empty p { color:var(--muted); font-size:13px; line-height:1.8; margin:4px 0; }
+#browser-launch { pointer-events:auto; margin:14px 0 6px; }
 .browser-clipboard { flex:none; padding:8px 12px; border-top:1px solid var(--line); }
 .browser-clipboard summary { font-size:12px; color:var(--muted); cursor:pointer; }
 .browser-clipboard>div { display:flex; gap:8px; margin-top:8px; align-items:center; }

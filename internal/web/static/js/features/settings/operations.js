@@ -1,5 +1,5 @@
 import { S } from "../../state.js";
-import { $, toast, fmtUptime, fmtBytes, fmtTime } from "../../util.js";
+import { $, toast, fmtUptime, fmtBytes, fmtTime, fmtDateTime } from "../../util.js";
 import { api } from "../../api.js";
 import { agentIcon, agentName } from "../../brand.js";
 import { setTip } from "../../tip.js";
@@ -39,7 +39,7 @@ export async function loadSystem() {
     add("用户", sys.users + " 个（含管理员）");
     add("数据目录", sys.data_dir);
     add("配置文件", sys.config_path);
-    add("运行时长", fmtUptime(Date.now() - sys.started_at) + "（自 " + new Date(sys.started_at).toLocaleString() + "）");
+    add("运行时长", fmtUptime(Date.now() - sys.started_at) + "（自 " + fmtDateTime(sys.started_at) + "）");
 }
 /* ---------------- 运维监控 ---------------- */
 const monitor = new Poller();
@@ -110,12 +110,13 @@ function renderMonitorTiles(m) {
         monTile("后端 CPU", cpu(p.cpu_percent), "已运行 " + fmtUptime(p.uptime_ms), cpuPct(p.cpu_percent)),
         monTile("后端内存", fmtBytes(p.rss), "Go 堆 " + fmtBytes(p.heap_alloc) + " · " + p.goroutines + " 协程"),
         monTile("主机 CPU", cpu(h.cpu_percent), h.cpu_count + " 核 · 负载 " + h.load1.toFixed(2), cpuPct(h.cpu_percent)),
-        monTile("主机内存", fmtBytes(h.mem_used) + " / " + fmtBytes(h.mem_total), memPct.toFixed(0) + "% 已用", memPct),
+        // 主数字只放已用量，总量进副标题：「17 GB / 30 GB」在 1440 宽度下会折成两行
+        monTile("主机内存", fmtBytes(h.mem_used), `共 ${fmtBytes(h.mem_total)} · ${memPct.toFixed(0)}% 已用`, memPct),
     ];
     // 数据盘写满会连带拖垮 SQLite 与所有会话，水位单独给一格（读不到则不显示）。
     if (h.disk_total) {
         const hint = diskPct >= 90 ? "数据盘将满，尽快清理" : "数据目录所在磁盘";
-        tiles.push(monTile("磁盘水位", fmtBytes(h.disk_used) + " / " + fmtBytes(h.disk_total), diskPct.toFixed(0) + "% 已用 · " + hint, diskPct));
+        tiles.push(monTile("磁盘水位", fmtBytes(h.disk_used), `共 ${fmtBytes(h.disk_total)} · ${diskPct.toFixed(0)}% 已用 · ${hint}`, diskPct));
     }
     tiles.push(monTile("运行容器", su.running + " / " + su.total, "个工作空间容器在运行"), monTile("容器合计", cpu(su.cpu_percent), "内存 " + fmtBytes(su.mem_usage)));
     box.replaceChildren(...tiles);

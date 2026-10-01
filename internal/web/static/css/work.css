@@ -29,10 +29,42 @@
   border: 1px solid color-mix(in srgb, var(--brand) 26%, transparent);
   font-size: 12px; color: var(--text);
 }
+.home-intro { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 @media (max-width: 760px) {
   .mascot-empty { width: 136px; }
   .empty-title { font-size: 24px; }
   .empty-sub { font-size: 12.5px; }
+}
+
+/* ---- 首页：最近的工作空间 ---- */
+.empty.has-recent { justify-content: flex-start; align-items: stretch; text-align: left; overflow-y: auto; padding: 28px 32px; }
+.home-recent { width: 100%; max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.home-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.home-title { margin: 0; font-size: 20px; font-weight: 600; color: var(--text); text-wrap: balance; }
+.home-sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.home-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.home-card {
+  display: flex; align-items: flex-start; gap: 12px; min-width: 0;
+  padding: 14px 16px; text-align: left;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.home-card:hover { border-color: color-mix(in srgb, var(--muted) 55%, var(--line)); background: color-mix(in srgb, var(--panel-2) 45%, var(--panel)); }
+.home-card .agent-avatar { margin-top: 1px; }
+.home-card .agent-avatar .led { border-color: var(--panel); }
+.home-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.home-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.home-card-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-card-meta { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-card-last { display: flex; gap: 8px; min-width: 0; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.home-card-title { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-card-when { flex: none; color: var(--muted); }
+.home-card-spend { font-size: 12px; color: var(--muted); min-height: 1.6em; }
+.home-card-spend .num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text); }
+@media (max-width: 760px) {
+  .empty.has-recent { padding: 16px; }
+  .home-head .btn { width: 100%; }
 }
 
 /* ---- 工作台 ---- */
@@ -53,8 +85,21 @@
   margin: 0; font-size: 16px; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.wb-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.wb-actions { display: flex; gap: 8px; flex: none; }
+.wb-meta { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.wb-meta .mono { font-size: 11.5px; }
+.wb-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+
+/* 运行状态胶囊：工作台头部、首页最近空间共用。运行中=绿，休眠=警告黄，已停止=灰 */
+.state-pill {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  height: 24px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px; line-height: 1; color: var(--muted); white-space: nowrap;
+}
+.state-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.state-pill.run { color: var(--green); border-color: var(--green-line); background: color-mix(in srgb, var(--green) 8%, transparent); }
+.state-pill.idle { color: var(--warn); border-color: var(--warn-line); }
+.state-pill:empty { display: none; }
 
 .tabs {
   display: flex; gap: 2px;
@@ -67,7 +112,7 @@
   color: var(--muted);
   padding: 10px 14px;
   border-bottom: 2px solid transparent;
-  font-family: var(--mono); font-size: 13px; letter-spacing: 0.08em;
+  font-size: 13px; letter-spacing: 0.02em; /* 中文标签用正文字体：等宽字体里没有中文字形 */
 }
 .tab-ic { flex: none; opacity: 0.75; transition: opacity 0.15s; }
 .tab:hover { color: var(--text); }
@@ -113,7 +158,7 @@
   animation: rot 0.8s linear infinite;
 }
 .wb-busy-text {
-  font-family: var(--mono); font-size: 13px; letter-spacing: 0.16em;
+  font-size: 14px; letter-spacing: 0.06em;
   color: var(--busy);
 }
 /* 尾随省略号：steps 逐帧点出 . .. …，配合转圈让文字也有动静 */
@@ -129,11 +174,18 @@
   .wb-busy-dots::after { animation: none; content: "…"; }
 }
 
-/* ---- 窄屏：头部并入顶栏（状态灯+会话名+⋯菜单），标签等宽三段 ---- */
+/* ---- 窄屏：头部并入顶栏（状态灯+会话名+⋯菜单）；七个标签挤不下文字，
+ * 只显示图标，当前标签再带上名称。未选中标签的名称仍留给读屏。 ---- */
 @media (max-width: 760px) {
   .wb-head { display: none; }
   .tabs { padding: 0; gap: 0; }
-  .tab { flex: 1; padding: 0; height: 44px; }
+  .tab { flex: 1 1 0; min-width: 0; padding: 0; height: 44px; }
+  .tab:not(.active) .t {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+  }
+  .tab.active { flex: 0 0 auto; padding: 0 12px; }
+  .tab-ic { opacity: 0.85; }
 }
 
 /* ---- 变更（Git 审查）页 ---- */
@@ -188,14 +240,21 @@
 }
 .change-row:hover { background: var(--panel-2); }
 .change-row.active { background: var(--panel-2); outline: 1px solid var(--line); }
+/* 类型标签定宽，路径左边缘对齐；暂存状态是标签后面的小圆点（实心=已暂存，半实心=部分） */
 .change-badge {
-  flex-shrink: 0; font-size: 11px; padding: 1px 6px; border-radius: 5px;
+  flex-shrink: 0; min-width: 50px; text-align: center;
+  font-size: 11px; padding: 1px 6px; border-radius: 5px;
   border: 1px solid var(--line);
 }
-.change-badge.k-add { color: #3fb950; border-color: color-mix(in srgb, #3fb950 45%, transparent); }
+.change-badge.k-add { color: var(--green); border-color: var(--green-line); }
+.change-badge.k-new { color: var(--green); border-style: dashed; border-color: var(--green-line); }
 .change-badge.k-del { color: var(--red); border-color: var(--red-line); }
-.change-badge.k-mod { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+.change-badge.k-mod { color: var(--warn); border-color: var(--warn-line); }
+.change-badge.k-conflict { color: var(--red); border-color: var(--red); font-weight: 600; }
 .change-badge.k-ren { color: var(--muted); }
+.change-staged { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.change-staged.full { background: var(--text); opacity: 0.7; }
+.change-staged.part { border: 1.5px solid var(--text); opacity: 0.7; background: linear-gradient(90deg, var(--text) 50%, transparent 50%); }
 .change-path {
   flex: 1; min-width: 0; font-size: 12.5px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -245,7 +304,7 @@
 .skill-row:hover { background: var(--panel-2); }
 .skill-row.active { background: var(--panel-2); outline: 1px solid var(--line); }
 .skill-row.is-dir, .skill-row.is-file { padding-top: 4px; padding-bottom: 4px; }
-.skill-row.is-dir .skill-name { color: var(--amber); }
+.skill-row.is-dir .skill-name { color: var(--text); font-weight: 600; }
 .skill-main { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .skill-name {
   font-size: 13px; min-width: 0;
@@ -256,15 +315,15 @@
   flex: none; width: 14px; text-align: center; color: var(--muted);
   user-select: none; transition: transform 0.15s ease, color 0.15s ease;
 }
-.skill-arrow:hover { color: var(--amber); }
-.skill-arrow.open { transform: rotate(90deg); color: var(--amber); }
+.skill-arrow:hover { color: var(--text); }
+.skill-arrow.open { transform: rotate(90deg); color: var(--text); }
 /* 展开加载中：箭头原地换成小转圈 */
 .skill-arrow.busy {
   transform: none; cursor: progress;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .skill-arrow .spin { width: 9px; height: 9px; border-width: 2px; }
-.skill-glyph { flex: none; width: 14px; text-align: center; color: var(--muted); font-size: 12px; }
+.skill-glyph { flex: none; width: 14px; display: inline-flex; justify-content: center; color: var(--muted); }
 .skill-size { flex: none; margin-left: auto; color: var(--muted); font-size: 11px; }
 .skill-flag {
   flex: none; font-size: 10px; padding: 0 4px; border-radius: 4px;
@@ -277,7 +336,7 @@
   border: 1px solid var(--line); color: var(--muted);
 }
 .skill-badge.s-template { color: #6ea8fe; border-color: color-mix(in srgb, #6ea8fe 45%, transparent); }
-.skill-badge.s-global { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+.skill-badge.s-global { color: var(--text); border-color: var(--muted); }
 .skill-desc {
   margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.45;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -290,7 +349,7 @@
   background: none; border: none; cursor: pointer;
   color: var(--muted); font-size: 12px;
 }
-.skill-back:hover { color: var(--amber); }
+.skill-back:hover { color: var(--text); }
 .skill-title { margin: 0; font-size: 15px; }
 .skill-head-desc { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
 .skill-meta { margin: 6px 0 0; color: var(--muted); font-size: 12px; }

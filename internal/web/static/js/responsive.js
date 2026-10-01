@@ -5,7 +5,8 @@ import { actionButton, decorateIcons } from "./icons.js";
 import { enhanceSelects, setSelectValue } from "./select.js";
 const mobile = matchMedia("(max-width: 760px)");
 const byId = (id) => document.getElementById(id);
-function overflow(host, id, nodes, title) {
+/* always=true：桌面端也收起（一行超过三个操作时，次要与破坏性动作统一进 ⋯）。 */
+function overflow(host, id, nodes, title, always = false) {
     const anchors = nodes.map(node => {
         const anchor = document.createComment("responsive action");
         node.before(anchor);
@@ -14,7 +15,7 @@ function overflow(host, id, nodes, title) {
     const trigger = actionButton(document.createElement("button"), "", "more", title);
     trigger.id = id;
     trigger.type = "button";
-    trigger.className = "btn btn-sm mobile-only overflow-trigger";
+    trigger.className = "btn btn-sm overflow-trigger" + (always ? "" : " mobile-only");
     trigger.setAttribute("aria-expanded", "false");
     const panel = document.createElement("div");
     panel.id = id + "-panel";
@@ -50,7 +51,7 @@ function overflow(host, id, nodes, title) {
     });
     const sync = () => {
         close();
-        nodes.forEach((node, index) => mobile.matches ? panel.append(node) : anchors[index].after(node));
+        nodes.forEach((node, index) => always || mobile.matches ? panel.append(node) : anchors[index].after(node));
     };
     mobile.addEventListener("change", sync);
     window.addEventListener("resize", close);
@@ -59,7 +60,7 @@ function overflow(host, id, nodes, title) {
     sync();
 }
 overflow(document.querySelector(".fv-actions"), "fv-more", ["fv-auto-wrap", "fv-newtab", "fv-download", "fv-meta"].map(byId), "文件更多操作");
-overflow(document.querySelector(".changes-actions"), "changes-more", ["btn-changes-clone", "btn-changes-profile", "btn-changes-discard-all"].map(byId), "仓库更多操作");
+overflow(document.querySelector(".changes-actions"), "changes-more", ["btn-changes-clone", "btn-changes-profile", "btn-changes-discard-all"].map(byId), "仓库更多操作", true);
 // The same navigation buttons drive both desktop and mobile. Their labels also
 // carry live counts, avoiding a second list that can drift as accounts change.
 const picker = byId("mobile-section-select");
@@ -95,14 +96,15 @@ function compactIntros(root) {
         const copy = intro.querySelector(":scope > p");
         if (!heading || !copy)
             continue;
+        // 窄屏默认收起，把首屏留给列表；实现细节的「了解更多」也一起收进来
         const details = document.createElement("details");
         details.className = "section-help";
         details.open = !mobile.matches;
         const summary = document.createElement("summary");
         summary.textContent = "说明";
         summary.setAttribute("aria-label", heading.textContent + "说明");
-        intro.append(details);
-        details.append(summary, copy);
+        heading.after(details); // 紧跟标题
+        details.append(summary, copy, ...intro.querySelectorAll(":scope > .learn-more"));
         intro.classList.add("compact-intro");
     }
 }

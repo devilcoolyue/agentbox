@@ -37,7 +37,8 @@ func (s *Server) filesRootForScope(scope string, sess store.Session) (string, er
 
 // handleUpload accepts a multipart "file" field. Archives (.zip/.tar.gz/.tgz/
 // .tar) are extracted into the target directory; anything else is stored as a
-// single file at its root. "clear=1" empties the target directory first.
+// single file in it. The target is the scope root, or "?path=" below it (the
+// directory the user is browsing). "clear=1" empties only that target first.
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	maxBytes := s.cfg.GetMaxUploadMB() << 20
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+(1<<20))
@@ -57,7 +58,15 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sess store
 		writeFileOpErr(w, err)
 		return
 	}
-	root, err := s.openDataDir(ws)
+	area, err := s.openDataDir(ws)
+	if err != nil {
+		writeFileOpErr(w, err)
+		return
+	}
+	defer area.Close()
+	// Sub pins each path component, so a directory swapped for a symlink
+	// can't redirect the merge (or the clear) outside the scope root.
+	root, err := area.Sub(r.URL.Query().Get("path"))
 	if err != nil {
 		writeFileOpErr(w, err)
 		return

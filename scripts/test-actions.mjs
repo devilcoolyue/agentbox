@@ -13,7 +13,9 @@ export async function assertActionIcons(page, root = 'body') {
       const problems = [];
       if (icons.length !== 1 || !icons[0]?.querySelector('path[d]')) problems.push(`${name}: missing or duplicate icon`);
       if (!button.textContent.trim() && (!button.getAttribute('aria-label') || !button.dataset.tip)) problems.push(`${name}: missing accessible name or tooltip`);
-      if (button.matches('.action-icon, .action-tools > .action-control') && button.getClientRects().length) {
+      // Same rule as actions.css: inside tool groups only plain actions become icons;
+      // primary, destructive and .keep-label actions keep their words.
+      if (button.matches('.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)') && button.getClientRects().length) {
         if (button.innerText.trim()) problems.push(`${name}: action text is visible`);
         if (!button.getAttribute('aria-label') || !button.dataset.tip) problems.push(`${name}: icon action has no name or tooltip`);
         const bounds = button.getBoundingClientRect(), icon = icons[0]?.getBoundingClientRect();
@@ -30,11 +32,14 @@ export async function fileActionSmoke(page) {
     await page.setViewportSize({width, height:900});
     for (const [scope, label] of [['ws', '空间文件'], ['shared', '共享目录']]) {
       await page.locator('#scope-' + scope).click();
-      for (const id of ['mkdir', 'upload', 'download']) {
-        assert.equal(await page.locator('#btn-' + id).innerText(), '');
+      for (const id of ['mkdir', 'upload', 'download', 'files-more']) {
+        // Upload is the page's primary action and keeps its label; the rest are icons.
+        assert.equal(await page.locator('#btn-' + id).innerText(), id === 'upload' ? '上传' : '');
         assert.ok(await page.locator('#btn-' + id).getAttribute('aria-label'));
         if (width <= 760) assert.ok((await page.locator('#btn-' + id).boundingBox()).height >= 44);
       }
+      // No standing "clear before upload" switch: clearing is a one-off menu action.
+      assert.equal(await page.locator('#upload-clear').count(), 0);
       assert.match(await page.locator('#btn-download').getAttribute('data-tip'), new RegExp(label + '.*ZIP'));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await assertActionIcons(page);
@@ -46,6 +51,6 @@ export async function fileActionSmoke(page) {
   await page.locator('#tip.show').filter({hasText:'下载全部空间文件（ZIP）'}).waitFor();
   await page.keyboard.press('Escape');
   await page.locator('#btn-upload').focus();
-  await page.locator('#tip.show').filter({hasText:'上传代码包并解压到空间文件'}).waitFor();
+  await page.locator('#tip.show').filter({hasText:'上传文件或代码包到当前目录'}).waitFor();
   await page.keyboard.press('Escape');
 }

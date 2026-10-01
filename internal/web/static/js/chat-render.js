@@ -69,7 +69,7 @@ export function toolChip(name, summary, htmlPath = "") {
 /* 上下文分割线：divider 之前的消息不再带入后续对话 */
 export function divider(label) {
     const d = document.createElement("div");
-    d.className = "chat-divider mono";
+    d.className = "chat-divider";
     const s = document.createElement("span");
     s.textContent = label || "新对话";
     d.appendChild(s);
@@ -609,9 +609,7 @@ const RATE_LIMIT_LABEL = {
 function resetsAt(sec) {
     if (!sec)
         return "";
-    const d = new Date(sec * 1000);
-    const p = (n) => String(n).padStart(2, "0");
-    return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())} 重置`;
+    return `${fmtTime(sec * 1000)} 重置`;
 }
 /* 限流事件：allowed=正常不展示，allowed_warning=接近上限（黄），rejected=已被拦（红） */
 function rateLimitChip(info) {
@@ -703,7 +701,7 @@ export function renderEvent(ev) {
         return out;
     if (ev.type === "turn.completed") {
         const u = ev.usage || {};
-        const tokens = u.input_tokens ? ` · ${u.input_tokens}↑ ${u.output_tokens || 0}↓` : "";
+        const tokens = u.input_tokens ? ` · 入 ${u.input_tokens} · 出 ${u.output_tokens || 0} tokens` : "";
         out.push(chip("✓ 回合完成" + tokens, "result"));
         return out;
     }

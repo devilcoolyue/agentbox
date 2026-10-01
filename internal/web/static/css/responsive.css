@@ -34,6 +34,9 @@
 .changes-empty .changes-view { display: none; }
 .changes-empty .changes-list { flex: 1; width: auto; border: 0; max-height: none; }
 .changes-empty .changes-list > .btn { margin: 0 12px 16px; }
+/* ⋯ 排在主操作「提交」之前，提交始终在最右 */
+.changes-actions #changes-more { order: 1; }
+.changes-actions #btn-changes-commit { order: 2; }
 .changes-actions .btn:not(.btn-primary):not(.btn-danger),
 .fv-actions > .btn:not(.btn-primary), .skills-actions .btn:not(.btn-primary) {
   background: transparent; border-color: transparent;
@@ -52,23 +55,25 @@
   #set-nav, #git-nav { display: none; }
   .set-body { padding: 12px 16px 0; min-height: 0; }
   .set-content { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
-  .sec-intro { align-items: flex-start; flex-wrap: nowrap; gap: 8px; }
+  /* 窄屏把内容区让给列表：分区说明收进「说明」，展开后占满整行（标题由顶栏的分区下拉代替） */
+  .sec-intro { align-items: flex-start; flex-wrap: wrap; gap: 8px; }
   .sec-intro > .compact-intro { flex: 1; min-width: 0; }
+  .compact-intro:has(.section-help[open]) { flex-basis: 100%; order: 2; }
   .compact-intro > h2 { display: none; }
   .section-help > summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; gap: 6px; }
   .section-help > summary::before { content: '?'; display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid var(--line); border-radius: 50%; font: 11px var(--mono); }
   .section-help > summary::-webkit-details-marker { display: none; }
-  .section-help:not([open]) > p { display: none; }
-  .section-help[open] > p { padding: 4px 0 12px; line-height: 1.6; }
-  .sec-intro .sec-actions { justify-content: flex-end; gap: 4px; }
+  .section-help:not([open]) > :not(summary) { display: none; }
+  .section-help[open] > p { padding: 4px 0 8px; line-height: 1.6; }
+  .sec-intro .sec-actions { justify-content: flex-end; gap: 4px; margin-left: auto; }
   .set-section { gap: 12px; }
   .acct-row { padding: 12px; gap: 8px; }
   .acct-id { gap: 8px; flex-wrap: wrap; }
   .acct-slug { font-size: 11px; }
   .acct-state { gap: 6px 12px; line-height: 1.6; }
   .acct-actions { flex-wrap: nowrap; gap: 4px; padding-top: 6px; border-top: 1px solid var(--line-soft); }
-  .acct-actions .btn { background: transparent; border-color: transparent; }
-  .acct-actions .btn-danger { margin-left: auto; }
+  .acct-actions .btn:not(.btn-primary) { background: transparent; border-color: transparent; }
+  .acct-actions .more-btn { margin-left: auto; }
   .card { padding: 14px; }
 
   /* Actions are compact only inside explicit tool groups (actions.css). */
@@ -111,8 +116,8 @@
   .files-bar, .skills-bar { padding: 8px 12px; gap: 8px; }
   .files-actions { gap: 4px; }
   .file-act { width: 44px; height: 44px; }
-  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) 48px 136px; gap: 4px; padding-inline: 0; }
-  .file-row .factions { min-width: 136px; }
+  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px; padding-inline: 0; }
+  .file-row .factions { min-width: 0; }
   .file-row .fname { padding-left: min(calc(var(--depth, 0) * 12px), 48px); gap: 4px; }
   .file-row { font-size: 12px; }
   .files-list { padding-inline: 12px; }
@@ -141,9 +146,9 @@
 }
 @container (max-width: 560px) {
   .acct-actions { gap: 4px; }
-  .acct-actions .btn { width: 44px; height: 44px; padding: 0; background: transparent; border-color: transparent; }
-  .acct-actions .action-label { display: none; }
-  .acct-actions .btn-danger { margin-left: auto; }
+  .acct-actions .btn { min-height: 44px; }
+  .acct-actions .btn:not(.btn-primary) { background: transparent; border-color: transparent; }
+  .acct-actions .more-btn { margin-left: auto; }
   .model-row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
   .model-row .m-label { grid-column: 1; grid-row: 1; }
   .model-row .m-id { grid-column: 1; grid-row: 2; }

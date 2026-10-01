@@ -1,6 +1,8 @@
 import { initImageUpdates, fillImageUpdateSettings, startImageUpdates, stopImageUpdates } from "./features/settings/image-updates.js";
 import { loadSystem, startMonitor, stopMonitor } from "./features/settings/operations.js";
 import { settingsState } from "./features/settings/state.js";
+import { bindSaveBar, confirmDiscard, defineGroups, dirtyGroups, holdDirty, rebaseline, saveDirty } from "./features/settings/savebar.js";
+import type { SettingsPatch } from "./features/settings/savebar.js";
 /* settings：系统设置视图 —— 账号池维护（含 OAuth / API Key 登录弹窗）、
  * 容器与资源、模型管理、安全与访问、关于。 */
 "use strict";
@@ -24,8 +26,9 @@ import { loadProxies, mountProxyPicker, openProxiesSection, refreshProxyCount } 
 import type { ProxyPicker } from "./proxies.js";
 import { openPricingSection, refreshPriceCount } from "./pricing.js";
 import { setTip } from "./tip.js";
-import { accountReasoningButton, editReasoning, reasoningLabel } from "./reasoning-editor.js";
-import { accountAccessButton } from "./account-access.js";
+import { editAccountReasoning, editReasoning, reasoningLabel } from "./reasoning-editor.js";
+import { accessLabel, editAccountAccess } from "./account-access.js";
+import { moreButton } from "./menu.js";
 
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
@@ -46,7 +49,10 @@ export async function openSettingsView() {
   if (S.sec !== "proxies") refreshProxyCount();
   try {
     settingsState.value = await api<Settings>("/settings");
+    // 离开设置页时没保存的改动还留在表单里：回来时接着显示保存条，不用服务端的值盖掉
+    const restore = holdDirty();
     fillSettingsForms();
+    restore();
   } catch (e) {
     toast("读取设置失败：" + (e as Error).message, true);
   }
@@ -150,27 +156,25 @@ function acctRow(a: Account) {
   setTip(px, a.proxy_id ? "该账号的请求经此代理出网" : "该账号的请求从服务器自身 IP 发出");
   state.appendChild(px);
 
+  // 行内只露两个带字的常用动作，其余收进 ⋯，删除放最后。
   const acts = document.createElement("div");
-  acts.className = "acct-actions action-tools";
+  acts.className = "acct-actions";
   const auth = document.createElement("button");
   const needAuth = a.cred_status !== "ok";
-  auth.className = "btn btn-sm" + (needAuth ? " btn-primary" : "");
-  actionButton(auth, "认证", "shield", needAuth ? "认证账号" : "管理认证");
+  auth.className = "btn btn-sm" + (needAuth ? " btn-primary" : " btn-ghost");
+  actionButton(auth, "认证", "key", needAuth ? "认证账号：登录订阅或填写 API Key" : "管理认证：重新登录或更换 API Key");
   auth.addEventListener("click", () => openAuthDlg(a));
   const edit = document.createElement("button");
   edit.className = "btn btn-sm btn-ghost";
-  actionButton(edit, "", "edit", "编辑账号");
+  actionButton(edit, "编辑", "edit", "编辑名称、环境变量与出口代理");
   edit.addEventListener("click", () => openAcctEdit(a));
-  const del = document.createElement("button");
-  del.className = "btn btn-sm btn-danger";
-  actionButton(del, "", "trash", "删除账号");
-  if (a.sessions > 0) {
-    del.disabled = true;
-    setTip(del, "有工作空间在用，请先删除对应工作空间");
-  } else {
-    del.addEventListener("click", () => openAcctDel(a));
-  }
-  acts.append(auth, edit, accountAccessButton(a), accountReasoningButton(a), del);
+  const more = moreButton(() => [
+    { label: "使用范围 · " + accessLabel(a), icon: "users", run: () => editAccountAccess(a) },
+    { label: "模型能力", icon: "sliders", run: () => editAccountReasoning(a), tip: "为这个账号覆盖模型的推理强度能力" },
+    { label: "删除账号", icon: "trash", danger: true, sep: true, run: () => openAcctDel(a),
+      disabled: a.sessions > 0, tip: a.sessions > 0 ? "有工作空间在用，请先删除对应工作空间" : undefined },
+  ], `${a.label} 的更多操作`);
+  acts.append(auth, edit, more);
 
   row.append(idBox, state, acts);
   return row;
@@ -443,15 +447,19 @@ function fillSettingsForms() {
   setSelectValue($<HTMLSelectElement>("set-tips-anim"), tips.animation || "scroll");
   renderModels();
   refreshPriceCount();
+  rebaseline();
 }
 
 export async function putSettings(
-  patch: Partial<Settings> & { expected_agent_image?: string }, btn: HTMLButtonElement | null, okMsg?: string,
+  patch: SettingsPatch, btn: HTMLButtonElement | null, okMsg?: string, keepDirty = true,
 ) {
   if (btn) btnBusy(btn, "保存中…");
   try {
     settingsState.value = await api<Settings>("/settings", { method: "PUT", body: JSON.stringify(patch) });
+    // 即时保存（模型列表等）只提交了自己的字段，其余卡片里没保存的改动重填后放回去
+    const restore = keepDirty ? holdDirty() : null;
     fillSettingsForms();
+    restore?.();
     if (settingsState.value.models) { S.models = settingsState.value.models; emit("models-updated"); } // 对话框的模型菜单同步更新
     if (settingsState.value.terminal_tips) { // 终端顶栏轮播实时刷新
       S.termTips = settingsState.value.terminal_tips;
@@ -597,7 +605,7 @@ function userRow(u: User) {
   const quota = quotaChip(u.quota);
 
   const acts = document.createElement("div");
-  acts.className = "u-actions action-tools";
+  acts.className = "u-actions"; // 只有三个动作：全部带字，删除放最后
   const credit = document.createElement("button");
   credit.className = "btn btn-sm btn-ghost";
   actionButton(credit, "额度", "wallet", "查看和管理用户额度");
@@ -627,8 +635,8 @@ function userRow(u: User) {
   acts.appendChild(pw);
   if (u.role !== "admin") {
     const del = document.createElement("button");
-    del.className = "btn btn-sm btn-danger";
-    actionButton(del, "", "trash", "删除用户");
+    del.className = "btn btn-sm btn-ghost btn-danger";
+    actionButton(del, "删除", "trash", "删除用户及其全部工作空间");
     del.addEventListener("click", async () => {
       const ok = await askConfirm("删除用户「" + u.name + "」？", {
         title: "删除用户",
@@ -658,16 +666,88 @@ function userRow(u: User) {
 
 
 
+/* ---------------- 统一保存条：各卡片的配置项分组登记 ---------------- */
+
+const inputVal = (id: string) => $<HTMLInputElement>(id).value;
+const valid = (...ids: string[]) => ids.every((id) => $<HTMLInputElement>(id).reportValidity());
+
+function initSaveBar(signal: AbortSignal) {
+  defineGroups([
+    { id: "container", label: "Agent 镜像与资源限制", fields: ["set-image", "set-mem", "set-cpus", "set-pids", "set-net"],
+      patch: () => ({
+        agent_image: inputVal("set-image").trim(),
+        expected_agent_image: settingsState.value?.agent_image,
+        container: {
+          memory_mb: Number(inputVal("set-mem")), cpus: Number(inputVal("set-cpus")),
+          pids_limit: Number(inputVal("set-pids")), network: $<HTMLSelectElement>("set-net").value,
+        },
+      }) },
+    { id: "image-updates", label: "客户端自动更新", fields: ["image-update-enabled", "image-update-channel", "image-update-time", "image-update-codex"],
+      patch: () => valid("image-update-time") ? {
+        image_updates: {
+          enabled: $<HTMLSelectElement>("image-update-enabled").value === "on",
+          channel: $<HTMLSelectElement>("image-update-channel").value as "stable" | "latest",
+          time: inputVal("image-update-time"),
+          update_codex: $<HTMLSelectElement>("image-update-codex").value === "on",
+        },
+      } : null },
+    { id: "resources", label: "容量与磁盘", fields: ["set-running", "set-user-running", "set-free-gib"],
+      patch: () => valid("set-running", "set-user-running", "set-free-gib") ? {
+        resources: {
+          max_running: Number(inputVal("set-running")), max_running_per_user: Number(inputVal("set-user-running")),
+          min_free_bytes: Math.round(Number(inputVal("set-free-gib")) * 1024 ** 3),
+        },
+      } : null },
+    { id: "idle", label: "空闲自动停机", fields: ["set-idle"],
+      patch: () => ({ idle_timeout_min: Number(inputVal("set-idle")) }) },
+    { id: "timezone", label: "界面时区", fields: ["set-timezone"],
+      patch: () => ({ timezone: $<HTMLSelectElement>("set-timezone").value }) },
+    { id: "tips", label: "终端提示语", fields: ["set-tips", "set-tips-interval", "set-tips-anim"],
+      patch: () => ({
+        terminal_tips: {
+          tips: $<HTMLTextAreaElement>("set-tips").value.split("\n").map((t) => t.trim()).filter(Boolean),
+          interval_sec: Number(inputVal("set-tips-interval")) || 0,
+          animation: $<HTMLSelectElement>("set-tips-anim").value,
+        },
+      }) },
+    { id: "security", label: "权限模式与上传监听", fields: ["set-perm", "set-upload", "set-listen"],
+      patch: () => ({
+        permission_mode: $<HTMLSelectElement>("set-perm").value,
+        max_upload_mb: Number(inputVal("set-upload")),
+        listen: inputVal("set-listen").trim(),
+      }),
+      done: (st) => { if (st.restart_required) toast("监听地址改动需重启 agentbox 服务后生效"); } },
+    { id: "tunnel", label: "内网隧道",
+      fields: ["set-tunnel-on", "set-tunnel-transparent", "set-network-bind", "set-network-image", "set-tunnel-bind", "set-tunnel-host"],
+      patch: () => ({
+        tunnel: {
+          enabled: $<HTMLInputElement>("set-tunnel-on").checked,
+          transparent: $<HTMLInputElement>("set-tunnel-transparent").checked,
+          network_bind: inputVal("set-network-bind").trim(),
+          network_image: inputVal("set-network-image").trim(),
+          proxy_bind: inputVal("set-tunnel-bind").trim(),
+          proxy_host: inputVal("set-tunnel-host").trim(),
+        },
+      }),
+      done: (st) => { if (st.tunnel_error) toast("隧道启动失败：" + st.tunnel_error, true); } },
+    { id: "bridge", label: "代理桥接地址", fields: ["set-bridge-bind", "set-bridge-host"],
+      patch: () => ({ proxy_bridge: { bind: inputVal("set-bridge-bind").trim(), host: inputVal("set-bridge-host").trim() } }),
+      done: () => openProxiesSection() }, // 重绑结果（成功/失败）由列表接口回报
+  ]);
+  bindSaveBar($("set-content"), signal, () => void saveDirty(async (patch, okMsg) =>
+    await putSettings(patch, $<HTMLButtonElement>("set-save"), okMsg, false) ? settingsState.value : null,
+  ), () => { fillSettingsForms(); toast("已放弃未保存的修改"); });
+  bus.addEventListener("view-changed", () => {
+    if (S.view !== "settings" && dirtyGroups().length) toast("系统设置里有未保存的修改，回到设置页可继续保存");
+  }, { signal });
+}
+
 let disposeSettings: (() => void) | undefined;
 export function initSettings() {
  disposeSettings?.();
  const lifetime = new AbortController();
  initImageUpdates(lifetime.signal);
- $("btn-save-resources").addEventListener("click", () => {
-  const global = $<HTMLInputElement>("set-running"), user = $<HTMLInputElement>("set-user-running"), free = $<HTMLInputElement>("set-free-gib");
-  if (![global, user, free].every(x => x.reportValidity())) return;
-  void putSettings({ resources: { max_running: Number(global.value), max_running_per_user: Number(user.value), min_free_bytes: Math.round(Number(free.value) * 1024 ** 3) } }, $("btn-save-resources"));
- }, { signal: lifetime.signal });
+ initSaveBar(lifetime.signal);
  $("btn-diagnostics").addEventListener("click", async () => {
   try {
    const data = await api("/diagnostics");
@@ -687,9 +767,14 @@ export function initSettings() {
   try { await api("/cache/marketplace", {method: "DELETE"}); toast("缓存已清理"); } catch (e) { toast((e as Error).message, true); }
  }, { signal: lifetime.signal });
  bus.addEventListener("view-changed", () => { if (S.view !== "settings") { stopMonitor(); stopImageUpdates(); } }, { signal: lifetime.signal });
- $("set-nav").addEventListener("click", (e) => {
+ $("set-nav").addEventListener("click", async (e) => {
   const btn = (e.target as Element).closest<HTMLElement>("button[data-sec]");
-  if (btn) setSec(btn.dataset.sec!);
+  if (!btn) return;
+  if (btn.dataset.sec !== S.sec && !await confirmDiscard(fillSettingsForms)) {
+    emit("navigation-changed"); // 让窄屏分区下拉回到当前分区
+    return;
+  }
+  setSec(btn.dataset.sec!);
 }, { signal: lifetime.signal });
 bus.addEventListener("open-settings", openSettingsView, { signal: lifetime.signal });
 bus.addEventListener("data-updated", () => {
@@ -849,72 +934,6 @@ $("auth-clearkey").addEventListener("click", () => authAction("auth-clearkey", a
   void refreshAll();
 }), {signal: lifetime.signal});
 $("auth-close").addEventListener("click", () => { if (!authBusy) $<HTMLDialogElement>("dlg-auth").close(); }, { signal: lifetime.signal });
-$("btn-save-container").addEventListener("click", () => {
-  putSettings({
-    agent_image: $<HTMLInputElement>("set-image").value.trim(),
-    expected_agent_image: settingsState.value?.agent_image,
-    container: {
-      memory_mb: Number($<HTMLInputElement>("set-mem").value),
-      cpus: Number($<HTMLInputElement>("set-cpus").value),
-      pids_limit: Number($<HTMLInputElement>("set-pids").value),
-      network: $<HTMLSelectElement>("set-net").value,
-    },
-  }, $("btn-save-container"), "已保存，对新启动的容器生效");
-}, { signal: lifetime.signal });
-$("btn-save-idle").addEventListener("click", () => {
-  putSettings({
-    idle_timeout_min: Number($<HTMLInputElement>("set-idle").value),
-  }, $("btn-save-idle"), "空闲停机设置已保存并即时生效");
-}, { signal: lifetime.signal });
-$("btn-save-timezone").addEventListener("click", () => {
-  putSettings({
-    timezone: $<HTMLSelectElement>("set-timezone").value,
-  }, $("btn-save-timezone"), "界面时区已保存并即时生效");
-}, { signal: lifetime.signal });
-$("btn-save-tips").addEventListener("click", () => {
-  const tips = $<HTMLTextAreaElement>("set-tips").value.split("\n").map((t) => t.trim()).filter(Boolean);
-  putSettings({
-    terminal_tips: {
-      tips,
-      interval_sec: Number($<HTMLInputElement>("set-tips-interval").value) || 0,
-      animation: $<HTMLSelectElement>("set-tips-anim").value,
-    },
-  }, $("btn-save-tips"), "终端提示已保存并即时生效");
-}, { signal: lifetime.signal });
-$("btn-save-tunnel").addEventListener("click", async () => {
-  const ok = await putSettings({
-    tunnel: {
-      enabled: $<HTMLInputElement>("set-tunnel-on").checked,
- transparent: $<HTMLInputElement>("set-tunnel-transparent").checked,
- network_bind: $<HTMLInputElement>("set-network-bind").value.trim(),
- network_image: $<HTMLInputElement>("set-network-image").value.trim(),
-      proxy_bind: $<HTMLInputElement>("set-tunnel-bind").value.trim(),
-      proxy_host: $<HTMLInputElement>("set-tunnel-host").value.trim(),
-    },
-  }, $<HTMLButtonElement>("btn-save-tunnel"), "隧道设置已保存并生效");
-  if (ok && settingsState.value!.tunnel_error) {
-    toast("隧道启动失败：" + settingsState.value!.tunnel_error, true);
-  }
-}, { signal: lifetime.signal });
-$("btn-save-bridge").addEventListener("click", async () => {
-  const ok = await putSettings({
-    proxy_bridge: {
-      bind: $<HTMLInputElement>("set-bridge-bind").value.trim(),
-      host: $<HTMLInputElement>("set-bridge-host").value.trim(),
-    },
-  }, $<HTMLButtonElement>("btn-save-bridge"), "桥接地址已保存并重新绑定");
-  if (ok) openProxiesSection(); // 重绑结果（成功/失败）由列表接口回报
-}, { signal: lifetime.signal });
-$("btn-save-security").addEventListener("click", async () => {
-  const ok = await putSettings({
-    permission_mode: $<HTMLSelectElement>("set-perm").value,
-    max_upload_mb: Number($<HTMLInputElement>("set-upload").value),
-    listen: $<HTMLInputElement>("set-listen").value.trim(),
-  }, $<HTMLButtonElement>("btn-save-security"));
-  if (ok && settingsState.value!.restart_required) {
-    toast("已保存；监听地址改动需重启 agentbox 服务后生效");
-  }
-}, { signal: lifetime.signal });
 $("btn-user-add").addEventListener("click", async () => {
   const username = $<HTMLInputElement>("user-new-name").value.trim();
   const password = $<HTMLInputElement>("user-new-pass").value;

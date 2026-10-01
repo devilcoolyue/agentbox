@@ -1,6 +1,10 @@
 /* Standalone actions keep labels. Only explicit tool groups and familiar
- * unlabelled controls use compact icons, on both desktop and mobile. */
-:root .btn:is(.action-icon, .action-tools > .action-control) {
+ * unlabelled controls use compact icons, on both desktop and mobile.
+ * Inside a tool group the primary action (commit, install, save, add) and
+ * destructive actions keep their text: with every button reduced to an icon,
+ * "commit" was just an amber dot and "discard all" a red one. Use .keep-label
+ * for any other action that needs its words. */
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)) {
   --action-size: 32px;
   --action-inset: 0px;
   position: relative;
@@ -14,38 +18,40 @@
   color: var(--muted); line-height: 1;
   transform: none;
 }
-:root .btn:is(.action-icon, .action-tools > .action-control)::before {
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label))::before {
   content: ''; position: absolute; inset: var(--action-inset);
   border-radius: 7px; pointer-events: none;
   background: transparent; transition: background 140ms ease;
 }
-:root .btn:is(.action-icon, .action-tools > .action-control) > .action-label { display: none; }
-:root .btn:is(.action-icon, .action-tools > .action-control) > svg {
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)) > .action-label { display: none; }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)) > svg {
   position: relative; display: block;
   width: 16px; height: 16px; margin: 0; flex: none;
 }
-:root .btn:is(.action-icon, .action-tools > .action-control) > .spin { position: relative; margin: 0; }
-:root .btn:is(.action-icon, .action-tools > .action-control).btn-primary { color: var(--amber); }
-:root .btn:is(.action-icon, .action-tools > .action-control).btn-danger { color: var(--red); }
-:root .btn:is(.action-icon, .action-tools > .action-control):is(:hover, :focus-visible):not(:disabled) { color: var(--text); }
-:root .btn:is(.action-icon, .action-tools > .action-control):is(:hover, :focus-visible):not(:disabled)::before { background: var(--panel-2); }
-:root .btn:is(.action-icon, .action-tools > .action-control).btn-primary:is(:hover, :focus-visible):not(:disabled) { color: var(--amber); }
-:root .btn:is(.action-icon, .action-tools > .action-control).btn-primary:is(:hover, :focus-visible):not(:disabled)::before {
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)) > .spin { position: relative; margin: 0; }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)).btn-primary { color: var(--amber); }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)).btn-danger { color: var(--red); }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)):is(:hover, :focus-visible):not(:disabled) { color: var(--text); }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)):is(:hover, :focus-visible):not(:disabled)::before { background: var(--panel-2); }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)).btn-primary:is(:hover, :focus-visible):not(:disabled) { color: var(--amber); }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)).btn-primary:is(:hover, :focus-visible):not(:disabled)::before {
   background: color-mix(in srgb, var(--amber) 12%, transparent);
 }
-:root .btn:is(.action-icon, .action-tools > .action-control).btn-danger:is(:hover, :focus-visible):not(:disabled) { color: var(--red); }
-:root .btn:is(.action-icon, .action-tools > .action-control).btn-danger:is(:hover, :focus-visible):not(:disabled)::before {
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)).btn-danger:is(:hover, :focus-visible):not(:disabled) { color: var(--red); }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)).btn-danger:is(:hover, :focus-visible):not(:disabled)::before {
   background: color-mix(in srgb, var(--red) 10%, transparent);
 }
-:root .btn:is(.action-icon, .action-tools > .action-control):active:not(:disabled)::before { background: color-mix(in srgb, var(--muted) 22%, transparent); }
-:root .btn:is(.action-icon, .action-tools > .action-control).loading .spin { border-color: var(--amber-dim); border-top-color: var(--amber); }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)):active:not(:disabled)::before { background: color-mix(in srgb, var(--muted) 22%, transparent); }
+:root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)).loading .spin { border-color: var(--amber-dim); border-top-color: var(--amber); }
 .acct-actions { gap: 4px; }
 @media (max-width: 760px), (pointer: coarse) {
   /* Keep touch targets generous while the visible hover surface stays 32px. */
-  :root .btn:is(.action-icon, .action-tools > .action-control) { --action-size: 44px; --action-inset: 6px; }
+  :root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)) { --action-size: 44px; --action-inset: 6px; }
+  /* 留着文字的主操作 / 危险操作同样给足触控高度 */
+  :root .action-tools > .btn.action-control:is(.btn-primary, .btn-danger, .keep-label) { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  :root .btn:is(.action-icon, .action-tools > .action-control)::before { transition: none; }
+  :root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label))::before { transition: none; }
 }
 
 /* Labelled actions keep compact padding without losing their descriptions. */

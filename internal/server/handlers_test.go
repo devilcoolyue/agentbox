@@ -265,3 +265,55 @@ func TestHandleRenameSession(t *testing.T) {
 		t.Fatalf("name changed by a rejected rename: %q", got.Name)
 	}
 }
+
+func TestHandleUploadIntoBrowsedDirectory(t *testing.T) {
+	s, sess := newTestServer(t)
+	ws := s.workspaceDir(sess)
+	if err := os.MkdirAll(filepath.Join(ws, "svc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"keep.txt", "svc/old.txt"} {
+		if err := os.WriteFile(filepath.Join(ws, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(ws, "link")); err != nil {
+		t.Fatal(err)
+	}
+	upload := func(path string) *httptest.ResponseRecorder {
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		_ = mw.WriteField("clear", "1")
+		fw, _ := mw.CreateFormFile("file", "new.txt")
+		_, _ = fw.Write([]byte("new"))
+		_ = mw.Close()
+		req := httptest.NewRequest(http.MethodPost, "/api/sessions/s1/upload?path="+path, &body)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		w := httptest.NewRecorder()
+		s.handleUpload(w, req, sess)
+		return w
+	}
+
+	if w := upload("svc"); w.Code != http.StatusOK {
+		t.Fatalf("status = %d (body %s)", w.Code, w.Body.String())
+	}
+	if raw, err := os.ReadFile(filepath.Join(ws, "svc", "new.txt")); err != nil || string(raw) != "new" {
+		t.Fatalf("upload did not land in svc/: %q %v", raw, err)
+	}
+	if _, err := os.Stat(filepath.Join(ws, "svc", "old.txt")); !os.IsNotExist(err) {
+		t.Fatalf("clear=1 kept svc/old.txt: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(ws, "keep.txt")); err != nil {
+		t.Fatalf("clear=1 reached outside svc/: %v", err)
+	}
+
+	for _, bad := range []string{"link", "../x", "missing"} {
+		if w := upload(bad); w.Code == http.StatusOK {
+			t.Fatalf("path %q accepted", bad)
+		}
+	}
+	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
+		t.Fatalf("upload followed the symlinked directory: %v", entries)
+	}
+}

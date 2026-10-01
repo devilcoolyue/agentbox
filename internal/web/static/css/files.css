@@ -8,7 +8,7 @@
 }
 .files-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; min-width: 0; }
 .files-crumb { color: var(--muted); font-size: 12.5px; }
-.files-crumb a { color: var(--amber); text-decoration: none; cursor: pointer; }
+.files-crumb a { color: var(--text); text-decoration: none; cursor: pointer; }
 
 /* 工作区 / 共享目录切换 */
 .scope-switch {
@@ -58,7 +58,7 @@
   box-shadow: var(--shadow-sm);
   cursor: auto;
 }
-.help-tip b { color: var(--amber); font-weight: 600; }
+.help-tip b { color: var(--text-hi); font-weight: 600; }
 .help-tip code {
   font-family: var(--mono); font-size: 11.5px;
   background: var(--code-bg); border-radius: 4px; padding: 1px 5px;
@@ -70,7 +70,7 @@
 /* 文件列表：名称 | 权限 | 大小 | 修改时间 | 操作 */
 .files-head, .file-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px 88px 168px 156px;
+  grid-template-columns: minmax(0, 1fr) 110px 88px 168px 104px;
   gap: 14px; align-items: center;
   padding: 0 10px;
 }
@@ -90,7 +90,7 @@
   border-bottom: 1px solid var(--line-soft);
   font-family: var(--mono); font-size: 13px;
 }
-.file-row:hover { background: color-mix(in srgb, var(--amber) 6%, transparent); }
+.file-row:hover { background: var(--panel); }
 .file-row .fname {
   display: flex; align-items: center; gap: 7px;
   min-width: 0;
@@ -104,21 +104,24 @@
   cursor: pointer; user-select: none;
   transition: transform 0.15s ease, color 0.15s ease;
 }
-.file-row .farrow:hover, .file-row .farrow:focus { color: var(--amber); outline: none; }
-.file-row .farrow.open { transform: rotate(90deg); color: var(--amber); }
+.file-row .farrow:hover, .file-row .farrow:focus { color: var(--text); outline: none; }
+.file-row .farrow.open { transform: rotate(90deg); color: var(--text); }
 /* 展开加载中：箭头原地换成小转圈 */
 .file-row .farrow.busy {
   transform: none; cursor: progress;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .file-row .farrow .spin { width: 9px; height: 9px; border-width: 2px; }
-.file-row .fglyph { flex: none; width: 16px; text-align: center; color: var(--muted); }
+.file-row .fglyph { flex: none; width: 16px; display: inline-flex; justify-content: center; color: var(--muted); }
+.file-row .ftext { min-width: 0; display: flex; flex-direction: column; }
 .file-row .flabel {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   cursor: pointer;
 }
-.file-row .flabel:hover { color: var(--amber); text-decoration: underline; text-underline-offset: 3px; }
-.file-row.dir .flabel { color: var(--amber); }
+/* 名称下方的大小副标题只在窄屏出现（窄屏收掉了大小列） */
+.file-row .fsub { display: none; color: var(--muted); font-size: 11px; line-height: 1.3; }
+.file-row .flabel:hover { color: var(--text-hi); text-decoration: underline; text-underline-offset: 3px; }
+.file-row.dir .flabel { color: var(--text); font-weight: 600; }
 .file-row.empty-dir { border-bottom: none; }
 .file-row .muted { color: var(--muted); font-style: normal; }
 .file-row .fperm { color: var(--muted); font-size: 12px; letter-spacing: 0; }
@@ -136,7 +139,7 @@
   background: transparent; color: var(--muted);
 }
 .file-act:hover, .file-act:focus-visible {
-  color: var(--amber); border-color: var(--line); background: var(--panel-2);
+  color: var(--text); border-color: var(--line); background: var(--panel-2);
 }
 .file-act.danger:hover, .file-act.danger:focus-visible { color: var(--red); border-color: var(--red-line); }
 .file-act:disabled { opacity: 0.4; cursor: progress; }
@@ -163,7 +166,7 @@
 }
 .file-move-crumb::-webkit-scrollbar { display: none; }
 .file-move-crumb button {
-  padding: 0; border: 0; background: transparent; color: var(--amber); font: inherit;
+  padding: 0; border: 0; background: transparent; color: var(--text); font: inherit;
 }
 .file-move-dirs {
   height: 260px; overflow-y: auto;
@@ -175,7 +178,7 @@
   padding: 0 8px; border: 0; border-bottom: 1px solid var(--line-soft);
   border-radius: 0; background: transparent; color: var(--text); text-align: left;
 }
-.file-move-dir:hover, .file-move-dir:focus-visible { background: var(--panel-2); color: var(--amber); outline: none; }
+.file-move-dir:hover, .file-move-dir:focus-visible { background: var(--panel-2); color: var(--text-hi); outline: none; }
 .file-move-dir .dir-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-move-dir .dir-arrow { color: var(--muted); }
 .file-move-dir:disabled { color: var(--muted); opacity: 0.5; cursor: not-allowed; }
@@ -202,7 +205,7 @@
 }
 .fv-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1; }
 .fv-name {
-  color: var(--amber); font-size: 14px; font-weight: 600;
+  color: var(--text-hi); font-size: 14px; font-weight: 600;
   max-width: 60%; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .fv-meta {
@@ -338,15 +341,16 @@
   }
   .files-crumb::-webkit-scrollbar { display: none; }
   .files-actions { justify-content: flex-end; }
-  .files-actions .check { margin-right: auto; }
 
-  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) 54px 148px; gap: 8px; }
-  .files-head span:nth-child(2), .files-head span:nth-child(4),
-  .file-row .fperm, .file-row .ftime { display: none; }
+  /* 窄屏只留名称（大小作副标题）+ 预览 + ⋯，其余操作在 ⋯ 里 */
+  .files-head, .file-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .files-head span:not(:first-child),
+  .file-row .fperm, .file-row .ftime, .file-row .fsize, .file-row .desktop-only { display: none; }
+  .file-row .fsub { display: block; }
   .files-head { margin: 4px 12px 0; }
   .files-list { padding: 0 12px 14px; }
   .file-row { padding-top: 10px; padding-bottom: 10px; } /* 触控行高 ≈40px */
-  .file-row .factions { min-width: 148px; gap: 2px; }
+  .file-row .factions { min-width: 0; gap: 2px; }
 
   .dlg-file-move { width: 94vw; padding: 20px 18px; }
   .file-move-nav { align-items: stretch; flex-direction: column; gap: 10px; }

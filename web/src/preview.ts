@@ -16,7 +16,7 @@ import { actionButton } from "./icons.js";
 import { S } from "./state.js";
 import type { FileScope } from "./state.js";
 import type { FileEntry } from "./types.js";
-import { $, withSpin, fmtSize, askConfirm, startDownload } from "./util.js";
+import { $, withSpin, fmtSize, askConfirm, startDownload, fmtClock } from "./util.js";
 import { api, fileDownloadURL } from "./api.js";
 import { loadFiles } from "./files.js";
 import { formatText, splitFrontMatter, frontMatterChips } from "./chat-render.js";
@@ -329,7 +329,7 @@ function startPoll() {
     if ($<HTMLInputElement>("fv-auto").checked && !keep) {
       if (FV.kind === "md") await reloadMD(ent);
       else reloadFrame();
-      $("fv-state").textContent = "已更新 " + new Date().toLocaleTimeString();
+      $("fv-state").textContent = "已更新 " + fmtClock(Date.now());
     } else {
       $("fv-state").textContent = keep
         ? "文件已在外部更新，保存会覆盖"
@@ -409,7 +409,7 @@ async function saveFile() {
       throw new Error(msg);
     }
     FV.dirty = false;
-    $("fv-state").textContent = "已保存 " + new Date().toLocaleTimeString();
+    $("fv-state").textContent = "已保存 " + fmtClock(Date.now());
     // 自己刚写的内容不该在下一次轮询里再被当成「外部改动」提示一遍
     const ent = await statFile();
     if (ent) { FV.mtime = ent.mtime; setMeta(ent); }
@@ -439,7 +439,7 @@ $("fv-reload").addEventListener("click", async () => {
   } else {
     reloadFrame();
   }
-  $("fv-state").textContent = "已刷新 " + new Date().toLocaleTimeString();
+  $("fv-state").textContent = "已刷新 " + fmtClock(Date.now());
 });
 $("fv-newtab").addEventListener("click", () => {
   if (FV.url) window.open(FV.url, "_blank", "noopener");

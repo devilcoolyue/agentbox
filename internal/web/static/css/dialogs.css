@@ -104,7 +104,7 @@ dialog form .dlg-head { margin: 0; } /* form 自带 gap，避免双份间距 */
 .dlg-x:hover { color: var(--text); background: var(--panel-2); }
 .dlg-x:disabled { opacity: 0.4; cursor: not-allowed; }
 .dlg-x:disabled:hover { color: var(--muted); background: transparent; }
-.skill-drop > .ui-icon { width: 28px; height: 28px; color: var(--amber); margin-bottom: 4px; }
+.skill-drop > .ui-icon { width: 28px; height: 28px; color: var(--muted); margin-bottom: 4px; }
 
 /* 弹窗内勾选行：通用 dialog label 是纵向布局，勾选框必须与文字同行 */
 dialog label.check {
@@ -272,7 +272,7 @@ dialog label.check input { margin: 0; flex: none; }
 .q-led-ts { flex: none; color: var(--muted); font-size: 11px; }
 .q-led-reason { flex: none; font-size: 11px; color: var(--muted); }
 .q-led-reason.grant { color: var(--green); }
-.q-led-reason.adjust { color: var(--amber); }
+.q-led-reason.adjust { color: var(--warn); }
 .q-led-delta { flex: none; min-width: 82px; text-align: right; }
 .q-led-delta.in { color: var(--green); }
 .q-led-delta.out { color: var(--text); }
@@ -369,8 +369,8 @@ dialog label.check input { margin: 0; flex: none; }
 .au-name { font-size: 13.5px; color: var(--text); }
 .au-plan {
   flex: none;
-  font-size: 11px; color: var(--amber);
-  border: 1px solid var(--amber-dim); border-radius: 4px;
+  font-size: 11px; color: var(--text);
+  border: 1px solid var(--line); border-radius: 4px;
   padding: 1px 6px;
 }
 
@@ -380,7 +380,7 @@ dialog label.check input { margin: 0; flex: none; }
 .au-row-label { font-size: 13px; color: var(--text); }
 .au-row-pct { font-size: 13px; font-weight: 600; color: var(--text); }
 /* 八成起转琥珀、满格转红：颜色是这个弹窗唯一要传达的判断。 */
-.au-row-pct.warn { color: var(--amber); }
+.au-row-pct.warn { color: var(--warn); }
 .au-row-pct.full { color: var(--red); }
 
 .au-track {
@@ -394,7 +394,7 @@ dialog label.check input { margin: 0; flex: none; }
   border-radius: 3px;
   transition: width 0.25s ease;
 }
-.au-fill.warn { background: var(--amber); }
+.au-fill.warn { background: var(--warn); }
 .au-fill.full { background: var(--red); }
 
 .au-row-sub { margin-top: 5px; font-size: 11.5px; color: var(--muted); }

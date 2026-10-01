@@ -96,7 +96,8 @@
 .us-label { font-size: 12px; color: var(--muted); }
 .us-value { font-size: 20px; line-height: 1.35; margin-top: 4px; letter-spacing: -0.6px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .us-item:first-child { padding-left: 0; border-left: 0; }
-.us-item:first-child .us-value { color: var(--amber); font-size: 25px; margin-top: 0; }
+/* 金额全站统一：正文色 + 等宽数字。绿色表示成功、琥珀表示主操作，都不该给钱 */
+.us-item:first-child .us-value { color: var(--text-hi); font-size: 25px; margin-top: 0; font-family: var(--mono); }
 
 /* ---- 明细表 ---- */
 
@@ -182,10 +183,11 @@
   color: var(--muted);
   white-space: nowrap;
 }
-.u-chip.title { color: var(--amber); background: color-mix(in srgb, var(--amber) 8%, transparent); }
-/* 终端行要和对话行区分开，但这一列旁边就是计费列（绿/红），再加一种色相会
- * 让两列串味。所以只提墨色不换色相：对话最安静，终端比它重一档。 */
+/* 类型只靠墨色深浅区分，不加色相（旁边的计费列已经用了绿/红）：
+ * 对话是主体最重，终端次之，服务端自动起标题最轻。 */
+.u-chip.chat { color: var(--text-hi); border-color: var(--line); background: transparent; }
 .u-chip.term { color: var(--text); }
+.u-chip.title { color: var(--muted); background: transparent; opacity: 0.8; }
 .u-chip.bill-provider { border-color: var(--green-line); color: var(--green); background: transparent; }
 .u-chip.bill-none { border-color: var(--red-line); color: var(--red); background: transparent; }
 

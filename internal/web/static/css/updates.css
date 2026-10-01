@@ -78,7 +78,11 @@
 @media (min-width: 761px) {
   :root[data-sidebar-collapsed="true"] .side-head:has(.version-badge:not(.hidden)) { display: flex; height: 94px; flex-direction: column; gap: 5px; padding: 0; }
   :root[data-sidebar-collapsed="true"] .side-head:has(.version-badge:not(.hidden)) .side-brand { display: none; }
-  :root[data-sidebar-collapsed="true"] .version-badge { order: 1; margin-left: 0; max-width: 60px; font-size: 9px; }
+  /* 68px 宽放不下版本号（会被截成「v0…」）：收起时只留一个圆点，版本号在气泡和弹层里 */
+  :root[data-sidebar-collapsed="true"] .version-badge { order: 1; margin-left: 0; width: 22px; min-height: 22px; padding: 0; justify-content: center; }
+  :root[data-sidebar-collapsed="true"] .version-badge > :is(.ui-icon, #version-label) { display: none; }
+  :root[data-sidebar-collapsed="true"] .version-badge .version-dot { display: block; width: 7px; height: 7px; background: var(--muted); }
+  :root[data-sidebar-collapsed="true"] .version-badge.has-update .version-dot { background: var(--amber); }
 }
 @media (max-width: 760px) {
   .side-head:has(.version-badge:not(.hidden)) { padding-inline: 16px; grid-template-columns: minmax(0, 1fr) 36px; }

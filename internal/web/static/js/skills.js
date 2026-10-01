@@ -5,7 +5,7 @@
  * 「我的模板」写的是 data/users/<user>/home-template，每次会话启动铺进该用户
  * 的所有会话（服务端 agent.SeedHomeTemplate）。 */
 "use strict";
-import { actionButton, buttonLabel, svgIcon } from "./icons.js";
+import { actionButton, buttonLabel, fileIconName, svgIcon } from "./icons.js";
 import { setSelectValue } from "./select.js";
 import { S } from "./state.js";
 import { $, spinEl, toast, askConfirm, fmtBytes, fmtSize, fmtTime, btnBusy, btnDone, startDownload, } from "./util.js";
@@ -77,7 +77,7 @@ export async function loadSkills() {
     // 选中的技能还在就把右侧恢复出来，没了就回到空白
     if (!SK.items.some((sk) => sk.name === SK.sel.skill)) {
         SK.sel = { skill: "", path: "" };
-        detailMsg("");
+        detailMsg(SK.items.length ? "选择左侧技能查看说明与文件。" : "");
         return;
     }
     if (SK.sel.path)
@@ -234,7 +234,7 @@ function nodeRow(skill, node, depth) {
     else {
         const glyph = document.createElement("span");
         glyph.className = "skill-glyph";
-        glyph.textContent = fileGlyph(node.name);
+        glyph.append(svgIcon(fileIconName(node.name), 14));
         line.appendChild(glyph);
     }
     const name = document.createElement("span");
@@ -261,18 +261,6 @@ function nodeRow(skill, node, depth) {
             openFile(skill, node.path);
     });
     return row;
-}
-function fileGlyph(name) {
-    const ext = (name.split(".").pop() || "").toLowerCase();
-    if (name === "SKILL.md")
-        return "★";
-    if (["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp"].includes(ext))
-        return "◨";
-    if (["sh", "bash", "py", "js", "ts", "rb", "pl", "go", "rs"].includes(ext))
-        return "⌘";
-    if (["md", "txt", "json", "yaml", "yml", "toml", "csv"].includes(ext))
-        return "▤";
-    return "·";
 }
 function isImage(path) {
     return /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i.test(path);

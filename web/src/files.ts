@@ -2,16 +2,17 @@
  * 单文件预览/编辑弹窗在 preview.ts。 */
 "use strict";
 
-import { actionButton, buttonLabel } from "./icons.js";
+import { actionButton, buttonLabel, fileIconName } from "./icons.js";
 
 import { S, emit } from "./state.js";
 import type { FileScope } from "./state.js";
 import type { FileEntry, UploadSummary } from "./types.js";
-import { $, spinEl, btnBusy, btnDone, fmtSize, isMobile, onMobileChange, startDownload, toast } from "./util.js";
+import { $, askConfirm, fmtDateTime, isImeEnter, isMobile, spinEl, btnBusy, btnDone, fmtSize, startDownload, toast } from "./util.js";
 import { api, archiveDownloadURL, fileDownloadURL, scopeQS } from "./api.js";
 import { openPreview } from "./preview.js";
 import { svgIcon } from "./chat-render.js";
 import { setTip } from "./tip.js";
+import { bindMenu, moreButton } from "./menu.js";
 
 /* 树形状态：expanded=已展开的目录（相对当前根），cache=已拉取的目录列表（"" 为当前根），
  * gen=竞态防护——快速连续导航时只让最后一次请求的结果上屏 */
@@ -175,7 +176,7 @@ function fileRow(ent: FileEntry, rel: string, depth: number) {
   } else {
     const glyph = document.createElement("span");
     glyph.className = "fglyph";
-    glyph.textContent = fileGlyph(ent.name);
+    glyph.append(svgIcon(fileIconName(ent.name), 15));
     name.appendChild(glyph);
   }
 
@@ -195,13 +196,18 @@ function fileRow(ent: FileEntry, rel: string, depth: number) {
   setTip(label, ent.is_dir ? "进入目录" : "预览 / 编辑");
   label.addEventListener("click", open);
   label.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
-  name.appendChild(label);
+  // 窄屏收掉大小列，大小改作名称下方的副标题（桌面端隐藏）
+  const text = document.createElement("span");
+  text.className = "ftext";
+  text.appendChild(label);
+  if (!ent.is_dir) text.appendChild(cell(fmtSize(ent.size), "fsub"));
+  name.appendChild(text);
   row.appendChild(name);
 
   row.append(
     cell(ent.mode || "", "fperm"),
     cell(ent.is_dir ? "" : fmtSize(ent.size), "fsize num"),
-    cell(ent.mtime ? new Date(ent.mtime).toLocaleString() : "", "ftime"),
+    cell(ent.mtime ? fmtDateTime(ent.mtime) : "", "ftime"),
     fileActions(ent, joinRel(S.filePath, rel)),
   );
   return row;
@@ -218,6 +224,8 @@ function fileAction(label: string, icon: string, action: () => void, danger = fa
   return btn;
 }
 
+/* 每行最多露出两个常用动作（预览、下载），改名/移动/删除收进 ⋯，删除放最后。
+ * 窄屏连下载也收进去：44px 触控按钮一行放不下四五个，会压住大小列。 */
 function fileActions(ent: FileEntry, fullPath: string) {
   const actions = document.createElement("span");
   actions.className = "factions";
@@ -228,14 +236,20 @@ function fileActions(ent: FileEntry, fullPath: string) {
     actions.append(fileAction(label, "eye", () => openPreview(fullPath, ent)));
   }
   // 目录没有单文件下载：整包下载走工具条的「下载 zip」
+  const download = () => startDownload(fileDownloadURL(fullPath));
   if (!ent.is_dir) {
-    actions.append(fileAction("下载", "download", () => startDownload(fileDownloadURL(fullPath))));
+    const btn = fileAction("下载", "download", download);
+    btn.classList.add("desktop-only");
+    actions.append(btn);
   }
-  actions.append(
-    fileAction("重命名", "rename", () => openFileRename(ent, fullPath)),
-    fileAction("移动", "move", () => openFileMove(ent, fullPath)),
-    fileAction("删除", "trash", () => openFileDelete(ent, fullPath), true),
-  );
+  const more = moreButton(() => [
+    { label: "下载", icon: "download", run: download, hidden: ent.is_dir || !isMobile() },
+    { label: "重命名", icon: "rename", run: () => openFileRename(ent, fullPath) },
+    { label: "移动到…", icon: "move", run: () => openFileMove(ent, fullPath) },
+    { label: "删除", icon: "trash", danger: true, sep: true, run: () => openFileDelete(ent, fullPath) },
+  ], `${ent.name} 的更多操作`);
+  more.className = "file-act file-more";
+  actions.append(more);
   return actions;
 }
 
@@ -603,7 +617,7 @@ $("file-name-close").addEventListener("click", closeFileName);
 $("file-name-cancel").addEventListener("click", closeFileName);
 $("file-name-ok").addEventListener("click", submitFileName);
 $("file-name-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); submitFileName(); }
+  if (e.key === "Enter" && !isImeEnter(e)) { e.preventDefault(); submitFileName(); }
 });
 $("dlg-file-name").addEventListener("cancel", (e) => { if (nameOp.busy) e.preventDefault(); });
 
@@ -626,14 +640,6 @@ async function rerenderTree() {
   if (gen !== tree.gen) return;
   $("files-head").classList.toggle("hidden", !entries.length && !S.filePath);
   $("files-list").replaceChildren(frag);
-}
-
-function fileGlyph(name: string) {
-  const ext = (name.split(".").pop() || "").toLowerCase();
-  if (["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp"].includes(ext)) return "◨";
-  if (["zip", "tar", "gz", "tgz", "7z", "rar"].includes(ext)) return "▣";
-  if (["sh", "py", "js", "ts", "go", "rs", "c", "h", "cpp", "java", "rb", "php"].includes(ext)) return "⌘";
-  return "·";
 }
 
 function renderCrumb() {
@@ -660,12 +666,9 @@ export function scopeLabel() {
 }
 
 function updateFileLabels() {
-  const short = isMobile();
-  actionButton($("btn-upload"), "上传", "upload", `上传代码包并解压到${scopeLabel()}`);
+  actionButton($("btn-upload"), "上传", "upload", "上传文件或代码包到当前目录，压缩包会自动解压");
   actionButton($("btn-download"), "下载", "download", `下载全部${scopeLabel()}（ZIP）`);
-  $("upload-clear-label").textContent = short ? "上传前清空" : "上传前清空" + scopeLabel();
 }
-onMobileChange(updateFileLabels);
 updateFileLabels();
 
 function setFileScope(scope: FileScope) {
@@ -676,15 +679,59 @@ function setFileScope(scope: FileScope) {
   $("scope-ws").classList.toggle("active", scope === "workspace");
   $("scope-shared").classList.toggle("active", scope === "shared");
   updateFileLabels();
-  $<HTMLInputElement>("upload-clear").checked = false;
   loadFiles();
 }
 
 $("scope-ws").addEventListener("click", () => setFileScope("workspace"));
 $("scope-shared").addEventListener("click", () => setFileScope("shared"));
 
-$("btn-upload").addEventListener("click", () => $("upload-input").click());
-$("upload-input").addEventListener("change", () => uploadFiles($<HTMLInputElement>("upload-input").files));
+/* 「清空后上传」是一次性的显式动作：从 ⋯ 菜单进入，选完文件后再确认一次，
+ * 不留常驻勾选状态——旧版勾选框会让之后每一次上传和拖拽都先清空整个根目录。 */
+let clearNextUpload = false;
+function pickUpload(clear: boolean) {
+  clearNextUpload = clear;
+  $("upload-input").click();
+}
+$("btn-upload").addEventListener("click", () => pickUpload(false));
+$("upload-input").addEventListener("change", async () => {
+  const input = $<HTMLInputElement>("upload-input");
+  const files = [...(input.files || [])];
+  const clear = clearNextUpload;
+  clearNextUpload = false;
+  input.value = "";
+  if (!files.length) return;
+  if (clear && !(await confirmClearUpload(files.length))) return;
+  uploadFiles(files, clear);
+});
+$("upload-input").addEventListener("cancel", () => { clearNextUpload = false; });
+actionButton($("btn-files-more"), "", "more", "更多操作");
+bindMenu($("btn-files-more"), () => [
+  { label: "清空当前目录后上传…", icon: "upload", danger: true, run: () => pickUpload(true),
+    tip: "先删除当前目录下的全部内容，再上传" },
+]);
+
+async function confirmClearUpload(count: number) {
+  const sess = S.current;
+  if (!sess) return false;
+  const dir = fullScopePath(S.fileScope, S.filePath);
+  let existing = 0;
+  try {
+    existing = (await api<FileEntry[]>(`/sessions/${sess.id}/files?path=${encodeURIComponent(S.filePath)}${scopeQS()}`)).length;
+  } catch (e) {
+    toast("读取当前目录失败：" + (e as Error).message, true);
+    return false;
+  }
+  const what = existing ? `会先删除 ${dir} 下的 ${existing} 项（含子目录），` : `${dir} 目前是空的，`;
+  return askConfirm(`${what}再上传 ${count} 个文件。`, {
+    title: "清空后上传",
+    hint: S.fileScope === "shared" && !S.filePath
+      ? "共享目录供你名下所有工作空间使用，对话里粘贴的图片和附件也存在这里，会一起删除。删除后无法恢复。"
+      : "删除后无法恢复。",
+    okLabel: existing ? "清空并上传" : "上传",
+    icon: existing ? "trash" : "upload",
+    danger: existing > 0,
+  });
+}
 
 /* fetch 拿不到上传进度，改用 XHR 手动带令牌与进度回调 */
 function uploadWithProgress(
@@ -713,11 +760,11 @@ function setUploadFill(frac: number) {
   $("upload-progress-fill").style.width = Math.round(frac * 100) + "%";
 }
 
-async function uploadFiles(fileList: FileList | null | undefined) {
-  const files = [...(fileList || [])];
+async function uploadFiles(files: File[], clearFirst = false) {
   if (!files.length || !S.current) return;
-  const clearFirst = $<HTMLInputElement>("upload-clear").checked;
-  const lock = ["btn-download", "scope-ws", "scope-shared", "btn-mkdir"];
+  const lock = ["btn-download", "scope-ws", "scope-shared", "btn-mkdir", "btn-files-more"];
+  // 目标在开始时定下：上传过程中用户点进别的目录，后续文件也不会换地方
+  const dir = S.filePath, dirLabel = fullScopePath(S.fileScope, dir);
   $("upload-progress").classList.remove("hidden");
   btnBusy($("btn-upload"), "上传中…");
   lock.forEach((id) => { $<HTMLButtonElement>(id).disabled = true; });
@@ -731,7 +778,7 @@ async function uploadFiles(fileList: FileList | null | undefined) {
       $("upload-progress-text").textContent = `${file.name}（${i + 1}/${files.length}）`;
       setUploadFill(0);
       try {
-        const res = await uploadWithProgress(`/sessions/${S.current!.id}/upload?x=1${scopeQS()}`, fd, setUploadFill);
+        const res = await uploadWithProgress(`/sessions/${S.current!.id}/upload?path=${encodeURIComponent(dir)}${scopeQS()}`, fd, setUploadFill);
         if (res.mode === "archive") archived += res.files || 0; else plain++;
       } catch (e) {
         toast(`${file.name} 上传失败：${(e as Error).message}`, true);
@@ -740,7 +787,7 @@ async function uploadFiles(fileList: FileList | null | undefined) {
     const parts = [];
     if (plain) parts.push(`${plain} 个文件`);
     if (archived) parts.push(`解压 ${archived} 个文件`);
-    if (parts.length) toast(`已上传${parts.join("，")}到${scopeLabel()}`);
+    if (parts.length) toast(`已上传${parts.join("，")}到 ${dirLabel}`);
     loadFiles();
   } finally {
     $("upload-progress").classList.add("hidden");
@@ -748,7 +795,6 @@ async function uploadFiles(fileList: FileList | null | undefined) {
     btnDone($("btn-upload"));
     updateFileLabels(); // btnDone 恢复的是点击时文案，断点可能已变
     lock.forEach((id) => { $<HTMLButtonElement>(id).disabled = false; });
-    $<HTMLInputElement>("upload-input").value = "";
   }
 }
 
@@ -767,7 +813,7 @@ filesTab.addEventListener("drop", (e) => {
   const files = e.dataTransfer?.files;
   if (!S.current || !files || !files.length) return;
   e.preventDefault();
-  uploadFiles(files);
+  uploadFiles([...files]);
 });
 
 $("btn-download").addEventListener("click", () => {

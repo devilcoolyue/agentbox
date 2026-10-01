@@ -9,15 +9,18 @@ import { refreshAll } from "./data.js";
 import { showView, renderSidebar, updateTopbarTitle } from "./shell.js";
 import { chatTeardown, resetChatImgs, loadPick, updateHero, loadHistory, connectChat } from "./chat.js";
 import { setThreadBar, closeThreadPanel } from "./chat-threads.js";
-import { svgIcon } from "./chat-render.js";
 import { termTeardown, termDisconnect, openTerm, termSpendPolling } from "./term.js";
 import { resetTree, loadFiles } from "./files.js";
 import { loadChanges, resetChangesRepo } from "./changes.js";
 import { loadSkills } from "./skills.js";
 import { agentKey, agentName, agentIcon, agentAvatar, decorateAgentOpts } from "./brand.js";
-import { openAcctUsage, syncUsageBtn } from "./acct-usage.js";
+import { openAcctUsage } from "./acct-usage.js";
 import { showBrowser, browserDisconnect } from "./remote-browser.js";
 import { setTip } from "./tip.js";
+import { bindMenu } from "./menu.js";
+import { sessionState } from "./session-state.js";
+import { renderHome } from "./home.js";
+import { actionButton } from "./icons.js";
 /* ---------------- 打开 / 切换 ---------------- */
 export async function openSession(sess, tab) {
     if (sess.agent !== "claude" && (tab === "skills" || tab === "mcp"))
@@ -65,27 +68,25 @@ export function renderHead() {
     const an = document.createElement("span");
     an.className = "agent-text agent-" + agentKey(sess.agent);
     an.textContent = agentName(sess.agent);
-    meta.append(an, document.createTextNode(` · ${sess.account_label} · #${sess.id}`));
+    const id = document.createElement("span");
+    id.className = "mono";
+    id.textContent = "#" + sess.id;
+    meta.append(an, document.createTextNode(` · ${sess.account_label} · `), id);
     // 技能是 Claude Code 的机制，codex 会话没有对应目录，页签直接藏掉
     const claude = agentKey(sess.agent) === "claude";
     $("tab-btn-skills").classList.toggle("hidden", !claude);
     $("tab-btn-mcp").classList.toggle("hidden", !claude);
     if (!claude && (S.tab === "skills" || S.tab === "mcp"))
         setTab("chat");
-    syncUsageBtn(sess.agent);
-    if (sess.stop_reason === "idle" && sess.status !== "running") {
-        const zzz = document.createElement("span");
-        zzz.className = "sc-sleep";
-        zzz.textContent = "休眠中";
-        setTip(zzz, "空闲自动停机，发消息或打开终端会自动唤醒");
-        meta.append(document.createTextNode(" · "), zzz);
-    }
-    if (!S.actionBusy) { // 启动/停止执行中由按钮自己管理禁用态，轮询刷新不得复活
-        const running = sess.status === "running";
-        $("btn-start").disabled = running;
-        $("btn-stop").disabled = !running;
-        $("kb-start").disabled = running;
-        $("kb-stop").disabled = !running;
+    const running = sess.status === "running";
+    const state = sessionState(sess);
+    const pill = $("wb-state");
+    pill.className = "state-pill " + state.cls;
+    pill.textContent = state.label;
+    setTip(pill, state.tip);
+    if (!S.actionBusy) { // 启动/停止执行中由按钮自己管理，轮询刷新不得把另一个按钮换回来
+        $("btn-start").classList.toggle("hidden", running);
+        $("btn-stop").classList.toggle("hidden", !running);
     }
 }
 function closeChannels() {
@@ -137,10 +138,6 @@ async function doStart() {
     S.actionBusy = true;
     wbBusy("start");
     btnBusy($("btn-start"), "启动中…");
-    $("btn-stop").disabled = true;
-    $("btn-delete").disabled = true;
-    $("kb-start").disabled = true;
-    $("kb-stop").disabled = true;
     try {
         const res = await api(`/sessions/${s.id}/start`, { method: "POST" });
         if (S.current && S.current.id === s.id)
@@ -152,7 +149,6 @@ async function doStart() {
     S.actionBusy = false;
     wbIdle();
     btnDone($("btn-start"));
-    $("btn-delete").disabled = false;
     renderHead();
     refreshAll();
 }
@@ -163,10 +159,6 @@ async function doStop() {
     S.actionBusy = true;
     wbBusy("stop");
     btnBusy($("btn-stop"), "停止中…");
-    $("btn-start").disabled = true;
-    $("btn-delete").disabled = true;
-    $("kb-start").disabled = true;
-    $("kb-stop").disabled = true;
     try {
         const res = await api(`/sessions/${s.id}/stop`, { method: "POST" });
         if (S.current && S.current.id === s.id)
@@ -180,7 +172,6 @@ async function doStop() {
     S.actionBusy = false;
     wbIdle();
     btnDone($("btn-stop"));
-    $("btn-delete").disabled = false;
     renderHead();
     refreshAll();
 }
@@ -189,33 +180,34 @@ function openDeleteDlg() {
         return;
     $("del-text").textContent = `确认删除工作空间「${S.current.name}」？空间将从列表移除，容器被删除。文件、配置和对话记录默认保留在服务器磁盘上。`;
     $("del-purge").checked = false;
+    syncDeleteLabel();
     $("dlg-del").showModal();
 }
-/* 静态装饰：工作台按钮与 ⋯ 菜单共用同一组图标。工作台直接前置（btnBusy 换成转圈后
- * 仍能原样还原）；菜单放进 .glyph 定宽槽位，保证各行文字左边缘对齐。 */
-for (const [act, ico] of [["start", "play"], ["stop", "stop"], ["usage", "gauge"], ["delete", "trash"]]) {
-    $("btn-" + act).prepend(svgIcon(ico, 17));
-    $("kb-" + act).querySelector(".glyph").appendChild(svgIcon(ico, 17));
+/* 勾选「同时清除」后按钮写明后果，不让同一个「删除」承担两种轻重 */
+function syncDeleteLabel() {
+    const purge = $("del-purge").checked;
+    actionButton($("del-ok"), purge ? "删除并清除文件" : "删除", "trash");
 }
-/* 重命名只在 ⋯ 菜单里有，工作台头部没有对应按钮，所以不能并进上面那轮。 */
-$("kb-rename").querySelector(".glyph").appendChild(svgIcon("rename", 17));
+$("del-purge").addEventListener("change", syncDeleteLabel);
 $("btn-start").addEventListener("click", doStart);
 $("btn-stop").addEventListener("click", doStop);
-$("btn-usage").addEventListener("click", openAcctUsage);
-$("btn-delete").addEventListener("click", openDeleteDlg);
-/* 窄屏顶栏 ⋯ 菜单：与工作台头部按钮共用同一套动作 */
-$("btn-kebab").addEventListener("click", (e) => {
-    e.stopPropagation();
-    $("kebab-menu").classList.toggle("hidden");
-});
-document.addEventListener("click", (e) => {
-    if (!e.target.closest(".kebab-wrap"))
-        $("kebab-menu").classList.add("hidden");
-});
-window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape")
-        $("kebab-menu").classList.add("hidden");
-});
+/* 工作台头部 ⋯ 与窄屏顶栏 ⋯ 共用一份菜单；窄屏没有头部，启动/停止也放进去。
+ * 删除与启停不在同一层级：删除只在菜单最后一项。 */
+function sessionMenu(withPower) {
+    const s = S.current;
+    if (!s)
+        return [];
+    const running = s.status === "running";
+    return [
+        { label: "启动", icon: "play", run: doStart, hidden: !withPower || running, disabled: S.actionBusy },
+        { label: "停止", icon: "stop", run: doStop, hidden: !withPower || !running, disabled: S.actionBusy, tip: "停止工作空间，保留文件与对话" },
+        { label: "查看账号额度", icon: "gauge", run: openAcctUsage, hidden: agentKey(s.agent) !== "claude", sep: true, tip: "该账号订阅的 5 小时 / 每周用量窗口" },
+        { label: "重命名", icon: "rename", run: renameSession, sep: agentKey(s.agent) !== "claude" },
+        { label: "删除工作空间…", icon: "trash", danger: true, sep: true, run: openDeleteDlg, disabled: S.actionBusy },
+    ];
+}
+bindMenu($("btn-wb-more"), () => sessionMenu(false));
+bindMenu($("btn-kebab"), () => sessionMenu(true));
 /* 会话改名：只改展示名，id / 目录 / 容器名都从 id 派生，不受影响 */
 async function renameSession() {
     const sess = S.current;
@@ -254,13 +246,8 @@ async function renameSession() {
         toast("重命名失败：" + e.message, true);
     }
 }
-const kebabDo = (fn) => () => { $("kebab-menu").classList.add("hidden"); fn(); };
-$("kb-start").addEventListener("click", kebabDo(doStart));
-$("kb-stop").addEventListener("click", kebabDo(doStop));
-$("kb-usage").addEventListener("click", kebabDo(openAcctUsage));
-$("kb-rename").addEventListener("click", kebabDo(renameSession));
-$("kb-delete").addEventListener("click", kebabDo(openDeleteDlg));
 $("del-cancel").addEventListener("click", () => $("dlg-del").close());
+$("del-close").addEventListener("click", () => $("dlg-del").close());
 let delBusy = false;
 $("dlg-del").addEventListener("cancel", (e) => { if (delBusy)
     e.preventDefault(); }); // 删除中禁止 Esc 关闭
@@ -272,6 +259,7 @@ $("del-form").addEventListener("submit", async (e) => {
     delBusy = true;
     btnBusy($("del-ok"), "删除中…");
     $("del-cancel").disabled = true;
+    $("del-close").disabled = true;
     const purge = $("del-purge").checked ? "?purge=1" : "";
     try {
         await api(`/sessions/${s.id}${purge}`, { method: "DELETE" });
@@ -281,6 +269,7 @@ $("del-form").addEventListener("submit", async (e) => {
         $("workbench").classList.add("hidden");
         $("empty").classList.remove("hidden");
         updateTopbarTitle();
+        renderHome();
         emit("navigation-changed");
         refreshAll();
     }
@@ -290,6 +279,7 @@ $("del-form").addEventListener("submit", async (e) => {
     delBusy = false;
     btnDone($("del-ok"));
     $("del-cancel").disabled = false;
+    $("del-close").disabled = false;
 });
 /* ---------------- 新建会话 ---------------- */
 decorateAgentOpts($("new-form"));
@@ -312,6 +302,7 @@ export function openHome() {
     showView("work"); /* 已在工作台时走早退分支，仍会收抽屉 */
     updateTopbarTitle();
     renderSidebar();
+    renderHome();
 }
 $("btn-home").addEventListener("click", openHome);
 $("btn-new").addEventListener("click", async () => {

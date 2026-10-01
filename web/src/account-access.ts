@@ -2,30 +2,23 @@ import { api } from "./api.js";
 import { refreshAll } from "./data.js";
 import { enhanceSelects, setSelectValue } from "./select.js";
 import { toast } from "./util.js";
-import { actionButton, decorateIcons } from "./icons.js";
+import { decorateIcons } from "./icons.js";
 import type { Account, AccountAccess } from "./types.js";
 
 const labels = { all: "全体用户", users: "指定用户", admin: "仅管理员" };
 
-export function accountAccessButton(account: Account): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.className = "btn btn-sm btn-ghost";
-  actionButton(button, "使用范围", "users", "使用范围 · " + labels[account.access?.mode || "all"]);
-  button.addEventListener("click", async () => {
-    button.disabled = true;
-    try {
-      // Refresh before editing: the settings list may predate another admin's edit.
-      const accounts = await api<Account[]>("/accounts");
-      const current = accounts.find(a => a.id === account.id);
-      if (!current) throw new Error("账号已不存在");
-      openAccess(current);
-    } catch (e) {
-      toast((e as Error).message, true);
-    } finally {
-      button.disabled = false;
-    }
-  });
-  return button;
+export const accessLabel = (account: Account) => labels[account.access?.mode || "all"];
+
+export async function editAccountAccess(account: Account) {
+  try {
+    // Refresh before editing: the settings list may predate another admin's edit.
+    const accounts = await api<Account[]>("/accounts");
+    const current = accounts.find(a => a.id === account.id);
+    if (!current) throw new Error("账号已不存在");
+    openAccess(current);
+  } catch (e) {
+    toast((e as Error).message, true);
+  }
 }
 
 function openAccess(account: Account) {

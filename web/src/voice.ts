@@ -4,7 +4,7 @@
 "use strict";
 
 import { S } from "./state.js";
-import { $, toast } from "./util.js";
+import { $, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { sendChat, autoGrow } from "./chat.js";
 import { setTip } from "./tip.js";
 
@@ -99,5 +99,5 @@ function abortIfRecording() {
 }
 $("chat-send").addEventListener("click", abortIfRecording, true);
 input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) abortIfRecording();
+  if (e.key === "Enter" && !e.shiftKey && !isImeEnter(e) && !enterInsertsNewline()) abortIfRecording();
 }, true);

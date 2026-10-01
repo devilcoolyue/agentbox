@@ -6,6 +6,7 @@ import { S, bus, emit } from "./state.js";
 import { $ } from "./util.js";
 import { agentIcon, agentAvatar, agentName } from "./brand.js";
 import { hideTip, setTip } from "./tip.js";
+import { sessionState } from "./session-state.js";
 /* ---- 侧栏：桌面收起偏好与移动抽屉各自独立 ---- */
 const narrowMQ = window.matchMedia("(max-width: 760px)");
 const sidebar = $("sidebar");
@@ -27,6 +28,7 @@ function renderUserMenu() {
     const role = S.role === "admin" ? "管理员" : "普通用户";
     $("sidebar-user-name").textContent = S.user;
     $("sidebar-user-role").textContent = role;
+    $("side-user-label").textContent = S.user;
     userButton.setAttribute("aria-label", `${S.user} · ${role}，用户菜单`);
 }
 function closeUserMenu(restoreFocus = false) {
@@ -216,7 +218,7 @@ export function showView(name) {
     renderSidebar();
 }
 $("btn-settings").addEventListener("click", () => emit("open-settings"));
-/* btn-usagelog 而非 btn-usage：后者是工作台头部的「额度」按钮，见 index.html 注释。 */
+/* 账号额度在工作台头部的 ⋯ 菜单里；这里是侧栏的使用记录入口。 */
 $("btn-usagelog").addEventListener("click", () => emit("open-usage"));
 $("btn-tunnel").addEventListener("click", () => emit("open-tunnel"));
 /* ---- 侧栏：会话列表 ---- */
@@ -242,12 +244,20 @@ export function renderSidebar() {
         card.dataset.sessionId = sess.id;
         if (active)
             card.setAttribute("aria-current", "page");
-        const status = sess.status === "running" ? "运行中" : sess.stop_reason === "idle" ? "休眠" : "已停止";
+        const state = sessionState(sess);
+        const status = state.label;
+        card.classList.add("st-" + state.cls);
         card.setAttribute("aria-label", `${sess.name}（${agentName(sess.agent)}，${status}）`);
         setTip(card, `${sess.name}\n${sess.account_label} · ${agentName(sess.agent)} · ${status}\n#${sess.id}`);
         const av = agentAvatar(sess.agent, { led: true });
         if (sess.status === "running")
             av.querySelector(".led").classList.add("on");
+        // 收起侧栏时只剩头像，同一种 Agent 的空间图标一模一样：改显示空间名首字
+        const initial = document.createElement("span");
+        initial.className = "sc-initial";
+        initial.setAttribute("aria-hidden", "true");
+        initial.textContent = Array.from(sess.name.trim())[0]?.toUpperCase() || "?";
+        av.append(initial);
         const body = document.createElement("span");
         body.className = "sc-body";
         const h = document.createElement("span");
@@ -257,13 +267,13 @@ export function renderSidebar() {
         meta.className = "meta";
         meta.textContent = sess.account_label || agentName(sess.agent);
         body.append(h, meta);
-        // 休眠 = 空闲自动停机（数据都在，发消息/开终端即自动唤醒）。与用户手动
-        // 停止区分开，否则回来发现会话没了会以为服务出了故障。
-        if (sess.stop_reason === "idle" && sess.status !== "running") {
-            const zzz = document.createElement("span");
-            zzz.className = "sc-sleep";
-            zzz.textContent = "休眠";
-            meta.append(document.createTextNode(" · "), zzz);
+        // 运行中 / 休眠写成文字，不只靠头像角上 7px 的灯区分。休眠 = 空闲自动停机
+        // （数据都在，发消息/开终端即自动唤醒），与用户手动停止区分开。
+        if (state.cls !== "off") {
+            const st = document.createElement("span");
+            st.className = "sc-state " + state.cls;
+            st.textContent = state.label;
+            meta.append(document.createTextNode(" · "), st);
         }
         card.append(av, body);
         const open = () => emit("open-session", sess);

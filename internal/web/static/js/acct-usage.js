@@ -5,9 +5,8 @@
  * 使用率和重置时间。只读，不做任何写操作。 */
 "use strict";
 import { S } from "./state.js";
-import { $, btnBusy, btnDone } from "./util.js";
+import { $, btnBusy, btnDone, fmtClock } from "./util.js";
 import { api } from "./api.js";
-import { agentKey } from "./brand.js";
 const dlg = () => $("dlg-ausage");
 /* 订阅档位代号 → 展示名。认不出的原样显示，别把新档位吃掉。 */
 const PLAN = { pro: "Pro", max: "Max", team: "Team", enterprise: "Enterprise" };
@@ -101,9 +100,7 @@ function render(u) {
     }
     if (u.extra && u.extra.enabled)
         body.appendChild(extraRow(u.extra));
-    $("au-fetched").textContent = "更新于 " + new Date(u.fetched_at).toLocaleTimeString("zh-CN", {
-        hour: "2-digit", minute: "2-digit",
-    });
+    $("au-fetched").textContent = "更新于 " + fmtClock(u.fetched_at, false);
 }
 /* 打开时正在查的会话。查询期间用户可能切走，回来的数据就不该再往弹窗里塞。 */
 let forSession = "";
@@ -141,12 +138,6 @@ export async function openAcctUsage() {
     $("au-plan").classList.add("hidden");
     dlg().showModal();
     await load();
-}
-/* 只有 Claude 会话有订阅额度可查：codex 走的是另一套计费，接口也不通。 */
-export function syncUsageBtn(agent) {
-    const show = agentKey(agent) === "claude";
-    $("btn-usage").classList.toggle("hidden", !show);
-    $("kb-usage").classList.toggle("hidden", !show);
 }
 $("au-close").addEventListener("click", () => dlg().close());
 dlg().addEventListener("close", () => { forSession = ""; });

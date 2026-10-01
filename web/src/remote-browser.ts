@@ -32,8 +32,12 @@ function state(text: string) {
 }
 function controls() {
  $("browser-dot").dataset.state = busy ? "busy" : connected ? "connected" : "idle";
+ // 同一时刻只露一个：没连上时「启动浏览器」，连上后「关闭浏览器」
+ $("browser-start").classList.toggle("hidden", connected);
+ $("browser-stop").classList.toggle("hidden", !connected);
  $<HTMLButtonElement>("browser-stop").disabled = busy;
  $<HTMLButtonElement>("browser-start").disabled = busy;
+ $<HTMLButtonElement>("browser-launch").disabled = busy;
  $<HTMLButtonElement>("browser-open").disabled = busy;
  $<HTMLButtonElement>("browser-paste").disabled = !connected;
  $<HTMLButtonElement>("browser-copy").disabled = !connected;
@@ -119,6 +123,7 @@ export function initRemoteBrowser() {
   else if (S.current && S.tab === "browser") void showBrowser();
  }, {signal});
  $("browser-start").addEventListener("click", () => void startBrowser(), {signal});
+ $("browser-launch").addEventListener("click", () => void startBrowser(), {signal});
  $("browser-address").addEventListener("submit", e => {
   e.preventDefault();
   const input = $<HTMLInputElement>("browser-url");

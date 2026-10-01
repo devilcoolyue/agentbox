@@ -2,7 +2,7 @@ import { actionButton } from "./icons.js";
 import { hideTip } from "./tip.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
-import { $, askConfirm, toast } from "./util.js";
+import { $, askConfirm, toast, fmtDateTime } from "./util.js";
 import { setSelectValue } from "./select.js";
 import type { MCPCheck, MCPDefinition, MCPItem, MCPView } from "./types.js";
 
@@ -173,7 +173,7 @@ export function initMCP() {
    row.append(actions);
    const check = checks.get(`${id}/${item.name}`);
    if (check) {
-    row.append(node("p", `上次检测：${status[check.status] || "检测失败"} · ${new Date(check.checked_at).toLocaleString()}`, check.status === "connected" ? "mcp-meta" : "mcp-error"));
+    row.append(node("p", `上次检测：${status[check.status] || "检测失败"} · ${fmtDateTime(check.checked_at, false)}`, check.status === "connected" ? "mcp-meta" : "mcp-error"));
     if (check.status === "authentication_required") row.append(node("p", `如服务使用 OAuth，请在终端运行 claude mcp login ${item.name}。本页检测暂不复用 CLI 的 OAuth 凭证。`));
     if (check.tools?.length) {
      const tools = node("details"); tools.append(node("summary", `${check.tools.length} 个工具${check.truncated ? "（已截断）" : ""}`));

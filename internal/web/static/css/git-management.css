@@ -25,7 +25,7 @@
 .git-empty p { color: var(--muted); margin: 8px 0 0; }
 .git-steps { list-style: none; counter-reset: git-step; padding: 0; margin: 24px 0 32px; }
 .git-steps li { counter-increment: git-step; display: flex; gap: 18px; padding: 20px 0; border-bottom: 1px solid var(--line); }
-.git-steps li::before { content: "0" counter(git-step); font: 16px var(--mono); color: var(--amber); padding-top: 2px; }
+.git-steps li::before { content: "0" counter(git-step); font: 16px var(--mono); color: var(--muted); padding-top: 2px; }
 .git-steps p { color: var(--muted); margin: 6px 0 12px; max-width: 60em; }
 .git-guide-section { margin-top: 28px; }
 .git-methods { margin: 12px 0 0; }
@@ -35,7 +35,7 @@
 .git-methods dd { color: var(--muted); margin: 0; }
 .git-guide details { border-bottom: 1px solid var(--line); }
 .git-guide summary { cursor: pointer; padding: 14px 0; font-weight: 500; }
-.git-guide summary:hover { color: var(--amber); }
+.git-guide summary:hover { color: var(--text-hi); }
 .git-guide details p { color: var(--muted); margin: 0 0 16px; }
 .git-guide code { overflow-wrap: anywhere; }
 @media (max-width: 760px) {

@@ -87,18 +87,23 @@
 .answer-model { color: var(--text); opacity: .72; }
 .answer-effort { white-space: nowrap; }
 .answer-cost { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.answer-cost.priced { color: var(--green); }
+.answer-cost.priced { color: var(--text); font-family: var(--mono); font-size: 0.95em; }
 .answer-details {
   flex-basis: 100%; margin: 6px 0 4px 8px; padding: 2px 0 2px 12px;
   border-left: 2px solid var(--line); overflow-wrap: anywhere;
 }
 .answer-details[hidden] { display: none; }
 .answer-details > div + div { margin-top: 4px; }
+.ad-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.ad-k { flex: none; width: 4.5em; color: var(--muted); }
+.ad-v { color: var(--text); font-variant-numeric: tabular-nums; }
+.ad-note { flex-basis: 100%; padding-left: calc(4.5em + 10px); color: var(--muted); }
+.ad-note:empty { display: none; }
+@media (max-width: 760px) { .ad-note { padding-left: 0; } }
 .answer-details .chip.result { font-size: inherit; padding: 0; opacity: 1; }
 @media (max-width: 760px) {
   .answer-copy { width: 40px; height: 40px; }
   .answer-context { padding: 9px 0; gap: 3px 10px; }
-  .answer-time { flex-basis: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .answer-copy { transition: none; }
@@ -154,10 +159,10 @@
 .md-table th { background: var(--panel); font-weight: 600; }
 .md-table tr:last-child td { border-bottom: none; }
 
-/* 行内代码：暗底暖字的磷光小片 */
+/* 行内代码：暗底小片，字用正文色（琥珀留给主操作与选中态，不再给代码） */
 .msg code {
   font-family: var(--mono); font-size: 12.5px;
-  color: var(--code-text);
+  color: var(--text-hi);
   background: var(--code-bg);
   border: 1px solid var(--code-line);
   border-radius: 5px;
@@ -237,10 +242,11 @@
   padding: 1px 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.chip .name { color: var(--amber); margin-right: 9px; }
-.chip .name svg { vertical-align: -1.5px; margin-right: 5px; }
+.chip .name { color: var(--text); margin-right: 9px; }
+/* base.css 给 .ui-icon 设了 display:block，这里按行内图标排，否则图标独占一行 */
+.chip .name svg { display: inline-block; vertical-align: -1.5px; margin-right: 5px; }
 .chip .sum { color: var(--muted); }
-.chip.result { font-size: 11.5px; color: var(--green); opacity: 0.75; padding-top: 3px; }
+.chip.result { font-family: var(--sans); font-size: 11.5px; color: var(--green); opacity: 0.75; padding-top: 3px; }
 /* 「预览」入口：Agent 刚写出的 HTML 直接在这里点开渲染 */
 .chip.has-open { display: flex; align-items: center; }
 .chip.has-open .name { flex: none; }
@@ -256,7 +262,9 @@
 .chip-open:hover, .chip-open:focus-visible {
   background: color-mix(in srgb, var(--amber) 12%, transparent); outline: none;
 }
+/* 错误 / 警告是中文句子，用正文字体（等宽字体里没有中文字形） */
 .chip.err, .chip.warn {
+  font-family: var(--sans); font-size: 12.5px;
   border-radius: 10px;
   padding: 8px 13px;
   white-space: pre-wrap; overflow: visible; text-overflow: clip;
@@ -268,9 +276,9 @@
   border: 1px solid color-mix(in srgb, var(--red) 28%, transparent);
 }
 .chip.warn {
-  color: var(--amber);
-  background: color-mix(in srgb, var(--amber) 7%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 25%, transparent);
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  border: 1px solid var(--warn-line);
 }
 
 details.raw { font-family: var(--mono); font-size: 12px; color: var(--muted); }
@@ -282,7 +290,7 @@ details.think { max-width: 100%; font-size: 13px; color: var(--muted); }
 details.think summary {
   cursor: pointer; list-style: none;
   display: inline-flex; align-items: center; gap: 6px;
-  font-family: var(--mono); font-size: 12px;
+  font-size: 12px;
   border-radius: 6px;
 }
 details.think summary::-webkit-details-marker { display: none; }
@@ -336,7 +344,7 @@ details.think.streaming .think-body::after {
   border: 1px solid var(--line); border-radius: 10px;
   background: var(--code-bg);
   padding: 5px 10px;
-  font-size: 12px; color: var(--amber);
+  font-size: 12px; color: var(--text);
   text-decoration: none;
   max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -353,7 +361,7 @@ details.think.streaming .think-body::after {
 .attach-thumb .badge {
   position: absolute; left: 3px; top: 3px; z-index: 1;
   background: var(--overlay-chip);
-  color: var(--amber);
+  color: #fff;
   font-family: var(--mono); font-size: 10px;
   padding: 1px 5px; border-radius: 4px;
 }
@@ -427,8 +435,8 @@ details.think.streaming .think-body::after {
 .chat-network-status { color: var(--muted); }
 .chat-network[data-state="ready"] .chat-network-dot { background: var(--green); }
 .chat-network[data-state="ready"] .chat-network-status { color: var(--green); }
-.chat-network[data-state="pending"] .chat-network-dot { background: var(--amber); }
-.chat-network[data-state="pending"] .chat-network-status { color: var(--amber); }
+.chat-network[data-state="pending"] .chat-network-dot { background: var(--warn); }
+.chat-network[data-state="pending"] .chat-network-status { color: var(--warn); }
 .chat-network[data-state="proxy"] .chat-network-dot { background: var(--green); }
 .chat-network-arrow { flex: none; opacity: .5; transition: opacity 140ms ease, transform 140ms ease; }
 .chat-network:hover .chat-network-arrow, .chat-network:focus-visible .chat-network-arrow { opacity: 1; transform: translateX(2px); }
@@ -547,7 +555,7 @@ details.think.streaming .think-body::after {
  * 沿用 .turn 布局（左头像 + 右内容列），头像按品牌做不同动画，文案在头像右侧。 ---- */
 .turn.working .turn-body { justify-content: center; }
 .work-label {
-  font-family: var(--mono); font-size: 13px;
+  font-size: 13px;
   color: var(--muted);
   animation: work-breathe 1.6s ease-in-out infinite;
 }
@@ -599,7 +607,7 @@ details.think.streaming .think-body::after {
   transform: translate(-50%, -100%) scale(1);
 }
 .chat-scroll-bottom:hover {
-  color: var(--amber);
+  color: var(--text-hi);
   background: color-mix(in srgb, var(--panel) 92%, transparent);
 }
 .chat-scroll-bottom:active {

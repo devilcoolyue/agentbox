@@ -127,22 +127,28 @@ function setActions(on) {
     $("btn-changes-commit").disabled = !on;
     $("btn-changes-discard-all").disabled = !on;
 }
-const STATUS_LABEL = {
-    "??": "新增", "A ": "新增", "AM": "新增",
-    " M": "修改", "M ": "已暂存", "MM": "修改",
-    " D": "删除", "D ": "删除", "R ": "重命名", "RM": "重命名",
-};
-function statusText(xy) {
-    return STATUS_LABEL[xy] || xy.trim() || "变更";
-}
+/* 标签只表示改动类型；是否已暂存单独用一个小圆点表示。旧版把两种分类混进同一个
+ * 标签（暂存的修改显示「已暂存」，暂存的新文件却显示「新增」），用户看不出改了什么。
+ * 提交时服务端会 add -A，暂存与否不影响这次提交包含哪些文件。 */
+const KIND_LABEL = { new: "未跟踪", add: "新增", mod: "修改", del: "删除", ren: "重命名", conflict: "冲突" };
 function statusKind(xy) {
-    if (xy === "??" || xy.includes("A"))
-        return "add";
-    if (xy.includes("D"))
-        return "del";
+    if (xy === "??")
+        return "new";
+    if (xy.includes("U") || xy === "AA" || xy === "DD")
+        return "conflict";
     if (xy.includes("R"))
         return "ren";
+    if (xy.includes("D"))
+        return "del";
+    if (xy.includes("A") || xy.includes("C"))
+        return "add";
     return "mod";
+}
+function stagedState(xy) {
+    const x = xy[0] || " ", y = xy[1] || " ";
+    if (x === " " || x === "?" || x === "!")
+        return "";
+    return y === " " ? "full" : "part";
 }
 function renderList() {
     $("tab-changes").classList.toggle("changes-empty", !CH.files.length);
@@ -159,14 +165,29 @@ function renderList() {
         return;
     }
     setActions(true);
+    // 右侧空着时给一句提示，别留一大块空白让人以为没加载出来
+    if (!CH.selected)
+        diffMsg(`共 ${CH.files.length} 个文件有改动。选择左侧文件查看差异。`);
     const frag = document.createDocumentFragment();
     for (const f of CH.files) {
         const row = document.createElement("div");
         row.className = "change-row" + (f.path === CH.selected ? " active" : "");
         row.tabIndex = 0;
+        const kind = statusKind(f.status);
         const badge = document.createElement("span");
-        badge.className = "change-badge k-" + statusKind(f.status);
-        badge.textContent = statusText(f.status);
+        badge.className = "change-badge k-" + kind;
+        badge.textContent = KIND_LABEL[kind];
+        const staged = stagedState(f.status);
+        const dot = document.createElement("span");
+        dot.className = "change-staged" + (staged ? " " + staged : "");
+        if (staged) {
+            const tip = staged === "full" ? "已暂存" : "部分暂存：工作区里还有未暂存的改动";
+            setTip(dot, tip);
+            dot.setAttribute("aria-label", tip);
+            dot.setAttribute("role", "img");
+        }
+        else
+            dot.setAttribute("aria-hidden", "true");
         const name = document.createElement("span");
         name.className = "change-path mono";
         name.textContent = f.path;
@@ -177,7 +198,7 @@ function renderList() {
         disc.setAttribute("aria-label", "丢弃此文件的改动");
         buttonLabel(disc, "", "undo");
         disc.addEventListener("click", (e) => { e.stopPropagation(); openDiscard(f.path); });
-        row.append(badge, name, disc);
+        row.append(badge, dot, name, disc);
         const open = () => selectFile(f);
         row.addEventListener("click", open);
         row.addEventListener("keydown", (e) => { if (e.key === "Enter")

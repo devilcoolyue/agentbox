@@ -4,8 +4,11 @@ import { $, toast, fmtTime, askConfirm } from "../../util.js";
 import { setSelectValue } from "../../select.js";
 import { Poller } from "../../shared/poller.js";
 import { settingsState } from "./state.js";
+import { dirtyGroups, rebaseline } from "./savebar.js";
 const poller = new Poller();
-let dirty = false, pending = false;
+let pending = false;
+// 是否有没保存的更新设置，以统一保存条的比较结果为准
+const isDirty = () => dirtyGroups().some((g) => g.id === "image-updates");
 let latest = null;
 export function fillImageUpdateSettings(p) {
     p ??= { enabled: false, channel: "stable", time: "04:00", update_codex: false };
@@ -13,15 +16,16 @@ export function fillImageUpdateSettings(p) {
     setSelectValue($("image-update-channel"), p.channel);
     $("image-update-time").value = p.time;
     setSelectValue($("image-update-codex"), p.update_codex ? "on" : "off");
-    dirty = false;
+    rebaseline(["image-update-enabled", "image-update-channel", "image-update-time", "image-update-codex"]);
     buttons();
 }
 function buttons() {
-    $("image-update-dirty").textContent = dirty ? "有未保存的设置，请先保存后执行操作。" : "设置保存后即时生效。";
+    const dirty = isDirty();
+    $("image-update-dirty").textContent = dirty ? "上方的更新设置还没保存，保存后才能执行下面的操作。" : "";
+    $("image-update-dirty").hidden = !dirty;
     for (const action of ["check", "update", "rollback"]) {
         $("image-update-" + action).disabled = pending || dirty || !!latest?.status.running || !latest || (action === "rollback" && !latest.previous_image);
     }
-    $("image-update-save").disabled = pending;
 }
 function render(v) {
     latest = v;
@@ -29,8 +33,9 @@ function render(v) {
     if (settingsState.value && input.value === settingsState.value.agent_image) {
         input.value = v.agent_image;
         settingsState.value.agent_image = v.agent_image;
+        rebaseline(["set-image"]); // 镜像是更新任务换的，不算用户的未保存改动
     }
-    if (!dirty)
+    if (!isDirty())
         fillImageUpdateSettings(v.settings);
     const st = v.status;
     const labels = { checking: "正在检查", building: "正在构建并验证镜像", failed: "任务失败", done: "任务完成" };
@@ -66,48 +71,15 @@ export function startImageUpdates() {
 export function stopImageUpdates() { poller.stop(); }
 export function initImageUpdates(signal) {
     latest = null;
-    dirty = false;
     pending = false;
     buttons();
     for (const field of ["enabled", "channel", "time", "codex"]) {
-        $("image-update-" + field).addEventListener("input", () => { dirty = true; buttons(); }, { signal });
+        for (const ev of ["input", "change"])
+            $("image-update-" + field).addEventListener(ev, () => buttons(), { signal });
     }
-    $("image-update-save").addEventListener("click", async () => {
-        const clock = $("image-update-time");
-        if (!clock.reportValidity())
-            return;
-        pending = true;
-        buttons();
-        const image_updates = {
-            enabled: $("image-update-enabled").value === "on",
-            channel: $("image-update-channel").value,
-            time: clock.value, update_codex: $("image-update-codex").value === "on",
-        };
-        try {
-            const saved = await api("/settings", { method: "PUT", body: JSON.stringify({ image_updates }), signal });
-            if (signal.aborted)
-                return;
-            // Keep the separately edited container form's image baseline unchanged.
-            if (settingsState.value)
-                settingsState.value.image_updates = saved.image_updates;
-            fillImageUpdateSettings(saved.image_updates);
-            await refresh(signal);
-            toast("客户端更新设置已保存");
-        }
-        catch (e) {
-            if (!signal.aborted)
-                toast(e.message, true);
-        }
-        finally {
-            if (!signal.aborted) {
-                pending = false;
-                buttons();
-            }
-        }
-    }, { signal });
     for (const action of ["check", "update", "rollback"]) {
         $("image-update-" + action).addEventListener("click", async () => {
-            if (pending || dirty || latest?.status.running)
+            if (pending || isDirty() || latest?.status.running)
                 return;
             pending = true;
             buttons();

@@ -12,7 +12,7 @@
   margin-left: 6px;
   min-width: 0; flex: 0 1 auto;
 }
-.term-tip-icon { flex: none; color: var(--amber); }
+.term-tip-icon { flex: none; color: var(--muted); }
 .term-tips {
   --tip-h: 18px;
   height: var(--tip-h);
@@ -22,7 +22,7 @@
 .term-tips-track { display: flex; flex-direction: column; will-change: transform; }
 .term-tip {
   height: var(--tip-h); line-height: var(--tip-h);
-  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  font-size: 12px; color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   background: linear-gradient(90deg,
     var(--muted) 0%, var(--muted) 44%,
@@ -42,18 +42,18 @@
 }
 
 /* ---- 本会话已花：贴着连接状态左边，margin-left:auto 把这一组顶到右侧 ----
- * 金额用琥珀，token 压成次要——扫一眼要先看到钱。提示轮播可能很长，这一块
+ * 金额用最亮的正文色（全站金额同一口径），token 压成次要。提示轮播可能很长，这一块
  * flex:none 保证它不被挤掉。 */
 .term-spend {
   display: inline-flex; align-items: baseline; gap: 6px;
   margin-left: auto; flex: none;
-  font-family: var(--mono); font-size: 12px;
+  font-size: 12px;
   white-space: nowrap;
   cursor: default;
 }
 .term-spend .ts-label { color: var(--muted); }
-.term-spend .ts-cost { color: var(--amber); }
-.term-spend .ts-tok { color: var(--muted); }
+.term-spend .ts-cost { color: var(--text-hi); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.term-spend .ts-tok { color: var(--muted); font-family: var(--mono); }
 /* 已花之后，连接状态那组就不该再抢 auto 边距了 */
 .term-spend:not(.hidden) + .term-conn { margin-left: 0; }
 
@@ -116,7 +116,7 @@
   background: var(--panel);
   border: 1px solid var(--line); border-radius: 10px;
   padding: 20px 28px;
-  font-family: var(--mono); font-size: 12px; color: var(--amber);
+  font-size: 12.5px; color: var(--text);
   box-shadow: var(--shadow-md);
 }
 .term-overlay-box .spin { width: 26px; height: 26px; border-width: 3px; }
@@ -160,8 +160,8 @@
 /* ---- 窄屏：提示占据连接状态左侧的剩余空间（xterm 字号在 js/term.js 里降到 12） ---- */
 @media (max-width: 760px) {
   .term-bar { padding: 2px 12px; }
-  .term-tip-wrap { margin-left: 0; flex: 1 1 0; }
-  .term-tips { flex: 1 1 0; }
+  /* 窄屏一行放不下轮播提示，挤到最后只剩一个字，直接收起 */
+  .term-tip-wrap { display: none; }
   .term-mount .xterm { padding: 6px 6px 6px 10px; }
 }
 

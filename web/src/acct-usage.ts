@@ -7,9 +7,8 @@
 
 import { S } from "./state.js";
 import type { AccountUsage, UsageWindow } from "./types.js";
-import { $, btnBusy, btnDone } from "./util.js";
+import { $, btnBusy, btnDone, fmtClock } from "./util.js";
 import { api } from "./api.js";
-import { agentKey } from "./brand.js";
 
 const dlg = () => $<HTMLDialogElement>("dlg-ausage");
 
@@ -106,9 +105,7 @@ function render(u: AccountUsage) {
   }
   if (u.extra && u.extra.enabled) body.appendChild(extraRow(u.extra));
 
-  $("au-fetched").textContent = "更新于 " + new Date(u.fetched_at).toLocaleTimeString("zh-CN", {
-    hour: "2-digit", minute: "2-digit",
-  });
+  $("au-fetched").textContent = "更新于 " + fmtClock(u.fetched_at, false);
 }
 
 /* 打开时正在查的会话。查询期间用户可能切走，回来的数据就不该再往弹窗里塞。 */
@@ -146,13 +143,6 @@ export async function openAcctUsage() {
   $("au-plan").classList.add("hidden");
   dlg().showModal();
   await load();
-}
-
-/* 只有 Claude 会话有订阅额度可查：codex 走的是另一套计费，接口也不通。 */
-export function syncUsageBtn(agent: string) {
-  const show = agentKey(agent) === "claude";
-  $("btn-usage").classList.toggle("hidden", !show);
-  $("kb-usage").classList.toggle("hidden", !show);
 }
 
 $("au-close").addEventListener("click", () => dlg().close());

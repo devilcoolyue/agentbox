@@ -438,6 +438,8 @@ data/
 ### 文件/共享目录
 
 - 默认操作为会话 `workspace`；`?scope=shared` 操作用户级共享目录（挂载到所有会话容器 `/shared`）。
+- 上传落在 `?path=` 指定的子目录（前端传当前浏览目录，服务端用 `safefs.Root.Sub` 逐级固定，拒绝符号链接）；
+  `clear=1` 只清空这个目标目录，前端只在「⋯ → 清空当前目录后上传」并二次确认后才带它。
 - 上传支持普通文件与 `.zip/.tar.gz/.tgz/.tar`；一律在容器挂载外的 staging 完整验证，
   `archivex.ExtractRoot` 限制解压量并拒绝路径逃逸，再用目录句柄合并；属主通过
   `ChownRoot` 调整为 1000:1000。合并不是跨目录事务，遇到冲突/磁盘错误可能部分完成。
@@ -491,7 +493,7 @@ data/
 
 ### Git 远程连接
 
-- 用户菜单统一进入独立 Git 管理页（`#/git/guide|profile|connections`）。`git-management.ts` 管分区与说明，`git-surface.ts` 管页内详情及清理；工作空间的远程操作仍留在空间内。切换分区、离页或退出登录时清理表单和记录轮询；身份、连接异步响应需校验登录 token 与挂载状态。
+- 侧栏「Git 管理」（与使用记录、系统设置并列）进入独立 Git 管理页（`#/git/guide|profile|connections`）。`git-management.ts` 管分区与说明，`git-surface.ts` 管页内详情及清理；工作空间的远程操作仍留在空间内。切换分区、离页或退出登录时清理表单和记录轮询；身份、连接异步响应需校验登录 token 与挂载状态。
 
 - 用户私有 HTTPS 连接独立于 Agent 账号池；入口 `/api/git/connections`，账号与绑定持久化在 SQLite schema 5。创建空间可选 `git_connection_id`，省略采用用户默认，空串表示不绑定。
 - Token 由 `internal/gitaccess.Vault` 加密保存；主密钥在 `data/git-secrets/master.key`，不可放进会话挂载或模板。系统备份/恢复必须验证密文能由配套密钥解开，不可把缺密钥当成自动生成新密钥的机会。

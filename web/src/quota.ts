@@ -10,7 +10,7 @@
 
 import { S, bus } from "./state.js";
 import type { CreditResult, LedgerEntry, Quota, QuotaDetail } from "./types.js";
-import { $, toast, btnBusy, btnDone, askConfirm } from "./util.js";
+import { $, toast, btnBusy, btnDone, askConfirm, fmtTime } from "./util.js";
 import { api } from "./api.js";
 import { setTip } from "./tip.js";
 
@@ -61,6 +61,11 @@ export function renderMyQuota() {
   const usage = $("btn-usagelog");
   const q = S.quota;
   usage.classList.toggle("quota-blocked", !!q?.metered && !!q.blocked);
+  // 侧栏用户按钮上直接写余额：不限额就不写，见底了标红
+  const side = $("side-user-quota");
+  side.classList.toggle("hidden", !q?.metered);
+  side.classList.toggle("empty", !!q?.metered && !!q.blocked);
+  if (q?.metered) side.textContent = q.blocked ? "额度已用完" : "余额 " + fmtUSD(q.balance_micro_usd, 2);
   if (!q || !q.metered) {
     box.classList.toggle("hidden", !q);
     $("my-quota-num").textContent = "不限额";
@@ -155,9 +160,7 @@ function ledgerRow(e: LedgerEntry) {
 
   const ts = document.createElement("span");
   ts.className = "q-led-ts mono";
-  ts.textContent = new Date(e.ts).toLocaleString("zh-CN", {
-    month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
-  });
+  ts.textContent = fmtTime(e.ts);
 
   const reason = document.createElement("span");
   reason.className = "q-led-reason " + e.reason;

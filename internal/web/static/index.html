@@ -157,15 +157,7 @@
     </div>
     <div id="mobile-section" class="mobile-section hidden"><select id="mobile-section-select" aria-label="切换子菜单"></select></div>
     <div id="kebab-wrap" class="kebab-wrap hidden">
-      <button id="btn-kebab" class="menu-btn" aria-label="工作空间操作" data-icon="more"></button>
-      <div id="kebab-menu" class="kebab-menu hidden">
-        <button id="kb-start" aria-label="启动工作空间" data-tip="启动工作空间"><span class="glyph"></span>启动</button>
-        <button id="kb-stop" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话"><span class="glyph"></span>停止</button>
-        <button id="kb-usage" class="hidden" aria-label="查看账号额度" data-tip="查看该账号的订阅额度"><span class="glyph"></span>额度</button>
-        <div class="sep"></div>
-        <button id="kb-rename" aria-label="重命名工作空间" data-tip="重命名工作空间"><span class="glyph"></span>重命名</button>
-        <button id="kb-delete" class="danger" aria-label="删除工作空间" data-tip="删除工作空间"><span class="glyph"></span>删除</button>
-      </div>
+      <button id="btn-kebab" class="menu-btn" aria-label="工作空间操作" aria-haspopup="menu" aria-expanded="false" data-icon="more"></button>
     </div>
   </header>
 
@@ -197,16 +189,16 @@
       </section>
 
       <footer class="side-foot">
-        <!-- 使用记录与内网隧道、设置共用图标工具栏；余额放在用户弹层。 -->
+        <!-- 管理入口带文字两列排；收起侧栏时只剩图标。Git 管理与使用记录、设置并列，
+             不再藏在用户弹层里。余额直接写在用户按钮上。 -->
         <nav class="side-nav" aria-label="管理与工具">
           <div class="side-tools">
-            <div id="conn-latency" class="conn-latency" tabindex="0" data-tip="到服务器的连接延迟">
-              <span id="conn-dot" class="t-dot"></span>
-              <span id="conn-text" class="conn-text mono">连接中…</span>
-            </div>
             <button id="btn-usagelog" aria-label="使用记录" data-tip="使用记录" class="side-item side-tool"><span class="glyph">
               <svg width="17" height="17" data-icon="list" aria-hidden="true"></svg>
             </span><span class="side-item-label">使用记录</span></button>
+            <button id="btn-git-management" aria-label="Git 管理" data-tip="Git 身份、仓库连接与授权" class="side-item side-tool"><span class="glyph">
+              <svg width="17" height="17" data-icon="branch" aria-hidden="true"></svg>
+            </span><span class="side-item-label">Git 管理</span></button>
             <button id="btn-tunnel" aria-label="内网隧道" data-tip="内网隧道" class="side-item side-tool hidden"><span class="glyph">
               <svg width="17" height="17" data-icon="link" aria-hidden="true"></svg>
             </span><span class="side-item-label">内网隧道</span><span id="tunnel-state" class="tunnel-state mono"><span id="tunnel-dot" class="t-dot"></span><span id="tunnel-text">离线</span></span></button>
@@ -216,19 +208,29 @@
           </div>
         </nav>
         <div class="side-preferences" role="group" aria-label="账户与主题">
+          <button id="btn-user-menu" type="button" class="side-item side-user" aria-label="用户菜单" aria-haspopup="dialog" aria-expanded="false" aria-controls="sidebar-user-menu">
+            <span class="glyph"><svg width="18" height="18" data-icon="user" aria-hidden="true"></svg></span>
+            <span class="side-user-text side-item-label">
+              <span id="side-user-label" class="side-user-label"></span>
+              <span id="side-user-quota" class="side-user-quota hidden"></span>
+            </span>
+          </button>
           <div class="theme-options" role="group" aria-label="主题">
             <button type="button" data-theme-option="system" aria-label="切换到跟随系统" data-tip="跟随系统" aria-pressed="true"><span class="glyph" data-theme-ico></span></button>
             <button type="button" data-theme-option="light" aria-label="切换到浅色" data-tip="浅色" aria-pressed="false"><span class="glyph" data-theme-ico></span></button>
             <button type="button" data-theme-option="dark" aria-label="切换到深色" data-tip="深色" aria-pressed="false"><span class="glyph" data-theme-ico></span></button>
           </div>
           <button type="button" class="side-item side-tool side-theme-cycle" data-theme-cycle aria-label="切换主题"><span class="glyph" data-theme-ico></span></button>
-          <button id="btn-user-menu" type="button" class="side-item side-tool side-user" aria-label="用户菜单" aria-haspopup="dialog" aria-expanded="false" aria-controls="sidebar-user-menu">
-            <svg width="18" height="18" data-icon="user" aria-hidden="true"></svg>
-          </button>
           <div id="sidebar-user-menu" class="side-user-menu" role="dialog" aria-label="当前用户" aria-describedby="sidebar-user-name sidebar-user-role" tabindex="-1" inert>
             <div class="side-user-info"><span id="sidebar-user-name" class="side-user-name"></span><span id="sidebar-user-role" class="side-user-role"></span></div>
             <div id="my-quota" class="my-quota hidden" tabindex="0"><span class="mq-label">余额</span><span id="my-quota-num" class="mq-num mono">—</span></div>
-            <button id="btn-git-management" type="button" class="btn btn-sm btn-ghost" data-icon="branch">Git 管理</button>
+            <div class="side-user-conn">
+              <span class="mq-label">连接延迟</span>
+              <div id="conn-latency" class="conn-latency" tabindex="0" data-tip="到服务器的往返延迟">
+                <span id="conn-dot" class="t-dot"></span>
+                <span id="conn-text" class="conn-text mono">连接中…</span>
+              </div>
+            </div>
             <button id="btn-logout" type="button" class="side-logout"><span class="glyph">
               <svg width="17" height="17" data-icon="logout" aria-hidden="true"></svg>
             </span><span>退出登录</span></button>
@@ -241,11 +243,24 @@
       <!-- 工作空间工作台视图 -->
       <div id="view-work" class="view">
         <div id="empty" class="empty">
-          <div class="mascot mascot-empty" data-mascot aria-hidden="true"></div>
-          <h1 class="empty-title">从一个工作空间开始</h1>
-          <p class="empty-sub">独立运行 Agent，集中管理文件、终端和对话。<br>选择左侧工作空间继续，或新建一个；停止后，文件与对话仍会保留。</p>
-          <button id="empty-new" class="btn btn-primary empty-cta" data-icon="plus">新建工作空间</button>
-          <div class="empty-ready mono">已就绪<span id="empty-brands" class="empty-brands"></span></div>
+          <!-- 新手引导：一个空间都没有时才出现；有空间后首页改为最近空间列表（home.ts） -->
+          <div id="home-intro" class="home-intro">
+            <div class="mascot mascot-empty" data-mascot aria-hidden="true"></div>
+            <h1 class="empty-title">从一个工作空间开始</h1>
+            <p class="empty-sub">独立运行 Agent，集中管理文件、终端和对话。<br>新建一个工作空间；停止后，文件与对话仍会保留。</p>
+            <button id="empty-new" class="btn btn-primary empty-cta" data-icon="plus">新建工作空间</button>
+            <div class="empty-ready">已就绪<span id="empty-brands" class="empty-brands"></span></div>
+          </div>
+          <section id="home-recent" class="home-recent hidden" aria-labelledby="home-recent-title">
+            <div class="home-head">
+              <div>
+                <h1 id="home-recent-title" class="home-title">最近的工作空间</h1>
+                <p id="home-recent-sub" class="home-sub"></p>
+              </div>
+              <button id="home-new" class="btn btn-primary" data-icon="plus">新建工作空间</button>
+            </div>
+            <div id="home-list" class="home-list"></div>
+          </section>
         </div>
 
         <div id="workbench" class="workbench hidden">
@@ -253,13 +268,14 @@
             <div class="wb-title">
               <span id="wb-avatar" class="wb-avatar"></span>
               <h1 id="wb-name"></h1>
-              <span id="wb-meta" class="wb-meta mono"></span>
+              <span id="wb-meta" class="wb-meta"></span>
             </div>
-            <div class="wb-actions action-tools">
-              <button id="btn-start" class="btn btn-sm btn-ico" aria-label="启动工作空间" data-tip="启动工作空间">启动</button>
-              <button id="btn-stop" class="btn btn-sm btn-ico" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话">停止</button>
-              <button id="btn-usage" class="btn btn-sm btn-ico hidden" data-tip="查看该账号的订阅额度">额度</button>
-              <button id="btn-delete" class="btn btn-sm btn-ico btn-danger" aria-label="删除工作空间" data-tip="删除工作空间">删除</button>
+            <!-- 状态 + 一个随状态切换的启动/停止；额度、重命名、删除收进 ⋯，与窄屏顶栏共用 -->
+            <div class="wb-actions">
+              <span id="wb-state" class="state-pill"></span>
+              <button id="btn-start" class="btn btn-sm btn-primary" data-icon="play" aria-label="启动工作空间" data-tip="启动工作空间">启动</button>
+              <button id="btn-stop" class="btn btn-sm" data-icon="stop" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话">停止</button>
+              <button id="btn-wb-more" class="btn btn-sm" data-icon="more" aria-label="工作空间更多操作" aria-haspopup="menu" aria-expanded="false" data-tip="更多操作"></button>
             </div>
           </header>
 
@@ -328,7 +344,7 @@
               <div id="hero-avatar" class="hero-avatar"></div>
               <h2>我们该构建什么？<span class="hero-cursor" aria-hidden="true"></span></h2>
               <div class="hero-pills">
-                <button class="hero-pill" data-fill="帮我梳理这个仓库的整体结构和核心模块，讲讲代码是如何组织的。" data-icon="network">
+                <button class="hero-pill" data-fill="帮我梳理这个仓库的整体结构和核心模块，讲讲代码是如何组织的。" data-icon="folder">
                   梳理仓库结构
                 </button>
                 <button class="hero-pill" data-fill="我想实现一个新功能：" data-icon="sparkles">
@@ -359,7 +375,7 @@
                   </button>
                   <input id="attach-input" type="file" multiple class="hidden">
                   <div id="picker" class="picker">
-                    <button id="btn-pick" class="pick-pill mono"></button>
+                    <button id="btn-pick" class="pick-pill"></button>
                     <div id="pick-menu" class="pick-menu hidden"></div>
                     <div id="pick-fly" class="pick-fly hidden"></div>
                   </div>
@@ -375,9 +391,11 @@
           <!-- 远程浏览器 -->
           <section id="tab-browser" class="pane hidden">
             <div class="browser-toolbar" aria-label="远程浏览器工具栏">
+              <!-- 带字的单个切换按钮：与工作台头部「启动 / 停止工作空间」区分开，
+                   曾经两组同样的播放/停止图标上下叠着，点错就把整个空间停了 -->
               <div class="browser-lifecycle" role="group" aria-label="浏览器连接">
-                <button id="browser-start" class="btn browser-tool" data-icon="play" aria-label="连接浏览器" data-tip="连接浏览器"></button>
-                <button id="browser-stop" class="btn browser-tool" data-icon="stop" aria-label="关闭浏览器" data-tip="关闭浏览器，保留登录状态"></button>
+                <button id="browser-start" class="btn btn-sm" data-icon="globe" aria-label="启动浏览器" data-tip="启动远程浏览器，继续上次的登录状态">启动浏览器</button>
+                <button id="browser-stop" class="btn btn-sm hidden" data-icon="close" aria-label="关闭浏览器" data-tip="关闭远程浏览器，登录状态保留">关闭浏览器</button>
               </div>
               <form id="browser-address" class="browser-address">
                 <svg class="browser-address-icon" width="16" height="16" data-icon="globe" aria-hidden="true"></svg>
@@ -396,7 +414,7 @@
             <div class="browser-status"><span id="browser-dot" class="browser-dot" aria-hidden="true"></span><p id="browser-state" class="browser-state" role="status">浏览器未启动</p></div>
             <div class="browser-desktop">
               <div id="browser-screen"></div>
-              <div id="browser-empty"><h3>你的远程浏览器</h3><p>在服务器上浏览网页，登录 Claude、ChatGPT 或其他网站。<br>登录状态按工作空间保存，关闭后仍可继续。</p><p>下载文件可在「文件 → Downloads」查看。</p></div>
+              <div id="browser-empty"><h3>你的远程浏览器</h3><p>在服务器上浏览网页，登录 Claude、ChatGPT 或其他网站。<br>登录状态按工作空间保存，关闭后仍可继续。</p><button id="browser-launch" type="button" class="btn btn-primary" data-icon="globe">启动浏览器</button><p>下载文件可在「文件 → Downloads」查看。</p></div>
             </div>
             <details class="browser-clipboard"><summary>剪贴板 · 中文输入与复制</summary><div><textarea id="browser-clipboard" rows="2" maxlength="16000" aria-label="远程剪贴板" placeholder="在这里输入或粘贴文字，再发送到远程输入框；远程复制后点击「读取远程复制」。"></textarea><button id="browser-paste" class="btn btn-sm" data-icon="copy" disabled>发送并粘贴</button><button id="browser-copy" class="btn btn-sm" data-icon="copy" disabled>读取远程复制</button></div></details>
           </section>
@@ -413,7 +431,7 @@
               <!-- 右侧连接状态：状态点 + 文案 + 手动重连 -->
               <div class="term-conn">
                 <span id="term-conn-dot" class="t-dot"></span>
-                <span id="term-state" class="term-state mono"></span>
+                <span id="term-state" class="term-state"></span>
                 <button id="term-reconnect" class="btn term-reconnect" type="button" data-tip="重新连接" aria-label="重新连接">
                   <svg width="1.9" height="1.9" data-icon="refresh" aria-hidden="true"></svg>
                 </button>
@@ -468,18 +486,18 @@
                 <div id="files-crumb" class="files-crumb mono"></div>
               </div>
               <div class="files-actions action-tools">
-                <label class="check"><input type="checkbox" id="upload-clear"> <span id="upload-clear-label">上传前清空空间文件</span></label>
                 <button id="btn-mkdir" class="btn btn-sm" data-icon="folder-plus" data-tip="新建文件夹">新建</button>
-                <button id="btn-upload" class="btn btn-sm" data-icon="upload" data-tip="上传代码包">上传</button>
+                <button id="btn-upload" class="btn btn-sm btn-primary" data-icon="upload" data-tip="上传代码包">上传</button>
                 <input id="upload-input" type="file" class="hidden" multiple accept=".zip,.tar,.tar.gz,.tgz,*/*">
                 <button id="btn-download" class="btn btn-sm" data-icon="download" data-tip="下载全部空间文件（ZIP）">下载</button>
+                <button id="btn-files-more" class="btn btn-sm" data-icon="more" aria-haspopup="menu" aria-expanded="false" data-tip="更多操作"></button>
               </div>
             </div>
             <div id="upload-progress" class="upload-progress hidden">
               <div class="upload-progress-track"><span id="upload-progress-fill"></span></div>
               <span id="upload-progress-text" class="mono"></span>
             </div>
-            <div id="files-head" class="files-head mono hidden">
+            <div id="files-head" class="files-head hidden">
               <span>名称</span><span>权限</span><span class="num">大小</span><span>修改时间</span><span class="factions-head">操作</span>
             </div>
             <div id="files-list" class="files-list"></div>
@@ -491,12 +509,13 @@
               <select id="changes-repo" class="changes-repo mono hidden" aria-label="仓库"></select>
               <div id="changes-branch" class="changes-branch mono"></div>
               <div class="changes-actions action-tools">
-                <button id="btn-changes-clone" class="btn btn-sm" data-icon="git-clone" data-tip="克隆远程仓库到当前空间">克隆</button>
-                <button id="btn-changes-profile" class="btn btn-sm btn-ghost" data-icon="user">Git 身份</button>
                 <button id="btn-changes-branches" class="btn btn-sm" disabled data-icon="branch" data-tip="管理 Git 分支">分支</button>
-                <button id="btn-changes-remote" class="btn btn-sm" disabled data-icon="network">远程</button>
-                <button id="btn-changes-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
-                <button id="btn-changes-discard-all" class="btn btn-sm btn-ghost btn-danger" disabled data-icon="undo" data-tip="丢弃全部未提交改动">丢弃</button>
+                <button id="btn-changes-remote" class="btn btn-sm" disabled data-icon="cloud" data-tip="远程仓库：拉取、推送与合并请求">远程</button>
+                <button id="btn-changes-refresh" class="btn btn-sm" data-icon="refresh" data-tip="刷新变更列表">刷新</button>
+                <!-- 以下三项由 responsive.ts 收进 ⋯ 菜单 -->
+                <button id="btn-changes-clone" class="btn btn-sm" data-icon="git-clone" data-tip="克隆远程仓库到当前空间">克隆仓库</button>
+                <button id="btn-changes-profile" class="btn btn-sm btn-ghost" data-icon="user" data-tip="设置提交时使用的姓名与邮箱">Git 身份</button>
+                <button id="btn-changes-discard-all" class="btn btn-sm btn-ghost btn-danger" disabled data-icon="undo" data-tip="丢弃全部未提交改动">丢弃全部改动</button>
                 <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled data-icon="commit" data-tip="将当前改动提交到本地">提交</button>
               </div>
             </div>
@@ -577,7 +596,7 @@
       <div id="view-settings" class="view hidden">
         <header class="set-head">
           <h1>系统设置</h1>
-          <p>账号池与服务端配置的集中维护入口。改动写入 config.json，多数即时生效。</p>
+          <p>账号池与服务端配置。多数改动保存后即时生效，需要重启的项会单独标出。</p>
         </header>
 
         <div class="set-body">
@@ -611,7 +630,7 @@
               <div class="sec-intro">
                 <div>
                   <h2>IP 代理</h2>
-                  <p>账号级别的出口代理池。账号绑定其中一个后，它的全部官方请求——容器里 agent 发的，以及服务端代发的登录与探测——都从这个 IP 出去。在「账号池 → 编辑」里绑定。</p>
+                  <p>账号的出口 IP。在「账号池 → 编辑」里绑定后，这个账号的官方请求都从这里发出。</p>
                 </div>
                 <div class="px-head-actions action-tools">
                   <button id="btn-proxy-reload" class="btn btn-sm btn-ghost" data-icon="refresh">刷新</button>
@@ -640,7 +659,8 @@
               </div>
               <div class="card">
                 <h3>桥接监听</h3>
-                <p class="card-desc">容器里的 claude 是 Node 客户端，只认 http(s) 代理、不认 socks5，所以 agentbox 在本机起一个 HTTP 代理替容器走完 SOCKS5 那一段。监听地址必须是容器能连到的宿主机地址，默认是 docker 网桥网关。改动即时生效。</p>
+                <p class="card-desc">容器经这个地址使用上面的代理，须是容器能连到的宿主机地址。保存后立即生效。</p>
+                <details class="learn-more"><summary>了解更多</summary><p>容器里的 Claude Code 只认 HTTP(S) 代理、不认 SOCKS5，所以服务端在本机起一个 HTTP 代理，替容器走完 SOCKS5 那一段。默认监听 docker 网桥网关。</p><p>包括容器里 Agent 发出的请求，以及服务端代发的登录与探测，都会经过所绑定的代理。</p></details>
                 <div class="field-row">
                   <label class="field">
                     <span>监听地址 <span class="tag live">即时生效</span></span>
@@ -653,7 +673,6 @@
                 </div>
                 <div class="card-foot">
                   <span class="note">代理池非空时自动启动；绑定失败只影响代理功能，不影响服务</span>
-                  <button id="btn-save-bridge" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
             </section>
@@ -663,7 +682,7 @@
               <div class="sec-intro">
                 <div>
                   <h2>容器与资源</h2>
-                  <p>设置工作空间使用的容器镜像与资源上限。保存后，新启动的空间会应用设置；运行中的空间需停止后再启动。</p>
+                  <p>工作空间的容器镜像与资源上限。新启动的空间生效，运行中的空间需停止后再启动。</p>
                 </div>
               </div>
               <div class="card">
@@ -676,7 +695,7 @@
               </div>
               <div class="card" id="image-update-card">
                 <h3>客户端更新</h3>
-                <p class="card-desc">更新工作空间里的 Claude Code，可选同时更新 Codex。保留当前镜像的浏览器与自定义功能；更新成功后，空间停止再启动时生效。</p>
+                <p class="card-desc">更新工作空间里的 Claude Code，可选同时更新 Codex。空间停止再启动后使用新版本。</p>
                 <div class="field-row">
                   <label class="field"><span>自动更新</span><select id="image-update-enabled"><option value="off">关闭 — 手动更新</option><option value="on">开启 — 每日检查并应用</option></select></label>
                   <label class="field"><span>Claude 渠道</span><select id="image-update-channel"><option value="stable">stable — 稳定版</option><option value="latest">latest — 最新版</option></select></label>
@@ -684,7 +703,11 @@
                   <label class="field"><span>Codex</span><select id="image-update-codex"><option value="off">保持当前版本</option><option value="on">同时更新到 latest</option></select></label>
                 </div>
                 <p id="image-update-schedule" class="note">按系统时区调度；stable 可能落后于 latest。切换渠道不会自动降级。</p>
-                <div class="card-foot"><span id="image-update-dirty" class="note"></span><button id="image-update-save" class="btn btn-primary btn-sm" data-icon="save">保存更新设置</button></div>
+              </div>
+              <!-- 状态与一次性操作单独一张卡，和上面的配置分开 -->
+              <div class="card" id="image-update-ops">
+                <h3>客户端版本</h3>
+                <p id="image-update-dirty" class="note"></p>
                 <p id="image-update-status" class="note" role="status" aria-live="polite">尚未检查客户端版本</p>
                 <p id="image-update-versions" class="note"></p>
                 <p id="image-update-active" class="note image-update-ref"></p>
@@ -720,7 +743,6 @@
                 </label>
                 <div class="card-foot">
                   <span class="note">对新启动的容器生效</span>
-                  <button id="btn-save-container" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
               <div class="card">
@@ -736,19 +758,17 @@
                   <button id="btn-storage" class="btn btn-sm" data-icon="activity" data-tip="查看磁盘使用统计">磁盘统计</button>
                   <button id="btn-clear-cache" class="btn btn-sm" data-icon="trash" data-tip="清理官方市场下载缓存，下次访问时重新下载">清理缓存</button>
                   <button id="btn-diagnostics" class="btn btn-sm" data-icon="download" data-tip="导出脱敏诊断信息">导出诊断</button>
-                  <button id="btn-save-resources" class="btn btn-primary btn-sm" data-icon="save" data-tip="保存容量设置">保存</button>
                 </div>
               </div>
               <div class="card">
                 <h3>空闲自动停机</h3>
-                <p class="card-desc">工作空间没有进行中的对话或终端连接，达到设定时长后会自动休眠，释放内存与 CPU。文件和对话保留，发送消息或连接终端即可唤醒。设为 0 可关闭自动休眠。</p>
+                <p class="card-desc">没有对话或终端连接的工作空间，到时间后自动休眠以释放资源；发消息或打开终端即可唤醒。</p>
                 <label class="field">
                   <span>空闲超时（分钟）<span class="tag live">即时生效</span></span>
                   <input id="set-idle" type="number" min="0" step="1" class="mono">
                 </label>
                 <div class="card-foot">
                   <span class="note">即时生效，无需重启；0 表示永不自动停机</span>
-                  <button id="btn-save-idle" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
             </section>
@@ -794,12 +814,12 @@
               <div class="sec-intro">
                 <div>
                   <h2>价目表</h2>
-                  <p>按 token 折算费用的单价，美元 / 百万 token。用于 Claude、Codex 网页对话及终端用量；Claude 网页对话按独立请求计价后汇总。独立起标题进程可使用 CLI 报价。查不到价的行记为「未定价」，只记用量、不扣额度。</p>
-                  <p class="sec-hint">键可以是<b>模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b>agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p>
+                  <p>每个模型的单价（美元 / 百万 token），用来算对话和终端的花费。没设置单价的模型只记用量、不扣额度。</p>
+                  <details class="learn-more"><summary>了解更多</summary><p>Claude 网页对话按每次请求分别计价后汇总；独立起标题可以使用客户端上报的金额。</p><p class="sec-hint">键可以是<b>模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b>agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p></details>
                 </div>
                 <div class="sec-actions action-tools">
-                  <button id="price-refresh" class="btn btn-sm" data-icon="refresh" data-tip="重新读取当前生效价目表">读取</button>
-                  <button id="price-check" class="btn btn-sm" data-icon="download" data-tip="检查远程价目目录更新">检查</button>
+                  <button id="price-refresh" class="btn btn-sm" data-icon="undo" data-tip="放弃编辑，重新读取当前生效的价目表">重新读取</button>
+                  <button id="price-check" class="btn btn-sm keep-label" data-icon="refresh" data-tip="检查远程价目目录有没有新价格，只预览不应用">检查更新</button>
                   <button id="price-save" class="btn btn-sm btn-primary" data-icon="save" data-tip="保存价目表">保存</button>
                 </div>
               </div>
@@ -811,7 +831,7 @@
                 <p id="price-catalog-error" class="price-notice hidden" role="status"></p>
                 <div class="field-row">
                   <label class="field"><span>远程目录地址（HTTPS）</span><input id="price-source" type="url" placeholder="填写已发布的价格目录 JSON 地址"></label>
-                  <button id="price-modelsdev" class="btn btn-sm" data-icon="download" data-tip="填入 models.dev 价格源并开启每日检查，保存后生效">使用 models.dev</button>
+                  <button id="price-modelsdev" class="btn btn-sm" data-icon="link" data-tip="填入 models.dev 价格源并开启每日检查，保存后生效">使用 models.dev</button>
                   <button id="price-source-save" class="btn btn-sm" data-icon="save" data-tip="保存价格目录来源地址">保存来源</button>
                   <button id="price-preview" class="btn btn-sm" data-icon="diff" data-tip="预览候选目录与当前价目表的差异">预览差异</button>
                 </div>
@@ -819,8 +839,8 @@
                   <label class="price-auto"><input id="price-auto" type="checkbox">每天自动检查</label>
                   <label class="price-auto"><input id="price-auto-apply" type="checkbox">自动跟随已选模型</label>
                 </div>
-                <p class="card-desc">默认只检查变化，勾选模型并应用后建立跟随关系。可开启自动跟随：每日检查后更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型及目录缺失的模型不会自动修改。</p>
-                <p class="card-desc">models.dev 为第三方价格源，仅导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入转换为 1 小时口径；缺失价格不按 0 导入。检查按钮只获取候选，不触发自动应用。</p>
+                <p class="card-desc">「检查更新」只预览变化；勾选模型并应用后，这些模型会跟随目录价格。</p>
+                <details class="learn-more"><summary>了解更多</summary><p>开启自动跟随后，每日检查会更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型和目录里没有的模型不会自动修改。</p><p>models.dev 是第三方价格源，只导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入换算为 1 小时口径；缺失的价格不会按 0 导入。</p></details>
                 <div id="price-source-issues" class="price-notice hidden" role="status"></div>
                 <div id="price-diff" class="hidden">
                   <p>勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。</p>
@@ -887,7 +907,6 @@
                 </label>
                 <div class="card-foot">
                   <span class="note">控制台时间、使用记录筛选与 CSV 导出采用此时区</span>
-                  <button id="btn-save-timezone" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
               <div class="card">
@@ -911,7 +930,6 @@
                 </div>
                 <div class="card-foot">
                   <span class="note">每行一条，最多 30 条；频率 0 表示不轮播（只显示第一条）</span>
-                  <button id="btn-save-tips" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
             </section>
@@ -966,9 +984,8 @@
               </div>
               <div class="card">
                 <h3>内网反向隧道</h3>
-                <p class="card-desc">本机 abox-link 连接后，工作空间可访问你放行的内网服务。两种模式都通过同一条隧道，按用户隔离，并由本机白名单控制。</p>
-                <p class="card-desc"><b>透明模式（默认，推荐）</b>：对话与终端直接使用内网 IP 或域名，无需 Agent 配置代理，支持 IPv4 / TCP。首次启用需先准备网络辅助镜像。</p>
-                <p class="card-desc"><b>兼容代理模式（保留，暂不推荐）</b>：取消下方勾选后使用。需要 Agent 显式使用 SOCKS 代理，不支持代理的程序需配置端口映射；依赖使用说明，容易漏用，仅供旧客户端或特殊场景。</p>
+                <p class="card-desc">本机运行 abox-link 后，工作空间可以访问你放行的内网服务。保存后立即生效。</p>
+                <details class="learn-more"><summary>了解更多</summary><p>两种模式都走同一条隧道，按用户隔离，并由本机白名单控制。</p><p><b>透明模式（默认，推荐）</b>：对话与终端直接使用内网 IP 或域名，不需要给 Agent 配代理，支持 IPv4 / TCP。首次启用需先准备网络辅助镜像。</p><p><b>兼容代理模式（不推荐）</b>：取消下方勾选后使用。Agent 要显式使用 SOCKS 代理，不支持代理的程序要配置端口映射，容易漏用，只给旧客户端或特殊场景。</p></details>
                 <label class="check"><input type="checkbox" id="set-tunnel-transparent"> 使用透明模式（默认，推荐）</label>
                 <div class="field-row"><label class="field"><span>网络控制监听地址</span><input id="set-network-bind" class="mono" placeholder="默认网桥地址:1082"></label><label class="field"><span>网络辅助镜像</span><input id="set-network-image" class="mono" placeholder="agentbox-network:latest"></label></div>
                 <label class="check"><input type="checkbox" id="set-tunnel-on"> 启用隧道 <span class="tag live">即时生效</span></label>
@@ -984,7 +1001,6 @@
                 </div>
                 <div class="card-foot">
                   <span id="tunnel-note" class="note">默认绑定 docker 网桥网关 172.17.0.1，仅容器与本机可达</span>
-                  <button id="btn-save-tunnel" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
               <div class="card">
@@ -1001,7 +1017,6 @@
                 </div>
                 <div class="card-foot">
                   <span id="security-note" class="note">权限模式与上传上限即时生效；监听地址需重启 agentbox 服务</span>
-                  <button id="btn-save-security" class="btn btn-primary btn-sm" data-icon="save">保存</button>
                 </div>
               </div>
             </section>
@@ -1011,7 +1026,7 @@
               <div class="sec-intro">
                 <div>
                   <h2>运维监控</h2>
-                  <p>后端服务与主机的实时资源占用，以及每个工作空间容器的 CPU / 内存明细。开启自动刷新时每 5 秒采样一次。</p>
+                  <p>服务端与主机的实时资源占用，以及每个工作空间容器的 CPU / 内存。</p>
                 </div>
                 <label class="mon-auto"><input type="checkbox" id="mon-auto" checked> 自动刷新</label>
               </div>
@@ -1083,6 +1098,13 @@
                 <dl id="about-kv" class="kv"></dl>
               </div>
             </section>
+            <!-- 统一保存条：任意配置项有改动时出现（js/features/settings/savebar.js） -->
+            <div id="set-savebar" class="set-savebar" role="region" aria-label="未保存的修改" hidden>
+              <span class="set-savebar-dot" aria-hidden="true"></span>
+              <span id="set-savebar-text" class="set-savebar-text"></span>
+              <button id="set-discard" type="button" class="btn btn-sm btn-ghost" data-icon="undo">放弃修改</button>
+              <button id="set-save" type="button" class="btn btn-sm btn-primary" data-icon="save">保存</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1366,7 +1388,7 @@
     <header class="fv-head">
       <div class="fv-title">
         <span id="fv-name" class="fv-name mono"></span>
-        <span id="fv-state" class="fv-state mono" role="status"></span>
+        <span id="fv-state" class="fv-state" role="status"></span>
       </div>
       <div class="fv-actions action-tools">
         <div id="fv-modes" class="scope-switch hidden" role="tablist" aria-label="查看方式">
@@ -1472,7 +1494,7 @@
   <p class="field-hint">提交当前仓库的全部未忽略改动，包含已暂存和未暂存文件。此操作不会推送到远程。</p>
   <div class="file-name-field">
     <label for="git-commit-msg">提交信息</label>
-    <textarea id="git-commit-msg" class="mono" rows="3" placeholder="描述这次改动…"></textarea>
+    <textarea id="git-commit-msg" rows="3" placeholder="描述这次改动…"></textarea>
   </div>
   <p id="git-commit-error" class="login-error hidden"></p>
   <div class="dlg-actions">
@@ -1572,7 +1594,7 @@
   </div>
   <div class="file-name-field">
     <label id="ask-input-label" for="ask-input-field"></label>
-    <input id="ask-input-field" type="text" class="mono" autocomplete="off" spellcheck="false">
+    <input id="ask-input-field" type="text" autocomplete="off" spellcheck="false">
   </div>
   <p id="ask-input-hint" class="field-hint hidden"></p>
   <p id="ask-input-error" class="login-error hidden"></p>
@@ -1595,7 +1617,7 @@
         <span class="q-bal-label">余额</span>
         <span id="q-balance" class="q-bal-num mono">—</span>
       </div>
-      <div id="q-totals" class="q-bal-sub mono"></div>
+      <div id="q-totals" class="q-bal-sub"></div>
     </div>
 
     <div class="q-block">
@@ -1645,7 +1667,7 @@
   <div id="au-body" class="au-body"></div>
 
   <div class="au-foot">
-    <span id="au-fetched" class="au-fetched mono"></span>
+    <span id="au-fetched" class="au-fetched"></span>
     <button type="button" id="au-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
   </div>
 </dialog>
@@ -1715,7 +1737,7 @@
     <p id="acct-created" class="field-hint hidden" role="status">账号已保存，等待完成认证。关闭后可在账号列表继续。</p>
   </form>
   <div id="auth-modes" class="auth-modes" aria-label="认证方式">
-    <button type="button" id="auth-mode-oauth" class="seg" data-icon="shield">订阅 OAuth</button>
+    <button type="button" id="auth-mode-oauth" class="seg" data-icon="login">订阅 OAuth</button>
     <button type="button" id="auth-mode-key" class="seg" data-icon="key">API Key / 中转</button>
   </div>
   <div id="auth-oauth" class="auth-body hidden">
@@ -1752,11 +1774,12 @@
   <form id="del-form" method="dialog">
     <div class="dlg-head">
       <h2>删除工作空间</h2>
-      <button type="button" id="del-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+      <button type="button" id="del-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
     </div>
     <p id="del-text"></p>
     <label class="check"><input type="checkbox" id="del-purge"> 同时清除文件、配置和对话记录（不可恢复）</label>
     <div class="dlg-actions">
+      <button type="button" id="del-cancel" class="btn btn-ghost" data-icon="close">取消</button>
       <button type="submit" id="del-ok" class="btn btn-danger" data-icon="trash">删除</button>
     </div>
   </form>

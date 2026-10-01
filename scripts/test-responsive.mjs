@@ -35,11 +35,17 @@ export async function responsiveSmoke(page, base) {
       await page.locator('#toast.show').waitFor({state:'hidden'});
       assert.ok(await page.locator('#acct-list-box').evaluate(e=>e.scrollWidth<=e.clientWidth), 'account contents overflow');
       assert.equal(await page.locator('#btn-acct-add').innerText(), '添加账号', 'standalone creation action needs a label');
-      for (const button of await page.locator('.acct-actions .btn').all()) assert.equal(await button.innerText(), '', 'account tool groups stay compact');
+      // Account rows show their two common actions with words; the rest live in ⋯.
+      for (const row of await page.locator('.acct-row').all()) {
+        assert.deepEqual(await row.locator('.acct-actions .btn').allInnerTexts(), ['认证', '编辑', ''], 'account row actions');
+        assert.ok(await row.locator('.acct-actions .more-btn').getAttribute('aria-label'));
+      }
       await page.screenshot({animations:'disabled',path:`output/playwright/responsive-settings-${width}-${theme}.png`});
       if (width > 760) {
-        await page.locator('#btn-user-menu').click();
+        // Git management sits with the other sidebar tools, labelled; the user button names the user.
         assert.equal(await page.locator('#btn-git-management').innerText(), 'Git 管理');
+        assert.ok((await page.locator('#side-user-label').innerText()).length > 0);
+        await page.locator('#btn-user-menu').click();
         await page.screenshot({animations:'disabled',path:`output/playwright/context-menu-${width}-${theme}.png`});
         await page.keyboard.press('Escape');
       }

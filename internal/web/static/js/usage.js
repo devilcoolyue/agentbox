@@ -198,9 +198,10 @@ const KIND_HINT = {
     title: "服务端自动为新对话生成标题的那趟消耗，不是用户发起的",
 };
 const BILLING = {
-    provider: { text: "CLI 报价", title: "CLI 报告的估算成本，不代表订阅账号的实际扣款" },
-    table: { text: "价目表", title: "provider 不报价，按系统设置里的价目表按 token 折算" },
-    none: { text: "未定价", title: "provider 不报价且没有配置价目表，这一行只记用量、不扣额度" },
+    // 与对话页每轮下方的说法一致：写用户看得懂的来源，不写「价目表」「CLI」
+    provider: { text: "客户端上报", title: "Claude Code 等客户端自己上报的估算成本，不代表订阅账号的实际扣款" },
+    table: { text: "按单价估算", title: "客户端没有上报金额，按系统设置里的模型单价折算" },
+    none: { text: "未定价", title: "客户端没有上报金额，这个模型也没有设置单价；这一行只记用量、不扣额度" },
 };
 /* 大数字加千分位；token 列四个桶都可能上十万，不分位读不出量级。 */
 const num = (n) => n.toLocaleString("en-US");
@@ -233,12 +234,13 @@ function cell(label, text, cls = "") {
 }
 function tokenCell(r) {
     const { td, v } = cellEl("Token", "num u-tok");
-    // 主行给「输入 ↓ / 输出 ↑」，缓存读单独一行——缓存读经常是输入的十几倍，
-    // 混在一起看不出这个回合到底喂了多少新内容。
+    // 主行给「入 / 出」，缓存读单独一行——缓存读经常是输入的十几倍，
+    // 混在一起看不出这个回合到底喂了多少新内容。全站统一写字不画箭头：
+    // 箭头方向在「发给模型」和「模型返回」两种视角下正好相反，曾经两页各画一套。
     const main = document.createElement("div");
     const io = document.createElement("span");
     io.className = "u-io";
-    io.append(Object.assign(document.createElement("i"), { className: "u-arrow", textContent: "↓" }), document.createTextNode(num(r.input_tokens)), Object.assign(document.createElement("i"), { className: "u-arrow up", textContent: "↑" }), document.createTextNode(num(r.output_tokens)));
+    io.append(Object.assign(document.createElement("i"), { className: "u-arrow", textContent: "入" }), document.createTextNode(num(r.input_tokens)), Object.assign(document.createElement("i"), { className: "u-arrow", textContent: "出" }), document.createTextNode(num(r.output_tokens)));
     main.appendChild(io);
     const cache = document.createElement("div");
     cache.className = "u-cache";
@@ -296,7 +298,7 @@ function renderRows(data) {
         const { td: kind, v: kindv } = cellEl("类型");
         const chip = document.createElement("span");
         // 终端和起标题各有各的颜色：这一列的用处就是一眼看出「这笔钱是谁按下去的」。
-        chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : "");
+        chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : r.kind === "chat" ? " chat" : "");
         chip.textContent = KIND_LABEL[r.kind] || r.kind;
         if (KIND_HINT[r.kind])
             setTip(chip, KIND_HINT[r.kind]);

@@ -9,6 +9,8 @@ import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { askConfirm, askPrompt, toast } from "./util.js";
 import { actionButton, decorateIcons } from "./icons.js";
+import { moreButton } from "./menu.js";
+import type { MenuItem } from "./menu.js";
 import { enhanceSelects, setSelectValue } from "./select.js";
 import type { GitConnection, GitBinding, GitStatus, GitPushPreview } from "./types.js";
 
@@ -25,10 +27,8 @@ function dialog(title: string, markup: string) {
 }
 function errorText(d: HTMLElement, error: unknown) { d.querySelector<HTMLElement>("[data-error]")!.textContent = (error as Error).message; }
 function option(value: string, label: string) { return Object.assign(document.createElement("option"), {value, textContent: label}); }
-function action(label: string, icon: string, run: () => Promise<void>, tip = label, managedOnly = false) {
+function action(label: string, icon: string, run: () => Promise<void>, tip = label) {
   const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-sm"; actionButton(b, label, icon, tip);
-  if (managedOnly) b.dataset.managedAction = "";
-  if (icon === "trash") b.classList.add("btn-danger");
   b.addEventListener("click", async () => { b.disabled = true; try { await run(); } catch (e) { toast((e as Error).message, true); } finally { b.disabled = false; } });
   return b;
 }
@@ -41,7 +41,7 @@ function renderGitConnections(host: HTMLElement) {
   d.className = "git-surface";
   d.id = "git-connections";
   d.innerHTML = `<div class="sec-intro"><div><h2>仓库连接</h2><p>连接可在你的多个工作空间复用。添加后，到空间「变更 → 远程」绑定仓库。</p></div></div>
-    <div class="git-connection-tools"><button class="btn btn-primary btn-sm" data-add data-icon="plus">添加连接</button><button class="btn btn-sm" data-oauth data-icon="shield">网页授权</button><button class="btn btn-sm" data-oauth-apps data-icon="key">OAuth 应用</button><button class="btn btn-sm" data-refresh data-icon="refresh">刷新</button><button class="btn btn-sm" data-operations data-icon="history">操作记录</button></div>
+    <div class="git-connection-tools"><button class="btn btn-primary btn-sm" data-add data-icon="plus">添加连接</button><button class="btn btn-sm" data-oauth data-icon="login">网页授权</button><button class="btn btn-sm" data-oauth-apps data-icon="key">OAuth 应用</button><button class="btn btn-sm" data-refresh data-icon="refresh">刷新</button><button class="btn btn-sm" data-operations data-icon="history">操作记录</button></div>
     <p class="git-note">默认连接用于新空间和未绑定仓库的默认选择；已有绑定保持不变。保存连接后可先「测试」仓库读取权限。</p>
     <p data-error role="alert" class="login-error"></p><div data-list aria-live="polite">读取中…</div>`;
   host.append(d);
@@ -59,30 +59,39 @@ function renderGitConnections(host: HTMLElement) {
       const row = document.createElement("div"); row.className = "git-connection-row";
       const title = document.createElement("strong"); title.textContent = c.label + (!managed ? " · 共享自 "+c.owner : "") + (def.connection_id === c.id ? " · 默认" : "");
       const meta = document.createElement("p"); meta.className = "field-hint"; meta.textContent = `${c.provider} · ${c.auth_type === "oauth" ? "OAuth" : c.auth_type === "ssh" ? "SSH" : "Token"} · ${c.base_url}\n${c.enabled ? "已保存" : "已停用"} · ${c.read_only ? "只读" : "允许推送"} · ${c.network?.route === "tunnel" ? "内网隧道" : "直连"}${c.host_fingerprint ? "\n主机指纹："+c.host_fingerprint : ""}`;
+      // 行内只露三个常用动作；启停、授权、公钥这些低频动作与删除收进 ⋯，删除放最后。
       const buttons = document.createElement("div"); buttons.className = "git-connection-tools";
       buttons.append(action("测试", "activity", async () => {
         const url = await askPrompt({title:"测试 Git 连接",label:"仓库地址",value:c.base_url+"/",hint:"验证此仓库可读取；不会推送或证明写权限。"});
         if (url === null || token !== S.token) return;
         await gitRequest(`/git/connections/${c.id}/test`,{url},d);
         toast("仓库可读取；写权限需在实际推送时由上游校验");
-      }, "测试仓库读取权限"), action("", "rename", async () => editConnection(c, load), "编辑", true), action(c.enabled ? "停用" : "启用", c.enabled ? "stop" : "play", async () => {
-        await api(`/git/connections/${c.id}`, { method:"PATCH", body:JSON.stringify({revision:c.revision, enabled:!c.enabled}) }); await load();
-      }, c.enabled ? "停用" : "启用", true), action(def.connection_id === c.id ? "取消默认" : "设为默认", def.connection_id === c.id ? "undo" : "check", async () => {
+      }, "测试仓库读取权限"), action(def.connection_id === c.id ? "取消默认" : "设为默认", def.connection_id === c.id ? "undo" : "check", async () => {
         await api("/me/git/default", {method:"PUT", body:JSON.stringify({connection_id:def.connection_id === c.id ? "" : c.id})}); await load();
-      }), action("", "trash", async () => {
-        if (!await askConfirm(`删除连接「${c.label}」？`, {title:"删除 Git 连接", hint:"已绑定的连接需先解除引用。删除不会撤销上游平台的 Token。", danger:true, okLabel:"删除", icon: "trash"})) return;
-        await api(`/git/connections/${c.id}`, {method:"DELETE", body:JSON.stringify({revision:c.revision})}); await load();
-      }, "删除", true));
-      if(!managed) buttons.querySelectorAll("[data-managed-action]").forEach(child=>child.remove());
-      if(managed && S.role==="admin" && c.auth_type!=="oauth") buttons.append(action("使用授权","users",async()=>openGitShares(c,load)));
-      if(c.public_key) buttons.append(action("公钥","key",async()=>{
-        const key=createGitSurface("连接公钥",'<p class="field-hint">将此公钥登记到上游 Git 服务账号或部署密钥；私钥不提供导出。</p><pre data-public-key></pre>');key.querySelector("[data-public-key]")!.textContent=c.public_key!;
-      }, "查看 SSH 公钥"));
-      if(managed && c.auth_type === "oauth") buttons.append(action("重新授权","shield",async()=>openGitOAuth(c)),action("撤销授权","shield-off",async()=>{
-        if(!await askConfirm(`撤销「${c.label}」的 OAuth 授权？`,{title:"撤销 Git 授权",hint:"会先停用本地连接，再请求上游撤销。上游可能同时影响使用同一应用授权的其他连接。",danger:true,okLabel:"撤销",icon:"shield-off"}))return;
-        const result=await gitRequest<{warning:string;remote_revoked:boolean}>(`/git/connections/${c.id}/revoke`,{revision:c.revision},d);
-        toast(result.warning||"本地已停用，上游授权已撤销",!result.remote_revoked);await load();
       }));
+      if (managed) buttons.append(action("编辑", "rename", async () => editConnection(c, load), "编辑连接"));
+      const later = (run: () => Promise<void>) => () => { run().catch(e => toast((e as Error).message, true)); };
+      const items: MenuItem[] = [
+        { label: c.enabled ? "停用" : "启用", icon: c.enabled ? "stop" : "play", hidden: !managed, run: later(async () => {
+          await api(`/git/connections/${c.id}`, { method:"PATCH", body:JSON.stringify({revision:c.revision, enabled:!c.enabled}) }); await load();
+        }) },
+        { label: "使用授权", icon: "users", hidden: !(managed && S.role==="admin" && c.auth_type!=="oauth"), run: later(async () => openGitShares(c,load)),
+          tip: "允许其他用户使用这个连接" },
+        { label: "查看公钥", icon: "key", hidden: !c.public_key, run: () => {
+          const key=createGitSurface("连接公钥",'<p class="field-hint">将此公钥登记到上游 Git 服务账号或部署密钥；私钥不提供导出。</p><pre data-public-key></pre>');key.querySelector("[data-public-key]")!.textContent=c.public_key!;
+        } },
+        { label: "重新授权", icon: "login", hidden: !(managed && c.auth_type === "oauth"), run: later(async () => openGitOAuth(c)) },
+        { label: "撤销授权", icon: "shield-off", danger: true, hidden: !(managed && c.auth_type === "oauth"), run: later(async () => {
+          if(!await askConfirm(`撤销「${c.label}」的 OAuth 授权？`,{title:"撤销 Git 授权",hint:"会先停用本地连接，再请求上游撤销。上游可能同时影响使用同一应用授权的其他连接。",danger:true,okLabel:"撤销",icon:"shield-off"}))return;
+          const result=await gitRequest<{warning:string;remote_revoked:boolean}>(`/git/connections/${c.id}/revoke`,{revision:c.revision},d);
+          toast(result.warning||"本地已停用，上游授权已撤销",!result.remote_revoked);await load();
+        }) },
+        { label: "删除连接", icon: "trash", danger: true, sep: true, hidden: !managed, run: later(async () => {
+          if (!await askConfirm(`删除连接「${c.label}」？`, {title:"删除 Git 连接", hint:"已绑定的连接需先解除引用。删除不会撤销上游平台的 Token。", danger:true, okLabel:"删除", icon: "trash"})) return;
+          await api(`/git/connections/${c.id}`, {method:"DELETE", body:JSON.stringify({revision:c.revision})}); await load();
+        }) },
+      ];
+      if (items.some(item => !item.hidden)) buttons.append(moreButton(() => items, `${c.label} 的更多操作`));
       row.append(title, meta, buttons); list.append(row);
     }
   };

@@ -21,6 +21,15 @@ export const isMobile = () => mq.matches;
 export const onMobileChange = (fn: (e: MediaQueryListEvent) => void) =>
   mq.addEventListener("change", fn);
 
+/* 输入法组字中的回车只是让候选上屏（拼音里打英文、选词），不能当成「提交」。
+ * Safari 组字结束那一下 isComposing 已是 false，但 keyCode 仍报 229。 */
+export const isImeEnter = (e: KeyboardEvent) => e.isComposing || e.keyCode === 229;
+
+/* 纯触屏设备（手机、无键盘平板）的软键盘没有 Shift，回车只能用来换行，
+ * 发送交给按钮；接了键盘/触控板的平板仍按桌面习惯回车发送。 */
+const touchOnly = window.matchMedia("(hover: none) and (pointer: coarse)");
+export const enterInsertsNewline = () => touchOnly.matches;
+
 /* ---- 加载态 ---- */
 
 export function spinEl() {
@@ -78,15 +87,19 @@ export function wbIdle() {
 
 /* ---- 格式化 ---- */
 
+/* 全站时间一律按系统时区（config.timezone，经 /me 下发）显示，不跟随访问者电脑。
+ * 不要再写不带参数的 toLocaleString()：它同时套用浏览器的时区和语言，
+ * 同一时刻会在不同页面显示成 22:44 与 2:53:28 PM。 */
 const timeFormatters = new Map<string, Intl.DateTimeFormat>();
 
-export function fmtTime(ms: number | string) {
+function zonedParts(ms: number | string | Date) {
   const zone = S.timeZone || "Asia/Shanghai";
   let fmt = timeFormatters.get(zone);
   if (!fmt) {
     fmt = new Intl.DateTimeFormat("en-CA", {
       timeZone: zone,
-      month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
       hourCycle: "h23",
     });
     timeFormatters.set(zone, fmt);
@@ -95,7 +108,44 @@ export function fmtTime(ms: number | string) {
   for (const part of fmt.formatToParts(new Date(ms))) {
     if (part.type !== "literal") p[part.type] = part.value;
   }
+  return p;
+}
+
+/* 简短时间：09-29 22:44，用于对话、列表这类「最近」的时间 */
+export function fmtTime(ms: number | string) {
+  const p = zonedParts(ms);
   return `${p.month}-${p.day} ${p.hour}:${p.minute}`;
+}
+
+/* 系统时区下今天 0 点的墙上时间（YYYY-MM-DDT00:00），用作用量接口的 since */
+export function todayWall() {
+  const p = zonedParts(Date.now());
+  return `${p.year}-${p.month}-${p.day}T00:00`;
+}
+
+/* 相对时间：刚刚 / 5 分钟前 / 3 小时前，超过一天回落到 fmtTime */
+export function fmtAgo(ms: number | string) {
+  const t = new Date(ms).getTime();
+  if (isNaN(t)) return "";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 60) return "刚刚";
+  if (s < 3600) return Math.floor(s / 60) + " 分钟前";
+  if (s < 86400) return Math.floor(s / 3600) + " 小时前";
+  return fmtTime(t);
+}
+
+/* 时刻：22:44:05，用于「已保存 / 更新于」这类当天的状态提示 */
+export function fmtClock(ms: number | string | Date, seconds = true) {
+  const p = zonedParts(ms);
+  return `${p.hour}:${p.minute}` + (seconds ? `:${p.second}` : "");
+}
+
+/* 完整时间：2026-09-29 22:44:05，用于文件修改时间、操作记录、版本信息 */
+export function fmtDateTime(ms: number | string | Date, seconds = true) {
+  const t = new Date(ms);
+  if (isNaN(t.getTime())) return "—";
+  const p = zonedParts(t);
+  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}` + (seconds ? `:${p.second}` : "");
 }
 
 /* n 允许 undefined：目录项没有 size，原来靠 typeof 守卫返回空串 */
@@ -241,7 +291,7 @@ $("ask-input-ok").addEventListener("click", submitAskInput);
 $("ask-input-cancel").addEventListener("click", () => $<HTMLDialogElement>("dlg-ask-input").close(""));
 $("ask-input-close").addEventListener("click", () => $<HTMLDialogElement>("dlg-ask-input").close(""));
 $("ask-input-field").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") { e.preventDefault(); submitAskInput(); }
+  if (e.key === "Enter" && !isImeEnter(e)) { e.preventDefault(); submitAskInput(); }
 });
 
 /* ---- 图片灯箱（对话缩略图 / 终端路径预览共用） ---- */
