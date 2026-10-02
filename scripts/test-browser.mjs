@@ -580,6 +580,41 @@ export async function smoke(page) {
   await key('up').click(); await lastInput('\x1bOA');
   await modifier('ctrl').click(); await key('left').click(); await lastInput('\x1b[1;5D');
   await key('|').click(); await lastInput('|');
+  // iOS Chinese keyboards commit "，" as a keydown without a printable keyCode plus insertText;
+  // xterm 6 skips that input event. Keycode 229 is diffed by xterm itself, so it must not double-send.
+  // iOS may also write the text after xterm's keycode-229 textarea diff has already run.
+  const commit = (ch, keyCode, late = 0) => page.locator('.xterm-helper-textarea').evaluate(async (t, [ch, keyCode, late]) => {
+   const key = type => t.dispatchEvent(new KeyboardEvent(type, {key:keyCode === 229 ? 'Process' : ch, keyCode, bubbles:true, cancelable:true, composed:true}));
+   key('keydown');
+   if (late) await new Promise(r => setTimeout(r, late));
+   t.value += ch;
+   t.dispatchEvent(new InputEvent('input', {inputType:'insertText', data:ch, bubbles:true, composed:true}));
+   key('keyup');
+  }, [ch, keyCode, late]);
+  const imeStart = terminalInput.length;
+  await commit('，', 0); await lastInput('，');
+  await commit('，', 229); await lastInput('，');
+  await commit('，', 229, 15); await lastInput('，');
+  await page.keyboard.type(','); await lastInput(',');
+  assert.deepEqual(terminalInput.slice(imeStart), ['，','，','，',','], 'IME punctuation must be sent exactly once');
+  // Repeated taps on the iOS punctuation key cycle ，→。→？ by deleting or replacing the last symbol
+  // without key events; the terminal needs a backspace first.
+  const retype = (ch, mode) => page.locator('.xterm-helper-textarea').evaluate((t, [ch, mode]) => {
+   const fire = (type, inputType, data) => t.dispatchEvent(new InputEvent(type, {inputType, data, bubbles:true, cancelable:true, composed:true}));
+   const chars = [...t.value];
+   if (mode === 'delete') {
+    fire('beforeinput','deleteContentBackward',null); t.value = chars.slice(0,-1).join(''); fire('input','deleteContentBackward',null);
+    fire('beforeinput','insertText',ch); t.value += ch; fire('input','insertText',ch);
+   } else {
+    fire('beforeinput','insertText',ch); t.value = chars.slice(0,-1).join('') + ch; fire('input','insertText',ch);
+   }
+  }, [ch, mode]);
+  const cycleStart = terminalInput.length;
+  await retype('。','delete'); await lastInput('。');
+  await retype('？','replace'); await lastInput('？');
+  await page.keyboard.press('Backspace'); await lastInput('\x7f');
+  // Message boundaries depend on whether xterm or the bridge sends the insertion; the PTY sees one byte stream.
+  assert.equal(terminalInput.slice(cycleStart).join(''), '\x7f。\x7f？\x7f', 'cycled punctuation must replace the previous symbol');
   await page.locator('#term-keyboard').click();
   assert.equal(await page.locator('.xterm-helper-textarea').evaluate(el=>el===document.activeElement),false);
   await page.locator('#term-keyboard').click();

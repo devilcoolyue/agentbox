@@ -172,3 +172,12 @@
     -webkit-text-fill-color: currentColor;
   }
 }
+
+/* 输入诊断（?imedebug）：浮在终端页右上角，随终端页一起隐藏 */
+.term-input-debug {
+  position: fixed; z-index: 40; right: 8px; top: calc(env(safe-area-inset-top) + 68px);
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  color: var(--text); background: var(--panel); border: 1px solid var(--amber-dim);
+  border-radius: 8px; box-shadow: var(--shadow-md); font-size: 12px;
+}
+.term-input-debug b { color: var(--amber); font-family: var(--mono); font-weight: 500; }

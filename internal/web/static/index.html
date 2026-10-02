@@ -155,7 +155,11 @@
       <span id="tb-ico" class="tb-ico hidden"></span>
       <span id="topbar-title" class="topbar-title"></span>
     </div>
-    <div id="mobile-section" class="mobile-section hidden"><select id="mobile-section-select" aria-label="切换子菜单"></select></div>
+    <!-- 窄屏的分区切换：一次列出全部分区（不搜索、不弹键盘），条目由 responsive.ts 照桌面导航生成 -->
+    <div id="mobile-section" class="mobile-section hidden">
+      <button id="mobile-section-btn" type="button" class="mobile-section-btn" popovertarget="mobile-section-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="mobile-section-menu"><span id="mobile-section-label" class="mobile-section-label"></span><span class="select-caret" aria-hidden="true"></span></button>
+      <div id="mobile-section-menu" class="section-menu" popover="auto" role="menu" aria-label="切换子菜单"></div>
+    </div>
     <div id="kebab-wrap" class="kebab-wrap hidden">
       <button id="btn-kebab" class="menu-btn" aria-label="工作空间操作" aria-haspopup="menu" aria-expanded="false" data-icon="more"></button>
     </div>

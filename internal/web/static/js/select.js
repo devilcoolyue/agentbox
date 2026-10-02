@@ -89,7 +89,10 @@ class SelectControl {
         this.search.addEventListener("input", () => { this.render(); this.position(); });
         this.trigger.addEventListener("keydown", e => this.keydown(e));
         this.panel.addEventListener("keydown", e => this.keydown(e));
-        this.list.addEventListener("pointerdown", e => e.preventDefault());
+        // 鼠标点选项时别让列表抢走搜索框的焦点。触摸不能这样拦：Safari 26.5 起在 pointerdown
+        // 上 preventDefault 会连这次触摸的滚动一起取消，选项一多手机上就滑不动了。
+        this.list.addEventListener("pointerdown", e => { if (e.pointerType === "mouse")
+            e.preventDefault(); });
         this.list.addEventListener("pointermove", e => {
             const row = e.target.closest("[data-index]");
             if (row && row.getAttribute("aria-disabled") !== "true")

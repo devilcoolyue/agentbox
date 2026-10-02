@@ -8,6 +8,7 @@ import { fmtUSD } from "./quota.js";
 import { refreshAll } from "./data.js";
 import { pastedImages } from "./chat.js";
 import { setTip } from "./tip.js";
+import { attachTermInputDebug, traceTermInput } from "./term-input-debug.js";
 const TerminalClass = window.Terminal && (window.Terminal.Terminal || window.Terminal);
 const FitAddonClass = window.FitAddon && (window.FitAddon.FitAddon || window.FitAddon);
 const WebglAddonClass = window.WebglAddon && (window.WebglAddon.WebglAddon || window.WebglAddon);
@@ -150,6 +151,92 @@ function refocusTerm() {
         S.term.focus();
     }
 }
+/* iOS Safari 的中文键盘直接上屏的标点（「，」等）会被 xterm 6 丢掉。xterm 只在三处发送：
+ * keydown（要求可打印键码）、keypress、以及键码 229 时 setTimeout(0) 里的 textarea 差分；
+ * 而 iOS 可能不给可打印键码、不发 keypress，且把字写进 textarea 晚于那次差分；最后到达的
+ * insertText 输入事件又因「已见过 keydown」被 _inputEvent 跳过（上游 xtermjs/xterm.js#3070，
+ * 修复 PR #5614 未合并）。这里等 xterm 所有发送时机都过去再看：从这次按键开始 xterm 一个字
+ * 都没发、也不在组字，才由我们补发，因此不会重复。监听挂在外层捕获阶段，先于 xterm 记数。
+ *
+ * 连按同一个标点键时 iOS 在「，。？！」间循环：不发按键事件，直接把刚上屏的符号删掉或替换
+ * 成下一个。xterm 只认插入、不认删除，终端里就剩下「，。」。所以补发前先比对 textarea 改动
+ * 前后的内容，删了几个字就先发几个退格。 */
+let dataSeq = 0;
+const MAX_BRIDGE_DELETE = 8; // 超出就不是循环标点这类小改动，宁可少删也不误删用户的输入
+/** 两段文本的差异：从末尾起删掉几个字符（按码点）、插入了什么 */
+function textEdit(before, after) {
+    const a = [...before], b = [...after];
+    let p = 0;
+    while (p < a.length && p < b.length && a[p] === b[p])
+        p++;
+    let s = 0;
+    while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s])
+        s++;
+    return { removed: a.length - p - s, inserted: b.slice(p, b.length - s).join("") };
+}
+function bridgeDroppedInput(host, ta) {
+    let mark = -1; // 本次按键开始时的 dataSeq，-1 表示没有待确认的按键
+    let keyCode = 0;
+    let composing = false;
+    let before = null; // beforeinput 时的 textarea 内容
+    let queued = 0;
+    const send = (out) => { traceTermInput("bridge", out); sendTermInput(modifiedTermInput(out)); };
+    // 晚于 xterm 在 keydown/compositionend 时排下的 setTimeout(0)，同延迟的定时器按登记顺序触发。
+    const later = (from, out) => {
+        queued++;
+        setTimeout(() => {
+            queued--;
+            if (dataSeq === from && !composing)
+                send(out);
+        }, 0);
+    };
+    const on = (type, fn) => host.addEventListener(type, (e) => { if (e.target === ta)
+        fn(e); }, true);
+    on("keydown", (e) => { mark = dataSeq; keyCode = e.keyCode; });
+    // xterm 已为这次按键发过数据就结束；还没发（iOS 晚到的输入）则留着等输入事件。
+    on("keyup", () => { if (mark !== dataSeq)
+        mark = -1; });
+    on("compositionstart", () => { composing = true; });
+    on("compositionend", () => { composing = false; });
+    on("beforeinput", () => { before = ta.value; });
+    on("input", (e) => {
+        const keyed = mark >= 0;
+        const from = keyed ? mark : dataSeq;
+        const prev = before;
+        mark = -1;
+        before = null;
+        if (e.isComposing || composing)
+            return;
+        const edit = prev === null ? null : textEdit(prev, ta.value);
+        let removed = edit && edit.removed <= MAX_BRIDGE_DELETE ? edit.removed : 0;
+        let data = "";
+        if (e.inputType === "insertText" && e.data) {
+            data = e.data;
+            if (edit?.inserted !== data)
+                removed = 0;
+        }
+        else if (e.inputType !== "deleteContentBackward" || edit?.inserted !== "")
+            return;
+        const del = "\x7f".repeat(removed);
+        if (!del && !data)
+            return;
+        // 键码 229 时 xterm 的差分定时器可能也为这次改动发退格或文字，整体等它跑完再决定。
+        if (keyed && keyCode === 229) {
+            later(from, del + data);
+            return;
+        }
+        // xterm 从不发删除：立即发出，赶在它可能同步发出的这次插入之前（循环标点的删除与插入
+        // 常是相邻两个输入事件）。插入照旧等 xterm 的时机都过去再看要不要补。
+        if (del && dataSeq === from) {
+            if (queued)
+                later(from, del);
+            else
+                send(del);
+        }
+        if (data)
+            later(from, data);
+    });
+}
 // 创建 xterm 实例（若尚不存在）：渲染器、图片路径链接、输入/尺寸回调都在这里挂一次，
 // 之后跨重连复用同一实例，回调动态读取 S.termWS，避免重复叠加监听。
 function ensureTerm() {
@@ -192,7 +279,13 @@ function ensureTerm() {
     S.term = term;
     S.fit = fit;
     fitTermViewport();
+    if (term.element && term.textarea) {
+        bridgeDroppedInput(term.element, term.textarea);
+        attachTermInputDebug(term.element, term.textarea);
+    }
     term.onData((d) => {
+        dataSeq++;
+        traceTermInput("xterm", d);
         // 焦点上报不是用户按键，不能消耗一次性的 Ctrl / Alt。
         if (d === "\x1b[I" || d === "\x1b[O") {
             sendTermInput(d);

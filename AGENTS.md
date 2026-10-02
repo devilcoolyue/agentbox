@@ -434,6 +434,7 @@ data/
   欠费还是网络抖动，于是无限退避重连。前端 `term.js` 见 4000–4999 就把 reason 写进
   终端画面并停止自动重连。控制帧上限 125 字节，reason 由 `truncReason` 按 rune 截断。
 - 断开只停得住新的输入：tmux detach 不杀进程，已经在跑的 agent 会继续跑完。
+- xterm 6 会丢掉 iOS 中文键盘直接上屏的标点（「，」等，上游 xtermjs/xterm.js#3070），也不认连按标点键时 iOS 不带按键事件的删除/替换（「，。？！」循环）。`term.ts` 的 `bridgeDroppedInput` 在 xterm 所有发送时机（keydown、keypress、229 差分定时器、输入事件）都过去后，若这次按键 xterm 一字未发且不在组字，才按 textarea 前后差异补发（先退格再插入，最多删 8 个字符）；升级 xterm 后若上游已修复（PR #5614），删掉它并保留 `test-browser.mjs` 的「恰好发送一次」断言。真机事件顺序用地址参数 `?imedebug` 打开 `term-input-debug.ts` 的诊断面板，上传到 `/shared/.file/`（只在开启期间记录，含期间输入的字符）。
 
 ### 文件/共享目录
 
@@ -595,6 +596,8 @@ data/
   前缀，其余模块靠原生 ES Module 的相对 import 继承该前缀（详见 `server.go` 的
   `staticHandler`），一个 .ts 对一个 .js 才能维持这套长缓存。
 - 单选下拉统一走 `web/src/select.ts` + `css/select.css`：入口 `enhanceSelects()` 增强现有 `<select>`，原元素继续提供表单值与 `input/change` 事件。动态插入控件后调用 `enhanceSelects(root)`；代码赋值用 `setSelectValue(select, value)`，因为原生 `.value` / `.selectedIndex` 赋值不触发 MutationObserver。选项列表和禁用/隐藏属性变更自动同步，不要另写一套菜单。
+- 可滚动的弹层/列表不要在 `pointerdown` 上无条件 `preventDefault()`：Safari 26.5 起这会取消这次触摸的滚动。只对 `pointerType === "mouse"` 拦截。
+- 窄屏顶栏的分区切换（系统设置 / Git 管理，`responsive.ts` 的 `mobile-section-menu`）是导航菜单，不是表单下拉：条目照桌面导航按钮生成，一次列全、竖屏不滚动，没有搜索框（获焦就弹键盘、把列表挤成一小截）。别把它并回 `select.ts`；分区多到一屏放不下时再考虑分组。
 - 前端类型约定：`web/src/types.d.ts` 是 API/WS 报文的接口定义，每个接口对应 Go 侧一个
   结构体，改服务端报文时两边一起改；`web/src/globals.d.ts` 声明 xterm/KaTeX 等
   `<script>` 引入的全局。两个纯类型文件用 `.d.ts`，不产生多余的 js。

@@ -63,6 +63,8 @@ interface XtermTerminal {
   readonly modes: { applicationCursorKeysMode: boolean };
   /** 承载键盘输入的隐藏 textarea；IME 相关处理需要直接操作它 */
   readonly textarea: HTMLTextAreaElement | undefined;
+  /** open 之后的根元素，随实例销毁；挂监听用它而不是 #term-mount，避免重建实例后叠加 */
+  readonly element: HTMLElement | undefined;
   options: XtermOptions;
   open(parent: HTMLElement): void;
   write(data: string | Uint8Array): void;

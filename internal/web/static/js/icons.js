@@ -174,7 +174,8 @@ export function decorateIcons(root = document) {
         if (!el.querySelector(":scope > svg"))
             continue;
         for (const node of [...el.childNodes]) {
-            if (node.nodeType !== Node.TEXT_NODE)
+            // 标签之间的换行缩进别包：包成 span 就成了 flex 项，每个都多吃一份 gap，把图标挤偏
+            if (node.nodeType !== Node.TEXT_NODE || !node.textContent?.trim())
                 continue;
             const caption = document.createElement("span");
             caption.className = "action-label";

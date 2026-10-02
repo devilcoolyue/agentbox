@@ -238,8 +238,8 @@
 .side-user-label { color: var(--text); font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 .side-user-quota { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
 .side-user-quota.empty { color: var(--red); }
-.side-user-conn { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 4px 8px; }
-.side-user-conn .conn-latency { flex: none; padding: 0 0 0 8px; height: 28px; }
+.side-user-conn { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 4px; }
+.side-user-conn .conn-latency { flex: none; padding: 0; height: 28px; font-size: 12px; }
 .side-user-menu {
   position: fixed; z-index: 90; width: 232px; max-width: calc(100vw - 24px);
   padding: 6px; border: 1px solid var(--line); border-radius: 10px;
@@ -402,11 +402,13 @@
 @media (min-width: 761px) {
   :root[data-sidebar-collapsed="true"] .sidebar { width: 68px; }
   :root[data-sidebar-collapsed="true"] .side-head { padding: 0; justify-content: center; }
-  :root[data-sidebar-collapsed="true"] :is(.side-brand, .side-item-label, .side-section-head, .sc-body, .conn-text, .session-empty-text) { display: none; }
+  :root[data-sidebar-collapsed="true"] :is(.side-brand, .side-item-label, .side-section-head, .sc-body, .session-empty-text) { display: none; }
   :root[data-sidebar-collapsed="true"] .side-create { padding: 16px 12px 12px; }
   :root[data-sidebar-collapsed="true"] .side-new { padding: 0; justify-content: center; }
   :root[data-sidebar-collapsed="true"] .side-sessions { padding: 0 4px; }
-  :root[data-sidebar-collapsed="true"] .session-list { padding: 2px 4px 6px; }
+  :root[data-sidebar-collapsed="true"] .session-list { padding: 2px 4px 6px; scrollbar-width: none; }
+  /* 68px 的窄栏里滚动条会把头像挤偏；滚轮与触控板照常能滚 */
+  :root[data-sidebar-collapsed="true"] .session-list::-webkit-scrollbar { display: none; }
   :root[data-sidebar-collapsed="true"] .session-card { height: 46px; padding: 0; justify-content: center; }
   :root[data-sidebar-collapsed="true"] .session-card .agent-ico { display: none; }
   :root[data-sidebar-collapsed="true"] .sc-initial {
@@ -414,9 +416,8 @@
   }
   :root[data-sidebar-collapsed="true"] .session-card.st-off .sc-initial { opacity: 0.6; }
   :root[data-sidebar-collapsed="true"] .side-foot { padding-left: 8px; padding-right: 8px; }
-  :root[data-sidebar-collapsed="true"] :is(.side-item, .conn-latency) { padding: 0; justify-content: center; }
+  :root[data-sidebar-collapsed="true"] .side-item { padding: 0; justify-content: center; }
   :root[data-sidebar-collapsed="true"] .side-tools { grid-template-columns: 1fr; justify-items: center; }
-  :root[data-sidebar-collapsed="true"] .conn-latency { flex: none; width: 100%; height: 20px; }
   :root[data-sidebar-collapsed="true"] .side-collapse { margin: 0; width: 36px; height: 36px; }
   :root[data-sidebar-collapsed="true"] .side-collapse svg { transform: rotate(180deg); }
   :root[data-sidebar-collapsed="true"] .side-tool { width: 38px; }

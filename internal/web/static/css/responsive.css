@@ -15,6 +15,44 @@
 .action-popover .btn:hover { background: var(--panel-2); }
 .action-popover .fv-meta { white-space: normal; overflow-wrap: anywhere; padding: 10px 12px; border-top: 1px solid var(--line); }
 .action-popover .action-label { display: inline; }
+/* 窄屏顶栏的分区菜单：全部分区一次列出，竖屏无需滚动（矮屏才在菜单内原生滚动） */
+.mobile-section-btn {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px;
+  font: inherit; font-size: 13px; line-height: 1.5; text-align: left;
+  color: var(--text); background: transparent;
+  border: 1px solid var(--line); border-radius: 8px;
+}
+.mobile-section-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-section-btn[aria-expanded="true"] { border-color: var(--amber-dim); }
+.mobile-section-btn[aria-expanded="true"] .select-caret { transform: translateY(3px) rotate(225deg); border-color: var(--amber); }
+.section-menu {
+  position: fixed; inset: auto; margin: 0; padding: 6px;
+  width: min(264px, calc(100vw - 16px)); overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel); color: var(--text); box-shadow: var(--shadow-lg);
+}
+.section-menu:popover-open { display: flex; flex-direction: column; gap: 2px; animation: select-enter 120ms ease-out; }
+.section-menu::backdrop { background: transparent; }
+.section-menu-item {
+  display: flex; align-items: center; gap: 12px; flex: none;
+  width: 100%; min-height: 44px; padding: 0 12px;
+  font: inherit; font-size: 14px; text-align: left;
+  color: var(--text); background: transparent; border: 0; border-radius: 8px;
+}
+.section-menu-item .ui-icon { flex: none; color: var(--muted); }
+.section-menu-item .count {
+  margin-left: auto; padding: 0 7px;
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px;
+}
+.section-menu-item:hover { background: var(--panel-2); }
+.section-menu-item:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+.section-menu-item[aria-checked="true"] { color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, transparent); }
+.section-menu-item[aria-checked="true"] :is(.ui-icon, .count) { color: var(--amber); }
+.section-menu-item[aria-checked="true"] .count { border-color: var(--amber-dim); }
+.section-menu-item:disabled { opacity: .4; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .section-menu:popover-open { animation: none; } }
 .fv-head { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 6px 12px; }
 .fv-title { min-width: 0; gap: 10px; }
 .fv-name { max-width: 70%; flex-shrink: 1; }
@@ -48,7 +86,6 @@
   .topbar { min-height: 60px; padding: 8px 12px; gap: 8px; }
   .menu-btn { width: 44px; height: 44px; background: transparent; border-color: transparent; }
   .mobile-section { margin-left: auto; min-width: 0; max-width: 52%; }
-  .mobile-section .select-trigger { min-height: 44px; width: 100%; background: transparent; font-size: 13px; }
   #view-settings > .set-head, #view-git > .set-head, #view-tunnel > .set-head { display: none; }
   .usage-head > div:first-child { display: none; }
   .set-head.usage-head { min-height: 0; padding: 8px 16px; background: transparent; }
