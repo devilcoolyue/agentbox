@@ -149,6 +149,8 @@
   .term-keys button[aria-pressed="true"] { box-shadow: inset 0 -2px var(--term-cursor); }
   .term-keys button:focus-visible { outline: 2px solid var(--term-cursor); outline-offset: -2px; }
   .term-keys button:disabled { opacity: .35; }
+  /* 长按由 term-touch.ts 弹出粘贴菜单，别让 iOS 的系统长按气泡抢在前面 */
+  .term-mount .xterm { -webkit-touch-callout: none; }
   #term-keyboard { border-left: 1px solid var(--term-sel); border-radius: 0; }
   /* dvh 不会在所有手机浏览器中随软键盘缩小，实际高度由 VisualViewport 提供。 */
   .app.term-viewport {

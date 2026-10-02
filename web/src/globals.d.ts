@@ -33,6 +33,8 @@ interface XtermBufferLine {
 
 interface XtermBuffer {
   active: {
+    /** 备用屏（全屏程序、tmux）没有 xterm 自己的回滚区 */
+    readonly type: "normal" | "alternate";
     getLine(y: number): XtermBufferLine | undefined;
   };
 }
@@ -60,7 +62,11 @@ interface XtermTerminal {
   readonly cols: number;
   readonly rows: number;
   readonly buffer: XtermBuffer;
-  readonly modes: { applicationCursorKeysMode: boolean };
+  readonly modes: {
+    applicationCursorKeysMode: boolean;
+    /** 程序（tmux 开了 mouse）是否在要鼠标上报；开着时滚轮被编码成上报发给程序 */
+    mouseTrackingMode: "none" | "x10" | "vt200" | "drag" | "any";
+  };
   /** 承载键盘输入的隐藏 textarea；IME 相关处理需要直接操作它 */
   readonly textarea: HTMLTextAreaElement | undefined;
   /** open 之后的根元素，随实例销毁；挂监听用它而不是 #term-mount，避免重建实例后叠加 */
@@ -69,6 +75,10 @@ interface XtermTerminal {
   open(parent: HTMLElement): void;
   write(data: string | Uint8Array): void;
   focus(): void;
+  /** 按粘贴写入：换行转成回车，程序开着括号粘贴时整段包起来 */
+  paste(data: string): void;
+  /** 滚动 xterm 自己的回滚区，正数往下 */
+  scrollLines(amount: number): void;
   dispose(): void;
   loadAddon(addon: XtermAddon): void;
   onData(handler: (data: string) => void): void;

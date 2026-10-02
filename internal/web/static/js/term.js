@@ -2,13 +2,15 @@
  * 终端内粘贴图片上传。 */
 "use strict";
 import { S, bus } from "./state.js";
-import { $, isMobile, openLightbox } from "./util.js";
+import { $, isMobile, openLightbox, toast } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { fmtUSD } from "./quota.js";
 import { refreshAll } from "./data.js";
 import { pastedImages } from "./chat.js";
 import { setTip } from "./tip.js";
 import { attachTermInputDebug, traceTermInput } from "./term-input-debug.js";
+import { attachTouchScroll } from "./term-touch.js";
+import { menuJustDismissed, openMenuAt } from "./menu.js";
 const TerminalClass = window.Terminal && (window.Terminal.Terminal || window.Terminal);
 const FitAddonClass = window.FitAddon && (window.FitAddon.FitAddon || window.FitAddon);
 const WebglAddonClass = window.WebglAddon && (window.WebglAddon.WebglAddon || window.WebglAddon);
@@ -283,6 +285,14 @@ function ensureTerm() {
         bridgeDroppedInput(term.element, term.textarea);
         attachTermInputDebug(term.element, term.textarea);
     }
+    attachTouchScroll(term, {
+        longPress: (x, y) => {
+            if (termKeys.disabled)
+                return;
+            openMenuAt(x, y, [{ label: "粘贴", icon: "paste", run: () => void pasteClipboard() }]);
+        },
+        swallowTap: menuJustDismissed,
+    });
     term.onData((d) => {
         dataSeq++;
         traceTermInput("xterm", d);
@@ -651,32 +661,72 @@ function termUploadUI() {
     }
     syncTermKeys();
 }
+async function uploadTermImages(files) {
+    termUpload.total += files.length;
+    termUploadUI();
+    for (const f of files) {
+        try {
+            const res = await uploadAttachment(f);
+            if (S.termWS && S.termWS.readyState === WebSocket.OPEN) {
+                S.termWS.send(ENC.encode(res.path + " "));
+            }
+        }
+        catch (err) {
+            if (S.term)
+                S.term.write(`\r\n\x1b[31m图片上传失败: ${err.message}\x1b[0m\r\n`);
+        }
+        termUpload.done++;
+        if (termUpload.done === termUpload.total) {
+            termUpload.total = 0;
+            termUpload.done = 0;
+        }
+        termUploadUI();
+    }
+}
 $("term-mount").addEventListener("paste", (e) => {
     const files = pastedImages(e);
     if (!files.length || !S.current)
         return;
     e.preventDefault();
     e.stopPropagation();
-    (async () => {
-        termUpload.total += files.length;
-        termUploadUI();
-        for (const f of files) {
-            try {
-                const res = await uploadAttachment(f);
-                if (S.termWS && S.termWS.readyState === WebSocket.OPEN) {
-                    S.termWS.send(ENC.encode(res.path + " "));
-                }
-            }
-            catch (err) {
-                if (S.term)
-                    S.term.write(`\r\n\x1b[31m图片上传失败: ${err.message}\x1b[0m\r\n`);
-            }
-            termUpload.done++;
-            if (termUpload.done === termUpload.total) {
-                termUpload.total = 0;
-                termUpload.done = 0;
-            }
-            termUploadUI();
-        }
-    })();
+    void uploadTermImages(files);
 }, true);
+/* 手机上长按终端的「粘贴」。触屏上 xterm 的输入框只是光标处看不见的一个点，长按别处出不来
+ * 系统的粘贴菜单，只能自己读剪贴板（要 HTTPS）：iOS 会再弹一个系统「粘贴」气泡确认，Android
+ * 第一次会问剪贴板权限。图片与桌面粘贴一样上传后写入路径；文字走 xterm 的 paste，程序开着
+ * 括号粘贴（Claude 会开）时多行文字整段送达，不会被当成一行行回车。 */
+async function pasteClipboard() {
+    const clip = navigator.clipboard;
+    if (!clip?.read && !clip?.readText) {
+        toast("浏览器不允许网页读取剪贴板（需要 HTTPS 访问）", true);
+        return;
+    }
+    let text = "";
+    const images = [];
+    try {
+        if (clip.read) {
+            for (const item of await clip.read()) {
+                const image = item.types.find((t) => t.startsWith("image/"));
+                if (image)
+                    images.push(await item.getType(image));
+                else if (item.types.includes("text/plain"))
+                    text += await (await item.getType("text/plain")).text();
+            }
+        }
+        else {
+            text = await clip.readText();
+        }
+    }
+    catch {
+        toast("没能读取剪贴板：请允许浏览器访问剪贴板后再试", true);
+        return;
+    }
+    if (!S.term || !S.current || termKeys.disabled)
+        return;
+    if (images.length)
+        void uploadTermImages(images);
+    else if (text)
+        S.term.paste(text);
+    else
+        toast("剪贴板里没有文字或图片");
+}

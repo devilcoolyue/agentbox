@@ -435,6 +435,7 @@ data/
   终端画面并停止自动重连。控制帧上限 125 字节，reason 由 `truncReason` 按 rune 截断。
 - 断开只停得住新的输入：tmux detach 不杀进程，已经在跑的 agent 会继续跑完。
 - xterm 6 会丢掉 iOS 中文键盘直接上屏的标点（「，」等，上游 xtermjs/xterm.js#3070），也不认连按标点键时 iOS 不带按键事件的删除/替换（「，。？！」循环）。`term.ts` 的 `bridgeDroppedInput` 在 xterm 所有发送时机（keydown、keypress、229 差分定时器、输入事件）都过去后，若这次按键 xterm 一字未发且不在组字，才按 textarea 前后差异补发（先退格再插入，最多删 8 个字符）；升级 xterm 后若上游已修复（PR #5614），删掉它并保留 `test-browser.mjs` 的「恰好发送一次」断言。真机事件顺序用地址参数 `?imedebug` 打开 `term-input-debug.ts` 的诊断面板，上传到 `/shared/.file/`（只在开启期间记录，含期间输入的字符）。
+- xterm 6 没有触摸滚动，单指拖动原本落给浏览器滚走整页。`term-touch.ts` 把单指纵向滑动换算成滚轮事件派发给 xterm，与桌面滚轮同路：tmux（`mouse on`）下是鼠标滚轮上报，tmux 进历史模式、一次翻 5 行（所以每 3 行手指位移发一次），普通屏才直接 `scrollLines`。单指 touchmove 一律 `preventDefault`（页面放大时除外），双指交还浏览器缩放；滑动过的触摸抬手吞掉点击，免得弹出键盘。历史模式里打字会被 tmux 吞掉，Esc 或滑回底部退出，与桌面滚轮翻历史一致。长按 500ms 由同一模块回调 `term.ts`，用 `menu.ts` 的 `openMenuAt` 在手指上方弹「粘贴」（不挪焦点，否则软键盘收起）：触屏上 xterm 输入框只是光标处一个点，系统粘贴菜单出不来，只能 Clipboard API 读剪贴板（要 HTTPS），图片走与桌面粘贴相同的上传，文字走 `term.paste`（括号粘贴）。Android 长按的 contextmenu 在捕获阶段拦下，不能让 xterm 当右键处理。回归在 `scripts/test-term-touch.mjs`（CDP 真实触摸）。
 
 ### 文件/共享目录
 

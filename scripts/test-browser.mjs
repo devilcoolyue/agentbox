@@ -12,6 +12,7 @@ import { imageUpdateSmoke } from './test-image-updates.mjs';
 import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
+import { terminalTouchSmoke } from './test-term-touch.mjs';
 
 export async function smoke(page) {
  page.setDefaultTimeout(15000);
@@ -615,6 +616,7 @@ export async function smoke(page) {
   await page.keyboard.press('Backspace'); await lastInput('\x7f');
   // Message boundaries depend on whether xterm or the bridge sends the insertion; the PTY sees one byte stream.
   assert.equal(terminalInput.slice(cycleStart).join(''), '\x7f。\x7f？\x7f', 'cycled punctuation must replace the previous symbol');
+  await terminalTouchSmoke(page, {send:data => terminalSocket.send(data), input:() => terminalInput});
   await page.locator('#term-keyboard').click();
   assert.equal(await page.locator('.xterm-helper-textarea').evaluate(el=>el===document.activeElement),false);
   await page.locator('#term-keyboard').click();

@@ -57,7 +57,7 @@
 <details>
 <summary><strong>浅色主题与手机界面</strong></summary>
 
-支持跟随系统、浅色和深色主题；窄屏提供抽屉导航，触屏终端另有快捷键栏。
+支持跟随系统、浅色和深色主题；窄屏提供抽屉导航，触屏终端另有快捷键栏，单指上下滑动可翻看历史输出，长按可粘贴。
 
 <img src="docs/images/chat-light.png" alt="浅色主题下的 AI 编码工作台" width="960" />
 

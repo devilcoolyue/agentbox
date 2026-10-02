@@ -20,17 +20,22 @@ export interface MenuItem {
   sep?: boolean;
 }
 
-interface OpenMenu { pop: HTMLElement; btn: HTMLElement; }
+/** 按钮弹出的菜单记着按钮（展开状态、收起后还焦点）；长按弹出的只有一个位置，btn 为空 */
+interface OpenMenu { pop: HTMLElement; btn: HTMLElement | null; }
 let current: OpenMenu | null = null;
+let dismissedAt = -Infinity;
 
 export function closeMenu(focusButton = false) {
   if (!current) return;
   const { pop, btn } = current;
   current = null;
   pop.remove();
-  btn.setAttribute("aria-expanded", "false");
-  if (focusButton) btn.focus();
+  btn?.setAttribute("aria-expanded", "false");
+  if (focusButton) btn?.focus();
 }
+
+/** 刚刚有一下点在菜单外把它收起了：那一下只是收菜单，触摸处不该再当成点击 */
+export function menuJustDismissed() { return performance.now() - dismissedAt < 600; }
 
 function place(pop: HTMLElement, btn: HTMLElement) {
   const r = btn.getBoundingClientRect();
@@ -43,10 +48,7 @@ function place(pop: HTMLElement, btn: HTMLElement) {
   pop.style.top = Math.max(edge, top) + "px";
 }
 
-export function openMenu(btn: HTMLElement, items: MenuItem[]) {
-  const reopen = current?.btn === btn;
-  closeMenu();
-  if (reopen) return; // 再点一次按钮 = 收起
+function buildMenu(items: MenuItem[]) {
   const pop = document.createElement("div");
   pop.className = "kebab-menu menu-pop";
   pop.setAttribute("role", "menu");
@@ -75,12 +77,35 @@ export function openMenu(btn: HTMLElement, items: MenuItem[]) {
     });
     pop.append(b);
   });
+  return pop;
+}
+
+export function openMenu(btn: HTMLElement, items: MenuItem[]) {
+  const reopen = current?.btn === btn;
+  closeMenu();
+  if (reopen) return; // 再点一次按钮 = 收起
+  const pop = buildMenu(items);
   (btn.closest("dialog[open]") || document.body).append(pop);
   btn.setAttribute("aria-expanded", "true");
   hideTip(); // 菜单本身就写明了每一项，按钮的「更多操作」气泡会盖住第一行
   current = { pop, btn };
   place(pop, btn);
   pop.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
+}
+
+/* 在手指长按处弹出（终端里长按粘贴）：浮在手指上方居中，免得被手指挡住。不挪焦点，点菜单项
+ * 也不让焦点离开原处——终端输入框一失焦，手机软键盘就收起了。 */
+export function openMenuAt(x: number, y: number, items: MenuItem[]) {
+  closeMenu();
+  const pop = buildMenu(items);
+  pop.addEventListener("mousedown", (e) => e.preventDefault());
+  document.body.append(pop);
+  hideTip();
+  current = { pop, btn: null };
+  const w = pop.offsetWidth, h = pop.offsetHeight, gap = 14, edge = 8;
+  const top = y - gap - h >= edge ? y - gap - h : Math.min(y + gap, innerHeight - h - edge);
+  pop.style.left = Math.max(edge, Math.min(x - w / 2, innerWidth - w - edge)) + "px";
+  pop.style.top = Math.max(edge, top) + "px";
 }
 
 /* 「⋯」按钮：items 每次打开时重新取，禁用/隐藏状态随当前数据走。 */
@@ -108,7 +133,9 @@ export function bindMenu(btn: HTMLElement, items: () => MenuItem[]) {
 document.addEventListener("pointerdown", (e) => {
   if (!current) return;
   const t = e.target as Node;
-  if (!current.pop.contains(t) && !current.btn.contains(t)) closeMenu();
+  if (current.pop.contains(t) || current.btn?.contains(t)) return;
+  closeMenu();
+  dismissedAt = performance.now();
 }, true);
 window.addEventListener("keydown", (e) => {
   if (!current) return;

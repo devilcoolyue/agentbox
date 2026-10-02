@@ -57,7 +57,7 @@ These are **browser screenshots of the current source UI**, using synthetic proj
 <details>
 <summary><strong>Light theme and mobile UI</strong></summary>
 
-Choose system, light, or dark themes. Narrow screens use drawer navigation, and touch terminals include a shortcut key bar.
+Choose system, light, or dark themes. Narrow screens use drawer navigation, and touch terminals include a shortcut key bar one-finger swipes to scroll back through output, and long-press to paste.
 
 <img src="docs/images/chat-light.png" alt="AI coding console in the light theme" width="960" />
 
