@@ -597,6 +597,7 @@ data/
   `staticHandler`），一个 .ts 对一个 .js 才能维持这套长缓存。
 - 单选下拉统一走 `web/src/select.ts` + `css/select.css`：入口 `enhanceSelects()` 增强现有 `<select>`，原元素继续提供表单值与 `input/change` 事件。动态插入控件后调用 `enhanceSelects(root)`；代码赋值用 `setSelectValue(select, value)`，因为原生 `.value` / `.selectedIndex` 赋值不触发 MutationObserver。选项列表和禁用/隐藏属性变更自动同步，不要另写一套菜单。
 - 可滚动的弹层/列表不要在 `pointerdown` 上无条件 `preventDefault()`：Safari 26.5 起这会取消这次触摸的滚动。只对 `pointerType === "mouse"` 拦截。
+- 获焦提示与按钮焦点环只给键盘操作：iOS / Safari 点按钮不获焦，随后 `showModal()` 或菜单用程序挪过去的焦点会被判成 `:focus-visible`（手指点开的弹窗，关闭按钮上带框带「关闭」气泡）。`modality.ts` 在 `<html data-input>` 记最近一次是键盘还是指针；新写「获焦就显示」的逻辑要同时核对 `keyboardInput()`。
 - 窄屏顶栏的分区切换（系统设置 / Git 管理，`responsive.ts` 的 `mobile-section-menu`）是导航菜单，不是表单下拉：条目照桌面导航按钮生成，一次列全、竖屏不滚动，没有搜索框（获焦就弹键盘、把列表挤成一小截）。别把它并回 `select.ts`；分区多到一屏放不下时再考虑分组。
 - 前端类型约定：`web/src/types.d.ts` 是 API/WS 报文的接口定义，每个接口对应 Go 侧一个
   结构体，改服务端报文时两边一起改；`web/src/globals.d.ts` 声明 xterm/KaTeX 等

@@ -52,5 +52,18 @@ export async function fileActionSmoke(page) {
   await page.keyboard.press('Escape');
   await page.locator('#btn-upload').focus();
   await page.locator('#tip.show').filter({hasText:'上传文件或代码包到当前目录'}).waitFor();
+  // iOS 点按钮不获焦，随后 showModal()/菜单挪过去的焦点被判成 focus-visible。这里让浏览器仍按
+  // 键盘焦点算、最近一次操作却是手指：不弹提示，也不画按钮焦点环（modality.ts）
+  const refocus = () => page.evaluate(() => { document.activeElement?.blur(); document.getElementById('btn-upload').focus(); });
+  await page.evaluate(() => document.body.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true, pointerType:'touch'})));
+  await refocus();
+  assert.deepEqual(await page.evaluate(() => {
+    const el = document.getElementById('btn-upload');
+    return {visible:el.matches(':focus-visible'), ring:getComputedStyle(el).outlineStyle, tip:document.getElementById('tip').classList.contains('show')};
+  }), {visible:true, ring:'none', tip:false});
+  await page.keyboard.press('Escape');
+  await refocus();
+  await page.locator('#tip.show').filter({hasText:'上传文件或代码包到当前目录'}).waitFor();
+  assert.equal(await page.locator('#btn-upload').evaluate(el => getComputedStyle(el).outlineStyle), 'solid');
   await page.keyboard.press('Escape');
 }

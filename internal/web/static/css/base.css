@@ -171,6 +171,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
   outline: 2px solid var(--amber);
   outline-offset: 1px;
 }
+/* 手指点开弹窗 / 菜单后，iOS 也把程序挪过去的焦点算成 focus-visible（见 modality.ts），
+ * 关闭按钮凭空套个框；按钮的焦点环只留给键盘。输入框照常显示，那是在告诉你往哪打字 */
+:root[data-input="pointer"] button:focus-visible { outline: none; }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 
 /* ---- 字标：logo 主形 + AGENTBOX + 呼吸光标 ---- */

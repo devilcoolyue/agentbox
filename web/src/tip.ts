@@ -15,6 +15,7 @@
 "use strict";
 
 import { $ } from "./util.js";
+import { keyboardInput } from "./modality.js";
 
 const OPEN_DELAY = 90;     // 冷启动延迟：够滤掉随手划过，又远快于原生的半秒起
 const WARM_MS = 260;       // 上一个刚收起，这段时间内换目标算「连读」，零延迟接上
@@ -209,10 +210,11 @@ document.addEventListener("pointermove", (e) => {
 
 document.addEventListener("pointerleave", () => hide());
 
-/* 键盘走到带提示的控件上立即显示——原生 title 做不到这件事 */
+/* 键盘走到带提示的控件上立即显示——原生 title 做不到这件事。手指点开弹窗时 iOS 会把
+ * showModal() 给关闭按钮的焦点也算成 :focus-visible，所以还要核对最近一次是不是键盘操作。 */
 document.addEventListener("focusin", (e) => {
   const t = e.target as HTMLElement | null;
-  if (!t?.matches?.(":focus-visible")) return;
+  if (!keyboardInput() || !t?.matches?.(":focus-visible")) return;
   const el = fromNode(t);
   if (!el) return;
   clearTimeout(openTimer); openTimer = undefined;
