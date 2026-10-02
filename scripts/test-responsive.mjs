@@ -26,6 +26,8 @@ export async function responsiveSmoke(page, base) {
         for (const height of [900, 667]) {
           await page.setViewportSize({width,height});
           await page.locator('#mobile-section-btn').click();
+          // 定位与聚焦排在打开后的下一帧；机器快时直接读会早于那一帧
+          await page.waitForFunction(()=>document.activeElement?.closest('#mobile-section-menu'));
           const menu = await page.locator('#mobile-section-menu:popover-open').evaluate(menu => {
             const r = menu.getBoundingClientRect();
             return {items:menu.querySelectorAll('[role=menuitemradio]').length, inputs:menu.querySelectorAll('input').length,
@@ -66,7 +68,12 @@ export async function responsiveSmoke(page, base) {
         await page.keyboard.press('Escape');
         // 收起侧栏：工具图标与会话头像都在窄栏正中；用户弹层不受窄栏规则影响，「连接延迟」横排、读数可见。
         await page.locator('#btn-sidebar-toggle').click();
-        await page.waitForFunction(()=>document.querySelector('#sidebar').getBoundingClientRect().width<80);
+        // 侧栏宽度有 0.2s 过渡：等它走完再量，过渡中途量到的是半截宽度
+        const sidebarSettled = narrow => page.waitForFunction(narrow => {
+          const side = document.querySelector('#sidebar'), width = side.getBoundingClientRect().width;
+          return (narrow ? width < 80 : width > 100) && !side.getAnimations({subtree:true}).some(a => a instanceof CSSTransition);
+        }, narrow);
+        await sidebarSettled(true);
         const rail = await page.evaluate(()=>{
           const side = document.querySelector('#sidebar').getBoundingClientRect();
           const mid = side.left + (side.width - 1) / 2; // 去掉右边框
@@ -84,7 +91,7 @@ export async function responsiveSmoke(page, base) {
         await page.screenshot({animations:'disabled',path:`output/playwright/collapsed-menu-${width}-${theme}.png`});
         await page.keyboard.press('Escape');
         await page.locator('#btn-sidebar-toggle').click();
-        await page.waitForFunction(()=>document.querySelector('#sidebar').getBoundingClientRect().width>100);
+        await sidebarSettled(false);
       }
       await page.goto(base + '/#/settings/models');
       await page.locator('#sec-models').waitFor({state:'visible'});
