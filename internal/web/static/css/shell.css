@@ -323,6 +323,7 @@
   padding: 2px 4px 6px;
 }
 .session-card {
+  position: relative;
   flex: none; width: 100%; height: 56px; min-width: 0;
   display: flex; align-items: center; gap: 11px;
   color: var(--text); text-align: left;
@@ -331,7 +332,13 @@
   transition: background 0.15s ease, color 0.15s ease;
 }
 .session-card:hover { background: var(--side-hover); }
-.session-card.active { background: var(--side-active); box-shadow: inset 3px 0 var(--amber); }
+.session-card.active { background: var(--side-active); }
+/* 选中标记是贴左缘、垂直居中的一小段直线：整条内阴影会顺着 8px 圆角弯成括号状，显得又粗又重 */
+.session-card.active::before {
+  content: ""; position: absolute; left: 0; top: 50%;
+  width: 2px; height: 20px; transform: translateY(-50%);
+  border-radius: 0 2px 2px 0; background: var(--amber);
+}
 .session-card .agent-avatar { border: 0; background: color-mix(in srgb, var(--brand) 9%, transparent); }
 .session-card .agent-avatar .led { border-color: var(--panel); }
 .session-card.active .agent-avatar .led { border-color: var(--side-active); }
