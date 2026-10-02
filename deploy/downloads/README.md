@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.7 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.8 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.7
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.8
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.7_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.8_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.7_linux_arm64/install.sh --version v0.1.7
+sudo bash agentbox_v0.1.8_linux_arm64/install.sh --version v0.1.8
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,12 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### v0.1.7 升级至 v0.1.8
+
+标准 Linux/systemd 版本目录安装可在「关于与更新」检查更新并升级至 v0.1.8，也可下载校验后使用包内 `deploy/release.py install/activate`。本版沿用 schema 9，不新增数据库迁移，升级会备份并重启服务。
+
+本版优化控制台导航与系统设置保存，修复上传到当前目录及清理范围，改善 iOS 中文标点输入，并新增终端触摸滚动与长按粘贴。长按粘贴需 HTTPS 和浏览器剪贴板授权；终端历史模式可按 Esc 或滑回底部退出。服务端升级不自动更换工作空间镜像。
 
 ### v0.1.6 / 开发版升级至 v0.1.7
 
@@ -98,7 +104,7 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 服务端包附带可选浏览器镜像配方。在解包目录运行（基础镜像名按当前配置替换）：
 
 ```bash
-AGENTBOX_BROWSER_BASE_IMAGE=agentbox-agent:v0.1.7 ./scripts/build-browser-image.sh
+AGENTBOX_BROWSER_BASE_IMAGE=agentbox-agent:v0.1.8 ./scripts/build-browser-image.sh
 ```
 
 然后在「系统设置 → 容器」将镜像设为 `agentbox-agent:browser`，停止并重新启动需要浏览器的空间。Linux amd64 使用固定版本 Google Chrome for Testing，ARM 使用 Chromium。推荐每空间 2 GiB 内存、2 CPU、512 PID。服务器需允许非特权用户命名空间，Chrome 沙箱保持开启。

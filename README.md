@@ -107,7 +107,7 @@ Run on a Linux server:
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
 ```
 
-The current stable release is [v0.1.7](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.7). The installer selects the latest stable release by default. Append `-s -- --version v0.1.7` to pin this version.
+The current stable release is [v0.1.8](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.8). The installer selects the latest stable release by default. Append `-s -- --version v0.1.8` to pin this version.
 
 On SELinux systems such as Oracle Linux / RHEL, if an older package fails to start with `203/EXEC` / `Permission denied`, follow [SELinux installation recovery](deploy/README.md#selinux-安装恢复) to repair executable labels before retrying activation.
 
