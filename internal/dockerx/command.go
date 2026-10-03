@@ -29,8 +29,19 @@ func (e *CommandError) ExitCode() int { return e.Code }
 // attached reads on cancellation. Callers must also bound the process inside
 // the container: disconnecting an exec stream alone doesn't terminate it.
 func (m *Manager) ExecCommand(ctx context.Context, containerID string, cmd []string) (string, error) {
+	return m.ExecCommandEnv(ctx, containerID, cmd, nil)
+}
+
+// ExecCommandEnv is the bounded command transport for interactive-terminal
+// preparation. Account values are passed through Docker's exec Env, never baked
+// into the container or interpolated into a shell's command-line arguments.
+func (m *Manager) ExecCommandEnv(ctx context.Context, containerID string, cmd []string, env []string) (string, error) {
+	if env != nil {
+		env = append([]string{"TERM=xterm-256color", "DISABLE_AUTOUPDATER=1"}, env...)
+	}
 	id, err := m.cli.ContainerExecCreate(ctx, containerID, container.ExecOptions{
 		User: execUser, WorkingDir: WorkspaceMount,
+		Env:          env,
 		AttachStdout: true, AttachStderr: true, Cmd: cmd,
 	})
 	if err != nil {

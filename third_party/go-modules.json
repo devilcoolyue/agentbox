@@ -173,6 +173,17 @@
     ]
   },
   {
+    "module": "github.com/mattn/go-isatty",
+    "version": "v0.0.20",
+    "source": "https://github.com/mattn/go-isatty",
+    "files": [
+      {
+        "path": "third_party/go/github.com_mattn_go-isatty@v0.0.20/LICENSE",
+        "sha256": "08eab1118c80885fa1fa6a6dd7303f65a379fcb3733e063d20d1bbc2c76e6fa1"
+      }
+    ]
+  },
+  {
     "module": "github.com/moby/docker-image-spec",
     "version": "v1.3.1",
     "source": "https://github.com/moby/docker-image-spec",
@@ -180,6 +191,17 @@
       {
         "path": "third_party/go/github.com_moby_docker-image-spec@v1.3.1/LICENSE",
         "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ]
+  },
+  {
+    "module": "github.com/ncruces/go-strftime",
+    "version": "v1.0.0",
+    "source": "https://github.com/ncruces/go-strftime",
+    "files": [
+      {
+        "path": "third_party/go/github.com_ncruces_go-strftime@v1.0.0/LICENSE",
+        "sha256": "38ae43959daf953a393a585b2988672cb65a5a541aca0d0be5e72595a0a16883"
       }
     ]
   },
@@ -337,6 +359,17 @@
     "files": [
       {
         "path": "third_party/go/golang.org_x_sys@v0.47.0/LICENSE",
+        "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+      }
+    ]
+  },
+  {
+    "module": "golang.org/x/text",
+    "version": "v0.41.0",
+    "source": "https://golang.org/x/text",
+    "files": [
+      {
+        "path": "third_party/go/golang.org_x_text@v0.41.0/LICENSE",
         "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
       }
     ]

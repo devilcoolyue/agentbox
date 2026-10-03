@@ -1,0 +1,13 @@
+{
+  "name": "webview2-com-sys",
+  "version": "0.39.1",
+  "license": "MIT",
+  "commit": "edc2caf886175ccaebe86078c9cfe1ae2a187328",
+  "files": [
+    {
+      "file": "LICENSE",
+      "url": "https://raw.githubusercontent.com/wravery/webview2-rs/edc2caf886175ccaebe86078c9cfe1ae2a187328/LICENSE",
+      "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73"
+    }
+  ]
+}

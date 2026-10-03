@@ -30,6 +30,23 @@ Chat, terminal, files, and code review share one persistent workspace.
 
 ## Why agentbox?
 
+An optional Windows/macOS desktop client is under development in [`desktop/`](desktop/README.md).
+It connects to older servers for login, workspace selection and the shared terminal. This development
+server adds pairing, logical projects and independent AI/shell terminal tabs without moving files or
+changing workspace account bindings. Local directory preflight is available; development sync APIs now
+provide manifests, leases, conditional file/directory operations and recovery downloads. Automatic file sync is still
+in development. Completed recovery copies can be explicitly removed locally or on the original server;
+server cleanup preserves permanent receipts at the original operation IDs to prevent replay. The cleanup
+capability is advertised separately as `sync_recovery_gc=1`; `sync=0` still keeps desktop synchronization
+disabled. Desktop local state uses schema 5 (migrating schemas 1–4); server metadata remains schema 10.
+Rollback requires a compatible backup. Cross-platform and release acceptance remain incomplete; see the
+[implementation record](docs/architecture/desktop-client-progress.md).
+
+The desktop includes persistent application zoom and a terminal context menu. macOS sync directories must
+be on a verified internal fixed disk. Servers advertising `sync_recovery_inspect=1` also offer recovery
+inspection and export after local history is lost; explicit cleanup retains execution receipts and never
+marks an uncertain operation complete. This maintenance capability does not enable synchronization.
+
 | What you want to do | How agentbox helps |
 | --- | --- |
 | **Resume coding anywhere** | Connect to persistent workspaces from your browser; code, home configuration, and chat history stay on your server |

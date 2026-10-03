@@ -182,6 +182,8 @@ func Create(ctx context.Context, opts Options) (_ *Manifest, err error) {
 	if err = add(stage, "state.db", "data/state.db", false); err != nil {
 		return nil, err
 	}
+	// client-instance-id is intentionally installation-local, not backed up.
+	// A restored service must require desktop clients to confirm a new baseline.
 	for _, name := range []string{"creds", "home-template", "git-secrets"} {
 		if err = add(data, name, "data/"+name, true); err != nil {
 			return nil, err

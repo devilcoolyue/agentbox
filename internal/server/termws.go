@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"agentbox/internal/dockerx"
 	"agentbox/internal/store"
 )
 
@@ -137,20 +138,7 @@ func shellQuote(s string) string {
 // 这一层只挡输入。tmux 里已经跑着的程序断开连接也不会停（detach 不杀进程），
 // 真要按量算准还得从中转站侧计量，见 AGENTS.md 的已知缺口。
 func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	if why := s.quotaBlock(sess.User); why != "" {
-		// 先升级再关：理由要送到浏览器手里，升级前返回 HTTP 错误它看不见。
-		if conn, err := s.upgrader.Upgrade(w, r, nil); err == nil {
-			closeWithReason(conn, closeQuota, why)
-			conn.Close()
-		}
-		return
-	}
-
-	if _, err := s.sessionAccount(sess); err != nil {
-		if conn, upgradeErr := s.upgrader.Upgrade(w, r, nil); upgradeErr == nil {
-			closeWithReason(conn, closeAccountAccess, err.Error())
-			conn.Close()
-		}
+	if !s.admitTerminal(w, r, sess) {
 		return
 	}
 
@@ -185,6 +173,34 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 		return
 	}
 
+	s.workspaces().Activity().Hold(sess.ID)
+	defer s.workspaces().Activity().Release(sess.ID)
+	s.bridgeTermPTY(w, r, sess, pty)
+}
+
+func (s *Server) admitTerminal(w http.ResponseWriter, r *http.Request, sess store.Session) bool {
+	if why := s.quotaBlock(sess.User); why != "" {
+		// 先升级再关：理由要送到浏览器手里，升级前返回 HTTP 错误它看不见。
+		if conn, err := s.upgrader.Upgrade(w, r, nil); err == nil {
+			closeWithReason(conn, closeQuota, why)
+			conn.Close()
+		}
+		return false
+	}
+
+	if _, err := s.sessionAccount(sess); err != nil {
+		if conn, upgradeErr := s.upgrader.Upgrade(w, r, nil); upgradeErr == nil {
+			closeWithReason(conn, closeAccountAccess, err.Error())
+			conn.Close()
+		}
+		return false
+	}
+
+	return true
+}
+
+func (s *Server) bridgeTermPTY(w http.ResponseWriter, r *http.Request, sess store.Session, pty *dockerx.PTY, checks ...func() error) {
+
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		pty.Close()
@@ -192,16 +208,14 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 	}
 	defer conn.Close()
 	defer pty.Close()
+	if len(checks) > 0 {
+		conn.SetReadLimit(64 << 10)
+	}
 	release, ok := s.track(func() { _ = conn.Close(); pty.Close() })
 	if !ok {
 		return
 	}
 	defer release()
-
-	// An attached terminal runs a live PTY exec inside the container; hold it
-	// so the idle reaper can't stop the container out from under the shell.
-	s.workspaces().Activity().Hold(sess.ID)
-	defer s.workspaces().Activity().Release(sess.ID)
 
 	conn.SetReadDeadline(time.Now().Add(wsPongWait))
 	conn.SetPongHandler(func(string) error {
@@ -245,6 +259,13 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 			case <-done:
 				return
 			case <-t.C:
+				for _, check := range checks {
+					if check() != nil {
+						closeWithReason(conn, 4005, "终端已结束或正在关闭")
+						conn.Close()
+						return
+					}
+				}
 				if _, err := s.sessionAccount(sess); err != nil {
 					closeWithReason(conn, closeAccountAccess, err.Error())
 					conn.Close()
@@ -269,6 +290,12 @@ func (s *Server) handleTermWS(w http.ResponseWriter, r *http.Request, sess store
 		mt, data, err := conn.ReadMessage()
 		if err != nil {
 			return
+		}
+		for _, check := range checks {
+			if check() != nil {
+				closeWithReason(conn, 4005, "终端已结束或正在关闭")
+				return
+			}
 		}
 		if _, err := s.sessionAccount(sess); err != nil {
 			closeWithReason(conn, closeAccountAccess, err.Error())

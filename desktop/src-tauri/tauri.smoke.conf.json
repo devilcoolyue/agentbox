@@ -1,0 +1,16 @@
+{
+  "identifier": "io.github.devilcoolyue.agentbox.desktop.smoke",
+  "productName": "Agentbox Smoke",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Agentbox — synthetic smoke test",
+        "center": true,
+        "alwaysOnTop": true,
+        "width": 1180,
+        "height": 780
+      }
+    ]
+  }
+}

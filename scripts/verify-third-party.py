@@ -30,7 +30,8 @@ linked = set()
 for system, arch, package in [
     ('linux','amd64','agentbox'), ('linux','arm64','agentbox'),
     ('linux','amd64','abox-link'), ('linux','arm64','abox-link'),
-    ('darwin','amd64','abox-link'), ('darwin','arm64','abox-link'), ('windows','amd64','abox-link')]:
+    ('darwin','amd64','abox-link'), ('darwin','arm64','abox-link'), ('windows','amd64','abox-link'),
+    ('darwin','amd64','abox-sync'), ('darwin','arm64','abox-sync'), ('windows','amd64','abox-sync')]:
     env = dict(os.environ, GOOS=system, GOARCH=arch, CGO_ENABLED='0')
     lines = subprocess.check_output(['go','list','-deps','-f',
         '{{if .Module}}{{if not .Module.Main}}{{.Module.Path}}{{end}}{{end}}','./cmd/'+package],

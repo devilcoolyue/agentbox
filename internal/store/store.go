@@ -242,7 +242,7 @@ func (s *Store) Delete(id string) error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, query := range []string{"DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
+	for _, query := range []string{"DELETE FROM client_terminals WHERE session_id=?", "DELETE FROM client_projects WHERE session_id=?", "DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
 		if _, err := tx.Exec(query, id); err != nil {
 			return err
 		}

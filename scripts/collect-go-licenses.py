@@ -14,6 +14,8 @@ for goos, goarch, package in [
     ('linux', 'amd64', './cmd/abox-link'), ('linux', 'arm64', './cmd/abox-link'),
     ('darwin', 'amd64', './cmd/abox-link'), ('darwin', 'arm64', './cmd/abox-link'),
     ('windows', 'amd64', './cmd/abox-link'),
+    ('darwin', 'amd64', './cmd/abox-sync'), ('darwin', 'arm64', './cmd/abox-sync'),
+    ('windows', 'amd64', './cmd/abox-sync'),
 ]:
     env = dict(os.environ, GOOS=goos, GOARCH=goarch, CGO_ENABLED='0')
     raw = subprocess.check_output(['go', 'list', '-deps', '-json', package], env=env, text=True)

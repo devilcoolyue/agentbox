@@ -1,0 +1,13 @@
+{
+  "name": "webview2-com-macros",
+  "version": "0.8.1",
+  "license": "MIT",
+  "commit": "dffa41a8a46d3f5565eefbff2de57d38d399f158",
+  "files": [
+    {
+      "file": "LICENSE",
+      "url": "https://raw.githubusercontent.com/wravery/webview2-rs/dffa41a8a46d3f5565eefbff2de57d38d399f158/LICENSE",
+      "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73"
+    }
+  ]
+}

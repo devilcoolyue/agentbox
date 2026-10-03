@@ -495,3 +495,44 @@ func (f rootFS) Open(name string) (fs.File, error) {
 	defer d.Close()
 	return d.root.Open(".")
 }
+
+// Remove removes only one entry, never a directory tree. The caller must check
+// its expected type/content while holding its application mutation lock.
+func (r *Root) Remove(name string) error {
+	p, leaf, err := r.parent(name)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	return p.root.Remove(leaf)
+}
+
+// Sync persists directory entry changes through the pinned descriptor.
+func (r *Root) Sync() error {
+	f, err := r.root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Sync()
+}
+
+// RemoveDirectory uses AT_REMOVEDIR: a concurrent file/symlink replacement must
+// never turn an empty-directory removal into an unlink of that replacement.
+func (r *Root) RemoveDirectory(name string) error {
+	p, leaf, err := r.parent(name)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	f, err := p.root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	err = unix.Unlinkat(int(f.Fd()), leaf, unix.AT_REMOVEDIR)
+	if err != nil {
+		return &os.PathError{Op: "rmdir", Path: name, Err: err}
+	}
+	return nil
+}

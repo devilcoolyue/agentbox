@@ -1,0 +1,178 @@
+name: Desktop release candidates
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Reviewed desktop version (must match all package manifests)
+        required: true
+        type: string
+      signed:
+        description: Require OS signing, Apple notarization and updater signatures
+        type: boolean
+        default: false
+      previous_tag:
+        description: Optional exact desktop-v tag for actual old-to-new installation (omitted reports upgrade skipped)
+        required: false
+        type: string
+permissions:
+  contents: read
+jobs:
+  candidate:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: rustfmt,clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: go test ../internal/syncclient ../internal/syncfs ../internal/syncproto ../cmd/abox-sync
+      - run: npm run sidecar -- ${{ matrix.target }}
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - run: python scripts/test-release-manifest.py
+      - run: python scripts/test-candidate-config.py
+      - name: Upgrade probe harness and bundled sidecar migration fixture (macOS)
+        if: runner.os == 'macOS'
+        run: python scripts/test-installed-harness.py --sidecar "src-tauri/binaries/abox-sync-${{ matrix.target }}"
+      - name: Upgrade probe harness and bundled sidecar migration fixture (Windows)
+        if: runner.os == 'Windows'
+        run: python scripts/test-installed-harness.py --sidecar "src-tauri/binaries/abox-sync-${{ matrix.target }}.exe"
+      - run: python scripts/collect-licenses.py
+      - name: Import Windows signing certificate
+        if: inputs.signed && runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CERTIFICATE: ${{ secrets.DESKTOP_WINDOWS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DESKTOP_WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (!$env:CERTIFICATE -or !$env:CERTIFICATE_PASSWORD) { throw 'Missing desktop signing certificate' }
+          $certificateFile = Join-Path $env:RUNNER_TEMP 'desktop-signing.pfx'
+          [IO.File]::WriteAllBytes($certificateFile,[Convert]::FromBase64String($env:CERTIFICATE))
+          $password = ConvertTo-SecureString $env:CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $certificateFile -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          "WINDOWS_CERTIFICATE_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
+          Remove-Item $certificateFile
+      - name: Prepare Apple notarization key
+        if: inputs.signed && runner.os == 'macOS'
+        env:
+          API_KEY_CONTENT: ${{ secrets.DESKTOP_APPLE_API_KEY_CONTENT }}
+        run: |
+          python -c "import os,pathlib; p=pathlib.Path(os.environ['RUNNER_TEMP'])/'desktop-notary.p8'; p.write_text(os.environ['API_KEY_CONTENT']); p.chmod(0o600)"
+          echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/desktop-notary.p8" >> "$GITHUB_ENV"
+      - name: Build independently signed desktop candidate
+        env:
+          DESKTOP_VERSION: ${{ inputs.version }}
+          DESKTOP_SIGNED: ${{ inputs.signed }}
+          DESKTOP_TARGET: ${{ matrix.target }}
+          DESKTOP_BUNDLES: ${{ matrix.bundles }}
+          AGENTBOX_UPDATER_PUBLIC_KEY: ${{ inputs.signed && vars.DESKTOP_UPDATER_PUBLIC_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.signed && secrets.DESKTOP_UPDATER_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.DESKTOP_UPDATER_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.DESKTOP_APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.DESKTOP_APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.DESKTOP_APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.DESKTOP_APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
+        run: python scripts/build-candidate.py
+      - name: Fetch frozen previous desktop package and verify SHA256
+        if: inputs.previous_tag != ''
+        shell: python
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ inputs.previous_tag }}
+          DESKTOP_TARGET: ${{ matrix.target }}
+        run: |
+          import os, pathlib, subprocess, sys
+          subprocess.run([sys.executable, 'scripts/prepare-previous.py', '--tag', os.environ['PREVIOUS_TAG'], '--target', os.environ['DESKTOP_TARGET'], '--directory', str(pathlib.Path(os.environ['RUNNER_TEMP']) / 'previous-desktop')], check=True)
+      - name: Installed package and optional actual previous-to-candidate upgrade
+        shell: python
+        env:
+          DESKTOP_VERSION: ${{ inputs.version }}
+          DESKTOP_TARGET: ${{ matrix.target }}
+          PREVIOUS_TAG: ${{ inputs.previous_tag }}
+        run: |
+          import json, os, pathlib, subprocess, sys
+          root = pathlib.Path('src-tauri/target') / os.environ['DESKTOP_TARGET'] / 'release/bundle'
+          packages = list((root / 'nsis').glob('*.exe')) if os.name == 'nt' else [root / 'macos/Agentbox.app']
+          if len(packages) != 1:
+              raise RuntimeError('Expected one candidate package')
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          command = [sys.executable, 'scripts/test-installed.py', str(packages[0]), '--expected-version', os.environ['DESKTOP_VERSION'], '--report', str(temporary / 'installed-probe.json')]
+          if os.name == 'nt':
+              command.append('--disposable-windows-user')
+          if os.environ['PREVIOUS_TAG']:
+              previous = json.loads((temporary / 'previous-desktop/previous-package.json').read_text())
+              command += ['--previous', previous['package']]
+          subprocess.run(command, check=True)
+      - name: Verify Apple signature and stapled notarization
+        if: inputs.signed && runner.os == 'macOS'
+        run: |
+          codesign --verify --deep --strict "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Agentbox.app"
+          spctl --assess --type execute "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Agentbox.app"
+          xcrun stapler validate "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Agentbox.app"
+      - name: Verify Windows installer signature
+        if: inputs.signed && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem 'src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe'
+          if ($installers.Count -ne 1) { throw 'Expected one installer' }
+          foreach ($installer in $installers) {
+            if ((Get-AuthenticodeSignature $installer.FullName).Status -ne 'Valid') { throw 'Invalid Authenticode signature' }
+          }
+      - name: Upload candidates and licenses (no public Release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-candidate-${{ matrix.target }}
+          path: |
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.tar.gz
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/**/*.sig
+            desktop/third-party/
+            ${{ runner.temp }}/installed-probe.json
+            ${{ runner.temp }}/previous-desktop/previous-package.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove temporary Apple key
+        if: always() && runner.os == 'macOS'
+        run: python -c "import pathlib,os; (pathlib.Path(os.environ['RUNNER_TEMP'])/'desktop-notary.p8').unlink(missing_ok=True)"
+      - name: Remove imported Windows certificate
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:WINDOWS_CERTIFICATE_THUMBPRINT) { Remove-Item "Cert:\CurrentUser\My\$env:WINDOWS_CERTIFICATE_THUMBPRINT" -ErrorAction SilentlyContinue }
+# Publication is separate. Both versioned desktop releases and the stable feed
+# must set make_latest=false, preserving the old server installer/update API.

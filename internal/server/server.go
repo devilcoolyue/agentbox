@@ -3,6 +3,7 @@
 package server
 
 import (
+	"agentbox/internal/syncproto"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -59,6 +60,20 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
+	clientIdentityOnce sync.Once
+	clientInstanceID   string
+	clientIdentityErr  error
+
+	clientLeasesOnce    sync.Once
+	clientLeases        *syncproto.Leases
+	clientManifestOnce  sync.Once
+	clientManifestSlots chan struct{}
+	clientInventoryMu   sync.Mutex
+	clientInventories   map[string]*clientJournalInventory
+
+	clientPairsOnce sync.Once
+	clientPairs     *pairStore
+
 	imageUpdatesOnce sync.Once
 	imageUpdates     *imageupdate.Service
 
@@ -232,6 +247,28 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/tunnel/probe", s.auth(http.HandlerFunc(s.handleNetworkProbe)))
 	mux.HandleFunc("GET /api/ping", s.handlePing)
 	mux.Handle("POST /api/logout", s.auth(http.HandlerFunc(s.handleLogout)))
+	mux.Handle("GET /api/clients/capabilities", s.auth(http.HandlerFunc(s.handleClientCapabilities)))
+	mux.Handle("POST /api/clients/pair", s.auth(http.HandlerFunc(s.handleClientPair)))
+	mux.HandleFunc("POST /api/clients/pair/redeem", s.handleClientPairRedeem)
+	mux.Handle("GET /api/sessions/{id}/client-projects", s.auth(s.withSession(s.handleClientProjects)))
+	mux.Handle("GET /api/sessions/{id}/sync/manifest", s.auth(s.withSession(s.withSyncIdentity(s.handleClientManifest))))
+	mux.Handle("GET /api/sessions/{id}/sync/file", s.auth(s.withSession(s.withSyncIdentity(s.handleClientFile))))
+	mux.Handle("GET /api/sessions/{id}/sync/storage", s.auth(s.withSession(s.withSyncIdentity(s.handleClientStorage))))
+	mux.Handle("GET /api/sessions/{id}/sync/recovery-operations", s.auth(s.withSession(s.withSyncIdentity(s.handleClientRecoveryOperations))))
+	mux.Handle("GET /api/sessions/{id}/sync/recovery-operations/{operation}", s.auth(s.withSession(s.withSyncIdentity(s.handleClientRecoveryInspect))))
+	mux.Handle("POST /api/sessions/{id}/sync/recovery-operations/{operation}/retire", s.auth(s.withSession(s.withSyncIdentity(s.handleClientRecoveryInspectRetire))))
+	mux.Handle("POST /api/sessions/{id}/sync/operations/{operation}/retire", s.auth(s.withSession(s.withSyncIdentity(s.handleClientRetire))))
+	mux.Handle("GET /api/sessions/{id}/sync/operations/{operation}", s.auth(s.withSession(s.withSyncIdentity(s.handleClientOperation))))
+	mux.Handle("GET /api/sessions/{id}/sync/operations/{operation}/{recovery}", s.auth(s.withSession(s.withSyncIdentity(s.handleClientOperation))))
+	mux.Handle("POST /api/sessions/{id}/sync/apply", s.auth(s.withSession(s.withSyncIdentity(s.handleClientMutation))))
+	mux.Handle("POST /api/sessions/{id}/sync/lease", s.auth(s.withSession(s.withSyncIdentity(s.handleClientLease))))
+	mux.Handle("POST /api/sessions/{id}/client-projects", s.auth(s.withSession(s.handleClientProjects)))
+	mux.Handle("PUT /api/sessions/{id}/client-projects/{project}", s.auth(s.withSession(s.handleClientProjects)))
+	mux.Handle("DELETE /api/sessions/{id}/client-projects/{project}", s.auth(s.withSession(s.handleClientProjectDelete)))
+	mux.Handle("GET /api/sessions/{id}/client-terminals", s.auth(s.withSession(s.handleClientTerminals)))
+	mux.Handle("POST /api/sessions/{id}/client-terminals", s.auth(s.withSession(s.handleClientTerminals)))
+	mux.Handle("DELETE /api/sessions/{id}/client-terminals/{terminal}", s.auth(s.withSession(s.handleClientTerminalDelete)))
+	mux.Handle("GET /api/sessions/{id}/client-terminals/{terminal}/stream", s.auth(s.withSession(s.handleClientTerminalWS)))
 	mux.Handle("GET /api/me", s.auth(http.HandlerFunc(s.handleMe)))
 	mux.Handle("POST /api/me/password", s.auth(http.HandlerFunc(s.handleChangePassword)))
 	mux.Handle("GET /api/me/git", s.auth(http.HandlerFunc(s.handleGitProfile)))

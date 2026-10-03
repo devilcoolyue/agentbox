@@ -74,6 +74,11 @@ jobs:
             GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/abox-link
           done
 
+      - name: Independent desktop terminals (real Linux PTY/tmux, no model calls)
+        run: |
+          docker build -t agentbox-client-test:ci -f internal/server/testdata/client.Dockerfile internal/server/testdata
+          AGENTBOX_CLIENT_TEST_IMAGE=agentbox-client-test:ci go test ./internal/server -run '^TestClientTerminalsContainerLive$' -count=1 -v
+
   govulncheck:
     runs-on: ubuntu-latest
     steps:
