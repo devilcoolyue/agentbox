@@ -1,5 +1,8 @@
 # 桌面候选包、更新通道与验收
 
+0.1.1 未签名测试版的三平台自动化验收、候选来源和仍需外部资源的发布条件见
+[开发验收表](desktop-client-acceptance.md)。下面保留构建、签名及正式发布的操作约定。
+
 桌面与 Linux 服务端独立构建。桌面版本标签为 `desktop-vX.Y.Z`；稳定更新清单位于
 `https://github.com/devilcoolyue/agentbox/releases/download/desktop-stable/latest.json`。
 应用不读取 GitHub `releases/latest`，该入口仍留给旧服务端安装器及更新器。

@@ -1,5 +1,21 @@
 # 桌面客户端实施记录
 
+## 2026-10-04：功能开发与未签名自动化验收完成
+
+最终功能提交 `926690df08edd84ab67bf67a805d526538c8eaed` 的
+[run 37183406848](https://github.com/devilcoolyue/agentbox/actions/runs/37183406848) 六个job全部通过。
+Windows已实跑新增sharing/lock重试与条件复核测试，45项Rust、系统凭证、NSIS安装/诊断/卸载和
+两类原生界面测试全部通过；Mac ARM/Intel均通过打包、安装探针、三类原生界面与故障恢复。
+Windows→真实Linux同步、冻结旧服务端/网页/abox-link兼容及Linux真实ENOSPC/SIGKILL也通过。
+
+本地最终Go全仓build/test/vet通过（server248.557s），同步四包通过；前端48项测试、类型检查
+和构建通过，Rust61项默认测试及Clippy通过。独立Go→Rust集成验证预览重试标记不会用于写入。
+三平台0.1.1候选与原始报告保存在 `output/desktop-candidates/0.1.1-926690d/`，包含源码/run/
+artifact来源和SHA-256。当前状态和明确未覆盖的正式签名、最低系统与物理交互见
+[开发验收表](desktop-client-acceptance.md)。本次交付为未签名测试版，没有公开发布或修改生产配置。
+下载后三包校验和已核对；两份DMG只读挂载及ad-hoc签名完整性检查通过。最终ARM64包与真实
+0.1.0旧包在隔离目录再次完成升级验证，设备、绑定、基线与历史保留，用户安装和真实凭证未改。
+
 ## 2026-10-04：最后两项重试行为与三平台验收收尾
 
 此前修复已由提交 `542ef9d9fd4bd5686e1cc4417a0054804bde7016` 的

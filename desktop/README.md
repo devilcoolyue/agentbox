@@ -11,6 +11,9 @@
 与[开发验收表](../docs/architecture/desktop-client-acceptance.md)；历史过程见
 [实施记录](../docs/architecture/desktop-client-progress.md)。
 
+0.1.1 的 Mac ARM64、Mac Intel、Windows x64 未签名包已通过三平台CI构建与自动化验收；
+对应源码、安装/原生界面的覆盖范围及剩余发布条件均记录在开发验收表中。
+
 ## 界面与操作
 
 客户端沿用现有网页版的 Agentbox 标识、线性图标、琥珀强调色，以及深色与暖色浅色主题。
