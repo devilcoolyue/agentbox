@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validate smoke launching and process ownership without opening any app."""
 import importlib.util
+import io
 import json
 from pathlib import Path
 import plistlib
@@ -125,6 +126,43 @@ class SmokeHarness(unittest.TestCase):
                     else:
                         with self.assertRaises(SystemExit):runner.run_smoke(binary,report,{},require_sync=True)
                 stop.assert_called_once_with(binary,report)
+                process.kill.assert_not_called()
+
+    def test_cli_prints_native_report_and_failure_diagnostics_on_windows_code_page(self):
+        for succeeds in (True, False):
+            with self.subTest(succeeds=succeeds), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                environment = self.sync_environment(root)
+                report = root / 'report.json'
+                content = {'ok': succeeds, 'sync_mode': True, 'terminal': '中文回显 🧪'}
+                process = Mock()
+                process.wait.return_value = 0
+                process.poll.return_value = 0
+
+                def launched(*args, **kwargs):
+                    report.write_text(json.dumps(content, ensure_ascii=False), encoding='utf-8')
+                    report.with_suffix('.stages').write_text('终端已打开', encoding='utf-8')
+                    return process
+
+                output_bytes = io.BytesIO()
+                with io.TextIOWrapper(output_bytes, encoding='cp1252') as output, \
+                        patch.object(runner.sys, 'stdout', output), \
+                        patch.object(runner.sys, 'argv', ['smoke.py', '/isolated/smoke', '--sync-fixture']), \
+                        patch.dict(runner.os.environ, environment, clear=True), \
+                        patch.object(runner, 'macos_session_diagnostics', return_value=None), \
+                        patch.object(runner.subprocess, 'Popen', side_effect=launched):
+                    if succeeds:
+                        runner.main()
+                    else:
+                        with self.assertRaisesRegex(SystemExit, 'Native desktop smoke failed'):
+                            runner.main()
+                    output.flush()
+                    decoded = output_bytes.getvalue().decode('utf-8')
+                    self.assertIn('中文回显 🧪', decoded)
+                    if succeeds:
+                        self.assertTrue(json.loads(decoded)['ok'])
+                    else:
+                        self.assertIn('终端已打开', decoded)
                 process.kill.assert_not_called()
 
 

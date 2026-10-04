@@ -156,6 +156,11 @@ def run_smoke(binary, report, environment, timeout_seconds=60, require_sync=Fals
 
 
 def main():
+    # Redirected Windows Python streams otherwise use the system code page;
+    # native reports and failure diagnostics include UTF-8 terminal output.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='backslashreplace')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('binary', type=Path)
     modes = parser.add_mutually_exclusive_group()
