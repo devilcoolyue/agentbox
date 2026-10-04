@@ -10,6 +10,7 @@ import argparse
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
+import importlib.util
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -18,10 +19,14 @@ import queue
 import re
 import shutil
 import sqlite3
+import stat
 import subprocess
 import tempfile
 import threading
 import time
+
+from webview2_support import (UNINSTALL_KEY, bounded_file, install_command, pe_machine,
+                              registry_values, write_report)
 
 SERVER_ID = 'a' * 64
 TOKEN = 'isolated-install-probe'
@@ -55,9 +60,125 @@ def check_windows_isolation(disposable):
         raise ValueError('NSIS probe requires --disposable-windows-user on a GitHub-hosted disposable runner; temporary install paths do not isolate registry entries')
 
 
-def install(package, installed):
+def app_registry():
+    return registry_values(UNINSTALL_KEY, ['DisplayVersion', 'InstallLocation', 'UninstallString'])
+
+
+def package_executable(package):
+    """Read the exact candidate's PE bytes without executing it or trusting a build directory."""
+    specification = importlib.util.spec_from_file_location('nsis_payload_audit', Path(__file__).with_name('test-webview2-package.py'))
+    audit = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(audit)
+    seven_zip = shutil.which('7z') or str(Path(os.environ['ProgramFiles']) / '7-Zip/7z.exe')
+    package_identity = bounded_file(package)
+    listing = subprocess.run([seven_zip, 'l', '-slt', '-sccUTF-8', str(package)], capture_output=True,
+                             text=True, encoding='utf-8', timeout=45, check=True).stdout
+    if len(listing) > 16 * 1024 * 1024:
+        raise ValueError('NSIS payload listing exceeded limit')
+    with tempfile.TemporaryDirectory(prefix='agentbox-payload-identity-') as temporary:
+        executable = Path(temporary) / 'agentbox-desktop.exe'
+        audit.extract(seven_zip, package, audit.archive_entry(listing, executable.name), executable)
+        if pe_machine(executable) != 0x8664:
+            raise ValueError('Installed probe requires the actual Windows x64 payload')
+        result = bounded_file(executable)
+    if bounded_file(package) != package_identity:
+        raise ValueError('Installer changed while verifying its payload')
+    return package_identity, result
+
+
+def normal_path(path, directory=False):
+    metadata = path.lstat()
+    if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, 'st_file_attributes', 0) & 0x400:
+        raise ValueError('Installer fixture path became a link or reparse point')
+    if (directory and not stat.S_ISDIR(metadata.st_mode)) or (not directory and not stat.S_ISREG(metadata.st_mode)):
+        raise ValueError('Installer fixture has an unexpected file type')
+    return metadata.st_dev, metadata.st_ino
+
+
+def registry_path(value):
+    # Tauri writes quoted InstallLocation and UninstallString values. Permit
+    # exactly a path, never command arguments from a registry string.
+    if value.startswith('"') and value.endswith('"'):
+        value = value[1:-1]
+    if not value or any(character in value for character in ('"', '\r', '\n', '\0')):
+        raise ValueError('Invalid installer registry path')
+    path = Path(value)
+    if not path.is_absolute():
+        raise ValueError('Installer registry path is not absolute')
+    return path.resolve()
+
+
+class WindowsInstallGuard:
+    def __init__(self, installed):
+        self.before = app_registry()
+        if any(row['exists'] for row in self.before):
+            raise ValueError('Agentbox is already registered; do not replace a pre-existing application')
+        if any(installed.iterdir()) or installed.resolve() != installed:
+            raise ValueError('Require an empty, owned installer fixture directory')
+        self.directory = installed
+        self.identity = normal_path(installed, directory=True)
+        self.payloads = []
+        self.report = {'registry_before': self.before, 'cleanup': 'not_run'}
+
+    def prepare(self, package):
+        package_identity, executable = package_executable(package)
+        self.payloads.append(executable)
+        if bounded_file(package) != package_identity:
+            raise ValueError('Verified installer changed before launch')
+
+    def missing(self):
+        self.report['registry_after_attempt'] = app_registry()
+        self.report['unexpected_locations_followed'] = False
+        return ValueError('Installed desktop executable missing; observed installer registry: ' +
+                          json.dumps(self.report['registry_after_attempt'], ensure_ascii=False))
+
+    def verify_executable(self):
+        if self.directory.resolve() != self.directory or normal_path(self.directory, directory=True) != self.identity:
+            raise ValueError('Owned installation directory changed')
+        executable = self.directory / 'agentbox-desktop.exe'
+        normal_path(executable)
+        if bounded_file(executable) not in self.payloads:
+            raise ValueError('Installed executable does not match a verified candidate payload')
+
+    def cleanup(self):
+        current = app_registry()
+        self.report['registry_after_attempt'] = current
+        self.report['unexpected_locations_followed'] = False
+        executable = self.directory / 'agentbox-desktop.exe'
+        uninstaller = self.directory / 'uninstall.exe'
+        if not executable.exists() and current == self.before:
+            self.report['cleanup'] = 'not_installed'
+            return
+        try:
+            self.verify_executable()
+            normal_path(uninstaller)
+            for row in current:
+                if row['exists'] and (row['hive'] != 'HKCU' or
+                        registry_path(row['values'].get('InstallLocation', '')) != self.directory or
+                        registry_path(row['values'].get('UninstallString', '')) != uninstaller):
+                    raise ValueError('Unexpected registered installation; location recorded but not followed')
+            # This path is fixed inside our previously empty owned directory.
+            # Never execute a registry command or follow a fallback location.
+            subprocess.run([str(uninstaller), '/S'], shell=False, check=True, timeout=180)
+            for _ in range(50):
+                if not executable.exists() and app_registry() == self.before:
+                    self.report['cleanup'] = 'passed'
+                    self.report['registry_after_cleanup'] = app_registry()
+                    return
+                time.sleep(0.2)
+            raise ValueError('Owned installation files or registry remain after uninstall')
+        except Exception as error:
+            self.report['cleanup'] = 'failed'
+            self.report['cleanup_error'] = str(error)
+            raise
+
+
+def install(package, installed, guard=None):
     if os.name == 'nt':
-        subprocess.run([str(package), '/S', '/D=' + str(installed)], check=True, timeout=180)
+        if guard is None:
+            raise ValueError('Windows installation requires an owned disposable fixture guard')
+        guard.prepare(package)
+        subprocess.run(install_command(package, installed), shell=False, check=True, timeout=180)
         executable = installed / 'agentbox-desktop.exe'
     else:
         if package.suffix != '.app' or not package.is_dir():
@@ -71,7 +192,9 @@ def install(package, installed):
         staging.rename(destination)
         executable = destination / 'Contents/MacOS/agentbox-desktop'
     if not executable.is_file():
-        raise ValueError('Installed desktop executable missing')
+        raise guard.missing() if guard is not None else ValueError('Installed desktop executable missing')
+    if guard is not None:
+        guard.verify_executable()
     return executable
 
 
@@ -236,43 +359,57 @@ def main():
     parser.add_argument('--disposable-windows-user', action='store_true')
     parser.add_argument('--report', type=Path)
     args = parser.parse_args()
-    check_windows_isolation(args.disposable_windows_user)
-    package = args.package.resolve()
-    with tempfile.TemporaryDirectory(prefix='agentbox-install-') as temporary, fixture_peer() as server:
-        directory = Path(temporary).resolve()
-        installed = directory / 'Agentbox 安装测试'
-        installed.mkdir()
-        try:
-            old = None
-            if args.previous:
-                executable = install(args.previous.resolve(), installed)
-                old = diagnostics(executable, directory, 'previous')
-                seeded = seed_state(executable.with_name('abox-sync.exe' if os.name == 'nt' else 'abox-sync'), directory, server)
-            executable = install(package, installed)
-            current = diagnostics(executable, directory, 'current')
-            if args.expected_version and current['version'] != args.expected_version:
-                raise ValueError('Installed version does not match reviewed candidate')
-            upgrade = {'status': 'skipped', 'reason': 'No actual previous package supplied'}
-            if old:
-                if (old['os'], old['arch']) != (current['os'], current['arch']) or semver(old['version']) >= semver(current['version']):
-                    raise ValueError('Upgrade requires an older version of the same OS and architecture')
-                state, local, binding_id, before = seeded
-                retention = verify_retention(executable.with_name('abox-sync.exe' if os.name == 'nt' else 'abox-sync'), state, local, binding_id, before, server)
-                upgrade = {'status': 'passed', 'previous_version': old['version'], 'current_version': current['version'], 'installation': 'nsis' if os.name == 'nt' else 'bundle_replacement', 'sync_state': retention}
-            report = {'installed_probe': 'passed', 'unicode_path': True, 'cold_and_repeat': True, 'version': current['version'], 'platform': current['os'], 'arch': current['arch'], 'upgrade': upgrade, 'gui_ime_tested': False, 'gui_settings_retention_tested': False, 'keyring_retention_tested': False, 'updater_installation_tested': False, 'interrupted_installation_tested': False, 'os_signature_verified': False}
-        finally:
+    report = {'installed_probe': 'failed'}
+    guard = None
+    try:
+        check_windows_isolation(args.disposable_windows_user)
+        package = args.package.resolve()
+        with tempfile.TemporaryDirectory(prefix='agentbox-install-') as temporary, fixture_peer() as server:
+            directory = Path(temporary).resolve()
+            installed = directory / 'Agentbox 安装测试'
+            installed.mkdir()
+            # Snapshot once: --previous then current are both this fixture's
+            # owned installations, never a pre-existing user application.
             if os.name == 'nt':
-                for uninstaller in installed.glob('*ninstall*.exe'):
-                    subprocess.run([str(uninstaller), '/S'], check=True, timeout=180)
-                for _ in range(30):
-                    if not (installed / 'agentbox-desktop.exe').exists():
-                        break
-                    time.sleep(0.2)
-                if (installed / 'agentbox-desktop.exe').exists():
-                    raise ValueError('Uninstall did not remove executable')
+                guard = WindowsInstallGuard(installed)
+            try:
+                old = None
+                if args.previous:
+                    executable = install(args.previous.resolve(), installed, guard)
+                    old = diagnostics(executable, directory, 'previous')
+                    seeded = seed_state(executable.with_name('abox-sync.exe' if os.name == 'nt' else 'abox-sync'), directory, server)
+                executable = install(package, installed, guard)
+                current = diagnostics(executable, directory, 'current')
+                if args.expected_version and current['version'] != args.expected_version:
+                    raise ValueError('Installed version does not match reviewed candidate')
+                upgrade = {'status': 'skipped', 'reason': 'No actual previous package supplied'}
+                if old:
+                    if (old['os'], old['arch']) != (current['os'], current['arch']) or semver(old['version']) >= semver(current['version']):
+                        raise ValueError('Upgrade requires an older version of the same OS and architecture')
+                    state, local, binding_id, before = seeded
+                    retention = verify_retention(executable.with_name('abox-sync.exe' if os.name == 'nt' else 'abox-sync'), state, local, binding_id, before, server)
+                    upgrade = {'status': 'passed', 'previous_version': old['version'], 'current_version': current['version'], 'installation': 'nsis' if os.name == 'nt' else 'bundle_replacement', 'sync_state': retention}
+                report.update(installed_probe='passed', unicode_path=True, cold_and_repeat=True,
+                              version=current['version'], platform=current['os'], arch=current['arch'], upgrade=upgrade,
+                              gui_ime_tested=False, gui_settings_retention_tested=False, keyring_retention_tested=False,
+                              updater_installation_tested=False, interrupted_installation_tested=False, os_signature_verified=False)
+            except Exception as error:
+                report['error'] = str(error)
+                raise
+            finally:
+                if guard is not None:
+                    guard.cleanup()
+    except Exception as error:
+        report['installed_probe'] = 'failed'
+        report.setdefault('error', str(error))
+    finally:
+        if guard is not None:
+            report['windows_installation'] = guard.report
         if args.report:
-            args.report.write_text(json.dumps(report, indent=2) + '\n')
+            write_report(args.report, report)
         print(json.dumps(report, indent=2))
+    if report['installed_probe'] != 'passed':
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

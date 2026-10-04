@@ -321,9 +321,10 @@ func TestDesktopSyncNativeSmoke(t *testing.T) {
 	config, _ := json.Marshal(map[string]string{"server": f.saved.Binding.Server, "local": f.local, "state": stateDir, "export": exportDir})
 	report := filepath.Join(private, "report.json")
 	// The expanded recovery/continuous-sync workflow includes 21 real durable
-	// history commits. Python stops at 170s, leaving time for owned-app cleanup;
+	// history commits. Intel measurements reached 169s with only logout/verification left.
+	// Python stops at 230s, leaving cleanup time and normal runner variance;
 	// per-request and per-UI-step limits remain unchanged.
-	ctx, cancel := context.WithTimeout(t.Context(), 180*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 240*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, binary)
 	if runtime.GOOS == "darwin" {

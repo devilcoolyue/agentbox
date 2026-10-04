@@ -179,9 +179,12 @@ class WebView2HarnessTests(unittest.TestCase):
 
     def test_nsis_unicode_destination_is_last_unquoted_remainder(self):
         command=offline.install_command(r'C:\installer dir\Agentbox.exe',r'C:\guest dir\Agentbox 中文')
+        self.assertIs(offline.install_command,support.install_command)
         self.assertTrue(command.endswith('/D=C:\\guest dir\\Agentbox 中文'))
         self.assertIn('"C:\\installer dir\\Agentbox.exe" /S',command)
-        with self.assertRaises(ValueError):offline.install_command('installer.exe','bad\npath')
+        for character in ('"','\r','\n','\0'):
+            for package,directory in [('installer.exe','bad'+character+'path'),('bad'+character+'installer.exe','directory')]:
+                with self.assertRaises(ValueError):support.install_command(package,directory)
 
 
 if __name__=='__main__':unittest.main()

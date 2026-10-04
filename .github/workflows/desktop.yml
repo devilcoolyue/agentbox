@@ -67,6 +67,12 @@ jobs:
       - name: Portable Go graph only (the server targets Linux)
         run: go test ../internal/syncclient ../internal/syncfs ../internal/syncproto ../cmd/abox-sync
       - run: npm run sidecar -- ${{ matrix.target }}
+      - name: Installation probe harness and bundled sidecar migration fixture
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          sidecar = pathlib.Path('src-tauri/binaries') / ('abox-sync-${{ matrix.target }}' + ('.exe' if os.name == 'nt' else ''))
+          subprocess.run([sys.executable, 'scripts/test-installed-harness.py', '--sidecar', str(sidecar)], check=True)
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - name: Diagnose native Windows loader imports
         if: runner.os == 'Windows'

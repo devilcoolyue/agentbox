@@ -173,7 +173,7 @@ def main():
         # This scenario includes recovery/cleanup/continuous-sync acceptance and
         # 21 real durable commits. Keep Go's final 10 seconds for owned cleanup;
         # individual fixture requests and UI conditions retain their deadlines.
-        run_smoke(binary, report, environment, timeout_seconds=170, require_sync=True)
+        run_smoke(binary, report, environment, timeout_seconds=230, require_sync=True)
         return
     with tempfile.TemporaryDirectory(prefix='agentbox-desktop-smoke-') as directory:
         report = Path(directory) / 'report.json'

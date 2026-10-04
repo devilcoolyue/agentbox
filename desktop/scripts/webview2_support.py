@@ -22,6 +22,14 @@ SOURCE_PREFIX = 'https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingser
 SELECTION_URL = 'https://go.microsoft.com/fwlink/?linkid=2124701'
 
 
+def install_command(package, directory):
+    if any(character in str(path) for path in (package, directory) for character in ('"', '\r', '\n', '\0')):
+        raise ValueError('Invalid NSIS path')
+    # /D is the final unquoted remainder, including spaces. Pass this string
+    # directly to Windows CreateProcess with shell=False, never as an argv list.
+    return subprocess.list2cmdline([str(package), '/S']) + ' /D=' + str(directory)
+
+
 def digest(path):
     with Path(path).open('rb') as source:
         return hashlib.file_digest(source, 'sha256').hexdigest()

@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 
-from webview2_support import (UNINSTALL_KEY, bounded_file, digest, network_inventory,
+from webview2_support import (UNINSTALL_KEY, bounded_file, digest, install_command, network_inventory,
                               registry_values, require_offline, runtime_inventory,
                               runtime_is_absent, sdk_loader, write_report)
 
@@ -28,14 +28,6 @@ def validate_package_audit(package, report):
             or report.get('microsoft_signature', {}).get('status') != 'Valid'):
         raise ValueError('Require a successful actual-payload audit for this exact NSIS artifact')
     return actual
-
-
-def install_command(package, directory):
-    if any(character in str(path) for path in (package, directory) for character in ('"', '\r', '\n', '\0')):
-        raise ValueError('Invalid NSIS path')
-    # NSIS documents /D as the final, unquoted remainder even for spaced paths.
-    # This is a Windows CreateProcess command line, never shell=True.
-    return subprocess.list2cmdline([str(package), '/S']) + ' /D=' + str(directory)
 
 
 def uninstaller_state():

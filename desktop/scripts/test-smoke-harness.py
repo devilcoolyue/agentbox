@@ -85,7 +85,7 @@ class SmokeHarness(unittest.TestCase):
             report.unlink();report.with_suffix('.pid').write_text('424242',encoding='utf-8')
             with self.assertRaises(ValueError):runner.sync_fixture_environment(environment)
 
-    def test_sync_main_reuses_existing_fixture_with_170_second_budget(self):
+    def test_sync_main_reuses_existing_fixture_with_230_second_budget(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory).resolve();environment=self.sync_environment(root)
             with patch.object(runner.sys,'argv',['smoke.py','/isolated/Agentbox Smoke.app/Contents/MacOS/agentbox-desktop','--sync-fixture']), \
@@ -94,22 +94,22 @@ class SmokeHarness(unittest.TestCase):
                     patch.object(runner,'run_smoke') as run:
                 runner.main()
             self.assertEqual(run.call_args.args[1],root/'report.json')
-            self.assertEqual(run.call_args.kwargs,{'timeout_seconds':170,'require_sync':True})
+            self.assertEqual(run.call_args.kwargs,{'timeout_seconds':230,'require_sync':True})
             self.assertEqual(run.call_args.args[2]['AGENTBOX_SMOKE_SYNC'],environment['AGENTBOX_SMOKE_SYNC'])
 
     def test_sync_timeout_cleans_owned_app_and_wait_wrapper(self):
         with tempfile.TemporaryDirectory() as directory:
             report=Path(directory)/'report.json';binary=Path('/isolated/smoke')
-            process=Mock();process.wait.side_effect=[subprocess.TimeoutExpired(['open'],170),0];process.poll.return_value=None
+            process=Mock();process.wait.side_effect=[subprocess.TimeoutExpired(['open'],230),0];process.poll.return_value=None
             with patch.object(runner,'launch_command',return_value=(['open'],'launch-services')), \
                     patch.object(runner.subprocess,'Popen',return_value=process), \
                     patch.object(runner,'stop_owned_application') as stop, \
                     patch.object(runner,'print_diagnostics'):
                 with self.assertRaisesRegex(SystemExit,'timed out'):
-                    runner.run_smoke(binary,report,{},timeout_seconds=170,require_sync=True)
+                    runner.run_smoke(binary,report,{},timeout_seconds=230,require_sync=True)
             stop.assert_called_once_with(binary,report)
             process.kill.assert_called_once()
-            self.assertEqual(process.wait.call_args_list,[call(timeout=170),call(timeout=10)])
+            self.assertEqual(process.wait.call_args_list,[call(timeout=230),call(timeout=10)])
 
     def test_launcher_success_requires_native_sync_report_and_always_cleans_up(self):
         with tempfile.TemporaryDirectory() as directory:
