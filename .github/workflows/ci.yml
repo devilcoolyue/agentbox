@@ -52,7 +52,12 @@ jobs:
       - name: vet
         run: go vet ./...
       - name: test
-        run: go test ./...
+        run: |
+          set -o pipefail
+          go list ./... | rg -v '^agentbox/internal/server$' | xargs go test
+          AGENTBOX_CHOWN_DENIAL_TEST=1 go test ./internal/server -run '^TestSyncMutationLinuxChownDeniedPreservesTarget$' -count=1 -v
+          # Build as the runner; only the server test process needs production UID/GID permissions.
+          go test -exec 'sudo -n --' ./internal/server -count=1
       - name: Deployment policy
         run: |
           python3 scripts/test-browser-runtime.py

@@ -85,6 +85,12 @@ sudo ./deploy/deploy.sh
 CODEX_LIVE_TEST=1 go test -run TestRunCodexTurnLive ./internal/agent/
 ```
 
+Linux 的服务端同步写入必须能设置容器属主 `1000:1000`；普通用户不能直接运行完整
+`internal/server` 写入测试。CI 保持普通用户构建及其他包测试，先用
+`AGENTBOX_CHOWN_DENIAL_TEST=1` 定向执行 `TestSyncMutationLinuxChownDeniedPreservesTarget`
+验证真实 EPERM 与文件保留，再用 `go test -exec 'sudo -n --' ./internal/server` 执行完整服务端测试。
+不要为通过测试放宽生产 Linux 的 Chown 校验；该拒绝回归在 root 全量测试中明确跳过。
+
 ## 生产环境发布
 
 生产机的具体地址、目录、域名等敏感信息不写进版本库，集中放在
