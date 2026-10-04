@@ -1,4 +1,4 @@
-# Agentbox Desktop（开发中）
+# Agentbox Desktop（未签名测试版）
 
 同仓库、独立构建的 Windows/macOS 客户端。目前实现旧服务端基础连接：用户名/密码登录、
 系统凭证库保存/恢复、工作空间列表、共享终端、重连、搜索、字号和主题。
@@ -8,7 +8,8 @@
 与清理按各自能力显示。
 
 服务端和现有网页不依赖本目录。参见[集成计划](../docs/architecture/desktop-client-integration.md)
-与[实施记录](../docs/architecture/desktop-client-progress.md)。
+与[开发验收表](../docs/architecture/desktop-client-acceptance.md)；历史过程见
+[实施记录](../docs/architecture/desktop-client-progress.md)。
 
 ## 界面与操作
 
@@ -44,7 +45,8 @@ Mac 开发包：`npm run tauri -- build --bundles app,dmg`；Windows 开发包�
 Mac 使用 ad-hoc 签名，Windows 尚无 Authenticode 签名；没有配置自动更新。
 
 图标由本仓库 `internal/web/static/img/logo.svg` 生成。依赖固定于 npm/Cargo 锁文件。
-桌面第三方许可证清单随包生成；正式签名、跨平台安装升级及实机体验仍是发布前的剩余门槛。
+桌面第三方许可证清单随包生成。正式签名、公证、正式旧包升级、最低系统与物理交互仍是
+发布前的验收门槛；未签名包的安装、原生界面和兼容验证范围见开发验收表。
 
 ## 验证
 

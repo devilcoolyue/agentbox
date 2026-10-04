@@ -113,7 +113,7 @@ func (r *Remote) request(ctx context.Context, method, workspace, endpoint string
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, ErrTransport
+		return nil, transportFailure(err)
 	}
 	if r.serverID != "" && response.Header.Get("X-Agentbox-Server-ID") != r.serverID {
 		response.Body.Close()
@@ -133,7 +133,7 @@ func decodeRemote(response *http.Response, limit int64, value any) error {
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil {
-		return ErrTransport
+		return transportFailure(err)
 	}
 	if int64(len(data)) > limit || json.Unmarshal(data, value) != nil {
 		return ErrProtocol

@@ -2,6 +2,7 @@ package syncfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"golang.org/x/sys/windows"
 	"os"
@@ -92,6 +93,14 @@ func checkSingleLink(f *os.File) error {
 // File contents are flushed before rename. Power-loss durability of the rename
 // itself remains filesystem-dependent and requires rescan after recovery.
 func syncDirectory(*os.Root) error { return nil }
+
+func retryableReplaceError(err error) bool {
+	return errors.Is(err, windows.ERROR_SHARING_VIOLATION) || errors.Is(err, windows.ERROR_LOCK_VIOLATION)
+}
+
+func replaceStaged(ctx context.Context, root *os.Root, staged, target string, validate func() error) error {
+	return retryFileReplace(ctx, validate, func() error { return root.Rename(staged, target) }, retryableReplaceError)
+}
 
 // Delete by a relative, type-restricted handle. It neither traverses a reparse
 // point nor falls back to pathname unlink when sharing/permissions refuse it.

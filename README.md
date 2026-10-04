@@ -30,17 +30,19 @@ Chat, terminal, files, and code review share one persistent workspace.
 
 ## Why agentbox?
 
-An optional Windows/macOS desktop client is under development in [`desktop/`](desktop/README.md).
-It connects to older servers for login, workspace selection and the shared terminal. This development
-server adds pairing, logical projects and independent AI/shell terminal tabs without moving files or
-changing workspace account bindings. Local directory preflight is available; development sync APIs now
-provide manifests, leases, conditional file/directory operations and recovery downloads. Automatic file sync is still
-in development. Completed recovery copies can be explicitly removed locally or on the original server;
-server cleanup preserves permanent receipts at the original operation IDs to prevent replay. The cleanup
-capability is advertised separately as `sync_recovery_gc=1`; `sync=0` still keeps desktop synchronization
-disabled. Desktop local state uses schema 5 (migrating schemas 1–4); server metadata remains schema 10.
-Rollback requires a compatible backup. Cross-platform and release acceptance remain incomplete; see the
-[implementation record](docs/architecture/desktop-client-progress.md).
+The optional Windows/macOS client in [`desktop/`](desktop/README.md) provides unsigned test packages.
+Older servers support login, workspace selection, the shared terminal and manual file transfers.
+Extended servers add pairing, logical projects, independent AI/shell tabs, local directory mappings,
+sync previews, per-file conflict handling and continuous synchronization while preserving workspace
+account rules. The client follows the existing web console's branding, icons, themes and interaction patterns.
+
+Synchronization is disabled by default (`desktop_sync_enabled=false`, capability `sync=0`) and requires
+explicit administrator opt-in. Recovery inspection, export and cleanup use independent capabilities;
+cleanup preserves permanent receipts at the original operation IDs to prevent replay. Desktop local state
+uses schema 5 (migrating schemas 1–4); server metadata uses schema 10. Rollback requires a compatible backup.
+Formal signing, notarization, minimum OS versions and physical interactions still require acceptance;
+see the [development and acceptance record](docs/architecture/desktop-client-acceptance.md) for verified
+coverage and test package provenance.
 
 The desktop includes persistent application zoom and a terminal context menu. macOS sync directories must
 be on a verified internal fixed disk. Servers advertising `sync_recovery_inspect=1` also offer recovery

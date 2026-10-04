@@ -3,10 +3,18 @@
 package syncfs
 
 import (
+	"context"
 	"fmt"
 	"golang.org/x/sys/unix"
 	"os"
 )
+
+func replaceStaged(_ context.Context, root *os.Root, staged, target string, validate func() error) error {
+	if err := validate(); err != nil {
+		return err
+	}
+	return root.Rename(staged, target)
+}
 
 func directoryIdentity(root *os.Root) (string, error) {
 	f, err := root.Open(".")

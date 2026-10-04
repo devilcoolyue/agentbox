@@ -44,9 +44,11 @@ const loop=new SyncLoop({
   if(!binding.value)throw new Error('Binding unavailable');
   await task.run('sync_apply',{bindingId:binding.value.id,preview:value,confirmation:value.plan.digest});
  },
- update:(state,value,error)=>{
+ update:(state,value,error,retry)=>{
   if(!alive)return;
   loopState.value=state;emit('sync-status',state==='paused'?'同步待处理':state==='checking'?'同步中':'持续同步');
+  if(state==='checking')message.value='';
+  if(retry)message.value=`连接暂时不可用，${retry.delayMs/1000} 秒后重新检查（重试 ${retry.attempt}/${retry.limit}）。`;
   if(state==='paused'){
    if(value){preview.value=value;choiceBasis=value.plan.digest;}
    message.value=error?errorMessage(error):'持续同步已暂停，请手动核对冲突或需要确认的变更。';
@@ -190,7 +192,7 @@ function openDiscardRecovery(batchId:string,operationId:string,path:string){
 }
 function openArchive(){if(!binding.value)return;clearDialogs();archiving.value={...binding.value};}
 function openResolve(action:'finish'|'replan'){clearDialogs();resolving.value=action;}
-function resetSelection(){clearDialogs();loopState.value='stopped';preview.value=null;review.value=null;history.value=null;message.value='';}
+function resetSelection(){loop.stop();emit('sync-status','');clearDialogs();loopState.value='stopped';preview.value=null;review.value=null;history.value=null;message.value='';}
 async function archiveBinding(){
  const shown=archiving.value;if(!shown)return;
  busy.value=true;message.value='';
@@ -261,7 +263,7 @@ onMounted(refresh);
      <button :disabled="busy" @click="startLoop"><UiIcon name="play" />开启持续同步</button>
     </div>
     <p v-if="direction!=='automatic'" class="sync-notice" role="note"><UiIcon name="alert" />此方向可能覆盖或删除另一端内容，请仔细核对预览。</p>
-    <p class="muted">切换工作空间后持续同步仍在后台运行，各项目依次使用同步通道。退出登录或关闭应用会停止。普通单侧修改会自动传播；冲突、首次同步、大批量删除和错误会暂停。</p>
+    <p class="muted">切换工作空间后持续同步仍在后台运行，各项目依次使用同步通道。退出登录或关闭应用会停止。只读检查的瞬时网络故障最多重试 4 次；冲突、首次同步、大批量删除和写入错误会暂停。</p>
    </template>
    <button :disabled="busy" @click="listRecovery()"><UiIcon name="history" />查看恢复副本</button>
    <section v-if="history" class="sync-history-section">

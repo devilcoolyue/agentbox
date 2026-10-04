@@ -114,21 +114,35 @@ func (w *Writer) Replace(ctx context.Context, name string, expected *syncproto.E
 			return recovery, err
 		}
 	}
-	if err = w.beforePublish(ctx, name, p); err != nil {
-		return recovery, err
-	}
-	if err = checkExpected(ctx, p, leaf, expected); err != nil {
-		return recovery, err
-	}
-	if err = ctx.Err(); err != nil {
-		return recovery, err
-	}
-	// A local process might have replaced our random staging name. Refuse it.
-	staged, err := p.root.Lstat(temp)
-	if err != nil || !staged.Mode().IsRegular() || !os.SameFile(tempInfo, staged) {
-		return recovery, syncproto.ErrChanged
+	publicationChecks := 0
+	validate := func() error {
+		publicationChecks++
+		if err := w.beforePublish(ctx, name, p); err != nil {
+			return err
+		}
+		if err := checkExpected(ctx, p, leaf, expected); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// A local process might have replaced our random staging name. Refuse
+		// it again after any Windows sharing-mode wait, before trying to rename.
+		staged, err := p.root.Lstat(temp)
+		if err != nil || !staged.Mode().IsRegular() || !os.SameFile(tempInfo, staged) {
+			return syncproto.ErrChanged
+		}
+		if publicationChecks > 1 {
+			// The wait also gave other local processes time to edit the same
+			// staging inode. Rehash before a retry, not only after publication.
+			return checkExpected(ctx, p, temp, &desired)
+		}
+		return nil
 	}
 	if expected == nil {
+		if err = validate(); err != nil {
+			return recovery, err
+		}
 		// Link publishes without overwriting an entry created after preflight.
 		// Remove the staging alias immediately; there is never an old file unlink.
 		if err = p.root.Link(temp, leaf); err != nil {
@@ -137,7 +151,7 @@ func (w *Writer) Replace(ctx context.Context, name string, expected *syncproto.E
 		if err = p.root.Remove(temp); err != nil {
 			return recovery, err
 		}
-	} else if err = p.root.Rename(temp, leaf); err != nil {
+	} else if err = replaceStaged(ctx, p.root, temp, leaf, validate); err != nil {
 		return recovery, err
 	}
 	if err = syncDirectory(p.root); err != nil {

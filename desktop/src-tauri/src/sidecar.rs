@@ -21,6 +21,15 @@ pub struct Sidecar {
     _job: windows_job::Job,
 }
 
+fn transient_preview_error(command: Option<&str>, code: Option<&str>) -> Option<Error> {
+    (command == Some("sync_preview") && code == Some("sync_preview_retryable")).then(|| {
+        Error::new(
+            "sync_preview_retryable",
+            "服务器连接暂时不可用，可以稍后重新检查变更",
+        )
+    })
+}
+
 impl Sidecar {
     pub async fn start(path: &Path) -> Result<Self> {
         let mut command = Command::new(path);
@@ -208,6 +217,11 @@ impl Sidecar {
             progress(update);
         };
         if event["type"] == "error" {
+            if let Some(error) =
+                transient_preview_error(value["type"].as_str(), event["error"].as_str())
+            {
+                return Err(error);
+            }
             let message = match event["error"].as_str() {
                 Some("sync_canceled") => "同步已取消；未完成操作会保留待核对记录",
                 Some("sync_identity") => "当前登录身份与同步请求不匹配",
@@ -637,6 +651,34 @@ mod windows_job {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn transient_preview_kind_is_never_forwarded_for_a_write_or_unclassified_failure() {
+        assert_eq!(
+            transient_preview_error(Some("sync_preview"), Some("sync_preview_retryable"))
+                .unwrap()
+                .kind,
+            "sync_preview_retryable"
+        );
+        for command in [
+            None,
+            Some("sync_apply"),
+            Some("sync_resolve"),
+            Some("sync_bind"),
+            Some("sync_orphan_retire"),
+        ] {
+            assert!(transient_preview_error(command, Some("sync_preview_retryable")).is_none());
+        }
+        for code in [
+            None,
+            Some("network"),
+            Some("sync_failed"),
+            Some("sync_identity"),
+            Some("sync_canceled"),
+            Some("sync_pending"),
+        ] {
+            assert!(transient_preview_error(Some("sync_preview"), code).is_none());
+        }
+    }
     #[tokio::test]
     async fn compiled_sidecar_handshake_ping_and_parent_eof() {
         let target = if cfg!(target_os = "windows") {
@@ -710,10 +752,24 @@ mod tests {
             r#"{{"manifest":{manifest},"digest":"{digest}","project":"project","project_revision":1,"project_path":"."}}"#
         );
         let server = tokio::spawn(async move {
-            for (route, body) in [
-                ("/api/clients/capabilities", caps.clone()),
-                ("/api/sessions/space/sync/manifest?project=project", tree),
-                ("/api/clients/capabilities", caps),
+            for (route, status, body) in [
+                ("/api/clients/capabilities", "200 OK", caps.clone()),
+                (
+                    "/api/sessions/space/sync/manifest?project=project",
+                    "200 OK",
+                    tree,
+                ),
+                ("/api/clients/capabilities", "200 OK", caps),
+                (
+                    "/api/clients/capabilities",
+                    "503 Service Unavailable",
+                    "{}".into(),
+                ),
+                (
+                    "/api/clients/capabilities",
+                    "503 Service Unavailable",
+                    "{}".into(),
+                ),
             ] {
                 let (mut socket, _) = listener.accept().await.unwrap();
                 let mut headers = Vec::new();
@@ -731,7 +787,7 @@ mod tests {
                     .next()
                     .unwrap()
                     .contains("private-sync-fixture"));
-                let response=format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nX-Agentbox-Server-ID: {server_id}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len());
+                let response=format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nX-Agentbox-Server-ID: {server_id}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len());
                 socket.write_all(response.as_bytes()).await.unwrap();
             }
         });
@@ -754,10 +810,23 @@ mod tests {
         assert!(!bound.to_string().contains("private-sync-fixture"));
         worker.stop().await;
         let mut worker = Sidecar::start(&binary).await.unwrap();
-        let mut request = common;
+        let mut request = common.clone();
         request["type"] = serde_json::json!("sync_list");
         let listed = worker.sync_request(request).await.unwrap();
         assert_eq!(listed["bindings"][0]["id"], bound["binding"]["id"]);
+        // Exercise the compiled Go process through the real Rust command path:
+        // identical transient identity failures permit only a read-only preview
+        // retry, never a write retry. No mutation route is requested.
+        for (command, expected_kind) in [
+            ("sync_preview", "sync_preview_retryable"),
+            ("sync_apply", "sync"),
+        ] {
+            let mut request = common.clone();
+            request["type"] = serde_json::json!(command);
+            request["binding_id"] = bound["binding"]["id"].clone();
+            let error = worker.sync_request(request).await.unwrap_err();
+            assert_eq!(error.kind, expected_kind, "{command}");
+        }
         worker.stop().await;
         timeout(Duration::from_secs(3), server)
             .await

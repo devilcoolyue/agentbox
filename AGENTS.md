@@ -458,7 +458,7 @@ data/
   写入在空间锁内，发布前复核租约。新建不覆盖、rmdir 仅空目录且 AT_REMOVEDIR，不递归。
   日志与 before 在 sessions/<id>/client-sync（容器挂载外），uncertain 不盲目重放；applied
   仅历史收据，执行器仍须重扫。每空间 1000 活动操作/256 MiB 旧内容，到限停写，无自动清理。
-  状态/恢复 GET 仍按空间属主；完整备份包含日志，默认系统备份不包含；sync 仍为 0。
+  状态/恢复 GET 仍按空间属主；完整备份包含日志，默认系统备份不包含；sync 默认仍为 0。
 - `sync_recovery_gc=1` 只宣告显式回收协议，不能作为开启 sync 的授权。`GET sync/storage` 统计当前
   空间；`POST sync/operations/{id}/retire` 要求原实例头、原 device、意图 digest 与实例/空间绑定的
   confirmation，只清理 applied，无需项目仍存在；空间存在活动租约则拒绝。先持久化 retiring，再校验/
@@ -480,7 +480,7 @@ data/
   生成新身份，客户端重新确认基线。损坏身份只阻止能力/同步接口，不阻断旧业务 API。
 - syncclient.StateStore 是原生专用应用目录的 SQLite，保存设备、绑定、基线、pending 与历史，
   不存令牌/内容。prepared→started→verified，崩溃 started 不重放；完整重扫符合计划才在同
-  事务提交基线和归档。目录/祖先实际 ID 防重叠；Engine/IPC/UI 已接通核对/收尾/副本导出，sync 保持 0。
+  事务提交基线和归档。目录/祖先实际 ID 防重叠；Engine/IPC/UI 已接通核对/收尾/副本导出，sync 默认保持 0。
   1024 绑定/每绑定 1000 完成批次/全库 256 MiB 逻辑元数据，到限停写，无自动清理。
 - 待定批次核对重新获租并重扫，finish 必须全树符合且远端收据全部 applied；replan 只归档
   不改文件或旧基线。副本按批次/操作 ID 导出到原生选择的映射外目录，不覆盖现有文件；
@@ -804,6 +804,10 @@ data/
   明示覆盖/解压合并及部分完成风险，不传 clear，不假称同步恢复副本。与 sync_work/attachment_work 排他。
 - 持续同步组件跨空间保留；`SyncScheduler` 统一排队进入 native sidecar，队列最多 64。取消排队项只让
   该项不再派发，不发全局 sync_cancel；当前运行项仍由 Rust 互斥/EOF 取消。退出登录卸载所有空间监督器。
+- 只读预览的明确瞬时网络/HTTP故障经 Go `sync_preview_retryable`→Rust 原命令核对后传给循环，
+  仅预览阶段按1/2/4/8秒最多重试四次；证书/身份/协议/取消不重试，写入阶段任何错误都暂停。
+  Windows原子替换仅对sharing/lock violation有界重试，每次重验租约/目录/目标，等待后重验暂存哈希。
+  不能重试ACCESS_DENIED、先删除目标或重新创建恢复副本来掩盖失败。
 - `TestLinuxDiskFullPreservesOriginalAndRecovery` 只对显式、≤8 MiB tmpfs 注入真实 ENOSPC；不得传普通
   项目目录/宿主临时盘。原生 Smoke.app 单实例，只能串行运行 legacy/projects/sync 场景。
 
@@ -811,7 +815,7 @@ data/
   且非 replan/abandoned 的历史（verified 或有 finish 核验摘要的 started），拒绝 pending；先 FULL 事务提交 discarding，再核对根身份/哈希/大小/
   单链接普通文件，unlink + 目录同步后写 discarded。中断重试须重新加载 revision；保留原 Recovery 引用
   和历史，不修改基线或服务器收据。远端副本另经显式预览与 retire 协议回收，不得直接删除目录绕过重放隔离。
-  新增清理实现不代表 P3～P5 已全面验收，sync 保持 0。
+  新增清理实现不代表 P3～P5 已全面验收，sync 默认保持 0。
 - 更新器 tests 用 mock Tauri runtime + 真实 loopback HTTP/插件 minisign 校验，只保留合成公钥与签名；
   不运行安装器，不触碰 keyring。更新下载 URL 必须属于清单版本的精确 desktop-v 标签；失败复查清空旧候选，
   下载限制还要在返回字节时复核，避免短响应在 select 观察超限信号前完成。

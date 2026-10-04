@@ -239,6 +239,9 @@ func syncEvent(parent context.Context, request command) event {
 	identity, err := remote.Identity(ctx)
 	if err != nil || identity.User != request.User {
 		result.Error = "sync_identity"
+		if request.Type == "sync_preview" && transientPreviewFailure(ctx, err) {
+			result.Error = "sync_preview_retryable"
+		}
 		return result
 	}
 	orphan := request.Type == "sync_orphan_list" || request.Type == "sync_orphan_review" || request.Type == "sync_orphan_export" || request.Type == "sync_orphan_retire"
@@ -373,6 +376,9 @@ func syncEvent(parent context.Context, request command) event {
 		preview, err := engine.PreviewChoices(ctx, request.BindingID, request.Direction, request.Choices, request.BasisDigest)
 		if err != nil {
 			result.Error = syncErrorCode(err)
+			if transientPreviewFailure(ctx, err) {
+				result.Error = "sync_preview_retryable"
+			}
 			return result
 		}
 		result.Type = "sync_previewed"

@@ -23,7 +23,7 @@ func (r *Remote) Identity(ctx context.Context) (syncproto.ServerIdentity, error)
 		if ctx.Err() != nil {
 			return identity, ctx.Err()
 		}
-		return identity, ErrTransport
+		return identity, transportFailure(err)
 	}
 	if response.StatusCode != http.StatusOK {
 		response.Body.Close()
