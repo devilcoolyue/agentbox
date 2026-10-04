@@ -83,7 +83,16 @@ jobs:
         run: python scripts/test-update-disk-full.py --target ${{ matrix.target }} --report "${{ runner.temp }}/updater-enospc.json"
       - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --all-targets -- -D warnings
       - name: Unsigned development installer (never a GitHub Release)
-        run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        shell: python
+        env:
+          DESKTOP_SIGNED: 'false'
+          DESKTOP_TARGET: ${{ matrix.target }}
+          DESKTOP_BUNDLES: ${{ matrix.bundles }}
+          AGENTBOX_UPDATER_PUBLIC_KEY: ''
+        run: |
+          import json, os, pathlib, subprocess, sys
+          version = json.loads(pathlib.Path('package.json').read_text(encoding='utf-8'))['version']
+          subprocess.run([sys.executable, 'scripts/build-candidate.py'], env={**os.environ, 'DESKTOP_VERSION': version}, check=True)
       - name: Audit embedded Microsoft Runtime and record genuine offline-test prerequisites
         if: runner.os == 'Windows'
         shell: pwsh
