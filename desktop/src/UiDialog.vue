@@ -12,6 +12,8 @@ let generation = 0;
 const focusable = () => Array.from(panel.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [href], [tabindex="0"]') || []).filter(element => element.getClientRects().length);
 function close() { if (!props.busy) emit('close'); }
 function key(event: KeyboardEvent) {
+  // Escape/Tab may belong to the native IME candidate window.
+  if (event.isComposing || event.keyCode === 229) return;
   if (!props.open || event.defaultPrevented) return;
   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
   if (event.key !== 'Tab') return;
