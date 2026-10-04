@@ -98,18 +98,40 @@ jobs:
           if ($packages.Count -ne 1) { throw 'Expected exactly one development NSIS installer' }
           python scripts/test-installed.py $packages[0].FullName --disposable-windows-user --report "${{ runner.temp }}/desktop-installed.json"
           if ($LASTEXITCODE -ne 0) { throw 'Installed development package probe failed' }
-      - name: Build synthetic native WebView smoke
+      - name: Build synthetic native WebView smoke (macOS app)
+        if: runner.os == 'macOS'
+        env:
+          VITE_AGENTBOX_SMOKE: '1'
+        run: npm run tauri -- build --debug --bundles app --target ${{ matrix.target }} --features desktop-smoke --config src-tauri/tauri.smoke.conf.json
+      - name: Build synthetic native WebView smoke (Windows)
+        if: runner.os == 'Windows'
         env:
           VITE_AGENTBOX_SMOKE: '1'
         run: npm run tauri -- build --debug --no-bundle --target ${{ matrix.target }} --features desktop-smoke --config src-tauri/tauri.smoke.conf.json
+      - name: Choose native smoke executable
+        shell: python
+        run: |
+          import os, pathlib
+          root = pathlib.Path('src-tauri/target/${{ matrix.target }}/debug')
+          binary = root / ('bundle/macos/Agentbox Smoke.app/Contents/MacOS/agentbox-desktop' if os.name != 'nt' else 'agentbox-desktop.exe')
+          if not binary.is_file():
+              raise RuntimeError('Native smoke executable is missing')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as environment:
+              environment.write('AGENTBOX_SMOKE_BINARY=' + str(binary.resolve()) + '\n')
       - name: Native WebView login and terminal smoke (not installed-app validation)
-        run: python scripts/smoke.py src-tauri/target/${{ matrix.target }}/debug/${{ matrix.executable }}
+        shell: python
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable, 'scripts/smoke.py', os.environ['AGENTBOX_SMOKE_BINARY']], check=True)
       - name: Native WebView project and independent tabs smoke
-        run: python scripts/smoke.py src-tauri/target/${{ matrix.target }}/debug/${{ matrix.executable }} --mode projects
+        shell: python
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable, 'scripts/smoke.py', os.environ['AGENTBOX_SMOKE_BINARY'], '--mode', 'projects'], check=True)
       - name: Native sync/recovery UI with real Go server fixture (macOS)
         if: runner.os == 'macOS'
         env:
-          AGENTBOX_SYNC_SMOKE_BINARY: ${{ github.workspace }}/desktop/src-tauri/target/${{ matrix.target }}/debug/${{ matrix.executable }}
+          AGENTBOX_SYNC_SMOKE_BINARY: ${{ env.AGENTBOX_SMOKE_BINARY }}
         run: go test ../internal/server -run '^TestDesktopSyncNativeSmoke$' -count=1 -v
       - name: Real sidecar SIGKILL and durable recovery (macOS)
         if: runner.os == 'macOS'

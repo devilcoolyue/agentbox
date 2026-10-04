@@ -113,8 +113,21 @@ python3 desktop/scripts/test-linux-sync.py \
 Windows CI 由 `test-windows-linux.py --peer <Linux测试程序> --sidecar <Windows程序> --report <报告>`
 自动生成并传递 run ID，无需手工填写。`test-cross-os-harness.py` 只验证探针边界，不作为 Windows
 运行证据。2026-10-04 本机 Mac ARM64→Docker Linux ARM64 强杀链路实跑通过，报告
-`/tmp/agentbox-cross-os-kernel-kill.json`；Windows 对应 `TerminateProcess` 链路仍须以远端实际报告为准。
-上述进程终止不是物理断电；也不替代 GUI、最低系统版本、休眠和物理设备验收。
+`/tmp/agentbox-cross-os-kernel-kill.json`。
+
+同日 GitHub Actions [run 37166114385](https://github.com/devilcoolyue/agentbox/actions/runs/37166114385)
+的 `windows-linux-sync`（job `111329224458`，提交 `68e99efa1a8268a283c2d0dd3881dee22a2fd489`）
+已实际通过。artifact `desktop-windows-linux-sync` 中的 `windows-linux-sync.json` 与
+`windows-linux-sync.sync.json` 记录 Windows Server 2025 AMD64 / Windows 10.0.26100.33438、
+WSL 2.7.14、Ubuntu 24.04、Linux `6.18.33.2-microsoft-standard-WSL2 x86_64` 和 Linux
+`ext2/ext3` 文件系统，以及两份执行程序 SHA256。Linux 内部就绪通过，Windows 自动 localhost
+转发返回 WinError 10061，实际使用受控回环 relay（290 个连接、0 拒绝，relay/fixture 清理均通过）。
+
+这次真实 Windows `TerminateProcess` 退出码为 1，重启使用不同 PID；等待剩余 29.641 秒后，
+30 秒真实租约自然失效。持久 started、拒绝重放、before 导出、replan、旧基线与两端后续编辑
+保留全部通过，HTTP apply 只增加一次。该 run 的 Windows 桌面构建仍因独立目录竞争测试的
+Windows 重命名语义假设失败，尚未进入 Rust/NSIS/原生 UI；不能把同步 job 的成功扩展为桌面包验收。
+上述进程终止不是物理断电，也不替代 GUI、最低系统版本、休眠和物理设备验收。
 
 ## 冻结旧版本兼容回归
 

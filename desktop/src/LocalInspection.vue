@@ -1,35 +1,60 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue';
-import { bridge,errorMessage } from './bridge';
+import { bridge, errorMessage } from './bridge';
+import { byteLabel } from './sync-task';
+import UiIcon from './UiIcon.vue';
 
 interface Inspection {
-  files:number;directories:number;bytes:number;windows_issues:number;
-  capabilities:{executable:boolean;name_policy:{windows:boolean;case_sensitive:boolean;normalization_sensitive:boolean}};
+  files: number; directories: number; bytes: number; windows_issues: number;
+  capabilities: {executable: boolean; name_policy: {windows: boolean; case_sensitive: boolean; normalization_sensitive: boolean}};
 }
-const busy=ref(false);
-const result=ref<Inspection|null>(null);
-const error=ref('');
-let alive=true;
-async function inspect(){
-  if(busy.value)return;busy.value=true;error.value='';result.value=null;
-  try{const value=await bridge.invoke<Inspection|null>('inspect_local');if(alive)result.value=value;}
-  catch(err){if(alive)error.value=errorMessage(err);}finally{if(alive)busy.value=false;}
+const busy = ref(false);
+const canceling = ref(false);
+const result = ref<Inspection|null>(null);
+const error = ref('');
+let alive = true;
+async function inspect() {
+  if (busy.value || !alive) return;
+  busy.value = true; canceling.value = false; error.value = ''; result.value = null;
+  try {
+    const value = await bridge.invoke<Inspection|null>('inspect_local');
+    if (alive) result.value = value;
+  } catch (err) { if (alive) error.value = errorMessage(err); }
+  finally { if (alive) { busy.value = false; canceling.value = false; } }
 }
-async function cancel(){try{await bridge.invoke('cancel_inspection');}catch(err){if(alive)error.value=errorMessage(err);}}
-onBeforeUnmount(()=>{alive=false;if(busy.value)void cancel();});
+async function cancel() {
+  if (!busy.value || canceling.value) return;
+  canceling.value = true;
+  try { await bridge.invoke('cancel_inspection'); }
+  catch (err) { if (alive) { error.value = errorMessage(err); canceling.value = false; } }
+}
+onBeforeUnmount(() => { alive = false; if (busy.value) void cancel(); });
 </script>
 
 <template>
   <details class="local-inspection">
-    <summary>检查本地目录</summary>
-    <p>扫描前检查目录兼容性和文件大小；不会上传、下载或启动自动同步。按项目的 .agentboxignore 及默认规则排除依赖和构建目录。</p>
-    <button :disabled="busy" @click="inspect">{{ busy?'正在检查…':'选择目录并检查' }}</button><button v-if="busy" @click="cancel">取消检查</button>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <div v-if="result" role="status">
-      <p>{{ result.files }} 个文件 · {{ result.directories }} 个目录 · {{ (result.bytes/1024/1024).toFixed(1) }} MiB</p>
-      <p>此目录{{ result.capabilities.name_policy.case_sensitive?'区分':'不区分' }}大小写；{{ result.capabilities.name_policy.normalization_sensitive?'区分':'合并' }} Unicode 等价名称。</p>
-      <p v-if="result.windows_issues" class="error">发现 {{ result.windows_issues }} 项 Windows 名称兼容问题，跨平台同步前需要处理。</p>
-      <p v-else>本次清单未发现 Windows 保留名、大小写或 Unicode 名称碰撞。</p>
+    <summary><UiIcon name="folder" :size="16" /><span>检查本地目录</span><UiIcon class="inspection-chevron" name="chevron" :size="13" /></summary>
+    <div class="inspection-body">
+      <p class="inspection-description">查看文件数量、大小与 Windows 文件名兼容性。</p>
+      <div class="inspection-actions"><button :disabled="busy" @click="inspect"><UiIcon :name="busy ? 'refresh' : 'folder'" :size="15" :class="{'is-inspecting': busy}" />{{ busy ? '正在检查…' : '选择目录并检查' }}</button><button v-if="busy" class="ghost" :disabled="canceling" @click="cancel">{{ canceling ? '正在取消…' : '取消检查' }}</button></div>
+      <p class="inspection-rule">遵循 .agentboxignore，忽略依赖与构建目录。</p>
+      <p v-if="error" class="error inspection-message" role="alert"><UiIcon name="info" :size="15" /><span>{{ error }}</span></p>
+      <div v-if="result" class="inspection-result" role="status">
+        <p class="inspection-counts"><strong>{{ result.files }}</strong> 个文件<span>·</span>{{ result.directories }} 个目录<span>·</span>{{ byteLabel(result.bytes) }}</p>
+        <p class="inspection-message" :class="{error: result.windows_issues, compatible: !result.windows_issues}"><UiIcon :name="result.windows_issues ? 'info' : 'check'" :size="15" /><span>{{ result.windows_issues ? `发现 ${result.windows_issues} 项 Windows 文件名兼容问题，请在同步前处理。` : '本次检查未发现 Windows 文件名兼容问题。' }}</span></p>
+        <p class="inspection-rules">文件名{{ result.capabilities.name_policy.case_sensitive ? '区分' : '不区分' }}大小写 · {{ result.capabilities.name_policy.normalization_sensitive ? '区分' : '合并' }} Unicode 等价名称</p>
+      </div>
     </div>
   </details>
 </template>
+
+<style scoped>
+.local-inspection{margin:18px 0 0;padding:16px 0 0;border-top:1px solid var(--line-soft);font-size:12px;color:var(--text)}
+.local-inspection>summary{display:flex;align-items:center;gap:8px;list-style:none;cursor:pointer;font-size:13px;font-weight:500}.local-inspection>summary::-webkit-details-marker{display:none}.local-inspection>summary>svg{color:var(--muted)}.inspection-chevron{margin-left:auto;transform:rotate(-90deg);transition:transform 140ms ease}.local-inspection[open] .inspection-chevron{transform:none}
+.inspection-body{padding:11px 0 0 24px}.inspection-description{margin:0 0 12px;color:var(--muted);font-size:12px;line-height:1.7}.inspection-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.inspection-actions button{display:inline-flex;align-items:center;gap:6px;min-height:32px;margin:0;padding:5px 10px;font-size:12px}.inspection-rule{margin:9px 0 0;color:var(--muted);font-size:11px;line-height:1.7}
+.inspection-result{margin-top:14px;padding-top:13px;border-top:1px solid var(--line-soft)}.inspection-counts{display:flex;align-items:baseline;flex-wrap:wrap;gap:5px;margin:0 0 8px;font-size:12px}.inspection-counts strong{font:13px var(--mono);color:var(--text)}.inspection-counts>span{margin:0 3px;color:var(--muted)}
+.inspection-message{display:flex;align-items:flex-start;gap:6px;margin:10px 0 0;font-size:12px;line-height:1.7}.inspection-message>svg{flex:none;margin-top:3px}.inspection-message.error{color:var(--red)}.inspection-message.compatible>svg{color:var(--green)}.inspection-message.compatible{color:var(--muted)}.inspection-rules{margin:7px 0 0;color:var(--muted);font-size:11px;line-height:1.7}
+.is-inspecting{animation:directory-inspecting .9s linear infinite}@keyframes directory-inspecting{to{transform:rotate(360deg)}}
+@media(max-width:480px){.inspection-body{padding-left:0}}
+@media(prefers-reduced-motion:reduce){.is-inspecting{animation:none}.inspection-chevron{transition:none}}
+</style>

@@ -92,6 +92,13 @@ func darwinVolumeGuard(approved unix.Statfs_t) volumeGuard {
 }
 
 func checkDarwinVolume(ctx context.Context, stat unix.Statfs_t, read func(context.Context, string) (diskInfo, error)) error {
+	return checkDarwinVolumeWithSystem(ctx, stat, read, readDarwinSystemVolume)
+}
+
+// The system probe is a test seam, never a caller/environment override. Normal
+// physical disks do not need it; it provides extra evidence for a known guest
+// platform whose fixed system disk omits BusProtocol in Disk Arbitration.
+func checkDarwinVolumeWithSystem(ctx context.Context, stat unix.Statfs_t, read func(context.Context, string) (diskInfo, error), system func(context.Context) (string, unix.Statfs_t, error)) error {
 	filesystem := unix.ByteSliceToString(stat.Fstypename[:])
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -103,12 +110,16 @@ func checkDarwinVolume(ctx context.Context, stat unix.Statfs_t, read func(contex
 	if !diskDeviceName.MatchString(device) {
 		return ErrUnsupportedVolume
 	}
+	verified := make(map[string]diskInfo) // Only this one bounded approval; never a global disk-name cache.
 	get := func(device string) (diskInfo, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 		if !diskDeviceName.MatchString(device) {
 			return nil, ErrUnsupportedVolume
+		}
+		if info, ok := verified[device]; ok {
+			return info, nil
 		}
 		info, err := read(ctx, device)
 		if ctx.Err() != nil {
@@ -117,6 +128,7 @@ func checkDarwinVolume(ctx context.Context, stat unix.Statfs_t, read func(contex
 		if err != nil || info.text("DeviceIdentifier") != device || info.text("DeviceNode") != "/dev/"+device || !info.internalFixed() {
 			return nil, ErrUnsupportedVolume
 		}
+		verified[device] = info
 		return info, nil
 	}
 	volume, err := get(device)
@@ -164,11 +176,79 @@ func checkDarwinVolume(ctx context.Context, stat unix.Statfs_t, read func(contex
 				return err
 			}
 		}
-		if !whole.isBool("WholeDisk", true) || !whole.physicalInternalBus() {
+		if !whole.isBool("WholeDisk", true) || (!whole.physicalInternalBus() && !verifiedDarwinGuestSystemDisk(ctx, whole, get, system)) {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return ErrUnsupportedVolume
 		}
 	}
 	return nil
+}
+
+// VirtualMac2,1's Apple virtual block system disk reports Internal=true,
+// non-removable/non-ejectable, an IODeviceTree path and VirtualOrPhysical=Unknown,
+// but no BusProtocol. Missing bus metadata alone is never permission: require
+// the exact whole disk backing the kernel's current APFS system root. Extra
+// guest disks and disk images cannot borrow the machine model as approval.
+func verifiedDarwinGuestSystemDisk(ctx context.Context, whole diskInfo, get func(string) (diskInfo, error), system func(context.Context) (string, unix.Statfs_t, error)) bool {
+	if !whole.internalFixed() || !whole.isBool("WholeDisk", true) || whole.text("VirtualOrPhysical") != "Unknown" || !strings.HasPrefix(whole.text("DeviceTreePath"), "IODeviceTree:/") {
+		return false
+	}
+	if bus, exists := whole["BusProtocol"]; exists && (bus.XMLName.Local != "string" || len(bus.Children) != 0 || bus.Text != "") {
+		return false
+	}
+	model, before, err := system(ctx)
+	if err != nil || model != "VirtualMac2,1" || before.Flags&unix.MNT_LOCAL == 0 || unix.ByteSliceToString(before.Fstypename[:]) != "apfs" {
+		return false
+	}
+	source := unix.ByteSliceToString(before.Mntfromname[:])
+	if !strings.HasPrefix(source, "/dev/") {
+		return false
+	}
+	root, err := get(strings.TrimPrefix(source, "/dev/"))
+	if err != nil || root.text("FilesystemType") != "apfs" {
+		return false
+	}
+	stores := root["APFSPhysicalStores"]
+	if stores.XMLName.Local != "array" || len(stores.Children) != 1 {
+		return false
+	}
+	fields, err := stores.Children[0].dict()
+	if err != nil {
+		return false
+	}
+	store, err := get(fields.text("APFSPhysicalStore"))
+	if err != nil || store.text("VirtualOrPhysical") == "Virtual" {
+		return false
+	}
+	parent := store.text("ParentWholeDisk")
+	if store.isBool("WholeDisk", true) {
+		parent = store.text("DeviceIdentifier")
+	}
+	if !diskDeviceName.MatchString(parent) || parent != whole.text("DeviceIdentifier") {
+		return false
+	}
+	currentModel, after, err := system(ctx)
+	return err == nil && currentModel == model && before.Fsid == after.Fsid && before.Mntfromname == after.Mntfromname && before.Fstypename == after.Fstypename && after.Flags&unix.MNT_LOCAL != 0
+}
+
+func readDarwinSystemVolume(ctx context.Context) (string, unix.Statfs_t, error) {
+	var root unix.Statfs_t
+	if err := ctx.Err(); err != nil {
+		return "", root, err
+	}
+	model, err := unix.Sysctl("hw.model")
+	if err != nil {
+		return "", root, err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", root, err
+	}
+	if err := unix.Statfs("/", &root); err != nil {
+		return "", root, err
+	}
+	return model, root, ctx.Err()
 }
 
 func (d diskInfo) internalFixed() bool {

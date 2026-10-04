@@ -120,7 +120,7 @@ fn dimensions(bytes: &[u8], format: Format) -> Result<(u32, u32)> {
             let mut width = None;
             let mut height = None;
             let mut metadata_bytes = 0_u64;
-        for entry in entries.as_chunks::<12>().0 {
+            for entry in entries.as_chunks::<12>().0 {
                 let tag = u16_at(entry, 0, little)?;
                 let kind = u16_at(entry, 2, little)?;
                 let count = u32_at(entry, 4, little)?;

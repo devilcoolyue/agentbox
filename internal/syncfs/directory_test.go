@@ -6,7 +6,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 
 	"agentbox/internal/syncproto"
@@ -93,9 +95,17 @@ func TestWriteRefusesMovedParentAndLeaseLostAfterTransfer(t *testing.T) {
 			if kind == "lease" {
 				w.Guard = func(context.Context) error { return syncproto.ErrLeaseExpired }
 			}
+			parentMoveBlocked := false
 			source := &callbackReader{reader: bytes.NewBufferString("new"), fn: func() {
 				if kind == "parent" {
 					if err := os.Rename(filepath.Join(dir, "sub"), filepath.Join(dir, "moved")); err != nil {
+						// Windows may fence the ancestor move while the staged file
+						// is open. Exercise that kernel protection instead of assuming
+						// Unix rename semantics or skipping the Windows case.
+						if runtime.GOOS == "windows" && (errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.Errno(32))) { // ERROR_SHARING_VIOLATION
+							parentMoveBlocked = true
+							return
+						}
 						t.Fatal(err)
 					}
 					if err := os.Mkdir(filepath.Join(dir, "sub"), 0700); err != nil {
@@ -104,7 +114,37 @@ func TestWriteRefusesMovedParentAndLeaseLostAfterTransfer(t *testing.T) {
 				}
 			}}
 			old := fileEntry("old")
-			_, err := w.Replace(t.Context(), "sub/file", &old, fileEntry("new"), source)
+			recovery, err := w.Replace(t.Context(), "sub/file", &old, fileEntry("new"), source)
+			if parentMoveBlocked {
+				if err != nil {
+					t.Fatal("write with an unmoved, protected parent failed", err)
+				}
+				if _, err := os.Stat(filepath.Join(dir, "moved")); !os.IsNotExist(err) {
+					t.Fatal("denied ancestor move still created a destination", err)
+				}
+				if data, err := os.ReadFile(filepath.Join(dir, "sub", "file")); err != nil || string(data) != "new" {
+					t.Fatal("protected parent did not receive the intended replacement", err)
+				}
+				if recovery.Path == "" {
+					t.Fatal("protected-parent replacement lost before reference")
+				}
+				if data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(recovery.Path))); err != nil || string(data) != "old" {
+					t.Fatal("protected-parent replacement lost original bytes", err)
+				}
+				// Prove this was a live-handle fence, not a test directory that
+				// cannot be renamed at all because of unrelated permissions.
+				if err := os.Rename(filepath.Join(dir, "sub"), filepath.Join(dir, "moved")); err != nil {
+					t.Fatal("parent remained locked after writer closed its handles", err)
+				}
+				if _, err := os.Stat(filepath.Join(dir, "sub")); !os.IsNotExist(err) {
+					t.Fatal("completed parent move retained the original directory", err)
+				}
+				if data, err := os.ReadFile(filepath.Join(dir, "moved", "file")); err != nil || string(data) != "new" {
+					t.Fatal("post-close parent move lost the published file", err)
+				}
+				t.Log("Windows blocked the ancestor move during transfer; safe publication, recovery and post-close rename verified")
+				return
+			}
 			if err == nil {
 				t.Fatal("unsafe publication accepted")
 			}

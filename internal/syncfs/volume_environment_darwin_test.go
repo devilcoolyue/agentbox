@@ -84,11 +84,14 @@ func TestDarwinVolumeEnvironmentReport(t *testing.T) {
 		wholes[index] = collect(fmt.Sprintf("backing_whole_%d", index), name)
 	}
 	trace := []string{}
+	systemQueries := 0
 	rejectedAt := ""
 	policyErr := checkDarwinVolume(ctx, mount, func(_ context.Context, name string) (diskInfo, error) {
 		role := roles[name]
 		if role == "" {
-			role = "unclassified_device"
+			role = fmt.Sprintf("system_probe_%d", systemQueries)
+			systemQueries++
+			collect(role, name)
 		}
 		trace = append(trace, role)
 		info, err := read(name)
@@ -189,6 +192,9 @@ func darwinDiagnosticFields(info diskInfo) map[string]any {
 	default:
 		row["device_tree_prefix"] = "other"
 	}
+	stores := info["APFSPhysicalStores"]
+	row["apfs_store_array_present"] = stores.XMLName.Local == "array"
+	row["apfs_store_count"] = len(stores.Children)
 	row["internal_fixed_pass"] = info.internalFixed()
 	row["physical_internal_bus_pass"] = info.physicalInternalBus()
 	return row

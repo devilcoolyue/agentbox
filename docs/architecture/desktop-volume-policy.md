@@ -126,3 +126,31 @@ docker run --rm --read-only --network none \
 
 服务端夹具沿用真实 workspace UID/GID 规则，容器明确授予上面列出的 CHOWN 等文件能力；
 root 文件系统与测试程序挂载只读，普通夹具与故障卷使用两个独立 tmpfs，网络仅使用容器回环。
+
+## Apple 虚拟机固定系统盘的证据与限制
+
+第二轮真实 CI `37166114385`（提交 `68e99ef`）的 ARM runner 使用 macOS 15.7.9。
+测试专用白名单报告观察到 `hw.model=VirtualMac2,1`、所选临时目录为 local APFS；
+卷、唯一 APFS physical store 与整盘均报告 Internal=true、Removable=false、Ejectable=false，
+有 `IODeviceTree:/` 前缀的原生设备树路径，整盘为 WholeDisk=true、VirtualOrPhysical=Unknown。
+但三个层级都没有 BusProtocol。旧策略因此在 `backing_whole_0:physical_internal_bus_policy`
+拒绝了真实固定系统盘，并非临时目录位于网络共享。
+
+据此新增的例外不依赖 CI 环境变量，也不按路径名字放行。仅当整盘上述固定／内置标志齐全、
+明确为 Unknown、BusProtocol 确实缺失或为空字符串时，才进一步查询原生 `hw.model` 和
+内核 `/` 所属文件系统。必须同时满足：
+
+- 机型精确为已有证据的 `VirtualMac2,1`；相似前缀、其他虚拟机型号不能借此放行。
+- 内核系统根为 local APFS；实际设备节点、文件系统和内置／不可移除标志均经 diskutil 核对。
+- 系统根只有一个可核验的 physical store，该 store 必须指向当前正在审查的同一 whole disk。
+- 系统根的机型、挂载 ID、来源、文件系统和 local 标志在查询前后保持一致。
+
+根卷查询沿调用方的取消上下文执行；只在本次有界核验中复用已经读取的设备元数据，没有
+全局设备名缓存。USB、Disk Image、显式 Unknown 等非空 BusProtocol，明确 Virtual 的整盘，
+额外挂载的其他 guest disk、多 store 或不可核验的系统根均不能使用此例外。随后固定目录
+句柄及子目录的原卷 guard 仍保持原检查，挂载于目录内部的其他卷仍拒绝。这里允许的是虚拟
+机内由系统根证实的固定块设备，不是 macOS 挂载的 DMG 磁盘映像。
+
+本机定向 race、全部 syncfs 回归和自建 HFS+ 磁盘映像／嵌套挂载否定测试已通过；负例覆盖
+错误机型、不同整盘、多 store、系统根不可读、元数据缺失、USB／DMG／Virtual、请求取消及
+根挂载变化。修复后的真实 VirtualMac CI 尚待下一轮验证，不能用这些模拟元数据用例替代。

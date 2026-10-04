@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from urllib.parse import urlsplit
 
 
 def macos_session_diagnostics():
@@ -77,7 +78,7 @@ def stop_owned_application(binary, report):
         raise ValueError('Invalid smoke fixture PID')
     pid = int(value)
     for attempt in range(31):
-        inspected = subprocess.run(['/bin/ps', '-ww', '-p', str(pid), '-o', 'comm='], text=True, capture_output=True, timeout=5)
+        inspected = subprocess.run(['/bin/ps', '-ww', '-p', str(pid), '-o', 'comm='], text=True, encoding='utf-8', capture_output=True, timeout=5)
         if inspected.returncode != 0:
             return
         # Only the executable launched for this exact fixture may be terminated.
@@ -99,10 +100,66 @@ def print_diagnostics(report):
         print(label + ':', path.read_text(encoding='utf-8')[-16384:] if path.exists() else 'none', flush=True)
 
 
+def sync_fixture_environment(environment):
+    """Reuse only the explicit loopback fixture and fresh report supplied by Go."""
+    if environment.get('AGENTBOX_SMOKE_COMPAT'):
+        raise ValueError('Conflicting sync and compatibility smoke fixtures')
+    config = json.loads(environment.get('AGENTBOX_SMOKE_SYNC', 'null'))
+    if not isinstance(config, dict) or set(config) != {'server', 'local', 'state', 'export'} or not all(isinstance(value, str) for value in config.values()):
+        raise ValueError('Sync smoke requires the Go fixture configuration')
+    server = urlsplit(config['server'])
+    if (server.scheme != 'http' or server.hostname != '127.0.0.1' or not server.port or server.path != '/'
+            or server.username is not None or server.password is not None or server.query or server.fragment):
+        raise ValueError('Sync smoke requires a loopback fixture origin')
+    for key in ('local', 'state', 'export'):
+        directory = Path(config[key])
+        if not directory.is_absolute() or not directory.is_dir():
+            raise ValueError('Sync fixture directory is missing: ' + key)
+    report = Path(environment.get('AGENTBOX_SMOKE_REPORT', ''))
+    if not report.is_absolute() or not report.parent.is_dir() or report.exists() or report.with_suffix('.pid').exists():
+        raise ValueError('Sync smoke requires a fresh absolute report path')
+    forwarded = dict(environment)
+    forwarded.pop('AGENTBOX_SMOKE_MODE', None)
+    return report, forwarded
+
+
+def run_smoke(binary, report, environment, timeout_seconds=60, require_sync=False):
+    command, launcher = launch_command(binary, report, environment)
+    process = subprocess.Popen(command, env=environment)
+    try:
+        try:
+            code = process.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            print_diagnostics(report)
+            raise SystemExit('Native smoke timed out; no success report')
+        if not report.exists():
+            print_diagnostics(report)
+            raise SystemExit(f'No smoke report; {launcher} exited {code}')
+        result = json.loads(report.read_text(encoding='utf-8'))
+        result['launcher'] = launcher
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        # LaunchServices' exit status is not proof of the app's result. Keep
+        # the native report and, for Go's fixture, its explicit sync-mode gate.
+        if code != 0 or result.get('ok') is not True or require_sync and result.get('sync_mode') is not True:
+            print_diagnostics(report)
+            raise SystemExit('Native desktop smoke failed')
+        return result
+    finally:
+        try:
+            if launcher == 'launch-services':
+                stop_owned_application(binary, report)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=10)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('binary', type=Path)
-    parser.add_argument('--mode', choices=['legacy', 'projects'], default='legacy')
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--mode', choices=['legacy', 'projects'], default='legacy')
+    modes.add_argument('--sync-fixture', action='store_true', help='Use the existing Go-owned AGENTBOX_SMOKE_REPORT/SYNC fixture')
     args = parser.parse_args()
     binary = args.binary.resolve()
     session = macos_session_diagnostics()
@@ -110,36 +167,17 @@ def main():
         print('Native desktop session:', json.dumps(session), flush=True)
         if session['screen_locked'] is True:
             raise SystemExit('Native smoke requires an unlocked desktop; the current macOS session is locked')
+    if args.sync_fixture:
+        report, environment = sync_fixture_environment(os.environ)
+        # This scenario includes recovery/cleanup/continuous-sync acceptance and
+        # 21 real durable commits. Keep Go's final 10 seconds for owned cleanup;
+        # individual fixture requests and UI conditions retain their deadlines.
+        run_smoke(binary, report, environment, timeout_seconds=170, require_sync=True)
+        return
     with tempfile.TemporaryDirectory(prefix='agentbox-desktop-smoke-') as directory:
         report = Path(directory) / 'report.json'
         environment = {**os.environ, 'AGENTBOX_SMOKE_REPORT': str(report), 'AGENTBOX_SMOKE_MODE': args.mode}
-        command, launcher = launch_command(binary, report, environment)
-        process = subprocess.Popen(command, env=environment)
-        try:
-            try:
-                code = process.wait(timeout=60)
-            except subprocess.TimeoutExpired:
-                print_diagnostics(report)
-                raise SystemExit('Native smoke timed out; no success report')
-            if not report.exists():
-                print_diagnostics(report)
-                raise SystemExit(f'No smoke report; {launcher} exited {code}')
-            result = json.loads(report.read_text(encoding='utf-8'))
-            result['launcher'] = launcher
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-            # open's status is not the application's status; the required native
-            # success report remains authoritative for both launch mechanisms.
-            if code != 0 or result.get('ok') is not True:
-                print_diagnostics(report)
-                raise SystemExit('Native desktop smoke failed')
-        finally:
-            try:
-                if launcher == 'launch-services':
-                    stop_owned_application(binary, report)
-            finally:
-                if process.poll() is None:
-                    process.kill()
-                    process.wait(timeout=10)
+        run_smoke(binary, report, environment)
 
 
 if __name__ == '__main__':

@@ -27,6 +27,16 @@ function fill(selector: string, value: string) {
   const input = document.querySelector<HTMLInputElement>(selector)!;
   input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
 }
+function visibleButton(label: string, scope: ParentNode | null = document) {
+  return Array.from(scope?.querySelectorAll<HTMLButtonElement>('button') || []).find(button =>
+    button.textContent?.trim() === label && !button.disabled && button.getClientRects().length > 0);
+}
+async function selectWorkspaceTab(label: '终端'|'文件'|'同步'|'恢复记录') {
+  const tab = await until(() => visibleButton(label, document.querySelector('.workspace-tabs')));
+  tab.click();
+  await nextTick();
+  await until(() => tab.getAttribute('aria-current') === 'page');
+}
 export async function reportSmokeError(error: unknown) { if(reportedFailure)return;reportedFailure=true;await invoke('smoke_finish', { ok: false, message: String(error) }); }
 
 export async function runSmoke() {
@@ -49,13 +59,21 @@ export async function runSmoke() {
     if(config.sync){await runSyncSmoke();return;}
     if(compatibilityMode&&(!document.querySelector('.sidebar-note')?.textContent?.includes('基础连接模式')||document.querySelector('.sync-workspace')))throw new Error('Legacy server capability fallback failed');
     if(projectsMode){
-      (await until(()=>Array.from(document.querySelectorAll<HTMLButtonElement>('.project-toolbar button')).find(b=>b.textContent==='添加项目'))).click();
+      (await until(()=>visibleButton('添加项目',document.querySelector('.project-toolbar')))).click();
       await until(()=>document.querySelector('.project-edit'));
       fill('.project-edit input','Smoke project');
       document.querySelector('.project-edit')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
-      const create=await until(()=>Array.from(document.querySelectorAll<HTMLButtonElement>('.project-heading button')).find(b=>b.textContent==='新建 Shell'));
+      await until(()=>!document.querySelector('.project-edit'));
+      const create=await until(()=>visibleButton('新建 Shell',document.querySelector('.project-heading')));
       await stage('project_created');create.click();
       await until(()=>document.querySelectorAll('.terminal-tabs>div').length===1);await stage('first_terminal');
+      // Attachment acceptance navigates to Files and back. Complete it before
+      // creating another tab so two terminal probes cannot compete for main UI.
+      await until(()=>!!attachmentProbe);await attachmentProbe;
+      await selectWorkspaceTab('终端');
+      const projectList=document.querySelector<HTMLDetailsElement>('.project-list')!;
+      if(!projectList.open)projectList.querySelector<HTMLElement>('summary')!.click();
+      await until(()=>create.getClientRects().length>0);
       await until(()=>!create.disabled);create.click();
       await until(()=>document.querySelectorAll('.terminal-tabs>div').length===2);await stage('second_terminal');
     }else (await until(() => document.querySelector<HTMLButtonElement>('.open-workspace button'))).click();
@@ -100,16 +118,20 @@ export async function probeTerminal(term: Terminal, connection: TerminalConnecti
       });
       if(term.buffer.active.getLine(term.buffer.active.cursorY)?.translateToString().includes(attachmentPath))throw new Error('Attachment inserted without confirmation');
       await stage('attachment_uploaded');
-      const browser=document.querySelector<HTMLDetailsElement>('.file-browser')!;browser.open=true;
-      const uploadDirectory=await until(()=>Array.from(browser.querySelectorAll<HTMLButtonElement>('button')).find(b=>b.textContent==='上传到此目录…'&&!b.disabled));
+      await selectWorkspaceTab('文件');
+      const browser=await until(()=>{const element=document.querySelector<HTMLElement>('.file-browser');return element?.getClientRects().length?element:null;});
+      const uploadDirectory=await until(()=>visibleButton('上传到此目录…',browser));
       await stage('directory_selected');uploadDirectory.click();
-      const confirmation=await until(()=>browser.querySelector('[aria-label="确认目录上传"]'));
+      // File upload confirmation is teleported to the window-level dialog host.
+      const confirmation=await until(()=>{const element=document.querySelector<HTMLElement>('[aria-label="确认目录上传"]');return element?.getClientRects().length?element:null;});
       if(!confirmation.textContent?.includes('目标已有同名项'))throw new Error('Upload preview lost overwrite warning');
       await stage('directory_previewed');
-      const confirm=await until(()=>Array.from(confirmation.querySelectorAll<HTMLButtonElement>('button')).find(b=>b.textContent==='确认上传并覆盖'&&!b.disabled));
+      const confirm=await until(()=>visibleButton('确认上传并覆盖',confirmation));
       confirm.click();await until(()=>browser.textContent?.includes('文件已上传到目标目录')||browser.textContent?.includes('请刷新目录检查实际结果'));
       if(!browser.textContent?.includes('文件已上传到目标目录'))throw new Error('Directory upload failed: '+browser.textContent);
       await stage('directory_uploaded');
+      await selectWorkspaceTab('终端');
+      await until(()=>document.querySelector<HTMLElement>('.terminal-workspace')?.getBoundingClientRect().width);
     })();
     await attachmentProbe;
     await stage('terminal_echo');verifiedTerminals.add(id);
@@ -173,12 +195,13 @@ async function probeTerminalMenu(term: Terminal, element: HTMLElement) {
 
 // Click the actual Vue controls; all sync work still goes through production IPC.
 async function runSyncSmoke() {
+  await selectWorkspaceTab('同步');
   const panel=()=>document.querySelector('.sync-workspace');
   const text=()=>panel()?.textContent||'';
   const button=(label:string, scope:ParentNode|null=panel())=>Array.from(scope?.querySelectorAll<HTMLButtonElement>('button')||[]).find(b=>b.textContent?.trim()===label&&!b.disabled);
   const click=async(label:string)=>{(await until(()=>button(label))).click();};
   const idle=async()=>{await nextTick();await until(()=>!text().includes('正在处理…'));};
-  const action=(action:string)=>invoke<{blocked?:number;done?:boolean}>('smoke_sync_action',{action});
+  const action=(action:string)=>invoke<{blocked?:number;done?:boolean;seeded?:number;total?:number}>('smoke_sync_action',{action});
   const expectText=(value:string)=>until(()=>text().includes(value));
   const preview=async()=>{await click('检查变更');await expectText('项变更');await idle();};
   const apply=async(expectProgress=false)=>{
@@ -211,7 +234,12 @@ async function runSyncSmoke() {
   await resolve('保留文件并结束旧批次');await expectText('原基线和恢复记录已保留');
   await preview();await expectText('1 项变更，0 个冲突');await apply();await expectText('同步完成');await stage('sync_replanned');
 
-  await action('history_seed');
+  // Preserve all 21 real Engine commits without placing the entire setup under
+  // a single native fixture request's 10-second network deadline.
+  for(let seeded=1;seeded<=21;seeded++){
+    const result=await action('history_seed');
+    if(result.seeded!==seeded||result.total!==21)throw new Error('History fixture did not commit exactly the expected batch');
+  }
   await click('刷新');await idle();
   await click('解除绑定');await until(()=>panel()?.querySelector('[aria-label="确认解除同步绑定"]'));
   await click('确认解除绑定');await expectText('此绑定已归档');await idle();
@@ -299,6 +327,7 @@ async function runSyncSmoke() {
   await click('重新绑定此项目');await click('选择本地目录并绑定');await until(()=>panel()?.querySelector('.sync-path'));await idle();
   await preview();await expectText('0 项变更，0 个冲突');await apply();await expectText('同步完成');await stage('sync_abandoned');
   await action('orphan_seed');
+  await selectWorkspaceTab('恢复记录');
   const orphan = await until(() => document.querySelector<HTMLDetailsElement>('.remote-recovery'));
   orphan.open = true;
   fill('.remote-recovery form input', 'orphan-fixture-device');
@@ -314,6 +343,7 @@ async function runSyncSmoke() {
   await until(() => orphan.textContent?.includes('服务器原内容已清理，执行收据保留'));
   if(button('导出原内容…', orphan))throw new Error('Retired orphan still offered export');
   await stage('orphan_recovery_managed');
+  await selectWorkspaceTab('同步');
   async function blockPreview(count:number) {
     await action('block');await click('检查变更');
     const deadline=Date.now()+10_000;
@@ -322,7 +352,8 @@ async function runSyncSmoke() {
   }
   await blockPreview(1);await click('取消');await idle();if(panel()?.querySelector('.sync-progress'))throw new Error('Progress remained after cancel');await stage('sync_canceled');
   await blockPreview(2);
-  (await until(()=>button('退出登录',document))).click();await until(()=>document.querySelector('.login-form'));
+  (await until(()=>document.querySelector<HTMLButtonElement>('[aria-label="账号与连接设置"]'))).click();
+  (await until(()=>visibleButton('退出登录',document.querySelector('.settings-signout')))).click();await until(()=>document.querySelector('.login-form'));
   if(panel())throw new Error('Sync UI survived logout');await stage('sync_logged_out');
   await action('verify');await stage('finishing');
   await invoke('smoke_finish',{ok:true,message:'Native Vue/Rust/Go sync: pagination/capacity, per-file conflicts, opt-in continuous sync, pending reconciliation, recovery exports, cancel and logout passed.'});

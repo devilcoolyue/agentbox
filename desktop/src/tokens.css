@@ -1,0 +1,115 @@
+/* Agentbox web design tokens, kept aligned with internal/web/static/css/base.css. */
+:root {
+  /* ---- 表面与文字 ---- */
+  --bg: #12151c;
+  --panel: #1a1f29;      /* 卡片 / 侧栏 / 弹窗等「一层」表面 */
+  --panel-2: #222834;    /* 悬停填充、次级按钮、用户气泡等「抬起」填充 */
+  --line: #2e3646;
+  --line-soft: #1d2330;  /* 列表行分隔线，比 --line 更收敛 */
+  --text: #d6dae3;
+  --text-hi: #fff;       /* 悬停时的最亮文字 */
+  --muted: #8a93a5;
+  --scroll-thumb: #566174;
+  --scroll-thumb-hover: #7b879b;
+  --scroll-thumb-active: var(--amber);
+
+  /* ---- 琥珀强调：墨（文字/描边）与填充（实心块）分开，
+   * 浅色主题下墨要压深才有对比度，填充仍需保持亮以承载深色文字 ---- */
+  --amber: #e8a33d;
+  --amber-dim: #7a5c28;  /* 强调弱描边 */
+  --accent: #e8a33d;     /* 主按钮 / 发送钮 / 字标光标块的底色 */
+  --accent-hi: #f0b45a;
+  --on-accent: #17130a;  /* 压在 --accent 上的文字 */
+
+  /* ---- 语义色 ---- */
+  --green: #57c78a;
+  --green-line: #2c4636;
+  --red: #e06c5f;
+  --red-hi: #e98376;
+  --red-line: #57352f;
+  --on-red: #fff;
+  /* 警告（额度将尽、休眠、限流预警）：独立于琥珀的黄。琥珀只表示「主操作 / 选中」，
+   * 警告也用琥珀的话，用户分不清哪个是要点的、哪个是要注意的。 */
+  --warn: #e2c55a;
+  --warn-line: #574c26;
+
+  /* ---- 代码片段（行内 code / 代码块 / 文件编辑器） ---- */
+  --code-bg: #0d1016;
+  --code-head: #151a24;
+  --code-line: #242b3a;
+  --syntax-keyword: #c5a0e5;
+  --syntax-function: #7ebee6;
+
+  /* ---- 终端：两个主题下都保持深色。
+   * xterm 里跑的是 agent TUI，它的 ANSI 配色按深底设计，翻成浅底会有大片
+   * 不可读的亮色文字，所以终端当成一块「设备屏幕」，不跟随主题。 ---- */
+  --term-bg: #0d1016;
+  --term-fg: #d6dae3;
+  --term-cursor: #e8a33d;
+  --term-sel: #2e3646;
+
+  /* ---- 遮罩与投影 ---- */
+  --scrim: rgba(6, 8, 12, 0.6);            /* 抽屉遮罩 */
+  --backdrop: rgba(6, 8, 12, 0.7);         /* 弹窗背板 */
+  --backdrop-strong: rgba(6, 8, 12, 0.82); /* 灯箱背板 */
+  --overlay-chip: rgba(6, 8, 12, 0.72);    /* 压在图片上的角标/关闭钮，始终深色 */
+  --shadow-sm: 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 10px 32px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.55);
+  --checker-a: #161a22;  /* 图片预览的透明棋盘格 */
+  --checker-b: #12151c;
+
+  --claude: #d97757; /* Claude 官方陶土橙（simple-icons 品牌色） */
+  --openai: #10a37f; /* ChatGPT 官方青绿 */
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+
+  color-scheme: dark; /* 让原生滚动条 / 表单控件跟着主题走 */
+}
+
+/* 浅色主题：只覆盖会变的令牌，品牌色、字体、终端配色继承上面 */
+:root[data-theme="light"] {
+  --bg: #f5f2ea;
+  --panel: #fffdf8;
+  --panel-2: #eae5d8;
+  --line: #dbd4c4;
+  --line-soft: #e8e2d5;
+  /* 中性色带一点暖：纸底配冷灰会发紫，和琥珀强调打架 */
+  --text: #2b2822;
+  --text-hi: #000;
+  --muted: #6f6a5d;
+  --scroll-thumb: #b7ae9d;
+  --scroll-thumb-hover: #8c8270;
+
+  --amber: #96620f;   /* 压深到能在纸底上当正文强调色 */
+  --amber-dim: #d3b681;
+  --accent: #dd9226;
+  --accent-hi: #c97f14;
+
+  --green: #2f7d55;
+  --green-line: #b3d0bd;
+  --red: #b8412f;
+  --red-hi: #a63625;
+  --red-line: #dfb0a7;
+  --warn: #7f6a00;
+  --warn-line: #d9cb8f;
+
+  --code-bg: #f2efe4;
+  --code-head: #e9e3d5;
+  --code-line: #dcd5c5;
+  --syntax-keyword: #80529a;
+  --syntax-function: #286b94;
+
+  --scrim: rgba(36, 32, 24, 0.3);
+  --backdrop: rgba(36, 32, 24, 0.32);
+  --backdrop-strong: rgba(28, 24, 16, 0.7);
+  --shadow-sm: 0 4px 14px rgba(45, 38, 24, 0.08);
+  --shadow-md: 0 8px 26px rgba(45, 38, 24, 0.11);
+  --shadow-lg: 0 16px 40px rgba(45, 38, 24, 0.16);
+  --checker-a: #e8e4d8;
+  --checker-b: #f5f2ea;
+
+  color-scheme: light;
+}
+
+:root { --ui-icon-stroke: 1.8; --border: var(--line); }

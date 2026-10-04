@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -41,6 +43,8 @@ func TestDesktopSyncNativeSmoke(t *testing.T) {
 	}
 	var lost, block atomic.Bool
 	var applied, blocked, canceled atomic.Int32
+	var historySeeded atomic.Int32
+	var historySeedMu sync.Mutex
 	var verified atomic.Bool
 	var f *engineFixture
 	f = newEngineFixture(t, true, func(next http.Handler) http.Handler {
@@ -138,7 +142,17 @@ func TestDesktopSyncNativeSmoke(t *testing.T) {
 					writeEngineFile(t, f.local, "b.txt", "partial-second")
 					lost.Store(true)
 				case "history_seed":
-					state, err := syncclient.OpenState(stateDir)
+					// One fully verified batch per bounded fixture request. The
+					// native helper has a 10-second deadline; committing all 21
+					// snapshots in one request made setup race that deadline.
+					historySeedMu.Lock()
+					defer historySeedMu.Unlock()
+					if historySeeded.Load() >= 21 {
+						t.Error("history fixture seeded more than 21 batches")
+						w.WriteHeader(http.StatusConflict)
+						return
+					}
+					state, err := syncclient.OpenStateContext(r.Context(), stateDir)
 					if err != nil {
 						t.Error(err)
 						w.WriteHeader(500)
@@ -152,19 +166,20 @@ func TestDesktopSyncNativeSmoke(t *testing.T) {
 						return
 					}
 					engine := &syncclient.Engine{State: state, Remote: f.engine.Remote}
-					for range 21 {
-						preview, err := engine.Preview(r.Context(), bindings[0].ID, syncclient.Automatic)
-						if err != nil || len(preview.Plan.Operations) != 0 {
-							t.Error("history seed preview", err)
-							w.WriteHeader(500)
-							return
-						}
-						if _, err = engine.Apply(r.Context(), bindings[0].ID, preview, preview.Plan.Digest); err != nil {
-							t.Error(err)
-							w.WriteHeader(500)
-							return
-						}
+					preview, err := engine.Preview(r.Context(), bindings[0].ID, syncclient.Automatic)
+					if err != nil || len(preview.Plan.Operations) != 0 {
+						t.Error("history seed preview", err)
+						w.WriteHeader(500)
+						return
 					}
+					if _, err = engine.Apply(r.Context(), bindings[0].ID, preview, preview.Plan.Digest); err != nil {
+						t.Error(err)
+						w.WriteHeader(500)
+						return
+					}
+					seeded := historySeeded.Add(1)
+					_ = json.NewEncoder(w).Encode(map[string]int32{"seeded": seeded, "total": 21})
+					return
 				case "choices":
 					for _, name := range []string{"choice-local.txt", "choice-remote.txt"} {
 						writeEngineFile(t, f.local, name, "local-choice")
@@ -191,8 +206,8 @@ func TestDesktopSyncNativeSmoke(t *testing.T) {
 					_ = json.NewEncoder(w).Encode(map[string]int32{"blocked": blocked.Load()})
 					return
 				case "verify":
-					if canceled.Load() != 2 || applied.Load() != 7 {
-						t.Errorf("requests: canceled=%d applied=%d", canceled.Load(), applied.Load())
+					if canceled.Load() != 2 || applied.Load() != 7 || historySeeded.Load() != 21 {
+						t.Errorf("requests: canceled=%d applied=%d history_seeded=%d", canceled.Load(), applied.Load(), historySeeded.Load())
 						w.WriteHeader(500)
 						return
 					}
@@ -267,9 +282,19 @@ func TestDesktopSyncNativeSmoke(t *testing.T) {
 	writeEngineFile(t, f.remote, "remote.txt", "remote\r\n中文\x00")
 	config, _ := json.Marshal(map[string]string{"server": f.saved.Binding.Server, "local": f.local, "state": stateDir, "export": exportDir})
 	report := filepath.Join(private, "report.json")
-	ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
+	// The expanded recovery/continuous-sync workflow includes 21 real durable
+	// history commits. Python stops at 170s, leaving time for owned-app cleanup;
+	// per-request and per-UI-step limits remain unchanged.
+	ctx, cancel := context.WithTimeout(t.Context(), 180*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, binary)
+	if runtime.GOOS == "darwin" {
+		runner, err := filepath.Abs(filepath.Join("..", "..", "desktop", "scripts", "smoke.py"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		command = exec.CommandContext(ctx, "python3", runner, binary, "--sync-fixture")
+	}
 	command.Env = append(os.Environ(), "AGENTBOX_SMOKE_REPORT="+report, "AGENTBOX_SMOKE_SYNC="+string(config))
 	output, runErr := command.CombinedOutput()
 	raw, readErr := os.ReadFile(report)
