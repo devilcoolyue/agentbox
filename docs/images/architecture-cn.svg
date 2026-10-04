@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="872" viewBox="0 0 1280 872" role="img" aria-labelledby="title desc" lang="zh-CN">
+<title id="title">你的智能体，你的基础设施。 — agentbox</title>
+<desc id="desc">浏览器或可选的桌面客户端通过 HTTPS 和 WebSocket 连接 agentbox Go 服务端。Linux 服务器通过本机 Docker Engine 为每个工作空间创建运行 Claude Code 或 Codex 的容器。CLI 调用模型 API，可按账号配置出口代理。SQLite、聊天记录以及 workspace、home、shared 目录持久保存在宿主机。可选的 abox-link 从用户本机主动连接服务端，工作空间请求经服务端与隧道访问本机白名单允许的内网服务。</desc>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#e8a33d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; fill: #f4efe6; }
+    .title { font-size: 37px; font-weight: 650; letter-spacing: -.8px; }
+    .subtitle { font-size: 21px; fill: #bdb5a8; }
+    .lane { font-size: 16px; font-weight: 600; letter-spacing: 1.2px; fill: #bdb5a8; }
+    .heading { font-size: 24px; font-weight: 600; letter-spacing: -.35px; }
+    .body { font-size: 18px; fill: #d5cec1; }
+    .muted { font-size: 16px; fill: #aba396; }
+    .edge { font-size: 15px; fill: #d2b483; }
+    .storage-title { font-size: 22px; font-weight: 600; }
+    .tunnel-heading { font-size: 20px; font-weight: 550; }
+    .overline { font-size: 15px; font-weight: 600; letter-spacing: .7px; fill: #c8b491; }
+    .pill { font-size: 12px; font-weight: 600; letter-spacing: .8px; fill: #e8bb74; }
+    .card { fill: #23221f; stroke: #4a4439; stroke-width: 1.5; }
+    .control { fill: #30271c; stroke: #8a6835; stroke-width: 1.5; }
+    .boundary { fill: #191917; stroke: #3d3a32; stroke-width: 1.5; }
+    .flow { fill: none; stroke: #e8a33d; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .optional { fill: none; stroke: #e8a33d; stroke-width: 1.7; stroke-dasharray: 5 5; stroke-linecap: round; }
+    .rule { stroke: #494237; stroke-width: 1; }
+  </style>
+</defs>
+<rect width="1280" height="872" rx="20" fill="#121311"/>
+<text x="48" y="66" class="title">你的智能体，你的基础设施。</text>
+<text x="49" y="102" class="subtitle">一个 Go 服务端，持久化工作空间，随时随地访问。</text>
+<g transform="translate(1157 36) scale(2.05)" aria-hidden="true">
+<path d="M5.6 12 L1.2 5.8 L4.9 2.9 L9.9 9.9 Z M26.4 12 L30.8 5.8 L27.1 2.9 L22.1 9.9 Z" fill="#e8a33d"/>
+<rect x="5" y="11.4" width="22" height="16.2" rx="3" fill="#e8a33d"/><rect x="8" y="11.4" width="16" height="6.6" rx="1.8" fill="#241803"/>
+<rect x="10.6" y="12.7" width="4" height="4" rx="1.3" fill="#ffc76b"/><rect x="17.4" y="12.7" width="4" height="4" rx="1.3" fill="#ffc76b"/>
+<path d="M10.6 20.3 L13.7 22.8 L10.6 25.3" stroke="#8a5f1f" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="16.4" y="23.9" width="4.6" height="2" rx="1" fill="#8a5f1f"/>
+</g>
+<text x="48" y="167" class="lane">01  你的设备</text>
+<text x="350" y="167" class="lane">02  你的 LINUX 服务器</text>
+<text x="1006" y="167" class="lane">03  模型服务</text>
+<rect x="322" y="190" width="642" height="437" rx="18" class="boundary"/>
+<text x="350" y="223" class="overline">GO 单二进制 + 本机 DOCKER ENGINE</text>
+<rect x="48" y="249" width="210" height="226" rx="14" class="card"/>
+<text x="68" y="285" class="heading">浏览器</text>
+<text x="68" y="316" class="muted">对话 · 终端 · 文件</text>
+<text x="68" y="341" class="muted">电脑、平板或手机</text>
+<path d="M68 366 H238" class="rule"/>
+<text x="68" y="402" class="heading">桌面客户端</text>
+<text x="68" y="430" class="muted">可选客户端</text>
+<text x="68" y="454" class="muted">macOS · Windows</text>
+<path d="M258 355 H350" class="flow" marker-end="url(#arrow)"/>
+<text x="304" y="332" class="edge" text-anchor="middle">HTTPS</text>
+<text x="304" y="382" class="edge" text-anchor="middle">WebSocket</text>
+<rect x="350" y="249" width="244" height="198" rx="14" class="control"/>
+<text x="370" y="285" class="heading">agentbox 服务端</text>
+<text x="370" y="311" class="muted">统一管理与调度</text>
+<path d="M370 327 H574" class="rule"/>
+<text x="370" y="351" class="body">用户与访问授权</text>
+<text x="370" y="376" class="body">账号池与凭证</text>
+<text x="370" y="401" class="body">工作空间生命周期</text>
+<text x="370" y="426" class="body">用量与额度</text>
+<rect x="666" y="241" width="268" height="198" rx="14" class="boundary"/>
+<rect x="659" y="249" width="275" height="198" rx="14" class="card"/>
+<text x="679" y="285" class="heading">工作空间容器</text>
+<text x="679" y="318" class="body">Claude Code 或 Codex</text>
+<text x="679" y="356" class="muted">流式对话 · 原生 CLI</text>
+<text x="679" y="383" class="muted">Shell · tmux · Git</text>
+<rect x="675" y="406" width="243" height="24" rx="6" fill="#332a1d"/>
+<text x="796.5" y="423" class="pill" text-anchor="middle">每个工作空间一个容器</text>
+<path d="M594 355 H659" class="flow" marker-end="url(#arrow)"/>
+<text x="626" y="320" class="edge" text-anchor="middle">Docker</text>
+<text x="626" y="339" class="edge" text-anchor="middle">API</text>
+<rect x="1006" y="269" width="226" height="145" rx="14" class="card"/>
+<text x="1026" y="308" class="heading">模型 API</text>
+<text x="1026" y="342" class="body">Anthropic</text>
+<text x="1026" y="370" class="body">OpenAI / 中转服务</text>
+<path d="M934 355 H1006" class="flow" marker-end="url(#arrow)"/>
+<text x="970" y="321" class="edge" text-anchor="middle">Model</text>
+<text x="970" y="339" class="edge" text-anchor="middle">API</text>
+<text x="1006" y="453" class="muted">由 CLI 调用模型服务</text>
+<text x="1006" y="478" class="muted">可选：按账号指定</text>
+<text x="1006" y="503" class="muted">出口代理</text>
+<path d="M472 447 V509" class="flow" marker-end="url(#arrow)"/>
+<text x="486" y="482" class="edge">状态与聊天记录</text>
+<path d="M797 447 V509" class="flow" marker-end="url(#arrow)"/>
+<text x="810" y="482" class="edge">挂载持久化目录</text>
+<rect x="350" y="509" width="584" height="86" rx="14" class="card"/>
+<text x="372" y="544" class="storage-title">数据持久保存在你的服务器</text>
+<text x="372" y="574" class="body">SQLite · 聊天记录 · workspace / home / shared</text>
+<text x="350" y="654" class="muted">容器可以停止，工作成果继续保留。</text>
+<rect x="48" y="687" width="1184" height="155" rx="16" class="boundary"/>
+<text x="72" y="717" class="overline">可选能力  /  访问你的内网</text>
+<text x="1208" y="717" class="muted" text-anchor="end">你的电脑无需开放入站端口</text>
+<text x="72" y="765" class="tunnel-heading">工作空间 → 服务端转发</text>
+<text x="584" y="765" class="tunnel-heading">本机运行 abox-link</text>
+<text x="1040" y="765" class="tunnel-heading">内网服务</text>
+<path d="M340 759 H562" class="optional" marker-end="url(#arrow)"/>
+<text x="451" y="749" class="edge" text-anchor="middle">WSS / yamux</text>
+<path d="M874 759 H1020" class="optional" marker-end="url(#arrow)"/>
+<text x="947" y="749" class="edge" text-anchor="middle">白名单校验</text>
+<text x="1040" y="794" class="muted">Git · 数据库 · API</text>
+<path d="M562 797 H340" class="optional" marker-end="url(#arrow)"/>
+<text x="451" y="826" class="muted" text-anchor="middle">由本机客户端主动连接服务端</text>
+</svg>

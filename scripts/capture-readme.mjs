@@ -2,11 +2,11 @@
 // Render the shipped UI with synthetic, local-only API data. No Docker or model calls.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export async function capture(page) {
+export async function capture(page, { tour = false, recordingStart = 0 } = {}) {
   const root = resolve(fileURLToPath(new URL('../internal/web/static/', import.meta.url)));
   const output = resolve('output/playwright/readme');
   await mkdir(output, { recursive: true });
@@ -21,6 +21,9 @@ export async function capture(page) {
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
+  // Keep documentation captures entirely local, including unexpected asset requests.
+  await page.route('**/*', route => new URL(route.request().url()).origin === base
+    ? route.continue() : route.abort('blockedbyclient'));
   page.setDefaultTimeout(15000);
   const now = Date.now();
   const stamp = new Date(now - 600000).toISOString();
@@ -53,6 +56,13 @@ export async function capture(page) {
   });
   const total = {rows:rows.length,turns:rows.length};
   for (const key of ['input_tokens','output_tokens','cache_read_tokens','cache_write_tokens','cost_micro_usd']) total[key]=rows.reduce((sum,row)=>sum+row[key],0);
+  const skills = [
+    {name:'code-review',description:'审查代码变更，重点检查正确性、边界条件与测试覆盖。',source:'template'},
+    {name:'api-design',description:'统一 API 结构、错误响应和接口文档。',source:'global'},
+    {name:'release-check',description:'发布前核对构建产物、迁移与回退步骤。',source:'session'},
+  ].map(s=>({...s,files:3,bytes:4096,updated_at:stamp}));
+  const skillContent = '# Code review\n\n在提交前做一次聚焦的代码审查，输出可操作的修改建议。\n\n## 工作流程\n\n1. 阅读项目约定，确认本次改动的目标与范围。\n2. 查看 Git diff，核对输入校验、权限与异常路径。\n3. 运行相关测试，记录验证结果与尚未覆盖的边界。\n\n## 审查重点\n\n- **正确性**：实现是否满足需求，是否保留原有行为。\n- **可维护性**：命名、接口和错误处理是否清晰。\n- **交付质量**：文档与测试是否跟随变更。\n\n## 输出\n\n按影响程度列出发现，附文件位置、原因与建议。没有发现时说明验证范围。';
+  const readmeContent = '# Workspace search\n\n搜索与状态筛选的演示项目。\n\n## 快速开始\n\n```sh\nnpm install\nnpm run dev\n```\n\n## 已完成\n\n- 按项目名称搜索，组合运行状态筛选。\n- 键盘导航与快捷聚焦。\n- 筛选条件保存在 URL，刷新后保留。\n\n## 验证\n\n```sh\nnpm run check\nnpm test\n```\n\n打开「变更」页检查实现，再提交到本地仓库。';
   const diff = 'diff --git a/src/components/ProjectList.tsx b/src/components/ProjectList.tsx\nindex 1234567..abcdef0 100644\n--- a/src/components/ProjectList.tsx\n+++ b/src/components/ProjectList.tsx\n@@ -12,8 +12,18 @@ export function ProjectList({ projects }) {\n   const [query, setQuery] = useState(\'\');\n+  const [status, setStatus] = useState(\'all\');\n \n-  const visibleProjects = projects;\n+  const visibleProjects = projects.filter(project =>\n+    matchesQuery(project, query) &&\n+    matchesStatus(project, status)\n+  );\n \n   return (\n     <section className="project-list">\n+      <ProjectFilters\n+        query={query}\n+        status={status}\n+        onQueryChange={setQuery}\n+        onStatusChange={setStatus}\n+      />\n       <ProjectGrid projects={visibleProjects} />\n     </section>\n   );\n';
   await page.routeWebSocket('**/api/sessions/*/chat?*', ws => ws.send(JSON.stringify({type:'status',state:'idle'})));
   await page.routeWebSocket('**/api/sessions/*/term?*', ws => {
@@ -77,11 +87,19 @@ export async function capture(page) {
     else if(path==='/api/usage') body={total,...total,by_model:[],by_user:[]};
     else if(path==='/api/usage/events') body={rows,total,facets:{users:['demo','designer'],agents:['claude','codex'],models:['claude-opus-5','gpt-5.5']},scope:'all',timezone:'Asia/Shanghai',order:'desc',limit:20,offset:0,sync:{last_scan_at:now,last_success_at:now,scanning:false,errors:0}};
     else if(path==='/api/tunnel/status') body={enabled:true,transparent:true,client_transparent:true,connected:true,proxy_up:true,since:now-3600000,remote:'192.0.2.10:53000',maps:[],rules:['10.20.0.0/16','gitlab.corp.example:443','db.corp.example:5432'],workspaces:sessions.filter(s=>s.status==='running').map(s=>({session:s.id,name:s.name,ready:true}))};
-    else if(path.endsWith('/models')) body={models:models.codex,default_reasoning:{support:'supported',control:'effort',levels:['low','medium','high','xhigh']},discovery:'available'};
+    else if(path.endsWith('/models')) body={models:path.includes('demo-api')?models.claude:models.codex,default_reasoning:{support:'supported',control:'effort',levels:['low','medium','high','xhigh']},discovery:'available'};
+    else if(path.endsWith('/skills')) body={skills};
+    else if(path.includes('/skills/')) body={...skills[0],content:skillContent,truncated:false,more:false,entries:[{path:'SKILL.md',size:1800,mtime:stamp},{path:'references',dir:true,size:0,mtime:stamp},{path:'references/checklist.md',size:1500,mtime:stamp}]};
+    else if(path.endsWith('/mcp')) body={revision:1,user_revision:1,project_names:[],items:[
+      {name:'workspace-files',source:'user',status:'applied',config:{type:'stdio',command:'npx',args:['-y','@modelcontextprotocol/server-filesystem','/workspace']}},
+      {name:'team-docs',source:'session',status:'applied',config:{type:'http',url:'https://docs.example.com/mcp'}},
+      {name:'design-assets',source:'user',status:'applied',disabled:true,config:{type:'http',url:'https://design.example.com/mcp'}},
+    ]};
     else if(path.endsWith('/history')) body={entries:history,thread,costs:{'demo-turn':{turn_id:'demo-turn',cost_micro_usd:101000,source:'table'}}};
     else if(path.endsWith('/chat/threads')) body={threads:[thread],active:thread.id};
     else if(path.endsWith('/git/status')) body={is_repo:true,repo:'',repos:[''],branch:'feat/workspace-search',files:[{path:'src/components/ProjectList.tsx',status:' M'},{path:'src/styles/workspace.css',status:' M'},{path:'src/filters.test.ts',status:'??',untracked:true}]};
     else if(path.endsWith('/git/diff')) {await route.fulfill({contentType:'text/plain',body:diff});return;}
+    else if(path.endsWith('/file')) {await route.fulfill({contentType:'text/plain; charset=utf-8',body:readmeContent});return;}
     else if(path.endsWith('/files')) body=(url.searchParams.get('path')==='src'?['components/','styles/','filters.test.ts','search.ts']:['src/','public/','docs/','package.json','README.md','tsconfig.json']).map((name,i)=>({name:name.replace(/\/$/,''),is_dir:name.endsWith('/'),size:name.endsWith('/')?4096:820+i*420,mode:name.endsWith('/')?'drwxr-xr-x':'-rw-r--r--',mtime:stamp}));
     else if(/^\/api\/sessions\/[^/]+$/.test(path)) body=sessions.find(s=>path.endsWith(s.id));
     else {missing.push(path);await route.fulfill({status:404,json:{error:'No screenshot fixture: '+path}});return;}
@@ -95,6 +113,55 @@ export async function capture(page) {
     await page.locator('#login-pass').fill('synthetic-password');
     await page.locator('#login-btn').click();
     await page.locator('.answer-footer').waitFor();
+    await page.evaluate(()=>document.fonts.ready);
+    if (tour) {
+      const chapters = [];
+      const scene = async (en, cn, action, hold = 4100) => {
+        chapters.push({en,cn,start:(performance.now()-recordingStart)/1000});
+        await action();
+        await page.mouse.move(1420,930,{steps:12});
+        await page.waitForTimeout(hold);
+      };
+      await scene('01  Assign a task', '对话 · 在同一个空间继续工作', async()=>{});
+      await scene('02  Use the original terminal', '终端 · 运行命令，检查测试结果', async()=>{
+        await page.locator('.tab[data-tab="term"]').click();
+        await page.locator('#term-state[data-state="connected"]').waitFor();
+        await page.locator('.xterm-screen').first().waitFor();
+      });
+      await scene('03  Review the changes', '变更 · 逐文件检查 Git diff', async()=>{
+        await page.locator('.tab[data-tab="changes"]').click();
+        await page.locator('.change-row').first().click();
+        await page.locator('#changes-diff').getByText('matchesQuery(project, query) &&',{exact:false}).waitFor();
+      });
+      await scene('04  Browse and preview files', '文件 · 阅读成果，再决定如何交付', async()=>{
+        await page.locator('.tab[data-tab="files"]').click();
+        await page.locator('#files-list').getByText('README.md',{exact:true}).dblclick();
+        await page.locator('#fv-md').getByText('Workspace search',{exact:true}).waitFor();
+      });
+      await page.locator('#fv-close').click();
+      await scene('05  Reuse skills and templates', '技能 · 把工作方法复用到新空间', async()=>{
+        await page.goto(base+'/#/sessions/demo-api/skills');
+        await page.locator('.skill-row').filter({hasText:'code-review'}).click();
+        await page.locator('#skills-detail').getByText('Code review',{exact:true}).waitFor();
+      });
+      await scene('06  Connect tools with MCP', 'MCP · 用户默认配置与空间覆盖', async()=>{
+        await page.locator('.tab[data-tab="mcp"]').click();
+        await page.locator('.mcp-row').first().waitFor();
+      });
+      await scene('07  Understand usage and costs', '用量 · 查看模型、费用与延迟', async()=>{
+        await page.goto(base+'/#/usage');
+        await page.locator('#usage-rows tr').first().waitFor();
+      });
+      await scene('08  Reach your private services', '内网 · abox-link 按白名单连接', async()=>{
+        await page.goto(base+'/#/tunnel');
+        await page.getByText('gitlab.corp.example:443',{exact:false}).first().waitFor();
+      });
+      const end = (performance.now()-recordingStart)/1000;
+      await writeFile(resolve(output,'tour-timeline.json'),JSON.stringify({chapters,end,synthetic:true},null,2)+'\n');
+      assert.deepEqual(errors,[], 'Browser errors');
+      assert.deepEqual([...new Set(missing)],[], 'Missing API fixtures');
+      return;
+    }
     const shot = async name => {
       await page.evaluate(()=>document.fonts.ready);
       await page.mouse.move(0,0);
@@ -114,9 +181,13 @@ export async function capture(page) {
     await page.getByRole('button',{name:'展开目录',exact:true}).first().click();
     await page.getByText('search.ts',{exact:true}).waitFor();
     await shot('files');
+    await page.locator('#files-list').getByText('README.md',{exact:true}).dblclick();
+    await page.locator('#fv-md').getByText('Workspace search',{exact:true}).waitFor();
+    await shot('preview');
+    await page.locator('#fv-close').click();
     await page.locator('.tab[data-tab="term"]').click();
     await page.locator('#term-state[data-state="connected"]').waitFor();
-    await page.locator('.xterm-screen canvas').first().waitFor();
+    await page.locator('.xterm-screen').first().waitFor();
     await page.waitForTimeout(300); // Let xterm paint the synthetic PTY frame.
     await shot('terminal');
     await page.goto(base+'/#/usage');
@@ -129,6 +200,13 @@ export async function capture(page) {
     await page.goto(base+'/#/settings/accounts');
     await page.locator('#sec-accounts').getByText(accounts[0].label,{exact:true}).waitFor();
     await shot('accounts');
+    await page.goto(base+'/#/sessions/demo-api/skills');
+    await page.locator('.skill-row').filter({hasText:'code-review'}).click();
+    await page.locator('#skills-detail').getByText('Code review',{exact:true}).waitFor();
+    await shot('skills');
+    await page.locator('.tab[data-tab="mcp"]').click();
+    await page.locator('.mcp-row').first().waitFor();
+    await shot('mcp');
     await page.setViewportSize({width:390,height:844});
     await page.goto(base+'/#/sessions/demo-web/chat');
     await page.locator('.answer-footer').waitFor();
@@ -144,5 +222,18 @@ export async function capture(page) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const {chromium} = await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href : 'playwright');
   const browser = await chromium.launch({headless:true,...(process.env.AGENTBOX_BROWSER_CHANNEL?{channel:process.env.AGENTBOX_BROWSER_CHANNEL}:{})});
-  try {await capture(await browser.newPage());} finally {await browser.close();}
+  try {
+    const context = await browser.newContext({deviceScaleFactor:2,locale:'zh-CN'});
+    await capture(await context.newPage());
+    await context.close();
+    if (process.argv.includes('--video')) {
+      const recording = await browser.newContext({viewport:{width:1440,height:960},locale:'zh-CN',recordVideo:{dir:resolve('output/playwright/readme/video'),size:{width:1440,height:960}}});
+      const recordingStart = performance.now();
+      const page = await recording.newPage();
+      await capture(page,{tour:true,recordingStart});
+      const video = page.video();
+      await recording.close();
+      await video.saveAs(resolve('output/playwright/readme/tour.webm'));
+    }
+  } finally {await browser.close();}
 }

@@ -199,19 +199,50 @@ Playwright 安装方法见下节，截图保存在 `output/playwright/`。这项
 
 ## 文档截图
 
-README 的截图由 [`scripts/capture-readme.mjs`](../scripts/capture-readme.mjs) 渲染当前 `internal/web/static/` 生成，使用本机临时 HTTP 服务和合成 API / WebSocket 数据，不连接生产、不调用模型、不需要 Docker。终端输出、对话、用户与费用均为演示数据，不是实际模型或性能测试结果。
+README 的图片与录屏由 [`scripts/capture-readme.mjs`](../scripts/capture-readme.mjs) 操作当前
+`internal/web/static/` 的真实浏览器界面生成。临时 HTTP 服务只监听本机，API / WebSocket
+均使用合成数据，外部请求会阻断；不连接生产、不调用模型、不需要 Docker。项目、对话、
+命令输出和费用都用于展示界面，不代表实际模型效果、性能或收费。
 
-使用与浏览器回归相同的 Playwright 环境（依赖放在仓库外，不修改项目依赖）：
+依赖放在仓库外，不修改项目依赖：
 
 ```bash
 npm install --prefix /tmp/agentbox-docs-browser playwright
-AGENTBOX_PLAYWRIGHT_MODULE=/tmp/agentbox-docs-browser/node_modules/playwright/index.mjs \
-  AGENTBOX_BROWSER_CHANNEL=chrome node scripts/capture-readme.mjs
+/tmp/agentbox-docs-browser/node_modules/.bin/playwright install chromium
+export AGENTBOX_PLAYWRIGHT_MODULE=/tmp/agentbox-docs-browser/node_modules/playwright/index.mjs
+
+# 只生成高清截图
+node scripts/capture-readme.mjs
+
+# 或同时生成截图和完整浏览器录屏
+node scripts/capture-readme.mjs --video
+
+# 需要 ffmpeg（含 libx264）：合成章节说明、MP4 和 GIF，并复制高清截图到 docs/images
+node scripts/render-readme-tour.mjs
+
+# 无额外依赖：重新生成中英文矢量架构图
+python3 scripts/render-architecture.py
 ```
 
-以上使用本机 Chrome；也可先执行 `/tmp/agentbox-docs-browser/node_modules/.bin/playwright install chromium`，再省略 `AGENTBOX_BROWSER_CHANNEL` 使用 Playwright Chromium。仅安装所需浏览器，不需要账号登录。
+也可以设置 `AGENTBOX_BROWSER_CHANNEL=chrome` 使用本机 Chrome。需要可显示中文的字体；
+没有 CJK 字体的 Linux 环境先安装 Noto Sans CJK 等字体。录制前如修改了 TypeScript，先执行
+`npm run build`，因为浏览器读取的是编译后的静态资源。
 
-脚本生成桌面 1440 × 960 和手机 390 × 844 截图到 `output/playwright/readme/`，检查页面异常与遗漏的 API 夹具。逐张检查后将 PNG 复制到 `docs/images/`，随文档一起提交。变更页面布局时重拍受影响页面，不能手工修改截图伪造界面。截图中的时间按生成当天计算，避免“当天”用量筛选与演示记录冲突。
+截图采用 **2 倍像素密度**：桌面逻辑视口 1440 × 960，输出 **2880 × 1920** PNG；手机
+逻辑视口 390 × 844，输出 **780 × 1688** PNG。涵盖对话两种主题、手机、终端、Git、文件、
+Markdown 预览、技能、MCP、用量、账号与隧道，共 12 张。脚本等待字体就绪，并检查浏览器
+异常和未定义 API 响应。截图暂存在 `output/playwright/readme/`，不要手工修改界面内容。
+
+视频使用真实浏览器录屏，展示八个操作阶段；顶部独立区域附中英文章节说明，并标注演示
+数据。`render-readme-tour.mjs` 输出无声 H.264 MP4（1440 × 1072，含说明区，faststart），
+以及前四段的 960px 宽循环 GIF。GitHub README 使用 GIF 展示动态预览，点击可打开更清晰
+的完整 MP4；不依赖 GitHub 会过滤的自定义视频 HTML。视频用于解释界面流程，不代替
+服务端或真实模型端到端验收。
+
+最终文件放在 `docs/images/` 和 `docs/media/`；生成脚本写入
+[`docs/media/capture.json`](media/capture.json)，记录界面源码提交、像素尺寸、时长与章节。
+发布前逐张检查原图、视频各章节及 GIF，确认没有截断文字、真实账号或私有地址，再与
+README 一起提交。图片内时间使用生成当天，保持与“当天”用量筛选一致。
 
 ## Git 密钥维护与容器网桥验收
 

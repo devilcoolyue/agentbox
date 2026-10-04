@@ -1,0 +1,76 @@
+{
+  "source_revision": "eb845db59e45ed042b1af9df44dae96f104bf43b",
+  "generated_at": "2026-10-04T13:51:09.496Z",
+  "data": "Synthetic fixtures; no model calls, real accounts or production access.",
+  "screenshot_css_viewport": {
+    "width": 1440,
+    "height": 960
+  },
+  "screenshot_device_scale_factor": 2,
+  "mobile_css_viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "video": {
+    "width": 1440,
+    "height": 1072,
+    "duration_seconds": 33.84,
+    "format": "H.264 / yuv420p, silent, faststart",
+    "chapters": [
+      {
+        "start_seconds": 0,
+        "en": "01  Assign a task",
+        "zh_CN": "对话 · 在同一个空间继续工作"
+      },
+      {
+        "start_seconds": 4.2,
+        "en": "02  Use the original terminal",
+        "zh_CN": "终端 · 运行命令，检查测试结果"
+      },
+      {
+        "start_seconds": 8.47,
+        "en": "03  Review the changes",
+        "zh_CN": "变更 · 逐文件检查 Git diff"
+      },
+      {
+        "start_seconds": 12.72,
+        "en": "04  Browse and preview files",
+        "zh_CN": "文件 · 阅读成果，再决定如何交付"
+      },
+      {
+        "start_seconds": 17.05,
+        "en": "05  Reuse skills and templates",
+        "zh_CN": "技能 · 把工作方法复用到新空间"
+      },
+      {
+        "start_seconds": 21.32,
+        "en": "06  Connect tools with MCP",
+        "zh_CN": "MCP · 用户默认配置与空间覆盖"
+      },
+      {
+        "start_seconds": 25.55,
+        "en": "07  Understand usage and costs",
+        "zh_CN": "用量 · 查看模型、费用与延迟"
+      },
+      {
+        "start_seconds": 29.77,
+        "en": "08  Reach your private services",
+        "zh_CN": "内网 · abox-link 按白名单连接"
+      }
+    ]
+  },
+  "screenshots": [
+    "docs/images/chat-dark.png",
+    "docs/images/chat-light.png",
+    "docs/images/chat-mobile.png",
+    "docs/images/terminal.png",
+    "docs/images/changes.png",
+    "docs/images/files.png",
+    "docs/images/preview.png",
+    "docs/images/skills.png",
+    "docs/images/mcp.png",
+    "docs/images/usage.png",
+    "docs/images/accounts.png",
+    "docs/images/tunnel.png"
+  ]
+}

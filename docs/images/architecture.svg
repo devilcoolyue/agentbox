@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="872" viewBox="0 0 1280 872" role="img" aria-labelledby="title desc" lang="en">
+<title id="title">Your agents. Your infrastructure. — agentbox</title>
+<desc id="desc">A browser or optional desktop client connects to the agentbox Go server over HTTPS and WebSocket. The Linux host runs a local Docker engine with one workspace container running Claude Code or Codex. The CLI calls model APIs, optionally through an account egress proxy. SQLite, chat history and workspace, home and shared directories persist on the host. Optional abox-link initiates an outbound tunnel from the user&#x27;s computer to the server. Workspace requests pass through the server and tunnel to services allowed by the local client.</desc>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#e8a33d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></marker>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif; fill: #f4efe6; }
+    .title { font-size: 37px; font-weight: 650; letter-spacing: -.8px; }
+    .subtitle { font-size: 21px; fill: #bdb5a8; }
+    .lane { font-size: 16px; font-weight: 600; letter-spacing: 1.2px; fill: #bdb5a8; }
+    .heading { font-size: 24px; font-weight: 600; letter-spacing: -.35px; }
+    .body { font-size: 18px; fill: #d5cec1; }
+    .muted { font-size: 16px; fill: #aba396; }
+    .edge { font-size: 15px; fill: #d2b483; }
+    .storage-title { font-size: 22px; font-weight: 600; }
+    .tunnel-heading { font-size: 20px; font-weight: 550; }
+    .overline { font-size: 15px; font-weight: 600; letter-spacing: .7px; fill: #c8b491; }
+    .pill { font-size: 12px; font-weight: 600; letter-spacing: .8px; fill: #e8bb74; }
+    .card { fill: #23221f; stroke: #4a4439; stroke-width: 1.5; }
+    .control { fill: #30271c; stroke: #8a6835; stroke-width: 1.5; }
+    .boundary { fill: #191917; stroke: #3d3a32; stroke-width: 1.5; }
+    .flow { fill: none; stroke: #e8a33d; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .optional { fill: none; stroke: #e8a33d; stroke-width: 1.7; stroke-dasharray: 5 5; stroke-linecap: round; }
+    .rule { stroke: #494237; stroke-width: 1; }
+  </style>
+</defs>
+<rect width="1280" height="872" rx="20" fill="#121311"/>
+<text x="48" y="66" class="title">Your agents. Your infrastructure.</text>
+<text x="49" y="102" class="subtitle">One Go server. Persistent workspaces. Open from anywhere.</text>
+<g transform="translate(1157 36) scale(2.05)" aria-hidden="true">
+<path d="M5.6 12 L1.2 5.8 L4.9 2.9 L9.9 9.9 Z M26.4 12 L30.8 5.8 L27.1 2.9 L22.1 9.9 Z" fill="#e8a33d"/>
+<rect x="5" y="11.4" width="22" height="16.2" rx="3" fill="#e8a33d"/><rect x="8" y="11.4" width="16" height="6.6" rx="1.8" fill="#241803"/>
+<rect x="10.6" y="12.7" width="4" height="4" rx="1.3" fill="#ffc76b"/><rect x="17.4" y="12.7" width="4" height="4" rx="1.3" fill="#ffc76b"/>
+<path d="M10.6 20.3 L13.7 22.8 L10.6 25.3" stroke="#8a5f1f" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="16.4" y="23.9" width="4.6" height="2" rx="1" fill="#8a5f1f"/>
+</g>
+<text x="48" y="167" class="lane">01  YOUR DEVICE</text>
+<text x="350" y="167" class="lane">02  YOUR LINUX SERVER</text>
+<text x="1006" y="167" class="lane">03  MODEL SERVICES</text>
+<rect x="322" y="190" width="642" height="437" rx="18" class="boundary"/>
+<text x="350" y="223" class="overline">GO BINARY + LOCAL DOCKER ENGINE</text>
+<rect x="48" y="249" width="210" height="226" rx="14" class="card"/>
+<text x="68" y="285" class="heading">Browser</text>
+<text x="68" y="316" class="muted">Chat · terminal · files</text>
+<text x="68" y="341" class="muted">Desktop, tablet or phone</text>
+<path d="M68 366 H238" class="rule"/>
+<text x="68" y="402" class="heading">Desktop app</text>
+<text x="68" y="430" class="muted">Optional</text>
+<text x="68" y="454" class="muted">macOS · Windows</text>
+<path d="M258 355 H350" class="flow" marker-end="url(#arrow)"/>
+<text x="304" y="332" class="edge" text-anchor="middle">HTTPS</text>
+<text x="304" y="382" class="edge" text-anchor="middle">WebSocket</text>
+<rect x="350" y="249" width="244" height="198" rx="14" class="control"/>
+<text x="370" y="285" class="heading">agentbox server</text>
+<text x="370" y="311" class="muted">Control plane</text>
+<path d="M370 327 H574" class="rule"/>
+<text x="370" y="351" class="body">Users &amp; access</text>
+<text x="370" y="376" class="body">Account pool</text>
+<text x="370" y="401" class="body">Workspace lifecycle</text>
+<text x="370" y="426" class="body">Usage &amp; quotas</text>
+<rect x="666" y="241" width="268" height="198" rx="14" class="boundary"/>
+<rect x="659" y="249" width="275" height="198" rx="14" class="card"/>
+<text x="679" y="285" class="heading">Workspace container</text>
+<text x="679" y="318" class="body">Claude Code or Codex</text>
+<text x="679" y="356" class="muted">Streaming chat · CLI</text>
+<text x="679" y="383" class="muted">Shell · tmux · Git</text>
+<rect x="675" y="406" width="243" height="24" rx="6" fill="#332a1d"/>
+<text x="796.5" y="423" class="pill" text-anchor="middle">ONE CONTAINER PER WORKSPACE</text>
+<path d="M594 355 H659" class="flow" marker-end="url(#arrow)"/>
+<text x="626" y="320" class="edge" text-anchor="middle">Docker</text>
+<text x="626" y="339" class="edge" text-anchor="middle">API</text>
+<rect x="1006" y="269" width="226" height="145" rx="14" class="card"/>
+<text x="1026" y="308" class="heading">Model APIs</text>
+<text x="1026" y="342" class="body">Anthropic</text>
+<text x="1026" y="370" class="body">OpenAI / relays</text>
+<path d="M934 355 H1006" class="flow" marker-end="url(#arrow)"/>
+<text x="970" y="321" class="edge" text-anchor="middle">Model</text>
+<text x="970" y="339" class="edge" text-anchor="middle">API</text>
+<text x="1006" y="453" class="muted">The CLI calls the provider.</text>
+<text x="1006" y="478" class="muted">Optional account</text>
+<text x="1006" y="503" class="muted">egress proxy.</text>
+<path d="M472 447 V509" class="flow" marker-end="url(#arrow)"/>
+<text x="486" y="482" class="edge">state + history</text>
+<path d="M797 447 V509" class="flow" marker-end="url(#arrow)"/>
+<text x="810" y="482" class="edge">directory mounts</text>
+<rect x="350" y="509" width="584" height="86" rx="14" class="card"/>
+<text x="372" y="544" class="storage-title">Persistent on your server</text>
+<text x="372" y="574" class="body">SQLite · chat history · workspace / home / shared</text>
+<text x="350" y="654" class="muted">Stop a container. Keep your work.</text>
+<rect x="48" y="687" width="1184" height="155" rx="16" class="boundary"/>
+<text x="72" y="717" class="overline">OPTIONAL  /  REACH YOUR PRIVATE NETWORK</text>
+<text x="1208" y="717" class="muted" text-anchor="end">No inbound port on your computer</text>
+<text x="72" y="765" class="tunnel-heading">Workspace → server relay</text>
+<text x="584" y="765" class="tunnel-heading">abox-link on your computer</text>
+<text x="1040" y="765" class="tunnel-heading">Internal services</text>
+<path d="M340 759 H562" class="optional" marker-end="url(#arrow)"/>
+<text x="451" y="749" class="edge" text-anchor="middle">WSS / yamux</text>
+<path d="M874 759 H1020" class="optional" marker-end="url(#arrow)"/>
+<text x="947" y="749" class="edge" text-anchor="middle">Allowlist</text>
+<text x="1040" y="794" class="muted">Git · databases · APIs</text>
+<path d="M562 797 H340" class="optional" marker-end="url(#arrow)"/>
+<text x="451" y="826" class="muted" text-anchor="middle">Client initiates the connection</text>
+</svg>
