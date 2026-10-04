@@ -44,9 +44,9 @@
 
 **对话 → 终端 → Git 审查 → 文件预览。** 动图先看核心工作台；34 秒 MP4 还展示技能、MCP、用量与内网连接。
 
-[![agentbox 工作空间操作动图](docs/images/tour.gif)](docs/media/agentbox-tour.mp4)
+[![agentbox 工作空间操作动图](docs/images/tour.gif)](docs/media/agentbox-tour.mp4?raw=1)
 
-<p align="center"><a href="docs/media/agentbox-tour.mp4"><strong>观看 / 下载更清晰的 MP4</strong></a> · <a href="#界面预览">查看高清界面截图</a></p>
+<p align="center"><a href="docs/media/agentbox-tour.mp4?raw=1"><strong>下载高清完整版 MP4</strong></a> · <a href="#界面预览">查看高清界面截图</a></p>
 
 <sub>截图按 2 倍像素密度采集；截图与演示来自实际浏览器界面，使用合成项目、对话、命令输出和用量记录，不代表模型实测效果。图中源码界面为中文，发布版本可能存在差异。</sub>
 

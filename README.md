@@ -44,9 +44,9 @@ You bring the server and your own Claude / Codex subscription, API key, or compa
 
 **Chat → terminal → Git review → previews.** The GIF introduces the core workspace; the 34-second MP4 also visits skills, MCP, usage, and private-network access.
 
-[![Animated tour of the agentbox workspace](docs/images/tour.gif)](docs/media/agentbox-tour.mp4)
+[![Animated tour of the agentbox workspace](docs/images/tour.gif)](docs/media/agentbox-tour.mp4?raw=1)
 
-<p align="center"><a href="docs/media/agentbox-tour.mp4"><strong>Watch / download the sharper MP4</strong></a> · <a href="#screenshots">Browse full-resolution screenshots</a></p>
+<p align="center"><a href="docs/media/agentbox-tour.mp4?raw=1"><strong>Download the full-resolution MP4</strong></a> · <a href="#screenshots">Browse full-resolution screenshots</a></p>
 
 <sub>Screenshots use 2× pixel density. All media is captured from the actual browser UI with synthetic projects, conversations, command output, and usage records. These are interface demonstrations, not live model benchmarks. The pictured source UI is in Chinese; release builds may differ.</sub>
 

@@ -2,7 +2,7 @@
 
 [English README](../../README.md) · [中文首页](../../README_CN.md)
 
-[Watch or download the MP4 / 观看或下载 MP4](agentbox-tour.mp4)
+[Download the MP4 / 下载 MP4](agentbox-tour.mp4?raw=1)
 
 A 34-second silent browser tour with English and Chinese chapter captions. The README
 uses a smaller [looping GIF](../images/tour.gif) for inline playback; the MP4 retains more
