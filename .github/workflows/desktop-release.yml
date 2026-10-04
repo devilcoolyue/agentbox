@@ -101,12 +101,12 @@ jobs:
           DESKTOP_BUNDLES: ${{ matrix.bundles }}
           AGENTBOX_UPDATER_PUBLIC_KEY: ${{ inputs.signed && vars.DESKTOP_UPDATER_PUBLIC_KEY || '' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.signed && secrets.DESKTOP_UPDATER_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.DESKTOP_UPDATER_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.DESKTOP_APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.DESKTOP_APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.DESKTOP_APPLE_SIGNING_IDENTITY }}
-          APPLE_API_KEY: ${{ secrets.DESKTOP_APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.signed && secrets.DESKTOP_UPDATER_PRIVATE_KEY_PASSWORD || '' }}
+          APPLE_CERTIFICATE: ${{ inputs.signed && secrets.DESKTOP_APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ inputs.signed && secrets.DESKTOP_APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ inputs.signed && secrets.DESKTOP_APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_API_KEY: ${{ inputs.signed && secrets.DESKTOP_APPLE_API_KEY || '' }}
+          APPLE_API_ISSUER: ${{ inputs.signed && secrets.DESKTOP_APPLE_API_ISSUER || '' }}
         run: python scripts/build-candidate.py
       - name: Fetch frozen previous desktop package and verify SHA256
         if: inputs.previous_tag != ''
