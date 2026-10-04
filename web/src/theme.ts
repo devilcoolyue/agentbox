@@ -1,3 +1,4 @@
+import { setAttrRender, t as i18nText } from "./i18n.js";
 /* theme：跟随系统 / 浅色 / 深色三态主题切换。
  * 选择模式落在 <html data-theme-mode>，实际生效主题落在 <html data-theme>；
  * 配色分支全在 css/base.css 的令牌里。首屏那次由 index.html 头部的内联脚本
@@ -16,7 +17,7 @@ type ThemeMode = "system" | "light" | "dark";
 type Theme = "light" | "dark";
 
 const MODES: ThemeMode[] = ["system", "light", "dark"];
-const MODE_LABEL: Record<ThemeMode, string> = { system: "跟随系统", light: "浅色", dark: "深色" };
+const MODE_LABEL: Record<ThemeMode, string> = { get system() { return i18nText("跟随系统"); }, get light() { return i18nText("浅色"); }, get dark() { return i18nText("深色"); } };
 
 const darkMQ = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -57,12 +58,12 @@ function syncUI(mode: ThemeMode) {
     const active = opt.dataset.themeOption === mode;
     opt.classList.toggle("active", active);
     opt.setAttribute("aria-pressed", String(active));
-    opt.setAttribute("aria-label", "切换到" + MODE_LABEL[opt.dataset.themeOption as ThemeMode]);
+    setAttrRender(opt, "aria-label", () => i18nText("切换到") + MODE_LABEL[opt.dataset.themeOption as ThemeMode]);
   }
   for (const button of document.querySelectorAll<HTMLElement>("[data-theme-cycle]")) {
     const next = MODES[(MODES.indexOf(mode) + 1) % MODES.length]!;
-    const label = `主题：${MODE_LABEL[mode]}，切换到${MODE_LABEL[next]}`;
-    button.setAttribute("aria-label", label);
+    const label = () => i18nText("主题：{p0}，切换到{p1}", { p0: String(MODE_LABEL[mode]), p1: String(MODE_LABEL[next]) });
+    setAttrRender(button, "aria-label", label);
     setTip(button, label);
   }
 

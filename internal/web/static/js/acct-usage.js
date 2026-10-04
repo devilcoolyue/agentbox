@@ -1,3 +1,4 @@
+import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* acct-usage：查看当前会话所用 Claude 账号的订阅额度。
  *
  * 数据来自服务端代查的官方 /usage 接口（见 server/acctusage.go），展示的东西
@@ -28,15 +29,15 @@ function untilReset(iso) {
     if (!Number.isFinite(ms))
         return "";
     if (ms <= 0)
-        return "即将重置";
+        return i18nText("即将重置");
     const mins = Math.floor(ms / 60000);
     const h = Math.floor(mins / 60);
     const d = Math.floor(h / 24);
     if (d >= 1)
-        return `${d} 天 ${h % 24} 小时后重置`;
+        return i18nText("{p0} 天 {p1} 小时后重置", { p0: String(d), p1: String(h % 24) });
     if (h >= 1)
-        return `${h} 小时 ${mins % 60} 分钟后重置`;
-    return `${mins} 分钟后重置`;
+        return i18nText("{p0} 小时 {p1} 分钟后重置", { p0: String(h), p1: String(mins % 60) });
+    return i18nText("{p0} 分钟后重置", { p0: String(mins) });
 }
 function winRow(w) {
     const row = document.createElement("div");
@@ -45,7 +46,11 @@ function winRow(w) {
     head.className = "au-row-head";
     const label = document.createElement("span");
     label.className = "au-row-label";
-    label.textContent = w.label;
+    const labels = { five_hour: "5 小时额度", seven_day: "周额度", seven_day_opus: "Opus 周额度", seven_day_sonnet: "Sonnet 周额度", extra: "额外用量" };
+    if (labels[w.key])
+        setText(label, labels[w.key]);
+    else
+        label.textContent = w.label;
     const pct = document.createElement("span");
     pct.className = "au-row-pct mono " + tone(w.percent);
     pct.textContent = Math.round(w.percent) + "%";
@@ -62,7 +67,7 @@ function winRow(w) {
     if (reset) {
         const sub = document.createElement("div");
         sub.className = "au-row-sub";
-        sub.textContent = reset;
+        setTextRender(sub, () => untilReset(w.resets_at));
         row.appendChild(sub);
     }
     return row;
@@ -71,13 +76,13 @@ function extraRow(x) {
     const cur = x.currency === "USD" ? "$" : (x.currency || "") + " ";
     const row = winRow({
         key: "extra",
-        label: "额外用量",
+        label: i18nText("额外用量"),
         percent: x.percent,
         resets_at: undefined,
     });
     const sub = document.createElement("div");
     sub.className = "au-row-sub";
-    sub.textContent = `已用 ${cur}${x.used.toFixed(2)} / ${cur}${x.limit.toFixed(2)}`;
+    setText(sub, "已用 {p0}{p1} / {p2}{p3}", { p0: String(cur), p1: String(x.used.toFixed(2)), p2: String(cur), p3: String(x.limit.toFixed(2)) });
     row.appendChild(sub);
     return row;
 }
@@ -91,7 +96,7 @@ function render(u) {
     if (!u.windows.length) {
         const empty = document.createElement("div");
         empty.className = "au-msg";
-        empty.textContent = "该账号暂时没有可显示的限额窗口";
+        setText(empty, "该账号暂时没有可显示的限额窗口");
         body.appendChild(empty);
     }
     else {
@@ -100,7 +105,7 @@ function render(u) {
     }
     if (u.extra && u.extra.enabled)
         body.appendChild(extraRow(u.extra));
-    $("au-fetched").textContent = "更新于 " + fmtClock(u.fetched_at, false);
+    setTextRender($("au-fetched"), () => i18nText("更新于 ") + fmtClock(u.fetched_at, false));
 }
 /* 打开时正在查的会话。查询期间用户可能切走，回来的数据就不该再往弹窗里塞。 */
 let forSession = "";
@@ -110,7 +115,7 @@ async function load() {
     body.replaceChildren();
     const loading = document.createElement("div");
     loading.className = "au-msg";
-    loading.textContent = "查询中…";
+    setText(loading, "查询中…");
     body.appendChild(loading);
     $("au-fetched").textContent = "";
     try {
@@ -143,7 +148,7 @@ $("au-close").addEventListener("click", () => dlg().close());
 dlg().addEventListener("close", () => { forSession = ""; });
 $("au-refresh").addEventListener("click", async () => {
     const btn = $("au-refresh");
-    btnBusy(btn, "查询中…");
+    btnBusy(btn, () => i18nText("查询中…"));
     try {
         await load();
     }

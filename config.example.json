@@ -17,6 +17,7 @@
   },
   "permission_mode": "bypassPermissions",
   "max_upload_mb": 512,
+  "desktop_sync_enabled": false,
   "timezone": "Asia/Shanghai",
   "container": {
     "memory_mb": 2048,

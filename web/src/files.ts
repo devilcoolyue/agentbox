@@ -1,3 +1,4 @@
+import { htmlText as trHTML, setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 /* files：文件页 —— 工作区/共享目录切换、懒加载目录树、上传/下载。
  * 单文件预览/编辑弹窗在 preview.ts。 */
 "use strict";
@@ -30,16 +31,16 @@ export function resetTree() {
 function filesLoadingRow() {
   const d = document.createElement("div");
   d.className = "loading-block";
-  d.append(spinEl(), document.createTextNode("读取目录中…"));
+  d.append(spinEl(), document.createTextNode(i18nText("读取目录中…")));
   return d;
 }
 
 function filesEmptyRow() {
   const p = document.createElement("p");
   p.className = "files-empty";
-  p.textContent = S.fileScope === "shared"
-    ? "共享目录为空。这里的文件供你名下的所有工作空间读写（/shared）。"
-    : "当前空间还没有文件。上传代码包，或在对话中让 Agent 创建项目。";
+  setTextRender(p, () => S.fileScope === "shared"
+    ? i18nText("共享目录为空。这里的文件供你名下的所有工作空间读写（/shared）。")
+    : i18nText("当前空间还没有文件。上传代码包，或在对话中让 Agent 创建项目。"));
   return p;
 }
 
@@ -64,7 +65,7 @@ export async function loadFiles() {
     if (gen !== tree.gen) return;
     $("files-head").classList.add("hidden");
     $("files-list").replaceChildren(Object.assign(document.createElement("p"), {
-      className: "files-empty", textContent: "读取失败：" + (e as Error).message,
+      className: "files-empty", textContent: i18nText("读取失败：") + (e as Error).message,
     }));
     return;
   }
@@ -99,7 +100,7 @@ async function buildRows(frag: DocumentFragment, entries: FileEntry[], base: str
         const p = document.createElement("div");
         p.className = "file-row empty-dir";
         p.style.setProperty("--depth", String(depth + 1));
-        p.innerHTML = '<span class="fname muted">（空目录）</span>';
+        p.innerHTML = `<span class="fname muted"><span data-i18n="（空目录）">${trHTML("（空目录）")}</span></span>`;
         frag.appendChild(p);
       } else {
         await buildRows(frag, kids, rel, depth + 1);
@@ -115,7 +116,7 @@ function upRow() {
   name.className = "fname";
   const label = document.createElement("span");
   label.className = "flabel";
-  buttonLabel(label, "上一级", "arrow-left");
+  buttonLabel(label, () => i18nText("上一级"), "arrow-left");
   label.setAttribute("role", "button");
   label.tabIndex = 0;
   const up = () => {
@@ -151,9 +152,9 @@ function fileRow(ent: FileEntry, rel: string, depth: number) {
     const arrow = document.createElement("span");
     arrow.className = "farrow" + (tree.expanded.has(rel) ? " open" : "");
     arrow.append(svgIcon("chevron-right", 12));
-    setTip(arrow, tree.expanded.has(rel) ? "收起" : "展开下级");
+    setTip(arrow, () => tree.expanded.has(rel) ? i18nText("收起") : i18nText("展开下级"));
     arrow.setAttribute("role", "button");
-    arrow.setAttribute("aria-label", tree.expanded.has(rel) ? "收起目录" : "展开目录");
+    setAttrRender(arrow, "aria-label", () => tree.expanded.has(rel) ? i18nText("收起目录") : i18nText("展开目录"));
     arrow.tabIndex = 0;
     const toggle = async () => {
       if (tree.expanded.has(rel)) {
@@ -193,7 +194,7 @@ function fileRow(ent: FileEntry, rel: string, depth: number) {
         loadFiles();
       }
     : () => openPreview(joinRel(S.filePath, rel), ent);
-  setTip(label, ent.is_dir ? "进入目录" : "预览 / 编辑");
+  setTip(label, () => ent.is_dir ? i18nText("进入目录") : i18nText("预览 / 编辑"));
   label.addEventListener("click", open);
   label.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
   // 窄屏收掉大小列，大小改作名称下方的副标题（桌面端隐藏）
@@ -232,22 +233,22 @@ function fileActions(ent: FileEntry, fullPath: string) {
   // HTML / Markdown 直接给一个渲染入口：点名字进的也是同一个弹窗，但列表里
   // 一眼能看出哪些文件是能「看效果」的
   if (!ent.is_dir && /\.(html?|md|markdown|mdx)$/i.test(ent.name)) {
-    const label = /\.html?$/i.test(ent.name) ? "预览页面" : "预览渲染";
+    const label = /\.html?$/i.test(ent.name) ? i18nText("预览页面") : i18nText("预览渲染");
     actions.append(fileAction(label, "eye", () => openPreview(fullPath, ent)));
   }
   // 目录没有单文件下载：整包下载走工具条的「下载 zip」
   const download = () => startDownload(fileDownloadURL(fullPath));
   if (!ent.is_dir) {
-    const btn = fileAction("下载", "download", download);
+    const btn = fileAction(i18nText("下载"), "download", download);
     btn.classList.add("desktop-only");
     actions.append(btn);
   }
   const more = moreButton(() => [
-    { label: "下载", icon: "download", run: download, hidden: ent.is_dir || !isMobile() },
-    { label: "重命名", icon: "rename", run: () => openFileRename(ent, fullPath) },
-    { label: "移动到…", icon: "move", run: () => openFileMove(ent, fullPath) },
-    { label: "删除", icon: "trash", danger: true, sep: true, run: () => openFileDelete(ent, fullPath) },
-  ], `${ent.name} 的更多操作`);
+    { label: i18nText("下载"), icon: "download", run: download, hidden: ent.is_dir || !isMobile() },
+    { label: i18nText("重命名"), icon: "rename", run: () => openFileRename(ent, fullPath) },
+    { label: i18nText("移动到…"), icon: "move", run: () => openFileMove(ent, fullPath) },
+    { label: i18nText("删除"), icon: "trash", danger: true, sep: true, run: () => openFileDelete(ent, fullPath) },
+  ], () => i18nText("{p0} 的更多操作", { p0: String(ent.name) }));
   more.className = "file-act file-more";
   actions.append(more);
   return actions;
@@ -331,7 +332,7 @@ function moveIsNoop() {
 function updateMoveTarget() {
   $("file-move-target").textContent = fullScopePath(fileOp.moveScope, fileOp.movePath);
   $<HTMLButtonElement>("file-move-ok").disabled = fileOp.moveBusy || moveIsNoop();
-  setTip($("file-move-ok"), moveIsNoop() ? "当前项目已在此目录" : "");
+  setTip($("file-move-ok"), () => moveIsNoop() ? i18nText("当前项目已在此目录") : "");
 }
 
 function renderMoveCrumb() {
@@ -339,7 +340,7 @@ function renderMoveCrumb() {
   crumb.replaceChildren();
   const root = document.createElement("button");
   root.type = "button";
-  actionButton(root, scopeRoot(fileOp.moveScope), "folder", "进入 " + scopeRoot(fileOp.moveScope));
+  actionButton(root, scopeRoot(fileOp.moveScope), "folder", () => i18nText("进入 ") + scopeRoot(fileOp.moveScope));
   root.addEventListener("click", () => { fileOp.movePath = ""; loadMoveDirs(); });
   crumb.appendChild(root);
   let acc = "";
@@ -349,7 +350,7 @@ function renderMoveCrumb() {
     const next = document.createElement("button");
     const target = acc;
     next.type = "button";
-    actionButton(next, part, "folder", "进入 " + fullScopePath(fileOp.moveScope, target));
+    actionButton(next, part, "folder", () => i18nText("进入 ") + fullScopePath(fileOp.moveScope, target));
     next.addEventListener("click", () => { fileOp.movePath = target; loadMoveDirs(); });
     crumb.appendChild(next);
   }
@@ -374,7 +375,7 @@ async function loadMoveDirs() {
   } catch (e) {
     if (gen !== fileOp.moveGen) return;
     $("file-move-dirs").replaceChildren();
-    setInlineError("file-move-error", "读取目标目录失败：" + (e as Error).message);
+    setInlineError("file-move-error", i18nText("读取目标目录失败：") + (e as Error).message);
     return;
   }
   if (gen !== fileOp.moveGen) return;
@@ -386,7 +387,7 @@ async function loadMoveDirs() {
     btn.type = "button";
     btn.className = "file-move-dir mono";
     btn.disabled = moveDirDisabled(path);
-    setTip(btn, btn.disabled ? "不能移动到自身或其子目录" : "进入目录");
+    setTip(btn, () => btn.disabled ? i18nText("不能移动到自身或其子目录") : i18nText("进入目录"));
     const name = document.createElement("span");
     name.className = "dir-name";
     name.textContent = dir.name;
@@ -400,7 +401,7 @@ async function loadMoveDirs() {
   if (!dirs.length) {
     const empty = document.createElement("p");
     empty.className = "file-move-empty";
-    empty.textContent = "当前目录下没有子目录";
+    setText(empty, "当前目录下没有子目录");
     frag.appendChild(empty);
   }
   $("file-move-dirs").replaceChildren(frag);
@@ -422,7 +423,7 @@ function openFileMove(ent: FileEntry, path: string) {
   fileOp.moveScope = S.fileScope;
   fileOp.movePath = parentRel(path);
   fileOp.moveBusy = false;
-  $("file-move-title").textContent = ent.is_dir ? "移动文件夹" : "移动文件";
+  setTextRender($("file-move-title"), () => ent.is_dir ? i18nText("移动文件夹") : i18nText("移动文件"));
   $("file-move-source").textContent = fullScopePath(fileOp.sourceScope, path);
   $("file-move-ws").classList.toggle("active", fileOp.moveScope === "workspace");
   $("file-move-shared").classList.toggle("active", fileOp.moveScope === "shared");
@@ -446,7 +447,7 @@ $("file-move-ok").addEventListener("click", async () => {
   if (!sess || !fileOp.entry || fileOp.moveBusy || moveIsNoop()) return;
   fileOp.moveBusy = true;
   setInlineError("file-move-error", "");
-  btnBusy($("file-move-ok"), "移动中…");
+  btnBusy($("file-move-ok"), () => i18nText("移动中…"));
   $<HTMLButtonElement>("file-move-close").disabled = true;
   $<HTMLButtonElement>("file-move-cancel").disabled = true;
   $<HTMLButtonElement>("file-move-ws").disabled = true;
@@ -465,11 +466,11 @@ $("file-move-ok").addEventListener("click", async () => {
       }),
     });
     $<HTMLDialogElement>("dlg-file-move").close();
-    toast(`${wasDir ? "文件夹" : "文件"}已移动到 ${destinationLabel}`);
+    toast(i18nText("{p0}已移动到 {p1}", { p0: String(wasDir ? i18nText("文件夹") : i18nText("文件")), p1: String(destinationLabel) }));
     resetTree();
     loadFiles();
   } catch (e) {
-    setInlineError("file-move-error", "移动失败：" + (e as Error).message);
+    setInlineError("file-move-error", i18nText("移动失败：") + (e as Error).message);
   } finally {
     fileOp.moveBusy = false;
     btnDone($("file-move-ok"));
@@ -486,11 +487,11 @@ function openFileDelete(ent: FileEntry, path: string) {
   fileOp.sourcePath = path;
   fileOp.sourceScope = S.fileScope;
   fileOp.deleteBusy = false;
-  $("file-delete-title").textContent = ent.is_dir ? "删除文件夹" : "删除文件";
-  $("file-delete-text").textContent = `确认删除「${fullScopePath(fileOp.sourceScope, path)}」？`;
-  $("file-delete-warning").textContent = ent.is_dir
-    ? "该文件夹及其中所有内容都会被删除，此操作不可恢复。"
-    : "此操作不可恢复。";
+  setTextRender($("file-delete-title"), () => ent.is_dir ? i18nText("删除文件夹") : i18nText("删除文件"));
+  setText($("file-delete-text"), "确认删除「{p0}」？", { p0: String(fullScopePath(fileOp.sourceScope, path)) });
+  setTextRender($("file-delete-warning"), () => ent.is_dir
+    ? i18nText("该文件夹及其中所有内容都会被删除，此操作不可恢复。")
+    : i18nText("此操作不可恢复。"));
   setInlineError("file-delete-error", "");
   $<HTMLDialogElement>("dlg-file-delete").showModal();
 }
@@ -511,16 +512,16 @@ $("file-delete-ok").addEventListener("click", async () => {
   const sourceScope = fileOp.sourceScope;
   fileOp.deleteBusy = true;
   setInlineError("file-delete-error", "");
-  btnBusy($("file-delete-ok"), "删除中…");
+  btnBusy($("file-delete-ok"), () => i18nText("删除中…"));
   $<HTMLButtonElement>("file-delete-close").disabled = true;
   $<HTMLButtonElement>("file-delete-cancel").disabled = true;
   try {
     await api(`/sessions/${sess.id}/files?path=${encodeURIComponent(sourcePath)}${scopeParam(sourceScope)}`, { method: "DELETE" });
     $<HTMLDialogElement>("dlg-file-delete").close();
-    toast(wasDir ? "文件夹已删除" : "文件已删除");
+    toast(wasDir ? i18nText("文件夹已删除") : i18nText("文件已删除"));
     if (sourceScope !== S.fileScope || !removeTreeEntry(sourcePath, wasDir)) loadFiles();
   } catch (e) {
-    setInlineError("file-delete-error", "删除失败：" + (e as Error).message);
+    setInlineError("file-delete-error", i18nText("删除失败：") + (e as Error).message);
   } finally {
     fileOp.deleteBusy = false;
     btnDone($("file-delete-ok"));
@@ -546,8 +547,8 @@ function openMkdir() {
   nameOp.entry = null;
   nameOp.scope = S.fileScope;
   nameOp.busy = false;
-  $("file-name-title").textContent = "新建文件夹";
-  $("file-name-label").textContent = `在 ${fullScopePath(S.fileScope, S.filePath)} 下新建`;
+  setText($("file-name-title"), "新建文件夹");
+  setText($("file-name-label"), "在 {p0} 下新建", { p0: String(fullScopePath(S.fileScope, S.filePath)) });
   $<HTMLInputElement>("file-name-input").value = "";
   setInlineError("file-name-error", "");
   $<HTMLDialogElement>("dlg-file-name").showModal();
@@ -560,8 +561,8 @@ function openFileRename(ent: FileEntry, path: string) {
   nameOp.sourcePath = path;
   nameOp.scope = S.fileScope;
   nameOp.busy = false;
-  $("file-name-title").textContent = ent.is_dir ? "重命名文件夹" : "重命名文件";
-  $("file-name-label").textContent = "新名称";
+  setTextRender($("file-name-title"), () => ent.is_dir ? i18nText("重命名文件夹") : i18nText("重命名文件"));
+  setText($("file-name-label"), "新名称");
   $<HTMLInputElement>("file-name-input").value = ent.name;
   setInlineError("file-name-error", "");
   $<HTMLDialogElement>("dlg-file-name").showModal();
@@ -580,11 +581,11 @@ async function submitFileName() {
   const sess = S.current;
   if (!sess || nameOp.busy) return;
   const name = $<HTMLInputElement>("file-name-input").value.trim();
-  if (!name) { setInlineError("file-name-error", "名称不能为空"); return; }
-  if (/[/\\]/.test(name)) { setInlineError("file-name-error", "名称不能包含斜杠"); return; }
+  if (!name) { setInlineError("file-name-error", i18nText("名称不能为空")); return; }
+  if (/[/\\]/.test(name)) { setInlineError("file-name-error", i18nText("名称不能包含斜杠")); return; }
   nameOp.busy = true;
   setInlineError("file-name-error", "");
-  btnBusy($("file-name-ok"), "提交中…");
+  btnBusy($("file-name-ok"), () => i18nText("提交中…"));
   try {
     if (nameOp.mode === "mkdir") {
       await api(`/sessions/${sess.id}/files/mkdir`, {
@@ -592,20 +593,20 @@ async function submitFileName() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scope: nameOp.scope, dir: S.filePath, name }),
       });
-      toast("文件夹已创建");
+      toast(i18nText("文件夹已创建"));
     } else {
       await api(`/sessions/${sess.id}/files/rename`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scope: nameOp.scope, path: nameOp.sourcePath, name }),
       });
-      toast("已重命名");
+      toast(i18nText("已重命名"));
     }
     $<HTMLDialogElement>("dlg-file-name").close();
     resetTree();
     loadFiles();
   } catch (e) {
-    setInlineError("file-name-error", (nameOp.mode === "mkdir" ? "创建失败：" : "重命名失败：") + (e as Error).message);
+    setInlineError("file-name-error", (nameOp.mode === "mkdir" ? i18nText("创建失败：") : i18nText("重命名失败：")) + (e as Error).message);
   } finally {
     nameOp.busy = false;
     btnDone($("file-name-ok"));
@@ -662,12 +663,12 @@ function renderCrumb() {
 }
 
 export function scopeLabel() {
-  return S.fileScope === "shared" ? "共享目录" : "空间文件";
+  return S.fileScope === "shared" ? i18nText("共享目录") : i18nText("空间文件");
 }
 
 function updateFileLabels() {
-  actionButton($("btn-upload"), "上传", "upload", "上传文件或代码包到当前目录，压缩包会自动解压");
-  actionButton($("btn-download"), "下载", "download", `下载全部${scopeLabel()}（ZIP）`);
+  actionButton($("btn-upload"), () => i18nText("上传"), "upload", () => i18nText("上传文件或代码包到当前目录，压缩包会自动解压"));
+  actionButton($("btn-download"), () => i18nText("下载"), "download", () => i18nText("下载全部{p0}（ZIP）", { p0: String(scopeLabel()) }));
 }
 updateFileLabels();
 
@@ -704,10 +705,10 @@ $("upload-input").addEventListener("change", async () => {
   uploadFiles(files, clear);
 });
 $("upload-input").addEventListener("cancel", () => { clearNextUpload = false; });
-actionButton($("btn-files-more"), "", "more", "更多操作");
+actionButton($("btn-files-more"), "", "more", () => i18nText("更多操作"));
 bindMenu($("btn-files-more"), () => [
-  { label: "清空当前目录后上传…", icon: "upload", danger: true, run: () => pickUpload(true),
-    tip: "先删除当前目录下的全部内容，再上传" },
+  { label: i18nText("清空当前目录后上传…"), icon: "upload", danger: true, run: () => pickUpload(true),
+    tip: i18nText("先删除当前目录下的全部内容，再上传") },
 ]);
 
 async function confirmClearUpload(count: number) {
@@ -718,16 +719,16 @@ async function confirmClearUpload(count: number) {
   try {
     existing = (await api<FileEntry[]>(`/sessions/${sess.id}/files?path=${encodeURIComponent(S.filePath)}${scopeQS()}`)).length;
   } catch (e) {
-    toast("读取当前目录失败：" + (e as Error).message, true);
+    toast(i18nText("读取当前目录失败：") + (e as Error).message, true);
     return false;
   }
-  const what = existing ? `会先删除 ${dir} 下的 ${existing} 项（含子目录），` : `${dir} 目前是空的，`;
-  return askConfirm(`${what}再上传 ${count} 个文件。`, {
-    title: "清空后上传",
-    hint: S.fileScope === "shared" && !S.filePath
-      ? "共享目录供你名下所有工作空间使用，对话里粘贴的图片和附件也存在这里，会一起删除。删除后无法恢复。"
-      : "删除后无法恢复。",
-    okLabel: existing ? "清空并上传" : "上传",
+  const what = existing ? i18nText("会先删除 {p0} 下的 {p1} 项（含子目录），", { p0: String(dir), p1: String(existing) }) : i18nText("{p0} 目前是空的，", { p0: String(dir) });
+  return askConfirm(() => i18nText("{p0}再上传 {p1} 个文件。", { p0: String(what), p1: String(count) }), {
+    get title() { return i18nText("清空后上传"); },
+    get hint() { return S.fileScope === "shared" && !S.filePath
+      ? i18nText("共享目录供你名下所有工作空间使用，对话里粘贴的图片和附件也存在这里，会一起删除。删除后无法恢复。")
+      : i18nText("删除后无法恢复。"); },
+    get okLabel() { return existing ? i18nText("清空并上传") : i18nText("上传"); },
     icon: existing ? "trash" : "upload",
     danger: existing > 0,
   });
@@ -749,9 +750,9 @@ function uploadWithProgress(
       let data: Partial<UploadSummary> & { error?: string } = {};
       try { data = JSON.parse(xhr.responseText); } catch (_) { /* 非 JSON 保持空 */ }
       if (xhr.status >= 200 && xhr.status < 300) resolve(data as UploadSummary);
-      else reject(new Error(data.error || xhr.statusText || "上传失败"));
+      else reject(new Error(data.error || xhr.statusText || i18nText("上传失败")));
     });
-    xhr.addEventListener("error", () => reject(new Error("网络错误")));
+    xhr.addEventListener("error", () => reject(new Error(i18nText("网络错误"))));
     xhr.send(formData);
   });
 }
@@ -766,7 +767,7 @@ async function uploadFiles(files: File[], clearFirst = false) {
   // 目标在开始时定下：上传过程中用户点进别的目录，后续文件也不会换地方
   const dir = S.filePath, dirLabel = fullScopePath(S.fileScope, dir);
   $("upload-progress").classList.remove("hidden");
-  btnBusy($("btn-upload"), "上传中…");
+  btnBusy($("btn-upload"), () => i18nText("上传中…"));
   lock.forEach((id) => { $<HTMLButtonElement>(id).disabled = true; });
   let plain = 0, archived = 0;
   try {
@@ -781,13 +782,13 @@ async function uploadFiles(files: File[], clearFirst = false) {
         const res = await uploadWithProgress(`/sessions/${S.current!.id}/upload?path=${encodeURIComponent(dir)}${scopeQS()}`, fd, setUploadFill);
         if (res.mode === "archive") archived += res.files || 0; else plain++;
       } catch (e) {
-        toast(`${file.name} 上传失败：${(e as Error).message}`, true);
+        toast(i18nText("{p0} 上传失败：{p1}", { p0: String(file.name), p1: String((e as Error).message) }), true);
       }
     }
     const parts = [];
-    if (plain) parts.push(`${plain} 个文件`);
-    if (archived) parts.push(`解压 ${archived} 个文件`);
-    if (parts.length) toast(`已上传${parts.join("，")}到 ${dirLabel}`);
+    if (plain) parts.push(i18nText("{p0} 个文件", { p0: String(plain) }));
+    if (archived) parts.push(i18nText("解压 {p0} 个文件", { p0: String(archived) }));
+    if (parts.length) toast(i18nText("已上传{p0}到 {p1}", { p0: String(parts.join("，")), p1: String(dirLabel) }));
     loadFiles();
   } finally {
     $("upload-progress").classList.add("hidden");

@@ -8,7 +8,25 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前正式版本为 [v0.1.8](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.8)。一键安装默认下载最新正式版本；下面说明构建、安装与维护流程。
+当前服务端正式版本为 [v0.1.10](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.10)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.10：多语言与项目展示
+
+网页控制台与 abox-link 面板支持简中、繁中和英文，默认跟随系统，不支持时回退英文；用户选择保存在当前浏览器／设备。即时切换保留草稿、终端与原有系统时区，服务端诊断和用户内容不翻译。语言菜单采用紧凑布局。中英文 README 增加高清截图、34 秒 MP4 / GIF 与双语架构图，完整规则见[界面多语言](i18n.md)。
+
+本次发布 Linux amd64 / arm64 服务端和 Linux/macOS amd64/arm64、Windows amd64 的 abox-link：共七个安装归档，另附 `release.json` 与 `SHA256SUMS`。服务端包也携带五个平台的 abox-link 下载文件；本机已安装的旧 abox-link 需要另行更新。桌面源码已接入三语，但本次**不发布新桌面安装包**，`desktop-v0.1.2` 不会因升级服务端而获得语言选择器。
+
+相对 v0.1.9 不新增数据库迁移（仍为 schema 10），不更改现有 API / WebSocket / 配对协议，不启用同步或更换工作空间镜像。从 v0.1.8 直接升级仍需执行 schema 9 → 10 迁移并遵守下节备份、回退约束。标准版本目录安装可使用「关于与更新 → 升级并重启」或发布包中的 `deploy/release.py`，会短暂断开连接。
+
+### v0.1.9 与桌面客户端
+
+v0.1.9 发布此前桌面集成开发中的服务端扩展：能力发现、桌面配对、逻辑项目、独立 AI/Shell 终端，以及带条件写入、执行收据和恢复管理的目录同步接口。Desktop 0.1.2 连接 v0.1.8 仍可使用登录、空间选择、共享终端和手动文件传输；扩展功能需要 v0.1.9，不能只安装新版桌面包。
+
+同步默认关闭（`desktop_sync_enabled=false`、能力 `sync=0`）。管理员显式在配置中开启后重启，或通过 `PUT /api/settings` 提交 `{"desktop_sync_enabled":true}`，客户端重新登录后才显示同步入口。配对、项目终端及恢复管理独立开放，升级不会自动建立本地映射或开始传输文件。
+
+首次启动将数据库从 schema 9 迁移至 10；升级前验证配套备份。**v0.1.8 不能直接打开已迁移的数据库**，回退必须恢复升级前兼容备份到新目录，并另外保全升级后的文件变化。现有网页与 abox-link 接口保持兼容，服务端包不自动更新空间镜像。详见[数据库迁移与回退](architecture/database-migrations.md)和[兼容矩阵](compatibility.md#桌面客户端与服务端)。
+
+主仓库和 `agentbox-releases` 兼容镜像使用同一套 v0.1.9 服务端/abox-link 附件、`release.json` 与 `SHA256SUMS`，只构建一次；桌面安装包继续使用独立的 `desktop-v0.1.2` Release。
 
 ### 历史版本与源码
 
@@ -32,7 +50,7 @@ v0.1.0～v0.1.4 的七个平台包、`release.json` 和 `SHA256SUMS` 从旧仓�
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.8 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.10 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0
@@ -53,8 +71,8 @@ python3 scripts/scan-secrets.py --artifacts /tmp/agentbox-release --output /tmp/
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
-tar -xzf agentbox_v0.1.0_linux_arm64.tar.gz
-cd agentbox_v0.1.0_linux_arm64
+tar -xzf agentbox_v0.1.10_linux_arm64.tar.gz
+cd agentbox_v0.1.10_linux_arm64
 ./agentbox --version
 cp config.example.json config.json
 chmod 600 config.json

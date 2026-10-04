@@ -37,7 +37,7 @@ subprocess.run(['npm', 'ci'], check=True)
 subprocess.run(['npm', 'run', 'check'], check=True)
 subprocess.run(['npm', 'run', 'build'], check=True)
 if not a.allow_dirty:
-    subprocess.run(['git', 'diff', '--exit-code', '--', 'internal/web/static/js'], check=True)
+    subprocess.run(['git', 'diff', '--exit-code', '--', 'internal/web/static/js', 'internal/linkapp/static/i18n-core.js'], check=True)
 subprocess.run(['python3', 'scripts/verify-third-party.py'], check=True)
 flags = f'-s -w -X agentbox/internal/buildinfo.Version={a.version} -X agentbox/internal/buildinfo.Revision={revision} -X agentbox/internal/buildinfo.BuiltAt={built}'
 def copy_tracked_tree(name, destination, required=()):

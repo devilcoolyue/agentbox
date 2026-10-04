@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AGENTBOX 控制台</title>
+<title data-i18n-text="[&quot;AGENTBOX 控制台&quot;]">AGENTBOX 控制台</title>
 <meta name="theme-color" content="#12151c">
 <!-- 主题：在样式表之前落 data-theme-mode（system|light|dark）与实际生效的
      data-theme（dark|light），避免跟随系统/浅色用户刷新时闪一帧错误底色。
@@ -111,16 +111,16 @@
   <svg class="ic-theme ic-moon" width="17" height="17" data-icon="moon" aria-hidden="true"></svg>
 </template>
 
-<div id="version-menu" class="version-menu" popover="auto" role="dialog" aria-label="版本与更新">
-  <header><strong>当前版本</strong><button type="button" class="version-check" data-update-check data-icon="refresh" aria-label="检查更新" data-tip="检查更新"></button></header>
+<div id="version-menu" class="version-menu" popover="auto" role="dialog" aria-label="版本与更新" data-i18n-attrs="{&quot;aria-label&quot;:&quot;版本与更新&quot;}">
+  <header><strong data-i18n-text="[&quot;当前版本&quot;]">当前版本</strong><button type="button" class="version-check" data-update-check data-icon="refresh" aria-label="检查更新" data-tip="检查更新" data-i18n-attrs="{&quot;aria-label&quot;:&quot;检查更新&quot;,&quot;data-tip&quot;:&quot;检查更新&quot;}"></button></header>
   <div class="version-menu-body">
-    <div class="version-number"><span data-update-version>—</span><span id="version-current" class="version-current hidden" data-icon="check" aria-label="已是最新版本"></span></div>
-    <p class="update-status" data-update-status role="status">尚未检查更新</p>
-    <button id="version-upgrade" type="button" class="btn btn-primary hidden" data-update-about data-icon="info">查看更新</button>
-    <a class="version-release" data-update-release target="_blank" rel="noopener noreferrer" data-icon="external">查看发布</a>
+    <div class="version-number"><span data-update-version>—</span><span id="version-current" class="version-current hidden" data-icon="check" aria-label="已是最新版本" data-i18n-attrs="{&quot;aria-label&quot;:&quot;已是最新版本&quot;}"></span></div>
+    <p class="update-status" data-update-status role="status" data-i18n-text="[&quot;尚未检查更新&quot;]">尚未检查更新</p>
+    <button id="version-upgrade" type="button" class="btn btn-primary hidden" data-update-about data-icon="info" data-i18n-text="[&quot;查看更新&quot;]">查看更新</button>
+    <a class="version-release" data-update-release target="_blank" rel="noopener noreferrer" data-icon="external" data-i18n-text="[&quot;查看发布&quot;]">查看发布</a>
     <p class="update-error hidden" data-update-error></p>
   </div>
-  <button type="button" class="version-menu-footer" data-update-about><span>每 4 小时自动检查<span data-update-time>尚未检查</span></span><span data-icon="caret" aria-hidden="true"></span></button>
+  <button type="button" class="version-menu-footer" data-update-about><span data-i18n-text="[&quot;每 4 小时自动检查&quot;]">每 4 小时自动检查<span data-update-time data-i18n-text="[&quot;尚未检查&quot;]">尚未检查</span></span><span data-icon="caret" aria-hidden="true"></span></button>
 </div>
 
 <!-- 登录：默认跟随系统主题，页内不放主题切换（登录后在侧栏切换） -->
@@ -128,17 +128,18 @@
   <form id="login-form" class="login-card">
     <div class="mascot mascot-login" data-mascot aria-hidden="true"></div>
     <div class="wordmark"><span data-mark></span><span>AGENTBOX<span class="cursor" aria-hidden="true"></span></span></div>
-    <p class="login-hint">在你的服务器上，使用独立的 Agent 工作空间</p>
+    <label class="language-control login-language"><span data-i18n-text="[&quot;语言&quot;]">语言</span><select id="login-language" data-language-select aria-label="界面语言" data-i18n-attrs="{&quot;aria-label&quot;:&quot;界面语言&quot;}"></select></label>
+    <p class="login-hint" data-i18n-text="[&quot;在你的服务器上，使用独立的 Agent 工作空间&quot;]">在你的服务器上，使用独立的 Agent 工作空间</p>
     <div class="login-field">
       <span class="login-field-icon" data-icon="user" aria-hidden="true"></span>
-      <input id="login-user" type="text" placeholder="账号" aria-label="账号" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      <input id="login-user" type="text" placeholder="账号" aria-label="账号" autocomplete="username" autocapitalize="none" spellcheck="false" required data-i18n-attrs="{&quot;placeholder&quot;:&quot;账号&quot;,&quot;aria-label&quot;:&quot;账号&quot;}">
     </div>
     <div class="login-field login-password">
       <span class="login-field-icon" data-icon="lock" aria-hidden="true"></span>
-      <input id="login-pass" type="password" placeholder="密码" aria-label="密码" autocomplete="current-password" required>
-      <button id="login-password-toggle" class="login-password-toggle" type="button" data-icon="eye" aria-label="显示密码" aria-controls="login-pass" data-tip="显示密码"></button>
+      <input id="login-pass" type="password" placeholder="密码" aria-label="密码" autocomplete="current-password" required data-i18n-attrs="{&quot;placeholder&quot;:&quot;密码&quot;,&quot;aria-label&quot;:&quot;密码&quot;}">
+      <button id="login-password-toggle" class="login-password-toggle" type="button" data-icon="eye" aria-label="显示密码" aria-controls="login-pass" data-tip="显示密码" data-i18n-attrs="{&quot;aria-label&quot;:&quot;显示密码&quot;,&quot;data-tip&quot;:&quot;显示密码&quot;}"></button>
     </div>
-    <button type="submit" id="login-btn" class="btn btn-primary" data-icon="login">登录</button>
+    <button type="submit" id="login-btn" class="btn btn-primary" data-icon="login" data-i18n-text="[&quot;登录&quot;]">登录</button>
     <p id="login-error" class="login-error hidden"></p>
   </form>
 </div>
@@ -147,7 +148,7 @@
 <div id="app" class="app hidden">
   <!-- 顶栏：仅窄屏出现。☰ 抽屉 + 状态灯/工作空间名（工作台）或页面标题（设置）+ ⋯ 工作空间操作 -->
   <header class="topbar">
-    <button id="btn-menu" class="menu-btn" aria-label="打开菜单" aria-expanded="false" aria-controls="sidebar">
+    <button id="btn-menu" class="menu-btn" aria-label="打开菜单" aria-expanded="false" aria-controls="sidebar" data-i18n-attrs="{&quot;aria-label&quot;:&quot;打开菜单&quot;}">
       <svg width="18" height="18" data-icon="menu" aria-hidden="true"></svg>
     </button>
     <div class="tb-title">
@@ -158,86 +159,87 @@
     <!-- 窄屏的分区切换：一次列出全部分区（不搜索、不弹键盘），条目由 responsive.ts 照桌面导航生成 -->
     <div id="mobile-section" class="mobile-section hidden">
       <button id="mobile-section-btn" type="button" class="mobile-section-btn" popovertarget="mobile-section-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="mobile-section-menu"><span id="mobile-section-label" class="mobile-section-label"></span><span class="select-caret" aria-hidden="true"></span></button>
-      <div id="mobile-section-menu" class="section-menu" popover="auto" role="menu" aria-label="切换子菜单"></div>
+      <div id="mobile-section-menu" class="section-menu" popover="auto" role="menu" aria-label="切换子菜单" data-i18n-attrs="{&quot;aria-label&quot;:&quot;切换子菜单&quot;}"></div>
     </div>
     <div id="kebab-wrap" class="kebab-wrap hidden">
-      <button id="btn-kebab" class="menu-btn" aria-label="工作空间操作" aria-haspopup="menu" aria-expanded="false" data-icon="more"></button>
+      <button id="btn-kebab" class="menu-btn" aria-label="工作空间操作" aria-haspopup="menu" aria-expanded="false" data-icon="more" data-i18n-attrs="{&quot;aria-label&quot;:&quot;工作空间操作&quot;}"></button>
     </div>
   </header>
 
   <div class="shell">
     <div id="scrim" class="scrim"></div>
 
-    <aside id="sidebar" class="sidebar" aria-label="主导航">
+    <aside id="sidebar" class="sidebar" aria-label="主导航" data-i18n-attrs="{&quot;aria-label&quot;:&quot;主导航&quot;}">
       <div class="side-head">
-        <button id="btn-home" type="button" class="wordmark wordmark-sm side-brand" data-tip="回到工作台首页" aria-label="AGENTBOX 工作台首页"><span class="side-mark"><span data-mark></span></span><span class="side-brand-name">AGENTBOX</span></button>
-        <button id="version-badge" type="button" data-icon="info" data-tip="查看版本与更新" class="version-badge hidden" aria-label="版本与更新" aria-haspopup="dialog" aria-expanded="false" aria-controls="version-menu"><span id="version-label">版本</span><span class="version-dot" aria-hidden="true"></span></button>
-        <button id="btn-sidebar-toggle" type="button" class="side-collapse" aria-label="收起侧栏" aria-expanded="true" aria-controls="sidebar" data-tip="收起侧栏">
+        <button id="btn-home" type="button" class="wordmark wordmark-sm side-brand" data-tip="回到工作台首页" aria-label="AGENTBOX 工作台首页" data-i18n-attrs="{&quot;data-tip&quot;:&quot;回到工作台首页&quot;,&quot;aria-label&quot;:&quot;AGENTBOX 工作台首页&quot;}"><span class="side-mark"><span data-mark></span></span><span class="side-brand-name">AGENTBOX</span></button>
+        <button id="version-badge" type="button" data-icon="info" data-tip="查看版本与更新" class="version-badge hidden" aria-label="版本与更新" aria-haspopup="dialog" aria-expanded="false" aria-controls="version-menu" data-i18n-attrs="{&quot;data-tip&quot;:&quot;查看版本与更新&quot;,&quot;aria-label&quot;:&quot;版本与更新&quot;}"><span id="version-label" data-i18n-text="[&quot;版本&quot;]">版本</span><span class="version-dot" aria-hidden="true"></span></button>
+        <button id="btn-sidebar-toggle" type="button" class="side-collapse" aria-label="收起侧栏" aria-expanded="true" aria-controls="sidebar" data-tip="收起侧栏" data-i18n-attrs="{&quot;aria-label&quot;:&quot;收起侧栏&quot;,&quot;data-tip&quot;:&quot;收起侧栏&quot;}">
           <span class="glyph"><svg width="18" height="18" data-icon="panel-left" aria-hidden="true"></svg></span>
         </button>
-        <button id="btn-sidebar-close" type="button" class="side-close" aria-label="关闭菜单">
+        <button id="btn-sidebar-close" type="button" class="side-close" aria-label="关闭菜单" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭菜单&quot;}">
           <svg width="18" height="18" data-icon="close" aria-hidden="true"></svg>
         </button>
       </div>
 
       <div class="side-create">
-        <button id="btn-new" class="btn btn-primary side-new" aria-label="新建工作空间" data-tip="新建工作空间">
+        <button id="btn-new" class="btn btn-primary side-new" aria-label="新建工作空间" data-tip="新建工作空间" data-i18n-attrs="{&quot;aria-label&quot;:&quot;新建工作空间&quot;,&quot;data-tip&quot;:&quot;新建工作空间&quot;}">
           <svg width="18" height="18" data-icon="plus" aria-hidden="true"></svg>
-          <span class="side-item-label action-label">新建工作空间</span>
+          <span class="side-item-label action-label" data-i18n-text="[&quot;新建工作空间&quot;]">新建工作空间</span>
         </button>
       </div>
 
-      <section class="side-sessions" aria-label="工作空间">
-        <div class="side-section-head"><span class="side-label">工作空间</span><span id="session-count" class="side-count">0</span></div>
+      <section class="side-sessions" aria-label="工作空间" data-i18n-attrs="{&quot;aria-label&quot;:&quot;工作空间&quot;}">
+        <div class="side-section-head"><span class="side-label" data-i18n-text="[&quot;工作空间&quot;]">工作空间</span><span id="session-count" class="side-count">0</span></div>
         <div id="session-list" class="session-list"></div>
       </section>
 
       <footer class="side-foot">
         <!-- 管理入口带文字两列排；收起侧栏时只剩图标。Git 管理与使用记录、设置并列，
              不再藏在用户弹层里。余额直接写在用户按钮上。 -->
-        <nav class="side-nav" aria-label="管理与工具">
+        <nav class="side-nav" aria-label="管理与工具" data-i18n-attrs="{&quot;aria-label&quot;:&quot;管理与工具&quot;}">
           <div class="side-tools">
-            <button id="btn-usagelog" aria-label="使用记录" data-tip="使用记录" class="side-item side-tool"><span class="glyph">
+            <button id="btn-usagelog" aria-label="使用记录" data-tip="使用记录" class="side-item side-tool" data-i18n-attrs="{&quot;aria-label&quot;:&quot;使用记录&quot;,&quot;data-tip&quot;:&quot;使用记录&quot;}"><span class="glyph">
               <svg width="17" height="17" data-icon="list" aria-hidden="true"></svg>
-            </span><span class="side-item-label">使用记录</span></button>
-            <button id="btn-git-management" aria-label="Git 管理" data-tip="Git 身份、仓库连接与授权" class="side-item side-tool"><span class="glyph">
+            </span><span class="side-item-label" data-i18n-text="[&quot;使用记录&quot;]">使用记录</span></button>
+            <button id="btn-git-management" aria-label="Git 管理" data-tip="Git 身份、仓库连接与授权" class="side-item side-tool" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Git 管理&quot;,&quot;data-tip&quot;:&quot;Git 身份、仓库连接与授权&quot;}"><span class="glyph">
               <svg width="17" height="17" data-icon="branch" aria-hidden="true"></svg>
-            </span><span class="side-item-label">Git 管理</span></button>
-            <button id="btn-tunnel" aria-label="内网隧道" data-tip="内网隧道" class="side-item side-tool hidden"><span class="glyph">
+            </span><span class="side-item-label" data-i18n-text="[&quot;Git 管理&quot;]">Git 管理</span></button>
+            <button id="btn-tunnel" aria-label="内网隧道" data-tip="内网隧道" class="side-item side-tool hidden" data-i18n-attrs="{&quot;aria-label&quot;:&quot;内网隧道&quot;,&quot;data-tip&quot;:&quot;内网隧道&quot;}"><span class="glyph">
               <svg width="17" height="17" data-icon="link" aria-hidden="true"></svg>
-            </span><span class="side-item-label">内网隧道</span><span id="tunnel-state" class="tunnel-state mono"><span id="tunnel-dot" class="t-dot"></span><span id="tunnel-text">离线</span></span></button>
-            <button id="btn-settings" aria-label="系统设置" data-tip="系统设置" class="side-item side-tool"><span class="glyph">
+            </span><span class="side-item-label" data-i18n-text="[&quot;内网隧道&quot;]">内网隧道</span><span id="tunnel-state" class="tunnel-state mono"><span id="tunnel-dot" class="t-dot"></span><span id="tunnel-text" data-i18n-text="[&quot;离线&quot;]">离线</span></span></button>
+            <button id="btn-settings" aria-label="系统设置" data-tip="系统设置" class="side-item side-tool" data-i18n-attrs="{&quot;aria-label&quot;:&quot;系统设置&quot;,&quot;data-tip&quot;:&quot;系统设置&quot;}"><span class="glyph">
               <svg width="17" height="17" data-icon="settings" aria-hidden="true"></svg>
-            </span><span class="side-item-label">系统设置</span></button>
+            </span><span class="side-item-label" data-i18n-text="[&quot;系统设置&quot;]">系统设置</span></button>
           </div>
         </nav>
-        <div class="side-preferences" role="group" aria-label="账户与主题">
-          <button id="btn-user-menu" type="button" class="side-item side-user" aria-label="用户菜单" aria-haspopup="dialog" aria-expanded="false" aria-controls="sidebar-user-menu">
+        <div class="side-preferences" role="group" aria-label="账户与主题" data-i18n-attrs="{&quot;aria-label&quot;:&quot;账户与主题&quot;}">
+          <button id="btn-user-menu" type="button" class="side-item side-user" aria-label="用户菜单" aria-haspopup="dialog" aria-expanded="false" aria-controls="sidebar-user-menu" data-i18n-attrs="{&quot;aria-label&quot;:&quot;用户菜单&quot;}">
             <span class="glyph"><svg width="18" height="18" data-icon="user" aria-hidden="true"></svg></span>
             <span class="side-user-text side-item-label">
               <span id="side-user-label" class="side-user-label"></span>
               <span id="side-user-quota" class="side-user-quota hidden"></span>
             </span>
           </button>
-          <div class="theme-options" role="group" aria-label="主题">
-            <button type="button" data-theme-option="system" aria-label="切换到跟随系统" data-tip="跟随系统" aria-pressed="true"><span class="glyph" data-theme-ico></span></button>
-            <button type="button" data-theme-option="light" aria-label="切换到浅色" data-tip="浅色" aria-pressed="false"><span class="glyph" data-theme-ico></span></button>
-            <button type="button" data-theme-option="dark" aria-label="切换到深色" data-tip="深色" aria-pressed="false"><span class="glyph" data-theme-ico></span></button>
+          <div class="theme-options" role="group" aria-label="主题" data-i18n-attrs="{&quot;aria-label&quot;:&quot;主题&quot;}">
+            <button type="button" data-theme-option="system" aria-label="切换到跟随系统" data-tip="跟随系统" aria-pressed="true" data-i18n-attrs="{&quot;aria-label&quot;:&quot;切换到跟随系统&quot;,&quot;data-tip&quot;:&quot;跟随系统&quot;}"><span class="glyph" data-theme-ico></span></button>
+            <button type="button" data-theme-option="light" aria-label="切换到浅色" data-tip="浅色" aria-pressed="false" data-i18n-attrs="{&quot;aria-label&quot;:&quot;切换到浅色&quot;,&quot;data-tip&quot;:&quot;浅色&quot;}"><span class="glyph" data-theme-ico></span></button>
+            <button type="button" data-theme-option="dark" aria-label="切换到深色" data-tip="深色" aria-pressed="false" data-i18n-attrs="{&quot;aria-label&quot;:&quot;切换到深色&quot;,&quot;data-tip&quot;:&quot;深色&quot;}"><span class="glyph" data-theme-ico></span></button>
           </div>
-          <button type="button" class="side-item side-tool side-theme-cycle" data-theme-cycle aria-label="切换主题"><span class="glyph" data-theme-ico></span></button>
-          <div id="sidebar-user-menu" class="side-user-menu" role="dialog" aria-label="当前用户" aria-describedby="sidebar-user-name sidebar-user-role" tabindex="-1" inert>
+          <button type="button" class="side-item side-tool side-theme-cycle" data-theme-cycle aria-label="切换主题" data-i18n-attrs="{&quot;aria-label&quot;:&quot;切换主题&quot;}"><span class="glyph" data-theme-ico></span></button>
+          <div id="sidebar-user-menu" class="side-user-menu" role="dialog" aria-label="当前用户" aria-describedby="sidebar-user-name sidebar-user-role" tabindex="-1" inert data-i18n-attrs="{&quot;aria-label&quot;:&quot;当前用户&quot;}">
             <div class="side-user-info"><span id="sidebar-user-name" class="side-user-name"></span><span id="sidebar-user-role" class="side-user-role"></span></div>
-            <div id="my-quota" class="my-quota hidden" tabindex="0"><span class="mq-label">余额</span><span id="my-quota-num" class="mq-num mono">—</span></div>
+            <div id="my-quota" class="my-quota hidden" tabindex="0"><span class="mq-label" data-i18n-text="[&quot;余额&quot;]">余额</span><span id="my-quota-num" class="mq-num mono">—</span></div>
             <div class="side-user-conn">
-              <span class="mq-label">连接延迟</span>
-              <div id="conn-latency" class="conn-latency" tabindex="0" data-tip="到服务器的往返延迟">
+              <span class="mq-label" data-i18n-text="[&quot;连接延迟&quot;]">连接延迟</span>
+              <div id="conn-latency" class="conn-latency" tabindex="0" data-tip="到服务器的往返延迟" data-i18n-attrs="{&quot;data-tip&quot;:&quot;到服务器的往返延迟&quot;}">
                 <span id="conn-dot" class="t-dot"></span>
-                <span id="conn-text" class="conn-text mono">连接中…</span>
+                <span id="conn-text" class="conn-text mono" data-i18n-text="[&quot;连接中…&quot;]">连接中…</span>
               </div>
             </div>
+            <label class="language-control"><span data-i18n-text="[&quot;语言&quot;]">语言</span><select id="app-language" data-language-select aria-label="界面语言" data-i18n-attrs="{&quot;aria-label&quot;:&quot;界面语言&quot;}"></select></label>
             <button id="btn-logout" type="button" class="side-logout"><span class="glyph">
               <svg width="17" height="17" data-icon="logout" aria-hidden="true"></svg>
-            </span><span>退出登录</span></button>
+            </span><span data-i18n-text="[&quot;退出登录&quot;]">退出登录</span></button>
           </div>
         </div>
       </footer>
@@ -250,18 +252,18 @@
           <!-- 新手引导：一个空间都没有时才出现；有空间后首页改为最近空间列表（home.ts） -->
           <div id="home-intro" class="home-intro">
             <div class="mascot mascot-empty" data-mascot aria-hidden="true"></div>
-            <h1 class="empty-title">从一个工作空间开始</h1>
-            <p class="empty-sub">独立运行 Agent，集中管理文件、终端和对话。<br>新建一个工作空间；停止后，文件与对话仍会保留。</p>
-            <button id="empty-new" class="btn btn-primary empty-cta" data-icon="plus">新建工作空间</button>
-            <div class="empty-ready">已就绪<span id="empty-brands" class="empty-brands"></span></div>
+            <h1 class="empty-title" data-i18n-text="[&quot;从一个工作空间开始&quot;]">从一个工作空间开始</h1>
+            <p class="empty-sub" data-i18n-text="[&quot;独立运行 Agent，集中管理文件、终端和对话。&quot;,&quot;新建一个工作空间；停止后，文件与对话仍会保留。&quot;]">独立运行 Agent，集中管理文件、终端和对话。<br>新建一个工作空间；停止后，文件与对话仍会保留。</p>
+            <button id="empty-new" class="btn btn-primary empty-cta" data-icon="plus" data-i18n-text="[&quot;新建工作空间&quot;]">新建工作空间</button>
+            <div class="empty-ready" data-i18n-text="[&quot;已就绪&quot;]">已就绪<span id="empty-brands" class="empty-brands"></span></div>
           </div>
           <section id="home-recent" class="home-recent hidden" aria-labelledby="home-recent-title">
             <div class="home-head">
               <div>
-                <h1 id="home-recent-title" class="home-title">最近的工作空间</h1>
+                <h1 id="home-recent-title" class="home-title" data-i18n-text="[&quot;最近的工作空间&quot;]">最近的工作空间</h1>
                 <p id="home-recent-sub" class="home-sub"></p>
               </div>
-              <button id="home-new" class="btn btn-primary" data-icon="plus">新建工作空间</button>
+              <button id="home-new" class="btn btn-primary" data-icon="plus" data-i18n-text="[&quot;新建工作空间&quot;]">新建工作空间</button>
             </div>
             <div id="home-list" class="home-list"></div>
           </section>
@@ -277,43 +279,43 @@
             <!-- 状态 + 一个随状态切换的启动/停止；额度、重命名、删除收进 ⋯，与窄屏顶栏共用 -->
             <div class="wb-actions">
               <span id="wb-state" class="state-pill"></span>
-              <button id="btn-start" class="btn btn-sm btn-primary" data-icon="play" aria-label="启动工作空间" data-tip="启动工作空间">启动</button>
-              <button id="btn-stop" class="btn btn-sm" data-icon="stop" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话">停止</button>
-              <button id="btn-wb-more" class="btn btn-sm" data-icon="more" aria-label="工作空间更多操作" aria-haspopup="menu" aria-expanded="false" data-tip="更多操作"></button>
+              <button id="btn-start" class="btn btn-sm btn-primary" data-icon="play" aria-label="启动工作空间" data-tip="启动工作空间" data-i18n-text="[&quot;启动&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;启动工作空间&quot;,&quot;data-tip&quot;:&quot;启动工作空间&quot;}">启动</button>
+              <button id="btn-stop" class="btn btn-sm" data-icon="stop" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话" data-i18n-text="[&quot;停止&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;停止工作空间&quot;,&quot;data-tip&quot;:&quot;停止工作空间，保留文件与对话&quot;}">停止</button>
+              <button id="btn-wb-more" class="btn btn-sm" data-icon="more" aria-label="工作空间更多操作" aria-haspopup="menu" aria-expanded="false" data-tip="更多操作" data-i18n-attrs="{&quot;aria-label&quot;:&quot;工作空间更多操作&quot;,&quot;data-tip&quot;:&quot;更多操作&quot;}"></button>
             </div>
           </header>
 
           <nav class="tabs">
             <button class="tab active" data-tab="chat">
-              <svg class="tab-ic" width="15" height="15" data-icon="message" aria-hidden="true"></svg><span class="t">对话</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="message" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;对话&quot;]">对话</span></button>
             <button class="tab" data-tab="term">
-              <svg class="tab-ic" width="15" height="15" data-icon="tool" aria-hidden="true"></svg><span class="t">终端</span></button>
-            <button class="tab" data-tab="browser"><svg class="tab-ic" width="15" height="15" data-icon="globe" aria-hidden="true"></svg><span class="t">浏览器</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="tool" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;终端&quot;]">终端</span></button>
+            <button class="tab" data-tab="browser"><svg class="tab-ic" width="15" height="15" data-icon="globe" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;浏览器&quot;]">浏览器</span></button>
             <button class="tab" data-tab="files">
-              <svg class="tab-ic" width="15" height="15" data-icon="folder" aria-hidden="true"></svg><span class="t">文件</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="folder" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;文件&quot;]">文件</span></button>
             <button class="tab" data-tab="changes">
-              <svg class="tab-ic" width="15" height="15" data-icon="branch" aria-hidden="true"></svg><span class="t">变更</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="branch" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;变更&quot;]">变更</span></button>
             <button class="tab" data-tab="skills" id="tab-btn-skills">
-              <svg class="tab-ic" width="15" height="15" data-icon="sparkles" aria-hidden="true"></svg><span class="t">技能</span></button>
+              <svg class="tab-ic" width="15" height="15" data-icon="sparkles" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;技能&quot;]">技能</span></button>
             <button class="tab" data-tab="mcp" id="tab-btn-mcp"><svg class="tab-ic" width="15" height="15" data-icon="plug" aria-hidden="true"></svg><span class="t">MCP</span></button>
           </nav>
 
           <section id="tab-mcp" class="pane hidden">
             <div class="mcp-toolbar">
               <div class="mcp-scope-group">
-                <label for="mcp-scope">配置范围</label>
-                <select id="mcp-scope"><option value="session">当前空间</option><option value="user">我的 MCP</option></select>
+                <label for="mcp-scope" data-i18n-text="[&quot;配置范围&quot;]">配置范围</label>
+                <select id="mcp-scope"><option value="session" data-i18n-text="[&quot;当前空间&quot;]">当前空间</option><option value="user" data-i18n-text="[&quot;我的 MCP&quot;]">我的 MCP</option></select>
               </div>
               <div class="mcp-toolbar-actions">
-                <button id="mcp-add" data-icon="plus" class="btn btn-primary btn-sm" aria-haspopup="dialog" aria-controls="mcp-editor">新增 MCP</button>
-                <button id="mcp-import" data-icon="upload" class="btn btn-sm">导入 JSON</button>
-                <button id="mcp-refresh" data-icon="refresh" class="btn btn-sm">刷新</button>
+                <button id="mcp-add" data-icon="plus" class="btn btn-primary btn-sm" aria-haspopup="dialog" aria-controls="mcp-editor" data-i18n-text="[&quot;新增 MCP&quot;]">新增 MCP</button>
+                <button id="mcp-import" data-icon="upload" class="btn btn-sm" data-i18n-text="[&quot;导入 JSON&quot;]">导入 JSON</button>
+                <button id="mcp-refresh" data-icon="refresh" class="btn btn-sm" data-i18n-text="[&quot;刷新&quot;]">刷新</button>
               </div>
               <input id="mcp-import-file" type="file" accept=".json,application/json" hidden>
             </div>
             <div id="mcp-content">
               <p id="mcp-scope-hint" class="mcp-meta"></p>
-              <p class="mcp-meta mcp-usage-note">下次聊天或终端连接时应用 · 已运行的 Claude 需重启 · OAuth 在终端授权</p>
+              <p class="mcp-meta mcp-usage-note" data-i18n-text="[&quot;下次聊天或终端连接时应用 · 已运行的 Claude 需重启 · OAuth 在终端授权&quot;]">下次聊天或终端连接时应用 · 已运行的 Claude 需重启 · OAuth 在终端授权</p>
               <div id="mcp-list" aria-live="polite"></div>
             </div>
           </section>
@@ -322,59 +324,59 @@
           <section id="tab-chat" class="pane">
             <!-- 对话切换栏：当前对话标题（点击打开历史面板）+ 新对话入口 -->
             <div class="thread-bar">
-              <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话">
-                <span id="thread-title" class="t">新对话</span>
+              <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话" data-i18n-attrs="{&quot;data-tip&quot;:&quot;历史对话：查看、切换并继续之前的对话&quot;}">
+                <span id="thread-title" class="t" data-i18n-text="[&quot;新对话&quot;]">新对话</span>
               </button>
-              <button id="chat-network" type="button" class="chat-network hidden" aria-label="内网状态，查看连接详情">
+              <button id="chat-network" type="button" class="chat-network hidden" aria-label="内网状态，查看连接详情" data-i18n-attrs="{&quot;aria-label&quot;:&quot;内网状态，查看连接详情&quot;}">
                 <span class="chat-network-dot" aria-hidden="true"></span>
-                <span>内网</span><span id="chat-network-status" class="chat-network-status">离线</span>
+                <span data-i18n-text="[&quot;内网&quot;]">内网</span><span id="chat-network-status" class="chat-network-status" data-i18n-text="[&quot;离线&quot;]">离线</span>
                 <svg class="chat-network-arrow" width="12" height="12" data-icon="chevron-right" aria-hidden="true"></svg>
               </button>
-              <button id="btn-thread-new" class="btn thread-new" data-tip="在当前工作空间中新建对话，原对话保留在历史中" data-icon="plus">新建对话</button>
+              <button id="btn-thread-new" class="btn thread-new" data-tip="在当前工作空间中新建对话，原对话保留在历史中" data-icon="plus" data-i18n-text="[&quot;新建对话&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;在当前工作空间中新建对话，原对话保留在历史中&quot;}">新建对话</button>
             </div>
             <!-- 对话通道连接状态：仅在非正常连接时出现，避免占用常态空间 -->
             <div id="chat-conn" class="chat-conn hidden">
               <span id="chat-conn-dot" class="t-dot"></span>
               <span id="chat-conn-text"></span>
-              <button id="chat-reconnect" type="button" class="btn btn-sm" data-icon="refresh">立即重连</button>
+              <button id="chat-reconnect" type="button" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;立即重连&quot;]">立即重连</button>
             </div>
             <div id="chat-log" class="chat-log"></div>
             <div id="chat-loading" class="loading-block hidden">
               <span id="chat-loading-spin" class="spin"></span>
-              <span id="chat-loading-text">正在加载历史对话…</span>
-              <button id="chat-loading-retry" type="button" class="btn btn-sm hidden" data-icon="refresh">重试</button>
+              <span id="chat-loading-text" data-i18n-text="[&quot;正在加载历史对话…&quot;]">正在加载历史对话…</span>
+              <button id="chat-loading-retry" type="button" class="btn btn-sm hidden" data-icon="refresh" data-i18n-text="[&quot;重试&quot;]">重试</button>
             </div>
             <div id="chat-hero" class="chat-hero hidden">
               <div id="hero-avatar" class="hero-avatar"></div>
-              <h2>我们该构建什么？<span class="hero-cursor" aria-hidden="true"></span></h2>
+              <h2 data-i18n-text="[&quot;我们该构建什么？&quot;]">我们该构建什么？<span class="hero-cursor" aria-hidden="true"></span></h2>
               <div class="hero-pills">
-                <button class="hero-pill" data-fill="帮我梳理这个仓库的整体结构和核心模块，讲讲代码是如何组织的。" data-icon="folder">
+                <button class="hero-pill" data-fill="帮我梳理这个仓库的整体结构和核心模块，讲讲代码是如何组织的。" data-icon="folder" data-i18n-text="[&quot;\n                  梳理仓库结构\n                &quot;]">
                   梳理仓库结构
                 </button>
-                <button class="hero-pill" data-fill="我想实现一个新功能：" data-icon="sparkles">
+                <button class="hero-pill" data-fill="我想实现一个新功能：" data-icon="sparkles" data-i18n-text="[&quot;\n                  实现一个新功能\n                &quot;]">
                   实现一个新功能
                 </button>
-                <button class="hero-pill" data-fill="请审查当前代码，找出问题并提出具体修改建议。" data-icon="list-check">
+                <button class="hero-pill" data-fill="请审查当前代码，找出问题并提出具体修改建议。" data-icon="list-check" data-i18n-text="[&quot;\n                  审查当前代码\n                &quot;]">
                   审查当前代码
                 </button>
-                <button class="hero-pill" data-fill="现在有一个问题需要修复：" data-icon="bug">
+                <button class="hero-pill" data-fill="现在有一个问题需要修复：" data-icon="bug" data-i18n-text="[&quot;\n                  修复一个问题\n                &quot;]">
                   修复一个问题
                 </button>
               </div>
             </div>
             <div class="composer-wrap">
               <button id="chat-scroll-bottom" class="chat-scroll-bottom" type="button"
-                data-tip="滚动到最新消息" aria-label="滚动到最新消息" aria-hidden="true">
+                data-tip="滚动到最新消息" aria-label="滚动到最新消息" aria-hidden="true" data-i18n-attrs="{&quot;data-tip&quot;:&quot;滚动到最新消息&quot;,&quot;aria-label&quot;:&quot;滚动到最新消息&quot;}">
                 <svg width="18" height="18" data-icon="arrow-down" aria-hidden="true"></svg>
               </button>
               <div class="composer">
                 <div id="chat-attach" class="chat-attach hidden"></div>
-                <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）"></textarea>
+                <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）" data-i18n-attrs="{&quot;placeholder&quot;:&quot;随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）&quot;}"></textarea>
                 <div class="composer-bar">
-                  <button id="btn-attach" class="icon-btn" aria-label="添加附件" data-tip="添加附件（图片或文件，48 小时后过期）">
+                  <button id="btn-attach" class="icon-btn" aria-label="添加附件" data-tip="添加附件（图片或文件，48 小时后过期）" data-i18n-attrs="{&quot;aria-label&quot;:&quot;添加附件&quot;,&quot;data-tip&quot;:&quot;添加附件（图片或文件，48 小时后过期）&quot;}">
                     <svg width="18" height="18" data-icon="paperclip" aria-hidden="true"></svg>
                   </button>
-                  <button id="btn-voice" class="icon-btn" aria-label="语音输入" data-tip="语音输入：点击说话，再点一次停止并发送">
+                  <button id="btn-voice" class="icon-btn" aria-label="语音输入" data-tip="语音输入：点击说话，再点一次停止并发送" data-i18n-attrs="{&quot;aria-label&quot;:&quot;语音输入&quot;,&quot;data-tip&quot;:&quot;语音输入：点击说话，再点一次停止并发送&quot;}">
                     <svg width="18" height="18" data-icon="mic" aria-hidden="true"></svg>
                   </button>
                   <input id="attach-input" type="file" multiple class="hidden">
@@ -383,7 +385,7 @@
                     <div id="pick-menu" class="pick-menu hidden"></div>
                     <div id="pick-fly" class="pick-fly hidden"></div>
                   </div>
-                  <button id="chat-send" class="send-btn" aria-label="发送" data-tip="发送">
+                  <button id="chat-send" class="send-btn" aria-label="发送" data-tip="发送" data-i18n-attrs="{&quot;aria-label&quot;:&quot;发送&quot;,&quot;data-tip&quot;:&quot;发送&quot;}">
                     <svg class="ic-send" width="17" height="17" data-icon="send" aria-hidden="true"></svg>
                     <svg class="ic-stop" width="17" height="17" data-icon="stop" aria-hidden="true"></svg>
                   </button>
@@ -394,33 +396,33 @@
 
           <!-- 远程浏览器 -->
           <section id="tab-browser" class="pane hidden">
-            <div class="browser-toolbar" aria-label="远程浏览器工具栏">
+            <div class="browser-toolbar" aria-label="远程浏览器工具栏" data-i18n-attrs="{&quot;aria-label&quot;:&quot;远程浏览器工具栏&quot;}">
               <!-- 带字的单个切换按钮：与工作台头部「启动 / 停止工作空间」区分开，
                    曾经两组同样的播放/停止图标上下叠着，点错就把整个空间停了 -->
-              <div class="browser-lifecycle" role="group" aria-label="浏览器连接">
-                <button id="browser-start" class="btn btn-sm" data-icon="globe" aria-label="启动浏览器" data-tip="启动远程浏览器，继续上次的登录状态">启动浏览器</button>
-                <button id="browser-stop" class="btn btn-sm hidden" data-icon="close" aria-label="关闭浏览器" data-tip="关闭远程浏览器，登录状态保留">关闭浏览器</button>
+              <div class="browser-lifecycle" role="group" aria-label="浏览器连接" data-i18n-attrs="{&quot;aria-label&quot;:&quot;浏览器连接&quot;}">
+                <button id="browser-start" class="btn btn-sm" data-icon="globe" aria-label="启动浏览器" data-tip="启动远程浏览器，继续上次的登录状态" data-i18n-text="[&quot;启动浏览器&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;启动浏览器&quot;,&quot;data-tip&quot;:&quot;启动远程浏览器，继续上次的登录状态&quot;}">启动浏览器</button>
+                <button id="browser-stop" class="btn btn-sm hidden" data-icon="close" aria-label="关闭浏览器" data-tip="关闭远程浏览器，登录状态保留" data-i18n-text="[&quot;关闭浏览器&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭浏览器&quot;,&quot;data-tip&quot;:&quot;关闭远程浏览器，登录状态保留&quot;}">关闭浏览器</button>
               </div>
               <form id="browser-address" class="browser-address">
                 <svg class="browser-address-icon" width="16" height="16" data-icon="globe" aria-hidden="true"></svg>
-                <input id="browser-url" type="text" aria-label="网页地址" placeholder="输入网址，在新标签页打开" autocomplete="off" spellcheck="false">
-                <button id="browser-open" class="btn browser-tool" data-icon="arrow-right" type="submit" aria-label="打开网页" data-tip="在远程浏览器新标签页打开"></button>
+                <input id="browser-url" type="text" aria-label="网页地址" placeholder="输入网址，在新标签页打开" autocomplete="off" spellcheck="false" data-i18n-attrs="{&quot;aria-label&quot;:&quot;网页地址&quot;,&quot;placeholder&quot;:&quot;输入网址，在新标签页打开&quot;}">
+                <button id="browser-open" class="btn browser-tool" data-icon="arrow-right" type="submit" aria-label="打开网页" data-tip="在远程浏览器新标签页打开" data-i18n-attrs="{&quot;aria-label&quot;:&quot;打开网页&quot;,&quot;data-tip&quot;:&quot;在远程浏览器新标签页打开&quot;}"></button>
               </form>
-              <div class="browser-shortcuts" role="group" aria-label="快捷网站">
-                <button class="browser-bookmark" data-browser-brand="claude" data-browser-url="https://claude.ai/" aria-label="打开 Claude" data-tip="在远程浏览器打开 Claude"><span>Claude</span></button>
-                <button class="browser-bookmark" data-browser-brand="codex" data-browser-url="https://chatgpt.com/" aria-label="打开 ChatGPT" data-tip="在远程浏览器打开 ChatGPT"><span>ChatGPT</span></button>
+              <div class="browser-shortcuts" role="group" aria-label="快捷网站" data-i18n-attrs="{&quot;aria-label&quot;:&quot;快捷网站&quot;}">
+                <button class="browser-bookmark" data-browser-brand="claude" data-browser-url="https://claude.ai/" aria-label="打开 Claude" data-tip="在远程浏览器打开 Claude" data-i18n-attrs="{&quot;aria-label&quot;:&quot;打开 Claude&quot;,&quot;data-tip&quot;:&quot;在远程浏览器打开 Claude&quot;}"><span>Claude</span></button>
+                <button class="browser-bookmark" data-browser-brand="codex" data-browser-url="https://chatgpt.com/" aria-label="打开 ChatGPT" data-tip="在远程浏览器打开 ChatGPT" data-i18n-attrs="{&quot;aria-label&quot;:&quot;打开 ChatGPT&quot;,&quot;data-tip&quot;:&quot;在远程浏览器打开 ChatGPT&quot;}"><span>ChatGPT</span></button>
               </div>
-              <div class="browser-display" role="group" aria-label="画面设置">
-                <div class="browser-quality"><svg width="15" height="15" data-icon="sliders" aria-hidden="true"></svg><select id="browser-quality" aria-label="浏览器画质"><option value="smooth">流畅</option><option value="balanced">均衡</option><option value="clear">清晰</option></select></div>
-                <button id="browser-fullscreen" class="btn browser-tool" data-icon="expand" aria-label="全屏" data-tip="全屏查看远程浏览器"></button>
+              <div class="browser-display" role="group" aria-label="画面设置" data-i18n-attrs="{&quot;aria-label&quot;:&quot;画面设置&quot;}">
+                <div class="browser-quality"><svg width="15" height="15" data-icon="sliders" aria-hidden="true"></svg><select id="browser-quality" aria-label="浏览器画质" data-i18n-attrs="{&quot;aria-label&quot;:&quot;浏览器画质&quot;}"><option value="smooth" data-i18n-text="[&quot;流畅&quot;]">流畅</option><option value="balanced" data-i18n-text="[&quot;均衡&quot;]">均衡</option><option value="clear" data-i18n-text="[&quot;清晰&quot;]">清晰</option></select></div>
+                <button id="browser-fullscreen" class="btn browser-tool" data-icon="expand" aria-label="全屏" data-tip="全屏查看远程浏览器" data-i18n-attrs="{&quot;aria-label&quot;:&quot;全屏&quot;,&quot;data-tip&quot;:&quot;全屏查看远程浏览器&quot;}"></button>
               </div>
             </div>
-            <div class="browser-status"><span id="browser-dot" class="browser-dot" aria-hidden="true"></span><p id="browser-state" class="browser-state" role="status">浏览器未启动</p></div>
+            <div class="browser-status"><span id="browser-dot" class="browser-dot" aria-hidden="true"></span><p id="browser-state" class="browser-state" role="status" data-i18n-text="[&quot;浏览器未启动&quot;]">浏览器未启动</p></div>
             <div class="browser-desktop">
               <div id="browser-screen"></div>
-              <div id="browser-empty"><h3>你的远程浏览器</h3><p>在服务器上浏览网页，登录 Claude、ChatGPT 或其他网站。<br>登录状态按工作空间保存，关闭后仍可继续。</p><button id="browser-launch" type="button" class="btn btn-primary" data-icon="globe">启动浏览器</button><p>下载文件可在「文件 → Downloads」查看。</p></div>
+              <div id="browser-empty"><h3 data-i18n-text="[&quot;你的远程浏览器&quot;]">你的远程浏览器</h3><p data-i18n-text="[&quot;在服务器上浏览网页，登录 Claude、ChatGPT 或其他网站。&quot;,&quot;登录状态按工作空间保存，关闭后仍可继续。&quot;]">在服务器上浏览网页，登录 Claude、ChatGPT 或其他网站。<br>登录状态按工作空间保存，关闭后仍可继续。</p><button id="browser-launch" type="button" class="btn btn-primary" data-icon="globe" data-i18n-text="[&quot;启动浏览器&quot;]">启动浏览器</button><p data-i18n-text="[&quot;下载文件可在「文件 → Downloads」查看。&quot;]">下载文件可在「文件 → Downloads」查看。</p></div>
             </div>
-            <details class="browser-clipboard"><summary>剪贴板 · 中文输入与复制</summary><div><textarea id="browser-clipboard" rows="2" maxlength="16000" aria-label="远程剪贴板" placeholder="在这里输入或粘贴文字，再发送到远程输入框；远程复制后点击「读取远程复制」。"></textarea><button id="browser-paste" class="btn btn-sm" data-icon="copy" disabled>发送并粘贴</button><button id="browser-copy" class="btn btn-sm" data-icon="copy" disabled>读取远程复制</button></div></details>
+            <details class="browser-clipboard"><summary data-i18n-text="[&quot;剪贴板 · 中文输入与复制&quot;]">剪贴板 · 中文输入与复制</summary><div><textarea id="browser-clipboard" rows="2" maxlength="16000" aria-label="远程剪贴板" placeholder="在这里输入或粘贴文字，再发送到远程输入框；远程复制后点击「读取远程复制」。" data-i18n-attrs="{&quot;aria-label&quot;:&quot;远程剪贴板&quot;,&quot;placeholder&quot;:&quot;在这里输入或粘贴文字，再发送到远程输入框；远程复制后点击「读取远程复制」。&quot;}"></textarea><button id="browser-paste" class="btn btn-sm" data-icon="copy" disabled data-i18n-text="[&quot;发送并粘贴&quot;]">发送并粘贴</button><button id="browser-copy" class="btn btn-sm" data-icon="copy" disabled data-i18n-text="[&quot;读取远程复制&quot;]">读取远程复制</button></div></details>
           </section>
 
           <section id="tab-term" class="pane hidden">
@@ -436,7 +438,7 @@
               <div class="term-conn">
                 <span id="term-conn-dot" class="t-dot"></span>
                 <span id="term-state" class="term-state"></span>
-                <button id="term-reconnect" class="btn term-reconnect" type="button" data-tip="重新连接" aria-label="重新连接">
+                <button id="term-reconnect" class="btn term-reconnect" type="button" data-tip="重新连接" aria-label="重新连接" data-i18n-attrs="{&quot;data-tip&quot;:&quot;重新连接&quot;,&quot;aria-label&quot;:&quot;重新连接&quot;}">
                   <svg width="1.9" height="1.9" data-icon="refresh" aria-hidden="true"></svg>
                 </button>
               </div>
@@ -444,31 +446,31 @@
             <div class="term-body">
               <div id="term-mount" class="term-mount"></div>
               <div id="term-loading" class="term-loading loading-block hidden">
-                <span class="spin"></span><span>连接中…（首次可能需要拉起容器）</span>
+                <span class="spin"></span><span data-i18n-text="[&quot;连接中…（首次可能需要拉起容器）&quot;]">连接中…（首次可能需要拉起容器）</span>
               </div>
             </div>
-            <fieldset id="term-keys" class="term-keys" aria-label="终端快捷键" disabled>
+            <fieldset id="term-keys" class="term-keys" aria-label="终端快捷键" disabled data-i18n-attrs="{&quot;aria-label&quot;:&quot;终端快捷键&quot;}">
               <div class="term-keys-scroll">
-                <button type="button" data-term-key="escape" aria-label="Esc 退出">esc</button>
-                <button type="button" data-term-key="tab" aria-label="Tab 补全">tab</button>
+                <button type="button" data-term-key="escape" aria-label="Esc 退出" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Esc 退出&quot;}">esc</button>
+                <button type="button" data-term-key="tab" aria-label="Tab 补全" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Tab 补全&quot;}">tab</button>
                 <button type="button" data-term-key="shift-tab" aria-label="Shift+Tab">⇧ tab</button>
-                <button type="button" data-term-mod="ctrl" aria-label="Ctrl，作用于下一次输入" aria-pressed="false">ctrl</button>
-                <button type="button" data-term-mod="alt" aria-label="Alt，作用于下一次输入" aria-pressed="false">alt</button>
-                <button type="button" data-term-key="interrupt" aria-label="Ctrl+C 中断">^C</button>
-                <button type="button" data-term-key="up" aria-label="方向上，上一条历史命令">↑</button>
-                <button type="button" data-term-key="down" aria-label="方向下，下一条历史命令">↓</button>
-                <button type="button" data-term-key="left" aria-label="方向左">←</button>
-                <button type="button" data-term-key="right" aria-label="方向右">→</button>
+                <button type="button" data-term-mod="ctrl" aria-label="Ctrl，作用于下一次输入" aria-pressed="false" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Ctrl，作用于下一次输入&quot;}">ctrl</button>
+                <button type="button" data-term-mod="alt" aria-label="Alt，作用于下一次输入" aria-pressed="false" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Alt，作用于下一次输入&quot;}">alt</button>
+                <button type="button" data-term-key="interrupt" aria-label="Ctrl+C 中断" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Ctrl+C 中断&quot;}">^C</button>
+                <button type="button" data-term-key="up" aria-label="方向上，上一条历史命令" data-i18n-attrs="{&quot;aria-label&quot;:&quot;方向上，上一条历史命令&quot;}">↑</button>
+                <button type="button" data-term-key="down" aria-label="方向下，下一条历史命令" data-i18n-attrs="{&quot;aria-label&quot;:&quot;方向下，下一条历史命令&quot;}">↓</button>
+                <button type="button" data-term-key="left" aria-label="方向左" data-i18n-attrs="{&quot;aria-label&quot;:&quot;方向左&quot;}">←</button>
+                <button type="button" data-term-key="right" aria-label="方向右" data-i18n-attrs="{&quot;aria-label&quot;:&quot;方向右&quot;}">→</button>
                 <button type="button" data-term-key="/">/</button>
                 <button type="button" data-term-key="|">|</button>
                 <button type="button" data-term-key="-">-</button>
               </div>
-              <button type="button" id="term-keyboard" aria-label="显示或收起键盘">
+              <button type="button" id="term-keyboard" aria-label="显示或收起键盘" data-i18n-attrs="{&quot;aria-label&quot;:&quot;显示或收起键盘&quot;}">
                 <svg width="22" height="22" data-icon="keyboard" aria-hidden="true"></svg>
               </button>
             </fieldset>
             <div id="term-overlay" class="term-overlay hidden">
-              <div class="term-overlay-box"><span class="spin"></span><span id="term-overlay-text">图片上传中…</span></div>
+              <div class="term-overlay-box"><span class="spin"></span><span id="term-overlay-text" data-i18n-text="[&quot;图片上传中…&quot;]">图片上传中…</span></div>
             </div>
           </section>
 
@@ -477,12 +479,12 @@
             <div class="files-bar">
               <div class="files-left">
                 <div class="scope-switch" role="tablist">
-                  <button id="scope-ws" class="scope-btn active" data-icon="folder">空间文件</button>
-                  <button id="scope-shared" class="scope-btn" data-icon="folder-shared">共享目录</button>
-                  <span class="help" tabindex="0" aria-label="共享目录说明">?
-                    <span class="help-tip" role="tooltip">
-                      <b>空间文件</b>（<code>/workspace</code>）仅属于当前工作空间。<br>
-                      <b>共享目录</b>（<code>/shared</code>）供你名下的所有工作空间读写，适合传递代码与构建产物。
+                  <button id="scope-ws" class="scope-btn active" data-icon="folder" data-i18n-text="[&quot;空间文件&quot;]">空间文件</button>
+                  <button id="scope-shared" class="scope-btn" data-icon="folder-shared" data-i18n-text="[&quot;共享目录&quot;]">共享目录</button>
+                  <span class="help" tabindex="0" aria-label="共享目录说明" data-i18n-attrs="{&quot;aria-label&quot;:&quot;共享目录说明&quot;}">?
+                    <span class="help-tip" role="tooltip" data-i18n-text="[&quot;）仅属于当前工作空间。&quot;,&quot;）供你名下的所有工作空间读写，适合传递代码与构建产物。\n                      在对话或终端中，可让 Agent 直接访问这些路径。\n                    &quot;]">
+                      <b data-i18n-text="[&quot;空间文件&quot;]">空间文件</b>（<code>/workspace</code>）仅属于当前工作空间。<br>
+                      <b data-i18n-text="[&quot;共享目录&quot;]">共享目录</b>（<code>/shared</code>）供你名下的所有工作空间读写，适合传递代码与构建产物。
                       在对话或终端中，可让 Agent 直接访问这些路径。
                     </span>
                   </span>
@@ -490,11 +492,11 @@
                 <div id="files-crumb" class="files-crumb mono"></div>
               </div>
               <div class="files-actions action-tools">
-                <button id="btn-mkdir" class="btn btn-sm" data-icon="folder-plus" data-tip="新建文件夹">新建</button>
-                <button id="btn-upload" class="btn btn-sm btn-primary" data-icon="upload" data-tip="上传代码包">上传</button>
+                <button id="btn-mkdir" class="btn btn-sm" data-icon="folder-plus" data-tip="新建文件夹" data-i18n-text="[&quot;新建&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;新建文件夹&quot;}">新建</button>
+                <button id="btn-upload" class="btn btn-sm btn-primary" data-icon="upload" data-tip="上传代码包" data-i18n-text="[&quot;上传&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;上传代码包&quot;}">上传</button>
                 <input id="upload-input" type="file" class="hidden" multiple accept=".zip,.tar,.tar.gz,.tgz,*/*">
-                <button id="btn-download" class="btn btn-sm" data-icon="download" data-tip="下载全部空间文件（ZIP）">下载</button>
-                <button id="btn-files-more" class="btn btn-sm" data-icon="more" aria-haspopup="menu" aria-expanded="false" data-tip="更多操作"></button>
+                <button id="btn-download" class="btn btn-sm" data-icon="download" data-tip="下载全部空间文件（ZIP）" data-i18n-text="[&quot;下载&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;下载全部空间文件（ZIP）&quot;}">下载</button>
+                <button id="btn-files-more" class="btn btn-sm" data-icon="more" aria-haspopup="menu" aria-expanded="false" data-tip="更多操作" data-i18n-attrs="{&quot;data-tip&quot;:&quot;更多操作&quot;}"></button>
               </div>
             </div>
             <div id="upload-progress" class="upload-progress hidden">
@@ -502,7 +504,7 @@
               <span id="upload-progress-text" class="mono"></span>
             </div>
             <div id="files-head" class="files-head hidden">
-              <span>名称</span><span>权限</span><span class="num">大小</span><span>修改时间</span><span class="factions-head">操作</span>
+              <span data-i18n-text="[&quot;名称&quot;]">名称</span><span data-i18n-text="[&quot;权限&quot;]">权限</span><span class="num" data-i18n-text="[&quot;大小&quot;]">大小</span><span data-i18n-text="[&quot;修改时间&quot;]">修改时间</span><span class="factions-head" data-i18n-text="[&quot;操作&quot;]">操作</span>
             </div>
             <div id="files-list" class="files-list"></div>
           </section>
@@ -510,17 +512,17 @@
           <!-- 变更（Git 审查） -->
           <section id="tab-changes" class="pane hidden">
             <div class="changes-bar">
-              <select id="changes-repo" class="changes-repo mono hidden" aria-label="仓库"></select>
+              <select id="changes-repo" class="changes-repo mono hidden" aria-label="仓库" data-i18n-attrs="{&quot;aria-label&quot;:&quot;仓库&quot;}"></select>
               <div id="changes-branch" class="changes-branch mono"></div>
               <div class="changes-actions action-tools">
-                <button id="btn-changes-branches" class="btn btn-sm" disabled data-icon="branch" data-tip="管理 Git 分支">分支</button>
-                <button id="btn-changes-remote" class="btn btn-sm" disabled data-icon="cloud" data-tip="远程仓库：拉取、推送与合并请求">远程</button>
-                <button id="btn-changes-refresh" class="btn btn-sm" data-icon="refresh" data-tip="刷新变更列表">刷新</button>
+                <button id="btn-changes-branches" class="btn btn-sm" disabled data-icon="branch" data-tip="管理 Git 分支" data-i18n-text="[&quot;分支&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;管理 Git 分支&quot;}">分支</button>
+                <button id="btn-changes-remote" class="btn btn-sm" disabled data-icon="cloud" data-tip="远程仓库：拉取、推送与合并请求" data-i18n-text="[&quot;远程&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;远程仓库：拉取、推送与合并请求&quot;}">远程</button>
+                <button id="btn-changes-refresh" class="btn btn-sm" data-icon="refresh" data-tip="刷新变更列表" data-i18n-text="[&quot;刷新&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;刷新变更列表&quot;}">刷新</button>
                 <!-- 以下三项由 responsive.ts 收进 ⋯ 菜单 -->
-                <button id="btn-changes-clone" class="btn btn-sm" data-icon="git-clone" data-tip="克隆远程仓库到当前空间">克隆仓库</button>
-                <button id="btn-changes-profile" class="btn btn-sm btn-ghost" data-icon="user" data-tip="设置提交时使用的姓名与邮箱">Git 身份</button>
-                <button id="btn-changes-discard-all" class="btn btn-sm btn-ghost btn-danger" disabled data-icon="undo" data-tip="丢弃全部未提交改动">丢弃全部改动</button>
-                <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled data-icon="commit" data-tip="将当前改动提交到本地">提交</button>
+                <button id="btn-changes-clone" class="btn btn-sm" data-icon="git-clone" data-tip="克隆远程仓库到当前空间" data-i18n-text="[&quot;克隆仓库&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;克隆远程仓库到当前空间&quot;}">克隆仓库</button>
+                <button id="btn-changes-profile" class="btn btn-sm btn-ghost" data-icon="user" data-tip="设置提交时使用的姓名与邮箱" data-i18n-text="[&quot;Git 身份&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;设置提交时使用的姓名与邮箱&quot;}">Git 身份</button>
+                <button id="btn-changes-discard-all" class="btn btn-sm btn-ghost btn-danger" disabled data-icon="undo" data-tip="丢弃全部未提交改动" data-i18n-text="[&quot;丢弃全部改动&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;丢弃全部未提交改动&quot;}">丢弃全部改动</button>
+                <button id="btn-changes-commit" class="btn btn-sm btn-primary" disabled data-icon="commit" data-tip="将当前改动提交到本地" data-i18n-text="[&quot;提交&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;将当前改动提交到本地&quot;}">提交</button>
               </div>
             </div>
             <details id="changes-remote-state" class="changes-remote-state hidden"><summary id="changes-tracking"></summary><div id="changes-remote-detail"></div></details>
@@ -528,11 +530,11 @@
               <div id="changes-list" class="changes-list"></div>
               <div class="changes-view">
                 <div id="changes-view-bar" class="changes-view-bar hidden">
-                  <button id="changes-back" class="btn btn-sm mobile-only" data-icon="arrow-left" aria-label="返回文件列表" data-tip="返回文件列表"></button>
+                  <button id="changes-back" class="btn btn-sm mobile-only" data-icon="arrow-left" aria-label="返回文件列表" data-tip="返回文件列表" data-i18n-attrs="{&quot;aria-label&quot;:&quot;返回文件列表&quot;,&quot;data-tip&quot;:&quot;返回文件列表&quot;}"></button>
                   <span id="changes-view-path" class="mono"></span>
                   <div class="changes-view-tabs">
-                    <button type="button" id="btn-view-diff" class="seg" data-icon="diff">差异</button>
-                    <button type="button" id="btn-view-full" class="seg" data-icon="code">完整内容</button>
+                    <button type="button" id="btn-view-diff" class="seg" data-icon="diff" data-i18n-text="[&quot;差异&quot;]">差异</button>
+                    <button type="button" id="btn-view-full" class="seg" data-icon="code" data-i18n-text="[&quot;完整内容&quot;]">完整内容</button>
                   </div>
                 </div>
                 <div id="changes-diff" class="changes-diff"></div>
@@ -545,12 +547,12 @@
             <div class="skills-bar">
               <div class="skills-left">
                 <div class="scope-switch" role="tablist">
-                  <button id="skill-scope-session" class="scope-btn active" data-icon="box">本空间</button>
-                  <button id="skill-scope-template" class="scope-btn" data-icon="template">我的模板</button>
-                  <span class="help" tabindex="0" aria-label="技能范围说明">?
-                    <span class="help-tip" role="tooltip">
-                      <b>本空间</b>的技能仅供当前工作空间使用。<br>
-                      <b>我的模板</b>用于复用技能，你的各个工作空间启动时都会同步，逐个文件保留较新的版本。
+                  <button id="skill-scope-session" class="scope-btn active" data-icon="box" data-i18n-text="[&quot;本空间&quot;]">本空间</button>
+                  <button id="skill-scope-template" class="scope-btn" data-icon="template" data-i18n-text="[&quot;我的模板&quot;]">我的模板</button>
+                  <span class="help" tabindex="0" aria-label="技能范围说明" data-i18n-attrs="{&quot;aria-label&quot;:&quot;技能范围说明&quot;}">?
+                    <span class="help-tip" role="tooltip" data-i18n-text="[&quot;的技能仅供当前工作空间使用。&quot;,&quot;用于复用技能，你的各个工作空间启动时都会同步，逐个文件保留较新的版本。\n                      要立即应用模板中的技能，选择「装到本空间」。\n                    &quot;]">
+                      <b data-i18n-text="[&quot;本空间&quot;]">本空间</b>的技能仅供当前工作空间使用。<br>
+                      <b data-i18n-text="[&quot;我的模板&quot;]">我的模板</b>用于复用技能，你的各个工作空间启动时都会同步，逐个文件保留较新的版本。
                       要立即应用模板中的技能，选择「装到本空间」。
                     </span>
                   </span>
@@ -558,8 +560,8 @@
                 <div id="skills-count" class="skills-count"></div>
               </div>
               <div class="skills-actions action-tools">
-                <button id="btn-skills-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
-                <button id="btn-skill-install" class="btn btn-sm btn-primary" data-icon="package-plus" data-tip="安装技能到当前范围">安装</button>
+                <button id="btn-skills-refresh" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新&quot;]">刷新</button>
+                <button id="btn-skill-install" class="btn btn-sm btn-primary" data-icon="package-plus" data-tip="安装技能到当前范围" data-i18n-text="[&quot;安装&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;安装技能到当前范围&quot;}">安装</button>
                 <input id="skill-install-input" type="file" class="hidden" accept=".md,.zip,.tar,.tgz,.gz">
               </div>
             </div>
@@ -574,7 +576,7 @@
           <div id="wb-busy" class="wb-busy" aria-live="polite">
             <div class="wb-busy-card">
               <span class="wb-busy-spin" aria-hidden="true"></span>
-              <span class="wb-busy-text"><span id="wb-busy-label">正在启动</span><span class="wb-busy-dots" aria-hidden="true"></span></span>
+              <span class="wb-busy-text"><span id="wb-busy-label" data-i18n-text="[&quot;正在启动&quot;]">正在启动</span><span class="wb-busy-dots" aria-hidden="true"></span></span>
             </div>
           </div>
         </div>
@@ -583,14 +585,14 @@
       <!-- 个人 Git 管理：与系统设置同级，普通用户也可进入 -->
       <div id="view-git" class="view hidden">
         <header class="set-head">
-          <h1>Git 管理</h1>
-          <p>管理你的提交身份和仓库连接，在多个工作空间复用。</p>
+          <h1 data-i18n-text="[&quot;Git 管理&quot;]">Git 管理</h1>
+          <p data-i18n-text="[&quot;管理你的提交身份和仓库连接，在多个工作空间复用。&quot;]">管理你的提交身份和仓库连接，在多个工作空间复用。</p>
         </header>
         <div class="set-body">
-          <nav id="git-nav" class="set-nav" aria-label="Git 管理分区">
-            <button data-git-sec="guide" data-icon="info">使用指南</button>
-            <button data-git-sec="profile" data-icon="user">提交身份</button>
-            <button data-git-sec="connections" data-icon="link">仓库连接</button>
+          <nav id="git-nav" class="set-nav" aria-label="Git 管理分区" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Git 管理分区&quot;}">
+            <button data-git-sec="guide" data-icon="info" data-i18n-text="[&quot;使用指南&quot;]">使用指南</button>
+            <button data-git-sec="profile" data-icon="user" data-i18n-text="[&quot;提交身份&quot;]">提交身份</button>
+            <button data-git-sec="connections" data-icon="link" data-i18n-text="[&quot;仓库连接&quot;]">仓库连接</button>
           </nav>
           <div id="git-content" class="set-content" tabindex="-1"></div>
         </div>
@@ -599,21 +601,21 @@
       <!-- 系统设置视图 -->
       <div id="view-settings" class="view hidden">
         <header class="set-head">
-          <h1>系统设置</h1>
-          <p>账号池与服务端配置。多数改动保存后即时生效，需要重启的项会单独标出。</p>
+          <h1 data-i18n-text="[&quot;系统设置&quot;]">系统设置</h1>
+          <p data-i18n-text="[&quot;账号池与服务端配置。多数改动保存后即时生效，需要重启的项会单独标出。&quot;]">账号池与服务端配置。多数改动保存后即时生效，需要重启的项会单独标出。</p>
         </header>
 
         <div class="set-body">
           <nav id="set-nav" class="set-nav">
-            <button class="active" data-sec="accounts" data-icon="users">账号池 <span id="set-acct-count" class="count">0</span></button>
-            <button data-sec="proxies" data-icon="network">IP 代理 <span id="proxy-count" class="count">0</span></button>
-            <button data-sec="container" data-icon="box">容器与资源</button>
-            <button data-sec="models" data-icon="cpu">模型管理</button>
-            <button data-sec="pricing" data-icon="wallet">价目表 <span id="price-count" class="count">0</span></button>
-            <button data-sec="interface" data-icon="sliders">界面与提示</button>
-            <button data-sec="security" data-icon="shield">安全与访问</button>
-            <button data-sec="monitor" data-icon="activity">运维监控</button>
-            <button data-sec="about" data-icon="info">关于与更新</button>
+            <button class="active" data-sec="accounts" data-icon="users" data-i18n-text="[&quot;账号池 &quot;]">账号池 <span id="set-acct-count" class="count">0</span></button>
+            <button data-sec="proxies" data-icon="network" data-i18n-text="[&quot;IP 代理 &quot;]">IP 代理 <span id="proxy-count" class="count">0</span></button>
+            <button data-sec="container" data-icon="box" data-i18n-text="[&quot;容器与资源&quot;]">容器与资源</button>
+            <button data-sec="models" data-icon="cpu" data-i18n-text="[&quot;模型管理&quot;]">模型管理</button>
+            <button data-sec="pricing" data-icon="wallet" data-i18n-text="[&quot;价目表 &quot;]">价目表 <span id="price-count" class="count">0</span></button>
+            <button data-sec="interface" data-icon="sliders" data-i18n-text="[&quot;界面与提示&quot;]">界面与提示</button>
+            <button data-sec="security" data-icon="shield" data-i18n-text="[&quot;安全与访问&quot;]">安全与访问</button>
+            <button data-sec="monitor" data-icon="activity" data-i18n-text="[&quot;运维监控&quot;]">运维监控</button>
+            <button data-sec="about" data-icon="info" data-i18n-text="[&quot;关于与更新&quot;]">关于与更新</button>
           </nav>
 
           <div id="set-content" class="set-content">
@@ -621,10 +623,10 @@
             <section id="sec-accounts" class="set-section">
               <div class="sec-intro">
                 <div>
-                  <h2>账号池</h2>
-                  <p>创建工作空间时可选用的订阅账号与 API Key。多个空间可共用账号，登录凭证由服务器统一管理和同步。</p>
+                  <h2 data-i18n-text="[&quot;账号池&quot;]">账号池</h2>
+                  <p data-i18n-text="[&quot;创建工作空间时可选用的订阅账号与 API Key。多个空间可共用账号，登录凭证由服务器统一管理和同步。&quot;]">创建工作空间时可选用的订阅账号与 API Key。多个空间可共用账号，登录凭证由服务器统一管理和同步。</p>
                 </div>
-                <button id="btn-acct-add" class="btn btn-primary btn-sm" data-icon="plus">添加账号</button>
+                <button id="btn-acct-add" class="btn btn-primary btn-sm" data-icon="plus" data-i18n-text="[&quot;添加账号&quot;]">添加账号</button>
               </div>
               <div id="acct-list-box" class="acct-list"></div>
             </section>
@@ -633,28 +635,28 @@
             <section id="sec-proxies" class="set-section hidden">
               <div class="sec-intro">
                 <div>
-                  <h2>IP 代理</h2>
-                  <p>账号的出口 IP。在「账号池 → 编辑」里绑定后，这个账号的官方请求都从这里发出。</p>
+                  <h2 data-i18n-text="[&quot;IP 代理&quot;]">IP 代理</h2>
+                  <p data-i18n-text="[&quot;账号的出口 IP。在「账号池 → 编辑」里绑定后，这个账号的官方请求都从这里发出。&quot;]">账号的出口 IP。在「账号池 → 编辑」里绑定后，这个账号的官方请求都从这里发出。</p>
                 </div>
                 <div class="px-head-actions action-tools">
-                  <button id="btn-proxy-reload" class="btn btn-sm btn-ghost" data-icon="refresh">刷新</button>
-                  <button id="btn-proxy-import" class="btn btn-sm btn-ghost" data-icon="upload">导入</button>
-                  <button id="btn-proxy-export" class="btn btn-sm btn-ghost" data-icon="download">导出</button>
-                  <button id="btn-proxy-add" class="btn btn-primary btn-sm" data-icon="plus" data-tip="添加出口代理">添加</button>
+                  <button id="btn-proxy-reload" class="btn btn-sm btn-ghost" data-icon="refresh" data-i18n-text="[&quot;刷新&quot;]">刷新</button>
+                  <button id="btn-proxy-import" class="btn btn-sm btn-ghost" data-icon="upload" data-i18n-text="[&quot;导入&quot;]">导入</button>
+                  <button id="btn-proxy-export" class="btn btn-sm btn-ghost" data-icon="download" data-i18n-text="[&quot;导出&quot;]">导出</button>
+                  <button id="btn-proxy-add" class="btn btn-primary btn-sm" data-icon="plus" data-tip="添加出口代理" data-i18n-text="[&quot;添加&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;添加出口代理&quot;}">添加</button>
                 </div>
               </div>
               <div id="proxy-bridge-state" class="px-bridge"></div>
               <div id="proxy-loading" class="loading-block hidden">
-                <span class="spin"></span><span>读取代理列表…</span>
+                <span class="spin"></span><span data-i18n-text="[&quot;读取代理列表…&quot;]">读取代理列表…</span>
               </div>
-              <p id="proxy-empty" class="acct-empty hidden">代理池为空。点击右上角「添加代理」或「导入」添加第一个出口。</p>
+              <p id="proxy-empty" class="acct-empty hidden" data-i18n-text="[&quot;代理池为空。点击右上角「添加代理」或「导入」添加第一个出口。&quot;]">代理池为空。点击右上角「添加代理」或「导入」添加第一个出口。</p>
               <div id="proxy-table-wrap" class="card mon-card hidden">
                 <div class="mon-table-wrap">
                   <table class="mon-table px-table">
                     <thead>
                       <tr>
-                        <th>名称</th><th>协议</th><th>地址</th><th>认证</th>
-                        <th>使用</th><th>延迟</th><th>操作</th>
+                        <th data-i18n-text="[&quot;名称&quot;]">名称</th><th data-i18n-text="[&quot;协议&quot;]">协议</th><th data-i18n-text="[&quot;地址&quot;]">地址</th><th data-i18n-text="[&quot;认证&quot;]">认证</th>
+                        <th data-i18n-text="[&quot;使用&quot;]">使用</th><th data-i18n-text="[&quot;延迟&quot;]">延迟</th><th data-i18n-text="[&quot;操作&quot;]">操作</th>
                       </tr>
                     </thead>
                     <tbody id="proxy-tbody"></tbody>
@@ -662,21 +664,21 @@
                 </div>
               </div>
               <div class="card">
-                <h3>桥接监听</h3>
-                <p class="card-desc">容器经这个地址使用上面的代理，须是容器能连到的宿主机地址。保存后立即生效。</p>
-                <details class="learn-more"><summary>了解更多</summary><p>容器里的 Claude Code 只认 HTTP(S) 代理、不认 SOCKS5，所以服务端在本机起一个 HTTP 代理，替容器走完 SOCKS5 那一段。默认监听 docker 网桥网关。</p><p>包括容器里 Agent 发出的请求，以及服务端代发的登录与探测，都会经过所绑定的代理。</p></details>
+                <h3 data-i18n-text="[&quot;桥接监听&quot;]">桥接监听</h3>
+                <p class="card-desc" data-i18n-text="[&quot;容器经这个地址使用上面的代理，须是容器能连到的宿主机地址。保存后立即生效。&quot;]">容器经这个地址使用上面的代理，须是容器能连到的宿主机地址。保存后立即生效。</p>
+                <details class="learn-more"><summary data-i18n-text="[&quot;了解更多&quot;]">了解更多</summary><p data-i18n-text="[&quot;容器里的 Claude Code 只认 HTTP(S) 代理、不认 SOCKS5，所以服务端在本机起一个 HTTP 代理，替容器走完 SOCKS5 那一段。默认监听 docker 网桥网关。&quot;]">容器里的 Claude Code 只认 HTTP(S) 代理、不认 SOCKS5，所以服务端在本机起一个 HTTP 代理，替容器走完 SOCKS5 那一段。默认监听 docker 网桥网关。</p><p data-i18n-text="[&quot;包括容器里 Agent 发出的请求，以及服务端代发的登录与探测，都会经过所绑定的代理。&quot;]">包括容器里 Agent 发出的请求，以及服务端代发的登录与探测，都会经过所绑定的代理。</p></details>
                 <div class="field-row">
                   <label class="field">
-                    <span>监听地址 <span class="tag live">即时生效</span></span>
+                    <span data-i18n-text="[&quot;监听地址 &quot;]">监听地址 <span class="tag live" data-i18n-text="[&quot;即时生效&quot;]">即时生效</span></span>
                     <input id="set-bridge-bind" type="text" class="mono" placeholder="172.17.0.1:1081">
                   </label>
                   <label class="field">
-                    <span>容器访问地址（可选）</span>
-                    <input id="set-bridge-host" type="text" class="mono" placeholder="留空取监听地址的 host">
+                    <span data-i18n-text="[&quot;容器访问地址（可选）&quot;]">容器访问地址（可选）</span>
+                    <input id="set-bridge-host" type="text" class="mono" placeholder="留空取监听地址的 host" data-i18n-attrs="{&quot;placeholder&quot;:&quot;留空取监听地址的 host&quot;}">
                   </label>
                 </div>
                 <div class="card-foot">
-                  <span class="note">代理池非空时自动启动；绑定失败只影响代理功能，不影响服务</span>
+                  <span class="note" data-i18n-text="[&quot;代理池非空时自动启动；绑定失败只影响代理功能，不影响服务&quot;]">代理池非空时自动启动；绑定失败只影响代理功能，不影响服务</span>
                 </div>
               </div>
             </section>
@@ -685,94 +687,94 @@
             <section id="sec-container" class="set-section hidden">
               <div class="sec-intro">
                 <div>
-                  <h2>容器与资源</h2>
-                  <p>工作空间的容器镜像与资源上限。新启动的空间生效，运行中的空间需停止后再启动。</p>
+                  <h2 data-i18n-text="[&quot;容器与资源&quot;]">容器与资源</h2>
+                  <p data-i18n-text="[&quot;工作空间的容器镜像与资源上限。新启动的空间生效，运行中的空间需停止后再启动。&quot;]">工作空间的容器镜像与资源上限。新启动的空间生效，运行中的空间需停止后再启动。</p>
                 </div>
               </div>
               <div class="card">
-                <h3>Agent 镜像</h3>
+                <h3 data-i18n-text="[&quot;Agent 镜像&quot;]">Agent 镜像</h3>
                 <label class="field">
-                  <span>镜像名称 <span class="tag live">新容器生效</span></span>
+                  <span data-i18n-text="[&quot;镜像名称 &quot;]">镜像名称 <span class="tag live" data-i18n-text="[&quot;新容器生效&quot;]">新容器生效</span></span>
                   <input id="set-image" type="text" class="mono">
-                  <span class="hint">重新构建镜像后无需改动此项，重启工作空间即可拉起新镜像。</span>
+                  <span class="hint" data-i18n-text="[&quot;重新构建镜像后无需改动此项，重启工作空间即可拉起新镜像。&quot;]">重新构建镜像后无需改动此项，重启工作空间即可拉起新镜像。</span>
                 </label>
               </div>
               <div class="card" id="image-update-card">
-                <h3>客户端更新</h3>
-                <p class="card-desc">更新工作空间里的 Claude Code，可选同时更新 Codex。空间停止再启动后使用新版本。</p>
+                <h3 data-i18n-text="[&quot;客户端更新&quot;]">客户端更新</h3>
+                <p class="card-desc" data-i18n-text="[&quot;更新工作空间里的 Claude Code，可选同时更新 Codex。空间停止再启动后使用新版本。&quot;]">更新工作空间里的 Claude Code，可选同时更新 Codex。空间停止再启动后使用新版本。</p>
                 <div class="field-row">
-                  <label class="field"><span>自动更新</span><select id="image-update-enabled"><option value="off">关闭 — 手动更新</option><option value="on">开启 — 每日检查并应用</option></select></label>
-                  <label class="field"><span>Claude 渠道</span><select id="image-update-channel"><option value="stable">stable — 稳定版</option><option value="latest">latest — 最新版</option></select></label>
-                  <label class="field"><span>每日检查时间</span><input id="image-update-time" type="time" value="04:00" required></label>
-                  <label class="field"><span>Codex</span><select id="image-update-codex"><option value="off">保持当前版本</option><option value="on">同时更新到 latest</option></select></label>
+                  <label class="field"><span data-i18n-text="[&quot;自动更新&quot;]">自动更新</span><select id="image-update-enabled"><option value="off" data-i18n-text="[&quot;关闭 — 手动更新&quot;]">关闭 — 手动更新</option><option value="on" data-i18n-text="[&quot;开启 — 每日检查并应用&quot;]">开启 — 每日检查并应用</option></select></label>
+                  <label class="field"><span data-i18n-text="[&quot;Claude 渠道&quot;]">Claude 渠道</span><select id="image-update-channel"><option value="stable" data-i18n-text="[&quot;stable — 稳定版&quot;]">stable — 稳定版</option><option value="latest" data-i18n-text="[&quot;latest — 最新版&quot;]">latest — 最新版</option></select></label>
+                  <label class="field"><span data-i18n-text="[&quot;每日检查时间&quot;]">每日检查时间</span><input id="image-update-time" type="time" value="04:00" required></label>
+                  <label class="field"><span>Codex</span><select id="image-update-codex"><option value="off" data-i18n-text="[&quot;保持当前版本&quot;]">保持当前版本</option><option value="on" data-i18n-text="[&quot;同时更新到 latest&quot;]">同时更新到 latest</option></select></label>
                 </div>
-                <p id="image-update-schedule" class="note">按系统时区调度；stable 可能落后于 latest。切换渠道不会自动降级。</p>
+                <p id="image-update-schedule" class="note" data-i18n-text="[&quot;按系统时区调度；stable 可能落后于 latest。切换渠道不会自动降级。&quot;]">按系统时区调度；stable 可能落后于 latest。切换渠道不会自动降级。</p>
               </div>
               <!-- 状态与一次性操作单独一张卡，和上面的配置分开 -->
               <div class="card" id="image-update-ops">
-                <h3>客户端版本</h3>
+                <h3 data-i18n-text="[&quot;客户端版本&quot;]">客户端版本</h3>
                 <p id="image-update-dirty" class="note"></p>
-                <p id="image-update-status" class="note" role="status" aria-live="polite">尚未检查客户端版本</p>
+                <p id="image-update-status" class="note" role="status" aria-live="polite" data-i18n-text="[&quot;尚未检查客户端版本&quot;]">尚未检查客户端版本</p>
                 <p id="image-update-versions" class="note"></p>
                 <p id="image-update-active" class="note image-update-ref"></p>
                 <div class="card-foot">
-                  <button id="image-update-check" class="btn btn-sm" data-icon="refresh">立即检查</button>
-                  <button id="image-update-update" class="btn btn-sm" data-icon="download">立即更新</button>
-                  <button id="image-update-rollback" class="btn btn-sm" data-icon="undo" disabled>回退上次镜像</button>
+                  <button id="image-update-check" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;立即检查&quot;]">立即检查</button>
+                  <button id="image-update-update" class="btn btn-sm" data-icon="download" data-i18n-text="[&quot;立即更新&quot;]">立即更新</button>
+                  <button id="image-update-rollback" class="btn btn-sm" data-icon="undo" disabled data-i18n-text="[&quot;回退上次镜像&quot;]">回退上次镜像</button>
                 </div>
-                <details><summary>最近任务日志</summary><pre id="image-update-log" class="image-update-log">暂无日志</pre></details>
+                <details><summary data-i18n-text="[&quot;最近任务日志&quot;]">最近任务日志</summary><pre id="image-update-log" class="image-update-log">暂无日志</pre></details>
               </div>
               <div class="card">
-                <h3>资源限制</h3>
+                <h3 data-i18n-text="[&quot;资源限制&quot;]">资源限制</h3>
                 <div class="field-row">
                   <label class="field">
-                    <span>内存上限（MB）</span>
+                    <span data-i18n-text="[&quot;内存上限（MB）&quot;]">内存上限（MB）</span>
                     <input id="set-mem" type="number" min="128" class="mono">
                   </label>
                   <label class="field">
-                    <span>CPU 核数</span>
+                    <span data-i18n-text="[&quot;CPU 核数&quot;]">CPU 核数</span>
                     <input id="set-cpus" type="number" min="0.5" step="0.5" class="mono">
                   </label>
                   <label class="field">
-                    <span>进程数上限</span>
+                    <span data-i18n-text="[&quot;进程数上限&quot;]">进程数上限</span>
                     <input id="set-pids" type="number" min="16" class="mono">
                   </label>
                 </div>
                 <label class="field">
-                  <span>网络模式</span>
+                  <span data-i18n-text="[&quot;网络模式&quot;]">网络模式</span>
                   <select id="set-net">
-                    <option value="bridge">bridge — 默认桥接，可访问外网</option>
-                    <option value="none">none — 完全断网</option>
+                    <option value="bridge" data-i18n-text="[&quot;bridge — 默认桥接，可访问外网&quot;]">bridge — 默认桥接，可访问外网</option>
+                    <option value="none" data-i18n-text="[&quot;none — 完全断网&quot;]">none — 完全断网</option>
                   </select>
                 </label>
                 <div class="card-foot">
-                  <span class="note">对新启动的容器生效</span>
+                  <span class="note" data-i18n-text="[&quot;对新启动的容器生效&quot;]">对新启动的容器生效</span>
                 </div>
               </div>
               <div class="card">
-                <h3>容量与磁盘</h3>
-                <p class="card-desc">只限制新启动的空间，已运行的任务继续执行。0 表示不限制。</p>
+                <h3 data-i18n-text="[&quot;容量与磁盘&quot;]">容量与磁盘</h3>
+                <p class="card-desc" data-i18n-text="[&quot;只限制新启动的空间，已运行的任务继续执行。0 表示不限制。&quot;]">只限制新启动的空间，已运行的任务继续执行。0 表示不限制。</p>
                 <div class="field-row">
-                  <label class="field"><span>全局运行容器上限</span><input id="set-running" type="number" min="0" step="1" required></label>
-                  <label class="field"><span>每用户运行容器上限</span><input id="set-user-running" type="number" min="0" step="1" required></label>
-                  <label class="field"><span>数据盘保留空间（GiB）</span><input id="set-free-gib" type="number" min="0" step="0.1" required></label>
+                  <label class="field"><span data-i18n-text="[&quot;全局运行容器上限&quot;]">全局运行容器上限</span><input id="set-running" type="number" min="0" step="1" required></label>
+                  <label class="field"><span data-i18n-text="[&quot;每用户运行容器上限&quot;]">每用户运行容器上限</span><input id="set-user-running" type="number" min="0" step="1" required></label>
+                  <label class="field"><span data-i18n-text="[&quot;数据盘保留空间（GiB）&quot;]">数据盘保留空间（GiB）</span><input id="set-free-gib" type="number" min="0" step="0.1" required></label>
                 </div>
-                <p id="storage-report" class="note">磁盘统计每 5 分钟刷新，按文件大小估算。</p>
+                <p id="storage-report" class="note" data-i18n-text="[&quot;磁盘统计每 5 分钟刷新，按文件大小估算。&quot;]">磁盘统计每 5 分钟刷新，按文件大小估算。</p>
                 <div class="card-foot">
-                  <button id="btn-storage" class="btn btn-sm" data-icon="activity" data-tip="查看磁盘使用统计">磁盘统计</button>
-                  <button id="btn-clear-cache" class="btn btn-sm" data-icon="trash" data-tip="清理官方市场下载缓存，下次访问时重新下载">清理缓存</button>
-                  <button id="btn-diagnostics" class="btn btn-sm" data-icon="download" data-tip="导出脱敏诊断信息">导出诊断</button>
+                  <button id="btn-storage" class="btn btn-sm" data-icon="activity" data-tip="查看磁盘使用统计" data-i18n-text="[&quot;磁盘统计&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;查看磁盘使用统计&quot;}">磁盘统计</button>
+                  <button id="btn-clear-cache" class="btn btn-sm" data-icon="trash" data-tip="清理官方市场下载缓存，下次访问时重新下载" data-i18n-text="[&quot;清理缓存&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;清理官方市场下载缓存，下次访问时重新下载&quot;}">清理缓存</button>
+                  <button id="btn-diagnostics" class="btn btn-sm" data-icon="download" data-tip="导出脱敏诊断信息" data-i18n-text="[&quot;导出诊断&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;导出脱敏诊断信息&quot;}">导出诊断</button>
                 </div>
               </div>
               <div class="card">
-                <h3>空闲自动停机</h3>
-                <p class="card-desc">没有对话或终端连接的工作空间，到时间后自动休眠以释放资源；发消息或打开终端即可唤醒。</p>
+                <h3 data-i18n-text="[&quot;空闲自动停机&quot;]">空闲自动停机</h3>
+                <p class="card-desc" data-i18n-text="[&quot;没有对话或终端连接的工作空间，到时间后自动休眠以释放资源；发消息或打开终端即可唤醒。&quot;]">没有对话或终端连接的工作空间，到时间后自动休眠以释放资源；发消息或打开终端即可唤醒。</p>
                 <label class="field">
-                  <span>空闲超时（分钟）<span class="tag live">即时生效</span></span>
+                  <span data-i18n-text="[&quot;空闲超时（分钟）&quot;]">空闲超时（分钟）<span class="tag live" data-i18n-text="[&quot;即时生效&quot;]">即时生效</span></span>
                   <input id="set-idle" type="number" min="0" step="1" class="mono">
                 </label>
                 <div class="card-foot">
-                  <span class="note">即时生效，无需重启；0 表示永不自动停机</span>
+                  <span class="note" data-i18n-text="[&quot;即时生效，无需重启；0 表示永不自动停机&quot;]">即时生效，无需重启；0 表示永不自动停机</span>
                 </div>
               </div>
             </section>
@@ -781,34 +783,34 @@
             <section id="sec-models" class="set-section hidden">
               <div class="sec-intro">
                 <div>
-                  <h2>模型管理</h2>
-                  <p>分别设置两种 Agent 的默认模型，新建工作空间时生效。也可以维护对话中的可选模型。</p>
+                  <h2 data-i18n-text="[&quot;模型管理&quot;]">模型管理</h2>
+                  <p data-i18n-text="[&quot;分别设置两种 Agent 的默认模型，新建工作空间时生效。也可以维护对话中的可选模型。&quot;]">分别设置两种 Agent 的默认模型，新建工作空间时生效。也可以维护对话中的可选模型。</p>
                 </div>
               </div>
               <div class="card">
                 <h3 data-agent="claude">Claude Code</h3>
                 <div class="model-default">
-                  <label for="mdl-claude-default">新空间默认模型</label>
-                  <select id="mdl-claude-default" aria-label="Claude Code 新空间默认模型"></select>
+                  <label for="mdl-claude-default" data-i18n-text="[&quot;新空间默认模型&quot;]">新空间默认模型</label>
+                  <select id="mdl-claude-default" aria-label="Claude Code 新空间默认模型" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Claude Code 新空间默认模型&quot;}"></select>
                 </div>
                 <div class="model-rows" data-agent="claude"></div>
                 <div class="model-add">
-                  <input id="mdl-claude-label" type="text" placeholder="显示名称，如 Fable 5">
-                  <input id="mdl-claude-id" type="text" placeholder="模型 ID，如 claude-fable-5" class="mono">
-                  <button class="btn btn-sm mdl-add" data-agent="claude" data-icon="plus">添加</button>
+                  <input id="mdl-claude-label" type="text" placeholder="显示名称，如 Fable 5" data-i18n-attrs="{&quot;placeholder&quot;:&quot;显示名称，如 Fable 5&quot;}">
+                  <input id="mdl-claude-id" type="text" placeholder="模型 ID，如 claude-fable-5" class="mono" data-i18n-attrs="{&quot;placeholder&quot;:&quot;模型 ID，如 claude-fable-5&quot;}">
+                  <button class="btn btn-sm mdl-add" data-agent="claude" data-icon="plus" data-i18n-text="[&quot;添加&quot;]">添加</button>
                 </div>
               </div>
               <div class="card">
                 <h3 data-agent="codex">Codex CLI</h3>
                 <div class="model-default">
-                  <label for="mdl-codex-default">新空间默认模型</label>
-                  <select id="mdl-codex-default" aria-label="Codex 新空间默认模型"></select>
+                  <label for="mdl-codex-default" data-i18n-text="[&quot;新空间默认模型&quot;]">新空间默认模型</label>
+                  <select id="mdl-codex-default" aria-label="Codex 新空间默认模型" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Codex 新空间默认模型&quot;}"></select>
                 </div>
                 <div class="model-rows" data-agent="codex"></div>
                 <div class="model-add">
-                  <input id="mdl-codex-label" type="text" placeholder="显示名称">
-                  <input id="mdl-codex-id" type="text" placeholder="模型 ID" class="mono">
-                  <button class="btn btn-sm mdl-add" data-agent="codex" data-icon="plus">添加</button>
+                  <input id="mdl-codex-label" type="text" placeholder="显示名称" data-i18n-attrs="{&quot;placeholder&quot;:&quot;显示名称&quot;}">
+                  <input id="mdl-codex-id" type="text" placeholder="模型 ID" class="mono" data-i18n-attrs="{&quot;placeholder&quot;:&quot;模型 ID&quot;}">
+                  <button class="btn btn-sm mdl-add" data-agent="codex" data-icon="plus" data-i18n-text="[&quot;添加&quot;]">添加</button>
                 </div>
               </div>
             </section>
@@ -817,71 +819,71 @@
             <section id="sec-pricing" class="set-section hidden">
               <div class="sec-intro">
                 <div>
-                  <h2>价目表</h2>
-                  <p>每个模型的单价（美元 / 百万 token），用来算对话和终端的花费。没设置单价的模型只记用量、不扣额度。</p>
-                  <details class="learn-more"><summary>了解更多</summary><p>Claude 网页对话按每次请求分别计价后汇总；独立起标题可以使用客户端上报的金额。</p><p class="sec-hint">键可以是<b>模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b>agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p></details>
+                  <h2 data-i18n-text="[&quot;价目表&quot;]">价目表</h2>
+                  <p data-i18n-text="[&quot;每个模型的单价（美元 / 百万 token），用来算对话和终端的花费。没设置单价的模型只记用量、不扣额度。&quot;]">每个模型的单价（美元 / 百万 token），用来算对话和终端的花费。没设置单价的模型只记用量、不扣额度。</p>
+                  <details class="learn-more"><summary data-i18n-text="[&quot;了解更多&quot;]">了解更多</summary><p data-i18n-text="[&quot;Claude 网页对话按每次请求分别计价后汇总；独立起标题可以使用客户端上报的金额。&quot;]">Claude 网页对话按每次请求分别计价后汇总；独立起标题可以使用客户端上报的金额。</p><p class="sec-hint" data-i18n-text="[&quot;键可以是&quot;,&quot;（如 &quot;,&quot;），也可以是 &quot;,&quot;）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 &quot;,&quot; 这类日期后缀再查 → agent 名。&quot;]">键可以是<b data-i18n-text="[&quot;模型 ID&quot;]">模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b data-i18n-text="[&quot;agent 名&quot;]">agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p></details>
                 </div>
                 <div class="sec-actions action-tools">
-                  <button id="price-refresh" class="btn btn-sm" data-icon="undo" data-tip="放弃编辑，重新读取当前生效的价目表">重新读取</button>
-                  <button id="price-check" class="btn btn-sm keep-label" data-icon="refresh" data-tip="检查远程价目目录有没有新价格，只预览不应用">检查更新</button>
-                  <button id="price-save" class="btn btn-sm btn-primary" data-icon="save" data-tip="保存价目表">保存</button>
+                  <button id="price-refresh" class="btn btn-sm" data-icon="undo" data-tip="放弃编辑，重新读取当前生效的价目表" data-i18n-text="[&quot;重新读取&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;放弃编辑，重新读取当前生效的价目表&quot;}">重新读取</button>
+                  <button id="price-check" class="btn btn-sm keep-label" data-icon="refresh" data-tip="检查远程价目目录有没有新价格，只预览不应用" data-i18n-text="[&quot;检查更新&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;检查远程价目目录有没有新价格，只预览不应用&quot;}">检查更新</button>
+                  <button id="price-save" class="btn btn-sm btn-primary" data-icon="save" data-tip="保存价目表" data-i18n-text="[&quot;保存&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;保存价目表&quot;}">保存</button>
                 </div>
               </div>
               <div class="card price-catalog">
                 <div class="price-catalog-head">
-                  <h3>价格目录</h3>
-                  <p id="price-catalog-status" role="status">读取中…</p>
+                  <h3 data-i18n-text="[&quot;价格目录&quot;]">价格目录</h3>
+                  <p id="price-catalog-status" role="status" data-i18n-text="[&quot;读取中…&quot;]">读取中…</p>
                 </div>
                 <p id="price-catalog-error" class="price-notice hidden" role="status"></p>
                 <div class="field-row">
-                  <label class="field"><span>远程目录地址（HTTPS）</span><input id="price-source" type="url" placeholder="填写已发布的价格目录 JSON 地址"></label>
-                  <button id="price-modelsdev" class="btn btn-sm" data-icon="link" data-tip="填入 models.dev 价格源并开启每日检查，保存后生效">使用 models.dev</button>
-                  <button id="price-source-save" class="btn btn-sm" data-icon="save" data-tip="保存价格目录来源地址">保存来源</button>
-                  <button id="price-preview" class="btn btn-sm" data-icon="diff" data-tip="预览候选目录与当前价目表的差异">预览差异</button>
+                  <label class="field"><span data-i18n-text="[&quot;远程目录地址（HTTPS）&quot;]">远程目录地址（HTTPS）</span><input id="price-source" type="url" placeholder="填写已发布的价格目录 JSON 地址" data-i18n-attrs="{&quot;placeholder&quot;:&quot;填写已发布的价格目录 JSON 地址&quot;}"></label>
+                  <button id="price-modelsdev" class="btn btn-sm" data-icon="link" data-tip="填入 models.dev 价格源并开启每日检查，保存后生效" data-i18n-text="[&quot;使用 models.dev&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;填入 models.dev 价格源并开启每日检查，保存后生效&quot;}">使用 models.dev</button>
+                  <button id="price-source-save" class="btn btn-sm" data-icon="save" data-tip="保存价格目录来源地址" data-i18n-text="[&quot;保存来源&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;保存价格目录来源地址&quot;}">保存来源</button>
+                  <button id="price-preview" class="btn btn-sm" data-icon="diff" data-tip="预览候选目录与当前价目表的差异" data-i18n-text="[&quot;预览差异&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;预览候选目录与当前价目表的差异&quot;}">预览差异</button>
                 </div>
                 <div class="price-sync-options">
-                  <label class="price-auto"><input id="price-auto" type="checkbox">每天自动检查</label>
-                  <label class="price-auto"><input id="price-auto-apply" type="checkbox">自动跟随已选模型</label>
+                  <label class="price-auto" data-i18n-text="[&quot;每天自动检查&quot;]"><input id="price-auto" type="checkbox">每天自动检查</label>
+                  <label class="price-auto" data-i18n-text="[&quot;自动跟随已选模型&quot;]"><input id="price-auto-apply" type="checkbox">自动跟随已选模型</label>
                 </div>
-                <p class="card-desc">「检查更新」只预览变化；勾选模型并应用后，这些模型会跟随目录价格。</p>
-                <details class="learn-more"><summary>了解更多</summary><p>开启自动跟随后，每日检查会更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型和目录里没有的模型不会自动修改。</p><p>models.dev 是第三方价格源，只导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入换算为 1 小时口径；缺失的价格不会按 0 导入。</p></details>
+                <p class="card-desc" data-i18n-text="[&quot;「检查更新」只预览变化；勾选模型并应用后，这些模型会跟随目录价格。&quot;]">「检查更新」只预览变化；勾选模型并应用后，这些模型会跟随目录价格。</p>
+                <details class="learn-more"><summary data-i18n-text="[&quot;了解更多&quot;]">了解更多</summary><p data-i18n-text="[&quot;开启自动跟随后，每日检查会更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型和目录里没有的模型不会自动修改。&quot;]">开启自动跟随后，每日检查会更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型和目录里没有的模型不会自动修改。</p><p data-i18n-text="[&quot;models.dev 是第三方价格源，只导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入换算为 1 小时口径；缺失的价格不会按 0 导入。&quot;]">models.dev 是第三方价格源，只导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入换算为 1 小时口径；缺失的价格不会按 0 导入。</p></details>
                 <div id="price-source-issues" class="price-notice hidden" role="status"></div>
                 <div id="price-diff" class="hidden">
-                  <p>勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。</p>
+                  <p data-i18n-text="[&quot;勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。&quot;]">勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。</p>
                   <div id="price-changes" class="price-changes"></div>
-                  <button id="price-apply" class="btn btn-sm btn-primary" data-icon="check" data-tip="应用所选模型的候选价格">应用</button>
+                  <button id="price-apply" class="btn btn-sm btn-primary" data-icon="check" data-tip="应用所选模型的候选价格" data-i18n-text="[&quot;应用&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;应用所选模型的候选价格&quot;}">应用</button>
                 </div>
               </div>
               <div id="price-warnings" class="price-notice hidden" role="status"></div>
               <div class="card price-editor">
-                <p id="price-edit-note" class="card-desc">手动修改单价后，该模型将转为自定义。网页回合开始时锁定价格，调价只影响之后的回合。</p>
+                <p id="price-edit-note" class="card-desc" data-i18n-text="[&quot;手动修改单价后，该模型将转为自定义。网页回合开始时锁定价格，调价只影响之后的回合。&quot;]">手动修改单价后，该模型将转为自定义。网页回合开始时锁定价格，调价只影响之后的回合。</p>
                 <div class="price-table-wrap">
                   <table class="price-table">
                     <thead>
                       <tr>
-                        <th>模型 ID / agent</th>
-                        <th class="num">输入</th>
-                        <th class="num">输出</th>
-                        <th class="num">缓存读取</th>
-                        <th class="num">缓存写入</th>
-                        <th class="num">长上下文阈值</th>
-                        <th class="num">超阈值单价<br><span class="th-sub">输入 / 输出 / 缓存读 / 缓存写</span></th>
+                        <th data-i18n-text="[&quot;模型 ID / agent&quot;]">模型 ID / agent</th>
+                        <th class="num" data-i18n-text="[&quot;输入&quot;]">输入</th>
+                        <th class="num" data-i18n-text="[&quot;输出&quot;]">输出</th>
+                        <th class="num" data-i18n-text="[&quot;缓存读取&quot;]">缓存读取</th>
+                        <th class="num" data-i18n-text="[&quot;缓存写入&quot;]">缓存写入</th>
+                        <th class="num" data-i18n-text="[&quot;长上下文阈值&quot;]">长上下文阈值</th>
+                        <th class="num" data-i18n-text="[&quot;超阈值单价&quot;]">超阈值单价<br><span class="th-sub" data-i18n-text="[&quot;输入 / 输出 / 缓存读 / 缓存写&quot;]">输入 / 输出 / 缓存读 / 缓存写</span></th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody id="price-rows"></tbody>
                   </table>
                 </div>
-                <p id="price-empty" class="files-empty hidden">价目表是空的。所有按 token 折算的消耗都会记为「未定价」。</p>
+                <p id="price-empty" class="files-empty hidden" data-i18n-text="[&quot;价目表是空的。所有按 token 折算的消耗都会记为「未定价」。&quot;]">价目表是空的。所有按 token 折算的消耗都会记为「未定价」。</p>
                 <div class="price-add">
-                  <input id="price-new-key" type="text" placeholder="模型 ID 或 agent 名，如 claude-opus-5" class="mono">
-                  <button id="price-add" class="btn btn-sm" data-icon="plus" data-tip="添加一个模型或 agent 价格条目">添加</button>
+                  <input id="price-new-key" type="text" placeholder="模型 ID 或 agent 名，如 claude-opus-5" class="mono" data-i18n-attrs="{&quot;placeholder&quot;:&quot;模型 ID 或 agent 名，如 claude-opus-5&quot;}">
+                  <button id="price-add" class="btn btn-sm" data-icon="plus" data-tip="添加一个模型或 agent 价格条目" data-i18n-text="[&quot;添加&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;添加一个模型或 agent 价格条目&quot;}">添加</button>
                 </div>
               </div>
               <details class="card price-history">
-                <summary>价格版本记录（最近 10 次）</summary>
+                <summary data-i18n-text="[&quot;价格版本记录（最近 10 次）&quot;]">价格版本记录（最近 10 次）</summary>
                 <div class="price-history-body">
-                  <p class="card-desc">可恢复修改前的价格及跟随状态，并暂停自动跟随；回退不改变历史账单或远程目录地址。</p>
+                  <p class="card-desc" data-i18n-text="[&quot;可恢复修改前的价格及跟随状态，并暂停自动跟随；回退不改变历史账单或远程目录地址。&quot;]">可恢复修改前的价格及跟随状态，并暂停自动跟随；回退不改变历史账单或远程目录地址。</p>
                   <div id="price-history"></div>
                 </div>
               </details>
@@ -891,49 +893,49 @@
             <section id="sec-interface" class="set-section hidden">
               <div class="sec-intro">
                 <div>
-                  <h2>界面与提示</h2>
-                  <p>控制台界面的展示项。改动即时生效，对所有用户可见。</p>
+                  <h2 data-i18n-text="[&quot;界面与提示&quot;]">界面与提示</h2>
+                  <p data-i18n-text="[&quot;控制台界面的展示项。改动即时生效，对所有用户可见。&quot;]">控制台界面的展示项。改动即时生效，对所有用户可见。</p>
                 </div>
               </div>
               <div class="card">
-                <h3>日期与时间</h3>
+                <h3 data-i18n-text="[&quot;日期与时间&quot;]">日期与时间</h3>
                 <label class="field">
-                  <span>界面时区 <span class="tag live">即时生效</span></span>
+                  <span data-i18n-text="[&quot;界面时区 &quot;]">界面时区 <span class="tag live" data-i18n-text="[&quot;即时生效&quot;]">即时生效</span></span>
                   <select id="set-timezone">
-                    <option value="Asia/Shanghai">中国标准时间（Asia/Shanghai）</option>
-                    <option value="Asia/Hong_Kong">香港时间（Asia/Hong_Kong）</option>
-                    <option value="Asia/Tokyo">日本时间（Asia/Tokyo）</option>
-                    <option value="UTC">协调世界时（UTC）</option>
-                    <option value="America/Los_Angeles">美国太平洋时间（America/Los_Angeles）</option>
-                    <option value="America/New_York">美国东部时间（America/New_York）</option>
-                    <option value="Europe/London">英国时间（Europe/London）</option>
+                    <option value="Asia/Shanghai" data-i18n-text="[&quot;中国标准时间（Asia/Shanghai）&quot;]">中国标准时间（Asia/Shanghai）</option>
+                    <option value="Asia/Hong_Kong" data-i18n-text="[&quot;香港时间（Asia/Hong_Kong）&quot;]">香港时间（Asia/Hong_Kong）</option>
+                    <option value="Asia/Tokyo" data-i18n-text="[&quot;日本时间（Asia/Tokyo）&quot;]">日本时间（Asia/Tokyo）</option>
+                    <option value="UTC" data-i18n-text="[&quot;协调世界时（UTC）&quot;]">协调世界时（UTC）</option>
+                    <option value="America/Los_Angeles" data-i18n-text="[&quot;美国太平洋时间（America/Los_Angeles）&quot;]">美国太平洋时间（America/Los_Angeles）</option>
+                    <option value="America/New_York" data-i18n-text="[&quot;美国东部时间（America/New_York）&quot;]">美国东部时间（America/New_York）</option>
+                    <option value="Europe/London" data-i18n-text="[&quot;英国时间（Europe/London）&quot;]">英国时间（Europe/London）</option>
                   </select>
                 </label>
                 <div class="card-foot">
-                  <span class="note">控制台时间、使用记录筛选与 CSV 导出采用此时区</span>
+                  <span class="note" data-i18n-text="[&quot;控制台时间、使用记录筛选与 CSV 导出采用此时区&quot;]">控制台时间、使用记录筛选与 CSV 导出采用此时区</span>
                 </div>
               </div>
               <div class="card">
-                <h3>终端提示语</h3>
-                <p class="card-desc">终端页左上角轮播显示的提示。每行一条，可配置多条；设置轮播频率与切换动画。留空则不显示提示。</p>
+                <h3 data-i18n-text="[&quot;终端提示语&quot;]">终端提示语</h3>
+                <p class="card-desc" data-i18n-text="[&quot;终端页左上角轮播显示的提示。每行一条，可配置多条；设置轮播频率与切换动画。留空则不显示提示。&quot;]">终端页左上角轮播显示的提示。每行一条，可配置多条；设置轮播频率与切换动画。留空则不显示提示。</p>
                 <label class="field">
-                  <span>提示语（每行一条）<span class="tag live">即时生效</span></span>
-                  <textarea id="set-tips" rows="4" placeholder="可直接粘贴图片，路径可点击预览&#10;支持鼠标选中复制、右键粘贴"></textarea>
+                  <span data-i18n-text="[&quot;提示语（每行一条）&quot;]">提示语（每行一条）<span class="tag live" data-i18n-text="[&quot;即时生效&quot;]">即时生效</span></span>
+                  <textarea id="set-tips" rows="4" placeholder="可直接粘贴图片，路径可点击预览&#10;支持鼠标选中复制、右键粘贴" data-i18n-attrs="{&quot;placeholder&quot;:&quot;可直接粘贴图片，路径可点击预览\n支持鼠标选中复制、右键粘贴&quot;}"></textarea>
                 </label>
                 <div class="field-row">
                   <label class="field">
-                    <span>轮播频率（秒）</span>
+                    <span data-i18n-text="[&quot;轮播频率（秒）&quot;]">轮播频率（秒）</span>
                     <input id="set-tips-interval" type="number" min="0" max="3600" step="1" class="mono">
                   </label>
                   <label class="field">
-                    <span>切换动画</span>
+                    <span data-i18n-text="[&quot;切换动画&quot;]">切换动画</span>
                     <select id="set-tips-anim">
-                      <option value="scroll">滚动</option>
+                      <option value="scroll" data-i18n-text="[&quot;滚动&quot;]">滚动</option>
                     </select>
                   </label>
                 </div>
                 <div class="card-foot">
-                  <span class="note">每行一条，最多 30 条；频率 0 表示不轮播（只显示第一条）</span>
+                  <span class="note" data-i18n-text="[&quot;每行一条，最多 30 条；频率 0 表示不轮播（只显示第一条）&quot;]">每行一条，最多 30 条；频率 0 表示不轮播（只显示第一条）</span>
                 </div>
               </div>
             </section>
@@ -942,85 +944,85 @@
             <section id="sec-security" class="set-section hidden">
               <div class="sec-intro">
                 <div>
-                  <h2>安全与访问</h2>
-                  <p>控制台的访问凭证与 Agent 的权限边界。</p>
+                  <h2 data-i18n-text="[&quot;安全与访问&quot;]">安全与访问</h2>
+                  <p data-i18n-text="[&quot;控制台的访问凭证与 Agent 的权限边界。&quot;]">控制台的访问凭证与 Agent 的权限边界。</p>
                 </div>
               </div>
               <div class="card">
-                <h3>用户管理</h3>
-                <p class="card-desc">普通用户只能访问自己的工作空间，无法查看系统设置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。</p>
+                <h3 data-i18n-text="[&quot;用户管理&quot;]">用户管理</h3>
+                <p class="card-desc" data-i18n-text="[&quot;普通用户只能访问自己的工作空间，无法查看系统设置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。&quot;]">普通用户只能访问自己的工作空间，无法查看系统设置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。</p>
                 <div id="user-list" class="user-list"></div>
                 <div class="user-add">
-                  <input id="user-new-name" type="text" class="mono" placeholder="用户名（小写字母数字开头，可含 - _）" autocapitalize="none" spellcheck="false">
-                  <input id="user-new-pass" type="password" placeholder="初始密码（至少 8 位）" autocomplete="new-password">
-                  <button id="btn-user-add" class="btn btn-sm" data-icon="plus">添加用户</button>
+                  <input id="user-new-name" type="text" class="mono" placeholder="用户名（小写字母数字开头，可含 - _）" autocapitalize="none" spellcheck="false" data-i18n-attrs="{&quot;placeholder&quot;:&quot;用户名（小写字母数字开头，可含 - _）&quot;}">
+                  <input id="user-new-pass" type="password" placeholder="初始密码（至少 8 位）" autocomplete="new-password" data-i18n-attrs="{&quot;placeholder&quot;:&quot;初始密码（至少 8 位）&quot;}">
+                  <button id="btn-user-add" class="btn btn-sm" data-icon="plus" data-i18n-text="[&quot;添加用户&quot;]">添加用户</button>
                 </div>
               </div>
               <div class="card">
-                <h3>修改登录密码</h3>
-                <p class="card-desc">修改当前管理员账号的登录密码。修改后本端保持登录，其他已登录端下次请求起需重新登录。</p>
+                <h3 data-i18n-text="[&quot;修改登录密码&quot;]">修改登录密码</h3>
+                <p class="card-desc" data-i18n-text="[&quot;修改当前管理员账号的登录密码。修改后本端保持登录，其他已登录端下次请求起需重新登录。&quot;]">修改当前管理员账号的登录密码。修改后本端保持登录，其他已登录端下次请求起需重新登录。</p>
                 <div class="field-row">
                   <label class="field">
-                    <span>当前密码</span>
+                    <span data-i18n-text="[&quot;当前密码&quot;]">当前密码</span>
                     <input id="pw-old" type="password" autocomplete="current-password">
                   </label>
                   <label class="field">
-                    <span>新密码（至少 8 位）</span>
+                    <span data-i18n-text="[&quot;新密码（至少 8 位）&quot;]">新密码（至少 8 位）</span>
                     <input id="pw-new" type="password" autocomplete="new-password">
                   </label>
                 </div>
                 <div class="card-foot">
-                  <span class="note">密码保存在服务端数据库（PBKDF2 哈希），不再依赖 config.json 的 auth_token</span>
-                  <button id="btn-pw-save" class="btn btn-primary btn-sm" data-icon="key">修改密码</button>
+                  <span class="note" data-i18n-text="[&quot;密码保存在服务端数据库（PBKDF2 哈希），不再依赖 config.json 的 auth_token&quot;]">密码保存在服务端数据库（PBKDF2 哈希），不再依赖 config.json 的 auth_token</span>
+                  <button id="btn-pw-save" class="btn btn-primary btn-sm" data-icon="key" data-i18n-text="[&quot;修改密码&quot;]">修改密码</button>
                 </div>
               </div>
               <div class="card">
-                <h3>Agent 权限模式</h3>
+                <h3 data-i18n-text="[&quot;Agent 权限模式&quot;]">Agent 权限模式</h3>
                 <label class="field">
-                  <span>容器内 Agent 的操作确认策略 <span class="tag live">下一轮对话生效</span></span>
+                  <span data-i18n-text="[&quot;容器内 Agent 的操作确认策略 &quot;]">容器内 Agent 的操作确认策略 <span class="tag live" data-i18n-text="[&quot;下一轮对话生效&quot;]">下一轮对话生效</span></span>
                   <select id="set-perm">
-                    <option value="bypassPermissions">bypassPermissions — 免确认（容器已隔离，推荐）</option>
-                    <option value="acceptEdits">acceptEdits — 自动接受文件编辑</option>
-                    <option value="plan">plan — 仅规划，不执行</option>
-                    <option value="default">default — 每步确认</option>
+                    <option value="bypassPermissions" data-i18n-text="[&quot;bypassPermissions — 免确认（容器已隔离，推荐）&quot;]">bypassPermissions — 免确认（容器已隔离，推荐）</option>
+                    <option value="acceptEdits" data-i18n-text="[&quot;acceptEdits — 自动接受文件编辑&quot;]">acceptEdits — 自动接受文件编辑</option>
+                    <option value="plan" data-i18n-text="[&quot;plan — 仅规划，不执行&quot;]">plan — 仅规划，不执行</option>
+                    <option value="default" data-i18n-text="[&quot;default — 每步确认&quot;]">default — 每步确认</option>
                   </select>
                 </label>
               </div>
               <div class="card">
-                <h3>内网反向隧道</h3>
-                <p class="card-desc">本机运行 abox-link 后，工作空间可以访问你放行的内网服务。保存后立即生效。</p>
-                <details class="learn-more"><summary>了解更多</summary><p>两种模式都走同一条隧道，按用户隔离，并由本机白名单控制。</p><p><b>透明模式（默认，推荐）</b>：对话与终端直接使用内网 IP 或域名，不需要给 Agent 配代理，支持 IPv4 / TCP。首次启用需先准备网络辅助镜像。</p><p><b>兼容代理模式（不推荐）</b>：取消下方勾选后使用。Agent 要显式使用 SOCKS 代理，不支持代理的程序要配置端口映射，容易漏用，只给旧客户端或特殊场景。</p></details>
-                <label class="check"><input type="checkbox" id="set-tunnel-transparent"> 使用透明模式（默认，推荐）</label>
-                <div class="field-row"><label class="field"><span>网络控制监听地址</span><input id="set-network-bind" class="mono" placeholder="默认网桥地址:1082"></label><label class="field"><span>网络辅助镜像</span><input id="set-network-image" class="mono" placeholder="agentbox-network:latest"></label></div>
-                <label class="check"><input type="checkbox" id="set-tunnel-on"> 启用隧道 <span class="tag live">即时生效</span></label>
+                <h3 data-i18n-text="[&quot;内网反向隧道&quot;]">内网反向隧道</h3>
+                <p class="card-desc" data-i18n-text="[&quot;本机运行 abox-link 后，工作空间可以访问你放行的内网服务。保存后立即生效。&quot;]">本机运行 abox-link 后，工作空间可以访问你放行的内网服务。保存后立即生效。</p>
+                <details class="learn-more"><summary data-i18n-text="[&quot;了解更多&quot;]">了解更多</summary><p data-i18n-text="[&quot;两种模式都走同一条隧道，按用户隔离，并由本机白名单控制。&quot;]">两种模式都走同一条隧道，按用户隔离，并由本机白名单控制。</p><p data-i18n-text="[&quot;：对话与终端直接使用内网 IP 或域名，不需要给 Agent 配代理，支持 IPv4 / TCP。首次启用需先准备网络辅助镜像。&quot;]"><b data-i18n-text="[&quot;透明模式（默认，推荐）&quot;]">透明模式（默认，推荐）</b>：对话与终端直接使用内网 IP 或域名，不需要给 Agent 配代理，支持 IPv4 / TCP。首次启用需先准备网络辅助镜像。</p><p data-i18n-text="[&quot;：取消下方勾选后使用。Agent 要显式使用 SOCKS 代理，不支持代理的程序要配置端口映射，容易漏用，只给旧客户端或特殊场景。&quot;]"><b data-i18n-text="[&quot;兼容代理模式（不推荐）&quot;]">兼容代理模式（不推荐）</b>：取消下方勾选后使用。Agent 要显式使用 SOCKS 代理，不支持代理的程序要配置端口映射，容易漏用，只给旧客户端或特殊场景。</p></details>
+                <label class="check" data-i18n-text="[&quot; 使用透明模式（默认，推荐）&quot;]"><input type="checkbox" id="set-tunnel-transparent"> 使用透明模式（默认，推荐）</label>
+                <div class="field-row"><label class="field"><span data-i18n-text="[&quot;网络控制监听地址&quot;]">网络控制监听地址</span><input id="set-network-bind" class="mono" placeholder="默认网桥地址:1082" data-i18n-attrs="{&quot;placeholder&quot;:&quot;默认网桥地址:1082&quot;}"></label><label class="field"><span data-i18n-text="[&quot;网络辅助镜像&quot;]">网络辅助镜像</span><input id="set-network-image" class="mono" placeholder="agentbox-network:latest"></label></div>
+                <label class="check" data-i18n-text="[&quot; 启用隧道 &quot;]"><input type="checkbox" id="set-tunnel-on"> 启用隧道 <span class="tag live" data-i18n-text="[&quot;即时生效&quot;]">即时生效</span></label>
                 <div class="field-row">
                   <label class="field">
-                    <span>SOCKS 监听地址（须容器可达）</span>
+                    <span data-i18n-text="[&quot;SOCKS 监听地址（须容器可达）&quot;]">SOCKS 监听地址（须容器可达）</span>
                     <input id="set-tunnel-bind" type="text" class="mono" placeholder="172.17.0.1:1080">
                   </label>
                   <label class="field">
-                    <span>注入容器的代理主机（可选）</span>
-                    <input id="set-tunnel-host" type="text" class="mono" placeholder="默认取监听地址的主机">
+                    <span data-i18n-text="[&quot;注入容器的代理主机（可选）&quot;]">注入容器的代理主机（可选）</span>
+                    <input id="set-tunnel-host" type="text" class="mono" placeholder="默认取监听地址的主机" data-i18n-attrs="{&quot;placeholder&quot;:&quot;默认取监听地址的主机&quot;}">
                   </label>
                 </div>
                 <div class="card-foot">
-                  <span id="tunnel-note" class="note">默认绑定 docker 网桥网关 172.17.0.1，仅容器与本机可达</span>
+                  <span id="tunnel-note" class="note" data-i18n-text="[&quot;默认绑定 docker 网桥网关 172.17.0.1，仅容器与本机可达&quot;]">默认绑定 docker 网桥网关 172.17.0.1，仅容器与本机可达</span>
                 </div>
               </div>
               <div class="card">
-                <h3>上传与监听</h3>
+                <h3 data-i18n-text="[&quot;上传与监听&quot;]">上传与监听</h3>
                 <div class="field-row">
                   <label class="field">
-                    <span>上传大小上限（MB）</span>
+                    <span data-i18n-text="[&quot;上传大小上限（MB）&quot;]">上传大小上限（MB）</span>
                     <input id="set-upload" type="number" min="1" class="mono">
                   </label>
                   <label class="field">
-                    <span>监听地址 <span class="tag restart">需重启</span></span>
+                    <span data-i18n-text="[&quot;监听地址 &quot;]">监听地址 <span class="tag restart" data-i18n-text="[&quot;需重启&quot;]">需重启</span></span>
                     <input id="set-listen" type="text" class="mono" placeholder="127.0.0.1:8180">
                   </label>
                 </div>
                 <div class="card-foot">
-                  <span id="security-note" class="note">权限模式与上传上限即时生效；监听地址需重启 agentbox 服务</span>
+                  <span id="security-note" class="note" data-i18n-text="[&quot;权限模式与上传上限即时生效；监听地址需重启 agentbox 服务&quot;]">权限模式与上传上限即时生效；监听地址需重启 agentbox 服务</span>
                 </div>
               </div>
             </section>
@@ -1029,33 +1031,33 @@
             <section id="sec-monitor" class="set-section hidden">
               <div class="sec-intro">
                 <div>
-                  <h2>运维监控</h2>
-                  <p>服务端与主机的实时资源占用，以及每个工作空间容器的 CPU / 内存。</p>
+                  <h2 data-i18n-text="[&quot;运维监控&quot;]">运维监控</h2>
+                  <p data-i18n-text="[&quot;服务端与主机的实时资源占用，以及每个工作空间容器的 CPU / 内存。&quot;]">服务端与主机的实时资源占用，以及每个工作空间容器的 CPU / 内存。</p>
                 </div>
-                <label class="mon-auto"><input type="checkbox" id="mon-auto" checked> 自动刷新</label>
+                <label class="mon-auto" data-i18n-text="[&quot; 自动刷新&quot;]"><input type="checkbox" id="mon-auto" checked> 自动刷新</label>
               </div>
               <div id="mon-loading" class="loading-block hidden">
-                <span class="spin"></span><span>采样资源占用中…</span>
+                <span class="spin"></span><span data-i18n-text="[&quot;采样资源占用中…&quot;]">采样资源占用中…</span>
               </div>
               <div id="mon-tiles" class="mon-tiles"></div>
               <div class="card mon-card">
                 <div class="mon-card-head">
-                  <h3>工作空间容器</h3>
+                  <h3 data-i18n-text="[&quot;工作空间容器&quot;]">工作空间容器</h3>
                   <span id="mon-sub" class="note"></span>
                 </div>
                 <div class="mon-table-wrap">
                   <table class="mon-table">
                     <thead>
                       <tr>
-                        <th>工作空间</th>
-                        <th>用户</th>
+                        <th data-i18n-text="[&quot;工作空间&quot;]">工作空间</th>
+                        <th data-i18n-text="[&quot;用户&quot;]">用户</th>
                         <th>Agent</th>
-                        <th>状态</th>
-                        <th>启动时间</th>
-                        <th>运行时长</th>
+                        <th data-i18n-text="[&quot;状态&quot;]">状态</th>
+                        <th data-i18n-text="[&quot;启动时间&quot;]">启动时间</th>
+                        <th data-i18n-text="[&quot;运行时长&quot;]">运行时长</th>
                         <th class="num">CPU</th>
-                        <th class="num">内存</th>
-                        <th class="num">进程</th>
+                        <th class="num" data-i18n-text="[&quot;内存&quot;]">内存</th>
+                        <th class="num" data-i18n-text="[&quot;进程&quot;]">进程</th>
                       </tr>
                     </thead>
                     <tbody id="mon-tbody"></tbody>
@@ -1068,46 +1070,46 @@
             <section id="sec-about" class="set-section hidden">
               <div class="sec-intro">
                 <div>
-                  <h2>关于与更新</h2>
-                  <p>版本信息、软件更新与服务运行状态。</p>
+                  <h2 data-i18n-text="[&quot;关于与更新&quot;]">关于与更新</h2>
+                  <p data-i18n-text="[&quot;版本信息、软件更新与服务运行状态。&quot;]">版本信息、软件更新与服务运行状态。</p>
                 </div>
               </div>
               <div class="update-panel">
                 <div class="update-product">
                   <span class="update-mark" data-mark></span>
-                  <div><h3>AGENTBOX</h3><p>服务端 <span data-update-version>—</span></p><p id="update-build" class="update-meta"></p></div>
+                  <div><h3>AGENTBOX</h3><p data-i18n-text="[&quot;服务端 &quot;]">服务端 <span data-update-version>—</span></p><p id="update-build" class="update-meta"></p></div>
                 </div>
                 <div class="update-detail">
-                  <div><h3>软件更新</h3><p>检查正式发布版本，升级前自动备份。重启服务会短暂断开连接。</p></div>
+                  <div><h3 data-i18n-text="[&quot;软件更新&quot;]">软件更新</h3><p data-i18n-text="[&quot;检查正式发布版本，升级前自动备份。重启服务会短暂断开连接。&quot;]">检查正式发布版本，升级前自动备份。重启服务会短暂断开连接。</p></div>
                   <div class="update-detail-main">
-                    <div class="update-actions"><button type="button" class="btn" data-update-check data-icon="refresh">检查更新</button><button type="button" id="update-install" class="btn btn-primary hidden" data-icon="download">升级并重启</button><a data-update-release target="_blank" rel="noopener noreferrer" data-icon="external">发行记录</a></div>
-                    <p class="update-status" data-update-status role="status">尚未检查更新</p>
+                    <div class="update-actions"><button type="button" class="btn" data-update-check data-icon="refresh" data-i18n-text="[&quot;检查更新&quot;]">检查更新</button><button type="button" id="update-install" class="btn btn-primary hidden" data-icon="download" data-i18n-text="[&quot;升级并重启&quot;]">升级并重启</button><a data-update-release target="_blank" rel="noopener noreferrer" data-icon="external" data-i18n-text="[&quot;发行记录&quot;]">发行记录</a></div>
+                    <p class="update-status" data-update-status role="status" data-i18n-text="[&quot;尚未检查更新&quot;]">尚未检查更新</p>
                     <p class="update-error hidden" data-update-error></p>
                     <p class="update-meta" data-update-time></p>
                     <p id="upgrade-support" class="update-meta"></p>
                     <div id="upgrade-progress" class="upgrade-progress hidden" role="status" aria-live="polite">
                       <p id="upgrade-message"></p><p id="upgrade-error" class="update-error hidden"></p>
                       <p id="upgrade-log" class="update-meta"></p>
-                      <div class="update-actions"><button type="button" id="upgrade-refresh" class="btn btn-sm" data-icon="refresh">刷新升级状态</button><button type="button" id="upgrade-reload" class="btn btn-sm hidden" data-icon="refresh">刷新页面</button></div>
+                      <div class="update-actions"><button type="button" id="upgrade-refresh" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新升级状态&quot;]">刷新升级状态</button><button type="button" id="upgrade-reload" class="btn btn-sm hidden" data-icon="refresh" data-i18n-text="[&quot;刷新页面&quot;]">刷新页面</button></div>
                     </div>
-                    <a class="update-guide" href="https://github.com/devilcoolyue/agentbox/blob/main/deploy/downloads/README.md#手工安装与升级" target="_blank" rel="noopener noreferrer">查看升级说明 <span aria-hidden="true">↗</span></a>
-                    <details id="update-notes-wrap" class="update-notes hidden"><summary>版本说明</summary><pre id="update-notes"></pre></details>
+                    <a class="update-guide" href="https://github.com/devilcoolyue/agentbox/blob/main/deploy/downloads/README.md#手工安装与升级" target="_blank" rel="noopener noreferrer" data-i18n-text="[&quot;查看升级说明 &quot;]">查看升级说明 <span aria-hidden="true">↗</span></a>
+                    <details id="update-notes-wrap" class="update-notes hidden"><summary data-i18n-text="[&quot;版本说明&quot;]">版本说明</summary><pre id="update-notes"></pre></details>
                   </div>
                 </div>
               </div>
               <div class="card">
                 <div id="about-loading" class="loading-block hidden">
-                  <span class="spin"></span><span>读取系统信息中…</span>
+                  <span class="spin"></span><span data-i18n-text="[&quot;读取系统信息中…&quot;]">读取系统信息中…</span>
                 </div>
                 <dl id="about-kv" class="kv"></dl>
               </div>
             </section>
             <!-- 统一保存条：任意配置项有改动时出现（js/features/settings/savebar.js） -->
-            <div id="set-savebar" class="set-savebar" role="region" aria-label="未保存的修改" hidden>
+            <div id="set-savebar" class="set-savebar" role="region" aria-label="未保存的修改" hidden data-i18n-attrs="{&quot;aria-label&quot;:&quot;未保存的修改&quot;}">
               <span class="set-savebar-dot" aria-hidden="true"></span>
               <span id="set-savebar-text" class="set-savebar-text"></span>
-              <button id="set-discard" type="button" class="btn btn-sm btn-ghost" data-icon="undo">放弃修改</button>
-              <button id="set-save" type="button" class="btn btn-sm btn-primary" data-icon="save">保存</button>
+              <button id="set-discard" type="button" class="btn btn-sm btn-ghost" data-icon="undo" data-i18n-text="[&quot;放弃修改&quot;]">放弃修改</button>
+              <button id="set-save" type="button" class="btn btn-sm btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
             </div>
           </div>
         </div>
@@ -1117,12 +1119,12 @@
       <div id="view-usage" class="view hidden">
         <header class="set-head usage-head">
           <div>
-            <h1>使用记录</h1>
-            <p id="usage-sub">每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。</p>
+            <h1 data-i18n-text="[&quot;使用记录&quot;]">使用记录</h1>
+            <p id="usage-sub" data-i18n-text="[&quot;每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。&quot;]">每一行是一个回合在一个模型上的消耗，费用与 token 由 agent 在回合收尾时上报。</p>
           </div>
-          <div class="usage-zone" aria-label="当前使用记录时区">
+          <div class="usage-zone" aria-label="当前使用记录时区" data-i18n-attrs="{&quot;aria-label&quot;:&quot;当前使用记录时区&quot;}">
             <span class="usage-zone-dot"></span>
-            <span><b id="usage-zone-name">中国标准时间</b><code id="usage-zone-id">Asia/Shanghai</code></span>
+            <span><b id="usage-zone-name" data-i18n-text="[&quot;中国标准时间&quot;]">中国标准时间</b><code id="usage-zone-id">Asia/Shanghai</code></span>
           </div>
         </header>
 
@@ -1131,43 +1133,43 @@
           <div id="usage-filters" class="usage-filters">
             <button id="uf-toggle" class="uf-toggle" aria-expanded="true" aria-controls="uf-fields">
               <span class="uf-caret"></span>
-              <span class="uf-title">筛选条件</span>
+              <span class="uf-title" data-i18n-text="[&quot;筛选条件&quot;]">筛选条件</span>
               <span id="uf-active" class="uf-active"></span>
             </button>
             <div id="uf-fields" class="uf-fields">
               <label class="uf-item" id="uf-user-wrap">
-                <span>用户</span>
-                <select id="uf-user"><option value="">全部</option></select>
+                <span data-i18n-text="[&quot;用户&quot;]">用户</span>
+                <select id="uf-user"><option value="" data-i18n-text="[&quot;全部&quot;]">全部</option></select>
               </label>
               <label class="uf-item">
                 <span>Agent</span>
-                <select id="uf-agent"><option value="">全部</option></select>
+                <select id="uf-agent"><option value="" data-i18n-text="[&quot;全部&quot;]">全部</option></select>
               </label>
               <label class="uf-item">
-                <span>模型</span>
-                <select id="uf-model"><option value="">全部</option></select>
+                <span data-i18n-text="[&quot;模型&quot;]">模型</span>
+                <select id="uf-model"><option value="" data-i18n-text="[&quot;全部&quot;]">全部</option></select>
               </label>
               <label class="uf-item">
-                <span>类型</span>
+                <span data-i18n-text="[&quot;类型&quot;]">类型</span>
                 <select id="uf-kind">
-                  <option value="">全部</option>
-                  <option value="chat">对话</option>
-                  <option value="terminal">终端</option>
-                  <option value="title">起标题</option>
+                  <option value="" data-i18n-text="[&quot;全部&quot;]">全部</option>
+                  <option value="chat" data-i18n-text="[&quot;对话&quot;]">对话</option>
+                  <option value="terminal" data-i18n-text="[&quot;终端&quot;]">终端</option>
+                  <option value="title" data-i18n-text="[&quot;起标题&quot;]">起标题</option>
                 </select>
               </label>
               <div class="uf-item uf-date">
-                <span>时间范围</span>
+                <span data-i18n-text="[&quot;时间范围&quot;]">时间范围</span>
                 <button type="button" id="uf-date-range" class="date-range-trigger">
                   <svg width="1.6" height="1.6" data-icon="calendar" aria-hidden="true"></svg>
-                  <span data-range-label>当天</span>
+                  <span data-range-label data-i18n-text="[&quot;当天&quot;]">当天</span>
                   <svg width="1.6" height="1.6" data-icon="chevron" aria-hidden="true"></svg>
                 </button>
               </div>
               <div class="uf-actions action-tools">
-                <button id="uf-reset" class="btn btn-ghost btn-sm" data-icon="undo">重置</button>
-                  <button id="uf-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
-                  <button id="uf-export" class="btn btn-sm" data-icon="download" data-tip="导出当前筛选范围的 CSV">导出</button>
+                <button id="uf-reset" class="btn btn-ghost btn-sm" data-icon="undo" data-i18n-text="[&quot;重置&quot;]">重置</button>
+                  <button id="uf-refresh" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新&quot;]">刷新</button>
+                  <button id="uf-export" class="btn btn-sm" data-icon="download" data-tip="导出当前筛选范围的 CSV" data-i18n-text="[&quot;导出&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;导出当前筛选范围的 CSV&quot;}">导出</button>
               </div>
             </div>
           </div>
@@ -1175,30 +1177,30 @@
           <div id="usage-summary" class="usage-summary"></div>
 
           <div class="usage-table-frame">
-            <div id="usage-table-scroll" class="usage-table-wrap" role="region" aria-label="使用记录明细" tabindex="0">
+            <div id="usage-table-scroll" class="usage-table-wrap" role="region" aria-label="使用记录明细" tabindex="0" data-i18n-attrs="{&quot;aria-label&quot;:&quot;使用记录明细&quot;}">
               <table class="usage-table">
                 <thead>
                   <tr>
-                    <th class="col-user">用户</th>
-                    <th>工作空间 / 账号</th>
-                    <th>模型</th>
-                    <th>类型</th>
+                    <th class="col-user" data-i18n-text="[&quot;用户&quot;]">用户</th>
+                    <th data-i18n-text="[&quot;工作空间 / 账号&quot;]">工作空间 / 账号</th>
+                    <th data-i18n-text="[&quot;模型&quot;]">模型</th>
+                    <th data-i18n-text="[&quot;类型&quot;]">类型</th>
                     <th class="num">Token</th>
-                    <th class="num">缓存命中率</th>
-                    <th class="num">费用</th>
-                    <th class="num">延迟</th>
+                    <th class="num" data-i18n-text="[&quot;缓存命中率&quot;]">缓存命中率</th>
+                    <th class="num" data-i18n-text="[&quot;费用&quot;]">费用</th>
+                    <th class="num" data-i18n-text="[&quot;延迟&quot;]">延迟</th>
                     <!-- 时间列可排序：上下箭头分别选正序/倒序，默认倒序（最新在最前）。
                          窄屏下表头整体隐藏，只留这一格当排序条用（见 usage.css） -->
                     <th class="num col-time">
                       <span class="u-sort">
-                        <span>时间</span>
+                        <span data-i18n-text="[&quot;时间&quot;]">时间</span>
                         <span class="u-sort-btns">
                           <button type="button" id="usage-sort-asc" class="u-sort-b asc"
                                   aria-pressed="false" data-tip="正序：最早的在最前"
-                                  aria-label="按时间正序排列" data-icon="chevron-up"></button>
+                                  aria-label="按时间正序排列" data-icon="chevron-up" data-i18n-attrs="{&quot;data-tip&quot;:&quot;正序：最早的在最前&quot;,&quot;aria-label&quot;:&quot;按时间正序排列&quot;}"></button>
                           <button type="button" id="usage-sort-desc" class="u-sort-b desc on"
                                   aria-pressed="true" data-tip="倒序：最新的在最前"
-                                  aria-label="按时间倒序排列" data-icon="chevron"></button>
+                                  aria-label="按时间倒序排列" data-icon="chevron" data-i18n-attrs="{&quot;data-tip&quot;:&quot;倒序：最新的在最前&quot;,&quot;aria-label&quot;:&quot;按时间倒序排列&quot;}"></button>
                         </span>
                       </span>
                     </th>
@@ -1206,31 +1208,31 @@
                 </thead>
                 <tbody id="usage-rows"></tbody>
               </table>
-              <div id="usage-empty" class="files-empty hidden">这个筛选条件下还没有消耗记录。</div>
+              <div id="usage-empty" class="files-empty hidden" data-i18n-text="[&quot;这个筛选条件下还没有消耗记录。&quot;]">这个筛选条件下还没有消耗记录。</div>
               <div id="usage-loading" class="loading-block hidden">
-                <span class="spin"></span><span>读取中…</span>
+                <span class="spin"></span><span data-i18n-text="[&quot;读取中…&quot;]">读取中…</span>
               </div>
             </div>
           </div>
 
           <footer class="usage-pager">
             <div class="usage-page-info">
-              <span id="usage-page" role="status">读取中…</span>
+              <span id="usage-page" role="status" data-i18n-text="[&quot;读取中…&quot;]">读取中…</span>
               <label class="usage-page-size">
-                <span>每页</span>
-                <select id="usage-page-size" aria-label="每页条数">
+                <span data-i18n-text="[&quot;每页&quot;]">每页</span>
+                <select id="usage-page-size" aria-label="每页条数" data-i18n-attrs="{&quot;aria-label&quot;:&quot;每页条数&quot;}">
                   <option value="20" selected>20</option>
                   <option value="50">50</option>
                   <option value="100">100</option>
                 </select>
               </label>
             </div>
-            <nav class="usage-page-nav" aria-label="使用记录分页">
-              <button type="button" id="usage-prev" class="usage-page-button" aria-label="上一页" disabled>
+            <nav class="usage-page-nav" aria-label="使用记录分页" data-i18n-attrs="{&quot;aria-label&quot;:&quot;使用记录分页&quot;}">
+              <button type="button" id="usage-prev" class="usage-page-button" aria-label="上一页" disabled data-i18n-attrs="{&quot;aria-label&quot;:&quot;上一页&quot;}">
                 <svg width="1.5" height="1.5" data-icon="chevron-left" aria-hidden="true"></svg>
               </button>
               <div id="usage-pages" class="usage-page-numbers"></div>
-              <button type="button" id="usage-next" class="usage-page-button" aria-label="下一页" disabled>
+              <button type="button" id="usage-next" class="usage-page-button" aria-label="下一页" disabled data-i18n-attrs="{&quot;aria-label&quot;:&quot;下一页&quot;}">
                 <svg width="1.5" height="1.5" data-icon="chevron-right" aria-hidden="true"></svg>
               </button>
             </nav>
@@ -1241,72 +1243,72 @@
       <!-- 内网隧道视图 -->
       <div id="view-tunnel" class="view hidden">
         <header class="set-head">
-          <h1>内网隧道</h1>
-          <p>在你的电脑上运行 abox-link，让云端工作空间中的 Agent 按需访问你授权的内网服务。</p>
+          <h1 data-i18n-text="[&quot;内网隧道&quot;]">内网隧道</h1>
+          <p data-i18n-text="[&quot;在你的电脑上运行 abox-link，让云端工作空间中的 Agent 按需访问你授权的内网服务。&quot;]">在你的电脑上运行 abox-link，让云端工作空间中的 Agent 按需访问你授权的内网服务。</p>
         </header>
 
         <div class="tun-body">
           <div id="tun-status" class="tun-status">
             <span id="tun-st-dot" class="t-dot big"></span>
             <div class="tun-st-text">
-              <b id="tun-st-title">离线</b>
+              <b id="tun-st-title" data-i18n-text="[&quot;离线&quot;]">离线</b>
               <span id="tun-st-sub" class="tun-st-sub mono"></span>
             </div>
           </div>
           <div id="tun-maps" class="tun-maps hidden"></div>
           <div id="tun-modes" class="card tun-guide">
-            <h3>访问模式</h3>
+            <h3 data-i18n-text="[&quot;访问模式&quot;]">访问模式</h3>
             <p id="tun-mode-current" role="status"></p>
-            <p><b>透明模式 · 默认推荐</b>：直接访问放行的内网 IP 或域名，对话与终端无需配置代理。支持 IPv4 / TCP。</p>
-            <p><b>兼容代理模式 · 暂不推荐</b>：保留给旧客户端或特殊场景；需要显式使用 SOCKS 代理，数据库等程序通常要另配端口映射，Agent 可能因漏用代理而连接失败。</p>
-            <p>两种模式都需要本机 abox-link 在线并配置白名单。旧客户端不会自动切换；请下载新版客户端，在本机开启透明模式并保存重连。</p>
+            <p data-i18n-text="[&quot;：直接访问放行的内网 IP 或域名，对话与终端无需配置代理。支持 IPv4 / TCP。&quot;]"><b data-i18n-text="[&quot;透明模式 · 默认推荐&quot;]">透明模式 · 默认推荐</b>：直接访问放行的内网 IP 或域名，对话与终端无需配置代理。支持 IPv4 / TCP。</p>
+            <p data-i18n-text="[&quot;：保留给旧客户端或特殊场景；需要显式使用 SOCKS 代理，数据库等程序通常要另配端口映射，Agent 可能因漏用代理而连接失败。&quot;]"><b data-i18n-text="[&quot;兼容代理模式 · 暂不推荐&quot;]">兼容代理模式 · 暂不推荐</b>：保留给旧客户端或特殊场景；需要显式使用 SOCKS 代理，数据库等程序通常要另配端口映射，Agent 可能因漏用代理而连接失败。</p>
+            <p data-i18n-text="[&quot;两种模式都需要本机 abox-link 在线并配置白名单。旧客户端不会自动切换；请下载新版客户端，在本机开启透明模式并保存重连。&quot;]">两种模式都需要本机 abox-link 在线并配置白名单。旧客户端不会自动切换；请下载新版客户端，在本机开启透明模式并保存重连。</p>
           </div>
           <div id="tun-network" class="card hidden">
-            <h3>透明内网访问</h3>
+            <h3 data-i18n-text="[&quot;透明内网访问&quot;]">透明内网访问</h3>
             <p id="tun-network-note" class="card-desc"></p>
             <div id="tun-network-rules" class="mono"></div>
             <div id="tun-network-workspaces"></div>
             <div class="field-row">
-              <label class="field"><span>检查客户端到目标的 TCP 连接</span><input id="tun-probe-target" class="mono" placeholder="db.corp.local:5432"></label>
-              <button id="tun-probe" class="btn btn-sm" type="button" data-icon="activity" data-tip="检查客户端到指定目标的 TCP 连接">检查</button>
+              <label class="field"><span data-i18n-text="[&quot;检查客户端到目标的 TCP 连接&quot;]">检查客户端到目标的 TCP 连接</span><input id="tun-probe-target" class="mono" placeholder="db.corp.local:5432"></label>
+              <button id="tun-probe" class="btn btn-sm" type="button" data-icon="activity" data-tip="检查客户端到指定目标的 TCP 连接" data-i18n-text="[&quot;检查&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;检查客户端到指定目标的 TCP 连接&quot;}">检查</button>
             </div>
             <p id="tun-probe-result" role="status"></p>
           </div>
           <p id="tun-admin-online" class="field-hint hidden"></p>
 
           <div id="tun-off-admin" class="card tun-hint hidden">
-            <p>隧道功能未启用。启用后，你可以在自己的电脑上运行 abox-link 客户端，
+            <p data-i18n-text="[&quot;隧道功能未启用。启用后，你可以在自己的电脑上运行 abox-link 客户端，\n            让云端容器里的智能体访问「只有你本机能连」的内网（公司内网、局域网设备、本地数据库）。&quot;]">隧道功能未启用。启用后，你可以在自己的电脑上运行 abox-link 客户端，
             让云端容器里的智能体访问「只有你本机能连」的内网（公司内网、局域网设备、本地数据库）。</p>
             <div>
-                  <button id="tun-goto-settings" class="btn btn-primary btn-sm" data-icon="settings" data-tip="前往系统设置启用内网隧道">设置</button>
+                  <button id="tun-goto-settings" class="btn btn-primary btn-sm" data-icon="settings" data-tip="前往系统设置启用内网隧道" data-i18n-text="[&quot;设置&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;前往系统设置启用内网隧道&quot;}">设置</button>
             </div>
           </div>
 
           <div id="tun-guide" class="card tun-guide hidden">
-            <h3>接入步骤</h3>
+            <h3 data-i18n-text="[&quot;接入步骤&quot;]">接入步骤</h3>
             <ol>
-              <li>
-                <b>下载 abox-link 客户端</b>（放到你自己的电脑上）
+              <li data-i18n-text="[&quot;（放到你自己的电脑上）\n                &quot;]">
+                <b data-i18n-text="[&quot;下载 abox-link 客户端&quot;]">下载 abox-link 客户端</b>（放到你自己的电脑上）
                 <div id="tun-dl" class="tun-dl"></div>
-                <span id="tun-dl-empty" class="field-hint hidden">此服务尚未安装客户端，请从 <a href="https://github.com/devilcoolyue/agentbox/releases/latest" target="_blank" rel="noopener noreferrer">官方发布页</a> 下载对应系统的 abox-link。一键安装 v0.1.1 起自动提供下载。</span>
+                <span id="tun-dl-empty" class="field-hint hidden" data-i18n-text="[&quot;此服务尚未安装客户端，请从 &quot;,&quot; 下载对应系统的 abox-link。一键安装 v0.1.1 起自动提供下载。&quot;]">此服务尚未安装客户端，请从 <a href="https://github.com/devilcoolyue/agentbox/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n-text="[&quot;官方发布页&quot;]">官方发布页</a> 下载对应系统的 abox-link。一键安装 v0.1.1 起自动提供下载。</span>
               </li>
-              <li>
-                <b>双击运行</b>，它会自动打开本机控制台 <code>http://127.0.0.1:7801</code>
+              <li data-i18n-text="[&quot;，它会自动打开本机控制台 &quot;]">
+                <b data-i18n-text="[&quot;双击运行&quot;]">双击运行</b>，它会自动打开本机控制台 <code>http://127.0.0.1:7801</code>
               </li>
-              <li>
-                <b>粘贴配对码完成接入</b>——不用输服务器地址和密码。
+              <li data-i18n-text="[&quot;——不用输服务器地址和密码。\n                之后在控制台里点选放行规则、点「启动」即可，还能勾选开机自启。\n                &quot;]">
+                <b data-i18n-text="[&quot;粘贴配对码完成接入&quot;]">粘贴配对码完成接入</b>——不用输服务器地址和密码。
                 之后在控制台里点选放行规则、点「启动」即可，还能勾选开机自启。
                 <div class="tun-cmd-foot">
-                  <button id="tun-pair" class="btn btn-primary btn-sm" data-icon="link" data-tip="生成一次性配对码，10 分钟内有效">配对</button>
-                  <span id="tun-pair-hint" class="field-hint">10 分钟内有效，只能用一次</span>
+                  <button id="tun-pair" class="btn btn-primary btn-sm" data-icon="link" data-tip="生成一次性配对码，10 分钟内有效" data-i18n-text="[&quot;配对&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;生成一次性配对码，10 分钟内有效&quot;}">配对</button>
+                  <span id="tun-pair-hint" class="field-hint" data-i18n-text="[&quot;10 分钟内有效，只能用一次&quot;]">10 分钟内有效，只能用一次</span>
                 </div>
                 <div id="tun-pair-result" class="tun-pair-result hidden">
                   <pre id="tun-pair-code" class="tun-cmd mono"></pre>
-                  <button id="tun-pair-copy" type="button" class="btn btn-ghost tun-pair-copy" data-icon="copy" aria-label="复制配对码" data-tip="复制配对码"></button>
+                  <button id="tun-pair-copy" type="button" class="btn btn-ghost tun-pair-copy" data-icon="copy" aria-label="复制配对码" data-tip="复制配对码" data-i18n-attrs="{&quot;aria-label&quot;:&quot;复制配对码&quot;,&quot;data-tip&quot;:&quot;复制配对码&quot;}"></button>
                 </div>
               </li>
               <li>
-                <b>完成。</b><span id="tun-guide-mode">连接后可访问本机放行的内网目标。</span>
+                <b data-i18n-text="[&quot;完成。&quot;]">完成。</b><span id="tun-guide-mode" data-i18n-text="[&quot;连接后可访问本机放行的内网目标。&quot;]">连接后可访问本机放行的内网目标。</span>
               </li>
             </ol>
           </div>
@@ -1322,34 +1324,34 @@
     <header class="mcp-dialog-head">
       <div class="mcp-dialog-title">
         <svg width="22" height="22" data-icon="plug" aria-hidden="true"></svg>
-        <div><h2 id="mcp-editor-title">新增 MCP</h2><p id="mcp-editor-context"></p></div>
+        <div><h2 id="mcp-editor-title" data-i18n-text="[&quot;新增 MCP&quot;]">新增 MCP</h2><p id="mcp-editor-context"></p></div>
       </div>
-      <button id="mcp-close" type="button" class="dlg-x" data-icon="close" aria-label="关闭 MCP 配置" data-tip="关闭"></button>
+      <button id="mcp-close" type="button" class="dlg-x" data-icon="close" aria-label="关闭 MCP 配置" data-tip="关闭" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭 MCP 配置&quot;,&quot;data-tip&quot;:&quot;关闭&quot;}"></button>
     </header>
     <div class="mcp-form-body">
       <div class="mcp-form-grid">
-        <label for="mcp-name">名称<input id="mcp-name" type="text" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" autocomplete="off" placeholder="例如 my-tools"></label>
-        <label for="mcp-type">连接方式<select id="mcp-type"><option value="stdio">stdio · 容器内进程</option><option value="http">HTTP · 远程服务</option></select></label>
+        <label for="mcp-name" data-i18n-text="[&quot;名称&quot;]">名称<input id="mcp-name" type="text" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" autocomplete="off" placeholder="例如 my-tools" data-i18n-attrs="{&quot;placeholder&quot;:&quot;例如 my-tools&quot;}"></label>
+        <label for="mcp-type" data-i18n-text="[&quot;连接方式&quot;]">连接方式<select id="mcp-type"><option value="stdio" data-i18n-text="[&quot;stdio · 容器内进程&quot;]">stdio · 容器内进程</option><option value="http" data-i18n-text="[&quot;HTTP · 远程服务&quot;]">HTTP · 远程服务</option></select></label>
       </div>
       <div id="mcp-stdio-fields" class="mcp-field-section">
-        <label for="mcp-command">启动命令<input id="mcp-command" type="text" placeholder="例如 npx 或 /home/agent/bin/my-mcp" autocomplete="off" aria-describedby="mcp-command-hint"></label>
-        <p id="mcp-command-hint" class="field-hint">命令在当前空间容器内运行，所需依赖需提前安装。</p>
-        <label for="mcp-args"><span>参数 <span class="mcp-field-format">JSON 数组</span></span><textarea id="mcp-args" rows="3" spellcheck="false" placeholder='["-y", "my-mcp-server"]'></textarea></label>
+        <label for="mcp-command" data-i18n-text="[&quot;启动命令&quot;]">启动命令<input id="mcp-command" type="text" placeholder="例如 npx 或 /home/agent/bin/my-mcp" autocomplete="off" aria-describedby="mcp-command-hint" data-i18n-attrs="{&quot;placeholder&quot;:&quot;例如 npx 或 /home/agent/bin/my-mcp&quot;}"></label>
+        <p id="mcp-command-hint" class="field-hint" data-i18n-text="[&quot;命令在当前空间容器内运行，所需依赖需提前安装。&quot;]">命令在当前空间容器内运行，所需依赖需提前安装。</p>
+        <label for="mcp-args"><span data-i18n-text="[&quot;参数 &quot;]">参数 <span class="mcp-field-format" data-i18n-text="[&quot;JSON 数组&quot;]">JSON 数组</span></span><textarea id="mcp-args" rows="3" spellcheck="false" placeholder='["-y", "my-mcp-server"]'></textarea></label>
       </div>
       <div id="mcp-http-fields" class="mcp-field-section hidden">
-        <label for="mcp-url">服务地址<input id="mcp-url" type="url" placeholder="https://example.com/mcp" autocomplete="off"></label>
+        <label for="mcp-url" data-i18n-text="[&quot;服务地址&quot;]">服务地址<input id="mcp-url" type="url" placeholder="https://example.com/mcp" autocomplete="off"></label>
       </div>
       <div class="mcp-field-section">
-        <label for="mcp-secrets"><span><span id="mcp-secret-label">环境变量</span> <span class="mcp-field-format">JSON 对象 · 可选</span></span><textarea id="mcp-secrets" rows="3" spellcheck="false" autocomplete="off" aria-describedby="mcp-secret-hint"></textarea></label>
-        <p id="mcp-secret-hint" class="field-hint">•••••• 保留已保存的值；输入新值替换，删除键清除。</p>
+        <label for="mcp-secrets"><span><span id="mcp-secret-label" data-i18n-text="[&quot;环境变量&quot;]">环境变量</span> <span class="mcp-field-format" data-i18n-text="[&quot;JSON 对象 · 可选&quot;]">JSON 对象 · 可选</span></span><textarea id="mcp-secrets" rows="3" spellcheck="false" autocomplete="off" aria-describedby="mcp-secret-hint"></textarea></label>
+        <p id="mcp-secret-hint" class="field-hint" data-i18n-text="[&quot;•••••• 保留已保存的值；输入新值替换，删除键清除。&quot;]">•••••• 保留已保存的值；输入新值替换，删除键清除。</p>
       </div>
       <p id="mcp-form-error" class="mcp-error hidden" role="alert"></p>
     </div>
     <footer class="mcp-dialog-footer">
-      <span>保存后在下次使用时应用</span>
+      <span data-i18n-text="[&quot;保存后在下次使用时应用&quot;]">保存后在下次使用时应用</span>
       <div class="mcp-dialog-buttons">
-        <button id="mcp-cancel" data-icon="close" type="button" class="btn">取消</button>
-        <button id="mcp-save" type="submit" data-icon="save" class="btn btn-primary">保存配置</button>
+        <button id="mcp-cancel" data-icon="close" type="button" class="btn" data-i18n-text="[&quot;取消&quot;]">取消</button>
+        <button id="mcp-save" type="submit" data-icon="save" class="btn btn-primary" data-i18n-text="[&quot;保存配置&quot;]">保存配置</button>
       </div>
     </footer>
   </form>
@@ -1359,29 +1361,29 @@
 <dialog id="dlg-new" aria-labelledby="new-title" aria-describedby="new-desc">
   <form id="new-form" method="dialog">
     <div class="dlg-head">
-      <h2 id="new-title">创建 Agent 工作空间</h2>
-      <button type="button" id="new-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+      <h2 id="new-title" data-i18n-text="[&quot;创建 Agent 工作空间&quot;]">创建 Agent 工作空间</h2>
+      <button type="button" id="new-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
-    <p id="new-desc" class="field-hint">独立运行 Agent，拥有自己的文件、终端和对话。</p>
-    <label>工作空间名称
-      <input id="new-name" type="text" maxlength="64" placeholder="例如：订单服务重构" required>
+    <p id="new-desc" class="field-hint" data-i18n-text="[&quot;独立运行 Agent，拥有自己的文件、终端和对话。&quot;]">独立运行 Agent，拥有自己的文件、终端和对话。</p>
+    <label data-i18n-text="[&quot;工作空间名称\n      &quot;]">工作空间名称
+      <input id="new-name" type="text" maxlength="64" placeholder="例如：订单服务重构" required data-i18n-attrs="{&quot;placeholder&quot;:&quot;例如：订单服务重构&quot;}">
     </label>
-    <label>Agent 类型
+    <label data-i18n-text="[&quot;Agent 类型\n      &quot;]">Agent 类型
       <div class="agent-row">
         <label class="agent-opt"><input type="radio" name="agent" value="claude" checked>Claude Code</label>
         <label class="agent-opt"><input type="radio" name="agent" value="codex">Codex CLI</label>
       </div>
     </label>
-    <label>使用账号
+    <label data-i18n-text="[&quot;使用账号\n      &quot;]">使用账号
       <select id="new-account"></select>
     </label>
-    <label>默认 Git 连接（可选）
-      <select id="new-git-connection"><option value="">不绑定</option></select>
+    <label data-i18n-text="[&quot;默认 Git 连接（可选）\n      &quot;]">默认 Git 连接（可选）
+      <select id="new-git-connection"><option value="" data-i18n-text="[&quot;不绑定&quot;]">不绑定</option></select>
     </label>
-    <p class="field-hint">Git 连接用于远程仓库；创建后仍需为具体仓库绑定 remote。</p>
+    <p class="field-hint" data-i18n-text="[&quot;Git 连接用于远程仓库；创建后仍需为具体仓库绑定 remote。&quot;]">Git 连接用于远程仓库；创建后仍需为具体仓库绑定 remote。</p>
     <p id="new-error" class="login-error hidden"></p>
     <div class="dlg-actions">
-      <button type="submit" id="new-ok" class="btn btn-primary" data-icon="plus" data-tip="创建独立的 Agent 工作空间">创建</button>
+      <button type="submit" id="new-ok" class="btn btn-primary" data-icon="plus" data-tip="创建独立的 Agent 工作空间" data-i18n-text="[&quot;创建&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;创建独立的 Agent 工作空间&quot;}">创建</button>
     </div>
   </form>
 </dialog>
@@ -1395,27 +1397,27 @@
         <span id="fv-state" class="fv-state" role="status"></span>
       </div>
       <div class="fv-actions action-tools">
-        <div id="fv-modes" class="scope-switch hidden" role="tablist" aria-label="查看方式">
-          <button type="button" id="fv-mode-view" class="scope-btn active" data-icon="eye">预览</button>
-          <button type="button" id="fv-mode-src" class="scope-btn" data-icon="code">源码</button>
+        <div id="fv-modes" class="scope-switch hidden" role="tablist" aria-label="查看方式" data-i18n-attrs="{&quot;aria-label&quot;:&quot;查看方式&quot;}">
+          <button type="button" id="fv-mode-view" class="scope-btn active" data-icon="eye" data-i18n-text="[&quot;预览&quot;]">预览</button>
+          <button type="button" id="fv-mode-src" class="scope-btn" data-icon="code" data-i18n-text="[&quot;源码&quot;]">源码</button>
         </div>
-        <div id="fv-vps" class="scope-switch fv-vps hidden" role="tablist" aria-label="模拟宽度">
-          <button type="button" class="scope-btn active" data-vp="desktop" data-tip="桌面宽度（自适应）" data-icon="desktop">桌面</button>
-          <button type="button" class="scope-btn" data-vp="tablet" data-tip="平板宽度 834px" data-icon="tablet">平板</button>
-          <button type="button" class="scope-btn" data-vp="phone" data-tip="手机宽度 390px" data-icon="phone">手机</button>
+        <div id="fv-vps" class="scope-switch fv-vps hidden" role="tablist" aria-label="模拟宽度" data-i18n-attrs="{&quot;aria-label&quot;:&quot;模拟宽度&quot;}">
+          <button type="button" class="scope-btn active" data-vp="desktop" data-tip="桌面宽度（自适应）" data-icon="desktop" data-i18n-text="[&quot;桌面&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;桌面宽度（自适应）&quot;}">桌面</button>
+          <button type="button" class="scope-btn" data-vp="tablet" data-tip="平板宽度 834px" data-icon="tablet" data-i18n-text="[&quot;平板&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;平板宽度 834px&quot;}">平板</button>
+          <button type="button" class="scope-btn" data-vp="phone" data-tip="手机宽度 390px" data-icon="phone" data-i18n-text="[&quot;手机&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;手机宽度 390px&quot;}">手机</button>
         </div>
-        <label id="fv-auto-wrap" class="check fv-auto hidden" data-tip="文件被 Agent 改动后自动重新渲染">
-          <input type="checkbox" id="fv-auto" checked> <span>自动刷新</span>
+        <label id="fv-auto-wrap" class="check fv-auto hidden" data-tip="文件被 Agent 改动后自动重新渲染" data-i18n-attrs="{&quot;data-tip&quot;:&quot;文件被 Agent 改动后自动重新渲染&quot;}">
+          <input type="checkbox" id="fv-auto" checked> <span data-i18n-text="[&quot;自动刷新&quot;]">自动刷新</span>
         </label>
-        <button id="fv-reload" class="btn btn-sm hidden" data-icon="refresh">刷新</button>
-        <button id="fv-newtab" class="btn btn-sm hidden" data-tip="在新标签页打开预览" data-icon="external">新标签页</button>
-        <button id="fv-full" class="btn btn-sm hidden" data-tip="铺满窗口" data-icon="expand">全屏</button>
+        <button id="fv-reload" class="btn btn-sm hidden" data-icon="refresh" data-i18n-text="[&quot;刷新&quot;]">刷新</button>
+        <button id="fv-newtab" class="btn btn-sm hidden" data-tip="在新标签页打开预览" data-icon="external" data-i18n-text="[&quot;新标签页&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;在新标签页打开预览&quot;}">新标签页</button>
+        <button id="fv-full" class="btn btn-sm hidden" data-tip="铺满窗口" data-icon="expand" data-i18n-text="[&quot;全屏&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;铺满窗口&quot;}">全屏</button>
 
-        <button id="fv-save" class="btn btn-sm btn-primary" disabled data-icon="save">保存</button>
-        <button id="fv-download" class="btn btn-sm" data-icon="download">下载</button>
+        <button id="fv-save" class="btn btn-sm btn-primary" disabled data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
+        <button id="fv-download" class="btn btn-sm" data-icon="download" data-i18n-text="[&quot;下载&quot;]">下载</button>
 
       </div>
-      <button id="fv-close" class="dlg-x" aria-label="关闭" data-tip="关闭" data-icon="close"></button>
+      <button id="fv-close" class="dlg-x" aria-label="关闭" data-tip="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;,&quot;data-tip&quot;:&quot;关闭&quot;}"></button>
       <div id="fv-meta" class="fv-meta mono"></div>
     </header>
     <div class="fv-body">
@@ -1425,7 +1427,7 @@
           <div class="fv-codepane">
             <div id="fv-current-line" class="fv-current-line" aria-hidden="true"></div>
             <pre id="fv-highlight" class="fv-highlight" aria-hidden="true"></pre>
-            <textarea id="fv-editor" class="fv-editor" aria-label="文件源码" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+            <textarea id="fv-editor" class="fv-editor" aria-label="文件源码" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" data-i18n-attrs="{&quot;aria-label&quot;:&quot;文件源码&quot;}"></textarea>
           </div>
         </div>
         <div class="fv-source-status"><span id="fv-language"></span><span id="fv-position" class="mono"></span></div>
@@ -1433,7 +1435,7 @@
       <div id="fv-framewrap" class="fv-framewrap hidden">
         <!-- sandbox 不含 allow-same-origin：原型脚本照跑，但读不到控制台的令牌 -->
         <iframe id="fv-frame" class="fv-frame" title="HTML 预览" referrerpolicy="no-referrer"
-                sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock"></iframe>
+                sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock" data-i18n-attrs="{&quot;title&quot;:&quot;HTML 预览&quot;}"></iframe>
       </div>
       <!-- Markdown 渲染：样式借用对话流的 .msg.agent -->
       <div id="fv-mdwrap" class="fv-mdwrap hidden"><div id="fv-md" class="fv-md msg agent"></div></div>
@@ -1446,99 +1448,99 @@
 <!-- 移动文件 / 目录 -->
 <dialog id="dlg-file-move" class="dlg-file-move">
   <div class="dlg-head">
-    <h2 id="file-move-title">移动文件</h2>
-    <button type="button" id="file-move-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 id="file-move-title" data-i18n-text="[&quot;移动文件&quot;]">移动文件</h2>
+    <button type="button" id="file-move-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
   <div class="file-op-source">
-    <span>正在移动</span>
+    <span data-i18n-text="[&quot;正在移动&quot;]">正在移动</span>
     <code id="file-move-source" class="mono"></code>
   </div>
   <div class="file-move-nav">
-    <div class="scope-switch" role="tablist" aria-label="目标范围">
-      <button type="button" id="file-move-ws" class="scope-btn" data-icon="folder">空间文件</button>
-      <button type="button" id="file-move-shared" class="scope-btn" data-icon="folder-shared">共享目录</button>
+    <div class="scope-switch" role="tablist" aria-label="目标范围" data-i18n-attrs="{&quot;aria-label&quot;:&quot;目标范围&quot;}">
+      <button type="button" id="file-move-ws" class="scope-btn" data-icon="folder" data-i18n-text="[&quot;空间文件&quot;]">空间文件</button>
+      <button type="button" id="file-move-shared" class="scope-btn" data-icon="folder-shared" data-i18n-text="[&quot;共享目录&quot;]">共享目录</button>
     </div>
     <div id="file-move-crumb" class="file-move-crumb mono"></div>
   </div>
   <div id="file-move-dirs" class="file-move-dirs"></div>
   <div class="file-move-target">
-    <span>目标目录</span>
+    <span data-i18n-text="[&quot;目标目录&quot;]">目标目录</span>
     <code id="file-move-target" class="mono"></code>
   </div>
   <p id="file-move-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="file-move-cancel" class="btn btn-ghost" data-icon="close">取消</button>
-    <button type="button" id="file-move-ok" class="btn btn-primary" data-icon="move" data-tip="移动到当前选中的目标目录">移动</button>
+    <button type="button" id="file-move-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+    <button type="button" id="file-move-ok" class="btn btn-primary" data-icon="move" data-tip="移动到当前选中的目标目录" data-i18n-text="[&quot;移动&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;移动到当前选中的目标目录&quot;}">移动</button>
   </div>
 </dialog>
 
 <!-- 删除文件 / 目录确认 -->
 <dialog id="dlg-file-delete">
   <div class="dlg-head">
-    <h2 id="file-delete-title">删除文件</h2>
-    <button type="button" id="file-delete-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 id="file-delete-title" data-i18n-text="[&quot;删除文件&quot;]">删除文件</h2>
+    <button type="button" id="file-delete-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
   <p id="file-delete-text"></p>
   <p id="file-delete-warning" class="field-hint"></p>
   <p id="file-delete-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="file-delete-cancel" class="btn btn-ghost" data-icon="close">取消</button>
-    <button type="button" id="file-delete-ok" class="btn btn-danger" data-icon="trash">删除</button>
+    <button type="button" id="file-delete-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+    <button type="button" id="file-delete-ok" class="btn btn-danger" data-icon="trash" data-i18n-text="[&quot;删除&quot;]">删除</button>
   </div>
 </dialog>
 
 <!-- Git 提交 -->
 <dialog id="dlg-git-commit">
   <div class="dlg-head">
-    <h2>提交到本地</h2>
-    <button type="button" id="git-commit-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 data-i18n-text="[&quot;提交到本地&quot;]">提交到本地</h2>
+    <button type="button" id="git-commit-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
   <p id="git-commit-target" class="field-hint"></p>
   <p id="git-commit-identity" class="field-hint"></p>
-  <p class="field-hint">提交当前仓库的全部未忽略改动，包含已暂存和未暂存文件。此操作不会推送到远程。</p>
+  <p class="field-hint" data-i18n-text="[&quot;提交当前仓库的全部未忽略改动，包含已暂存和未暂存文件。此操作不会推送到远程。&quot;]">提交当前仓库的全部未忽略改动，包含已暂存和未暂存文件。此操作不会推送到远程。</p>
   <div class="file-name-field">
-    <label for="git-commit-msg">提交信息</label>
-    <textarea id="git-commit-msg" rows="3" placeholder="描述这次改动…"></textarea>
+    <label for="git-commit-msg" data-i18n-text="[&quot;提交信息&quot;]">提交信息</label>
+    <textarea id="git-commit-msg" rows="3" placeholder="描述这次改动…" data-i18n-attrs="{&quot;placeholder&quot;:&quot;描述这次改动…&quot;}"></textarea>
   </div>
   <p id="git-commit-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="git-commit-cancel" class="btn btn-ghost" data-icon="close">取消</button>
-    <button type="button" id="git-commit-ok" class="btn btn-primary" data-icon="commit" data-tip="提交到本地仓库，不推送到远程">提交</button>
+    <button type="button" id="git-commit-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+    <button type="button" id="git-commit-ok" class="btn btn-primary" data-icon="commit" data-tip="提交到本地仓库，不推送到远程" data-i18n-text="[&quot;提交&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;提交到本地仓库，不推送到远程&quot;}">提交</button>
   </div>
 </dialog>
 
 <!-- 安装技能：本地上传 / 官方市场 -->
 <dialog id="dlg-skill-install" class="dlg-skill">
   <div class="dlg-head">
-    <h2>安装技能</h2>
-    <button type="button" id="skill-install-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 data-i18n-text="[&quot;安装技能&quot;]">安装技能</h2>
+    <button type="button" id="skill-install-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
 
   <div class="skill-src-bar">
     <div class="scope-switch" role="tablist">
-      <button type="button" id="skill-src-local" class="scope-btn active" data-icon="upload">本地上传</button>
-      <button type="button" id="skill-src-market" class="scope-btn" data-icon="store">官方市场</button>
+      <button type="button" id="skill-src-local" class="scope-btn active" data-icon="upload" data-i18n-text="[&quot;本地上传&quot;]">本地上传</button>
+      <button type="button" id="skill-src-market" class="scope-btn" data-icon="store" data-i18n-text="[&quot;官方市场&quot;]">官方市场</button>
     </div>
-    <span class="skill-target">装到：<b id="skill-install-target">本空间</b></span>
+    <span class="skill-target" data-i18n-text="[&quot;装到：&quot;]">装到：<b id="skill-install-target" data-i18n-text="[&quot;本空间&quot;]">本空间</b></span>
   </div>
 
   <div id="skill-src-local-pane">
     <button type="button" id="skill-drop" class="skill-drop" data-icon="upload">
-      <span class="skill-drop-main">拖拽文件到这里，或点击选择</span>
-      <span class="skill-drop-hint"><code>.md</code> = 单文件技能　·　<code>.zip</code> / <code>.tar.gz</code> = 技能目录打包（可以外面套一层同名目录）</span>
+      <span class="skill-drop-main" data-i18n-text="[&quot;拖拽文件到这里，或点击选择&quot;]">拖拽文件到这里，或点击选择</span>
+      <span class="skill-drop-hint" data-i18n-text="[&quot; = 单文件技能　·　&quot;,&quot; = 技能目录打包（可以外面套一层同名目录）&quot;]"><code>.md</code> = 单文件技能　·　<code>.zip</code> / <code>.tar.gz</code> = 技能目录打包（可以外面套一层同名目录）</span>
     </button>
     <input id="skill-install-input" type="file" class="hidden" accept=".md,.zip,.tar,.tgz,.gz">
   </div>
 
   <div id="skill-src-market-pane" class="hidden">
     <div class="market-bar">
-      <input type="search" id="market-q" placeholder="搜索插件名、描述、作者…">
-      <select id="market-cat" aria-label="分类"></select>
-      <button type="button" id="btn-market-refresh" class="btn btn-sm" data-tip="重新拉取官方目录" data-icon="refresh">刷新目录</button>
+      <input type="search" id="market-q" placeholder="搜索插件名、描述、作者…" data-i18n-attrs="{&quot;placeholder&quot;:&quot;搜索插件名、描述、作者…&quot;}">
+      <select id="market-cat" aria-label="分类" data-i18n-attrs="{&quot;aria-label&quot;:&quot;分类&quot;}"></select>
+      <button type="button" id="btn-market-refresh" class="btn btn-sm" data-tip="重新拉取官方目录" data-icon="refresh" data-i18n-text="[&quot;刷新目录&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;重新拉取官方目录&quot;}">刷新目录</button>
     </div>
     <div id="market-list" class="market-list"></div>
-    <p class="market-foot">
-      目录来自 <code>anthropics/claude-plugins-official</code>。市场里的条目是<b>插件</b>——
+    <p class="market-foot" data-i18n-text="[&quot;\n      目录来自 &quot;,&quot;。市场里的条目是&quot;,&quot;——\n      只提供斜杠命令或 MCP 服务器的条目没有技能可装，点安装会明确告诉你，整包安装请在终端里跑\n      &quot;]">
+      目录来自 <code>anthropics/claude-plugins-official</code>。市场里的条目是<b data-i18n-text="[&quot;插件&quot;]">插件</b>——
       只提供斜杠命令或 MCP 服务器的条目没有技能可装，点安装会明确告诉你，整包安装请在终端里跑
       <code>claude plugin install</code>。
     </p>
@@ -1548,53 +1550,53 @@
 <!-- Git 丢弃改动确认 -->
 <dialog id="dlg-git-discard">
   <div class="dlg-head">
-    <h2 id="git-discard-title">丢弃改动</h2>
-    <button type="button" id="git-discard-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 id="git-discard-title" data-i18n-text="[&quot;丢弃改动&quot;]">丢弃改动</h2>
+    <button type="button" id="git-discard-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
   <p id="git-discard-text"></p>
-  <p class="field-hint">会把文件恢复到最近一次提交的状态，未提交的改动无法恢复。</p>
+  <p class="field-hint" data-i18n-text="[&quot;会把文件恢复到最近一次提交的状态，未提交的改动无法恢复。&quot;]">会把文件恢复到最近一次提交的状态，未提交的改动无法恢复。</p>
   <div class="dlg-actions">
-    <button type="button" id="git-discard-cancel" class="btn btn-ghost" data-icon="close">取消</button>
-    <button type="button" id="git-discard-ok" class="btn btn-danger" data-icon="undo">丢弃</button>
+    <button type="button" id="git-discard-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+    <button type="button" id="git-discard-ok" class="btn btn-danger" data-icon="undo" data-i18n-text="[&quot;丢弃&quot;]">丢弃</button>
   </div>
 </dialog>
 
 <!-- 新建文件夹 / 重命名 通用输入框 -->
 <dialog id="dlg-file-name">
   <div class="dlg-head">
-    <h2 id="file-name-title">新建文件夹</h2>
-    <button type="button" id="file-name-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 id="file-name-title" data-i18n-text="[&quot;新建文件夹&quot;]">新建文件夹</h2>
+    <button type="button" id="file-name-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
   <div class="file-name-field">
-    <label id="file-name-label" for="file-name-input">文件夹名称</label>
+    <label id="file-name-label" for="file-name-input" data-i18n-text="[&quot;文件夹名称&quot;]">文件夹名称</label>
     <input id="file-name-input" type="text" class="mono" autocomplete="off" spellcheck="false">
   </div>
   <p id="file-name-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="file-name-cancel" class="btn btn-ghost" data-icon="close">取消</button>
-    <button type="button" id="file-name-ok" class="btn btn-primary" data-icon="check">确定</button>
+    <button type="button" id="file-name-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+    <button type="button" id="file-name-ok" class="btn btn-primary" data-icon="check" data-i18n-text="[&quot;确定&quot;]">确定</button>
   </div>
 </dialog>
 
 <!-- 通用确认框（替代原生 confirm） -->
 <dialog id="dlg-ask">
   <div class="dlg-head">
-    <h2 id="ask-title">确认</h2>
-    <button type="button" id="ask-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 id="ask-title" data-i18n-text="[&quot;确认&quot;]">确认</h2>
+    <button type="button" id="ask-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
   <p id="ask-text"></p>
   <p id="ask-hint" class="field-hint hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="ask-cancel" class="btn btn-ghost" data-icon="close">取消</button>
-    <button type="button" id="ask-ok" class="btn btn-primary" data-icon="check">确定</button>
+    <button type="button" id="ask-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+    <button type="button" id="ask-ok" class="btn btn-primary" data-icon="check" data-i18n-text="[&quot;确定&quot;]">确定</button>
   </div>
 </dialog>
 
 <!-- 通用输入框（替代原生 prompt） -->
 <dialog id="dlg-ask-input">
   <div class="dlg-head">
-    <h2 id="ask-input-title">输入</h2>
-    <button type="button" id="ask-input-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 id="ask-input-title" data-i18n-text="[&quot;输入&quot;]">输入</h2>
+    <button type="button" id="ask-input-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
   <div class="file-name-field">
     <label id="ask-input-label" for="ask-input-field"></label>
@@ -1603,54 +1605,54 @@
   <p id="ask-input-hint" class="field-hint hidden"></p>
   <p id="ask-input-error" class="login-error hidden"></p>
   <div class="dlg-actions">
-    <button type="button" id="ask-input-cancel" class="btn btn-ghost" data-icon="close">取消</button>
-    <button type="button" id="ask-input-ok" class="btn btn-primary" data-icon="check">确定</button>
+    <button type="button" id="ask-input-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+    <button type="button" id="ask-input-ok" class="btn btn-primary" data-icon="check" data-i18n-text="[&quot;确定&quot;]">确定</button>
   </div>
 </dialog>
 
 <!-- 额度管理（管理员） -->
 <dialog id="dlg-quota" class="dlg-quota">
   <div class="dlg-head">
-    <h2>额度 · <span id="q-user" class="mono"></span></h2>
-    <button type="button" id="q-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 data-i18n-text="[&quot;额度 · &quot;]">额度 · <span id="q-user" class="mono"></span></h2>
+    <button type="button" id="q-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
 
   <div id="q-body" class="q-body">
     <div class="q-balance">
       <div class="q-bal-main">
-        <span class="q-bal-label">余额</span>
+        <span class="q-bal-label" data-i18n-text="[&quot;余额&quot;]">余额</span>
         <span id="q-balance" class="q-bal-num mono">—</span>
       </div>
       <div id="q-totals" class="q-bal-sub"></div>
     </div>
 
     <div class="q-block">
-      <div class="q-block-title">计费模式</div>
+      <div class="q-block-title" data-i18n-text="[&quot;计费模式&quot;]">计费模式</div>
       <div class="q-modes">
         <label class="q-mode"><input type="radio" name="q-mode" value="off">
-          <span class="q-mode-name">不限额</span>
-          <span class="q-mode-desc">不计额度，用量照记</span></label>
+          <span class="q-mode-name" data-i18n-text="[&quot;不限额&quot;]">不限额</span>
+          <span class="q-mode-desc" data-i18n-text="[&quot;不计额度，用量照记&quot;]">不计额度，用量照记</span></label>
         <label class="q-mode"><input type="radio" name="q-mode" value="track">
-          <span class="q-mode-name">只计不拦</span>
-          <span class="q-mode-desc">照常扣减，见底也不阻止</span></label>
+          <span class="q-mode-name" data-i18n-text="[&quot;只计不拦&quot;]">只计不拦</span>
+          <span class="q-mode-desc" data-i18n-text="[&quot;照常扣减，见底也不阻止&quot;]">照常扣减，见底也不阻止</span></label>
         <label class="q-mode"><input type="radio" name="q-mode" value="block">
-          <span class="q-mode-name">超支拦截</span>
-          <span class="q-mode-desc">余额 ≤ 0 时禁止发起新对话</span></label>
+          <span class="q-mode-name" data-i18n-text="[&quot;超支拦截&quot;]">超支拦截</span>
+          <span class="q-mode-desc" data-i18n-text="[&quot;余额 ≤ 0 时禁止发起新对话&quot;]">余额 ≤ 0 时禁止发起新对话</span></label>
       </div>
-      <p class="field-hint">切换模式不会改变余额。零余额下直接开「超支拦截」会立刻挡住该用户，建议先充值。</p>
+      <p class="field-hint" data-i18n-text="[&quot;切换模式不会改变余额。零余额下直接开「超支拦截」会立刻挡住该用户，建议先充值。&quot;]">切换模式不会改变余额。零余额下直接开「超支拦截」会立刻挡住该用户，建议先充值。</p>
     </div>
 
     <div class="q-block">
-      <div class="q-block-title">充值</div>
+      <div class="q-block-title" data-i18n-text="[&quot;充值&quot;]">充值</div>
       <div class="q-grant">
-        <input id="q-amount" type="text" class="mono" inputmode="decimal" placeholder="金额（美元，可为负数冲正）" autocomplete="off">
-        <input id="q-note" type="text" placeholder="备注（可选）" autocomplete="off">
-        <button type="button" id="q-grant-btn" class="btn btn-primary btn-sm" data-icon="wallet">充值</button>
+        <input id="q-amount" type="text" class="mono" inputmode="decimal" placeholder="金额（美元，可为负数冲正）" autocomplete="off" data-i18n-attrs="{&quot;placeholder&quot;:&quot;金额（美元，可为负数冲正）&quot;}">
+        <input id="q-note" type="text" placeholder="备注（可选）" autocomplete="off" data-i18n-attrs="{&quot;placeholder&quot;:&quot;备注（可选）&quot;}">
+        <button type="button" id="q-grant-btn" class="btn btn-primary btn-sm" data-icon="wallet" data-i18n-text="[&quot;充值&quot;]">充值</button>
       </div>
     </div>
 
     <div class="q-block">
-      <div class="q-block-title">最近流水</div>
+      <div class="q-block-title" data-i18n-text="[&quot;最近流水&quot;]">最近流水</div>
       <div id="q-ledger" class="q-ledger"></div>
     </div>
   </div>
@@ -1659,8 +1661,8 @@
 <!-- Claude 订阅额度 -->
 <dialog id="dlg-ausage" class="dlg-ausage">
   <div class="dlg-head">
-    <h2>账号额度</h2>
-    <button type="button" id="au-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 data-i18n-text="[&quot;账号额度&quot;]">账号额度</h2>
+    <button type="button" id="au-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
 
   <div class="au-acct">
@@ -1672,15 +1674,15 @@
 
   <div class="au-foot">
     <span id="au-fetched" class="au-fetched"></span>
-    <button type="button" id="au-refresh" class="btn btn-sm" data-icon="refresh">刷新</button>
+    <button type="button" id="au-refresh" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新&quot;]">刷新</button>
   </div>
 </dialog>
 
 <!-- 费用明细：使用记录里点「费用」旁的 ?，摊开这一行的钱是怎么算出来的 -->
 <dialog id="dlg-cost" class="dlg-cost">
   <div class="dlg-head">
-    <h2>费用明细</h2>
-    <button type="button" id="cost-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 data-i18n-text="[&quot;费用明细&quot;]">费用明细</h2>
+    <button type="button" id="cost-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
 
   <div id="cost-head" class="cost-head"></div>
@@ -1689,10 +1691,10 @@
     <table class="cost-table">
       <thead>
         <tr>
-          <th>项目</th>
+          <th data-i18n-text="[&quot;项目&quot;]">项目</th>
           <th class="num">Token</th>
-          <th class="num">单价 $/M</th>
-          <th class="num">金额</th>
+          <th class="num" data-i18n-text="[&quot;单价 $/M&quot;]">单价 $/M</th>
+          <th class="num" data-i18n-text="[&quot;金额&quot;]">金额</th>
         </tr>
       </thead>
       <tbody id="cost-rows"></tbody>
@@ -1704,8 +1706,8 @@
 
 <!-- 图片灯箱 -->
 <dialog id="dlg-img" class="dlg-img">
-  <button id="lb-close" class="dlg-x lb-x" aria-label="关闭" data-icon="close"></button>
-  <img id="lb-img" alt="图片预览">
+  <button id="lb-close" class="dlg-x lb-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
+  <img id="lb-img" alt="图片预览" data-i18n-attrs="{&quot;alt&quot;:&quot;图片预览&quot;}">
   <div class="lb-bar mono">
     <span id="lb-name"></span>
   </div>
@@ -1714,60 +1716,60 @@
 <!-- 账号登录 / 配置 -->
 <dialog id="dlg-auth" class="dlg-auth">
   <div class="dlg-head">
-    <h2 id="auth-title">账号登录</h2>
-    <button type="button" id="auth-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <h2 id="auth-title" data-i18n-text="[&quot;账号登录&quot;]">账号登录</h2>
+    <button type="button" id="auth-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
   <form id="acct-form" class="hidden" novalidate>
     <fieldset id="acct-fields" class="acct-fields">
-      <div class="acct-field-label">账号类型</div>
+      <div class="acct-field-label" data-i18n-text="[&quot;账号类型&quot;]">账号类型</div>
       <div class="agent-row">
         <label class="agent-opt"><input type="radio" name="atype" value="claude" checked>Claude Code</label>
         <label class="agent-opt"><input type="radio" name="atype" value="codex">Codex CLI</label>
       </div>
       <div class="acct-basics">
-        <label>显示名称<input id="acct-label" type="text" maxlength="32" placeholder="例如：团队订阅账号"></label>
-        <label>账号 ID<input id="acct-id" type="text" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{1,31}" required class="mono" placeholder="例如：codex-team"></label>
+        <label data-i18n-text="[&quot;显示名称&quot;]">显示名称<input id="acct-label" type="text" maxlength="32" placeholder="例如：团队订阅账号" data-i18n-attrs="{&quot;placeholder&quot;:&quot;例如：团队订阅账号&quot;}"></label>
+        <label data-i18n-text="[&quot;账号 ID&quot;]">账号 ID<input id="acct-id" type="text" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{1,31}" required class="mono" placeholder="例如：codex-team" data-i18n-attrs="{&quot;placeholder&quot;:&quot;例如：codex-team&quot;}"></label>
       </div>
       <div class="acct-basics">
-        <label>使用范围<select id="acct-access"><option value="all">全体用户</option><option value="users">指定用户</option><option value="admin">仅管理员</option></select></label>
-        <div><span class="acct-field-label">出口 IP 代理</span><div id="acct-proxy"></div></div>
+        <label data-i18n-text="[&quot;使用范围&quot;]">使用范围<select id="acct-access"><option value="all" data-i18n-text="[&quot;全体用户&quot;]">全体用户</option><option value="users" data-i18n-text="[&quot;指定用户&quot;]">指定用户</option><option value="admin" data-i18n-text="[&quot;仅管理员&quot;]">仅管理员</option></select></label>
+        <div><span class="acct-field-label" data-i18n-text="[&quot;出口 IP 代理&quot;]">出口 IP 代理</span><div id="acct-proxy"></div></div>
       </div>
-      <label id="acct-users-row" class="hidden">用户名<textarea id="acct-users" rows="2" placeholder="每行一个用户名，也可用逗号分隔"></textarea></label>
-      <details class="acct-advanced"><summary>高级设置</summary>
-        <label>环境变量<textarea id="acct-env" rows="2" class="mono" placeholder="每行一条 KEY=VALUE" spellcheck="false"></textarea></label>
-        <p class="field-hint">账号 ID 创建后不可修改。认证信息请在下方填写，无需手动设置环境变量。</p>
+      <label id="acct-users-row" class="hidden" data-i18n-text="[&quot;用户名&quot;]">用户名<textarea id="acct-users" rows="2" placeholder="每行一个用户名，也可用逗号分隔" data-i18n-attrs="{&quot;placeholder&quot;:&quot;每行一个用户名，也可用逗号分隔&quot;}"></textarea></label>
+      <details class="acct-advanced"><summary data-i18n-text="[&quot;高级设置&quot;]">高级设置</summary>
+        <label data-i18n-text="[&quot;环境变量&quot;]">环境变量<textarea id="acct-env" rows="2" class="mono" placeholder="每行一条 KEY=VALUE" spellcheck="false" data-i18n-attrs="{&quot;placeholder&quot;:&quot;每行一条 KEY=VALUE&quot;}"></textarea></label>
+        <p class="field-hint" data-i18n-text="[&quot;账号 ID 创建后不可修改。认证信息请在下方填写，无需手动设置环境变量。&quot;]">账号 ID 创建后不可修改。认证信息请在下方填写，无需手动设置环境变量。</p>
       </details>
     </fieldset>
-    <p id="acct-created" class="field-hint hidden" role="status">账号已保存，等待完成认证。关闭后可在账号列表继续。</p>
+    <p id="acct-created" class="field-hint hidden" role="status" data-i18n-text="[&quot;账号已保存，等待完成认证。关闭后可在账号列表继续。&quot;]">账号已保存，等待完成认证。关闭后可在账号列表继续。</p>
   </form>
-  <div id="auth-modes" class="auth-modes" aria-label="认证方式">
-    <button type="button" id="auth-mode-oauth" class="seg" data-icon="login">订阅 OAuth</button>
-    <button type="button" id="auth-mode-key" class="seg" data-icon="key">API Key / 中转</button>
+  <div id="auth-modes" class="auth-modes" aria-label="认证方式" data-i18n-attrs="{&quot;aria-label&quot;:&quot;认证方式&quot;}">
+    <button type="button" id="auth-mode-oauth" class="seg" data-icon="login" data-i18n-text="[&quot;订阅 OAuth&quot;]">订阅 OAuth</button>
+    <button type="button" id="auth-mode-key" class="seg" data-icon="key" data-i18n-text="[&quot;API Key / 中转&quot;]">API Key / 中转</button>
   </div>
   <div id="auth-oauth" class="auth-body hidden">
     <p id="auth-oauth-hint" class="auth-hint"></p>
-    <button id="auth-gen" class="btn" data-icon="link" data-tip="生成订阅 OAuth 授权链接">授权</button>
+    <button id="auth-gen" class="btn" data-icon="link" data-tip="生成订阅 OAuth 授权链接" data-i18n-text="[&quot;授权&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;生成订阅 OAuth 授权链接&quot;}">授权</button>
     <div id="auth-linkrow" class="auth-linkrow hidden">
       <a id="auth-link" class="auth-link" target="_blank" rel="noopener noreferrer"></a>
-      <button id="auth-copy" class="btn btn-sm" data-icon="copy">复制</button>
+      <button id="auth-copy" class="btn btn-sm" data-icon="copy" data-i18n-text="[&quot;复制&quot;]">复制</button>
     </div>
-    <label id="auth-code-label" class="hidden"><span id="auth-code-title">授权码</span><input id="auth-code" type="text" placeholder="粘贴授权码（形如 xxxx#yyyy）" autocomplete="off" spellcheck="false"></label>
-    <button id="auth-finish" class="btn btn-primary hidden" data-icon="check" data-tip="完成订阅 OAuth 登录">完成</button>
+    <label id="auth-code-label" class="hidden"><span id="auth-code-title" data-i18n-text="[&quot;授权码&quot;]">授权码</span><input id="auth-code" type="text" placeholder="粘贴授权码（形如 xxxx#yyyy）" autocomplete="off" spellcheck="false" data-i18n-attrs="{&quot;placeholder&quot;:&quot;粘贴授权码（形如 xxxx#yyyy）&quot;}"></label>
+    <button id="auth-finish" class="btn btn-primary hidden" data-icon="check" data-tip="完成订阅 OAuth 登录" data-i18n-text="[&quot;完成&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;完成订阅 OAuth 登录&quot;}">完成</button>
   </div>
   <div id="auth-key" class="auth-body hidden">
     <p id="auth-key-hint" class="auth-hint"></p>
-    <label>API Key<input id="auth-apikey" type="password" placeholder="输入 API Key" autocomplete="off"></label>
-    <label>Base URL<input id="auth-baseurl" type="url" class="mono" placeholder="留空使用官方接口" autocomplete="off" spellcheck="false"></label>
+    <label>API Key<input id="auth-apikey" type="password" placeholder="输入 API Key" autocomplete="off" data-i18n-attrs="{&quot;placeholder&quot;:&quot;输入 API Key&quot;}"></label>
+    <label>Base URL<input id="auth-baseurl" type="url" class="mono" placeholder="留空使用官方接口" autocomplete="off" spellcheck="false" data-i18n-attrs="{&quot;placeholder&quot;:&quot;留空使用官方接口&quot;}"></label>
     <div class="auth-keyrow">
-      <select id="auth-wire" data-tip="中转站接口协议">
+      <select id="auth-wire" data-tip="中转站接口协议" data-i18n-attrs="{&quot;data-tip&quot;:&quot;中转站接口协议&quot;}">
         <option value="responses">Responses API</option>
         <option value="chat">Chat Completions</option>
       </select>
-      <button id="auth-test" class="btn" data-icon="activity">测试连接</button>
-      <button id="auth-savekey" class="btn btn-primary" data-icon="save">保存</button>
+      <button id="auth-test" class="btn" data-icon="activity" data-i18n-text="[&quot;测试连接&quot;]">测试连接</button>
+      <button id="auth-savekey" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
     </div>
     <div id="auth-models" class="auth-models hidden"></div>
-    <button id="auth-clearkey" class="btn btn-ghost btn-sm hidden" data-icon="undo" data-tip="清除中转站配置并切回订阅凭证">切回订阅</button>
+    <button id="auth-clearkey" class="btn btn-ghost btn-sm hidden" data-icon="undo" data-tip="清除中转站配置并切回订阅凭证" data-i18n-text="[&quot;切回订阅&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;清除中转站配置并切回订阅凭证&quot;}">切回订阅</button>
   </div>
   <p id="auth-msg" class="auth-msg hidden" role="status" aria-live="polite"></p>
 </dialog>
@@ -1777,14 +1779,14 @@
 <dialog id="dlg-del">
   <form id="del-form" method="dialog">
     <div class="dlg-head">
-      <h2>删除工作空间</h2>
-      <button type="button" id="del-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+      <h2 data-i18n-text="[&quot;删除工作空间&quot;]">删除工作空间</h2>
+      <button type="button" id="del-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
     <p id="del-text"></p>
-    <label class="check"><input type="checkbox" id="del-purge"> 同时清除文件、配置和对话记录（不可恢复）</label>
+    <label class="check" data-i18n-text="[&quot; 同时清除文件、配置和对话记录（不可恢复）&quot;]"><input type="checkbox" id="del-purge"> 同时清除文件、配置和对话记录（不可恢复）</label>
     <div class="dlg-actions">
-      <button type="button" id="del-cancel" class="btn btn-ghost" data-icon="close">取消</button>
-      <button type="submit" id="del-ok" class="btn btn-danger" data-icon="trash">删除</button>
+      <button type="button" id="del-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+      <button type="submit" id="del-ok" class="btn btn-danger" data-icon="trash" data-i18n-text="[&quot;删除&quot;]">删除</button>
     </div>
   </form>
 </dialog>
@@ -1793,22 +1795,22 @@
 <dialog id="dlg-acct-edit">
   <form id="acct-edit-form" method="dialog">
     <div class="dlg-head">
-      <h2 id="acct-edit-title">编辑账号</h2>
-      <button type="button" id="acct-edit-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+      <h2 id="acct-edit-title" data-i18n-text="[&quot;编辑账号&quot;]">编辑账号</h2>
+      <button type="button" id="acct-edit-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
-    <label>显示名称
+    <label data-i18n-text="[&quot;显示名称\n      &quot;]">显示名称
       <input id="acct-edit-label" type="text" maxlength="32">
     </label>
-    <label>环境变量（每行一条 KEY=VALUE，留空清除）
+    <label data-i18n-text="[&quot;环境变量（每行一条 KEY=VALUE，留空清除）\n      &quot;]">环境变量（每行一条 KEY=VALUE，留空清除）
       <textarea id="acct-edit-env" rows="2" class="mono" spellcheck="false"></textarea>
     </label>
-    <label>出口 IP 代理
+    <label data-i18n-text="[&quot;出口 IP 代理\n      &quot;]">出口 IP 代理
       <div id="acct-edit-proxy"></div>
-      <span class="field-hint">该账号的全部官方请求都会经此代理出网，对新对话和新开终端立即生效。代理在「系统设置 → IP 代理」里维护。</span>
+      <span class="field-hint" data-i18n-text="[&quot;该账号的全部官方请求都会经此代理出网，对新对话和新开终端立即生效。代理在「系统设置 → IP 代理」里维护。&quot;]">该账号的全部官方请求都会经此代理出网，对新对话和新开终端立即生效。代理在「系统设置 → IP 代理」里维护。</span>
     </label>
     <p id="acct-edit-error" class="login-error hidden"></p>
     <div class="dlg-actions">
-      <button type="submit" id="acct-edit-ok" class="btn btn-primary" data-icon="save">保存</button>
+      <button type="submit" id="acct-edit-ok" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
     </div>
   </form>
 </dialog>
@@ -1817,13 +1819,13 @@
 <dialog id="dlg-acct-del">
   <form id="acct-del-form" method="dialog">
     <div class="dlg-head">
-      <h2>删除账号</h2>
-      <button type="button" id="acct-del-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+      <h2 data-i18n-text="[&quot;删除账号&quot;]">删除账号</h2>
+      <button type="button" id="acct-del-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
     <p id="acct-del-text"></p>
-    <p class="field-hint">凭证目录会保留在服务器磁盘上，不会随配置一起删除。</p>
+    <p class="field-hint" data-i18n-text="[&quot;凭证目录会保留在服务器磁盘上，不会随配置一起删除。&quot;]">凭证目录会保留在服务器磁盘上，不会随配置一起删除。</p>
     <div class="dlg-actions">
-      <button type="submit" id="acct-del-ok" class="btn btn-danger" data-icon="trash">删除</button>
+      <button type="submit" id="acct-del-ok" class="btn btn-danger" data-icon="trash" data-i18n-text="[&quot;删除&quot;]">删除</button>
     </div>
   </form>
 </dialog>
@@ -1832,13 +1834,13 @@
 <dialog id="dlg-proxy">
   <form id="proxy-form" method="dialog">
     <div class="dlg-head">
-      <h2 id="proxy-dlg-title">添加代理</h2>
-      <button type="button" id="proxy-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+      <h2 id="proxy-dlg-title" data-i18n-text="[&quot;添加代理&quot;]">添加代理</h2>
+      <button type="button" id="proxy-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
-    <label>名称
-      <input id="proxy-name" type="text" maxlength="64" placeholder="留空则用主机名">
+    <label data-i18n-text="[&quot;名称\n      &quot;]">名称
+      <input id="proxy-name" type="text" maxlength="64" placeholder="留空则用主机名" data-i18n-attrs="{&quot;placeholder&quot;:&quot;留空则用主机名&quot;}">
     </label>
-    <label>协议
+    <label data-i18n-text="[&quot;协议\n      &quot;]">协议
       <select id="proxy-scheme">
         <option value="socks5">SOCKS5</option>
         <option value="http">HTTP</option>
@@ -1846,31 +1848,31 @@
       </select>
     </label>
     <div class="dlg-row">
-      <label>主机
-        <input id="proxy-host" type="text" class="mono" placeholder="1.2.3.4 或 gate.example.com" required>
+      <label data-i18n-text="[&quot;主机\n        &quot;]">主机
+        <input id="proxy-host" type="text" class="mono" placeholder="1.2.3.4 或 gate.example.com" required data-i18n-attrs="{&quot;placeholder&quot;:&quot;1.2.3.4 或 gate.example.com&quot;}">
       </label>
-      <label class="dlg-narrow">端口
+      <label class="dlg-narrow" data-i18n-text="[&quot;端口\n        &quot;]">端口
         <input id="proxy-port" type="number" min="1" max="65535" class="mono" placeholder="1080" required>
       </label>
     </div>
     <div class="dlg-row">
-      <label>用户名（可选）
+      <label data-i18n-text="[&quot;用户名（可选）\n        &quot;]">用户名（可选）
         <input id="proxy-user" type="text" class="mono" autocomplete="off">
       </label>
-      <label>密码（可选）
+      <label data-i18n-text="[&quot;密码（可选）\n        &quot;]">密码（可选）
         <input id="proxy-pass" type="password" class="mono" autocomplete="new-password">
       </label>
     </div>
-    <label>状态
+    <label data-i18n-text="[&quot;状态\n      &quot;]">状态
       <select id="proxy-state">
-        <option value="on">正常</option>
-        <option value="off">停用（绑定它的账号会直接报错，不会退回直连）</option>
+        <option value="on" data-i18n-text="[&quot;正常&quot;]">正常</option>
+        <option value="off" data-i18n-text="[&quot;停用（绑定它的账号会直接报错，不会退回直连）&quot;]">停用（绑定它的账号会直接报错，不会退回直连）</option>
       </select>
     </label>
     <p id="proxy-msg" class="auth-msg hidden"></p>
     <div class="dlg-actions">
-      <button type="button" id="proxy-test" class="btn btn-ghost" data-icon="activity">测试连接</button>
-      <button type="submit" id="proxy-ok" class="btn btn-primary" data-icon="save">保存</button>
+      <button type="button" id="proxy-test" class="btn btn-ghost" data-icon="activity" data-i18n-text="[&quot;测试连接&quot;]">测试连接</button>
+      <button type="submit" id="proxy-ok" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
     </div>
   </form>
 </dialog>
@@ -1879,39 +1881,39 @@
 <dialog id="dlg-proxy-import">
   <form id="proxy-import-form" method="dialog">
     <div class="dlg-head">
-      <h2>批量导入代理</h2>
-      <button type="button" id="proxy-import-cancel" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+      <h2 data-i18n-text="[&quot;批量导入代理&quot;]">批量导入代理</h2>
+      <button type="button" id="proxy-import-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
-    <label>每行一条，支持三种写法
+    <label data-i18n-text="[&quot;每行一条，支持三种写法\n      &quot;]">每行一条，支持三种写法
       <textarea id="proxy-import-text" rows="8" class="mono" spellcheck="false"
-        placeholder="socks5://user:pass@1.2.3.4:1080#香港节点&#10;1.2.3.4:1080:user:pass&#10;1.2.3.4:1080"></textarea>
-      <span class="field-hint">不写协议默认按 SOCKS5 处理；`#` 后面是名称。与已有条目主机端口重复的行会被跳过。</span>
+        placeholder="socks5://user:pass@1.2.3.4:1080#香港节点&#10;1.2.3.4:1080:user:pass&#10;1.2.3.4:1080" data-i18n-attrs="{&quot;placeholder&quot;:&quot;socks5://user:pass@1.2.3.4:1080#香港节点\n1.2.3.4:1080:user:pass\n1.2.3.4:1080&quot;}"></textarea>
+      <span class="field-hint" data-i18n-text="[&quot;不写协议默认按 SOCKS5 处理；`#` 后面是名称。与已有条目主机端口重复的行会被跳过。&quot;]">不写协议默认按 SOCKS5 处理；`#` 后面是名称。与已有条目主机端口重复的行会被跳过。</span>
     </label>
     <p id="proxy-import-msg" class="login-error hidden"></p>
     <div class="dlg-actions">
-      <button type="submit" id="proxy-import-ok" class="btn btn-primary" data-icon="upload">导入</button>
+      <button type="submit" id="proxy-import-ok" class="btn btn-primary" data-icon="upload" data-i18n-text="[&quot;导入&quot;]">导入</button>
     </div>
   </form>
 </dialog>
 
 <!-- 历史对话：右侧滑出面板（chat-threads.js）。每条对话独立上下文，可切换续聊 -->
 <div id="tp-scrim" class="tp-scrim"></div>
-<aside id="thread-panel" class="thread-panel" aria-label="历史对话" aria-hidden="true">
+<aside id="thread-panel" class="thread-panel" aria-label="历史对话" aria-hidden="true" data-i18n-attrs="{&quot;aria-label&quot;:&quot;历史对话&quot;}">
   <header class="tp-head">
-    <b>历史对话</b>
+    <b data-i18n-text="[&quot;历史对话&quot;]">历史对话</b>
     <span id="tp-count" class="tp-count mono"></span>
-    <button id="tp-close" class="dlg-x" aria-label="关闭" data-icon="close"></button>
+    <button id="tp-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </header>
-  <button id="tp-new" class="btn btn-primary tp-new" data-icon="plus">新建对话</button>
-  <input id="tp-search" class="tp-search" type="search" placeholder="搜索对话标题…" autocomplete="off">
+  <button id="tp-new" class="btn btn-primary tp-new" data-icon="plus" data-i18n-text="[&quot;新建对话&quot;]">新建对话</button>
+  <input id="tp-search" class="tp-search" type="search" placeholder="搜索对话标题…" autocomplete="off" data-i18n-attrs="{&quot;placeholder&quot;:&quot;搜索对话标题…&quot;}">
   <div id="tp-list" class="tp-list"></div>
-  <p class="tp-hint">同一工作空间内的对话各自保留上下文，共用空间中的文件和终端。</p>
+  <p class="tp-hint" data-i18n-text="[&quot;同一工作空间内的对话各自保留上下文，共用空间中的文件和终端。&quot;]">同一工作空间内的对话各自保留上下文，共用空间中的文件和终端。</p>
 </aside>
 
 <!-- 全局离线横幅：与服务器失联时常驻，避免页面看起来一切正常实则数据早已过期 -->
 <div id="offline-banner" class="offline-banner hidden" role="status">
   <span class="t-dot bad"></span>
-  <span id="offline-text">与服务器的连接已断开，正在重连…</span>
+  <span id="offline-text" data-i18n-text="[&quot;与服务器的连接已断开，正在重连…&quot;]">与服务器的连接已断开，正在重连…</span>
 </div>
 
 <!-- 全站悬浮提示的单例气泡，由 js/tip.js 驱动；popover 让它能浮在原生 <dialog> 之上 -->

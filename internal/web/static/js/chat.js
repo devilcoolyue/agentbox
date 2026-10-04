@@ -1,3 +1,4 @@
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 /* chat：对话通道（WS）、历史加载、composer（发送/中断/附件/自增高）、
  * 模型与思考强度选择、空会话引导。渲染管线在 chat-render.ts。 */
 "use strict";
@@ -41,17 +42,17 @@ function setChatConn(state) {
     const btn = $("chat-reconnect");
     if (state === "connecting") {
         dot.className = "t-dot warn";
-        text.textContent = chatAttempt > 1 ? `对话连接重连中…（第 ${chatAttempt} 次）` : "对话连接建立中…";
+        setTextRender(text, () => chatAttempt > 1 ? i18nText("对话连接重连中…（第 {p0} 次）", { p0: String(chatAttempt) }) : i18nText("对话连接建立中…"));
         btn.classList.add("hidden");
     }
     else if (state === "waking") {
         dot.className = "t-dot warn";
-        text.textContent = "工作空间已休眠，正在唤醒…";
+        setText(text, "工作空间已休眠，正在唤醒…");
         btn.classList.add("hidden");
     }
     else {
         dot.className = "t-dot bad";
-        text.textContent = "对话连接已断开，消息无法发送";
+        setText(text, "对话连接已断开，消息无法发送");
         btn.classList.remove("hidden");
     }
 }
@@ -186,7 +187,7 @@ function replayPump() {
             appendChat(job.node);
             continue;
         }
-        setWorkingLabel(job.kind === "thinking" ? "推理中…" : "生成回复…");
+        setWorkingLabel(() => job.kind === "thinking" ? i18nText("推理中…") : i18nText("生成回复…"));
         liveBlock = {
             ...liveNode(job.kind), kind: job.kind, shown: "", buf: "", carry: 0, tick: 0, raf: 0,
             replay: true, rate: Math.max(140, job.text.length / 3),
@@ -232,16 +233,16 @@ function workLabelFromEvent(ev) {
     if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
         for (const b of ev.message.content) {
             if (b.type === "tool_use") {
-                setWorkingLabel("运行工具 " + b.name + "…");
+                setWorkingLabel(() => i18nText("运行工具 ") + b.name + "…");
                 return;
             }
         }
     }
     else if (ev.type === "item.started" && ev.item && ev.item.type === "command_execution") {
-        setWorkingLabel("执行命令…");
+        setWorkingLabel(() => i18nText("执行命令…"));
     }
     else if (ev.type === "item.completed" && ev.item && ev.item.type === "reasoning") {
-        setWorkingLabel("推理中…");
+        setWorkingLabel(() => i18nText("推理中…"));
     }
 }
 function handleStreamEvent(e) {
@@ -257,7 +258,7 @@ function handleStreamEvent(e) {
             liveDrain(); // 上一块若有残余（丢了 stop 事件）先补齐
             const t = e.content_block && e.content_block.type;
             if (t === "text" || t === "thinking") {
-                setWorkingLabel(t === "thinking" ? "思考中…" : "生成回复…");
+                setWorkingLabel(() => t === "thinking" ? i18nText("思考中…") : i18nText("生成回复…"));
                 liveBlock = { ...liveNode(t), kind: t, shown: "", buf: "", carry: 0, tick: 0, raf: 0 };
                 liveBlock.el.classList.add("streaming");
                 appendChat(liveBlock.el);
@@ -420,7 +421,7 @@ function handleChatMsg(msg) {
                 }
                 const retry = document.createElement("button");
                 retry.className = "btn btn-sm";
-                actionButton(retry, "重试", "refresh", "恢复默认设置并重试本轮对话");
+                actionButton(retry, () => i18nText("重试"), "refresh", () => i18nText("恢复默认设置并重试本轮对话"));
                 retry.addEventListener("click", () => {
                     S.pick.effort = "";
                     pendingPick = null;
@@ -428,7 +429,7 @@ function handleChatMsg(msg) {
                     savePick();
                     renderPickPill();
                     if (input.value.trim() && input.value.trim() !== msg.retry_text) {
-                        toast("已恢复默认，请确认当前输入后发送");
+                        toast(i18nText("已恢复默认，请确认当前输入后发送"));
                         return;
                     }
                     input.value = msg.retry_text;
@@ -465,15 +466,15 @@ export function setChatStatus(state, error) {
         if (stick)
             log.scrollTop = log.scrollHeight;
         send.classList.add("stop");
-        setTip(send, "中断");
-        send.ariaLabel = "中断"; // 纯图标按钮，可访问名称得跟着状态走
+        setTip(send, () => i18nText("中断"));
+        setAttrRender(send, "aria-label", () => i18nText("中断")); // 纯图标按钮，可访问名称得跟着状态走
         send.disabled = false;
     }
     else {
         clearWorking();
         send.classList.remove("stop");
-        setTip(send, "发送");
-        send.ariaLabel = "发送";
+        setTip(send, () => i18nText("发送"));
+        setAttrRender(send, "aria-label", () => i18nText("发送"));
         send.disabled = chatImgs.uploading > 0;
         if (state === "error" && error)
             appendChat(chip(error, "err"));
@@ -482,9 +483,9 @@ export function setChatStatus(state, error) {
 }
 /* 占位提示：窄屏一行放不下长文案，且键盘快捷键提示在手机上无意义 */
 function updateChatPlaceholder() {
-    $("chat-input").placeholder = isMobile() || enterInsertsNewline()
-        ? "向 Agent 下达任务…"
-        : "随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）";
+    setAttrRender($("chat-input"), "placeholder", () => isMobile() || enterInsertsNewline()
+        ? i18nText("向 Agent 下达任务…")
+        : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）"));
 }
 /* 输入框随内容自动增高（1 行起步，封顶后内部滚动） */
 export function autoGrow() {
@@ -497,7 +498,7 @@ export function sendChat() {
     if (!text || S.chatState === "running")
         return;
     if (chatImgs.uploading > 0) {
-        appendChat(chip("附件仍在上传中，请稍候…", "err"));
+        appendChat(chip(i18nText("附件仍在上传中，请稍候…"), "err"));
         return;
     }
     if (!connection.ready) {
@@ -548,7 +549,7 @@ async function wakeAndSend() {
             }
             await new Promise((r) => setTimeout(r, 400));
         }
-        appendChat(chip("唤醒工作空间超时，请稍后重试或手动启动工作空间", "err"));
+        appendChat(chip(i18nText("唤醒工作空间超时，请稍后重试或手动启动工作空间"), "err"));
     }
     finally {
         if (epoch !== chatEpoch)
@@ -585,10 +586,10 @@ function renderAttach() {
             box.className = "attach-file mono";
             const name = document.createElement("span");
             name.className = "fn";
-            name.textContent = info.orig || info.name || "附件";
+            setTextRender(name, () => info.orig || info.name || i18nText("附件"));
             if (info.path) {
                 box.append(document.createTextNode("📄"), name);
-                setTip(box, `附件 #${n} · ${info.path}`);
+                setTip(box, () => i18nText("附件 #{p0} · {p1}", { p0: String(n), p1: String(info.path) }));
             }
             else {
                 box.append(spinEl(), name);
@@ -606,13 +607,13 @@ function renderAttach() {
             const img = document.createElement("img");
             img.src = imgURLFromPath(info.path);
             img.alt = "Image #" + n;
-            img.addEventListener("click", () => openLightbox(imgURLFromPath(info.path), `图片 #${n} · ${info.path}`));
+            img.addEventListener("click", () => openLightbox(imgURLFromPath(info.path), i18nText("图片 #{p0} · {p1}", { p0: String(n), p1: String(info.path) })));
             box.appendChild(img);
         }
         else {
             const up = document.createElement("span");
             up.className = "up";
-            up.append(spinEl(), document.createTextNode("上传中"));
+            up.append(spinEl(), document.createTextNode(i18nText("上传中")));
             box.appendChild(up);
         }
         strip.appendChild(box);
@@ -637,7 +638,7 @@ async function attachFile(file) {
     catch (e) {
         chatImgs.map.delete(n);
         $("chat-input").value = $("chat-input").value.replace(`[${tag} #${n}]`, "");
-        appendChat(chip("附件上传失败：" + e.message, "err"));
+        appendChat(chip(i18nText("附件上传失败：") + e.message, "err"));
     }
     finally {
         chatImgs.uploading--;
@@ -677,11 +678,11 @@ function currentReasoning() {
 }
 function effortOpts() {
     const r = currentReasoning();
-    const opts = [{ v: "", l: "默认强度", sub: "沿用模型和客户端的默认设置，不等于关闭推理" }];
+    const opts = [{ v: "", l: i18nText("默认强度"), sub: i18nText("沿用模型和客户端的默认设置，不等于关闭推理") }];
     if (r.support === "unsupported" || (r.support === "unknown" && !manualEffort))
         return opts;
     const levels = r.support === "supported" ? r.levels || [] : allowedLevels(pickStyle(), r.control);
-    return [...opts, ...levels.map(v => ({ v, l: EFFORT_LABELS[v] || v, sub: r.control === "budget" ? `预算上限 ${BUDGETS[v].toLocaleString("en-US")} tokens` : v }))];
+    return [...opts, ...levels.map(v => ({ v, l: EFFORT_LABELS[v] || v, sub: r.control === "budget" ? i18nText("预算上限 {p0} tokens", { p0: String(BUDGETS[v].toLocaleString("en-US")) }) : v }))];
 }
 async function refreshModelCapabilities() {
     const id = S.current?.id, epoch = chatEpoch;
@@ -695,7 +696,7 @@ async function refreshModelCapabilities() {
         if (abort.signal.aborted || epoch !== chatEpoch || S.current?.id !== id)
             return;
         if (!Array.isArray(value.models))
-            throw new Error("模型能力响应无效");
+            throw new Error(i18nText("模型能力响应无效"));
         let previous = currentReasoning();
         sessionModels = value;
         if (pendingPick) {
@@ -711,7 +712,7 @@ async function refreshModelCapabilities() {
         if (S.pick.effort && !(next.support === "unknown" && previous.control === next.control && manualEffort) && !canKeepEffort(previous, next, S.pick.effort)) {
             S.pick.effort = "";
             manualEffort = false;
-            toast("模型能力已变化，已恢复为默认强度");
+            toast(i18nText("模型能力已变化，已恢复为默认强度"));
         }
         savePick();
         renderPickPill();
@@ -719,7 +720,7 @@ async function refreshModelCapabilities() {
     }
     catch (error) {
         if (!abort.signal.aborted && epoch === chatEpoch)
-            toast("读取模型能力失败：" + error.message, true);
+            toast(i18nText("读取模型能力失败：") + error.message, true);
     }
 }
 /* 尾部 [1m] 是 Claude Code 的 1M 上下文后缀（opus[1m] 等），与后端 modelRe 保持一致 */
@@ -743,7 +744,7 @@ function modelLabel(v) {
 }
 function effortLabel(v) {
     if (currentReasoning().support === "unsupported")
-        return "不支持调整";
+        return i18nText("不支持调整");
     return (effortOpts().find(o => o.v === v) || effortOpts()[0]).l;
 }
 function workspaceModel() {
@@ -787,7 +788,7 @@ function renderPickPill() {
  * 两者都：点击选项即选中并收起，点击外部收起整个面板。
  * 移动端无悬停，退回「点击进二级 + 返回」的抽屉式。 */
 function pickStyle() { return S.current && S.current.agent === "codex" ? "codex" : "claude"; }
-function effortTitle() { return currentReasoning().control === "budget" ? "思考预算" : "推理强度"; }
+function effortTitle() { return currentReasoning().control === "budget" ? i18nText("思考预算") : i18nText("推理强度"); }
 function customModel() {
     return S.pick.model && !modelOpts().some((o) => o.id === S.pick.model) ? S.pick.model : "";
 }
@@ -798,7 +799,7 @@ function choose(kind, v) {
         S.pick.model = v || workspaceModel();
         if (!canKeepEffort(before, currentReasoning(), S.pick.effort)) {
             S.pick.effort = "";
-            toast("新模型的支持范围不同，已恢复为默认强度");
+            toast(i18nText("新模型的支持范围不同，已恢复为默认强度"));
         }
         manualEffort = false;
     }
@@ -810,12 +811,12 @@ function choose(kind, v) {
 }
 async function askCustomModel() {
     const v = await askPrompt({
-        title: "自定义模型",
-        label: "模型 ID",
+        get title() { return i18nText("自定义模型"); },
+        get label() { return i18nText("模型 ID"); },
         value: customModel(),
-        hint: `留空恢复为 ${modelLabel(workspaceModel())}。`,
+        get hint() { return i18nText("留空恢复为 {p0}。", { p0: String(modelLabel(workspaceModel())) }); },
         validate: (s) => (s.trim() && !MODEL_ID_RE.test(s.trim())
-            ? "模型 ID 格式不合法（字母数字开头，可含 . _ -）" : ""),
+            ? i18nText("模型 ID 格式不合法（字母数字开头，可含 . _ -）") : ""),
     });
     if (v === null)
         return;
@@ -828,17 +829,17 @@ function optList(kind) {
         if (r.support === "unsupported") {
             const info = document.createElement("p");
             info.className = "muted";
-            info.textContent = "此模型不支持调整。CLI 中已配置的强度可能仍需清除。";
+            setText(info, "此模型不支持调整。CLI 中已配置的强度可能仍需清除。");
             return [info];
         }
         const opts = effortOpts().map(o => pickOpt(o.l, o.sub || "", S.pick.effort === o.v, () => choose("effort", o.v)));
         if (r.support === "unknown") {
             const note = document.createElement("p");
             note.className = "muted";
-            note.textContent = "支持情况未知，手动指定可能被模型或中转服务拒绝。";
+            setText(note, "支持情况未知，手动指定可能被模型或中转服务拒绝。");
             opts.unshift(note);
             if (!manualEffort)
-                opts.push(pickOpt("手动指定…", "仅在确认服务支持时使用", false, () => {
+                opts.push(pickOpt(i18nText("手动指定…"), i18nText("仅在确认服务支持时使用"), false, () => {
                     manualEffort = true;
                     hideFly();
                     buildPickSub("effort");
@@ -851,7 +852,7 @@ function optList(kind) {
         out.push(pickOpt(o.label, o.id, S.pick.model === o.id, () => choose("model", o.id)));
     }
     const cur = customModel();
-    out.push(pickOpt("自定义模型…", cur, !!cur, askCustomModel));
+    out.push(pickOpt(i18nText("自定义模型…"), cur, !!cur, askCustomModel));
     return out;
 }
 /* ---- 悬停浮层 ---- */
@@ -870,7 +871,7 @@ function showFly(row, kind) {
     if (fly.dataset.kind !== kind || fly.classList.contains("hidden")) {
         const head = document.createElement("div");
         head.className = "pick-fly-h";
-        head.textContent = kind === "model" ? "模型" : effortTitle();
+        setTextRender(head, () => kind === "model" ? i18nText("模型") : effortTitle());
         fly.replaceChildren(head, ...optList(kind));
         fly.dataset.kind = kind;
     }
@@ -915,12 +916,12 @@ function buildPickMain() {
     hideFly();
     menu.replaceChildren();
     if (pickStyle() === "codex") {
-        menu.append(pickRow("模型", modelLabel(S.pick.model), "model"), pickRow(effortTitle(), effortLabel(S.pick.effort), "effort"));
+        menu.append(pickRow(i18nText("模型"), modelLabel(S.pick.model), "model"), pickRow(effortTitle(), effortLabel(S.pick.effort), "effort"));
         return;
     }
     const head = document.createElement("div");
     head.className = "pick-fly-h";
-    head.textContent = "模型";
+    setText(head, "模型");
     const sep = document.createElement("div");
     sep.className = "pick-sep";
     menu.append(head, ...optList("model"), sep, pickRow(effortTitle(), effortLabel(S.pick.effort), "effort"));
@@ -931,7 +932,7 @@ function buildPickSub(kind) {
     menu.replaceChildren();
     const h = document.createElement("button");
     h.className = "pick-back";
-    buttonLabel(h, kind === "model" ? "模型" : effortTitle(), "chevron-left");
+    buttonLabel(h, () => kind === "model" ? i18nText("模型") : effortTitle(), "chevron-left");
     h.addEventListener("click", (e) => { e.stopPropagation(); buildPickMain(); });
     menu.append(h, ...optList(kind));
 }
@@ -964,7 +965,7 @@ export function updateHero() {
     $("chat-loading").classList.toggle("hidden", !blocked);
     $("chat-loading").classList.toggle("history-error", failed);
     $("chat-loading-spin").classList.toggle("hidden", !loading);
-    $("chat-loading-text").textContent = failed ? S.histError : "正在加载历史对话…";
+    setTextRender($("chat-loading-text"), () => failed ? S.histError : i18nText("正在加载历史对话…"));
     $("chat-loading-retry").classList.toggle("hidden", !failed);
     const show = !blocked && !!S.current &&
         !$("chat-log").childElementCount && S.chatState !== "running";
@@ -1067,8 +1068,8 @@ export async function loadHistory(opts = {}) {
         if (silent)
             return; // 补拉失败不打扰：下次重连或手动刷新还有机会
         S.histError = timedOut
-            ? "历史对话加载超时"
-            : "历史对话加载失败：" + (e.message || "未知错误");
+            ? i18nText("历史对话加载超时")
+            : i18nText("历史对话加载失败：") + (e.message || i18nText("未知错误"));
     }
     finally {
         clearTimeout(timer);
@@ -1169,7 +1170,7 @@ function ensureWorking() {
         body.className = "turn-body";
         const label = document.createElement("span");
         label.className = "work-label";
-        label.textContent = agent === "codex" ? "推理中…" : "思考中…";
+        setTextRender(label, () => agent === "codex" ? i18nText("推理中…") : i18nText("思考中…"));
         body.append(label);
         turn.append(av, body);
         workingEl = turn;
@@ -1183,8 +1184,12 @@ function clearWorking() {
 }
 function setWorkingLabel(text) {
     const l = workingEl && workingEl.querySelector(".work-label");
-    if (l)
-        l.textContent = text;
+    if (l) {
+        if (typeof text === "function")
+            setTextRender(l, text);
+        else
+            l.textContent = text;
+    }
 }
 let disposeChat;
 export function initChat() {
@@ -1262,3 +1267,8 @@ export function initChat() {
     disposeChat = () => { lifetime.abort(); chatTeardown(); };
     return disposeChat;
 }
+// Only redraw model controls; preserve the composer, chat stream and connections.
+window.addEventListener("agentbox-language-change", () => {
+    renderPickPill();
+    closePickMenu();
+});

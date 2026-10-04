@@ -1,3 +1,4 @@
+import "./i18n/bootstrap.js";
 import { initApplication } from "./app/lifecycle.js";
 /* main：入口。chat/settings 由 app/lifecycle 显式挂载与清理；
  * 其他功能仍保留兼容入口，逐步迁移。 */

@@ -25,12 +25,15 @@ jobs:
         run: npm run build
       - name: 产物与源码一致性
         run: |
-          if ! git diff --quiet -- internal/web/static/js; then
+          if ! git diff --quiet -- internal/web/static/js internal/linkapp/static/i18n-core.js; then
             echo "::error::internal/web/static/js 与 web/src 不一致。请在本地执行 npm run build 并提交产物。"
-            git diff --stat -- internal/web/static/js
+            git diff --stat -- internal/web/static/js internal/linkapp/static/i18n-core.js
             exit 1
           fi
           echo "前端产物与源码一致。"
+
+      - name: Interface language catalogs and runtime
+        run: npm run test:i18n
 
       - name: Browser lifecycle regression (synthetic API)
         run: |
@@ -38,6 +41,8 @@ jobs:
           "$RUNNER_TEMP/browser-tools/node_modules/.bin/playwright" install --with-deps chromium
           AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-browser.mjs
           AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-git.mjs
+          AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-web-i18n.mjs
+          AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-link-i18n.mjs
 
   build-test:
     runs-on: ubuntu-latest
@@ -52,7 +57,12 @@ jobs:
       - name: vet
         run: go vet ./...
       - name: test
-        run: go test ./...
+        run: |
+          set -o pipefail
+          go list -f '{{if ne .ImportPath "agentbox/internal/server"}}{{.ImportPath}}{{end}}' ./... | xargs -r go test
+          AGENTBOX_CHOWN_DENIAL_TEST=1 go test ./internal/server -run '^TestSyncMutationLinuxChownDeniedPreservesTarget$' -count=1 -v
+          # Build as the runner; only the server test process needs production UID/GID permissions.
+          go test -exec 'sudo -n --' ./internal/server -count=1
       - name: Deployment policy
         run: |
           python3 scripts/test-browser-runtime.py
@@ -73,6 +83,11 @@ jobs:
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
             GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/abox-link
           done
+
+      - name: Independent desktop terminals (real Linux PTY/tmux, no model calls)
+        run: |
+          docker build -t agentbox-client-test:ci -f internal/server/testdata/client.Dockerfile internal/server/testdata
+          AGENTBOX_CLIENT_TEST_IMAGE=agentbox-client-test:ci go test ./internal/server -run '^TestClientTerminalsContainerLive$' -count=1 -v
 
   govulncheck:
     runs-on: ubuntu-latest

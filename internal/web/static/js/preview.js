@@ -1,3 +1,4 @@
+import { setText, setTextRender, t as i18nText } from "./i18n.js";
 import "./responsive.js";
 /* preview：文件预览 / 在线编辑弹窗（HTML 实时渲染、Markdown 渲染、文本编辑、
  * 图片查看、二进制/超大文件提示）。
@@ -95,7 +96,7 @@ export async function openPreview(fullRel, ent, scope = S.fileScope) {
     setMeta(ent);
     $("fv-state").textContent = "";
     $("fv-save").disabled = true;
-    $("fv-notice").replaceChildren(withSpin("加载中…"));
+    $("fv-notice").replaceChildren(withSpin(() => i18nText("加载中…")));
     fvShow("notice");
     syncChrome();
     $("dlg-file").showModal();
@@ -151,7 +152,7 @@ export async function openPreview(fullRel, ent, scope = S.fileScope) {
             fvShow("img");
         }
         catch (e) {
-            notice("图片加载失败：" + e.message);
+            notice(i18nText("图片加载失败：") + e.message);
         }
         return;
     }
@@ -184,7 +185,7 @@ async function statFile() {
 /* ---------------- 源码态 ---------------- */
 async function loadSource(size) {
     if (size > EDIT_MAX) {
-        notice(`文件超过 ${fmtSize(EDIT_MAX)}，不支持在线编辑，请下载查看。`);
+        notice(i18nText("文件超过 {p0}，不支持在线编辑，请下载查看。", { p0: String(fmtSize(EDIT_MAX)) }));
         return;
     }
     try {
@@ -192,7 +193,7 @@ async function loadSource(size) {
         // 前 8KB 含 NUL 视为二进制
         for (let i = 0; i < Math.min(buf.length, 8192); i++) {
             if (buf[i] === 0) {
-                notice("二进制文件，无法预览，请下载查看。");
+                notice(i18nText("二进制文件，无法预览，请下载查看。"));
                 return;
             }
         }
@@ -201,10 +202,10 @@ async function loadSource(size) {
         FV.srcLoaded = true;
         syncChrome();
         fvShow("editor");
-        $("fv-state").textContent = "可编辑";
+        setText($("fv-state"), "可编辑");
     }
     catch (e) {
-        notice("读取失败：" + e.message);
+        notice(i18nText("读取失败：") + e.message);
     }
 }
 /* ---------------- Markdown 渲染态 ---------------- */
@@ -297,7 +298,7 @@ async function mountFrame() {
         $("fv-state").textContent = "";
     }
     catch (e) {
-        notice("预览失败：" + e.message);
+        notice(i18nText("预览失败：") + e.message);
     }
 }
 /* 通行证响应带 no-store，重新赋 src 就是一次真刷新；查询串不参与相对路径解析，
@@ -335,12 +336,12 @@ function startPoll() {
                 await reloadMD(ent);
             else
                 reloadFrame();
-            $("fv-state").textContent = "已更新 " + fmtClock(Date.now());
+            setTextRender($("fv-state"), () => i18nText("已更新 ") + fmtClock(Date.now()));
         }
         else {
-            $("fv-state").textContent = keep
-                ? "文件已在外部更新，保存会覆盖"
-                : "文件已更新，点「刷新」查看";
+            setTextRender($("fv-state"), () => keep
+                ? i18nText("文件已在外部更新，保存会覆盖")
+                : i18nText("文件已更新，点「刷新」查看"));
         }
     }, POLL_MS);
 }
@@ -357,7 +358,7 @@ async function setMode(mode) {
     if (mode === "preview") {
         if (FV.kind === "md") {
             renderMD();
-            $("fv-state").textContent = FV.dirty ? "未保存" : "";
+            setTextRender($("fv-state"), () => FV.dirty ? i18nText("未保存") : "");
             return;
         }
         if (FV.url) {
@@ -371,10 +372,10 @@ async function setMode(mode) {
     }
     if (FV.srcLoaded) {
         fvShow("editor");
-        $("fv-state").textContent = FV.dirty ? "未保存" : "可编辑";
+        setTextRender($("fv-state"), () => FV.dirty ? i18nText("未保存") : i18nText("可编辑"));
         return;
     }
-    $("fv-notice").replaceChildren(withSpin("加载中…"));
+    $("fv-notice").replaceChildren(withSpin(() => i18nText("加载中…")));
     fvShow("notice");
     const ent = await statFile();
     await loadSource(ent?.size ?? 0);
@@ -383,7 +384,7 @@ async function setMode(mode) {
 function markDirty() {
     FV.dirty = true;
     $("fv-save").disabled = false;
-    $("fv-state").textContent = "未保存";
+    setText($("fv-state"), "未保存");
 }
 $("fv-editor").addEventListener("input", markDirty);
 /* Tab 键在编辑器里插入两个空格 */
@@ -404,7 +405,7 @@ async function saveFile() {
     if (!FV.path || $("fv-save").disabled)
         return;
     $("fv-save").disabled = true;
-    $("fv-state").replaceChildren(withSpin("保存中…"));
+    $("fv-state").replaceChildren(withSpin(() => i18nText("保存中…")));
     try {
         const res = await fetch(fileAPI(), {
             method: "PUT",
@@ -420,7 +421,7 @@ async function saveFile() {
             throw new Error(msg);
         }
         FV.dirty = false;
-        $("fv-state").textContent = "已保存 " + fmtClock(Date.now());
+        setTextRender($("fv-state"), () => i18nText("已保存 ") + fmtClock(Date.now()));
         // 自己刚写的内容不该在下一次轮询里再被当成「外部改动」提示一遍
         const ent = await statFile();
         if (ent) {
@@ -431,7 +432,7 @@ async function saveFile() {
     }
     catch (e) {
         $("fv-save").disabled = false;
-        $("fv-state").textContent = "保存失败：" + e.message;
+        setTextRender($("fv-state"), () => i18nText("保存失败：") + e.message);
     }
 }
 /* ---------------- 头部动作 ---------------- */
@@ -442,9 +443,9 @@ $("fv-reload").addEventListener("click", async () => {
     if (FV.kind === "md") {
         // Markdown 刷新 = 重新拉源码，会盖掉编辑器里没保存的东西，先问一句
         if (FV.dirty) {
-            const ok = await askConfirm("重新载入会丢弃未保存的修改，确定继续？", {
-                title: "重新载入", hint: "弹窗里改的内容会被磁盘上的版本覆盖。",
-                okLabel: "丢弃并重载", icon: "refresh", danger: true,
+            const ok = await askConfirm(() => i18nText("重新载入会丢弃未保存的修改，确定继续？"), {
+                get title() { return i18nText("重新载入"); }, get hint() { return i18nText("弹窗里改的内容会被磁盘上的版本覆盖。"); },
+                get okLabel() { return i18nText("丢弃并重载"); }, icon: "refresh", danger: true,
             });
             if (!ok)
                 return;
@@ -454,7 +455,7 @@ $("fv-reload").addEventListener("click", async () => {
     else {
         reloadFrame();
     }
-    $("fv-state").textContent = "已刷新 " + fmtClock(Date.now());
+    setTextRender($("fv-state"), () => i18nText("已刷新 ") + fmtClock(Date.now()));
 });
 $("fv-newtab").addEventListener("click", () => {
     if (FV.url)
@@ -462,7 +463,7 @@ $("fv-newtab").addEventListener("click", () => {
 });
 $("fv-full").addEventListener("click", () => {
     const full = $("dlg-file").classList.toggle("fv-max");
-    actionButton($("fv-full"), full ? "还原" : "全屏", full ? "collapse" : "expand", full ? "退出全屏，恢复预览窗口" : "全屏预览");
+    actionButton($("fv-full"), () => full ? i18nText("还原") : i18nText("全屏"), full ? "collapse" : "expand", () => full ? i18nText("退出全屏，恢复预览窗口") : i18nText("全屏预览"));
 });
 $("fv-vps").addEventListener("click", (e) => {
     const b = e.target.closest("[data-vp]");
@@ -476,8 +477,8 @@ $("fv-download").addEventListener("click", () => {
 /* ---------------- 关闭 ---------------- */
 async function closePreview() {
     if (FV.dirty) {
-        const ok = await askConfirm("有未保存的修改，确定关闭？", {
-            title: "放弃修改", hint: "关闭后未保存的内容会丢失。", okLabel: "放弃并关闭", icon: "close", danger: true,
+        const ok = await askConfirm(() => i18nText("有未保存的修改，确定关闭？"), {
+            get title() { return i18nText("放弃修改"); }, get hint() { return i18nText("关闭后未保存的内容会丢失。"); }, get okLabel() { return i18nText("放弃并关闭"); }, icon: "close", danger: true,
         });
         if (!ok)
             return;
@@ -494,7 +495,7 @@ async function closePreview() {
     $("fv-md").replaceChildren();
     $("fv-frame").src = "about:blank"; // 别让原型在后台继续跑
     $("dlg-file").classList.remove("fv-max");
-    actionButton($("fv-full"), "全屏", "expand", "全屏预览");
+    actionButton($("fv-full"), () => i18nText("全屏"), "expand", () => i18nText("全屏预览"));
     $("dlg-file").close();
 }
 $("fv-close").addEventListener("click", closePreview);

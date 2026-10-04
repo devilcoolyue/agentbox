@@ -78,7 +78,8 @@ with tempfile.TemporaryDirectory(prefix='agentbox-secret-scan-') as tmp:
         # Gitleaks skips binary content. Also scan printable strings from the
         # exact release executables, including embedded frontend/config data.
         binaries = [f for f in extracted.rglob('*') if f.is_file() and (f.name in
-                    ('agentbox', 'abox-link', 'abox-link.exe') or f.name.startswith('abox-link-'))]
+                    ('agentbox', 'abox-link', 'abox-link.exe', 'agentbox-desktop',
+                     'agentbox-desktop.exe', 'abox-sync', 'abox-sync.exe') or f.name.startswith('abox-link-'))]
         for binary in binaries:
             with binary.with_name(binary.name + '.strings.txt').open('wb') as output:
                 subprocess.run(['strings', str(binary)], stdout=output, check=True)

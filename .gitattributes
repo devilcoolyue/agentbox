@@ -1,3 +1,5 @@
 # Preserve third-party license text exactly as supplied upstream.
-third_party/go/** -whitespace
-third_party/licenses/** -whitespace
+third_party/go/** -whitespace -text
+third_party/licenses/** -whitespace -text
+third_party/desktop/** -whitespace -text
+desktop/third-party/NOTICES.txt -whitespace -text

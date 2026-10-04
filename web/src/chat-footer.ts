@@ -1,3 +1,4 @@
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 /* Per-turn context uses persisted request settings, never the current picker. */
 import type { AgentEvent, ChatTurnMetadata, ChatTurnCost } from "./types.js";
 import { answerSources, copyText } from "./chat-render.js";
@@ -42,75 +43,76 @@ export function observeAnswer(context: AnswerContext, ev?: AgentEvent, ts?: stri
 }
 
 function reasoningText(turn?: ChatTurnMetadata): string {
-  if (!turn) return "未记录";
-  if (turn.unsupported) return "不支持调整";
-  if (!turn.effort) return "默认";
+  if (!turn) return i18nText("未记录");
+  if (turn.unsupported) return i18nText("不支持调整");
+  if (!turn.effort) return i18nText("默认");
   if (turn.control === "budget") {
-    return turn.budget_tokens ? `思考预算 ${turn.budget_tokens.toLocaleString("en-US")} tokens`
-      : `思考预算 · ${EFFORT_LABELS[turn.effort] || turn.effort}`;
+    return turn.budget_tokens ? i18nText("思考预算 {p0} tokens", { p0: String(turn.budget_tokens.toLocaleString("en-US")) })
+      : i18nText("思考预算 · {p0}", { p0: String(EFFORT_LABELS[turn.effort] || turn.effort) });
   }
   return EFFORT_LABELS[turn.effort] || turn.effort;
 }
 
 /* 计费来源写成用户看得懂的话：「价目表」「CLI 报告」是实现细节 */
-const SOURCE_TEXT: Record<string, string> = { table: "按单价估算", provider: "客户端上报", mixed: "部分按单价估算" };
+const SOURCE_TEXT: Record<string, string> = { get table() { return i18nText("按单价估算"); }, get provider() { return i18nText("客户端上报"); }, get mixed() { return i18nText("部分按单价估算"); } };
 
 function costView(context: AnswerContext): { label: string; detail: string; priced: boolean } {
   const money = (micro: number) => "$" + (micro / 1e6).toFixed(micro > 0 && micro < 100 ? 6 : 4);
   const cost = context.cost;
   if (cost && cost.source !== "unknown") {
-    if (cost.source === "unpriced") return { label: "未定价", detail: "本轮已记录用量，但这个模型还没有设置单价，所以没有算出金额；这不表示模型服务免费。", priced: false };
-    const source = SOURCE_TEXT[cost.source] || "混合计价";
+    if (cost.source === "unpriced") return { label: i18nText("未定价"), detail: i18nText("本轮已记录用量，但这个模型还没有设置单价，所以没有算出金额；这不表示模型服务免费。"), priced: false };
+    const source = SOURCE_TEXT[cost.source] || i18nText("混合计价");
     return {
       label: (cost.partial ? "≥ " : "") + money(cost.cost_micro_usd),
-      detail: `本轮用量成本 ${money(cost.cost_micro_usd)}，${cost.partial ? "部分模型未设置单价，金额不完整" : source}。与使用记录一致，包含本轮子模型，不含自动起标题；不代表订阅额外扣费或中转站实际账单。`,
+      detail: i18nText("本轮用量成本 {p0}，{p1}。与使用记录一致，包含本轮子模型，不含自动起标题；不代表订阅额外扣费或中转站实际账单。", { p0: String(money(cost.cost_micro_usd)), p1: String(cost.partial ? i18nText("部分模型未设置单价，金额不完整") : source) }),
       priced: true,
     };
   }
   if (!context.turn && context.legacyCost !== undefined) return {
     label: money(context.legacyCost),
-    detail: "历史回答中客户端上报的用量成本；无法关联当时的入账记录，不代表订阅额外扣费或中转站实际账单。", priced: true,
+    detail: i18nText("历史回答中客户端上报的用量成本；无法关联当时的入账记录，不代表订阅额外扣费或中转站实际账单。"), priced: true,
   };
   const pending = !cost && !context.historical;
-  return { label: pending ? "费用待结算" : "费用未记录", detail: pending ? "回合结束后显示已入账的用量成本。" : "未找到这轮回答对应的费用记录，未按当前价格重算历史。", priced: false };
+  return { label: pending ? i18nText("费用待结算") : i18nText("费用未记录"), detail: pending ? i18nText("回合结束后显示已入账的用量成本。") : i18nText("未找到这轮回答对应的费用记录，未按当前价格重算历史。"), priced: false };
 }
 
 export function answerFooter(body: HTMLElement, context: AnswerContext) {
   const el = document.createElement("div");
   el.className = "answer-footer";
   el.setAttribute("role", "group");
-  el.setAttribute("aria-label", "回答信息与操作");
+  setAttrRender(el, "aria-label", () => i18nText("回答信息与操作"));
   const copy = document.createElement("button");
   copy.type = "button";
   copy.className = "answer-copy";
-  copy.setAttribute("aria-label", "复制回答");
+  setAttrRender(copy, "aria-label", () => i18nText("复制回答"));
   copy.append(svgIcon("copy", 16));
-  setTip(copy, "复制回答（Markdown）");
+  setTip(copy, () => i18nText("复制回答（Markdown）"));
   const actions = document.createElement("div");
   actions.className = "answer-actions";
   const more = document.createElement("button");
   more.type = "button";
   more.className = "answer-copy answer-more";
-  more.setAttribute("aria-label", "回答详情");
+  setAttrRender(more, "aria-label", () => i18nText("回答详情"));
   more.setAttribute("aria-expanded", "false");
   more.append(svgIcon("info", 16));
-  setTip(more, "回答详情");
+  setTip(more, () => i18nText("回答详情"));
   // 外面只放时间和金额；模型、推理强度、计费说明与本轮 token 收进「详情」
   const details = document.createElement("div");
   details.className = "answer-details";
   details.hidden = true;
-  const detailRow = (key: string) => {
+  const detailRow = (key: () => string) => {
     const row = document.createElement("div");
     row.className = "ad-row";
-    const k = Object.assign(document.createElement("span"), { className: "ad-k", textContent: key });
+    const k = Object.assign(document.createElement("span"), { className: "ad-k" });
+    setTextRender(k, key);
     const v = Object.assign(document.createElement("span"), { className: "ad-v" });
     const note = Object.assign(document.createElement("span"), { className: "ad-note" });
     row.append(k, v, note);
     return { row, v, note };
   };
-  const model = detailRow("模型");
-  const effort = detailRow("推理强度");
-  const costDetail = detailRow("费用");
+  const model = detailRow(() => i18nText("模型"));
+  const effort = detailRow(() => i18nText("推理强度"));
+  const costDetail = detailRow(() => i18nText("费用"));
   const receipt = document.createElement("div");
   receipt.className = "answer-receipt";
   details.append(model.row, effort.row, costDetail.row, receipt);
@@ -132,50 +134,50 @@ export function answerFooter(body: HTMLElement, context: AnswerContext) {
       .map(node => answerSources.get(node) || "").filter(Boolean).join("\n\n");
     if (!source) return;
     try { await copyText(source); }
-    catch (_) { toast("复制失败，请选择回答后手动复制", true); return; }
+    catch (_) { toast(i18nText("复制失败，请选择回答后手动复制"), true); return; }
     copy.replaceChildren(svgIcon("check", 16));
     copy.classList.add("copied");
-    copy.setAttribute("aria-label", "已复制回答");
-    setTip(copy, "已复制");
+    setAttrRender(copy, "aria-label", () => i18nText("已复制回答"));
+    setTip(copy, () => i18nText("已复制"));
     copy.disabled = true;
     setTimeout(() => {
       copy.replaceChildren(svgIcon("copy", 16));
       copy.classList.remove("copied");
-      copy.setAttribute("aria-label", "复制回答");
-      setTip(copy, "复制回答（Markdown）");
+      setAttrRender(copy, "aria-label", () => i18nText("复制回答"));
+      setTip(copy, () => i18nText("复制回答（Markdown）"));
       copy.disabled = false;
     }, 1400);
   });
   function update() {
     el.hidden = ![...body.querySelectorAll<HTMLElement>(".msg.agent")].some(node => answerSources.has(node));
     const turn = context.turn;
-    model.v.textContent = context.reportedModel || turn?.model || "未记录";
-    model.note.textContent = context.reportedModel
-      ? (turn && turn.model !== context.reportedModel ? `请求的是 ${turn.model}，以模型实际返回为准` : "")
-      : turn ? "服务未返回实际模型，这里是请求的模型" : "这条历史回答未记录模型";
-    effort.v.textContent = reasoningText(turn);
-    effort.note.textContent = !turn ? "这条历史回答未记录推理设置"
-      : turn.unsupported ? "本轮模型不支持调整推理强度"
-      : !turn.effort ? "本轮未指定，沿用模型默认"
-      : turn.control === "budget" ? "这是请求的思考预算上限，并非实际消耗"
-      : "";
+    setTextRender(model.v, () => context.reportedModel || turn?.model || i18nText("未记录"));
+    setTextRender(model.note, () => context.reportedModel
+      ? (turn && turn.model !== context.reportedModel ? i18nText("请求的是 {p0}，以模型实际返回为准", { p0: String(turn.model) }) : "")
+      : turn ? i18nText("服务未返回实际模型，这里是请求的模型") : i18nText("这条历史回答未记录模型"));
+    setTextRender(effort.v, () => reasoningText(turn));
+    setTextRender(effort.note, () => !turn ? i18nText("这条历史回答未记录推理设置")
+      : turn.unsupported ? i18nText("本轮模型不支持调整推理强度")
+      : !turn.effort ? i18nText("本轮未指定，沿用模型默认")
+      : turn.control === "budget" ? i18nText("这是请求的思考预算上限，并非实际消耗")
+      : "");
     const d = context.ts ? new Date(context.ts) : null;
     if (d && Number.isFinite(d.getTime())) {
       const zone = S.timeZone || "Asia/Shanghai";
       date.textContent = fmtDateTime(d, false);
       date.dateTime = d.toISOString();
-      setTip(date, `回答时间：${fmtDateTime(d)}（${zone}）`);
+      setTip(date, () => i18nText("回答时间：{p0}（{p1}）", { p0: String(fmtDateTime(d)), p1: String(zone) }));
     } else {
-      date.textContent = "时间未记录";
+      setText(date, "时间未记录");
       date.removeAttribute("datetime");
-      setTip(date, "这条回答未记录时间");
+      setTip(date, () => i18nText("这条回答未记录时间"));
     }
     const price = costView(context);
-    cost.textContent = price.label;
+    setTextRender(cost, () => costView(context).label);
     cost.classList.toggle("priced", price.priced);
-    setTip(cost, price.detail);
-    costDetail.v.textContent = price.label;
-    costDetail.note.textContent = price.detail;
+    setTip(cost, () => costView(context).detail);
+    setTextRender(costDetail.v, () => costView(context).label);
+    setTextRender(costDetail.note, () => costView(context).detail);
   }
   return { el, update, setReceipt: (node: HTMLElement) => receipt.replaceChildren(node) };
 }

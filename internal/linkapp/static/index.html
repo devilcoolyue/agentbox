@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>abox-link 内网隧道</title>
+  <title data-i18n>abox-link 内网隧道</title>
   <link rel="icon" href="/img/logo.svg">
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -13,11 +13,17 @@
   <div class="brand">
     <img class="brand-mark" src="/img/logo.svg" width="20" height="20" alt="">
     <strong>ABOX-LINK</strong>
-    <span class="brand-sub">内网隧道</span>
+    <span class="brand-sub" data-i18n>内网隧道</span>
   </div>
+  <div class="top-tools">
+    <label class="language-picker">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h12M10 3v2M7 5c0 5 3 8 7 10M13 5c0 5-3 8-7 10m8 6 4-10 4 10m-6-4h4"/></svg>
+      <select id="interface-language" aria-label="界面语言" data-i18n-aria-label="界面语言"></select>
+    </label>
   <div class="acct">
     <span class="acct-name" id="hdr-acct"></span>
     <span class="dot" id="hdr-dot"></span>
+  </div>
   </div>
 </header>
 
@@ -27,19 +33,16 @@
   <section class="card card-pair hidden" id="card-pair">
     <img class="pair-mascot" src="/img/mascot.svg" width="104" height="90" alt="">
     <div class="pair-body">
-      <h2>接入你的 agentbox</h2>
-      <p>
-        打开浏览器里的 agentbox → 侧栏「内网隧道」 → 点「生成配对码」，
-        把那串字符粘到下面。不需要在这里输密码。
-      </p>
+      <h2 data-i18n>接入你的 agentbox</h2>
+      <p data-i18n>打开浏览器里的 agentbox → 侧栏「内网隧道」 → 点「生成配对码」，把那串字符粘到下面。不需要在这里输密码。</p>
       <textarea id="pair-code" rows="3" spellcheck="false"
-                placeholder="ABOX1-…"></textarea>
+                placeholder="ABOX1-…" aria-label="配对码" data-i18n-aria-label="配对码"></textarea>
       <label class="check">
         <input type="checkbox" id="pair-insecure">
-        <span>服务器用的是自签名证书，跳过证书校验</span>
+        <span data-i18n>服务器用的是自签名证书，跳过证书校验</span>
       </label>
       <div class="row">
-        <button class="primary" id="btn-pair" data-icon="link">接入</button>
+        <button class="primary" id="btn-pair" data-icon="link" data-i18n>接入</button>
         <span class="err" id="pair-err"></span>
       </div>
     </div>
@@ -55,21 +58,21 @@
       <span class="leg leg-a"><i class="glint"></i></span>
       <span class="node">
         <span class="node-mark"></span>
-        <span class="term-label">本机</span>
+        <span class="term-label" data-i18n>本机</span>
         <span class="node-rules" id="wire-rules"></span>
       </span>
       <span class="leg leg-b"></span>
       <span class="term term-b">
         <span class="lamp"></span>
-        <span class="term-label">内网</span>
+        <span class="term-label" data-i18n>内网</span>
       </span>
     </div>
     <div class="link-foot">
       <div class="link-read">
-        <div class="st-title" id="st-title">未连接</div>
+        <div class="st-title" id="st-title" data-i18n>未连接</div>
         <div class="st-sub" id="st-sub"></div>
       </div>
-      <button class="primary" id="btn-toggle" data-icon="play">启动</button>
+      <button class="primary" id="btn-toggle" data-icon="play" data-i18n>启动</button>
     </div>
   </section>
 
@@ -79,32 +82,29 @@
 
       <section class="card">
         <div class="head">
-          <h2>放行规则</h2>
+          <h2 data-i18n>放行规则</h2>
           <span class="head-line"></span>
         </div>
         <p>
-          容器只能访问这里列出的目标，其余一律拒绝。
-          可填网段 <code>192.168.1.0/24</code>、主机名 <code>db.corp.local</code>
-          或带端口的 <code>db.corp.local:5432</code>。
+          <span data-i18n>容器只能访问这里列出的目标，其余一律拒绝。</span>
+          <span data-i18n>可填网段</span> <code>192.168.1.0/24</code><span data-i18n>、主机名</span> <code>db.corp.local</code>
+          <span data-i18n>或带端口的地址</span> <code>db.corp.local:5432</code><span data-i18n>。</span>
         </p>
         <div id="allow-list" class="rules"
-             data-empty="还没有规则 — 容器现在到不了任何内网地址。"></div>
-        <button class="ghost add" id="btn-add-allow" data-icon="plus">添加规则</button>
+             data-empty="还没有规则 — 容器现在到不了任何内网地址。" data-i18n-data-empty="还没有规则 — 容器现在到不了任何内网地址。"></div>
+        <button class="ghost add" id="btn-add-allow" data-icon="plus" data-i18n>添加规则</button>
       </section>
 
       <section class="card">
         <div class="head">
-          <h2>端口映射</h2>
-          <span class="head-tag">可选</span>
+          <h2 data-i18n>端口映射</h2>
+          <span class="head-tag" data-i18n>可选</span>
           <span class="head-line"></span>
         </div>
-        <p>
-          兼容代理模式下，给不支持 SOCKS 的程序使用；透明访问下可直接连接放行目标。也可
-          在服务端开一个固定端口，直通某个内网地址。映射的目标自动放行。
-        </p>
+        <p data-i18n>兼容代理模式下，给不支持 SOCKS 的程序使用；透明访问下可直接连接放行目标。也可在服务端开一个固定端口，直通某个内网地址。映射的目标自动放行。</p>
         <div id="map-list" class="rules"
-             data-empty="未配置端口映射。透明模式下，直接访问放行目标即可。"></div>
-        <button class="ghost add" id="btn-add-map" data-icon="plus">添加映射</button>
+             data-empty="未配置端口映射。透明模式下，直接访问放行目标即可。" data-i18n-data-empty="未配置端口映射。透明模式下，直接访问放行目标即可。"></div>
+        <button class="ghost add" id="btn-add-map" data-icon="plus" data-i18n>添加映射</button>
       </section>
 
     </div>
@@ -113,7 +113,7 @@
 
       <section class="card card-log">
         <div class="head">
-          <h2>运行日志</h2>
+          <h2 data-i18n>运行日志</h2>
           <span class="head-line"></span>
         </div>
         <div class="log" id="log"></div>
@@ -121,29 +121,29 @@
 
       <section class="card">
         <div class="head">
-          <h2>选项</h2>
+          <h2 data-i18n>选项</h2>
           <span class="head-line"></span>
         </div>
         <label class="check">
           <input type="checkbox" id="opt-transparent">
-          <span>透明内网访问（默认，推荐） <span class="hint">直接使用放行的 IPv4 地址与域名，无需 Agent 配置代理；需服务端支持</span></span>
+          <span><span data-i18n>透明内网访问（默认，推荐）</span> <span class="hint" data-i18n>直接使用放行的 IPv4 地址与域名，无需 Agent 配置代理；需服务端支持</span></span>
         </label>
-        <p class="hint">取消上方勾选可使用兼容代理模式（保留，暂不推荐）：需要显式使用 SOCKS 代理或配置端口映射，Agent 可能因漏用代理而连接失败。两种模式都受本机白名单限制。</p>
+        <p class="hint" data-i18n>取消上方勾选可使用兼容代理模式（保留，暂不推荐）：需要显式使用 SOCKS 代理或配置端口映射，Agent 可能因漏用代理而连接失败。两种模式都受本机白名单限制。</p>
         <label class="check">
           <input type="checkbox" id="opt-auto">
-          <span>启动本程序时自动连接隧道</span>
+          <span data-i18n>启动本程序时自动连接隧道</span>
         </label>
         <label class="check">
           <input type="checkbox" id="opt-boot">
-          <span>开机自启 <span class="hint" id="boot-detail"></span></span>
+          <span><span data-i18n>开机自启</span> <span class="hint" id="boot-detail"></span></span>
         </label>
         <label class="check">
           <input type="checkbox" id="opt-insecure">
-          <span>跳过 TLS 证书校验（服务器用自签名证书时才勾）</span>
+          <span data-i18n>跳过 TLS 证书校验（服务器用自签名证书时才勾）</span>
         </label>
         <div class="unpair">
-          <button class="ghost danger" id="btn-unpair" data-icon="unlink">解除绑定</button>
-          <span class="hint">保留放行规则，只清除服务器与登录凭证</span>
+          <button class="ghost danger" id="btn-unpair" data-icon="unlink" data-i18n>解除绑定</button>
+          <span class="hint" data-i18n>保留放行规则，只清除服务器与登录凭证</span>
         </div>
       </section>
 
@@ -153,10 +153,10 @@
 
 <!-- 有未保存改动时浮出 -->
 <div class="savebar hidden" id="savebar">
-  <span id="save-msg">改动还没生效</span>
+  <span id="save-msg" data-i18n>改动还没生效</span>
   <div class="row">
-    <button class="ghost" id="btn-revert" data-icon="undo">放弃</button>
-    <button class="primary" id="btn-save" data-icon="save">保存并应用</button>
+    <button class="ghost" id="btn-revert" data-icon="undo" data-i18n>放弃</button>
+    <button class="primary" id="btn-save" data-icon="save" data-i18n>保存并应用</button>
   </div>
 </div>
 

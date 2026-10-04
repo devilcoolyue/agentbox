@@ -1,3 +1,4 @@
+import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
 import { actionButton } from "./icons.js";
 import { hideTip } from "./tip.js";
 import { api } from "./api.js";
@@ -7,15 +8,18 @@ import { setSelectValue } from "./select.js";
 const KEEP = "__AGENTBOX_KEEP_SECRET__";
 const MASK = "••••••";
 const status = {
-    configured: "已保存", pending: "待应用", pending_delete: "待清理（下次使用时移除）", applied: "已写入用户配置", conflict: "配置冲突",
-    unmanaged: "终端自装", disabled: "未继承", connected: "连接成功", authentication_required: "需要授权",
-    missing_command: "容器内未找到命令", network_error: "网络或 HTTP 错误", protocol_error: "协议或响应错误",
-    timeout: "检测超时", cancelled: "检测已取消",
+    get configured() { return i18nText("已保存"); }, get pending() { return i18nText("待应用"); }, get pending_delete() { return i18nText("待清理（下次使用时移除）"); }, get applied() { return i18nText("已写入用户配置"); }, get conflict() { return i18nText("配置冲突"); },
+    get unmanaged() { return i18nText("终端自装"); }, get disabled() { return i18nText("未继承"); }, get connected() { return i18nText("连接成功"); }, get authentication_required() { return i18nText("需要授权"); },
+    get missing_command() { return i18nText("容器内未找到命令"); }, get network_error() { return i18nText("网络或 HTTP 错误"); }, get protocol_error() { return i18nText("协议或响应错误"); },
+    get timeout() { return i18nText("检测超时"); }, get cancelled() { return i18nText("检测已取消"); },
 };
-const sources = { user: "用户配置", session: "空间覆盖", native: "终端自装" };
+const sources = { get user() { return i18nText("用户配置"); }, get session() { return i18nText("空间覆盖"); }, get native() { return i18nText("终端自装"); } };
 function node(tag, text = "", cls = "") {
     const e = document.createElement(tag);
-    e.textContent = text;
+    if (typeof text === "function")
+        setTextRender(e, text);
+    else
+        e.textContent = text;
     e.className = cls;
     return e;
 }
@@ -25,7 +29,7 @@ function secretJSON(values) {
 function jsonMap(value) {
     const obj = JSON.parse(value || "{}");
     if (!obj || typeof obj !== "object" || Array.isArray(obj) || Object.values(obj).some(v => typeof v !== "string"))
-        throw new Error("凭证必须是 JSON 对象，键和值均为字符串");
+        throw new Error(i18nText("凭证必须是 JSON 对象，键和值均为字符串"));
     return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, v === MASK ? KEEP : v]));
 }
 export function initMCP() {
@@ -99,7 +103,7 @@ export function initMCP() {
         data = null;
         request?.abort();
         request = new AbortController();
-        $("mcp-list").replaceChildren(node("p", "正在读取 MCP 配置…"));
+        $("mcp-list").replaceChildren(node("p", () => i18nText("正在读取 MCP 配置…")));
         try {
             const result = await api(endpoint(), { signal: request.signal });
             if (!current(g))
@@ -116,7 +120,7 @@ export function initMCP() {
         const http = $("mcp-type").value === "http";
         $("mcp-stdio-fields").classList.toggle("hidden", http);
         $("mcp-http-fields").classList.toggle("hidden", !http);
-        $("mcp-secret-label").textContent = http ? "请求头" : "环境变量";
+        setTextRender($("mcp-secret-label"), () => http ? i18nText("请求头") : i18nText("环境变量"));
         $("mcp-url").required = http;
         $("mcp-command").required = !http;
     }
@@ -126,8 +130,8 @@ export function initMCP() {
         selected = item || null;
         const d = item?.config || { type: "stdio" };
         $("mcp-form-error").classList.add("hidden");
-        $("mcp-editor-context").textContent = scope() === "user" ? "我的 MCP · 所有 Claude 空间默认继承" : "当前空间 · " + (S.current?.name || "");
-        $("mcp-editor-title").textContent = item ? `编辑 ${item.name}` : "新增 MCP";
+        setTextRender($("mcp-editor-context"), () => scope() === "user" ? i18nText("我的 MCP · 所有 Claude 空间默认继承") : i18nText("当前空间 · ") + (S.current?.name || ""));
+        setTextRender($("mcp-editor-title"), () => item ? i18nText("编辑 {p0}", { p0: String(item.name) }) : i18nText("新增 MCP"));
         $("mcp-name").value = item?.name || "";
         $("mcp-name").disabled = !!item;
         setSelectValue($("mcp-type"), d.type || "stdio");
@@ -146,44 +150,45 @@ export function initMCP() {
         list.replaceChildren();
         if (!data)
             return;
-        $("mcp-scope-hint").textContent = scope() === "user" ? "自己的 Claude 空间默认继承这些配置；同名自装配置需要在各空间确认接管。" : "空间覆盖优先；删除覆盖可恢复继承。已写入配置不代表终端进程已重新加载。";
-        if (data.project_names.length)
-            list.append(node("p", `项目配置：${data.project_names.join("、")}。项目批准和插件 MCP 请在终端管理；同名配置可能影响最终加载结果。`, "mcp-notice"));
-        if (data.external?.length)
-            list.append(node("p", data.external.map(e => `${e.source === "local" ? "本地项目 MCP" : "已安装插件"}：${e.name}`).join("；") + "。这些来源由 CLI 管理，插件不一定提供 MCP，同名工具请在 CLI 核对。", "mcp-notice"));
-        if (!data.items.length)
-            list.append(node("p", "还没有 MCP。新增一个服务，或导入标准 mcpServers JSON 配置。", "mcp-empty"));
-        for (const item of data.items) {
+        const snapshot = data;
+        setTextRender($("mcp-scope-hint"), () => scope() === "user" ? i18nText("自己的 Claude 空间默认继承这些配置；同名自装配置需要在各空间确认接管。") : i18nText("空间覆盖优先；删除覆盖可恢复继承。已写入配置不代表终端进程已重新加载。"));
+        if (snapshot.project_names.length)
+            list.append(node("p", () => i18nText("项目配置：{p0}。项目批准和插件 MCP 请在终端管理；同名配置可能影响最终加载结果。", { p0: String(snapshot.project_names.join("、")) }), "mcp-notice"));
+        if (snapshot.external?.length)
+            list.append(node("p", () => (snapshot.external || []).map(e => `${e.source === "local" ? i18nText("本地项目 MCP") : i18nText("已安装插件")}：${e.name}`).join("；") + i18nText("。这些来源由 CLI 管理，插件不一定提供 MCP，同名工具请在 CLI 核对。"), "mcp-notice"));
+        if (!snapshot.items.length)
+            list.append(node("p", () => i18nText("还没有 MCP。新增一个服务，或导入标准 mcpServers JSON 配置。"), "mcp-empty"));
+        for (const item of snapshot.items) {
             const row = node("article", "", "mcp-row");
             const heading = node("div", "", "mcp-row-heading");
             const title = node("div", "", "mcp-row-title");
-            title.append(node("strong", item.name), node("span", item.config.type || "继承", "mcp-transport"));
+            title.append(node("strong", item.name), node("span", () => item.config.type || i18nText("继承"), "mcp-transport"));
             const meta = node("div", "", "mcp-meta");
-            const state = node("span", `${item.disabled ? "已停用 · " : ""}${status[item.status] || item.status}`, "mcp-state");
+            const state = node("span", () => `${item.disabled ? i18nText("已停用 · ") : ""}${status[item.status] || item.status}`, "mcp-state");
             state.dataset.state = item.disabled ? "disabled" : item.status;
-            meta.append(node("span", sources[item.source]), state);
+            meta.append(node("span", () => sources[item.source]), state);
             heading.append(title, meta);
             row.append(heading);
             const actions = node("div", "", "mcp-actions");
-            const base = endpoint(), id = S.current.id, revision = data.revision, g = generation;
+            const base = endpoint(), id = S.current.id, revision = snapshot.revision, g = generation;
             const path = `${base}/${encodeURIComponent(item.name)}`;
             const refresh = async () => { if (current(g))
                 await load(); };
             if (item.status === "conflict" || item.source === "native") {
                 const details = node("details");
-                details.append(node("summary", "查看配置差异（凭证已隐藏）"));
-                details.append(node("pre", `网页配置\n${JSON.stringify(item.config, null, 2).replaceAll(KEEP, MASK)}\n终端配置\n${JSON.stringify(item.native, null, 2).replaceAll(KEEP, MASK)}`));
+                details.append(node("summary", () => i18nText("查看配置差异（凭证已隐藏）")));
+                details.append(node("pre", () => i18nText("网页配置\n{p0}\n终端配置\n{p1}", { p0: String(JSON.stringify(item.config, null, 2).replaceAll(KEEP, MASK)), p1: String(JSON.stringify(item.native, null, 2).replaceAll(KEEP, MASK)) })));
                 row.append(details);
                 if (item.native && ["stdio", "http"].includes(item.native.type))
-                    actions.append(button("导入并接管终端配置", "download", async () => {
-                        if (!await askConfirm(`将 ${item.name} 的当前终端配置导入为空间覆盖，之后由网页管理。凭证会在服务端保留。`))
+                    actions.append(button(() => i18nText("导入并接管终端配置"), "download", async () => {
+                        if (!await askConfirm(() => i18nText("将 {p0} 的当前终端配置导入为空间覆盖，之后由网页管理。凭证会在服务端保留。", { p0: String(item.name) })))
                             return;
                         await send(`${path}/adopt`, "POST", { revision, native_revision: item.native_revision });
                         await refresh();
                     }));
                 if (item.status === "conflict")
-                    actions.append(button("保留自装并解除管理", "undo", async () => {
-                        if (!await askConfirm(`保留 ${item.name} 的终端配置，并在本空间禁用同名继承项？`))
+                    actions.append(button(() => i18nText("保留自装并解除管理"), "undo", async () => {
+                        if (!await askConfirm(() => i18nText("保留 {p0} 的终端配置，并在本空间禁用同名继承项？", { p0: String(item.name) })))
                             return;
                         await send(`${path}/adopt`, "POST", { revision, native_revision: item.native_revision, release: true });
                         await refresh();
@@ -192,8 +197,8 @@ export function initMCP() {
             else if (item.status !== "pending_delete") {
                 const tools = node("div", "", "mcp-row-tools");
                 actions.append(tools);
-                tools.append(button(scope() === "session" && item.source === "user" ? "编辑空间覆盖" : "编辑", "edit", async () => edit(item), true));
-                const toggle = button(item.disabled ? "启用" : "停用", "play", async () => {
+                tools.append(button(() => scope() === "session" && item.source === "user" ? i18nText("编辑空间覆盖") : i18nText("编辑"), "edit", async () => edit(item), true));
+                const toggle = button(() => item.disabled ? i18nText("启用") : i18nText("停用"), "play", async () => {
                     if (item.disabled && !item.config.command && !item.config.url)
                         await send(path, "DELETE", { revision });
                     else
@@ -203,25 +208,25 @@ export function initMCP() {
                 toggle.className = "mcp-toggle";
                 toggle.setAttribute("role", "switch");
                 toggle.setAttribute("aria-checked", String(!item.disabled));
-                toggle.setAttribute("aria-label", `启用 ${item.name}`);
-                toggle.replaceChildren(node("span", "", "mcp-toggle-track"), node("span", item.disabled ? "已停用" : "已启用"));
+                setAttrRender(toggle, "aria-label", () => i18nText("启用 {p0}", { p0: String(item.name) }));
+                toggle.replaceChildren(node("span", "", "mcp-toggle-track"), node("span", () => item.disabled ? i18nText("已停用") : i18nText("已启用")));
                 actions.append(toggle);
                 let remove;
                 if (scope() === "user" || item.source === "session")
-                    remove = button(scope() === "session" ? "删除覆盖 / 恢复继承" : "删除", "trash", async () => {
-                        if (!await askConfirm(`删除 ${item.name} 的${scope() === "user" ? "用户配置" : "空间覆盖"}？`, { danger: true }))
+                    remove = button(() => scope() === "session" ? i18nText("删除覆盖 / 恢复继承") : i18nText("删除"), "trash", async () => {
+                        if (!await askConfirm(() => i18nText("删除 {p0} 的{p1}？", { p0: String(item.name), p1: String(scope() === "user" ? i18nText("用户配置") : i18nText("空间覆盖")) }), { danger: true }))
                             return;
                         await send(path, "DELETE", { revision });
                         await refresh();
                     }, true);
                 if (scope() === "session" && !item.disabled) {
-                    tools.append(button("复制到我的 MCP", "copy", async () => {
+                    tools.append(button(() => i18nText("复制到我的 MCP"), "copy", async () => {
                         const user = await api("/mcp", { signal: lifetime.signal });
                         await send(`${path}/copy`, "POST", { revision: user.revision });
-                        toast("已复制到我的 MCP");
+                        toast(i18nText("已复制到我的 MCP"));
                     }, true));
-                    const test = button("测试连接", "activity", async () => {
-                        toast("正在容器内检测 MCP，最多等待 30 秒");
+                    const test = button(() => i18nText("测试连接"), "activity", async () => {
+                        toast(i18nText("正在容器内检测 MCP，最多等待 30 秒"));
                         checkRequest?.abort();
                         checkRequest = new AbortController();
                         const result = await api(`/sessions/${encodeURIComponent(id)}/mcp/${encodeURIComponent(item.name)}/check`, { method: "POST", signal: checkRequest.signal });
@@ -238,12 +243,12 @@ export function initMCP() {
             row.append(actions);
             const check = checks.get(`${id}/${item.name}`);
             if (check) {
-                row.append(node("p", `上次检测：${status[check.status] || "检测失败"} · ${fmtDateTime(check.checked_at, false)}`, check.status === "connected" ? "mcp-meta" : "mcp-error"));
+                row.append(node("p", () => i18nText("上次检测：{p0} · {p1}", { p0: String(status[check.status] || i18nText("检测失败")), p1: String(fmtDateTime(check.checked_at, false)) }), check.status === "connected" ? "mcp-meta" : "mcp-error"));
                 if (check.status === "authentication_required")
-                    row.append(node("p", `如服务使用 OAuth，请在终端运行 claude mcp login ${item.name}。本页检测暂不复用 CLI 的 OAuth 凭证。`));
+                    row.append(node("p", () => i18nText("如服务使用 OAuth，请在终端运行 claude mcp login {p0}。本页检测暂不复用 CLI 的 OAuth 凭证。", { p0: String(item.name) })));
                 if (check.tools?.length) {
                     const tools = node("details");
-                    tools.append(node("summary", `${check.tools.length} 个工具${check.truncated ? "（已截断）" : ""}`));
+                    tools.append(node("summary", () => i18nText("{p0} 个工具{p1}", { p0: String(check.tools?.length || 0), p1: String(check.truncated ? i18nText("（已截断）") : "") })));
                     for (const tool of check.tools)
                         tools.append(node("p", `${tool.name} — ${tool.description}`));
                     row.append(tools);
@@ -277,11 +282,11 @@ export function initMCP() {
             else {
                 const args = JSON.parse($("mcp-args").value || "[]");
                 if (!Array.isArray(args) || args.some(a => typeof a !== "string"))
-                    throw new Error("参数必须是字符串 JSON 数组");
+                    throw new Error(i18nText("参数必须是字符串 JSON 数组"));
                 config = { type, command: $("mcp-command").value.trim(), args, env: secrets };
             }
             await send(`${base}/${encodeURIComponent(name)}`, "PUT", { revision, entry: { config, disabled: selected?.disabled || false } });
-            toast("已保存，下次聊天或终端连接时应用；已运行的 Claude 需要重启");
+            toast(i18nText("已保存，下次聊天或终端连接时应用；已运行的 Claude 需要重启"));
             if (current(g))
                 await load();
         });
@@ -295,12 +300,12 @@ export function initMCP() {
         const base = endpoint(), revision = data.revision, g = generation;
         void action(async () => {
             if (file.size > 100 * 1024)
-                throw new Error("导入文件不能超过 100 KB");
+                throw new Error(i18nText("导入文件不能超过 100 KB"));
             const parsed = JSON.parse(await file.text());
             if (!parsed.mcpServers || typeof parsed.mcpServers !== "object" || Array.isArray(parsed.mcpServers))
-                throw new Error("文件需要包含 mcpServers 对象");
+                throw new Error(i18nText("文件需要包含 mcpServers 对象"));
             const names = Object.keys(parsed.mcpServers);
-            if (!await askConfirm(`将导入 ${names.length} 个 MCP：\n${names.join("、")}\n已有同名配置不会覆盖。凭证随配置保存。`, { title: "预览导入" }))
+            if (!await askConfirm(() => i18nText("将导入 {p0} 个 MCP：\n{p1}\n已有同名配置不会覆盖。凭证随配置保存。", { p0: String(names.length), p1: String(names.join("、")) }), { get title() { return i18nText("预览导入"); } }))
                 return;
             await send(`${base}/import`, "POST", { revision, mcpServers: parsed.mcpServers });
             if (current(g))

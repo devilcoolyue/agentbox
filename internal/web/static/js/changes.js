@@ -1,3 +1,4 @@
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 import { openGitBranches } from "./git-branches.js";
 /* changes：Git 变更审查页 —— 列出 workspace 相对上次提交的改动，查看 diff，
  * 提交或丢弃。让「下发任务 → 审查改动 → 提交/回滚」的闭环不必切到终端。 */
@@ -56,7 +57,7 @@ export async function loadChanges() {
     $("btn-changes-remote").disabled = $("btn-changes-branches").disabled = true;
     $("changes-remote-state").classList.add("hidden");
     $("changes-branch").textContent = "";
-    $("changes-list").replaceChildren(loadingRow("读取变更中…"));
+    $("changes-list").replaceChildren(loadingRow(i18nText("读取变更中…")));
     $("changes-diff").replaceChildren();
     $("changes-view-bar").classList.add("hidden");
     let data;
@@ -67,7 +68,7 @@ export async function loadChanges() {
     catch (e) {
         if (stale())
             return;
-        listMsg("读取变更失败：" + e.message);
+        listMsg(i18nText("读取变更失败：") + e.message);
         setActions(false);
         return;
     }
@@ -79,10 +80,10 @@ export async function loadChanges() {
     CH.repos = data.repos || [];
     renderRepoPick();
     if (!data.is_repo) {
-        listMsg("当前空间没有 Git 仓库。在终端中初始化或克隆项目后，即可查看改动。");
+        listMsg(i18nText("当前空间没有 Git 仓库。在终端中初始化或克隆项目后，即可查看改动。"));
         const clone = document.createElement("button");
         clone.className = "btn btn-primary";
-        buttonLabel(clone, "克隆仓库", "git-clone");
+        buttonLabel(clone, () => i18nText("克隆仓库"), "git-clone");
         clone.addEventListener("click", () => $("btn-changes-clone").click());
         $("changes-list").append(clone);
         setActions(false);
@@ -91,17 +92,17 @@ export async function loadChanges() {
     CH.files = data.files || [];
     $("btn-changes-remote").disabled = $("btn-changes-branches").disabled = false;
     CH.truncated = !!data.truncated;
-    const branch = data.detached ? "游离 HEAD · " + (data.head || "").slice(0, 12) : "分支 " + (data.branch || "—") + (data.unborn ? "（尚无提交）" : "");
+    const branch = data.detached ? i18nText("游离 HEAD · ") + (data.head || "").slice(0, 12) : i18nText("分支 ") + (data.branch || "—") + (data.unborn ? i18nText("（尚无提交）") : "");
     // 仓库下拉已经显示路径时就不再重复；只有一个仓库且它在子目录里才带上路径。
     const prefix = CH.repos.length > 1 || !CH.repo ? "" : CH.repo + " · ";
     $("changes-branch").textContent = prefix + branch;
     const remoteState = $("changes-remote-state");
     const tracking = data.upstream
-        ? `${data.upstream} · ${data.tracking_known ? `本地领先 ${data.ahead} / 落后 ${data.behind}` : "跟踪分支尚未获取或已删除"}（本地缓存）`
-        : "当前分支未设置上游";
-    const remotes = (data.remotes || []).map(r => `${r.name}${r.push ? "（推送）" : ""}: ${r.url}`);
+        ? i18nText("{p0} · {p1}（本地缓存）", { p0: String(data.upstream), p1: String(data.tracking_known ? i18nText("本地领先 {p0} / 落后 {p1}", { p0: String(data.ahead), p1: String(data.behind) }) : i18nText("跟踪分支尚未获取或已删除")) })
+        : i18nText("当前分支未设置上游");
+    const remotes = (data.remotes || []).map(r => `${r.name}${r.push ? i18nText("（推送）") : ""}: ${r.url}`);
     $("changes-tracking").textContent = tracking;
-    $("changes-remote-detail").textContent = [...remotes, ...(data.last_fetch ? [`上次网页获取 ${data.last_fetch.target} · ${fmtTime(Date.parse(data.last_fetch.at))}`] : []), "刷新仅检查本地状态，不会获取或推送远程提交。"].join("\n");
+    setTextRender($("changes-remote-detail"), () => [...remotes, ...(data.last_fetch ? [i18nText("上次网页获取 {p0} · {p1}", { p0: String(data.last_fetch.target), p1: String(fmtTime(Date.parse(data.last_fetch.at))) })] : []), i18nText("刷新仅检查本地状态，不会获取或推送远程提交。")].join("\n"));
     remoteState.classList.remove("hidden");
     renderList();
     if (CH.selected)
@@ -118,7 +119,7 @@ function renderRepoPick() {
     sel.replaceChildren(...CH.repos.map((r) => {
         const o = document.createElement("option");
         o.value = r;
-        o.textContent = r || "（空间文件根目录）";
+        setTextRender(o, () => r || i18nText("（空间文件根目录）"));
         return o;
     }));
     setSelectValue(sel, CH.repo);
@@ -130,7 +131,7 @@ function setActions(on) {
 /* 标签只表示改动类型；是否已暂存单独用一个小圆点表示。旧版把两种分类混进同一个
  * 标签（暂存的修改显示「已暂存」，暂存的新文件却显示「新增」），用户看不出改了什么。
  * 提交时服务端会 add -A，暂存与否不影响这次提交包含哪些文件。 */
-const KIND_LABEL = { new: "未跟踪", add: "新增", mod: "修改", del: "删除", ren: "重命名", conflict: "冲突" };
+const KIND_LABEL = { get new() { return i18nText("未跟踪"); }, get add() { return i18nText("新增"); }, get mod() { return i18nText("修改"); }, get del() { return i18nText("删除"); }, get ren() { return i18nText("重命名"); }, get conflict() { return i18nText("冲突"); } };
 function statusKind(xy) {
     if (xy === "??")
         return "new";
@@ -159,7 +160,7 @@ function renderList() {
     }
     renderViewBar();
     if (!CH.files.length) {
-        listMsg("没有未提交的改动。");
+        listMsg(i18nText("没有未提交的改动。"));
         setActions(false);
         diffMsg("");
         return;
@@ -167,7 +168,7 @@ function renderList() {
     setActions(true);
     // 右侧空着时给一句提示，别留一大块空白让人以为没加载出来
     if (!CH.selected)
-        diffMsg(`共 ${CH.files.length} 个文件有改动。选择左侧文件查看差异。`);
+        diffMsg(i18nText("共 {p0} 个文件有改动。选择左侧文件查看差异。", { p0: String(CH.files.length) }));
     const frag = document.createDocumentFragment();
     for (const f of CH.files) {
         const row = document.createElement("div");
@@ -176,12 +177,12 @@ function renderList() {
         const kind = statusKind(f.status);
         const badge = document.createElement("span");
         badge.className = "change-badge k-" + kind;
-        badge.textContent = KIND_LABEL[kind];
+        setTextRender(badge, () => KIND_LABEL[kind]);
         const staged = stagedState(f.status);
         const dot = document.createElement("span");
         dot.className = "change-staged" + (staged ? " " + staged : "");
         if (staged) {
-            const tip = staged === "full" ? "已暂存" : "部分暂存：工作区里还有未暂存的改动";
+            const tip = staged === "full" ? i18nText("已暂存") : i18nText("部分暂存：工作区里还有未暂存的改动");
             setTip(dot, tip);
             dot.setAttribute("aria-label", tip);
             dot.setAttribute("role", "img");
@@ -194,8 +195,8 @@ function renderList() {
         const disc = document.createElement("button");
         disc.type = "button";
         disc.className = "change-discard";
-        setTip(disc, "丢弃此文件的改动");
-        disc.setAttribute("aria-label", "丢弃此文件的改动");
+        setTip(disc, () => i18nText("丢弃此文件的改动"));
+        setAttrRender(disc, "aria-label", () => i18nText("丢弃此文件的改动"));
         buttonLabel(disc, "", "undo");
         disc.addEventListener("click", (e) => { e.stopPropagation(); openDiscard(f.path); });
         row.append(badge, dot, name, disc);
@@ -208,7 +209,7 @@ function renderList() {
     if (CH.truncated) {
         const more = document.createElement("p");
         more.className = "files-empty";
-        more.textContent = `变更太多，只列出前 ${CH.files.length} 个。`;
+        setText(more, "变更太多，只列出前 {p0} 个。", { p0: String(CH.files.length) });
         frag.appendChild(more);
     }
     $("changes-list").replaceChildren(frag);
@@ -242,8 +243,8 @@ function renderViewBar() {
     fullBtn.classList.toggle("active", CH.view === "full");
     diffBtn.disabled = f.untracked; // 未跟踪的文件相对 HEAD 没有差异
     fullBtn.disabled = isDeleted(f); // 删掉的文件没有内容可读
-    setTip(diffBtn, f.untracked ? "新文件没有可比对的版本" : "");
-    setTip(fullBtn, isDeleted(f) ? "文件已删除" : "");
+    setTip(diffBtn, () => f.untracked ? i18nText("新文件没有可比对的版本") : "");
+    setTip(fullBtn, () => isDeleted(f) ? i18nText("文件已删除") : "");
 }
 async function renderView() {
     const f = currentFile();
@@ -253,7 +254,7 @@ async function renderView() {
         return;
     }
     const full = CH.view === "full";
-    $("changes-diff").replaceChildren(loadingRow(full ? "读取文件内容…" : "读取 diff…"));
+    $("changes-diff").replaceChildren(loadingRow(full ? i18nText("读取文件内容…") : i18nText("读取 diff…")));
     const stale = () => CH.selected !== f.path || (CH.view === "full") !== full;
     try {
         const text = await fetchText(full ? "file" : "diff", f.path);
@@ -267,7 +268,7 @@ async function renderView() {
     catch (e) {
         if (stale())
             return;
-        diffMsg((full ? "读取文件内容失败：" : "读取 diff 失败：") + e.message);
+        diffMsg((full ? i18nText("读取文件内容失败：") : i18nText("读取 diff 失败：")) + e.message);
     }
 }
 /* diff / 文件内容都是纯文本，不走 api()（它只解析 JSON）。path 相对仓库根，
@@ -293,7 +294,7 @@ async function fetchText(kind, path) {
 }
 function renderText(text) {
     if (!text) {
-        diffMsg("（空文件）");
+        diffMsg(i18nText("（空文件）"));
         return;
     }
     const pre = document.createElement("pre");
@@ -303,7 +304,7 @@ function renderText(text) {
 }
 function renderDiff(text) {
     if (!text.trim()) {
-        diffMsg("（无文本差异）");
+        diffMsg(i18nText("（无文本差异）"));
         return;
     }
     const pre = document.createElement("pre");
@@ -354,11 +355,12 @@ let committing = false;
 $("btn-changes-commit").addEventListener("click", async () => {
     if (!S.current || committing)
         return;
+    const sessionName = S.current.name;
     const target = { session: S.current.id, repo: CH.repo, token: S.token };
     commitTarget = target;
     $("git-commit-msg").value = "";
-    $("git-commit-target").textContent = `${S.current.name} · ${CH.repo || "空间文件根目录"}`;
-    $("git-commit-identity").textContent = "读取提交身份中…";
+    setTextRender($("git-commit-target"), () => `${sessionName} · ${target.repo || i18nText("空间文件根目录")}`);
+    setText($("git-commit-identity"), "读取提交身份中…");
     $("git-commit-ok").disabled = true;
     setErr("git-commit-error", "");
     $("dlg-git-commit").showModal();
@@ -367,12 +369,12 @@ $("btn-changes-commit").addEventListener("click", async () => {
         const profile = await api("/me/git");
         if (commitTarget !== target || target.token !== S.token)
             return;
-        $("git-commit-identity").textContent = `提交身份：${profile.name} <${profile.email}>`;
+        setText($("git-commit-identity"), "提交身份：{p0} <{p1}>", { p0: String(profile.name), p1: String(profile.email) });
         $("git-commit-ok").disabled = false;
     }
     catch (e) {
         if (commitTarget === target)
-            setErr("git-commit-error", "读取提交身份失败：" + e.message);
+            setErr("git-commit-error", i18nText("读取提交身份失败：") + e.message);
     }
 });
 $("dlg-git-commit").addEventListener("close", () => { commitTarget = null; });
@@ -386,13 +388,13 @@ $("git-commit-ok").addEventListener("click", async () => {
         return;
     const msg = $("git-commit-msg").value.trim();
     if (!msg) {
-        setErr("git-commit-error", "提交信息不能为空");
+        setErr("git-commit-error", i18nText("提交信息不能为空"));
         return;
     }
     setErr("git-commit-error", "");
     committing = true;
     $("git-commit-cancel").disabled = $("git-commit-close").disabled = true;
-    btnBusy($("git-commit-ok"), "提交中…");
+    btnBusy($("git-commit-ok"), () => i18nText("提交中…"));
     try {
         const res = await api(`/sessions/${target.session}/git/commit`, {
             method: "POST",
@@ -402,13 +404,13 @@ $("git-commit-ok").addEventListener("click", async () => {
         $("dlg-git-commit").close();
         if (target.token !== S.token)
             return;
-        toast(res.warning || `已提交到本地${res.sha ? " · " + res.sha.slice(0, 12) : ""}，未推送到远程`);
+        toast(res.warning || i18nText("已提交到本地{p0}，未推送到远程", { p0: String(res.sha ? " · " + res.sha.slice(0, 12) : "") }));
         if (target.session === S.current?.id && target.repo === CH.repo)
             loadChanges();
     }
     catch (e) {
         if (target.token === S.token)
-            setErr("git-commit-error", "提交失败：" + e.message);
+            setErr("git-commit-error", i18nText("提交失败：") + e.message);
     }
     finally {
         committing = false;
@@ -425,11 +427,11 @@ bus.addEventListener("signed-out", () => {
 let discardPath = "";
 function openDiscard(path) {
     discardPath = path || "";
-    $("git-discard-title").textContent = path ? "丢弃文件改动" : "丢弃全部改动";
-    const where = CH.repo ? `仓库「${CH.repo}」` : "空间文件根目录";
-    $("git-discard-text").textContent = path
-        ? `确认丢弃「${path}」的改动？`
-        : `确认丢弃${where}里所有未提交的改动？`;
+    setTextRender($("git-discard-title"), () => path ? i18nText("丢弃文件改动") : i18nText("丢弃全部改动"));
+    const where = CH.repo ? i18nText("仓库「{p0}」", { p0: String(CH.repo) }) : i18nText("空间文件根目录");
+    setTextRender($("git-discard-text"), () => path
+        ? i18nText("确认丢弃「{p0}」的改动？", { p0: String(path) })
+        : i18nText("确认丢弃{p0}里所有未提交的改动？", { p0: String(where) }));
     $("dlg-git-discard").showModal();
 }
 $("btn-changes-discard-all").addEventListener("click", () => openDiscard(""));
@@ -439,7 +441,7 @@ $("git-discard-ok").addEventListener("click", async () => {
     const sess = S.current;
     if (!sess)
         return;
-    btnBusy($("git-discard-ok"), "处理中…");
+    btnBusy($("git-discard-ok"), () => i18nText("处理中…"));
     try {
         await api(`/sessions/${sess.id}/git/discard`, {
             method: "POST",
@@ -447,12 +449,12 @@ $("git-discard-ok").addEventListener("click", async () => {
             body: JSON.stringify({ path: discardPath, repo: CH.repo }),
         });
         $("dlg-git-discard").close();
-        toast("已丢弃改动");
+        toast(i18nText("已丢弃改动"));
         CH.selected = "";
         loadChanges();
     }
     catch (e) {
-        toast("丢弃失败：" + e.message, true);
+        toast(i18nText("丢弃失败：") + e.message, true);
     }
     finally {
         btnDone($("git-discard-ok"));

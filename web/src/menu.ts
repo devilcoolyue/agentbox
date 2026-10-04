@@ -1,6 +1,7 @@
 /* menu：「⋯」更多操作菜单。工具栏里不该与主操作并排的动作（重命名、删除、清空后上传）
  * 以及一行放不下的次要动作收进这里。弹层挂在 body（或所在的模态框）上用 fixed 定位，
  * 列表行与卡片的 overflow 裁不到它；全站同一时刻只开一个。 */
+import { t as i18nText, setAttrRender } from "./i18n.js";
 "use strict";
 
 import { svgIcon } from "./icons.js";
@@ -109,14 +110,16 @@ export function openMenuAt(x: number, y: number, items: MenuItem[]) {
 }
 
 /* 「⋯」按钮：items 每次打开时重新取，禁用/隐藏状态随当前数据走。 */
-export function moreButton(items: () => MenuItem[], label = "更多操作"): HTMLButtonElement {
+export function moreButton(items: () => MenuItem[], label: string | (() => string) = () => i18nText("更多操作")): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "btn btn-sm action-control action-icon more-btn";
-  btn.setAttribute("aria-label", label);
+  if (typeof label === "function") setAttrRender(btn, "aria-label", label);
+  else btn.setAttribute("aria-label", label);
   btn.setAttribute("aria-haspopup", "menu");
   btn.setAttribute("aria-expanded", "false");
-  btn.dataset.tip = label;
+  if (typeof label === "function") setAttrRender(btn, "data-tip", label);
+  else btn.dataset.tip = label;
   btn.append(svgIcon("more", 16));
   bindMenu(btn, items);
   return btn;
@@ -157,3 +160,5 @@ window.addEventListener("resize", () => closeMenu());
 document.addEventListener("scroll", (e) => {
   if (current && !current.pop.contains(e.target as Node)) closeMenu();
 }, true);
+
+window.addEventListener("agentbox-language-change", () => closeMenu());

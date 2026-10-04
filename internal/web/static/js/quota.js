@@ -1,3 +1,4 @@
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 /* quota：额度的展示与管理。
  *
  * 金额一律以「微美元」（USD × 1e6 的整数）在前后端之间传递，前端只在显示的
@@ -32,17 +33,17 @@ export function quotaChip(q) {
     el.className = "u-quota";
     if (!q || !q.metered) {
         el.classList.add("off");
-        el.textContent = "不限额";
+        setText(el, "不限额");
         return el;
     }
     el.textContent = fmtUSD(q.balance_micro_usd, 2);
     if (q.blocked) {
         el.classList.add("blocked");
-        setTip(el, "余额已用完，该用户无法发起新对话");
+        setTip(el, () => i18nText("余额已用完，该用户无法发起新对话"));
     }
     else if (!q.enforced) {
         el.classList.add("track");
-        setTip(el, "只计不拦：照常扣减，见底也不阻止");
+        setTip(el, () => i18nText("只计不拦：照常扣减，见底也不阻止"));
     }
     return el;
 }
@@ -57,27 +58,27 @@ export function renderMyQuota() {
     side.classList.toggle("hidden", !q?.metered);
     side.classList.toggle("empty", !!q?.metered && !!q.blocked);
     if (q?.metered)
-        side.textContent = q.blocked ? "额度已用完" : "余额 " + fmtUSD(q.balance_micro_usd, 2);
+        setTextRender(side, () => q.blocked ? i18nText("额度已用完") : i18nText("余额 ") + fmtUSD(q.balance_micro_usd, 2));
     if (!q || !q.metered) {
         box.classList.toggle("hidden", !q);
-        $("my-quota-num").textContent = "不限额";
+        setText($("my-quota-num"), "不限额");
         $("my-quota-num").classList.remove("empty");
-        setTip(box, "当前账号不限额");
-        box.setAttribute("aria-label", "当前账号不限额");
-        setTip(usage, "使用记录");
-        usage.setAttribute("aria-label", "使用记录");
+        setTip(box, () => i18nText("当前账号不限额"));
+        setAttrRender(box, "aria-label", () => i18nText("当前账号不限额"));
+        setTip(usage, () => i18nText("使用记录"));
+        setAttrRender(usage, "aria-label", () => i18nText("使用记录"));
         return;
     }
     box.classList.remove("hidden");
     const num = $("my-quota-num");
     num.textContent = fmtUSD(q.balance_micro_usd, 2);
     num.classList.toggle("empty", !!q.blocked);
-    setTip(box, q.blocked
-        ? "额度已用完，无法发起新对话，请联系管理员充值"
-        : "剩余额度 " + fmtUSD(q.balance_micro_usd));
+    setTip(box, () => q.blocked
+        ? i18nText("额度已用完，无法发起新对话，请联系管理员充值")
+        : i18nText("剩余额度 ") + fmtUSD(q.balance_micro_usd));
     box.setAttribute("aria-label", box.dataset.tip);
-    setTip(usage, "使用记录 · " + box.dataset.tip);
-    usage.setAttribute("aria-label", "使用记录，" + box.dataset.tip);
+    setTip(usage, () => i18nText("使用记录 · ") + box.dataset.tip);
+    setAttrRender(usage, "aria-label", () => i18nText("使用记录，") + box.dataset.tip);
 }
 // refreshAll 每轮都会带回自己的额度（回合收尾也会调它），这里跟着重画。
 bus.addEventListener("data-updated", renderMyQuota);
@@ -109,7 +110,7 @@ async function load() {
         data = await api("/users/" + encodeURIComponent(curUser) + "/quota");
     }
     catch (e) {
-        toast("读取额度失败：" + e.message, true);
+        toast(i18nText("读取额度失败：") + e.message, true);
         return;
     }
     curQuota = data.quota;
@@ -117,11 +118,11 @@ async function load() {
 }
 function render(q, ledger) {
     const bal = $("q-balance");
-    bal.textContent = q.metered ? fmtUSD(q.balance_micro_usd) : "不限额";
+    setTextRender(bal, () => q.metered ? fmtUSD(q.balance_micro_usd) : i18nText("不限额"));
     bal.classList.toggle("neg", q.metered && q.balance_micro_usd <= 0);
-    $("q-totals").textContent = q.metered
-        ? "已充 " + fmtUSD(q.granted_micro_usd, 2) + " · 已花 " + fmtUSD(q.spent_micro_usd, 2)
-        : "该用户不受额度限制，用量仍在记账";
+    setTextRender($("q-totals"), () => q.metered
+        ? i18nText("已充 ") + fmtUSD(q.granted_micro_usd, 2) + i18nText(" · 已花 ") + fmtUSD(q.spent_micro_usd, 2)
+        : i18nText("该用户不受额度限制，用量仍在记账"));
     const mode = modeOf(q);
     for (const r of dlg().querySelectorAll('input[name="q-mode"]'))
         r.checked = r.value === mode;
@@ -130,14 +131,14 @@ function render(q, ledger) {
     if (!ledger.length) {
         const empty = document.createElement("div");
         empty.className = "q-empty";
-        empty.textContent = "还没有流水";
+        setText(empty, "还没有流水");
         box.appendChild(empty);
         return;
     }
     for (const e of ledger)
         box.appendChild(ledgerRow(e));
 }
-const REASON = { grant: "充值", spend: "消耗", adjust: "冲正" };
+const REASON = { get grant() { return i18nText("充值"); }, get spend() { return i18nText("消耗"); }, get adjust() { return i18nText("冲正"); } };
 function ledgerRow(e) {
     const row = document.createElement("div");
     row.className = "q-led-row";
@@ -146,13 +147,13 @@ function ledgerRow(e) {
     ts.textContent = fmtTime(e.ts);
     const reason = document.createElement("span");
     reason.className = "q-led-reason " + e.reason;
-    reason.textContent = REASON[e.reason] || e.reason;
+    setTextRender(reason, () => REASON[e.reason] || e.reason);
     const delta = document.createElement("span");
     delta.className = "q-led-delta mono " + (e.delta_micro_usd < 0 ? "out" : "in");
     delta.textContent = (e.delta_micro_usd > 0 ? "+" : "") + fmtUSD(e.delta_micro_usd);
     const after = document.createElement("span");
     after.className = "q-led-after mono";
-    after.textContent = "余 " + fmtUSD(e.balance_after);
+    setTextRender(after, () => i18nText("余 ") + fmtUSD(e.balance_after));
     const note = document.createElement("span");
     note.className = "q-led-note";
     // 消耗流水的 note 存的是模型名；充值存管理员填的备注，后面带上操作人。
@@ -178,11 +179,15 @@ for (const radio of document.querySelectorAll('#dlg-quota input[name="q-mode"]')
             return;
         // 解除限额会丢掉余额（账本保留），这一步不可逆，先问一声。
         if (mode === "off" && curQuota && curQuota.metered) {
-            const ok = await askConfirm("解除「" + curUser + "」的额度限制？", {
-                title: "解除限额",
-                hint: "当前余额 " + fmtUSD(curQuota.balance_micro_usd) +
-                    " 将被清空（历史流水保留）。以后重新开启额度会从 0 开始。",
-                okLabel: "解除", icon: "unlock", danger: true,
+            const balance = curQuota.balance_micro_usd;
+            const userName = curUser;
+            const ok = await askConfirm(() => i18nText("解除「") + userName + i18nText("」的额度限制？"), {
+                get title() { return i18nText("解除限额"); },
+                get hint() {
+                    return i18nText("当前余额 ") + fmtUSD(balance) +
+                        i18nText(" 将被清空（历史流水保留）。以后重新开启额度会从 0 开始。");
+                },
+                get okLabel() { return i18nText("解除"); }, icon: "unlock", danger: true,
             });
             if (!ok) {
                 for (const r of dlg().querySelectorAll('input[name="q-mode"]')) {
@@ -196,12 +201,12 @@ for (const radio of document.querySelectorAll('#dlg-quota input[name="q-mode"]')
                 method: "PUT",
                 body: JSON.stringify({ metered: mode !== "off", enforced: mode === "block" }),
             });
-            toast("已切换为「" + { off: "不限额", track: "只计不拦", block: "超支拦截" }[mode] + "」");
+            toast(i18nText("已切换为「") + { off: i18nText("不限额"), track: i18nText("只计不拦"), block: i18nText("超支拦截") }[mode] + "」");
             dirty = true;
             await load();
         }
         catch (e) {
-            toast("切换失败：" + e.message, true);
+            toast(i18nText("切换失败：") + e.message, true);
             await load();
         }
     });
@@ -210,11 +215,11 @@ $("q-grant-btn").addEventListener("click", async () => {
     const raw = $("q-amount").value.trim();
     const usd = Number(raw);
     if (!raw || !Number.isFinite(usd) || usd === 0) {
-        toast("请填写充值金额（美元），负数表示冲正", true);
+        toast(i18nText("请填写充值金额（美元），负数表示冲正"), true);
         return;
     }
     const btn = $("q-grant-btn");
-    btnBusy(btn, "提交中…");
+    btnBusy(btn, () => i18nText("提交中…"));
     try {
         // ref 是幂等键：同一次点击生成一次，网络重试或连点都不会重复入账。
         const ref = "ui-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -223,15 +228,15 @@ $("q-grant-btn").addEventListener("click", async () => {
             body: JSON.stringify({ usd, note: $("q-note").value.trim(), ref }),
         });
         toast(res.applied
-            ? (usd > 0 ? "已充值 " : "已冲正 ") + fmtUSD(Math.round(usd * 1e6), 2)
-            : "该笔已入过账，未重复扣充");
+            ? (usd > 0 ? i18nText("已充值 ") : i18nText("已冲正 ")) + fmtUSD(Math.round(usd * 1e6), 2)
+            : i18nText("该笔已入过账，未重复扣充"));
         $("q-amount").value = "";
         $("q-note").value = "";
         dirty = true;
         await load();
     }
     catch (e) {
-        toast("充值失败：" + e.message, true);
+        toast(i18nText("充值失败：") + e.message, true);
     }
     finally {
         btnDone(btn);

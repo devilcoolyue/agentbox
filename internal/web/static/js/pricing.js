@@ -1,3 +1,4 @@
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 import { settingsState } from "./features/settings/state.js";
 import { actionButton, buttonLabel } from "./icons.js";
 import { S } from "./state.js";
@@ -36,32 +37,32 @@ function renderRows() {
         k.append(document.createTextNode(key));
         const meta = document.createElement("small");
         const origin = view?.active.managed[key];
-        meta.textContent = origin && !customModels.has(key) ? `跟随目录 · ${origin.version}` : "自定义";
+        setTextRender(meta, () => origin && !customModels.has(key) ? i18nText("跟随目录 · {p0}", { p0: String(origin.version) }) : i18nText("自定义"));
         k.appendChild(meta);
         if (origin && !customModels.has(key)) {
             const custom = document.createElement("button");
             custom.type = "button";
             custom.className = "price-mode";
-            actionButton(custom, "自定义", "rename", "设为自定义价格");
+            actionButton(custom, () => i18nText("自定义"), "rename", () => i18nText("设为自定义价格"));
             custom.addEventListener("click", () => { readDraft(); customModels.add(key); dirty = true; renderRows(); });
             k.appendChild(custom);
         }
-        setTip(k, FALLBACK_KEYS.has(key)
-            ? `${key} 的兜底价：这个 agent 下没有单独配价的模型都按它算`
+        setTip(k, () => FALLBACK_KEYS.has(key)
+            ? i18nText("{p0} 的兜底价：这个 agent 下没有单独配价的模型都按它算", { p0: String(key) })
             : key);
         tr.appendChild(k);
         for (const [field, label] of [
-            ["input", "输入"], ["output", "输出"],
-            ["cache_read", "缓存读取"], ["cache_write", "缓存写入"],
+            ["input", i18nText("输入")], ["output", i18nText("输出")],
+            ["cache_read", i18nText("缓存读取")], ["cache_write", i18nText("缓存写入")],
         ]) {
             const td = document.createElement("td");
             td.className = "num";
-            td.appendChild(rateInput("rate " + field, p[field], `${label}：美元 / 百万 token`));
+            td.appendChild(rateInput("rate " + field, p[field], i18nText("{p0}：美元 / 百万 token", { p0: String(label) })));
             tr.appendChild(td);
         }
         const over = document.createElement("td");
         over.className = "num";
-        over.appendChild(rateInput("rate wide over", p.long_context_over, "超过这么多 token 的回合整体按右边那档计价（留空 = 没有长上下文档位）"));
+        over.appendChild(rateInput("rate wide over", p.long_context_over, i18nText("超过这么多 token 的回合整体按右边那档计价（留空 = 没有长上下文档位）")));
         tr.appendChild(over);
         const long = document.createElement("td");
         long.className = "num";
@@ -69,10 +70,10 @@ function renderRows() {
         wrap.className = "pt-long";
         const l = p.long || {};
         for (const [field, label] of [
-            ["input", "输入"], ["output", "输出"],
-            ["cache_read", "缓存读取"], ["cache_write", "缓存写入"],
+            ["input", i18nText("输入")], ["output", i18nText("输出")],
+            ["cache_read", i18nText("缓存读取")], ["cache_write", i18nText("缓存写入")],
         ]) {
-            wrap.appendChild(rateInput("rate long-" + field, l[field], `长上下文档的${label}`));
+            wrap.appendChild(rateInput("rate long-" + field, l[field], i18nText("长上下文档的{p0}", { p0: String(label) })));
         }
         long.appendChild(wrap);
         tr.appendChild(long);
@@ -81,8 +82,8 @@ function renderRows() {
         btn.className = "pt-del";
         btn.type = "button";
         buttonLabel(btn, "", "trash");
-        btn.setAttribute("aria-label", "删除 " + key);
-        setTip(btn, "删掉这一行");
+        setAttrRender(btn, "aria-label", () => i18nText("删除 ") + key);
+        setTip(btn, () => i18nText("删掉这一行"));
         btn.addEventListener("click", () => {
             readDraft(); // 先把别的行的改动收进来，别让删除顺手回滚它们
             delete draft[key];
@@ -145,12 +146,12 @@ $("price-add").addEventListener("click", () => {
     if (!key)
         return;
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(key)) {
-        toast("模型 ID 只能用字母、数字和 . _ -", true);
+        toast(i18nText("模型 ID 只能用字母、数字和 . _ -"), true);
         return;
     }
     readDraft();
     if (draft[key]) {
-        toast(`${key} 已经在表里了`, true);
+        toast(i18nText("{p0} 已经在表里了", { p0: String(key) }), true);
         return;
     }
     dirty = true;
@@ -173,7 +174,7 @@ export function initPricing() {
         for (const id of ["price-rows", "price-changes", "price-history", "price-warnings", "price-source-issues"])
             $(id).replaceChildren();
         $("price-diff").classList.add("hidden");
-        $("price-catalog-status").textContent = "读取中…";
+        setText($("price-catalog-status"), "读取中…");
         $("price-catalog-error").textContent = "";
         $("price-source").value = "";
         $("price-auto").checked = false;
@@ -216,7 +217,7 @@ export async function openPricingSection(force = false) {
     }
     catch (e) {
         if (ticket === generation)
-            toast("读取价目表失败：" + e.message, true);
+            toast(i18nText("读取价目表失败：") + e.message, true);
     }
     finally {
         if (ticket === generation)
@@ -231,16 +232,16 @@ function renderCatalog() {
         return;
     const c = view.candidate;
     const count = view.changes.filter(row => row.kind === "new" || row.kind === "update").length;
-    $("price-catalog-status").textContent = `${c.bundled ? "内置旧快照（尚未重新核验）" : c.catalog.source === "models.dev" ? "models.dev 第三方候选（未人工核验）" : "远程候选目录"} · ${c.catalog.version} · ${count} 个新增 / 调价候选` +
-        (c.checked_at ? ` · 最近成功检查 ${fmtTime(c.checked_at)}` : " · 尚未成功联网检查");
-    const error = c.error || (!view.active.catalog.url ? "尚未配置远程目录。内置数据仅供核对，不代表最新官方价格。" : "");
+    setTextRender($("price-catalog-status"), () => i18nText("{p0} · {p1} · {p2} 个新增 / 调价候选", { p0: String(c.bundled ? i18nText("内置旧快照（尚未重新核验）") : c.catalog.source === "models.dev" ? i18nText("models.dev 第三方候选（未人工核验）") : i18nText("远程候选目录")), p1: String(c.catalog.version), p2: String(count) }) +
+        (c.checked_at ? i18nText(" · 最近成功检查 {p0}", { p0: String(fmtTime(c.checked_at)) }) : i18nText(" · 尚未成功联网检查")));
+    const error = c.error || (!view.active.catalog.url ? i18nText("尚未配置远程目录。内置数据仅供核对，不代表最新官方价格。") : "");
     $("price-catalog-error").textContent = error;
     $("price-catalog-error").classList.toggle("hidden", !error);
     const issues = $("price-source-issues");
     issues.replaceChildren();
     if (c.catalog.issues?.length) {
         const title = document.createElement("b");
-        title.textContent = "以下模型暂未导入，保留现价";
+        setText(title, "以下模型暂未导入，保留现价");
         issues.appendChild(title);
         const list = document.createElement("ul");
         for (const issue of c.catalog.issues) {
@@ -256,52 +257,53 @@ function renderCatalog() {
     warnings.replaceChildren();
     if (view.warnings.length) {
         const title = document.createElement("b");
-        title.textContent = "需要核对的模型价格";
+        setText(title, "需要核对的模型价格");
         warnings.appendChild(title);
         const hint = document.createElement("p");
-        hint.textContent = "来自默认模型、现有空间及最近 30 天使用记录；以下为当前定价状态，不会改写历史账单。";
+        setText(hint, "来自默认模型、现有空间及最近 30 天使用记录；以下为当前定价状态，不会改写历史账单。");
         warnings.appendChild(hint);
         const list = document.createElement("ul");
         for (const row of view.warnings) {
             const item = document.createElement("li");
-            item.textContent = `${row.agent} / ${row.model || "未提供模型名"}：${row.kind === "fallback" ? `使用 ${row.key} 兜底价` : "未定价（费用记 0）"}`;
+            setTextRender(item, () => `${row.agent} / ${row.model || i18nText("未提供模型名")}：${row.kind === "fallback" ? i18nText("使用 {p0} 兜底价", { p0: String(row.key) }) : i18nText("未定价（费用记 0）")}`);
             list.appendChild(item);
         }
         warnings.appendChild(list);
     }
     if (view.warnings_truncated || view.warning_error) {
+        const warningError = view.warning_error;
         const note = document.createElement("p");
-        note.textContent = view.warning_error || "最近使用模型超过 200 种，仅检查前 200 种。";
+        setTextRender(note, () => warningError || i18nText("最近使用模型超过 200 种，仅检查前 200 种。"));
         warnings.appendChild(note);
     }
     warnings.classList.toggle("hidden", !warnings.childElementCount);
     const history = $("price-history");
     history.replaceChildren();
     if (!view.active.history.length)
-        history.textContent = "尚无价格变更记录。";
+        setText(history, "尚无价格变更记录。");
     for (const item of view.active.history) {
         const row = document.createElement("div");
         row.className = "price-history-row";
         const text = document.createElement("span");
-        text.textContent = `${fmtTime(item.saved_at)} · ${item.reason}前 · ${Object.keys(item.prices).length} 条`;
+        setText(text, "{p0} · {p1}前 · {p2} 条", { p0: String(fmtTime(item.saved_at)), p1: String(item.reason), p2: String(Object.keys(item.prices).length) });
         const restore = document.createElement("button");
         restore.type = "button";
         restore.className = "btn btn-sm";
-        actionButton(restore, "恢复", "undo", "恢复此价格版本");
+        actionButton(restore, () => i18nText("恢复"), "undo", () => i18nText("恢复此价格版本"));
         restore.addEventListener("click", async () => {
             if (!view || busy || !requireClean())
                 return;
             const revision = view.active.revision;
-            if (!await askConfirm("将恢复该次修改前的全部价格及跟随状态。自动跟随将暂停，避免下次检查再次覆盖。历史账单和已开始的网页回合保持原价。", { title: "恢复价格版本", okLabel: "恢复", icon: "undo" }))
+            if (!await askConfirm(() => i18nText("将恢复该次修改前的全部价格及跟随状态。自动跟随将暂停，避免下次检查再次覆盖。历史账单和已开始的网页回合保持原价。"), { get title() { return i18nText("恢复价格版本"); }, get okLabel() { return i18nText("恢复"); }, icon: "undo" }))
                 return;
-            await mutate("/pricing/restore", "POST", { revision, id: item.id }, "价格版本已恢复");
+            await mutate("/pricing/restore", "POST", { revision, id: item.id }, i18nText("价格版本已恢复"));
         });
         row.append(text, restore);
         history.appendChild(row);
     }
 }
-const labels = { new: "新增", update: "调价", custom: "自定义 · 默认保留", current: "价格一致", removed: "目录已移除 · 保留现价" };
-const buckets = [["input", "输入"], ["output", "输出"], ["cache_read", "缓存读"], ["cache_write", "缓存写"]];
+const labels = { get new() { return i18nText("新增"); }, get update() { return i18nText("调价"); }, get custom() { return i18nText("自定义 · 默认保留"); }, get current() { return i18nText("价格一致"); }, get removed() { return i18nText("目录已移除 · 保留现价"); } };
+const buckets = () => [["input", i18nText("输入")], ["output", i18nText("输出")], ["cache_read", i18nText("缓存读")], ["cache_write", i18nText("缓存写")]];
 function rateChange(old, next) {
     if (old === undefined)
         return String(next);
@@ -328,26 +330,26 @@ function renderChanges() {
         const name = document.createElement("strong");
         name.textContent = row.model;
         const kind = document.createElement("span");
-        kind.textContent = labels[row.kind];
+        setTextRender(kind, () => labels[row.kind]);
         label.append(check, name, kind);
         item.appendChild(label);
         if (row.auto_block_reason) {
             const note = document.createElement("p");
             note.className = "card-desc";
-            note.textContent = "暂不自动应用：" + row.auto_block_reason;
+            setTextRender(note, () => i18nText("暂不自动应用：") + row.auto_block_reason);
             item.appendChild(note);
         }
         if (row.candidate) {
             const candidate = row.candidate;
             const rates = document.createElement("p");
             rates.className = "price-change-rates";
-            rates.textContent = buckets.map(([key, label]) => `${label} ${rateChange(row.current?.[key], candidate.price[key])}`).join(" · ");
+            setTextRender(rates, () => buckets().map(([key, label]) => `${label} ${rateChange(row.current?.[key], candidate.price[key])}`).join(" · "));
             item.appendChild(rates);
             if (row.current?.long || candidate.price.long || row.current?.long_context_over || candidate.price.long_context_over) {
                 const long = document.createElement("p");
                 long.className = "price-change-rates";
-                long.textContent = `长上下文阈值 ${row.current?.long_context_over || "无"} → ${candidate.price.long_context_over || "无"}；` +
-                    (candidate.price.long ? buckets.map(([key, label]) => `${label} ${rateChange(row.current?.long?.[key], candidate.price.long[key])}`).join(" · ") : "取消长上下文档");
+                setTextRender(long, () => i18nText("长上下文阈值 {p0} → {p1}；", { p0: String(row.current?.long_context_over || i18nText("无")), p1: String(candidate.price.long_context_over || i18nText("无")) }) +
+                    (candidate.price.long ? buckets().map(([key, label]) => `${label} ${rateChange(row.current?.long?.[key], candidate.price.long[key])}`).join(" · ") : i18nText("取消长上下文档")));
                 item.appendChild(long);
             }
             const source = document.createElement("p");
@@ -356,8 +358,8 @@ function renderChanges() {
             link.href = candidate.source_url;
             link.target = "_blank";
             link.rel = "noopener noreferrer";
-            link.textContent = "价格来源";
-            source.append(link, document.createTextNode(` · ${candidate.verified_at ? "核验于 " + fmtTime(Date.parse(candidate.verified_at)) : "尚未重新核验"}${candidate.notes ? " · " + candidate.notes : ""}`));
+            setText(link, "价格来源");
+            source.append(link, document.createTextNode(` · ${candidate.verified_at ? i18nText("核验于 ") + fmtTime(Date.parse(candidate.verified_at)) : i18nText("尚未重新核验")}${candidate.notes ? " · " + candidate.notes : ""}`));
             item.appendChild(source);
         }
         box.appendChild(item);
@@ -368,7 +370,7 @@ function sourceDirty() {
 }
 function requireClean() {
     if (dirty || sourceDirty()) {
-        toast("请先保存编辑中的价格或目录来源，再执行此操作", true);
+        toast(i18nText("请先保存编辑中的价格或目录来源，再执行此操作"), true);
         return false;
     }
     return true;
@@ -400,29 +402,29 @@ $("price-save").addEventListener("click", async () => {
         return;
     const bad = badCells();
     if (bad.length) {
-        toast(`这些行的单价不是合法数字：${bad.join("、")}`, true);
+        toast(i18nText("这些行的单价不是合法数字：{p0}", { p0: String(bad.join("、")) }), true);
         return;
     }
     if (!await confirmAutoApply())
         return;
     readDraft();
-    await mutate("/pricing", "PUT", { revision: view.active.revision, prices: draft, custom_models: [...customModels], catalog: sourceDraft() }, "价目表已保存，修改的模型已设为自定义");
+    await mutate("/pricing", "PUT", { revision: view.active.revision, prices: draft, custom_models: [...customModels], catalog: sourceDraft() }, i18nText("价目表已保存，修改的模型已设为自定义"));
 });
 $("price-source-save").addEventListener("click", async () => {
     if (!view || busy)
         return;
     if (dirty) {
-        toast("请先保存价目表", true);
+        toast(i18nText("请先保存价目表"), true);
         return;
     }
     if (!await confirmAutoApply())
         return;
-    await mutate("/pricing", "PUT", { revision: view.active.revision, catalog: sourceDraft() }, "目录来源已保存");
+    await mutate("/pricing", "PUT", { revision: view.active.revision, catalog: sourceDraft() }, i18nText("目录来源已保存"));
 });
 $("price-refresh").addEventListener("click", async () => {
     if (busy)
         return;
-    if ((dirty || sourceDirty()) && !await askConfirm("将丢弃当前尚未保存的价格和来源编辑。", { title: "重新读取价目表", okLabel: "放弃编辑并重新读取", icon: "undo", danger: true }))
+    if ((dirty || sourceDirty()) && !await askConfirm(() => i18nText("将丢弃当前尚未保存的价格和来源编辑。"), { get title() { return i18nText("重新读取价目表"); }, get okLabel() { return i18nText("放弃编辑并重新读取"); }, icon: "undo", danger: true }))
         return;
     await openPricingSection(true);
 });
@@ -453,16 +455,16 @@ $("price-apply").addEventListener("click", async () => {
         return;
     const models = [...document.querySelectorAll("#price-changes input:checked")].map(el => el.value);
     if (!models.length) {
-        toast("请选择需要应用的模型", true);
+        toast(i18nText("请选择需要应用的模型"), true);
         return;
     }
     const adopt = models.filter(key => !!view.active.prices[key] && !view.active.managed[key]);
     const request = { revision: view.active.revision, catalog_revision: view.candidate.revision, models, adopt_custom: adopt };
-    const note = `将应用 ${models.length} 个模型的候选价格。` + (adopt.length ? `其中 ${adopt.length} 个自定义模型将替换价格并恢复跟随目录。` : "") +
-        (view.candidate.bundled ? "当前为尚未重新核验的旧快照，请先核对来源。" : "") + "历史账单及已开始的网页回合保持原价。";
-    if (!await askConfirm(note, { title: "应用价格变更", okLabel: "应用" }))
+    const note = i18nText("将应用 {p0} 个模型的候选价格。", { p0: String(models.length) }) + (adopt.length ? i18nText("其中 {p0} 个自定义模型将替换价格并恢复跟随目录。", { p0: String(adopt.length) }) : "") +
+        (view.candidate.bundled ? i18nText("当前为尚未重新核验的旧快照，请先核对来源。") : "") + i18nText("历史账单及已开始的网页回合保持原价。");
+    if (!await askConfirm(note, { get title() { return i18nText("应用价格变更"); }, get okLabel() { return i18nText("应用"); } }))
         return;
-    await mutate("/pricing/apply", "POST", request, "所选价格已应用");
+    await mutate("/pricing/apply", "POST", request, i18nText("所选价格已应用"));
 });
 function sourceDraft() {
     return { url: $("price-source").value.trim(), auto_check: $("price-auto").checked, auto_apply: $("price-auto-apply").checked };
@@ -470,7 +472,7 @@ function sourceDraft() {
 async function confirmAutoApply() {
     if (!sourceDraft().auto_apply || view?.active.catalog.auto_apply)
         return true;
-    return askConfirm("每日检查后，将自动调整已明确跟随当前来源的模型价格，仅影响新回合。自定义价格和新模型保持不变；单价变化超过 25%、零价格及长上下文规则变化需要手动核对。", { title: "开启自动跟随", okLabel: "开启" });
+    return askConfirm(() => i18nText("每日检查后，将自动调整已明确跟随当前来源的模型价格，仅影响新回合。自定义价格和新模型保持不变；单价变化超过 25%、零价格及长上下文规则变化需要手动核对。"), { get title() { return i18nText("开启自动跟随"); }, get okLabel() { return i18nText("开启"); } });
 }
 $("price-modelsdev").addEventListener("click", () => {
     if (busy)

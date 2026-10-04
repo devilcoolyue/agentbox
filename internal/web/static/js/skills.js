@@ -1,3 +1,4 @@
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 /* skills：技能（Claude Code Skill）页 —— 左侧是技能目录的文件树（SKILL.md、
  * scripts/、references/、assets/ 全部列出来），右侧看内容：.md 可切预览/源码，
  * 脚本和文本直接显示，图片内联，二进制只给下载。另外能安装、删除、在「本会话」
@@ -29,14 +30,14 @@ let paneGen = 0;
 /* 来源徽章：会话自装 / 用户模板 / 服务器模板。只有「本会话」范围才有意义，
  * 因为模板范围里的东西按定义都来自模板。 */
 const SOURCE_LABEL = {
-    session: "空间自装",
-    template: "我的模板",
-    global: "服务器模板",
+    get session() { return i18nText("空间自装"); },
+    get template() { return i18nText("我的模板"); },
+    get global() { return i18nText("服务器模板"); },
 };
 const SOURCE_HINT = {
-    session: "仅在当前工作空间使用。复制到「我的模板」后，可供其他空间复用。",
-    template: "来自你的模板，工作空间启动时自动同步。",
-    global: "来自服务器模板，由管理员统一下发给所有用户。",
+    get session() { return i18nText("仅在当前工作空间使用。复制到「我的模板」后，可供其他空间复用。"); },
+    get template() { return i18nText("来自你的模板，工作空间启动时自动同步。"); },
+    get global() { return i18nText("来自服务器模板，由管理员统一下发给所有用户。"); },
 };
 function listMsg(msg) {
     const p = document.createElement("p");
@@ -60,7 +61,7 @@ export async function loadSkills() {
     const sess = S.current;
     if (!sess)
         return;
-    $("skills-list").replaceChildren(loadingRow("读取技能中…"));
+    $("skills-list").replaceChildren(loadingRow(i18nText("读取技能中…")));
     $("skills-detail").replaceChildren();
     $("skills-count").textContent = "";
     let data;
@@ -68,7 +69,7 @@ export async function loadSkills() {
         data = await api(`/sessions/${sess.id}/skills?scope=${SK.scope}`);
     }
     catch (e) {
-        listMsg("读取技能失败：" + e.message);
+        listMsg(i18nText("读取技能失败：") + e.message);
         return;
     }
     SK.items = data.skills || [];
@@ -77,7 +78,7 @@ export async function loadSkills() {
     // 选中的技能还在就把右侧恢复出来，没了就回到空白
     if (!SK.items.some((sk) => sk.name === SK.sel.skill)) {
         SK.sel = { skill: "", path: "" };
-        detailMsg(SK.items.length ? "选择左侧技能查看说明与文件。" : "");
+        detailMsg(SK.items.length ? i18nText("选择左侧技能查看说明与文件。") : "");
         return;
     }
     if (SK.sel.path)
@@ -120,11 +121,11 @@ function buildTree(entries) {
 }
 function renderList() {
     const n = SK.items.length;
-    $("skills-count").textContent = n ? `${n} 个技能` : "";
+    setTextRender($("skills-count"), () => n ? i18nText("{p0} 个技能", { p0: String(n) }) : "");
     if (!n) {
         listMsg(SK.scope === "session"
-            ? "当前空间还没有技能。点击「安装技能」，或从「我的模板」中选择技能安装。"
-            : "模板里还没有技能。安装到这里后，你的各个工作空间启动时都会自动同步。");
+            ? i18nText("当前空间还没有技能。点击「安装技能」，或从「我的模板」中选择技能安装。")
+            : i18nText("模板里还没有技能。安装到这里后，你的各个工作空间启动时都会自动同步。"));
         detailMsg("");
         return;
     }
@@ -138,12 +139,12 @@ function renderList() {
             continue; // 还在拉，箭头上已经在转圈
         const roots = buildTree(det.entries || []);
         if (!roots.length) {
-            frag.appendChild(hintRow("（空目录，Claude Code 不会加载它）", 1));
+            frag.appendChild(hintRow(i18nText("（空目录，Claude Code 不会加载它）"), 1));
             continue;
         }
         appendNodes(frag, sk.name, roots, 1);
         if (det.more)
-            frag.appendChild(hintRow("……文件太多，只列出了前面一部分", 1));
+            frag.appendChild(hintRow(i18nText("……文件太多，只列出了前面一部分"), 1));
     }
     $("skills-list").replaceChildren(frag);
 }
@@ -167,9 +168,9 @@ function arrowEl(open, busy, toggle) {
         a.replaceChildren(spinEl());
     else
         a.append(svgIcon("chevron-right", 12));
-    setTip(a, open ? "收起" : "展开目录");
+    setTip(a, () => open ? i18nText("收起") : i18nText("展开目录"));
     a.setAttribute("role", "button");
-    a.setAttribute("aria-label", open ? "收起目录" : "展开目录");
+    setAttrRender(a, "aria-label", () => open ? i18nText("收起目录") : i18nText("展开目录"));
     a.tabIndex = -1; // 行本身可聚焦就够了，别让 Tab 在树里走两遍
     a.addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
     return a;
@@ -205,7 +206,7 @@ function skillRow(sk) {
     }
     const desc = document.createElement("div");
     desc.className = "skill-desc";
-    desc.textContent = sk.description || "（无描述）";
+    setTextRender(desc, () => sk.description || i18nText("（无描述）"));
     row.append(line, desc);
     bindOpen(row, () => selectSkill(sk.name));
     return row;
@@ -218,7 +219,7 @@ function appendNodes(frag, skill, nodes, depth) {
         if (node.kids.length)
             appendNodes(frag, skill, node.kids, depth + 1);
         else
-            frag.appendChild(hintRow("（空目录）", depth + 1));
+            frag.appendChild(hintRow(i18nText("（空目录）"), depth + 1));
     }
 }
 function nodeRow(skill, node, depth) {
@@ -242,9 +243,9 @@ function nodeRow(skill, node, depth) {
     name.textContent = node.name;
     line.appendChild(name);
     if (node.entry.link)
-        line.appendChild(tagEl("链接", "符号链接：装技能时不会产生，也不支持预览"));
+        line.appendChild(tagEl(i18nText("链接"), i18nText("符号链接：装技能时不会产生，也不支持预览")));
     else if (node.entry.exec)
-        line.appendChild(tagEl("+x", "有可执行位，脚本能直接跑"));
+        line.appendChild(tagEl("+x", i18nText("有可执行位，脚本能直接跑")));
     if (!isDir) {
         const size = document.createElement("span");
         size.className = "skill-size";
@@ -256,7 +257,7 @@ function nodeRow(skill, node, depth) {
         if (isDir)
             toggleDir(key);
         else if (node.entry.link)
-            toast("符号链接不支持预览", true);
+            toast(i18nText("符号链接不支持预览"), true);
         else
             openFile(skill, node.path);
     });
@@ -283,7 +284,7 @@ async function ensureDetail(name) {
         return det;
     }
     catch (e) {
-        toast("读取技能失败：" + e.message, true);
+        toast(i18nText("读取技能失败：") + e.message, true);
         SK.open.delete(name);
         return null;
     }
@@ -313,13 +314,13 @@ async function selectSkill(name) {
     SK.open.add(name);
     const gen = ++paneGen;
     renderList();
-    $("skills-detail").replaceChildren(loadingRow("读取 SKILL.md…"));
+    $("skills-detail").replaceChildren(loadingRow(i18nText("读取 SKILL.md…")));
     const det = await ensureDetail(name);
     renderList();
     if (gen !== paneGen)
         return; // 期间点了别的
     if (!det) {
-        detailMsg("读取失败");
+        detailMsg(i18nText("读取失败"));
         return;
     }
     renderDetail(det);
@@ -331,7 +332,7 @@ async function openFile(skill, path) {
     SK.sel = { skill, path };
     const gen = ++paneGen;
     renderList();
-    $("skills-detail").replaceChildren(loadingRow("读取 " + path + "…"));
+    $("skills-detail").replaceChildren(loadingRow(i18nText("读取 ") + path + "…"));
     try {
         const f = await api(`/sessions/${sess.id}/skills/${encodeURIComponent(skill)}/file` +
             `?scope=${SK.scope}&path=${encodeURIComponent(path)}`);
@@ -341,7 +342,7 @@ async function openFile(skill, path) {
     }
     catch (e) {
         if (gen === paneGen)
-            detailMsg("读取失败：" + e.message);
+            detailMsg(i18nText("读取失败：") + e.message);
     }
 }
 function renderDetail(det) {
@@ -359,10 +360,10 @@ function renderDetail(det) {
     }
     const meta = document.createElement("p");
     meta.className = "skill-meta";
-    const bits = [`${det.files} 个文件`, fmtBytes(det.bytes)];
+    const bits = [i18nText("{p0} 个文件", { p0: String(det.files) }), fmtBytes(det.bytes)];
     // 空目录没有任何文件时 updated_at 是零值时间，别拿它渲染出个 0001 年
     if (det.files && det.updated_at)
-        bits.push("更新于 " + fmtTime(det.updated_at));
+        bits.push(i18nText("更新于 ") + fmtTime(det.updated_at));
     meta.textContent = bits.join(" · ");
     head.appendChild(meta);
     if (SK.scope === "session" && SOURCE_HINT[det.source]) {
@@ -375,14 +376,14 @@ function renderDetail(det) {
     actions.className = "skill-head-actions";
     const move = document.createElement("button");
     move.className = "btn btn-sm";
-    actionButton(move, SK.scope === "session" ? "复制" : "安装", SK.scope === "session" ? "copy" : "package-plus", SK.scope === "session" ? "复制技能到我的模板" : "安装技能到本空间");
-    setTip(move, SK.scope === "session"
-        ? "复制进模板后，你名下每个工作空间启动时都会带上它"
-        : "把模板里的这个技能立刻装进当前工作空间，不必等下次启动");
+    actionButton(move, () => SK.scope === "session" ? i18nText("复制") : i18nText("安装"), SK.scope === "session" ? "copy" : "package-plus", () => SK.scope === "session" ? i18nText("复制技能到我的模板") : i18nText("安装技能到本空间"));
+    setTip(move, () => SK.scope === "session"
+        ? i18nText("复制进模板后，你名下每个工作空间启动时都会带上它")
+        : i18nText("把模板里的这个技能立刻装进当前工作空间，不必等下次启动"));
     move.addEventListener("click", () => copySkill(det.name, move));
     const del = document.createElement("button");
     del.className = "btn btn-sm btn-danger";
-    actionButton(del, "", "trash", "删除技能");
+    actionButton(del, "", "trash", () => i18nText("删除技能"));
     del.addEventListener("click", () => removeSkill(det.name));
     actions.append(move, del);
     head.appendChild(actions);
@@ -394,7 +395,7 @@ function renderDetail(det) {
     else {
         const p = document.createElement("p");
         p.className = "files-empty";
-        p.textContent = "这个技能目录里没有 SKILL.md —— Claude Code 不会加载它。";
+        setText(p, "这个技能目录里没有 SKILL.md —— Claude Code 不会加载它。");
         body.appendChild(p);
     }
     $("skills-detail").replaceChildren(head, body);
@@ -408,7 +409,7 @@ function renderFile(skill, f) {
     back.type = "button";
     back.className = "skill-back";
     buttonLabel(back, skill, "arrow-left");
-    setTip(back, "回到技能概览");
+    setTip(back, () => i18nText("回到技能概览"));
     back.addEventListener("click", () => selectSkill(skill));
     head.appendChild(back);
     const title = document.createElement("h3");
@@ -417,18 +418,18 @@ function renderFile(skill, f) {
     head.appendChild(title);
     const meta = document.createElement("p");
     meta.className = "skill-meta";
-    meta.textContent = [
+    setTextRender(meta, () => [
         fmtSize(f.size),
         f.mode,
-        f.exec ? "可执行" : "",
-        f.mtime ? "更新于 " + fmtTime(f.mtime) : "",
-    ].filter(Boolean).join(" · ");
+        f.exec ? i18nText("可执行") : "",
+        f.mtime ? i18nText("更新于 ") + fmtTime(f.mtime) : "",
+    ].filter(Boolean).join(" · "));
     head.appendChild(meta);
     const actions = document.createElement("div");
     actions.className = "skill-head-actions";
     const dl = document.createElement("button");
     dl.className = "btn btn-sm";
-    actionButton(dl, "", "download", "下载技能文件");
+    actionButton(dl, "", "download", () => i18nText("下载技能文件"));
     dl.addEventListener("click", () => startDownload(skillFileURL(skill, f.path, SK.scope, true)));
     actions.appendChild(dl);
     head.appendChild(actions);
@@ -444,7 +445,7 @@ function renderFile(skill, f) {
     else if (f.binary) {
         const p = document.createElement("p");
         p.className = "files-empty";
-        p.textContent = `二进制文件（${fmtSize(f.size)}），没法在页面里看，点上面的「下载」拿到本地。`;
+        setText(p, "二进制文件（{p0}），没法在页面里看，点上面的「下载」拿到本地。", { p0: String(fmtSize(f.size)) });
         body.appendChild(p);
     }
     else if (/\.md$/i.test(f.path)) {
@@ -453,7 +454,7 @@ function renderFile(skill, f) {
     else {
         const pre = document.createElement("pre");
         pre.className = "skill-md mono";
-        pre.textContent = f.content + (f.truncated ? "\n…（内容过长，已截断）" : "");
+        setTextRender(pre, () => f.content + (f.truncated ? i18nText("\n…（内容过长，已截断）") : ""));
         body.appendChild(pre);
     }
     $("skills-detail").replaceChildren(head, body);
@@ -470,7 +471,7 @@ function docView(label, content, truncated, skipMeta) {
     const sw = document.createElement("div");
     sw.className = "scope-switch";
     const buttons = {};
-    for (const [mode, text] of [["preview", "预览"], ["source", "源码"]]) {
+    for (const [mode, text] of [["preview", i18nText("预览")], ["source", i18nText("源码")]]) {
         const b = document.createElement("button");
         b.type = "button";
         b.className = "scope-btn" + (SK.view === mode ? " active" : "");
@@ -488,7 +489,7 @@ function docView(label, content, truncated, skipMeta) {
     }
     bar.append(labelEl, sw);
     const view = document.createElement("div");
-    const tail = truncated ? "\n…（内容过长，已截断）" : "";
+    const tail = truncated ? i18nText("\n…（内容过长，已截断）") : "";
     const paint = () => {
         if (SK.view === "source") {
             view.className = "skill-view";
@@ -517,18 +518,18 @@ async function copySkill(name, btn) {
     if (!sess)
         return;
     const to = SK.scope === "session" ? "template" : "session";
-    btnBusy(btn, "处理中…");
+    btnBusy(btn, () => i18nText("处理中…"));
     try {
         await api(`/sessions/${sess.id}/skills/${encodeURIComponent(name)}/copy?scope=${SK.scope}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ to }),
         });
-        toast(to === "template" ? "已复制到模板，各工作空间下次启动时同步" : "已安装到本空间");
+        toast(to === "template" ? i18nText("已复制到模板，各工作空间下次启动时同步") : i18nText("已安装到本空间"));
         loadSkills();
     }
     catch (e) {
-        toast("操作失败：" + e.message, true);
+        toast(i18nText("操作失败：") + e.message, true);
     }
     finally {
         btnDone(btn);
@@ -538,26 +539,28 @@ async function removeSkill(name) {
     const sess = S.current;
     if (!sess)
         return;
-    const where = SK.scope === "session" ? "当前工作空间" : "你的模板";
-    const ok = await askConfirm(`确认从${where}删除技能「${name}」？`, {
-        title: "删除技能",
+    const where = SK.scope === "session" ? i18nText("当前工作空间") : i18nText("你的模板");
+    const ok = await askConfirm(() => i18nText("确认从{p0}删除技能「{p1}」？", { p0: String(where), p1: String(name) }), {
+        get title() { return i18nText("删除技能"); },
         danger: true,
-        okLabel: "删除", icon: "trash",
-        hint: SK.scope === "session"
-            ? "若它来自模板，下次工作空间启动还会被铺回来；要彻底去掉请到「我的模板」里删。"
-            : "已经铺进各个工作空间的副本不会跟着消失，需要各自删除。",
+        get okLabel() { return i18nText("删除"); }, icon: "trash",
+        get hint() {
+            return SK.scope === "session"
+                ? i18nText("若它来自模板，下次工作空间启动还会被铺回来；要彻底去掉请到「我的模板」里删。")
+                : i18nText("已经铺进各个工作空间的副本不会跟着消失，需要各自删除。");
+        },
     });
     if (!ok)
         return;
     try {
         await api(`/sessions/${sess.id}/skills/${encodeURIComponent(name)}?scope=${SK.scope}`, { method: "DELETE" });
-        toast("已删除");
+        toast(i18nText("已删除"));
         SK.sel = { skill: "", path: "" };
         SK.open.delete(name);
         loadSkills();
     }
     catch (e) {
-        toast("删除失败：" + e.message, true);
+        toast(i18nText("删除失败：") + e.message, true);
     }
 }
 /* ---- 范围切换与安装 ---- */
@@ -577,7 +580,7 @@ $("btn-skills-refresh").addEventListener("click", loadSkills);
 /* ---- 安装弹窗：本地上传 / 官方市场 ---- */
 const dlgInstall = () => $("dlg-skill-install");
 function scopeLabel() {
-    return SK.scope === "session" ? "本空间" : "我的模板";
+    return SK.scope === "session" ? i18nText("本空间") : i18nText("我的模板");
 }
 $("btn-skill-install").addEventListener("click", () => {
     $("skill-install-target").textContent = scopeLabel();
@@ -615,10 +618,10 @@ async function installFile(file) {
     fd.append("file", file, file.name);
     try {
         const res = await api(`/sessions/${sess.id}/skills?scope=${SK.scope}`, { method: "POST", body: fd });
-        await afterInstall(res.name, `已安装技能「${res.name}」`);
+        await afterInstall(res.name, i18nText("已安装技能「{p0}」", { p0: String(res.name) }));
     }
     catch (err) {
-        toast("安装失败：" + err.message, true);
+        toast(i18nText("安装失败：") + err.message, true);
     }
     finally {
         drop.classList.remove("over");
@@ -661,14 +664,14 @@ async function loadMarket(force) {
         renderMarket();
         return;
     }
-    $("market-list").replaceChildren(loadingRow("拉取官方目录中…"));
+    $("market-list").replaceChildren(loadingRow(i18nText("拉取官方目录中…")));
     try {
         const data = await api("/marketplace" + (force ? "?refresh=1" : ""));
         MK.plugins = data.plugins || [];
         MK.loaded = true;
         const sel = $("market-cat");
         const cur = sel.value;
-        const opts = [{ v: "", t: "全部分类" }, ...(data.categories || []).map((c) => ({ v: c, t: c }))];
+        const opts = [{ v: "", t: i18nText("全部分类") }, ...(data.categories || []).map((c) => ({ v: c, t: c }))];
         sel.replaceChildren(...opts.map(({ v, t }) => {
             const o = document.createElement("option");
             o.value = v;
@@ -679,7 +682,7 @@ async function loadMarket(force) {
         renderMarket();
     }
     catch (e) {
-        marketMsg("拉取失败：" + e.message);
+        marketMsg(i18nText("拉取失败：") + e.message);
     }
 }
 function renderMarket() {
@@ -694,7 +697,7 @@ function renderMarket() {
             .some((s) => (s || "").toLowerCase().includes(q));
     });
     if (!hit.length) {
-        marketMsg(MK.plugins.length ? "没有匹配的插件。" : "目录是空的。");
+        marketMsg(MK.plugins.length ? i18nText("没有匹配的插件。") : i18nText("目录是空的。"));
         return;
     }
     const frag = document.createDocumentFragment();
@@ -711,7 +714,7 @@ function renderMarket() {
         for (const [text, cls] of [
             [p.author, ""],
             [p.category, ""],
-            [p.skills ? `含 ${p.skills} 个技能` : "", "has-skills"],
+            [p.skills ? i18nText("含 {p0} 个技能", { p0: String(p.skills) }) : "", "has-skills"],
         ]) {
             if (!text)
                 continue;
@@ -727,7 +730,7 @@ function renderMarket() {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "btn btn-sm";
-        buttonLabel(btn, "安装", "package-plus");
+        buttonLabel(btn, () => i18nText("安装"), "package-plus");
         btn.addEventListener("click", () => installFromMarket(p.name, btn));
         row.append(info, btn);
         frag.appendChild(row);
@@ -738,7 +741,7 @@ async function installFromMarket(name, btn) {
     const sess = S.current;
     if (!sess)
         return;
-    btnBusy(btn, "安装中…");
+    btnBusy(btn, () => i18nText("安装中…"));
     try {
         const res = await api(`/sessions/${sess.id}/skills/market?scope=${SK.scope}`, {
             method: "POST",
@@ -747,8 +750,8 @@ async function installFromMarket(name, btn) {
         });
         const list = res.installed || [];
         await afterInstall(list[0] || "", list.length > 1
-            ? `已装 ${list.length} 个技能：${list.join("、")}`
-            : `已安装技能「${list[0]}」`);
+            ? i18nText("已装 {p0} 个技能：{p1}", { p0: String(list.length), p1: String(list.join("、")) })
+            : i18nText("已安装技能「{p0}」", { p0: String(list[0]) }));
     }
     catch (e) {
         // 纯命令/MCP 插件会走到这里，服务端给的文案已经说明该怎么办

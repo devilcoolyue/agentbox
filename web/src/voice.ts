@@ -1,3 +1,4 @@
+import { i18n, setAttrRender, t as i18nText } from "./i18n.js";
 /* voice：语音输入。用浏览器内置的 Web Speech API 识别（Chrome/Edge/Safari；
  * Firefox 不支持则隐藏入口）。点击开始录音，边说边把文字实时写进输入框，
  * 再点一次停止并直接发送；Agent 执行中则把文字留在输入框里。 */
@@ -11,7 +12,7 @@ import { setTip } from "./tip.js";
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const btn = $("btn-voice");
 const input = $<HTMLTextAreaElement>("chat-input");
-const IDLE_TITLE = "语音输入：点击说话，再点一次停止并发送";
+const idleTitle = () => i18nText("语音输入：点击说话，再点一次停止并发送");
 
 let rec: SpeechRecognition | null = null; // 当前识别实例，非 null 即录音中
 let base = "";         // 录音开始时输入框已有的内容
@@ -27,8 +28,8 @@ btn.addEventListener("click", () => {
 
 function start() {
   const r = new SR!();
-  // 界面是中文产品，识别语言跟随浏览器的中文区域设置，非中文环境兜底 zh-CN
-  r.lang = /^zh/i.test(navigator.language || "") ? navigator.language : "zh-CN";
+  // New recognition sessions use the selected interface language.
+  r.lang = i18n.locale;
   r.continuous = true;
   r.interimResults = true;
   base = input.value && !/\s$/.test(input.value) ? input.value + " " : input.value;
@@ -50,11 +51,11 @@ function start() {
     if (e.error === "no-speech" || e.error === "aborted") return;
     failed = true;
     const msg: string = ({
-      "not-allowed": "麦克风权限被拒绝，请在浏览器允许（非 localhost 访问需 HTTPS）",
-      "service-not-allowed": "浏览器禁用了语音识别服务（非 localhost 访问需 HTTPS）",
-      "audio-capture": "未检测到可用的麦克风",
-      network: "语音识别网络异常（识别由浏览器云端服务完成）",
-    } as Partial<Record<SpeechRecognitionErrorCode, string>>)[e.error] || "语音识别出错：" + e.error;
+      "not-allowed": i18nText("麦克风权限被拒绝，请在浏览器允许（非 localhost 访问需 HTTPS）"),
+      "service-not-allowed": i18nText("浏览器禁用了语音识别服务（非 localhost 访问需 HTTPS）"),
+      "audio-capture": i18nText("未检测到可用的麦克风"),
+      network: i18nText("语音识别网络异常（识别由浏览器云端服务完成）"),
+    } as Partial<Record<SpeechRecognitionErrorCode, string>>)[e.error] || i18nText("语音识别出错：") + e.error;
     toast(msg, true);
   };
   r.onend = () => {
@@ -67,14 +68,14 @@ function start() {
     setRecUI(false);
     const text = input.value.trim();
     if (!sendOnEnd || !text) return;
-    if (S.chatState === "running") toast("Agent 执行中，识别文字已放入输入框");
+    if (S.chatState === "running") toast(i18nText("Agent 执行中，识别文字已放入输入框"));
     else sendChat();
   };
 
-  try { r.start(); } catch (e) { toast("无法启动语音识别：" + (e as Error).message, true); return; }
+  try { r.start(); } catch (e) { toast(i18nText("无法启动语音识别：") + (e as Error).message, true); return; }
   rec = r;
   setRecUI(true);
-  toast("正在聆听，再点一次 🎤 停止并发送");
+  toast(i18nText("正在聆听，再点一次 🎤 停止并发送"));
 }
 
 function stopAndSend() {
@@ -84,8 +85,8 @@ function stopAndSend() {
 
 function setRecUI(on: boolean) {
   btn.classList.toggle("rec", on);
-  setTip(btn, on ? "停止录音并发送" : IDLE_TITLE);
-  btn.ariaLabel = on ? "停止录音" : "语音输入"; // 纯图标按钮，可访问名称得跟着状态走
+  setTip(btn, () => on ? i18nText("停止录音并发送") : idleTitle());
+  setAttrRender(btn, "aria-label", () => on ? i18nText("停止录音") : i18nText("语音输入")); // 纯图标按钮，可访问名称得跟着状态走
 }
 
 /* 录音途中手动发送（Enter / 发送键）：先掐掉识别，
@@ -101,3 +102,5 @@ $("chat-send").addEventListener("click", abortIfRecording, true);
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !isImeEnter(e) && !enterInsertsNewline()) abortIfRecording();
 }, true);
+
+window.addEventListener("agentbox-language-change", () => setRecUI(!!rec));

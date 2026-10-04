@@ -449,3 +449,14 @@
 @media (prefers-reduced-motion: reduce) {
   .sidebar, .scrim, .side-new, .side-item, .session-card, .side-collapse svg, .side-user-menu, .side-logout, .theme-options button { transition: none; }
 }
+
+/* Local language preference: shared with the standard select control. */
+.language-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; color: var(--muted); font-size: 12px; }
+.language-control > span { flex-shrink: 0; }
+.language-control select, .language-control .select-trigger { width: 150px; min-width: 0; }
+.language-control .select-trigger { min-height: 32px; padding: 5px 10px; gap: 8px; font-size: 12px; line-height: 18px; }
+.login-language { align-self: center; margin-top: 2px; }
+.side-user-menu .language-control { gap: 8px; padding: 4px 8px; }
+.side-user-menu .language-control :is(select, .select-trigger) { width: 128px; }
+@media (pointer: coarse) { .language-control .select-trigger { min-height: 40px; } }
+html[lang="en"] .side-tools { grid-template-columns: 1fr; }

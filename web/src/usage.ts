@@ -1,3 +1,4 @@
+import { t as i18nText, setText, setTextRender, setAttrRender } from "./i18n.js";
 import { svgIcon } from "./icons.js";
 import { cacheHitText } from "./usage-math.js";
 /* usage：使用记录（消耗流水明细）。
@@ -31,6 +32,8 @@ let pageSize = 20;
 /* 当前视图状态。offset 单独放：改筛选要归零，翻页只动它。 */
 let offset = 0;
 let last: UsageEvents | null = null;
+let activeCost: UsageEventRow | null = null;
+let usageGeneration = 0;
 let loading = false;
 let loadPending = false;
 let resetScroll = false;
@@ -103,17 +106,17 @@ function fmtUsageTime(ms: number | string, withYear = false) {
 }
 
 const ZONE_NAMES: Record<string, string> = {
-  "Asia/Shanghai": "中国标准时间",
-  "Asia/Hong_Kong": "香港时间",
-  "Asia/Tokyo": "日本时间",
-  UTC: "协调世界时",
-  "America/Los_Angeles": "美国太平洋时间",
-  "America/New_York": "美国东部时间",
-  "Europe/London": "英国时间",
+  get "Asia/Shanghai"() { return i18nText("中国标准时间"); },
+  get "Asia/Hong_Kong"() { return i18nText("香港时间"); },
+  get "Asia/Tokyo"() { return i18nText("日本时间"); },
+  get UTC() { return i18nText("协调世界时"); },
+  get "America/Los_Angeles"() { return i18nText("美国太平洋时间"); },
+  get "America/New_York"() { return i18nText("美国东部时间"); },
+  get "Europe/London"() { return i18nText("英国时间"); },
 };
 
 function syncTimeZone() {
-  $("usage-zone-name").textContent = ZONE_NAMES[usageTimeZone] || "系统时区";
+  setTextRender($("usage-zone-name"), () => ZONE_NAMES[usageTimeZone] || i18nText("系统时区"));
   $("usage-zone-id").textContent = usageTimeZone;
   dateRange.refresh();
 }
@@ -152,12 +155,13 @@ function fillSelect(id: string, values: string[], label?: (v: string) => string)
   sel.replaceChildren();
   const all = document.createElement("option");
   all.value = "";
-  all.textContent = "全部";
+  setText(all, "全部");
   sel.appendChild(all);
   for (const v of values) {
     const o = document.createElement("option");
     o.value = v;
-    o.textContent = label ? label(v) : v;
+    if (label) setTextRender(o, () => label(v));
+    else o.textContent = v;
     sel.appendChild(o);
   }
   setSelectValue(sel, values.includes(cur) ? cur : "");
@@ -183,13 +187,17 @@ function initFiltersOpen() {
 
 /* 收起后光看一个「筛选」字样，认不出当前到底筛没筛——把生效的条件摘要挂在标题行上。 */
 function renderFilterChip(f: Filters) {
-  const parts: string[] = [];
-  if (f.user) parts.push(f.user);
-  if (f.agent) parts.push(agentName(f.agent));
-  if (f.model) parts.push(f.model);
-  if (f.kind) parts.push(KIND_LABEL[f.kind] || f.kind);
-  if (f.since || f.until) parts.push(dateRange.label());
-  $("uf-active").textContent = parts.length ? parts.join(" · ") : "全部记录";
+  // Keep the applied filter values, but resolve authored labels at display time.
+  // dateRange.label() reads applied values and never changes its open draft.
+  setTextRender($("uf-active"), () => {
+    const parts: string[] = [];
+    if (f.user) parts.push(f.user);
+    if (f.agent) parts.push(agentName(f.agent));
+    if (f.model) parts.push(f.model);
+    if (f.kind) parts.push(KIND_LABEL[f.kind] || f.kind);
+    if (f.since || f.until) parts.push(dateRange.label());
+    return parts.length ? parts.join(" · ") : i18nText("全部记录");
+  });
 }
 
 /* ---------------- 排序 ---------------- */
@@ -215,16 +223,16 @@ function setSort(next: boolean) {
 
 /* ---------------- 渲染 ---------------- */
 
-const KIND_LABEL: Record<string, string> = { chat: "对话", terminal: "终端", title: "起标题" };
+const KIND_LABEL: Record<string, string> = { get chat() { return i18nText("对话"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); } };
 const KIND_HINT: Record<string, string> = {
-  terminal: "用户在「终端」页签里手敲 CLI 花的量，事后从 CLI 自己的记录里补记；只记账不扣额度",
-  title: "服务端自动为新对话生成标题的那趟消耗，不是用户发起的",
+  get terminal() { return i18nText("用户在「终端」页签里手敲 CLI 花的量，事后从 CLI 自己的记录里补记；只记账不扣额度"); },
+  get title() { return i18nText("服务端自动为新对话生成标题的那趟消耗，不是用户发起的"); },
 };
 const BILLING: Record<string, { text: string; title: string }> = {
   // 与对话页每轮下方的说法一致：写用户看得懂的来源，不写「价目表」「CLI」
-  provider: { text: "客户端上报", title: "Claude Code 等客户端自己上报的估算成本，不代表订阅账号的实际扣款" },
-  table: { text: "按单价估算", title: "客户端没有上报金额，按系统设置里的模型单价折算" },
-  none: { text: "未定价", title: "客户端没有上报金额，这个模型也没有设置单价；这一行只记用量、不扣额度" },
+  provider: { get text() { return i18nText("客户端上报"); }, get title() { return i18nText("Claude Code 等客户端自己上报的估算成本，不代表订阅账号的实际扣款"); } },
+  table: { get text() { return i18nText("按单价估算"); }, get title() { return i18nText("客户端没有上报金额，按系统设置里的模型单价折算"); } },
+  none: { get text() { return i18nText("未定价"); }, get title() { return i18nText("客户端没有上报金额，这个模型也没有设置单价；这一行只记用量、不扣额度"); } },
 };
 
 /* 大数字加千分位；token 列四个桶都可能上十万，不分位读不出量级。 */
@@ -241,17 +249,18 @@ function fmtDur(ms: number) {
 /* 每个格子都带上表头名（data-l）并把内容裹进 .u-v：窄屏下表格会拆成一行一张卡片，
  * 标签由 data-l 生成在左边，.u-v 负责把整格内容（可能有两行）作为一块推到右边。
  * 没有这层包裹，格子一变 flex，两行内容就会被拆成并排的两列。 */
-function cellEl(label: string, cls = "") {
+function cellEl(label: string | (() => string), cls = "") {
   const td = document.createElement("td");
   if (cls) td.className = cls;
-  td.dataset.l = label;
+  if (typeof label === "function") setAttrRender(td, "data-l", label);
+  else td.dataset.l = label;
   const v = document.createElement("div");
   v.className = "u-v";
   td.appendChild(v);
   return { td, v };
 }
 
-function cell(label: string, text: string, cls = "") {
+function cell(label: string | (() => string), text: string, cls = "") {
   const { td, v } = cellEl(label, cls);
   v.textContent = text;
   return td;
@@ -265,22 +274,21 @@ function tokenCell(r: UsageEventRow) {
   const main = document.createElement("div");
   const io = document.createElement("span");
   io.className = "u-io";
-  io.append(
-    Object.assign(document.createElement("i"), { className: "u-arrow", textContent: "入" }),
-    document.createTextNode(num(r.input_tokens)),
-    Object.assign(document.createElement("i"), { className: "u-arrow", textContent: "出" }),
-    document.createTextNode(num(r.output_tokens)),
-  );
+  const incoming = document.createElement("i"), outgoing = document.createElement("i");
+  incoming.className = outgoing.className = "u-arrow";
+  setText(incoming, "入");
+  setText(outgoing, "出");
+  io.append(incoming, document.createTextNode(num(r.input_tokens)),
+    outgoing, document.createTextNode(num(r.output_tokens)));
   main.appendChild(io);
   const cache = document.createElement("div");
   cache.className = "u-cache";
-  cache.textContent = "缓存 " + num(r.cache_read_tokens) +
-    (r.cache_write_tokens ? " / 写 " + num(r.cache_write_tokens) : "");
+  setTextRender(cache, () => i18nText("缓存 ") + num(r.cache_read_tokens) +
+    (r.cache_write_tokens ? i18nText(" / 写 ") + num(r.cache_write_tokens) : ""));
   v.append(main, cache);
-  td.title =
-    `输入 ${num(r.input_tokens)}\n输出 ${num(r.output_tokens)}\n` +
-    `缓存读取 ${num(r.cache_read_tokens)}\n缓存写入 ${num(r.cache_write_tokens)}\n` +
-    `合计 ${num(r.total_tokens)}`;
+  setAttrRender(td, "title", () => i18nText("输入 {p0}\n输出 {p1}\n", { p0: String(num(r.input_tokens)), p1: String(num(r.output_tokens)) }) +
+    i18nText("缓存读取 {p0}\n缓存写入 {p1}\n", { p0: String(num(r.cache_read_tokens)), p1: String(num(r.cache_write_tokens)) }) +
+    i18nText("合计 {p0}", { p0: String(num(r.total_tokens)) }));
   return td;
 }
 
@@ -296,72 +304,72 @@ function renderRows(data: UsageEvents) {
   for (const r of data.rows) {
     const tr = document.createElement("tr");
 
-    const u = cell("用户", r.user, "col-user");
+    const u = cell(() => i18nText("用户"), r.user, "col-user");
     u.classList.toggle("hidden", self);
     tr.appendChild(u);
 
     // 会话名 + 账号。会话被删掉后名字为空，退回显示 id：这行消耗真实发生过，
     // 不能因为会话没了就不显示。
-    const { td: sess, v: sessv } = cellEl("工作空间", "u-cell-sess");
+    const { td: sess, v: sessv } = cellEl(() => i18nText("工作空间"), "u-cell-sess");
     const name = document.createElement("div");
     name.className = "u-sess";
     name.textContent = r.session_name || r.session_id;
     name.title = name.textContent;
-    if (!r.session_name) setTip(name, "工作空间已删除");
+    if (!r.session_name) setTip(name, () => i18nText("工作空间已删除"));
     const acct = document.createElement("div");
     acct.className = "u-sub";
     acct.textContent = r.account_label || r.account_id || "—";
     sessv.append(name, acct);
     tr.appendChild(sess);
 
-    const { td: model, v: modelv } = cellEl("模型");
+    const { td: model, v: modelv } = cellEl(() => i18nText("模型"));
     const mline = document.createElement("div");
     mline.className = "u-model";
     const modelName = document.createElement("span");
-    modelName.textContent = r.model || agentName(r.agent) + "（默认模型）";
-    modelName.title = modelName.textContent;
+    setTextRender(modelName, () => r.model || agentName(r.agent) + i18nText("（默认模型）"));
+    setAttrRender(modelName, "title", () => r.model || agentName(r.agent) + i18nText("（默认模型）"));
     mline.append(agentIcon(r.agent, 15), modelName);
     modelv.appendChild(mline);
     if (r.provider) {
       const p = document.createElement("div");
       p.className = "u-sub";
-      p.textContent = r.provider === "firstParty" ? "官方直连" : r.provider;
+      setTextRender(p, () => r.provider === "firstParty" ? i18nText("官方直连") : (r.provider || ""));
       modelv.appendChild(p);
     }
     tr.appendChild(model);
 
-    const { td: kind, v: kindv } = cellEl("类型");
+    const { td: kind, v: kindv } = cellEl(() => i18nText("类型"));
     const chip = document.createElement("span");
     // 终端和起标题各有各的颜色：这一列的用处就是一眼看出「这笔钱是谁按下去的」。
     chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : r.kind === "chat" ? " chat" : "");
-    chip.textContent = KIND_LABEL[r.kind] || r.kind;
-    if (KIND_HINT[r.kind]) setTip(chip, KIND_HINT[r.kind]);
+    setTextRender(chip, () => KIND_LABEL[r.kind] || r.kind);
+    if (KIND_HINT[r.kind]) setTip(chip, () => KIND_HINT[r.kind]);
     kindv.appendChild(chip);
     tr.appendChild(kind);
 
     const b = BILLING[r.billing] || { text: r.billing, title: "" };
     const bchip = document.createElement("span");
     bchip.className = "u-chip bill-" + r.billing;
-    bchip.textContent = b.text;
-    setTip(bchip, b.title);
+    setTextRender(bchip, () => b.text);
+    setTip(bchip, () => b.title);
 
     tr.appendChild(tokenCell(r));
 
-    const hit = cell("缓存命中率", cacheHitText(r), "num u-hit");
-    setTip(hit, "缓存读取 ÷（未缓存输入 + 缓存读取 + 缓存写入）；不含输出 token，无输入时显示 —");
+    const hit = cell(() => i18nText("缓存命中率"), cacheHitText(r), "num u-hit");
+    setTip(hit, () => i18nText("缓存读取 ÷（未缓存输入 + 缓存读取 + 缓存写入）；不含输出 token，无输入时显示 —"));
     tr.appendChild(hit);
 
     // 金额后面挂一个「?」：点开是这一行的分项算式（输入/输出/缓存各花了多少）。
     // 金额本身看不出为什么是这个数，尤其是缓存读取常常比输入贵不了几分钱、
     // 却占了大头。
-    const { td: cost, v: costv } = cellEl("费用", "num u-cost");
+    const { td: cost, v: costv } = cellEl(() => i18nText("费用"), "num u-cost");
     if (!r.cost_micro_usd) cost.classList.add("zero");
     const why = document.createElement("button");
     why.type = "button";
     why.className = "u-why";
     why.append(svgIcon("help", 14));
-    setTip(why, "这笔钱是怎么算出来的");
-    why.setAttribute("aria-label", "费用明细");
+    setTip(why, () => i18nText("这笔钱是怎么算出来的"));
+    setAttrRender(why, "aria-label", () => i18nText("费用明细"));
     why.addEventListener("click", () => openCost(r));
     costv.append(document.createTextNode(fmtUSD(r.cost_micro_usd)), why);
     const billing = document.createElement("div");
@@ -376,21 +384,21 @@ function renderRows(data: UsageEvents) {
     //
     // 两个数都是回合级的，同回合拆成多行时每行重复——所以标题里点明，免得有人
     // 把一列加起来当总时长。
-    const { td: lat, v: latv } = cellEl("延迟", "num u-lat");
+    const { td: lat, v: latv } = cellEl(() => i18nText("延迟"), "num u-lat");
     const ttft = document.createElement("div");
-    ttft.textContent = "首字 " + fmtDur(r.ttft_ms);
+    setTextRender(ttft, () => i18nText("首字 ") + fmtDur(r.ttft_ms));
     const dur = document.createElement("div");
     dur.className = "u-sub";
     // 老数据没量过墙钟，那种行退回 provider 报的模型侧耗时，并把标签换掉——
     // 宁可标明这是另一个口径，也不要把它冒充成总耗时。
-    dur.textContent = r.wall_ms ? "总耗时 " + fmtDur(r.wall_ms) : "模型 " + fmtDur(r.duration_ms);
+    setTextRender(dur, () => r.wall_ms ? i18nText("总耗时 ") + fmtDur(r.wall_ms) : i18nText("模型 ") + fmtDur(r.duration_ms));
     latv.append(ttft, dur);
-    setTip(lat, "首字与总耗时都从容器就绪开始算，含 CLI 启动，两个数同源。"
-      + "老数据没量过总耗时，退回显示 provider 自报的模型侧耗时（标「模型」，不含启动）。"
-      + "都是回合级指标：同一回合拆成多行时每行都是这个值，不要跨行求和");
+    setTip(lat, () => i18nText("首字与总耗时都从容器就绪开始算，含 CLI 启动，两个数同源。")
+      + i18nText("老数据没量过总耗时，退回显示 provider 自报的模型侧耗时（标「模型」，不含启动）。")
+      + i18nText("都是回合级指标：同一回合拆成多行时每行都是这个值，不要跨行求和"));
     tr.appendChild(lat);
 
-    const { td: time, v: timev } = cellEl("时间", "num u-time");
+    const { td: time, v: timev } = cellEl(() => i18nText("时间"), "num u-time");
     const stamp = fmtUsageTime(r.ts, true);
     const day = document.createElement("div");
     day.className = "u-sub";
@@ -432,6 +440,14 @@ function costRow(cells: [string, string, string, string], cls = "") {
 }
 
 function openCost(r: UsageEventRow) {
+  activeCost = r;
+  renderCost(r);
+  costDlg().showModal();
+}
+
+// Repaint the displayed receipt only; the selected row and its price snapshot
+// are kept even if polling loads another page while the dialog is open.
+function renderCost(r: UsageEventRow) {
   const rate = r.rate;
 
   const head = $("cost-head");
@@ -439,7 +455,7 @@ function openCost(r: UsageEventRow) {
   const top = document.createElement("div");
   top.className = "cost-model";
   top.append(agentIcon(r.agent, 14),
-    document.createTextNode(r.model || agentName(r.agent) + "（默认模型）"));
+    document.createTextNode(r.model || agentName(r.agent) + i18nText("（默认模型）")));
   const b = BILLING[r.billing] || { text: r.billing, title: "" };
   const chip = document.createElement("span");
   chip.className = "u-chip bill-" + r.billing;
@@ -457,10 +473,10 @@ function openCost(r: UsageEventRow) {
   // micro = token × 单价（同 quota.go 的 priceEvent）。
   let sum = 0;
   for (const [label, tok, rt] of [
-    ["输入", r.input_tokens, rate?.input],
-    ["输出", r.output_tokens, rate?.output],
-    ["缓存读取", r.cache_read_tokens, rate?.cache_read],
-    ["缓存写入", r.cache_write_tokens, rate?.cache_write],
+    [i18nText("输入"), r.input_tokens, rate?.input],
+    [i18nText("输出"), r.output_tokens, rate?.output],
+    [i18nText("缓存读取"), r.cache_read_tokens, rate?.cache_read],
+    [i18nText("缓存写入"), r.cache_write_tokens, rate?.cache_write],
   ] as [string, number, number | undefined][]) {
     const micro = rt === undefined ? 0 : Math.round(tok * rt);
     sum += micro;
@@ -471,8 +487,8 @@ function openCost(r: UsageEventRow) {
 
   // 逐桶四舍五入与服务端整笔四舍五入能差出一两个微美元，不算「对不上」。
   const off = !rate || rate.basis !== "table" || Math.abs(sum - r.cost_micro_usd) > 2;
-  if (rate && off) body.appendChild(costRow(["按单价合计", num(r.total_tokens), "", fmtUSD(sum)], "cost-sum"));
-  body.appendChild(costRow([off ? "实收费用" : "合计",
+  if (rate && off) body.appendChild(costRow([i18nText("按单价合计"), num(r.total_tokens), "", fmtUSD(sum)], "cost-sum"));
+  body.appendChild(costRow([off ? i18nText("实收费用") : i18nText("合计"),
     rate && off ? "" : num(r.total_tokens), "", fmtUSD(r.cost_micro_usd)], "cost-total"));
 
   const note = $("cost-note");
@@ -480,45 +496,50 @@ function openCost(r: UsageEventRow) {
   const lines: string[] = [];
   if (!rate) {
     lines.push(r.billing === "provider"
-      ? "这一行的钱由 provider 在回合收尾时自报，只给总额不给分项；这条记录也没有可用的参考单价，无法拆分。"
-      : "这条记录没有可用单价，只记用量、不扣额度。配置价目表会用于之后的新记录，不会追溯补扣。");
+      ? i18nText("这一行的钱由 provider 在回合收尾时自报，只给总额不给分项；这条记录也没有可用的参考单价，无法拆分。")
+      : i18nText("这条记录没有可用单价，只记用量、不扣额度。配置价目表会用于之后的新记录，不会追溯补扣。"));
   } else if (rate.basis === "reference") {
-    lines.push(`这一行的钱由 provider 自报总额，拆不出分项：上表是照${rate.snapshot ? "入账时保存的" : "当前"}价目表「${rate.key}」推的参考值，与实收有出入很正常。`);
+    lines.push(i18nText("这一行的钱由 provider 自报总额，拆不出分项：上表是照{p0}价目表「{p1}」推的参考值，与实收有出入很正常。", { p0: String(rate.snapshot ? i18nText("入账时保存的") : i18nText("当前")), p1: String(rate.key) }));
   } else {
-    lines.push(`按${rate.snapshot ? "入账时保存的" : "当前"}价目表「${rate.key}」${rate.key === r.model ? "" : "（兜底价）"}折算。`);
-    if (off) lines.push(rate.snapshot ? "拆分与实收有差异，请以已入账金额为准。" : "这条历史记录没有价格快照，展示当前参考价；实收金额以入账记录为准。");
+    lines.push(i18nText("按{p0}价目表「{p1}」{p2}折算。", { p0: String(rate.snapshot ? i18nText("入账时保存的") : i18nText("当前")), p1: String(rate.key), p2: String(rate.key === r.model ? "" : i18nText("（兜底价）")) }));
+    if (off) lines.push(rate.snapshot ? i18nText("拆分与实收有差异，请以已入账金额为准。") : i18nText("这条历史记录没有价格快照，展示当前参考价；实收金额以入账记录为准。"));
   }
-  if (rate?.per_request) lines.push("本行按消息 ID 去重后逐请求计价，再按模型汇总；上表按标准单价展示，逐请求舍入或长上下文档可能使合计有差异。长上下文阈值按各请求判断，不按整行累计输入判断。");
-  if (rate && !rate.snapshot) lines.push("旧记录没有保存入账价格，当前单价仅供参考。");
-  if (rate?.catalog_version) lines.push(`价格目录版本：${rate.catalog_version}；${rate.verified_at ? "核验于 " + fmtTime(Date.parse(rate.verified_at)) : "来源为尚未重新核验的预置快照"}。`);
+  if (rate?.per_request) lines.push(i18nText("本行按消息 ID 去重后逐请求计价，再按模型汇总；上表按标准单价展示，逐请求舍入或长上下文档可能使合计有差异。长上下文阈值按各请求判断，不按整行累计输入判断。"));
+  if (rate && !rate.snapshot) lines.push(i18nText("旧记录没有保存入账价格，当前单价仅供参考。"));
+  if (rate?.catalog_version) lines.push(i18nText("价格目录版本：{p0}；{p1}。", { p0: String(rate.catalog_version), p1: String(rate.verified_at ? i18nText("核验于 ") + fmtTime(Date.parse(rate.verified_at)) : i18nText("来源为尚未重新核验的预置快照")) }));
   if (rate?.long) {
-    lines.push(`输入 + 缓存读取超过 ${num(rate.long_context_over || 0)} token，整个回合走的是长上下文档单价。`);
+    lines.push(i18nText("输入 + 缓存读取超过 {p0} token，整个回合走的是长上下文档单价。", { p0: String(num(rate.long_context_over || 0)) }));
   }
-  lines.push("计价算法：查价顺序为 模型 ID → 去掉 -20251001 这类日期后缀再查 → agent 名兜底；" +
-    "费用 = 各桶 token × 该桶单价 ÷ 100 万（单价单位是美元 / 百万 token），四舍五入到微美元；" +
-    (rate?.per_request ? "配了长上下文档时，每个请求分别判断输入 + 缓存读取是否超过阈值。" : "配了长上下文档时，输入 + 缓存读取超过阈值的回合整体改用超阈值那档单价。"));
+  lines.push(i18nText("计价算法：查价顺序为 模型 ID → 去掉 -20251001 这类日期后缀再查 → agent 名兜底；") +
+    i18nText("费用 = 各桶 token × 该桶单价 ÷ 100 万（单价单位是美元 / 百万 token），四舍五入到微美元；") +
+    (rate?.per_request ? i18nText("配了长上下文档时，每个请求分别判断输入 + 缓存读取是否超过阈值。") : i18nText("配了长上下文档时，输入 + 缓存读取超过阈值的回合整体改用超阈值那档单价。")));
   for (const t of lines) {
     const p = document.createElement("p");
     p.textContent = t;
     note.appendChild(p);
   }
-
-  costDlg().showModal();
 }
 
 $("cost-close").addEventListener("click", () => costDlg().close());
+costDlg().addEventListener("close", () => { if (!costDlg().open) activeCost = null; });
+window.addEventListener("agentbox-language-change", () => {
+  if (!activeCost || !costDlg().open) return;
+  const scrollTop = costDlg().scrollTop;
+  renderCost(activeCost);
+  costDlg().scrollTop = scrollTop;
+});
 
 function renderSummary(data: UsageEvents) {
   const box = $("usage-summary");
   box.replaceChildren();
   const t = data.total;
-  const items: [string, string, string?][] = [
-    ["总花费", fmtUSD(t.cost_micro_usd, 2), "筛选范围内所有行的费用之和"],
-    ["回合", num(t.turns), `按 turn_id 去重；共 ${num(t.rows)} 行明细`],
-    ["输入", num(t.input_tokens), "未命中缓存的输入 token"],
-    ["输出", num(t.output_tokens), ""],
-    ["缓存读取", num(t.cache_read_tokens), "命中缓存的输入，计价远低于新输入"],
-    ["缓存写入", num(t.cache_write_tokens), ""],
+  const items: [string, string, (() => string)?][] = [
+    ["总花费", fmtUSD(t.cost_micro_usd, 2), () => i18nText("筛选范围内所有行的费用之和")],
+    ["回合", num(t.turns), () => i18nText("按 turn_id 去重；共 {p0} 行明细", { p0: String(num(t.rows)) })],
+    ["输入", num(t.input_tokens), () => i18nText("未命中缓存的输入 token")],
+    ["输出", num(t.output_tokens)],
+    ["缓存读取", num(t.cache_read_tokens), () => i18nText("命中缓存的输入，计价远低于新输入")],
+    ["缓存写入", num(t.cache_write_tokens)],
   ];
   for (const [label, value, tip] of items) {
     const card = document.createElement("div");
@@ -526,7 +547,7 @@ function renderSummary(data: UsageEvents) {
     if (tip) setTip(card, tip);
     const l = document.createElement("div");
     l.className = "us-label";
-    l.textContent = label;
+    setText(l, label);
     const v = document.createElement("div");
     v.className = "us-value mono";
     v.textContent = value;
@@ -539,7 +560,7 @@ function renderPager(data: UsageEvents) {
   const total = data.total.rows;
   const from = total === 0 ? 0 : offset + 1;
   const to = offset + data.rows.length;
-  $("usage-page").textContent = `显示 ${num(from)} 至 ${num(to)} 条，共 ${num(total)} 条`;
+  setText($("usage-page"), "显示 {p0} 至 {p1} 条，共 {p2} 条", { p0: String(num(from)), p1: String(num(to)), p2: String(num(total)) });
   const current = Math.floor(offset / pageSize) + 1;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const numbers = $("usage-pages");
@@ -560,7 +581,7 @@ function renderPager(data: UsageEvents) {
     button.type = "button";
     button.className = "usage-page-button";
     button.textContent = String(page);
-    button.setAttribute("aria-label", `第 ${page} 页`);
+    setAttrRender(button, "aria-label", () => i18nText("第 {p0} 页", { p0: String(page) }));
     if (page === current) button.setAttribute("aria-current", "page");
     button.addEventListener("click", () => goToPage(page));
     numbers.append(button);
@@ -593,13 +614,14 @@ async function load() {
   loading = true;
   syncPagerBusy();
   $("usage-loading").classList.remove("hidden");
+  const generation = usageGeneration;
   try {
     const f = readFilters();
     renderFilterChip(f);
     const data = await api<UsageEvents>(
       "/usage/events?" + query(f, { limit: String(pageSize), offset: String(offset), order: orderParam() }));
     // 确认日期范围时上一趟可能仍在加载；不能让旧结果覆盖新筛选和排序。
-    if (loadPending) return;
+    if (generation !== usageGeneration || loadPending) return;
     // 数据减少或相对时间窗口移动后，回到仍有记录的最后一页。
     const maxOffset = Math.max(0, Math.ceil(data.total.rows / pageSize) - 1) * pageSize;
     if (offset > maxOffset) {
@@ -610,7 +632,7 @@ async function load() {
     }
     last = data;
     const sync = data.sync;
-    $("usage-sub").textContent = sync ? (sync.last_scan_at ? `终端全量扫描：${fmtTime(sync.last_scan_at)}${sync.errors ? " · 部分文件失败，后台将重试" : ""}${sync.scanning ? " · 同步中" : ""}` : "终端用量正在后台同步") : "使用记录";
+    setTextRender($("usage-sub"), () => sync ? (sync.last_scan_at ? i18nText("终端全量扫描：{p0}{p1}{p2}", { p0: String(fmtTime(sync.last_scan_at)), p1: String(sync.errors ? i18nText(" · 部分文件失败，后台将重试") : ""), p2: String(sync.scanning ? i18nText(" · 同步中") : "") }) : i18nText("终端用量正在后台同步")) : i18nText("使用记录"));
     usageTimeZone = data.timezone || S.timeZone || "Asia/Shanghai";
     S.timeZone = usageTimeZone;
     syncTimeZone();
@@ -629,7 +651,7 @@ async function load() {
       resetScroll = false;
     }
   } catch (e) {
-    toast("读取使用记录失败：" + (e as Error).message, true);
+    if (generation === usageGeneration) toast(i18nText("读取使用记录失败：") + (e as Error).message, true);
   } finally {
     loading = false;
     syncPagerBusy();
@@ -649,9 +671,9 @@ export async function openUsageView() {
   showView("usage");
   usageTimeZone = S.timeZone || "Asia/Shanghai";
   syncTimeZone();
-  $("usage-sub").textContent = S.role === "admin"
-    ? "查看所有用户的用量与费用，每行对应一个回合中的一个模型。"
-    : "查看你的用量与费用，每行对应一个回合中的一个模型。";
+  setTextRender($("usage-sub"), () => S.role === "admin"
+    ? i18nText("查看所有用户的用量与费用，每行对应一个回合中的一个模型。")
+    : i18nText("查看你的用量与费用，每行对应一个回合中的一个模型。"));
   await load();
 }
 
@@ -671,12 +693,12 @@ async function exportCSV() {
     syncTimeZone();
     if (data.total.rows > data.rows.length) {
       // 截断是从哪头截的，得跟着排序方向说，否则「最近 500 行」是句假话
-      toast(`只导出了${asc ? "最早" : "最近"}的 ${data.rows.length} 行（共 ${data.total.rows} 行），` +
-        "请缩小时间范围后分批导出", true);
+      toast(i18nText("只导出了{p0}的 {p1} 行（共 {p2} 行），", { p0: String(asc ? i18nText("最早") : i18nText("最近")), p1: String(data.rows.length), p2: String(data.total.rows) }) +
+        i18nText("请缩小时间范围后分批导出"), true);
     }
-    const head = [`时间（${usageTimeZone}）`, "用户", "工作空间", "工作空间ID", "账号", "Agent", "模型", "类型", "计费",
-      "输入", "输出", "缓存读取", "缓存写入", "缓存命中率", "合计Token", "费用USD",
-      "首字ms", "总耗时ms", "模型耗时ms", "回合ID"];
+    const head = [i18nText("时间（{p0}）", { p0: String(usageTimeZone) }), i18nText("用户"), i18nText("工作空间"), i18nText("工作空间ID"), i18nText("账号"), "Agent", i18nText("模型"), i18nText("类型"), i18nText("计费"),
+      i18nText("输入"), i18nText("输出"), i18nText("缓存读取"), i18nText("缓存写入"), i18nText("缓存命中率"), i18nText("合计Token"), i18nText("费用USD"),
+      i18nText("首字ms"), i18nText("总耗时ms"), i18nText("模型耗时ms"), i18nText("回合ID")];
     const lines = [head.join(",")];
     for (const r of data.rows) {
       lines.push([
@@ -695,7 +717,7 @@ async function exportCSV() {
     startDownload(url);
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   } catch (e) {
-    toast("导出失败：" + (e as Error).message, true);
+    toast(i18nText("导出失败：") + (e as Error).message, true);
   } finally {
     btn.disabled = false;
   }
@@ -743,3 +765,17 @@ bus.addEventListener("timezone-updated", () => {
 setInterval(() => {
   if (S.view === "usage" && !document.hidden && dateRange.value().followNow) void load();
 }, 30000);
+
+// Discard account-owned display snapshots on logout/page teardown. Language
+// changes never trigger API reads, mutate filters, or reopen a closed dialog.
+function clearUsageDisplay() {
+  usageGeneration++;
+  last = null;
+  activeCost = null;
+  loadPending = false;
+  if (costDlg().open) costDlg().close();
+  for (const id of ["usage-rows", "usage-summary", "usage-pages", "cost-head", "cost-rows", "cost-note"]) $(id).replaceChildren();
+  for (const id of ["usage-page", "uf-active", "usage-sub"]) $(id).textContent = "";
+}
+bus.addEventListener("signed-out", clearUsageDisplay);
+window.addEventListener("pagehide", clearUsageDisplay);

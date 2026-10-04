@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"agentbox/internal/clientidentity"
 	"agentbox/internal/store"
 )
 
@@ -81,6 +83,19 @@ func fixture(t *testing.T) (string, string) {
 
 func TestFullBackupRestoreRoundTrip(t *testing.T) {
 	cfg, data := fixture(t)
+	journalFiles := map[string]string{
+		"users/alice/sessions/s1/client-sync/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/record.json": `{"result":{"operation_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"uncertain","recovery":true}}`,
+		"users/alice/sessions/s1/client-sync/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/before":      "old\r\n\x00",
+	}
+	for rel, content := range journalFiles {
+		name := filepath.Join(data, rel)
+		if err := os.MkdirAll(filepath.Dir(name), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	archive := filepath.Join(t.TempDir(), "full.tar.gz")
 	checks := 0
 	m, err := Create(t.Context(), Options{Config: cfg, Output: archive, Full: true, CheckStopped: func(context.Context, []string) error { checks++; return nil }})
@@ -110,6 +125,16 @@ func TestFullBackupRestoreRoundTrip(t *testing.T) {
 		got, err := os.ReadFile(filepath.Join(target, "data", rel))
 		if err != nil || !bytes.Equal(want, got) {
 			t.Fatalf("%s: %q %v", rel, got, err)
+		}
+	}
+	for rel, want := range journalFiles {
+		got, err := os.ReadFile(filepath.Join(target, "data", rel))
+		if err != nil || string(got) != want {
+			t.Fatalf("sync journal restore %s: %q %v", rel, got, err)
+		}
+		info, err := os.Stat(filepath.Join(target, "data", rel))
+		if err != nil || info.Mode().Perm() != 0600 {
+			t.Fatal("private journal mode", info, err)
 		}
 	}
 	before, _ := os.Stat(filepath.Join(data, "users/alice/sessions/s1/workspace/run.sh"))
@@ -145,6 +170,62 @@ func TestFullBackupRestoreRoundTrip(t *testing.T) {
 	}
 	if _, err = Restore(t.Context(), archive, target); err == nil {
 		t.Fatal("overwrote existing instance")
+	}
+}
+
+func TestSystemBackupIncludesDesktopMetadata(t *testing.T) {
+	cfg, data := fixture(t)
+	st, err := store.Open(filepath.Join(data, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := st.CreateClientProject(store.ClientProject{SessionID: "s1", Name: "Root", Path: ".", Arguments: []string{"--model", "fixture"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminal, err := st.CreateClientTerminal("s1", p.ID, "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = st.BeginCloseClientTerminal("s1", terminal.ID); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	archive := filepath.Join(t.TempDir(), "system.tar.gz")
+	if _, err = Create(t.Context(), Options{Config: cfg, Output: archive}); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "restored")
+	if _, err = Restore(t.Context(), archive, target); err != nil {
+		t.Fatal(err)
+	}
+	// Restores normalize data_dir to the new layout.
+	raw, err := os.ReadFile(filepath.Join(target, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored struct {
+		DataDir string `json:"data_dir"`
+	}
+	if err = json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	root := restored.DataDir
+	if !filepath.IsAbs(root) {
+		root = filepath.Join(target, root)
+	}
+	st, err = store.Open(filepath.Join(root, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.ClientProject("s1", p.ID)
+	if err != nil || got.Path != "." || got.Arguments[1] != "fixture" {
+		t.Fatalf("project restore: %+v %v", got, err)
+	}
+	tm, err := st.ClientTerminal("s1", terminal.ID)
+	if err != nil || tm.State != "closing" {
+		t.Fatalf("pending teardown restore: %+v %v", tm, err)
 	}
 }
 
@@ -360,5 +441,38 @@ func TestMCPSystemBackupRestore(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, "data/users/alice/sessions/s1/home/.claude/.credentials.json")); !os.IsNotExist(err) {
 		t.Fatal("system backup included runtime home")
+	}
+}
+
+func TestBackupRestoreCreatesNewDesktopIdentity(t *testing.T) {
+	for _, full := range []bool{false, true} {
+		t.Run(fmt.Sprint(full), func(t *testing.T) {
+			cfg, data := fixture(t)
+			source, err := clientidentity.LoadOrCreate(data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			archive := filepath.Join(t.TempDir(), "backup.tar.gz")
+			_, err = Create(t.Context(), Options{Config: cfg, Output: archive, Full: full, CheckStopped: func(context.Context, []string) error { return nil }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(t.TempDir(), "restored")
+			if _, err = Restore(t.Context(), archive, target); err != nil {
+				t.Fatal(err)
+			}
+			restoredData := filepath.Join(target, "data")
+			if _, err = os.Stat(filepath.Join(restoredData, clientidentity.File)); !os.IsNotExist(err) {
+				t.Fatal("backup copied live desktop identity", err)
+			}
+			restored, err := clientidentity.LoadOrCreate(restoredData)
+			if err != nil || restored == source {
+				t.Fatal("restore reused identity", err)
+			}
+			again, err := clientidentity.LoadOrCreate(data)
+			if err != nil || again != source {
+				t.Fatal("backup changed source identity", err)
+			}
+		})
 	}
 }

@@ -1,0 +1,49 @@
+[package]
+name = "agentbox-desktop"
+version = "0.1.2"
+description = "Cross-platform client for Agentbox workspaces"
+license = "Apache-2.0"
+edition = "2021"
+rust-version = "1.90"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+desktop-smoke = ["objc2-app-kit/NSApplication", "objc2-app-kit/NSWindow"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "=2.13.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream"] }
+tokio = { version = "1", features = ["sync", "time", "net", "io-util", "macros", "process"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
+futures-util = { version = "0.3", features = ["sink"] }
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+rfd = "0.15"
+tempfile = "3"
+clipboard-rs = "=0.3.5"
+image = { version = "=0.25.10", default-features = false, features = ["png", "tiff", "bmp"] }
+sha2 = "0.10"
+url = "2"
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Storage_FileSystem", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_Globalization"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+flate2 = "=1.1.10"
+tar = "=0.4.46"
+plist = "=1.10.1"
+libc = "0.2"
+objc2 = "0.6.3"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSPasteboard", "NSPasteboardItem"] }
+
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSData", "NSString", "NSRange"] }

@@ -1,3 +1,7 @@
+import { setTextRender, setAttrRender, setAttr } from "./i18n.js";
+
+export type ActionLabel = string | (() => string);
+
 /* Shared action icons: 24px grid, 1.8px rounded stroke, currentColor.
  * Keep action semantics independent from danger/primary styling. */
 const ICONS: Record<string, string> = {
@@ -160,8 +164,15 @@ export function decorateIcons(root: ParentNode = document) {
     if (el.matches("button, a")) {
       const label = el.dataset.tip || el.getAttribute("aria-label") || el.textContent?.trim();
       if (label) {
-        el.dataset.tip ||= label;
-        if (!el.hasAttribute("aria-label")) el.setAttribute("aria-label", label);
+        const source = el.querySelector<HTMLElement>(":scope > [data-i18n]")?.dataset.i18n;
+        if (!el.dataset.tip) {
+          if (source) setAttr(el, "data-tip", source);
+          else el.dataset.tip = label;
+        }
+        if (!el.hasAttribute("aria-label")) {
+          if (source) setAttr(el, "aria-label", source);
+          else el.setAttribute("aria-label", label);
+        }
       }
     }
   }
@@ -187,29 +198,42 @@ export function decorateIcons(root: ParentNode = document) {
 }
 
 /** Update icon and label together, including state changes and dynamic controls. */
-export function buttonLabel(el: HTMLElement, label: string, icon: string) {
+export function buttonLabel(el: HTMLElement, label: ActionLabel, icon: string) {
   const previous = el.querySelector(".action-label")?.textContent;
+  const value = typeof label === "function" ? label() : label;
   el.dataset.icon = icon;
   const caption = document.createElement("span");
   caption.className = "action-label";
-  caption.textContent = label;
+  if (typeof label === "function") setTextRender(caption, label);
+  else caption.textContent = label;
   el.replaceChildren(svgIcon(icon, 16), caption);
   if (el.matches(".btn")) {
     el.classList.add("action-control");
-    el.classList.toggle("action-icon", !label);
-    if (label) {
-      if (!el.dataset.tip || el.dataset.tip === previous) el.dataset.tip = label;
-      if (!el.getAttribute("aria-label") || el.getAttribute("aria-label") === previous) el.setAttribute("aria-label", label);
+    el.classList.toggle("action-icon", !value);
+    if (value) {
+      if (!el.dataset.tip || el.dataset.tip === previous) {
+        if (typeof label === "function") setAttrRender(el, "data-tip", label);
+        else el.dataset.tip = value;
+      }
+      if (!el.getAttribute("aria-label") || el.getAttribute("aria-label") === previous) {
+        if (typeof label === "function") setAttrRender(el, "aria-label", label);
+        else el.setAttribute("aria-label", value);
+      }
     }
   }
 }
 
-export function actionButton<T extends HTMLElement>(el: T, label: string, icon: string, tip = label): T {
+export function actionButton<T extends HTMLElement>(el: T, label: ActionLabel, icon: string, tip: ActionLabel = label): T {
   buttonLabel(el, label, icon);
-  el.classList.toggle("action-icon", !label);
-  el.setAttribute("aria-label", tip || label);
+  const value = typeof label === "function" ? label() : label;
+  const tipValue = typeof tip === "function" ? tip() : tip;
+  el.classList.toggle("action-icon", !value);
+  if (typeof tip === "function") setAttrRender(el, "aria-label", tip);
+  else if (!tipValue && typeof label === "function") setAttrRender(el, "aria-label", label);
+  else el.setAttribute("aria-label", tipValue || value);
   el.removeAttribute("title");
-  if (tip) el.dataset.tip = tip;
+  if (typeof tip === "function") setAttrRender(el, "data-tip", tip);
+  else if (tipValue) el.dataset.tip = tipValue;
   else delete el.dataset.tip;
   return el;
 }

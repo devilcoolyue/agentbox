@@ -1,3 +1,4 @@
+import { htmlText as trHTML, setText, setTextRender, t as i18nText } from "./i18n.js";
 import { api } from "./api.js";
 import { S,bus } from "./state.js";
 import { enhanceSelects,setSelectValue } from "./select.js";
@@ -9,28 +10,28 @@ let active:HTMLDialogElement|null=null;
 export function openGitReviews(repo:string,remote:string,connection:GitConnection,connections:GitConnection[]){
  if(active||!S.current)return;const session=S.current.id,token=S.token,d=document.createElement("dialog");active=d;
  d.id="dlg-git-reviews";d.className="dlg-git-connections";
- d.innerHTML=`<div class="dlg-head"><h2>Pull Request / Merge Request</h2><button class="dlg-x" data-close aria-label="关闭" data-icon="close"></button></div>
- <p data-project class="field-hint"></p><label data-api-label>平台 API 连接<select data-api></select></label>
- <p class="field-hint">先推送当前分支。此处创建同一仓库内的 PR/MR，不自动推送、合并或删除分支。GitLab Token/OAuth 需要 api 权限；GitHub 需要仓库 Pull requests 写权限。</p>
- <div class="git-connection-tools"><button class="btn btn-sm" data-refresh data-icon="refresh">刷新</button><button class="btn btn-sm" data-next disabled data-icon="arrow-right">下一页</button></div>
+ d.innerHTML=`<div class="dlg-head"><h2>Pull Request / Merge Request</h2><button class="dlg-x" data-close aria-label="${trHTML("关闭")}" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button></div>
+ <p data-project class="field-hint"></p><label data-api-label><span data-i18n="平台 API 连接">${trHTML("平台 API 连接")}</span><select data-api></select></label>
+ <p class="field-hint"><span data-i18n="先推送当前分支。此处创建同一仓库内的 PR/MR，不自动推送、合并或删除分支。GitLab Token/OAuth 需要 api 权限；GitHub 需要仓库 Pull requests 写权限。">${trHTML("先推送当前分支。此处创建同一仓库内的 PR/MR，不自动推送、合并或删除分支。GitLab Token/OAuth 需要 api 权限；GitHub 需要仓库 Pull requests 写权限。")}</span></p>
+ <div class="git-connection-tools"><button class="btn btn-sm" data-refresh data-icon="refresh"><span class="action-label" data-i18n="刷新">${trHTML("刷新")}</span></button><button class="btn btn-sm" data-next disabled data-icon="arrow-right"><span class="action-label" data-i18n="下一页">${trHTML("下一页")}</span></button></div>
  <p data-error role="alert" class="login-error"></p><div data-list></div>
- <form><div class="dlg-row"><label>来源分支<input name="source" type="text" readonly></label><label>目标分支<input name="target" type="text" required maxlength="240" placeholder="main"></label></div>
- <label>标题<input name="title" type="text" required maxlength="240"></label><label>描述<textarea name="body" rows="4" maxlength="32000"></textarea></label>
- <label class="check"><input name="draft" type="checkbox" checked>创建为草稿</label>
- <div class="dlg-actions"><button class="btn btn-primary" type="submit" disabled data-icon="eye" data-tip="预览将创建的 PR/MR，确认后才提交">预览</button></div></form>
- <div data-preview class="hidden"><p data-summary class="field-hint"></p><pre data-body></pre><div data-existing></div><button class="btn btn-primary" data-create data-icon="plus" data-tip="确认创建已预览的 PR/MR">创建</button></div>`;
+ <form><div class="dlg-row"><label><span data-i18n="来源分支">${trHTML("来源分支")}</span><input name="source" type="text" readonly></label><label><span data-i18n="目标分支">${trHTML("目标分支")}</span><input name="target" type="text" required maxlength="240" placeholder="main"></label></div>
+ <label><span data-i18n="标题">${trHTML("标题")}</span><input name="title" type="text" required maxlength="240"></label><label><span data-i18n="描述">${trHTML("描述")}</span><textarea name="body" rows="4" maxlength="32000"></textarea></label>
+ <label class="check"><input name="draft" type="checkbox" checked><span data-i18n="创建为草稿">${trHTML("创建为草稿")}</span></label>
+ <div class="dlg-actions"><button class="btn btn-primary" type="submit" disabled data-icon="eye" data-tip="${trHTML("预览将创建的 PR/MR，确认后才提交")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;预览将创建的 PR/MR，确认后才提交&quot;}"><span class="action-label" data-i18n="预览">${trHTML("预览")}</span></button></div></form>
+ <div data-preview class="hidden"><p data-summary class="field-hint"></p><pre data-body></pre><div data-existing></div><button class="btn btn-primary" data-create data-icon="plus" data-tip="${trHTML("确认创建已预览的 PR/MR")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;确认创建已预览的 PR/MR&quot;}"><span class="action-label" data-i18n="创建">${trHTML("创建")}</span></button></div>`;
  const form=d.querySelector("form")!,field=(name:string)=>form.elements.namedItem(name) as HTMLInputElement;
  const apiSelect=d.querySelector<HTMLSelectElement>("[data-api]")!,error=d.querySelector<HTMLElement>("[data-error]")!,list=d.querySelector<HTMLElement>("[data-list]")!,previewBox=d.querySelector<HTMLElement>("[data-preview]")!;
  const button=(name:string)=>d.querySelector<HTMLButtonElement>(`[data-${name}]`)!;
  let page:GitReviewPage|null=null,preview:GitReviewPreview|null=null,busy=false;
  const prefix=`/sessions/${session}/git`;
- const option=(c:GitConnection)=>Object.assign(document.createElement("option"),{value:c.id,textContent:c.label+(c.read_only?" · 只读":"")});
+ const option=(c:GitConnection)=>Object.assign(document.createElement("option"),{value:c.id,textContent:c.label+(c.read_only?i18nText(" · 只读"):"")});
  let eligible=[connection];if(connection.auth_type==="ssh")eligible=connections.filter(c=>c.auth_type!=="ssh"&&c.provider===connection.provider&&c.enabled&&new URL(c.base_url).hostname===new URL(connection.base_url).hostname);
  apiSelect.replaceChildren(...eligible.map(option));if(connection.auth_type!=="ssh")setSelectValue(apiSelect,connection.id);
  d.querySelector("[data-api-label]")!.classList.toggle("hidden",connection.auth_type!=="ssh");
  function link(review:GitReview){
   const row=document.createElement("p"),anchor=document.createElement("a");
-  anchor.textContent=`#${review.number} ${review.title}${review.draft?" · 草稿":""}`;
+  setTextRender(anchor, () => `#${review.number} ${review.title}${review.draft?i18nText(" · 草稿"):""}`);
   // Server validates links, and browser checks protocol again for stale fixtures.
   try{const url=new URL(review.url);if(url.protocol==="https:"){anchor.href=url.href;anchor.target="_blank";anchor.rel="noopener noreferrer";}}catch{}
   row.append(anchor,document.createTextNode(` · ${review.source} → ${review.target}`));return row;
@@ -42,11 +43,11 @@ export function openGitReviews(repo:string,remote:string,connection:GitConnectio
   button("next").disabled=busy||!page?.has_more;
  }
  async function load(number=1){
-  invalidate();if(!apiSelect.value)throw new Error("请先添加同平台的 HTTPS Token/OAuth API 连接，并授予所需 API 权限。");
+  invalidate();if(!apiSelect.value)throw new Error(i18nText("请先添加同平台的 HTTPS Token/OAuth API 连接，并授予所需 API 权限。"));
   const q=new URLSearchParams({repo,remote,api_connection_id:apiSelect.value,page:String(number)});
   const next=await api<GitReviewPage>(prefix+"/reviews?"+q);if(!d.open||token!==S.token)return;page=next;
-  d.querySelector("[data-project]")!.textContent=`${page.provider} · ${page.project} · ${remote} · 第 ${page.page} 页`;
-  list.replaceChildren(...page.rows.map(link));if(!page.rows.length)list.textContent="没有打开的 PR/MR。";
+  setText(d.querySelector("[data-project]")!, "{p0} · {p1} · {p2} · 第 {p3} 页", { p0: String(page.provider), p1: String(page.project), p2: String(remote), p3: String(page.page) });
+  list.replaceChildren(...page.rows.map(link));if(!page.rows.length)setText(list, "没有打开的 PR/MR。");
   field("source").value=page.source_branch;if(!field("target").value)field("target").value=page.default_branch;
  }
  async function run(fn:()=>Promise<void>){
@@ -60,14 +61,14 @@ export function openGitReviews(repo:string,remote:string,connection:GitConnectio
  form.addEventListener("submit",e=>{e.preventDefault();void run(async()=>{
   invalidate();const candidate=await gitRequest<GitReviewPreview>(prefix+"/review-preview",payload(),d);
   if(!d.open||token!==S.token)return;preview=candidate;
-  d.querySelector("[data-summary]")!.textContent=`${candidate.project}\n${candidate.source.name} (${candidate.source.sha.slice(0,12)}) → ${candidate.target.name} (${candidate.target.sha.slice(0,12)})${candidate.target.protected?" · 受保护目标分支":""}\n${candidate.draft?"草稿 · ":""}${candidate.title}`;
+  setTextRender(d.querySelector("[data-summary]")!, () => `${candidate.project}\n${candidate.source.name} (${candidate.source.sha.slice(0,12)}) → ${candidate.target.name} (${candidate.target.sha.slice(0,12)})${candidate.target.protected?i18nText(" · 受保护目标分支"):""}\n${candidate.draft?i18nText("草稿 · "):""}${candidate.title}`);
   d.querySelector("[data-body]")!.textContent=candidate.body;
   d.querySelector("[data-existing]")!.replaceChildren(...candidate.existing.map(link));button("create").classList.toggle("hidden",candidate.existing.length>0);previewBox.classList.remove("hidden");
  });});
  button("create").addEventListener("click",()=>void run(async()=>{
   const checked=preview;if(!checked)return;invalidate();
   const result=await gitRequest<{review:GitReview;existing:boolean}>(prefix+"/reviews",{repo,remote,api_connection_id:checked.connection_id,title:checked.title,body:checked.body,source:checked.source.name,target:checked.target.name,draft:checked.draft,expected_head:checked.source.sha,expected_target:checked.target.sha},d);
-  toast(result.existing?"已存在相同 PR/MR":"PR/MR 已创建");await load();
+  toast(result.existing?i18nText("已存在相同 PR/MR"):i18nText("PR/MR 已创建"));await load();
  }));
  button("refresh").addEventListener("click",()=>void run(()=>load()));button("next").addEventListener("click",()=>void run(()=>load((page?.page||1)+1)));button("close").addEventListener("click",()=>d.close());
  d.addEventListener("cancel",e=>{if(busy)e.preventDefault();});d.addEventListener("close",()=>{active=null;d.remove();});document.body.append(d);decorateIcons(d);enhanceSelects(d);d.showModal();void run(()=>load());

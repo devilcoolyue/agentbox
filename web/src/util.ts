@@ -1,4 +1,5 @@
 /* util：DOM / 格式化 / 加载态 / 气泡 / 灯箱等无业务依赖的小工具。 */
+import { t as i18nText, setTextRender, setAttrRender } from "./i18n.js";
 "use strict";
 
 import { actionButton } from "./icons.js";
@@ -38,16 +39,19 @@ export function spinEl() {
   return s;
 }
 
-export function withSpin(text: string) {
+export function withSpin(text: string | (() => string)) {
   const f = document.createDocumentFragment();
-  f.append(spinEl(), document.createTextNode(text));
+  const caption = document.createTextNode("");
+  if (typeof text === "function") setTextRender(caption, text);
+  else caption.textContent = text;
+  f.append(spinEl(), caption);
   return f;
 }
 
 /* 按钮进入/退出加载态：转圈 + 禁用，防止重复提交 */
 const btnSaved = new WeakMap<HTMLButtonElement, ChildNode[]>(); // btn -> 原始子节点，含图标等元素，不能退化成纯文本
 
-export function btnBusy(btn: HTMLButtonElement, label: string) {
+export function btnBusy(btn: HTMLButtonElement, label: string | (() => string)) {
   if (btn.classList.contains("loading")) return;
   btnSaved.set(btn, [...btn.childNodes]);
   btn.disabled = true;
@@ -55,7 +59,8 @@ export function btnBusy(btn: HTMLButtonElement, label: string) {
   btn.classList.add("loading");
   const caption = document.createElement("span");
   caption.className = "action-label";
-  caption.textContent = label;
+  if (typeof label === "function") setTextRender(caption, label);
+  else caption.textContent = label;
   btn.replaceChildren(spinEl(), caption);
 }
 
@@ -73,11 +78,11 @@ export type WbBusyKind = "start" | "stop";
 
 /* 工作区生命周期遮罩：启动/停止时罩住头部按钮以下的整块工作区，
  * 毛玻璃 + 绿/红点缀，给窄屏（按钮藏在 ⋯ 菜单里）一个明确的进行中反馈。 */
-const WB_BUSY_LABEL: Record<WbBusyKind, string> = { start: "正在启动工作空间", stop: "正在停止工作空间" };
+const WB_BUSY_LABEL: Record<WbBusyKind, string> = { get start() { return i18nText("正在启动工作空间"); }, get stop() { return i18nText("正在停止工作空间"); } };
 export function wbBusy(kind: WbBusyKind) {
   const el = $("wb-busy");
   if (!el) return;
-  $("wb-busy-label").textContent = WB_BUSY_LABEL[kind] || "处理中";
+  setTextRender($("wb-busy-label"), () => WB_BUSY_LABEL[kind] || i18nText("处理中"));
   el.classList.remove("start", "stop");
   el.classList.add(kind, "show");
 }
@@ -128,9 +133,9 @@ export function fmtAgo(ms: number | string) {
   const t = new Date(ms).getTime();
   if (isNaN(t)) return "";
   const s = Math.max(0, (Date.now() - t) / 1000);
-  if (s < 60) return "刚刚";
-  if (s < 3600) return Math.floor(s / 60) + " 分钟前";
-  if (s < 86400) return Math.floor(s / 3600) + " 小时前";
+  if (s < 60) return i18nText("刚刚");
+  if (s < 3600) return Math.floor(s / 60) + i18nText(" 分钟前");
+  if (s < 86400) return Math.floor(s / 3600) + i18nText(" 小时前");
   return fmtTime(t);
 }
 
@@ -169,9 +174,9 @@ export function fmtBytes(n: number | undefined) {
 export function fmtUptime(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
-  if (d > 0) return `${d} 天 ${h} 小时`;
-  if (h > 0) return `${h} 小时 ${m} 分钟`;
-  return `${m} 分钟`;
+  if (d > 0) return i18nText("{p0} 天 {p1} 小时", { p0: String(d), p1: String(h) });
+  if (h > 0) return i18nText("{p0} 小时 {p1} 分钟", { p0: String(h), p1: String(m) });
+  return i18nText("{p0} 分钟", { p0: String(m) });
 }
 
 /* 延迟展示：<1ms 收成「<1」，个位数保留一位小数，其余取整 */
@@ -224,15 +229,16 @@ export interface ConfirmOpts {
 }
 
 /* 确认：true=确定，false=取消/关闭。 */
-export function askConfirm(text: string, opts: ConfirmOpts = {}) {
-  $("ask-title").textContent = opts.title || "确认";
-  $("ask-text").textContent = text;
+export function askConfirm(text: string | (() => string), opts: ConfirmOpts = {}) {
+  setTextRender($("ask-title"), () => opts.title || i18nText("确认"));
+  if (typeof text === "function") setTextRender($("ask-text"), text);
+  else $("ask-text").textContent = text;
   const hint = $("ask-hint");
-  hint.textContent = opts.hint || "";
+  setTextRender(hint, () => opts.hint || "");
   hint.classList.toggle("hidden", !opts.hint);
   const ok = $("ask-ok");
   ok.className = "btn " + (opts.danger ? "btn-danger" : "btn-primary");
-  actionButton(ok, opts.okLabel || "确定", opts.icon || "check");
+  actionButton(ok, () => opts.okLabel || i18nText("确定"), opts.icon || "check");
   return dlgOnce($<HTMLDialogElement>("dlg-ask"), (v) => v === "ok");
 }
 
@@ -254,14 +260,14 @@ export interface PromptOpts {
 
 /* 输入：返回字符串，取消返回 null（与 window.prompt 语义一致）。 */
 export function askPrompt(opts: PromptOpts = {}) {
-  $("ask-input-title").textContent = opts.title || "输入";
-  $("ask-input-label").textContent = opts.label || "";
+  setTextRender($("ask-input-title"), () => opts.title || i18nText("输入"));
+  setTextRender($("ask-input-label"), () => opts.label || "");
   const field = $<HTMLInputElement>("ask-input-field");
   field.value = opts.value || "";
   field.type = opts.password ? "password" : "text";
-  field.placeholder = opts.placeholder || "";
+  setAttrRender(field, "placeholder", () => opts.placeholder || "");
   const hint = $("ask-input-hint");
-  hint.textContent = opts.hint || "";
+  setTextRender(hint, () => opts.hint || "");
   hint.classList.toggle("hidden", !opts.hint);
   askInputValidate = opts.validate || null;
   setAskInputError("");

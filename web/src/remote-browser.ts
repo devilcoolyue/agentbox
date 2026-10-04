@@ -1,3 +1,4 @@
+import { t as i18nText } from "./i18n.js";
 import { agentIcon } from "./brand.js";
 import { S, bus } from "./state.js";
 import { api, wsURL } from "./api.js";
@@ -61,29 +62,29 @@ async function connect(id: string, ticket: number, info: BrowserInfo) {
  applyQuality(view);
  view.addEventListener("connect", () => {
   if (desktop !== view) return;
-  connected = true; state(`已连接 · ${info.browser || "Chrome"} · ${info.proxy ? "账号代理出口" : "服务器出口"}`);
+  connected = true; state(i18nText("已连接 · {p0} · {p1}", { p0: String(info.browser || "Chrome"), p1: String(info.proxy ? i18nText("账号代理出口") : i18nText("服务器出口")) }));
   $("browser-empty").classList.add("hidden"); controls();
  });
  view.addEventListener("disconnect", () => {
   if (desktop !== view) return;
   desktop = null; connected = false;
-  state("连接已断开，可点击连接浏览器重试");
+  state(i18nText("连接已断开，可点击连接浏览器重试"));
   $("browser-screen").replaceChildren();
   $("browser-empty").classList.remove("hidden"); controls();
  });
- view.addEventListener("securityfailure", () => { if (desktop === view) state("远程桌面连接失败，请重新启动浏览器"); });
+ view.addEventListener("securityfailure", () => { if (desktop === view) state(i18nText("远程桌面连接失败，请重新启动浏览器")); });
 }
 
 export async function showBrowser() {
  browserDisconnect();
  const id = S.current?.id; if (!id) return;
  const ticket = generation;
- state("正在读取浏览器状态…");
+ state(i18nText("正在读取浏览器状态…"));
  try {
   const info = await api<BrowserInfo>(`/sessions/${id}/browser`);
   if (ticket !== generation || S.current?.id !== id) return;
-  if (info.running) { state(`正在连接 ${info.browser}…`); await connect(id, ticket, info); }
-  else state("浏览器未启动 · 点击启动后继续上次的登录状态");
+  if (info.running) { state(i18nText("正在连接 {p0}…", { p0: String(info.browser) })); await connect(id, ticket, info); }
+  else state(i18nText("浏览器未启动 · 点击启动后继续上次的登录状态"));
  } catch (e) { if (ticket === generation) state((e as Error).message); }
 }
 
@@ -91,11 +92,11 @@ async function startBrowser(url = "") {
  if (busy || !S.current) return;
  const id = S.current.id;
  const ticket = generation;
- busy = true; controls(); state("正在启动浏览器…");
+ busy = true; controls(); state(i18nText("正在启动浏览器…"));
  try {
   const info = await api<BrowserInfo>(`/sessions/${id}/browser`, {method:"POST",body:JSON.stringify({url})});
   if (ticket !== generation || S.current?.id !== id || S.tab !== "browser") return;
-  state(`${info.browser || "Chrome"} · ${info.proxy ? "账号代理出口" : "服务器出口"}`);
+  state(`${info.browser || "Chrome"} · ${info.proxy ? i18nText("账号代理出口") : i18nText("服务器出口")}`);
   if (!desktop) await connect(id, ticket, info);
  } catch (e) {
   if (ticket === generation) { state((e as Error).message); toast((e as Error).message, true); }
@@ -133,7 +134,7 @@ export function initRemoteBrowser() {
   try {
    const parsed = new URL(url);
    if (!["http:","https:"].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error();
-  } catch { toast("请输入有效的 HTTP / HTTPS 地址", true); return; }
+  } catch { toast(i18nText("请输入有效的 HTTP / HTTPS 地址"), true); return; }
   void startBrowser(url);
  }, {signal});
  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-browser-url]")) {
@@ -143,16 +144,16 @@ export function initRemoteBrowser() {
   if (!S.current || busy) return;
   const id = S.current.id;
   browserDisconnect(); const ticket = generation;
-  busy = true; controls(); state("正在关闭浏览器…");
+  busy = true; controls(); state(i18nText("正在关闭浏览器…"));
   try {
    await api(`/sessions/${id}/browser`, {method:"DELETE"});
-   if (ticket === generation) state("浏览器已关闭 · 登录状态已保留");
+   if (ticket === generation) state(i18nText("浏览器已关闭 · 登录状态已保留"));
   } catch (e) { if (ticket === generation) state((e as Error).message); }
   finally { if (ticket === generation) { busy = false; controls(); } }
  }, {signal});
  $("browser-fullscreen").addEventListener("click", async () => {
   try { if (document.fullscreenElement) await document.exitFullscreen(); else await $("tab-browser").requestFullscreen(); }
-  catch { toast("当前浏览器不支持全屏", true); }
+  catch { toast(i18nText("当前浏览器不支持全屏"), true); }
  }, {signal});
  $("browser-copy").addEventListener("click", async () => {
   const id = S.current?.id, ticket = generation; if (!id || !connected) return;

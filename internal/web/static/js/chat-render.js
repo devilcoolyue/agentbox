@@ -1,3 +1,4 @@
+import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* chat-render：对话流的纯渲染管线 —— 用户消息、agent 事件（Claude stream-json /
  * Codex --json 新旧两种结构）、轻量 Markdown、附件缩略图。无状态副作用。
  * 全部通过 DOM 构建输出，模型文本永远走 textContent，不存在注入面。 */
@@ -59,8 +60,8 @@ export function toolChip(name, summary, htmlPath = "") {
         b.type = "button";
         b.className = "btn chip-open";
         b.dataset.htmlPreview = htmlPath;
-        buttonLabel(b, "预览", "eye");
-        setTip(b, "在预览窗口渲染 " + htmlPath);
+        buttonLabel(b, () => i18nText("预览"), "eye");
+        setTip(b, () => i18nText("在预览窗口渲染 ") + htmlPath);
         c.appendChild(b);
     }
     setTip(c, summary || name);
@@ -71,7 +72,7 @@ export function divider(label) {
     const d = document.createElement("div");
     d.className = "chat-divider";
     const s = document.createElement("span");
-    s.textContent = label || "新对话";
+    setTextRender(s, () => label || i18nText("新对话"));
     d.appendChild(s);
     return d;
 }
@@ -84,9 +85,9 @@ export function renderUserMsg(text) {
         if (m.index > last)
             d.appendChild(document.createTextNode(str.slice(last, m.index)));
         if (m[1] === "图片")
-            d.appendChild(chatThumb(m[3], "图片 #" + m[2]));
+            d.appendChild(chatThumb(m[3], i18nText("图片 #") + m[2]));
         else
-            d.appendChild(fileLink(m[3], "附件 #" + m[2]));
+            d.appendChild(fileLink(m[3], i18nText("附件 #") + m[2]));
         last = m.index + m[0].length;
     }
     if (last < str.length)
@@ -99,12 +100,12 @@ export function chatThumb(containerPath, title) {
     img.className = "chat-thumb";
     img.src = imgURLFromPath(containerPath);
     img.alt = title;
-    setTip(img, title + "（点击查看大图）");
+    setTip(img, () => title + i18nText("（点击查看大图）"));
     img.addEventListener("click", () => openLightbox(imgURLFromPath(containerPath), title + " · " + containerPath));
     img.addEventListener("error", () => {
         const gone = document.createElement("span");
         gone.className = "img-gone";
-        gone.textContent = `[${title} 已过期]`;
+        setText(gone, "[{p0} 已过期]", { p0: String(title) });
         img.replaceWith(gone);
     });
     return img;
@@ -206,7 +207,7 @@ function codeBlock(lang, body) {
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "cb-toggle";
-    setTip(toggle, "折叠 / 展开代码");
+    setTip(toggle, () => i18nText("折叠 / 展开代码"));
     toggle.setAttribute("aria-expanded", "true");
     const caret = document.createElement("span");
     caret.className = "cb-caret";
@@ -216,7 +217,7 @@ function codeBlock(lang, body) {
     l.textContent = lang || "code";
     const cnt = document.createElement("span");
     cnt.className = "cb-count";
-    cnt.textContent = lines.length + " 行";
+    setTextRender(cnt, () => lines.length + i18nText(" 行"));
     toggle.append(caret, l, cnt);
     toggle.addEventListener("click", () => {
         const folded = box.classList.toggle("folded");
@@ -225,19 +226,19 @@ function codeBlock(lang, body) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "btn cb-copy";
-    actionButton(btn, "复制", "copy", "复制代码");
+    actionButton(btn, () => i18nText("复制"), "copy", () => i18nText("复制代码"));
     btn.addEventListener("click", async () => {
         try {
             await copyText(body);
         }
         catch (_) {
-            toast("复制失败，请选择内容后手动复制", true);
+            toast(i18nText("复制失败，请选择内容后手动复制"), true);
             return;
         }
-        actionButton(btn, "已复制", "check", "代码已复制");
+        actionButton(btn, () => i18nText("已复制"), "check", () => i18nText("代码已复制"));
         btn.disabled = true;
         setTimeout(() => {
-            actionButton(btn, "复制", "copy", "复制代码");
+            actionButton(btn, () => i18nText("复制"), "copy", () => i18nText("复制代码"));
             btn.disabled = false;
         }, 1400);
     });
@@ -549,7 +550,7 @@ export function renderEntry(raw) {
     if (raw.kind === "event")
         return renderEvent(raw.event);
     if (raw.kind === "divider")
-        return [divider(raw.ts ? "新对话 · " + fmtTime(raw.ts) : "")];
+        return [divider(raw.ts ? i18nText("新对话 · ") + fmtTime(raw.ts) : "")];
     if (raw.kind === "status" && raw.state === "error")
         return [chip(raw.error, "err")];
     return [];
@@ -581,7 +582,7 @@ export function liveNode(kind) {
         det.className = "think";
         det.open = true;
         const sum = document.createElement("summary");
-        sum.textContent = "思考过程";
+        setText(sum, "思考过程");
         const body = document.createElement("div");
         body.className = "think-body";
         det.append(sum, body);
@@ -599,33 +600,33 @@ function thinkBlock(text) {
 }
 /* rateLimitType → 额度名称，对齐原生 Claude Code 的 session/weekly limit 措辞 */
 const RATE_LIMIT_LABEL = {
-    five_hour: "5 小时额度",
-    seven_day: "周额度",
-    seven_day_opus: "Opus 周额度",
-    seven_day_sonnet: "Sonnet 周额度",
-    seven_day_overage_included: "周额度",
-    overage: "用量积分额度",
+    get five_hour() { return i18nText("5 小时额度"); },
+    get seven_day() { return i18nText("周额度"); },
+    get seven_day_opus() { return i18nText("Opus 周额度"); },
+    get seven_day_sonnet() { return i18nText("Sonnet 周额度"); },
+    get seven_day_overage_included() { return i18nText("周额度"); },
+    get overage() { return i18nText("用量积分额度"); },
 };
 function resetsAt(sec) {
     if (!sec)
         return "";
-    return `${fmtTime(sec * 1000)} 重置`;
+    return i18nText("{p0} 重置", { p0: String(fmtTime(sec * 1000)) });
 }
 /* 限流事件：allowed=正常不展示，allowed_warning=接近上限（黄），rejected=已被拦（红） */
 function rateLimitChip(info) {
     if (!info || !info.status || info.status === "allowed")
         return null;
-    const label = RATE_LIMIT_LABEL[info.rateLimitType] || "用量额度";
+    const label = RATE_LIMIT_LABEL[info.rateLimitType] || i18nText("用量额度");
     const reset = resetsAt(info.resetsAt);
     if (info.status === "rejected") {
-        return chip(["⛔ 已用尽" + label, reset].filter(Boolean).join(" · "), "err");
+        return chip([i18nText("⛔ 已用尽") + label, reset].filter(Boolean).join(" · "), "err");
     }
-    const pct = typeof info.utilization === "number" ? "已用 " + Math.round(info.utilization * 100) + "%" : "";
+    const pct = typeof info.utilization === "number" ? i18nText("已用 ") + Math.round(info.utilization * 100) + "%" : "";
     // allowed_warning 之外的未知状态照原样带出，免得又变成看不懂的提示
-    const head = (info.status === "allowed_warning" ? "接近" : info.status + " · ") + label;
+    const head = (info.status === "allowed_warning" ? i18nText("接近") : info.status + " · ") + label;
     const parts = ["⚠ " + head, pct, reset];
     if (info.isUsingOverage)
-        parts.push("正在使用用量积分");
+        parts.push(i18nText("正在使用用量积分"));
     return chip(parts.filter(Boolean).join(" · "), "warn");
 }
 /* 渲染一条 agent 事件（Claude stream-json / Codex --json），返回节点数组 */
@@ -663,10 +664,10 @@ export function renderEvent(ev) {
             const secs = ev.duration_ms ? (ev.duration_ms / 1000).toFixed(1) + "s" : "";
             // Cost is shown in the footer from committed usage, including table-priced
             // Codex/Claude fallbacks. Raw CLI totals could disagree with settlement.
-            out.push(chip(["✓ 回合完成", secs].filter(Boolean).join(" · "), "result"));
+            out.push(chip([i18nText("✓ 回合完成"), secs].filter(Boolean).join(" · "), "result"));
         }
         else {
-            out.push(chip("✗ " + (ev.result || ev.subtype || "回合失败"), "err"));
+            out.push(chip("✗ " + (ev.result || ev.subtype || i18nText("回合失败")), "err"));
         }
         return out;
     }
@@ -701,12 +702,12 @@ export function renderEvent(ev) {
         return out;
     if (ev.type === "turn.completed") {
         const u = ev.usage || {};
-        const tokens = u.input_tokens ? ` · 入 ${u.input_tokens} · 出 ${u.output_tokens || 0} tokens` : "";
-        out.push(chip("✓ 回合完成" + tokens, "result"));
+        const tokens = u.input_tokens ? i18nText(" · 入 {p0} · 出 {p1} tokens", { p0: String(u.input_tokens), p1: String(u.output_tokens || 0) }) : "";
+        out.push(chip(i18nText("✓ 回合完成") + tokens, "result"));
         return out;
     }
     if (ev.type === "turn.failed") {
-        out.push(chip("✗ " + (ev.error && ev.error.message || "回合失败"), "err"));
+        out.push(chip("✗ " + (ev.error && ev.error.message || i18nText("回合失败")), "err"));
         return out;
     }
     if (ev.type === "error" && ev.message) {
@@ -731,7 +732,7 @@ export function renderEvent(ev) {
             return out;
         }
         if (m.type === "task_complete") {
-            out.push(chip("✓ 回合完成", "result"));
+            out.push(chip(i18nText("✓ 回合完成"), "result"));
             return out;
         }
         if (m.type === "error" && m.message) {

@@ -85,6 +85,12 @@ sudo ./deploy/deploy.sh
 CODEX_LIVE_TEST=1 go test -run TestRunCodexTurnLive ./internal/agent/
 ```
 
+Linux 的服务端同步写入必须能设置容器属主 `1000:1000`；普通用户不能直接运行完整
+`internal/server` 写入测试。CI 保持普通用户构建及其他包测试，先用
+`AGENTBOX_CHOWN_DENIAL_TEST=1` 定向执行 `TestSyncMutationLinuxChownDeniedPreservesTarget`
+验证真实 EPERM 与文件保留，再用 `go test -exec 'sudo -n --' ./internal/server` 执行完整服务端测试。
+不要为通过测试放宽生产 Linux 的 Chown 校验；该拒绝回归在 root 全量测试中明确跳过。
+
 ## 生产环境发布
 
 生产机的具体地址、目录、域名等敏感信息不写进版本库，集中放在
@@ -437,6 +443,77 @@ data/
 - xterm 6 会丢掉 iOS 中文键盘直接上屏的标点（「，」等，上游 xtermjs/xterm.js#3070），也不认连按标点键时 iOS 不带按键事件的删除/替换（「，。？！」循环）。`term.ts` 的 `bridgeDroppedInput` 在 xterm 所有发送时机（keydown、keypress、229 差分定时器、输入事件）都过去后，若这次按键 xterm 一字未发且不在组字，才按 textarea 前后差异补发（先退格再插入，最多删 8 个字符）；升级 xterm 后若上游已修复（PR #5614），删掉它并保留 `test-browser.mjs` 的「恰好发送一次」断言。真机事件顺序用地址参数 `?imedebug` 打开 `term-input-debug.ts` 的诊断面板，上传到 `/shared/.file/`（只在开启期间记录，含期间输入的字符）。
 - xterm 6 没有触摸滚动，单指拖动原本落给浏览器滚走整页。`term-touch.ts` 把单指纵向滑动换算成滚轮事件派发给 xterm，与桌面滚轮同路：tmux（`mouse on`）下是鼠标滚轮上报，tmux 进历史模式、一次翻 5 行（所以每 3 行手指位移发一次），普通屏才直接 `scrollLines`。单指 touchmove 一律 `preventDefault`（页面放大时除外），双指交还浏览器缩放；滑动过的触摸抬手吞掉点击，免得弹出键盘。历史模式里打字会被 tmux 吞掉，Esc 或滑回底部退出，与桌面滚轮翻历史一致。长按 500ms 由同一模块回调 `term.ts`，用 `menu.ts` 的 `openMenuAt` 在手指上方弹「粘贴」（不挪焦点，否则软键盘收起）：触屏上 xterm 输入框只是光标处一个点，系统粘贴菜单出不来，只能 Clipboard API 读剪贴板（要 HTTPS），图片走与桌面粘贴相同的上传，文字走 `term.paste`（括号粘贴）。Android 长按的 contextmenu 在捕获阶段拦下，不能让 xterm 当右键处理。回归在 `scripts/test-term-touch.mjs`（CDP 真实触摸）。
 
+### 桌面项目与终端
+
+- 顶部/侧栏状态只取服务端sessions结果，不从WebSocket已连接/断开推导容器运行/停止。
+  TerminalPane经ProjectWorkspace向App通知连接变化；SessionRefresh串行合并并补一次尾随读取，
+  可见时5秒轮询、focus/visibility恢复刷新，stop/start代次拒绝旧账号结果，刷新不重建现有终端。
+- `desktop/` 为独立 Tauri/Vue/xterm 构建；Rust 原生 HTTP/WS 管令牌，Go `cmd/abox-sync`
+  提供私有 stdio 预检及显式同步批次命令，服务端 sync 默认关闭。管理员显式设置
+  `desktop_sync_enabled=true` 后通告 sync v1；该字段须同时保留在 Config mutate/persist/settings。
+  开关控制能力发现与新计划，不强杀在途写入，恢复管理独立。桌面不进入服务端 Go 构建依赖。
+- `internal/syncproto/syncclient/syncfs` 是便携同步基础层。scan 失败不能变空清单，规则变化
+  不能当删除，冲突必须暂停项目；写入用预期哈希、受限句柄与恢复副本，不跟随链接/硬链接。
+  Windows 原生实现不得依赖 Unix safefs；本地预检路径只由原生 picker 经私有管道授权。
+  执行器与尚未完成的验收边界见 docs/architecture/desktop-sync.md；sync capability 默认仍为 0。
+- 登录与两条配对通道发 token 时用 `CreateTokenIfUserUnchanged` 原子核对用户的密码 hash 与
+  CreatedAt；HTTP 改密通过 `ResetPasswordIfUserUnchanged` 同事务更新密码和失效其他 token。
+  不能退回先校验再无条件 CreateToken，或拆开改密与撤销；否则重置/同名重建期间能续签旧登录。
+  配对码满额仍允许属主替换自己的旧码，两个通道的码不能互换。
+- 服务端 client_manifest 使用 safefs 而非客户端绝对路径遍历，最多两项并行、空间锁内有界
+  扫描；错误不返回部分清单。client_lease 进程内 30 秒租约协调重叠目录，校验设备/令牌/代次，
+  重启全部失效。持有租约时禁止编辑/移除项目。
+- client_mutation 的 apply 支持 replace/delete/mkdir/rmdir；接收上传不占空间锁，最终检查与
+  写入在空间锁内，发布前复核租约。新建不覆盖、rmdir 仅空目录且 AT_REMOVEDIR，不递归。
+  日志与 before 在 sessions/<id>/client-sync（容器挂载外），uncertain 不盲目重放；applied
+  仅历史收据，执行器仍须重扫。每空间 1000 活动操作/256 MiB 旧内容，到限停写，无自动清理。
+  状态/恢复 GET 仍按空间属主；完整备份包含日志，默认系统备份不包含；sync 默认仍为 0。
+- `sync_recovery_gc=1` 只宣告显式回收协议，不能作为开启 sync 的授权。`GET sync/storage` 统计当前
+  空间；`POST sync/operations/{id}/retire` 要求原实例头、原 device、意图 digest 与实例/空间绑定的
+  confirmation，只清理 applied，无需项目仍存在；空间存在活动租约则拒绝。先持久化 retiring，再校验/
+  删除旧字节、同步目录，最后记 retired；原 ID 的 applied 收据永久保留，旧服务端也不能将其当新操作重放。
+  每空间最多 100000 永久收据（retiring 已预占），到限拒绝新的回收；只释放旧内容与活动名额，
+  不释放永久收据元数据。容量缓存绑定 journal 根 inode，空间锁内更新，错误失效；冷扫描有界且限 60 秒，
+  大量收据时可能慢，扫描失败停写，不降级为空统计。metadata 为逻辑字节，不含 inode/目录分配开销。
+- `client_file` 条件下载核对项目 revision、规则 hash 和文件 hash/size/executable，校验完快照
+  才发送。与清单共用两个读取槽，文件各限 64 MiB；网络发送不持有空间锁。Go Remote 只提供
+  原生传输，禁重定向、验证 TLS、请求头传令牌；读取失败不能当空树；Engine 已接入显式执行和 IPC，pending 禁止重放。
+- `client_projects.go/client_terminals.go/client_pair.go` 新 API 保持 auth + withSession 属主检查；
+  元数据通过 workspace.WithSession 与 purge 串行，目录通过 safefs 固定句柄校验。
+- 每个终端以稳定 ID 使用独立 tmux socket，旧 `/term` 仍是默认 socket 的 `main`。在空间锁内
+  ExecCommandEnv 等待 tmux 创建完成，再 ExecPTY 仅 attach；不能改成延迟 new-session，否则
+  并发结束可能确认成功后再产生孤儿终端。参数逐项 shellQuote，凭证只经 Docker exec Env。
+- 关闭先持久化 closing，再停止对应 tmux，失败保留可重试记录；输入/心跳复查资源状态和账号
+  权限。项目改路径/删除必须先结束所有终端；移除项目映射不删除文件。终端用量仍只补记不扣款。
+- clientidentity 将 server_id 放 data/client-instance-id（0600），不进系统/完整备份；恢复实例
+  生成新身份，客户端重新确认基线。损坏身份只阻止能力/同步接口，不阻断旧业务 API。
+- syncclient.StateStore 是原生专用应用目录的 SQLite，保存设备、绑定、基线、pending 与历史，
+  不存令牌/内容。prepared→started→verified，崩溃 started 不重放；完整重扫符合计划才在同
+  事务提交基线和归档。目录/祖先实际 ID 防重叠；Engine/IPC/UI 已接通核对/收尾/副本导出，sync 默认保持 0。
+  1024 绑定/每绑定 1000 完成批次/全库 256 MiB 逻辑元数据，到限停写，无自动清理。
+- 待定批次核对重新获租并重扫，finish 必须全树符合且远端收据全部 applied；replan 只归档
+  不改文件或旧基线。副本按批次/操作 ID 导出到原生选择的映射外目录，不覆盖现有文件；
+  收据错误不变成 missing，哈希失败不发布，renderer 不能提供本地源路径。
+- 同步进度只观察状态，不参与收据/基线。Go 私有 IPC 的 progress=true 为可选，100ms
+  合并快照；Rust Channel 一条未 ACK 加一个最新值，ACK 限定原生任务 ID/序号。取消/退出
+  登录关闭转发，Vue 代次丢弃旧事件。传输读满不等于已发布，N/N 操作不等于基线已提交。
+- 本地同步 schema 5 支持 archived、逐文件选择、abandoned 未知结果与本地/远端清理审计；schema 1/2/3/4
+  迁移保留设备/记录，旧 sidecar 拒绝重新打开 schema 5。远端清理先持久化 retiring，成功后记 retired，
+  不修改基线。当前绑定有 pending 或历史为 replan/abandoned 时禁止；只允许全部 verified，或由 finish
+  及有效核验摘要证实完成的 started。旧能力不发送 storage/retire 请求，身份变化不发送旧操作 ID；失败
+  重新加载 revision 并预览续做，无自动重试。原本无恢复引用的历史也必须所有远端操作 retired 才可删除，
+  避免丢失回收入口。解绑须核对 revision、拒绝 pending，仅归档不删文件/旧基线/历史；新绑定
+  不继承基线。活动映射按实例或同 URL 排除重叠，不能换 server_id 绕过旧 pending。
+- 同 URL/认证用户可以发现本机旧实例记录；身份变化时只允许历史/本地副本恢复，禁止将旧
+  远端恢复引用发往新实例。历史目录仍排除为导出目的地，归档仍计容量，移动副本不自动定位。
+- schema 10 仅新增项目/终端表，Store.Delete 同事务清理。回退须兼容备份；不得改变旧账号绑定。
+- 回归：`go test ./internal/store ./internal/server ./internal/dockerx`；真实 Linux PTY/tmux 用
+  `AGENTBOX_CLIENT_TEST_IMAGE=<client.Dockerfile 镜像> go test ./internal/server -run TestClientTerminalsContainerLive`。
+  原生桌面 smoke 有 legacy/projects 两种合成模式；`TestDesktopSyncNativeSmoke` 通过
+  AGENTBOX_SYNC_SMOKE_BINARY 指定显式测试包，使用真实 Go 路由和私有 sidecar 验证同步/
+  恢复 UI。临时目录注入仅编译进 desktop-smoke，不能进入正常 picker 路径或接受 renderer
+  提供目录。此服务端测试包不能在 Windows 构建；平台、真实 picker 与安装验收另行记录。
+
 ### 文件/共享目录
 
 - 默认操作为会话 `workspace`；`?scope=shared` 操作用户级共享目录（挂载到所有会话容器 `/shared`）。
@@ -668,7 +745,7 @@ data/
 
 - `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度，终端 UpsertTerminalUsage 绝不扣额度。
 - 新行 `PriceSnapshot` 包含来源、价格键、普通/长上下文档和阈值。终端 upsert 在同一事务读取首份快照，续写不能改用新价；旧行没有快照时不要伪造历史单价。Claude 0 费用按表补算时保存 table 来源。
-- 当前 SQLite schema=9（迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
+- 当前 SQLite schema=10（迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
 - `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。
 - 协议样本放在 agent/usage 的 testdata，全部为合成脱敏数据。Linux 测试脚本必须复制这些 testdata；禁止读取真实用户 rollout 当测试夹具。
 
@@ -710,3 +787,76 @@ data/
 - 只接管明确授权的原生用户级条目，记录 Applied/Pending 后通过容器 Claude 原生配置命令修改，取消后可重试。未知字段不做有损接管。当前终端 CLI 不承诺热更新；项目批准与插件仍由 CLI 管理。
 - `helper.py` 嵌入服务端，通过 python3 -I -c 在目标容器执行，敏感载荷走 stdin。stdin EOF 取消，独立 28 秒闹钟兜底，清理检测进程组；禁止宿主机执行 MCP 或返回原始 stderr。HTTP 支持 Streamable HTTP 的 JSON/SSE 响应，不含旧 SSE transport；首版检测不读取 CLI OAuth 凭证。
 - 回归：`go test ./internal/mcpconfig ./internal/server ./internal/workspace ./internal/backup`；`scripts/test-mcp.mjs` 纳入浏览器合成 API 测试；`python3 scripts/test-mcp-live.py` 使用固定镜像、隔离临时 home、network=none 与本地模拟模型验证真实工具调用，不发付费请求。`scripts/test-mcp-server.py --binary <Linux binary>` 验证真实 Go API→Docker 同步与检测，使用独立卷并清理。
+
+### 桌面附件、文件与更新边界
+
+- `desktop/src-tauri/src/attachments.rs` 从原生 picker/剪贴板/DragDrop 获取文件；renderer 只收
+  两分钟、单次、绑定当前 Remote 实例的 ticket，不提供任意绝对路径读文件命令。最多 32 个/
+  总 64 MiB，单附件 19 MiB（旧服务端 20 MiB 上限包含 multipart）。上传确认后走旧 images API，
+  返回路径限定 `/shared/.images|.file/<安全名字>`，只通过用户点击插入终端，不写入伪终端输出。
+- 附件与下载共用原生互斥及按 task ID 取消；退出登录先取消并等待网络任务收尾。取消/断流不能宣称
+  服务器回滚，未知结果不自动重试。手动下载当前限 64 MiB，原生保存路径、不覆盖、收到完整内容才发布。
+- 剪贴板图片经 `attachments/clipboard_image.rs` 原生取 PNG/TIFF（Mac）或 PNG/DIB（Windows），
+  先检查同一快照的头与尺寸再解码，不得改回 `clipboard-rs::get_image` 的解码后限额。输入 ≤128 MiB、
+  ≤32 Mpx、单边 ≤32768、解码像素 ≤128 MiB、输出 PNG ≤19 MiB；库分配限额不是进程 RSS 上限，
+  Mac 系统物化 NSData 前的开销不受此限制。BigTIFF 拒绝；文件剪贴板仍优先。
+  Windows packed DIB 用虚拟 BMP 头显式给像素偏移；image 0.25.10 的无文件头解码对 V4/V5
+  BI_BITFIELDS 会多跳 12 字节，不能直接改回 new_without_file_header；标准手写样本覆盖行序和透明度。
+- `updates.rs` 固定桌面专用清单、编译时更新公钥及版本绑定签名，不能读取服务端 releases/latest。
+  更新与文件/同步排他，安装保留 keyring；开发包不配置公钥时明确禁用更新。
+- `desktop-release.yml` 只生成 artifacts；正式签名需独立 Apple/Windows/更新密钥且验证成功，不静默降级。
+  versioned release 和 desktop-stable feed 发布均须 make_latest=false。验收门槛见
+  `docs/architecture/desktop-release.md`，安装探针不等于 GUI/升级/最低系统实机验收。
+
+- 目录手动上传走 `file_upload.rs`：预览消耗原生 ticket 并保存 ≤19 MiB 字节快照，两分钟确认摘要绑定
+  目标空间/范围/目录、文件内容和目录列表；执行重读列表，变化即拒绝。旧 upload API 无 CAS，UI 必须
+  明示覆盖/解压合并及部分完成风险，不传 clear，不假称同步恢复副本。与 sync_work/attachment_work 排他。
+- 持续同步组件跨空间保留；`SyncScheduler` 统一排队进入 native sidecar，队列最多 64。取消排队项只让
+  该项不再派发，不发全局 sync_cancel；当前运行项仍由 Rust 互斥/EOF 取消。退出登录卸载所有空间监督器。
+- 只读预览的明确瞬时网络/HTTP故障经 Go `sync_preview_retryable`→Rust 原命令核对后传给循环，
+  仅预览阶段按1/2/4/8秒最多重试四次；证书/身份/协议/取消不重试，写入阶段任何错误都暂停。
+  Windows原子替换仅对sharing/lock violation有界重试，每次重验租约/目录/目标，等待后重验暂存哈希。
+  不能重试ACCESS_DENIED、先删除目标或重新创建恢复副本来掩盖失败。
+- `TestLinuxDiskFullPreservesOriginalAndRecovery` 只对显式、≤8 MiB tmpfs 注入真实 ENOSPC；不得传普通
+  项目目录/宿主临时盘。原生 Smoke.app 单实例，只能串行运行 legacy/projects/sync 场景。
+
+- 本地副本清理 `sync_recovery_discard` 只接受绑定/批次/操作 ID 和 revision，不收路径。只允许完整核验
+  且非 replan/abandoned 的历史（verified 或有 finish 核验摘要的 started），拒绝 pending；先 FULL 事务提交 discarding，再核对根身份/哈希/大小/
+  单链接普通文件，unlink + 目录同步后写 discarded。中断重试须重新加载 revision；保留原 Recovery 引用
+  和历史，不修改基线或服务器收据。远端副本另经显式预览与 retire 协议回收，不得直接删除目录绕过重放隔离。
+  新增清理实现不代表 P3～P5 已全面验收，sync 默认保持 0。
+- 更新器 tests 用 mock Tauri runtime + 真实 loopback HTTP/插件 minisign 校验，只保留合成公钥与签名；
+  不运行安装器，不触碰 keyring。更新下载 URL 必须属于清单版本的精确 desktop-v 标签；失败复查清空旧候选，
+  下载限制还要在返回字节时复核，避免短响应在 select 观察超限信号前完成。
+- 冻结兼容回归为 `desktop/scripts/test-server-compat.py`；默认固定 eb845db 全提交，临时 archive/
+  Docker 卷构建旧 server/link，验证升级、旧接口/隧道/重启/离线完整备份/purge。`--browser-smoke`
+  只冻结静态资源，实际 HTTP/WS 连新服务端；`--desktop-smoke` 只在测试构建接受 loopback fixture。
+  正常产品不得接受 `AGENTBOX_SMOKE_COMPAT`。同一 Smoke.app 原生场景必须串行。
+- 安装探针可传 `--previous`，使用旧包真实 sidecar 生成隔离状态并由新包读回；未提供旧包必须报告
+  skipped，不能算升级通过。Windows NSIS 即使临时 /D 路径也会改注册表，只在明确标记的托管 CI
+  临时账号执行。探针不证明 GUI 偏好/keyring/Tauri更新安装或中断恢复。
+- 独立服务器恢复管理能力 `sync_recovery_inspect=1` 不启用同步；四个 `sync_orphan_*` IPC 可在
+  sync=0 下核对/导出原日志，清理额外要求 recovery_gc。固定当前登录实例、空间属主与原 device，
+  每页50条，未知日志可见但不得猜测状态；uncertain有真实且校验通过的before也可导出，不可清理。
+  retire复核当前比较摘要，先持久化 inspection_confirmation 再沿原协议清理，保留永久applied收据；
+  SQLite IMMEDIATE检查本机同实例/用户/空间/操作的pending引用，不能凭不同URL绕过。该维护入口
+  不更新文件或基线；新前端独立于绑定历史，所有导出路径仍由原生picker给出。
+- macOS syncfs.Open只允许系统元数据正向核验的内部固定卷，固定diskutil路径、无shell、限时/限输出；
+  guard附属于固定Root，CheckIdentity及子Root用fstatfs校验原卷，禁止嵌套挂载到另一卷。热路径不得
+  逐文件运行diskutil，也不按diskN缓存成功。卷策略/实测见docs/architecture/desktop-volume-policy.md。
+- 整体缩放使用受限 desktop_set_zoom（80%～200%、main WebView），成功才保存renderer偏好；
+  原生drop位置须同时除以系统scale factor和应用zoom。IME期间暂缓缩放，Windows Ctrl+C仍中断。
+  终端右键/更多/Shift+F10菜单复用受控粘贴，不增加本地路径读取权限。
+- Windows↔Linux CI必须由原生Windows PE侧车连接WSL2内实际Linux ELF peer，核对内核/架构/
+  本地Linux文件系统及随机run_id，WSL1、跳过或假peer均失败；只用托管临时账号，清理固定临时目录。
+  这不替代Windows最低版本、实体设备、真实Explorer/IME或物理断电验收。
+
+### 界面多语言
+
+- 三端共用 `web/src/i18n/core.ts` 的简中/繁中/英文检测与本地偏好；网页与 Vue 适配分别位于
+  `web/src/i18n.ts` / `desktop/src/i18n.ts`。不修改服务器语言、时区、协议枚举或用户内容。
+- 网页仅翻译显式标记和绑定的 UI 文案；禁止全局扫词替换、DOM 原型拦截或重载页面切语言。
+  翻译带用户值时保留转义，聊天附件协议标记不可本地化；日期仍按服务端系统时区查询。
+- 词典与编译产物一并维护；`npm run build` 同步生成独立 abox-link 的 `i18n-core.js`。
+  改文案跑 `npm run test:i18n` 及合成浏览器/桌面 locale 回归，既有中文断言显式固定 zh-CN。
+  详细约定见 `docs/i18n.md`。

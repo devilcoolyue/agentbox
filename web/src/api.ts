@@ -1,5 +1,6 @@
 /* api：REST / WebSocket 地址 / 附件上传等与服务端通信的底座。
  * 401 时通过 bus 广播 unauthorized（login.ts 负责跳回登录页），避免反向依赖。 */
+import { t as i18nText } from "./i18n.js";
 "use strict";
 
 import { S, emit } from "./state.js";
@@ -15,7 +16,7 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
     ...opts,
     headers: { ...(opts.headers || {}), Authorization: "Bearer " + S.token },
   });
-  if (token !== S.token) throw new Error("登录状态已变化");
+  if (token !== S.token) throw new Error(i18nText("登录状态已变化"));
   if (res.status === 401) {
     emit("unauthorized");
     throw new Error("unauthorized");
@@ -26,7 +27,7 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
     throw new Error(msg);
   }
   const data = await res.json() as T;
-  if (token !== S.token) throw new Error("登录状态已变化");
+  if (token !== S.token) throw new Error(i18nText("登录状态已变化"));
   return data;
 }
 

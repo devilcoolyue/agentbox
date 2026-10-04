@@ -1,3 +1,4 @@
+import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* term：终端页 —— xterm 实例、PTY WebSocket（含自动重连）、连接状态与顶栏提示轮播、
  * 终端内粘贴图片上传。 */
 "use strict";
@@ -50,7 +51,7 @@ function setConnStatus(state) {
             break;
         case "reconnecting":
             cls = "warn";
-            text = reconnectAttempt > 1 ? `重连中…（第 ${reconnectAttempt} 次）` : "重连中…";
+            text = reconnectAttempt > 1 ? "重连中…（第 {p0} 次）" : "重连中…";
             break;
         default:
             cls = "bad";
@@ -60,7 +61,9 @@ function setConnStatus(state) {
     }
     if (dot)
         dot.className = "t-dot " + cls;
-    st.textContent = text;
+    // Bind only this generic label. An explicit diagnostic replacing it owns its
+    // text, so switching language cannot overwrite a raw server refusal reason.
+    setText(st, text, { p0: String(reconnectAttempt) });
     st.dataset.state = state;
     if (btn)
         btn.classList.toggle("busy", state === "connecting" || state === "reconnecting");
@@ -247,7 +250,7 @@ function ensureTerm() {
     if (!TerminalClass) {
         $("term-loading").classList.add("hidden");
         setConnStatus("closed");
-        $("term-state").textContent = "xterm.js 加载失败";
+        setText($("term-state"), "xterm.js 加载失败");
         return;
     }
     const term = new TerminalClass({
@@ -289,7 +292,7 @@ function ensureTerm() {
         longPress: (x, y) => {
             if (termKeys.disabled)
                 return;
-            openMenuAt(x, y, [{ label: "粘贴", icon: "paste", run: () => void pasteClipboard() }]);
+            openMenuAt(x, y, [{ label: i18nText("粘贴"), icon: "paste", run: () => void pasteClipboard() }]);
         },
         swallowTap: menuJustDismissed,
     });
@@ -373,7 +376,7 @@ function connectTermWS(isReconnect) {
         // 人看的一句话，写进终端画面并顶到状态栏。绝不自动重连——理由不会因为重试
         // 而改变，只会被同一句话再挡一次。
         if (e && e.code >= 4000 && e.code < 5000) {
-            const why = e.reason || "连接已被服务端拒绝";
+            const why = e.reason || i18nText("连接已被服务端拒绝");
             if (S.term)
                 S.term.write("\r\n\x1b[31m" + why + "\x1b[0m\r\n");
             setConnStatus("closed");
@@ -619,8 +622,9 @@ async function loadSpend() {
         return;
     }
     const label = Object.assign(document.createElement("span"), {
-        className: "ts-label", textContent: "本空间已花",
+        className: "ts-label",
     });
+    setText(label, "本空间已花");
     const cost = Object.assign(document.createElement("span"), {
         className: "ts-cost", textContent: fmtUSD(total.cost_micro_usd, 2),
     });
@@ -628,8 +632,8 @@ async function loadSpend() {
         className: "ts-tok", textContent: fmtTok(tokens) + " tok",
     });
     box.replaceChildren(label, cost, tok);
-    setTip(box, `${total.turns} 个回合 / ${total.rows} 条记录，含网页对话、终端和起标题。`
-        + "金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗计入这里但不扣额度。");
+    setTip(box, () => i18nText("{p0} 个回合 / {p1} 条记录，含网页对话、终端和起标题。", { p0: String(total.turns), p1: String(total.rows) })
+        + i18nText("金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗计入这里但不扣额度。"));
     box.classList.remove("hidden");
 }
 /** 进出终端页时开关轮询：不在终端页就没必要一直问。 */
@@ -650,9 +654,9 @@ function termUploadUI() {
     const on = termUpload.total > 0;
     $("term-overlay").classList.toggle("hidden", !on);
     if (on) {
-        $("term-overlay-text").textContent = termUpload.total > 1
-            ? `图片上传中… (${termUpload.done + 1}/${termUpload.total})`
-            : "图片上传中…";
+        setTextRender($("term-overlay-text"), () => termUpload.total > 1
+            ? i18nText("图片上传中… ({p0}/{p1})", { p0: String(termUpload.done + 1), p1: String(termUpload.total) })
+            : i18nText("图片上传中…"));
     }
     if (S.term) {
         S.term.options.disableStdin = on;
@@ -673,7 +677,7 @@ async function uploadTermImages(files) {
         }
         catch (err) {
             if (S.term)
-                S.term.write(`\r\n\x1b[31m图片上传失败: ${err.message}\x1b[0m\r\n`);
+                S.term.write(i18nText("\r\n\u001b[31m图片上传失败: {p0}\u001b[0m\r\n", { p0: String(err.message) }));
         }
         termUpload.done++;
         if (termUpload.done === termUpload.total) {
@@ -698,7 +702,7 @@ $("term-mount").addEventListener("paste", (e) => {
 async function pasteClipboard() {
     const clip = navigator.clipboard;
     if (!clip?.read && !clip?.readText) {
-        toast("浏览器不允许网页读取剪贴板（需要 HTTPS 访问）", true);
+        toast(i18nText("浏览器不允许网页读取剪贴板（需要 HTTPS 访问）"), true);
         return;
     }
     let text = "";
@@ -718,7 +722,7 @@ async function pasteClipboard() {
         }
     }
     catch {
-        toast("没能读取剪贴板：请允许浏览器访问剪贴板后再试", true);
+        toast(i18nText("没能读取剪贴板：请允许浏览器访问剪贴板后再试"), true);
         return;
     }
     if (!S.term || !S.current || termKeys.disabled)
@@ -728,5 +732,5 @@ async function pasteClipboard() {
     else if (text)
         S.term.paste(text);
     else
-        toast("剪贴板里没有文字或图片");
+        toast(i18nText("剪贴板里没有文字或图片"));
 }

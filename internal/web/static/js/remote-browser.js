@@ -1,3 +1,4 @@
+import { t as i18nText } from "./i18n.js";
 import { agentIcon } from "./brand.js";
 import { S, bus } from "./state.js";
 import { api, wsURL } from "./api.js";
@@ -59,7 +60,7 @@ async function connect(id, ticket, info) {
         if (desktop !== view)
             return;
         connected = true;
-        state(`已连接 · ${info.browser || "Chrome"} · ${info.proxy ? "账号代理出口" : "服务器出口"}`);
+        state(i18nText("已连接 · {p0} · {p1}", { p0: String(info.browser || "Chrome"), p1: String(info.proxy ? i18nText("账号代理出口") : i18nText("服务器出口")) }));
         $("browser-empty").classList.add("hidden");
         controls();
     });
@@ -68,13 +69,13 @@ async function connect(id, ticket, info) {
             return;
         desktop = null;
         connected = false;
-        state("连接已断开，可点击连接浏览器重试");
+        state(i18nText("连接已断开，可点击连接浏览器重试"));
         $("browser-screen").replaceChildren();
         $("browser-empty").classList.remove("hidden");
         controls();
     });
     view.addEventListener("securityfailure", () => { if (desktop === view)
-        state("远程桌面连接失败，请重新启动浏览器"); });
+        state(i18nText("远程桌面连接失败，请重新启动浏览器")); });
 }
 export async function showBrowser() {
     browserDisconnect();
@@ -82,17 +83,17 @@ export async function showBrowser() {
     if (!id)
         return;
     const ticket = generation;
-    state("正在读取浏览器状态…");
+    state(i18nText("正在读取浏览器状态…"));
     try {
         const info = await api(`/sessions/${id}/browser`);
         if (ticket !== generation || S.current?.id !== id)
             return;
         if (info.running) {
-            state(`正在连接 ${info.browser}…`);
+            state(i18nText("正在连接 {p0}…", { p0: String(info.browser) }));
             await connect(id, ticket, info);
         }
         else
-            state("浏览器未启动 · 点击启动后继续上次的登录状态");
+            state(i18nText("浏览器未启动 · 点击启动后继续上次的登录状态"));
     }
     catch (e) {
         if (ticket === generation)
@@ -106,12 +107,12 @@ async function startBrowser(url = "") {
     const ticket = generation;
     busy = true;
     controls();
-    state("正在启动浏览器…");
+    state(i18nText("正在启动浏览器…"));
     try {
         const info = await api(`/sessions/${id}/browser`, { method: "POST", body: JSON.stringify({ url }) });
         if (ticket !== generation || S.current?.id !== id || S.tab !== "browser")
             return;
-        state(`${info.browser || "Chrome"} · ${info.proxy ? "账号代理出口" : "服务器出口"}`);
+        state(`${info.browser || "Chrome"} · ${info.proxy ? i18nText("账号代理出口") : i18nText("服务器出口")}`);
         if (!desktop)
             await connect(id, ticket, info);
     }
@@ -174,7 +175,7 @@ export function initRemoteBrowser() {
                 throw new Error();
         }
         catch {
-            toast("请输入有效的 HTTP / HTTPS 地址", true);
+            toast(i18nText("请输入有效的 HTTP / HTTPS 地址"), true);
             return;
         }
         void startBrowser(url);
@@ -190,11 +191,11 @@ export function initRemoteBrowser() {
         const ticket = generation;
         busy = true;
         controls();
-        state("正在关闭浏览器…");
+        state(i18nText("正在关闭浏览器…"));
         try {
             await api(`/sessions/${id}/browser`, { method: "DELETE" });
             if (ticket === generation)
-                state("浏览器已关闭 · 登录状态已保留");
+                state(i18nText("浏览器已关闭 · 登录状态已保留"));
         }
         catch (e) {
             if (ticket === generation)
@@ -215,7 +216,7 @@ export function initRemoteBrowser() {
                 await $("tab-browser").requestFullscreen();
         }
         catch {
-            toast("当前浏览器不支持全屏", true);
+            toast(i18nText("当前浏览器不支持全屏"), true);
         }
     }, { signal });
     $("browser-copy").addEventListener("click", async () => {

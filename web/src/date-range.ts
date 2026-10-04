@@ -1,6 +1,7 @@
 /* 日期范围组件：草稿与已应用值分离。所有值都是指定时区的墙上时间，
  * 不交给浏览器本地时区解析；只有快捷范围的相对时长按绝对时刻计算。 */
 import { buttonLabel, decorateIcons } from "./icons.js";
+import { t, i18n, setText, setAttr, translateMarked } from "./i18n.js";
 
 export interface DateRangeValue {
   since: string;
@@ -61,13 +62,13 @@ export class DateRangePicker {
     this.panel.id = trigger.id + "-popover";
     this.panel.setAttribute("popover", "auto");
     this.panel.setAttribute("role", "dialog");
-    this.panel.setAttribute("aria-label", "选择时间范围");
+    setAttr(this.panel, "aria-label", "选择时间范围");
     this.panel.innerHTML = `
       <form novalidate>
-        <div class="dr-presets" aria-label="快捷时间范围"></div>
+        <div class="dr-presets" data-i18n-attrs='{"aria-label":"快捷时间范围"}' aria-label="快捷时间范围"></div>
         <div class="dr-body">
           <div class="dr-editor">
-            <div class="dr-caption">日期与时间 <span data-dr="zone"></span></div>
+            <div class="dr-caption"><span data-i18n="日期与时间">日期与时间</span> <span data-dr="zone"></span></div>
             ${(["since", "until"] as const).map(which => `
               <section class="dr-bound" data-dr="${which}-box">
                 <button class="dr-bound-title" type="button" data-icon="clock" data-dr="${which}-select">${which === "since" ? "开始时间" : "结束时间"}</button>
@@ -81,24 +82,31 @@ export class DateRangePicker {
                   </div>
                 </div>
               </section>`).join("")}
-            <label class="dr-follow"><input data-dr="follow" type="checkbox">结束时间跟随当前时刻</label>
+            <label class="dr-follow"><input data-dr="follow" type="checkbox"><span data-i18n="结束时间跟随当前时刻">结束时间跟随当前时刻</span></label>
             <p class="dr-error" data-dr="error" role="alert"></p>
             <div class="dr-actions">
-              <button type="button" class="btn btn-ghost" data-dr="cancel" data-icon="close">取消</button>
-              <button type="submit" class="btn btn-primary" data-icon="check">确定</button>
+              <button type="button" class="btn btn-ghost" data-dr="cancel" data-icon="close" data-i18n="取消">取消</button>
+              <button type="submit" class="btn btn-primary" data-icon="check" data-i18n="确定">确定</button>
             </div>
           </div>
           <div class="dr-calendar">
             <div class="dr-month-nav">
-              <button type="button" data-dr="prev" data-icon="chevron-left" aria-label="上个月"></button>
+              <button type="button" data-dr="prev" data-icon="chevron-left" data-i18n-attrs='{"aria-label":"上个月"}' aria-label="上个月"></button>
               <strong data-dr="month" aria-live="polite"></strong>
-              <button type="button" data-dr="next" data-icon="chevron-right" aria-label="下个月"></button>
+              <button type="button" data-dr="next" data-icon="chevron-right" data-i18n-attrs='{"aria-label":"下个月"}' aria-label="下个月"></button>
             </div>
             <div class="dr-weekdays" aria-hidden="true">${["日", "一", "二", "三", "四", "五", "六"].map(d => `<span>${d}</span>`).join("")}</div>
-            <div class="dr-days" data-dr="days" role="group" aria-label="日期，方向键移动，回车选择"></div>
+            <div class="dr-days" data-dr="days" role="group" data-i18n-attrs='{"aria-label":"日期，方向键移动，回车选择"}' aria-label="日期，方向键移动，回车选择"></div>
           </div>
         </div>
       </form>`;
+    translateMarked(this.panel);
+    for (const which of ["since", "until"] as const) {
+      setText(this.field(which + "-select"), which === "since" ? "开始时间" : "结束时间");
+      setAttr(this.field(which + "-day"), "aria-label", which === "since" ? "开始日期" : "结束日期");
+      setAttr(this.field(which + "-h"), "aria-label", which === "since" ? "开始时" : "结束时");
+      setAttr(this.field(which + "-m"), "aria-label", which === "since" ? "开始分" : "结束分");
+    }
     decorateIcons(this.panel);
     document.body.append(this.panel);
     trigger.setAttribute("aria-haspopup", "dialog");
@@ -135,6 +143,7 @@ export class DateRangePicker {
       const b = document.createElement("button");
       b.type = "button";
       buttonLabel(b, label, "calendar");
+      setText(b.querySelector(".action-label")!, label);
       b.dataset.preset = key;
       b.addEventListener("click", () => {
         this.draft = this.rangeFor(key);
@@ -182,7 +191,16 @@ export class DateRangePicker {
     document.addEventListener("scroll", e => {
       if (this.panel.matches(":popover-open") && !this.panel.contains(e.target as Node)) this.position();
     }, true);
-    this.syncTrigger();
+    const updateLanguage = () => {
+      const weekdays = this.panel.querySelectorAll(".dr-weekdays span");
+      const fmt = new Intl.DateTimeFormat(i18n.locale, { weekday: i18n.locale === 'en' ? 'short' : 'narrow', timeZone: 'UTC' });
+      weekdays.forEach((day, index) => { day.textContent = fmt.format(new Date(Date.UTC(2024, 0, 7 + index))); });
+      this.syncTrigger();
+      if (this.month) this.renderCalendar();
+      if (this.panel.matches(":popover-open")) this.position();
+    };
+    window.addEventListener("agentbox-language-change", updateLanguage);
+    updateLanguage();
   }
 
   private now() { return wallStamp(new Date(), this.zone()); }
@@ -221,17 +239,17 @@ export class DateRangePicker {
 
   label(): string {
     const v = this.value();
-    if (!v.since && !v.until) return "全部时间";
+    if (!v.since && !v.until) return t("全部时间");
     const label = presets.find(([key]) => key === v.preset)?.[1];
-    if (label) return label === "当天" ? "当天" : /^\d+d$/.test(label) ? `最近 ${label.slice(0, -1)} 天` : label;
+    if (label) return /^\d+d$/.test(label) ? t("最近 {days} 天", { days: label.slice(0, -1) }) : t(label);
     const fmt = (s: string) => s.replaceAll("-", "/").replace("T", " ");
-    return `${v.since ? fmt(v.since) : "不限起始"} — ${v.followNow ? "现在" : v.until ? fmt(v.until) : "不限截止"}`;
+    return `${v.since ? fmt(v.since) : t("不限起始")} — ${v.followNow ? t("现在") : v.until ? fmt(v.until) : t("不限截止")}`;
   }
 
   private syncTrigger() {
     this.trigger.querySelector("[data-range-label]")!.textContent = this.label();
     this.trigger.classList.toggle("has-range", !!(this.applied.since || this.applied.until));
-    this.trigger.title = this.label() + `（${this.zone()}）`;
+    this.trigger.title = this.label() + ` (${this.zone()})`;
   }
 
   private prepareOpen() {
@@ -292,7 +310,7 @@ export class DateRangePicker {
     return true;
   }
 
-  private error(message: string) { this.field("error").textContent = message; }
+  private error(message: string) { setText(this.field("error"), message); }
 
   private syncPresets() {
     for (const button of this.panel.querySelectorAll<HTMLButtonElement>("[data-preset]")) {
@@ -344,7 +362,7 @@ export class DateRangePicker {
 
   private renderCalendar() {
     const [year, month] = this.month.split("-").map(Number);
-    this.field("month").textContent = `${year}年${month}月`;
+    this.field("month").textContent = new Intl.DateTimeFormat(i18n.locale, { year: "numeric", month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));
     const first = this.month + "-01";
     const start = shiftDay(first, -new Date(first + "T12:00:00Z").getUTCDay());
     const today = this.now().slice(0, 10);

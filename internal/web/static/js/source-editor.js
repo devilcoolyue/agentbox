@@ -1,3 +1,4 @@
+import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* 原生 textarea 负责输入、选择与保存；只读着色层和可见行号跟随它滚动。
  * 不把源码放进 contenteditable，避免浏览器改写空格或 HTML。 */
 import { $ } from "./util.js";
@@ -54,8 +55,8 @@ export class SourceEditor {
         // 输入后立即同步明文，避免着色层短暂显示旧字符（也兼容中文输入法）。
         this.highlight.textContent = text + "\n";
         const canHighlight = text.length <= HIGHLIGHT_MAX && this.language && typeof Prism !== "undefined";
-        $("fv-language").textContent = (LABELS[this.language] || "纯文本") +
-            (text.length > HIGHLIGHT_MAX && this.language ? " · 大文件，已简化着色" : "");
+        setTextRender($("fv-language"), () => (LABELS[this.language] || i18nText("纯文本")) +
+            (text.length > HIGHLIGHT_MAX && this.language ? i18nText(" · 大文件，已简化着色") : ""));
         const paint = () => {
             const grammar = Prism.languages[this.language];
             if (!grammar)
@@ -101,7 +102,7 @@ export class SourceEditor {
         this.line.style.transform = `translateY(${top}px)`;
         this.line.style.height = `${height}px`;
         this.line.hidden = top + height < 0 || top > t.clientHeight;
-        $("fv-position").textContent = `第 ${low + 1} 行，第 ${caret - this.starts[low] + 1} 列 · 共 ${this.starts.length} 行`;
+        setText($("fv-position"), "第 {p0} 行，第 {p1} 列 · 共 {p2} 行", { p0: String(low + 1), p1: String(caret - this.starts[low] + 1), p2: String(this.starts.length) });
         // 只画可见的行号，2MB 的短行文件也不会创建几十万个 DOM 节点。
         const first = Math.max(0, Math.floor((t.scrollTop - padding) / height));
         const end = Math.min(this.starts.length, first + Math.ceil(t.clientHeight / height) + 2);

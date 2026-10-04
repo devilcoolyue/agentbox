@@ -9,7 +9,7 @@ import (
 
 // SchemaVersion changes only with a committed, ordered migration. Versions
 // predating this framework use user_version=0, including partially upgraded DBs.
-const SchemaVersion = 9
+const SchemaVersion = 10
 
 //go:embed migrations/001_baseline.sql
 var baselineSQL string
@@ -25,6 +25,9 @@ var gitConnectionsSQL string
 
 //go:embed migrations/009_usage_messages.sql
 var usageMessagesSQL string
+
+//go:embed migrations/010_client_projects.sql
+var clientProjectsSQL string
 
 type migration struct {
 	version int
@@ -66,6 +69,7 @@ func migrations() []migration {
 			return err
 		}},
 		{9, func(tx *sql.Tx) error { _, err := tx.Exec(usageMessagesSQL); return err }},
+		{10, func(tx *sql.Tx) error { _, err := tx.Exec(clientProjectsSQL); return err }},
 	}
 }
 func migrate(db *sql.DB) error { return runMigrations(db, migrations()) }

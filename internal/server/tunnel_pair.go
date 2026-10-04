@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"agentbox/internal/store"
 	"agentbox/internal/tunnel"
 )
 
@@ -30,6 +31,9 @@ const (
 type pairEntry struct {
 	user    string
 	expires time.Time
+	// This private memory-only proof is never returned or persisted. A password
+	// reset or same-name replacement account invalidates outstanding codes.
+	principal store.User
 }
 
 // pairStore holds unredeemed pairing codes. Memory-only on purpose: a code
@@ -44,44 +48,78 @@ func newPairStore() *pairStore { return &pairStore{codes: map[string]pairEntry{}
 // issue mints a code for user, replacing any the user already had — clicking
 // "generate" twice should not leave the first code live.
 func (p *pairStore) issue(user string) (string, bool) {
+	return p.issueUser(store.User{Name: user})
+}
+
+func (p *pairStore) issueUser(user store.User) (string, bool) {
 	code := randomPairCode()
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.sweepLocked()
-	if len(p.codes) >= pairMaxOutstand {
-		return "", false
-	}
 	for c, e := range p.codes {
-		if e.user == user {
+		if e.user == user.Name {
 			delete(p.codes, c)
 		}
 	}
-	p.codes[code] = pairEntry{user: user, expires: time.Now().Add(pairCodeTTL)}
+	if len(p.codes) >= pairMaxOutstand {
+		return "", false
+	}
+	p.codes[code] = pairEntry{user: user.Name, principal: user, expires: time.Now().Add(pairCodeTTL)}
 	return code, true
 }
 
 // redeem consumes a code, returning the user it was issued to. A code works
 // exactly once.
 func (p *pairStore) redeem(code string) (string, bool) {
+	entry, ok := p.redeemEntry(code)
+	return entry.user, ok
+}
+
+func (p *pairStore) redeemEntry(code string) (pairEntry, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.sweepLocked()
 
 	// Compare in constant time against every candidate rather than indexing the
 	// map directly, so redemption timing cannot confirm a guessed prefix.
-	var user string
+	var entry pairEntry
 	var found string
 	for c, e := range p.codes {
 		if subtle.ConstantTimeCompare([]byte(c), []byte(code)) == 1 {
-			user, found = e.user, c
+			entry, found = e, c
 		}
 	}
 	if found == "" {
-		return "", false
+		return pairEntry{}, false
 	}
 	delete(p.codes, found)
-	return user, true
+	return entry, true
+}
+
+// Recheck the identity authenticated by middleware before creating a new
+// delegation. An in-flight request must not acquire a replacement account.
+func (s *Server) authenticatedPairUser(r *http.Request) (store.User, bool) {
+	authenticated := reqUser(r)
+	current, exists := s.store.GetUser(authenticated.Name)
+	return current, exists && !current.CreatedAt.IsZero() && current.CreatedAt.Equal(authenticated.CreatedAt) && current.PassHash == authenticated.PassHash
+}
+
+func (s *Server) redeemPairing(pairs *pairStore, code string) (store.User, string, bool, error) {
+	entry, valid := pairs.redeemEntry(code)
+	if !valid {
+		return store.User{}, "", false, nil
+	}
+	current, exists := s.store.GetUser(entry.user)
+	if !exists {
+		return store.User{}, "", false, nil
+	}
+	token := newToken()
+	valid, err := s.store.CreateTokenIfUserUnchanged(token, entry.principal)
+	if err != nil || !valid {
+		return store.User{}, "", false, err
+	}
+	return current, token, true, nil
 }
 
 func (p *pairStore) sweepLocked() {
@@ -117,7 +155,12 @@ func (s *Server) handleTunnelPair(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "无法确定服务器地址")
 		return
 	}
-	code, ok := s.pairs.issue(reqUser(r).Name)
+	user, ok := s.authenticatedPairUser(r)
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "登录状态已改变，请重新登录")
+		return
+	}
+	code, ok := s.pairs.issueUser(user)
 	if !ok {
 		writeErr(w, http.StatusTooManyRequests, "待用配对码过多，请稍后再试")
 		return
@@ -168,22 +211,15 @@ func (s *Server) handleTunnelPairRedeem(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	user, ok := s.pairs.redeem(strings.TrimSpace(req.Code))
+	user, tok, ok, err := s.redeemPairing(s.pairs, strings.TrimSpace(req.Code))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "创建登录失败，请重新配对")
+		return
+	}
 	if !ok {
 		time.Sleep(400 * time.Millisecond) // 拖慢在线爆破
 		writeErr(w, http.StatusUnauthorized, "配对码无效或已过期，请重新生成")
 		return
 	}
-	// The account may have been deleted between issue and redeem.
-	if _, exists := s.store.GetUser(user); !exists {
-		writeErr(w, http.StatusUnauthorized, "账号不存在")
-		return
-	}
-
-	tok := newToken()
-	if err := s.store.CreateToken(tok, user); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"user": user, "token": tok})
+	writeJSON(w, http.StatusOK, map[string]string{"user": user.Name, "token": tok})
 }

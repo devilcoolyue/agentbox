@@ -1,3 +1,4 @@
+import { t as i18nText, setText } from "../../i18n.js";
 import { S } from "../../state.js";
 import { $, toast, fmtUptime, fmtBytes, fmtTime, fmtDateTime } from "../../util.js";
 import { api } from "../../api.js";
@@ -16,7 +17,7 @@ export async function loadSystem() {
   try {
     sys = await api<SystemInfo>("/system");
   } catch (e) {
-    toast("读取系统信息失败：" + (e as Error).message, true);
+    toast(i18nText("读取系统信息失败：") + (e as Error).message, true);
     return;
   } finally {
     $("about-loading").classList.add("hidden"); // 失败时也别留着转圈
@@ -29,17 +30,17 @@ export async function loadSystem() {
     dd.textContent = v;
     kv.append(dt, dd);
   };
-  add("版本", sys.version || "dev");
-  add("数据库版本", String(sys.schema_version ?? "unknown"));
-  add("运行时", "agentbox · " + sys.go_version);
-  add("Docker", sys.docker_version ? sys.docker_version : "无法连接");
-  add("监听地址", sys.listen);
-  add("工作空间", `${sys.sessions_running} 个运行中 / 共 ${sys.sessions_total} 个`);
-  add("账号池", sys.accounts + " 个账号");
-  add("用户", sys.users + " 个（含管理员）");
-  add("数据目录", sys.data_dir);
-  add("配置文件", sys.config_path);
-  add("运行时长", fmtUptime(Date.now() - sys.started_at) + "（自 " + fmtDateTime(sys.started_at) + "）");
+  add(i18nText("版本"), sys.version || "dev");
+  add(i18nText("数据库版本"), String(sys.schema_version ?? "unknown"));
+  add(i18nText("运行时"), "agentbox · " + sys.go_version);
+  add("Docker", sys.docker_version ? sys.docker_version : i18nText("无法连接"));
+  add(i18nText("监听地址"), sys.listen);
+  add(i18nText("工作空间"), i18nText("{p0} 个运行中 / 共 {p1} 个", { p0: String(sys.sessions_running), p1: String(sys.sessions_total) }));
+  add(i18nText("账号池"), sys.accounts + i18nText(" 个账号"));
+  add(i18nText("用户"), sys.users + i18nText(" 个（含管理员）"));
+  add(i18nText("数据目录"), sys.data_dir);
+  add(i18nText("配置文件"), sys.config_path);
+  add(i18nText("运行时长"), fmtUptime(Date.now() - sys.started_at) + i18nText("（自 ") + fmtDateTime(sys.started_at) + "）");
 }
 
 /* ---------------- 运维监控 ---------------- */
@@ -63,7 +64,7 @@ async function loadMonitor(surfaceErr: boolean, signal: AbortSignal) {
   try {
     m = await api<Monitor>("/monitor", { signal });
   } catch (e) {
-    if (!signal.aborted && surfaceErr && S.sec === "monitor") toast("读取监控失败：" + (e as Error).message, true);
+    if (!signal.aborted && surfaceErr && S.sec === "monitor") toast(i18nText("读取监控失败：") + (e as Error).message, true);
     return;
   }
   if (signal.aborted || S.view !== "settings" || S.sec !== "monitor") return; // 请求在途中切走了页，丢弃这帧
@@ -100,34 +101,33 @@ function renderMonitorTiles(m: Monitor) {
   const memPct = h.mem_total ? (h.mem_used / h.mem_total) * 100 : 0;
   const diskPct = h.disk_total ? (h.disk_used / h.disk_total) * 100 : 0;
   // 首帧还没有上一帧可做差，CPU 速率标「测量中」而不是误导的 0.0%。
-  const cpu = (v: number) => (m.window_ms ? v.toFixed(1) + "%" : "测量中");
+  const cpu = (v: number) => (m.window_ms ? v.toFixed(1) + "%" : i18nText("测量中"));
   const cpuPct = (v: number) => (m.window_ms ? v : undefined);
   const tiles = [
-    monTile("后端 CPU", cpu(p.cpu_percent), "已运行 " + fmtUptime(p.uptime_ms), cpuPct(p.cpu_percent)),
-    monTile("后端内存", fmtBytes(p.rss), "Go 堆 " + fmtBytes(p.heap_alloc) + " · " + p.goroutines + " 协程"),
-    monTile("主机 CPU", cpu(h.cpu_percent), h.cpu_count + " 核 · 负载 " + h.load1.toFixed(2), cpuPct(h.cpu_percent)),
+    monTile(i18nText("后端 CPU"), cpu(p.cpu_percent), i18nText("已运行 ") + fmtUptime(p.uptime_ms), cpuPct(p.cpu_percent)),
+    monTile(i18nText("后端内存"), fmtBytes(p.rss), i18nText("Go 堆 ") + fmtBytes(p.heap_alloc) + " · " + p.goroutines + i18nText(" 协程")),
+    monTile(i18nText("主机 CPU"), cpu(h.cpu_percent), h.cpu_count + i18nText(" 核 · 负载 ") + h.load1.toFixed(2), cpuPct(h.cpu_percent)),
     // 主数字只放已用量，总量进副标题：「17 GB / 30 GB」在 1440 宽度下会折成两行
-    monTile("主机内存", fmtBytes(h.mem_used), `共 ${fmtBytes(h.mem_total)} · ${memPct.toFixed(0)}% 已用`, memPct),
+    monTile(i18nText("主机内存"), fmtBytes(h.mem_used), i18nText("共 {p0} · {p1}% 已用", { p0: String(fmtBytes(h.mem_total)), p1: String(memPct.toFixed(0)) }), memPct),
   ];
   // 数据盘写满会连带拖垮 SQLite 与所有会话，水位单独给一格（读不到则不显示）。
   if (h.disk_total) {
-    const hint = diskPct >= 90 ? "数据盘将满，尽快清理" : "数据目录所在磁盘";
-    tiles.push(monTile("磁盘水位", fmtBytes(h.disk_used),
-      `共 ${fmtBytes(h.disk_total)} · ${diskPct.toFixed(0)}% 已用 · ${hint}`, diskPct));
+    const hint = diskPct >= 90 ? i18nText("数据盘将满，尽快清理") : i18nText("数据目录所在磁盘");
+    tiles.push(monTile(i18nText("磁盘水位"), fmtBytes(h.disk_used),
+      i18nText("共 {p0} · {p1}% 已用 · {p2}", { p0: String(fmtBytes(h.disk_total)), p1: String(diskPct.toFixed(0)), p2: String(hint) }), diskPct));
   }
   tiles.push(
-    monTile("运行容器", su.running + " / " + su.total, "个工作空间容器在运行"),
-    monTile("容器合计", cpu(su.cpu_percent), "内存 " + fmtBytes(su.mem_usage)),
+    monTile(i18nText("运行容器"), su.running + " / " + su.total, i18nText("个工作空间容器在运行")),
+    monTile(i18nText("容器合计"), cpu(su.cpu_percent), i18nText("内存 ") + fmtBytes(su.mem_usage)),
   );
   box.replaceChildren(...tiles);
 }
 
 function renderMonitorTable(m: Monitor) {
   const win = m.window_ms
-    ? "采样窗口 " + (m.window_ms / 1000).toFixed(1) + " 秒"
-    : "首次采样中";
-  $("mon-sub").textContent =
-    `共 ${m.summary.total} 个工作空间 · ${m.summary.running} 个运行中 · ${win}`;
+    ? i18nText("采样窗口 ") + (m.window_ms / 1000).toFixed(1) + i18nText(" 秒")
+    : i18nText("首次采样中");
+  setText($("mon-sub"), "共 {p0} 个工作空间 · {p1} 个运行中 · {p2}", { p0: String(m.summary.total), p1: String(m.summary.running), p2: String(win) });
   const tb = $("mon-tbody");
   tb.replaceChildren();
   if (!m.containers.length) {
@@ -135,7 +135,7 @@ function renderMonitorTable(m: Monitor) {
     const td = document.createElement("td");
     td.colSpan = 9;
     td.className = "mon-empty";
-    td.textContent = "暂无工作空间容器";
+    setText(td, "暂无工作空间容器");
     tr.appendChild(td);
     tb.appendChild(tr);
     return;
@@ -162,10 +162,10 @@ function monRow(c: ContainerStat, now: number, rate: boolean) {
   status.className = "mon-status";
   const dot = document.createElement("span");
   dot.className = "mon-dot" + (c.running ? " on" : "");
-  status.append(dot, document.createTextNode(c.running ? "运行中" : "已停止"));
+  status.append(dot, document.createTextNode(c.running ? i18nText("运行中") : i18nText("已停止")));
 
   const mem = monCell(c.running ? fmtBytes(c.mem_usage) : "—", "num");
-  if (c.running && c.mem_limit) setTip(mem, fmtBytes(c.mem_usage) + " / " + fmtBytes(c.mem_limit) + " 上限");
+  if (c.running && c.mem_limit) setTip(mem, () => fmtBytes(c.mem_usage) + " / " + fmtBytes(c.mem_limit) + i18nText(" 上限"));
 
   tr.append(
     name,

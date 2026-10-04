@@ -1,3 +1,4 @@
+import { t as i18nText } from "../i18n.js";
 import { S, bus, emit } from "../state.js";
 import type { Tab } from "../state.js";
 import { openHome, openSession } from "../sessions.js";
@@ -51,7 +52,7 @@ export function initRouter() {
           void openSession(session, target);
         } else {
           openHome();
-          toast("该工作空间不存在或无权访问", true);
+          toast(i18nText("该工作空间不存在或无权访问"), true);
         }
       } else {
         openHome();

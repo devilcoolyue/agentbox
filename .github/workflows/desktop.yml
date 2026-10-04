@@ -1,0 +1,283 @@
+name: Desktop development packages
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['desktop/**', 'cmd/abox-sync/**', 'internal/syncclient/**', 'internal/syncfs/**', 'internal/syncproto/**', 'internal/server/client_*.go', 'internal/clientidentity/**', 'go.mod', 'go.sum', '.github/workflows/desktop.yml']
+  push:
+    branches: [main, 'codex/desktop-validation-*']
+    paths: ['desktop/**', 'cmd/abox-sync/**', 'internal/syncclient/**', 'internal/syncfs/**', 'internal/syncproto/**', 'internal/server/client_*.go', 'internal/clientidentity/**', 'go.mod', 'go.sum', '.github/workflows/desktop.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+            executable: agentbox-desktop
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+            executable: agentbox-desktop
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            executable: agentbox-desktop.exe
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: rustfmt,clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+          cache-on-failure: true
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: python scripts/test-release-manifest.py
+      - run: python scripts/test-candidate-config.py
+      - run: python scripts/test-smoke-harness.py
+      - run: python scripts/test-webview2-harness.py
+      - run: python scripts/test-license-encoding.py
+      - run: python scripts/collect-licenses.py
+      - name: Record whitelisted macOS volume environment
+        if: runner.os == 'macOS'
+        run: go test ../internal/syncfs -run '^TestDarwinVolumeEnvironmentReport$' -count=1 -v
+      - name: Portable Go graph only (the server targets Linux)
+        run: go test ../internal/syncclient ../internal/syncfs ../internal/syncproto ../cmd/abox-sync
+      - run: npm run sidecar -- ${{ matrix.target }}
+      - name: Installation probe harness and bundled sidecar migration fixture
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          sidecar = pathlib.Path('src-tauri/binaries') / ('abox-sync-${{ matrix.target }}' + ('.exe' if os.name == 'nt' else ''))
+          subprocess.run([sys.executable, 'scripts/test-installed-harness.py', '--sidecar', str(sidecar)], check=True)
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: Diagnose native Windows loader imports
+        if: runner.os == 'Windows'
+        run: |
+          cargo test --locked --no-run --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+          python scripts/check-windows-imports.py src-tauri/target/${{ matrix.target }}/debug/deps --report "${{ runner.temp }}/windows-imports.json"
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+      - name: Native credential store persistence and identity isolation
+        env:
+          AGENTBOX_CREDENTIAL_TEST: '1'
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} native_credentials_persist_isolate_and_delete -- --nocapture
+      - name: Real updater disk-full rollback on an isolated image (macOS)
+        if: runner.os == 'macOS'
+        run: python scripts/test-update-disk-full.py --target ${{ matrix.target }} --report "${{ runner.temp }}/updater-enospc.json"
+      - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --all-targets -- -D warnings
+      - name: Unsigned development installer (never a GitHub Release)
+        shell: python
+        env:
+          DESKTOP_SIGNED: 'false'
+          DESKTOP_TARGET: ${{ matrix.target }}
+          DESKTOP_BUNDLES: ${{ matrix.bundles }}
+          AGENTBOX_UPDATER_PUBLIC_KEY: ''
+        run: |
+          import json, os, pathlib, subprocess, sys
+          version = json.loads(pathlib.Path('package.json').read_text(encoding='utf-8'))['version']
+          subprocess.run([sys.executable, 'scripts/build-candidate.py'], env={**os.environ, 'DESKTOP_VERSION': version}, check=True)
+      - name: Audit embedded Microsoft Runtime and record genuine offline-test prerequisites
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem 'src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe')
+          if ($packages.Count -ne 1) { throw 'Expected exactly one development NSIS installer' }
+          python scripts/test-webview2-package.py $packages[0].FullName --nsis-script 'src-tauri/target/${{ matrix.target }}/release/nsis/x64/installer.nsi' --report '${{ runner.temp }}/webview2-package.json'
+          if ($LASTEXITCODE -ne 0) { throw 'Embedded Microsoft Runtime audit failed' }
+          python scripts/test-webview2-offline.py $packages[0].FullName --package-audit '${{ runner.temp }}/webview2-package.json' --report '${{ runner.temp }}/webview2-preflight.json'
+          if ($LASTEXITCODE -ne 0) { throw 'WebView2 prerequisite inspection failed' }
+      - name: Execute isolated NSIS missing-runtime repair control flows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python scripts/test-webview2-hook.py --makensis "$env:LOCALAPPDATA/tauri/NSIS/makensis.exe" --execute-fixtures --report '${{ runner.temp }}/webview2-hook.json'
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS repair control-flow fixtures failed' }
+      - name: Probe installed development bundle (macOS)
+        if: runner.os == 'macOS'
+        run: python scripts/test-installed.py "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Agentbox.app" --report "${{ runner.temp }}/desktop-installed.json"
+      - name: Install, probe and uninstall development NSIS package (disposable Windows user)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem 'src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe')
+          if ($packages.Count -ne 1) { throw 'Expected exactly one development NSIS installer' }
+          python scripts/test-installed.py $packages[0].FullName --disposable-windows-user --report "${{ runner.temp }}/desktop-installed.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed development package probe failed' }
+      - name: Build synthetic native WebView smoke (macOS app)
+        if: runner.os == 'macOS'
+        env:
+          VITE_AGENTBOX_SMOKE: '1'
+        run: npm run tauri -- build --debug --bundles app --target ${{ matrix.target }} --features desktop-smoke --config src-tauri/tauri.smoke.conf.json
+      - name: Build synthetic native WebView smoke (Windows)
+        if: runner.os == 'Windows'
+        env:
+          VITE_AGENTBOX_SMOKE: '1'
+        run: npm run tauri -- build --debug --no-bundle --target ${{ matrix.target }} --features desktop-smoke --config src-tauri/tauri.smoke.conf.json
+      - name: Choose native smoke executable
+        shell: python
+        run: |
+          import os, pathlib
+          root = pathlib.Path('src-tauri/target/${{ matrix.target }}/debug')
+          binary = root / ('bundle/macos/Agentbox Smoke.app/Contents/MacOS/agentbox-desktop' if os.name != 'nt' else 'agentbox-desktop.exe')
+          if not binary.is_file():
+              raise RuntimeError('Native smoke executable is missing')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as environment:
+              environment.write('AGENTBOX_SMOKE_BINARY=' + str(binary.resolve()) + '\n')
+      - name: Native WebView login and terminal smoke (not installed-app validation)
+        shell: python
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable, 'scripts/smoke.py', os.environ['AGENTBOX_SMOKE_BINARY']], check=True)
+      - name: Native WebView project and independent tabs smoke
+        shell: python
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable, 'scripts/smoke.py', os.environ['AGENTBOX_SMOKE_BINARY'], '--mode', 'projects'], check=True)
+      - name: Native sync/recovery UI with real Go server fixture (macOS)
+        if: runner.os == 'macOS'
+        env:
+          AGENTBOX_SYNC_SMOKE_BINARY: ${{ env.AGENTBOX_SMOKE_BINARY }}
+        run: go test ../internal/server -run '^TestDesktopSyncNativeSmoke$' -count=1 -v
+      - name: Real sidecar SIGKILL and durable recovery (macOS)
+        if: runner.os == 'macOS'
+        env:
+          AGENTBOX_SYNC_PROCESS_TEST: '1'
+        run: go test ../internal/server -run '^TestSyncSidecarSIGKILLAfterRemotePublication$' -count=1 -timeout=3m -v
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agentbox-desktop-installed-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/desktop-installed.json
+            ${{ runner.temp }}/webview2-package.json
+            ${{ runner.temp }}/webview2-preflight.json
+            ${{ runner.temp }}/webview2-hook.json
+            ${{ runner.temp }}/windows-imports.json
+            ${{ runner.temp }}/updater-enospc.json
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agentbox-desktop-dev-${{ matrix.target }}
+          path: |
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-linux-sync:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate cross-platform probe guards
+        run: python desktop/scripts/test-cross-os-harness.py
+      - name: Build actual Windows sidecar
+        env:
+          CGO_ENABLED: '0'
+        run: go build -o "${{ runner.temp }}/abox-sync.exe" ./cmd/abox-sync
+      - name: Build Linux test-only peer for the WSL2 runtime
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: go test -c -o "${{ runner.temp }}/client-linux-peer.test" ./internal/server
+      - name: Install isolated WSL2 Linux distribution
+        uses: Vampire/setup-wsl@887f39deb6c0976365e546926fe66f41b77d65ff # v6, supports WSL2 on windows-latest
+        with:
+          distribution: Ubuntu-24.04
+          wsl-version: '2'
+          set-as-default: 'false'
+      - name: Execute Windows filesystem sync against the Linux kernel and filesystem
+        run: python desktop/scripts/test-windows-linux.py --peer "${{ runner.temp }}/client-linux-peer.test" --sidecar "${{ runner.temp }}/abox-sync.exe" --distribution Ubuntu-24.04 --report "${{ runner.temp }}/windows-linux-sync.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-windows-linux-sync
+          path: |
+            ${{ runner.temp }}/windows-linux-sync.json
+            ${{ runner.temp }}/windows-linux-sync.sync.json
+            ${{ runner.temp }}/windows-linux-sync.peer.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  server-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare isolated Linux and browser fixtures
+        run: |
+          docker build -t agentbox-client-test:compat -f internal/server/testdata/client.Dockerfile internal/server/testdata
+          docker pull alpine:3
+          npm install --prefix "$RUNNER_TEMP/compat-browser" --no-package-lock playwright@1.58.2
+          "$RUNNER_TEMP/compat-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Frozen server migration, old browser and abox-link against current server
+        env:
+          AGENTBOX_PLAYWRIGHT_MODULE: ${{ runner.temp }}/compat-browser/node_modules/playwright/index.mjs
+        run: python desktop/scripts/test-server-compat.py --image agentbox-client-test:compat --browser-smoke --report "$RUNNER_TEMP/server-compat.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-server-compat
+          path: ${{ runner.temp }}/server-compat.json
+          if-no-files-found: error
+          retention-days: 14
+
+  disk-full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Compile portable filesystem probe
+        run: CGO_ENABLED=0 go test -c -o "$RUNNER_TEMP/syncfs-full.test" ./internal/syncfs
+      - name: Real ENOSPC preserves file bytes and recovery
+        run: docker run --rm --read-only --network none --tmpfs /full:rw,nosuid,size=4m --mount "type=bind,src=$RUNNER_TEMP/syncfs-full.test,dst=/probe,readonly" -e AGENTBOX_SYNC_FULL_TEST_ROOT=/full alpine:3.22 /probe -test.run=^TestLinuxDiskFullPreservesOriginalAndRecovery$ -test.v
+      - name: Real sidecar SIGKILL and durable recovery (Linux)
+        run: |
+          CGO_ENABLED=0 go test -c -o "$RUNNER_TEMP/server-kill.test" ./internal/server
+          CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/abox-sync-kill" ./cmd/abox-sync
+          docker run --rm --read-only --network none --tmpfs /tmp:rw,nosuid,size=128m --mount "type=bind,src=$RUNNER_TEMP/server-kill.test,dst=/probe,readonly" --mount "type=bind,src=$RUNNER_TEMP/abox-sync-kill,dst=/sidecar,readonly" -e AGENTBOX_SYNC_PROCESS_TEST=1 -e AGENTBOX_SYNC_SIDECAR_BINARY=/sidecar alpine:3.22 /probe -test.run=^TestSyncSidecarSIGKILLAfterRemotePublication$ -test.v -test.timeout=2m
+      - name: Real engine SQLite and project-volume ENOSPC boundaries
+        run: docker run --rm --read-only --network none --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --security-opt no-new-privileges --user 0:0 --tmpfs /tmp:rw,nosuid,nodev,size=128m,mode=1777 --tmpfs /sync-full:rw,nosuid,nodev,size=4m,mode=0700 --mount "type=bind,src=$RUNNER_TEMP/server-kill.test,dst=/probe,readonly" -e AGENTBOX_ENGINE_FULL_TEST=1 -e AGENTBOX_ENGINE_FULL_TEST_ROOT=/sync-full alpine:3.22 /probe -test.run=^TestSyncEngineRealENOSPC$ -test.count=1 -test.timeout=2m -test.v

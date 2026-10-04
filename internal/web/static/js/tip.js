@@ -1,3 +1,4 @@
+import { setAttrRender } from "./i18n.js";
 /* tip：全站统一的悬浮提示。一个单例气泡 + document 上的事件委托，替掉原生 title。
  *
  * 换掉原生的理由：系统气泡不认设计令牌（浅色主题下尤其突兀）、冷启动要等半秒、
@@ -181,7 +182,9 @@ function hover(el) {
 /** 设置/清除元素的提示文案，替代 `el.title = …`；文案为空即清除 */
 export function setTip(el, text) {
     const h = el;
-    if (text)
+    if (typeof text === "function")
+        setAttrRender(h, "data-tip", text);
+    else if (text)
         h.dataset.tip = text;
     else
         delete h.dataset.tip;
@@ -274,3 +277,5 @@ document.addEventListener("pointermove", (e) => {
         && Math.abs(e.clientX - tx) + Math.abs(e.clientY - ty) > TOUCH_SLOP)
         cancelHold();
 }, { capture: true, passive: true });
+window.addEventListener("agentbox-language-change", () => { if (shown && anchor)
+    show(anchor); });

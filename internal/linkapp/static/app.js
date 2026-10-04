@@ -2,6 +2,35 @@
  * 点「保存并应用」才提交。日志按 seq 增量拉取。 */
 "use strict";
 
+import { createI18n, languages } from "./i18n-core.js";
+import en from "./locales/en.js";
+import zhTW from "./locales/zh-TW.js";
+
+const i18n = createI18n({ storageKey: "abox_link_language", catalogs: { en, "zh-TW": zhTW } });
+const tr = (source, params) => i18n.t(source, params);
+// Only explicitly marked interface text is translated. User targets, logs,
+// pairing codes and server diagnostics never enter this catalog.
+const staticSources = new WeakMap();
+const translatedAttributes = ["aria-label", "title", "data-empty"];
+function translateMarkers(root = document) {
+  for (const el of root.querySelectorAll("[data-i18n]")) {
+    if (!staticSources.has(el)) staticSources.set(el, el.textContent.trim());
+    const text = tr(staticSources.get(el));
+    if (el.dataset.icon) actionLabel(el, text, el.dataset.icon);
+    else el.textContent = text;
+  }
+  for (const attr of translatedAttributes) {
+    for (const el of root.querySelectorAll(`[data-i18n-${attr}]`)) {
+      el.setAttribute(attr, tr(el.getAttribute(`data-i18n-${attr}`)));
+    }
+  }
+}
+function localizedAttribute(el, attr, source) {
+  el.setAttribute(`data-i18n-${attr}`, source);
+  el.setAttribute(attr, tr(source));
+}
+
+
 const $ = (id) => document.getElementById(id);
 
 // This panel is embedded in its own binary, so its small icon set is standalone.
@@ -29,9 +58,6 @@ function actionLabel(button, label, icon) {
   path.setAttribute("d", actionIcons[icon]);
   svg.append(path);
   button.replaceChildren(svg, document.createTextNode(label));
-}
-for (const button of document.querySelectorAll("button[data-icon]")) {
-  actionLabel(button, button.textContent, button.dataset.icon);
 }
 
 /* 面板 API：X-Abox-Panel 头是防跨站的凭据——浏览器不会让外站页面带上它。 */
@@ -73,9 +99,9 @@ function render() {
   const look = ST[st.state] || ST.stopped;
   $("hdr-dot").className = "dot " + look.cls;
   $("wire").className = "wire " + look.cls; // 电路两条腿与三个节点全按状态取色
-  $("st-title").textContent = look.title;
+  $("st-title").textContent = tr(look.title);
   $("st-sub").textContent = subtitle(st);
-  actionLabel($("btn-toggle"), look.btn, look.btn === "停止" ? "stop" : "play");
+  actionLabel($("btn-toggle"), tr(look.btn), look.btn === "停止" ? "stop" : "play");
 
   renderRules();
   renderOptions();
@@ -84,12 +110,12 @@ function render() {
 
 function subtitle(st) {
   if (st.state === "online") {
-    const parts = [st.transparent ? "透明访问" : "兼容代理", "已连接 " + uptime(Date.now() - st.since)];
+    const parts = [tr(st.transparent ? "透明访问" : "兼容代理"), tr("已连接 {duration}", { duration: uptime(Date.now() - st.since) })];
     if (typeof st.ping_ms === "number" && st.ping_ms >= 0) {
-      parts.push("延迟 " + fmtLatency(st.ping_ms));
+      parts.push(tr("延迟 {latency}", { latency: fmtLatency(st.ping_ms) }));
     }
     for (const m of st.maps || []) {
-      parts.push("映射 " + m.port + (m.ok ? "" : "（失败：" + m.detail + "）"));
+      parts.push(m.ok ? tr("映射 {port}", { port: m.port }) : tr("映射 {port}（失败：{detail}）", { port: m.port, detail: m.detail }));
     }
     return parts.join(" · ");
   }
@@ -131,7 +157,7 @@ function renderRules() {
   const v = view();
 
   // 电路中点挂的就是白名单——放行规则在本机侧生效，这里是它作用的那一点
-  $("wire-rules").textContent = v.allow.length ? v.allow.length + " 条规则" : "无规则";
+  $("wire-rules").textContent = v.allow.length ? tr("{count} 条规则", { count: v.allow.length }) : tr("无规则");
 
   // 轮询每 2 秒调一次 render()，这里必须只在规则真的变了时才重建 DOM，
   // 否则正在编辑的输入框会被换掉，焦点和光标位置跟着丢。
@@ -177,8 +203,8 @@ function removeBtn(onClick) {
   const b = document.createElement("button");
   b.type = "button";
   actionLabel(b, "", "trash");
-  b.setAttribute("aria-label", "删除规则");
-  b.title = "删除";
+  localizedAttribute(b, "aria-label", "删除规则");
+  localizedAttribute(b, "title", "删除");
   b.addEventListener("click", onClick);
   return b;
 }
@@ -186,7 +212,9 @@ function removeBtn(onClick) {
 function ruleRow(value, placeholder, onCommit, onRemove) {
   const row = document.createElement("div");
   row.className = "rule";
-  row.append(input(value, placeholder, onCommit), removeBtn(onRemove));
+  const target = input(value, placeholder, onCommit);
+  localizedAttribute(target, "aria-label", "放行目标");
+  row.append(target, removeBtn(onRemove));
   return row;
 }
 
@@ -195,6 +223,8 @@ function mapRow(port, target, onCommit, onRemove) {
   row.className = "rule";
   const p = input(port, "3306", () => onCommit(p.value.trim(), t.value.trim()));
   const t = input(target, "10.0.1.5:3306", () => onCommit(p.value.trim(), t.value.trim()));
+  localizedAttribute(p, "aria-label", "服务端端口");
+  localizedAttribute(t, "aria-label", "内网目标");
   p.style.maxWidth = "110px";
   const sep = document.createElement("span");
   sep.className = "sep";
@@ -231,7 +261,7 @@ async function pollLogs() {
     const div = document.createElement("div");
     const t = document.createElement("span");
     t.className = "t";
-    t.textContent = new Date(line.time).toLocaleTimeString("zh-CN", { hour12: false });
+    t.textContent = new Date(line.time).toLocaleTimeString(i18n.locale, { hour12: false });
     div.append(t, document.createTextNode(line.text));
     box.appendChild(div);
   }
@@ -244,15 +274,21 @@ async function pollLogs() {
 
 $("btn-pair").addEventListener("click", async () => {
   const code = $("pair-code").value.trim();
+  pairErrorSource = "";
   $("pair-err").textContent = "";
-  if (!code) { $("pair-err").textContent = "请先粘贴配对码"; return; }
+  if (!code) {
+    pairErrorSource = "请先粘贴配对码";
+    $("pair-err").textContent = tr(pairErrorSource);
+    return;
+  }
   await withBusy($("btn-pair"), async () => {
     try {
       state = await api("/pair", { code, insecure: $("pair-insecure").checked });
       $("pair-code").value = "";
       render();
-      toast("接入成功，接下来添加放行规则");
+      toastUI("接入成功，接下来添加放行规则");
     } catch (e) {
+      pairErrorSource = "";
       $("pair-err").textContent = e.message;
     }
   });
@@ -283,7 +319,7 @@ $("opt-boot").addEventListener("change", async (e) => {
   try {
     state = await api("/autostart", { enable });
     render();
-    toast(enable ? "已设置开机自启" : "已取消开机自启");
+    toastUI(enable ? "已设置开机自启" : "已取消开机自启");
   } catch (err) {
     toast(err.message, true);
     await refresh();
@@ -305,7 +341,7 @@ $("btn-save").addEventListener("click", async () => {
       state = await api("/config", payload);
       draft = null;
       render();
-      toast(state.running ? "已保存，隧道按新规则重连中" : "已保存");
+      toastUI(state.running ? "已保存，隧道按新规则重连中" : "已保存");
     } catch (e) {
       toast(e.message, true);
     }
@@ -315,7 +351,7 @@ $("btn-save").addEventListener("click", async () => {
 $("btn-revert").addEventListener("click", () => { draft = null; render(); });
 
 $("btn-unpair").addEventListener("click", async () => {
-  if (!confirm("解除绑定后需要重新配对才能连接，放行规则会保留。继续？")) return;
+  if (!confirm(tr("解除绑定后需要重新配对才能连接，放行规则会保留。继续？"))) return;
   try {
     state = await api("/unpair", {});
     draft = null;
@@ -345,10 +381,10 @@ function fmtLatency(ms) {
 
 function uptime(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return s + " 秒";
-  if (s < 3600) return Math.floor(s / 60) + " 分钟";
-  if (s < 86400) return Math.floor(s / 3600) + " 小时 " + Math.floor((s % 3600) / 60) + " 分";
-  return Math.floor(s / 86400) + " 天 " + Math.floor((s % 86400) / 3600) + " 小时";
+  if (s < 60) return tr("{count} 秒", { count: s });
+  if (s < 3600) return tr("{count} 分钟", { count: Math.floor(s / 60) });
+  if (s < 86400) return tr("{hours} 小时 {minutes} 分", { hours: Math.floor(s / 3600), minutes: Math.floor((s % 3600) / 60) });
+  return tr("{days} 天 {hours} 小时", { days: Math.floor(s / 86400), hours: Math.floor((s % 86400) / 3600) });
 }
 
 async function withBusy(btn, fn) {
@@ -364,7 +400,14 @@ async function withBusy(btn, fn) {
 }
 
 let toastTimer = 0;
+let toastSource = "";
+let pairErrorSource = "";
+function toastUI(source) {
+  toast(tr(source));
+  toastSource = source;
+}
 function toast(msg, bad) {
+  toastSource = "";
   const el = $("toast");
   el.textContent = msg;
   el.className = "toast" + (bad ? " bad" : "");
@@ -378,6 +421,28 @@ async function refresh() {
     render();
   } catch (_) { /* 面板进程没了，下一轮再试 */ }
 }
+
+const languageSelect = $("interface-language");
+for (const language of [{ value: "system", label: "跟随系统" }, ...languages.filter(language => language.value !== "system")]) {
+  const option = document.createElement("option");
+  option.value = language.value;
+  option.textContent = language.label;
+  if (language.value === "system") option.setAttribute("data-i18n", "");
+  languageSelect.append(option);
+}
+function renderLanguage() {
+  document.documentElement.lang = i18n.locale;
+  languageSelect.value = i18n.preference;
+  translateMarkers();
+  // renderRules keeps its existing DOM when rule values have not changed.
+  // Switching language must never discard an unsaved target or cursor.
+  render();
+  if (pairErrorSource) $("pair-err").textContent = tr(pairErrorSource);
+  if (toastSource) $("toast").textContent = tr(toastSource);
+}
+languageSelect.addEventListener("change", () => i18n.setLanguage(languageSelect.value));
+i18n.subscribe(renderLanguage);
+renderLanguage();
 
 /* 在线时刷得勤一点，让「连接中 → 在线」和运行时长跟得上 */
 setInterval(() => {

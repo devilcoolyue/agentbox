@@ -242,7 +242,7 @@ func (s *Store) Delete(id string) error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, query := range []string{"DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
+	for _, query := range []string{"DELETE FROM client_terminals WHERE session_id=?", "DELETE FROM client_projects WHERE session_id=?", "DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
 		if _, err := tx.Exec(query, id); err != nil {
 			return err
 		}
@@ -383,6 +383,36 @@ func (s *Store) SetPassword(name, hash string) error {
 	return nil
 }
 
+// ResetPasswordIfUserUnchanged updates the authenticated account and revokes
+// its other tokens together. No reader can use a soon-to-be-revoked token to
+// obtain the new credential identity while the reset is only half complete.
+func (s *Store) ResetPasswordIfUserUnchanged(expected User, hash, keep string) (bool, error) {
+	if expected.Name == "" || expected.CreatedAt.IsZero() || hash == "" {
+		return false, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`UPDATE users SET pass_hash = ? WHERE name = ? AND pass_hash = ? AND created_at = ?`,
+		hash, expected.Name, expected.PassHash, expected.CreatedAt.Format(time.RFC3339Nano))
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil || count != 1 {
+		return false, err
+	}
+	if _, err = tx.Exec("DELETE FROM tokens WHERE user = ? AND token != ?", expected.Name, keep); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // TokenTTL bounds how long a login token stays valid after issue. Absolute
 // (not sliding) so a leaked token can't be kept alive forever by being used.
 const TokenTTL = 30 * 24 * time.Hour
@@ -393,6 +423,25 @@ func (s *Store) CreateToken(token, user string) error {
 	return err
 }
 
+// CreateTokenIfUserUnchanged issues a login only while the account still has
+// the credential and creation identity that was originally authenticated. The
+// predicate and insert are one SQLite statement, so password reset/deletion
+// cannot slip between an application-side check and token creation. Existing
+// tokens and database schema are unchanged.
+func (s *Store) CreateTokenIfUserUnchanged(token string, expected User) (bool, error) {
+	if token == "" || expected.Name == "" || expected.CreatedAt.IsZero() {
+		return false, nil
+	}
+	result, err := s.db.Exec(`INSERT INTO tokens (token, user, created_at)
+		SELECT ?, name, ? FROM users WHERE name = ? AND pass_hash = ? AND created_at = ?`,
+		token, time.Now().Format(time.RFC3339Nano), expected.Name, expected.PassHash, expected.CreatedAt.Format(time.RFC3339Nano))
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
+}
+
 // TokenUser resolves a login token to its user; the join makes tokens of a
 // deleted user dead even if a stray row survived. Tokens older than TokenTTL
 // are treated as invalid and deleted lazily on access.
@@ -401,10 +450,10 @@ func (s *Store) TokenUser(token string) (User, bool) {
 		return User{}, false
 	}
 	var u User
-	var created string
-	err := s.db.QueryRow(`SELECT u.name, u.role, u.pass_hash, t.created_at FROM tokens t
+	var created, userCreated string
+	err := s.db.QueryRow(`SELECT u.name, u.role, u.pass_hash, t.created_at, u.created_at FROM tokens t
 		JOIN users u ON u.name = t.user WHERE t.token = ?`, token).
-		Scan(&u.Name, &u.Role, &u.PassHash, &created)
+		Scan(&u.Name, &u.Role, &u.PassHash, &created, &userCreated)
 	if err != nil {
 		return User{}, false
 	}
@@ -412,6 +461,7 @@ func (s *Store) TokenUser(token string) (User, bool) {
 		_, _ = s.db.Exec("DELETE FROM tokens WHERE token = ?", token)
 		return User{}, false
 	}
+	u.CreatedAt, _ = time.Parse(time.RFC3339Nano, userCreated)
 	return u, true
 }
 

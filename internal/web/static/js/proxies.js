@@ -1,3 +1,4 @@
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 /* proxies：系统设置 → IP 代理。出口代理池的维护（增删改 / 连通性探测 /
  * 批量导入导出），以及账号编辑弹窗里那个「绑定代理」下拉选择器。
  *
@@ -48,7 +49,7 @@ export async function openProxiesSection() {
         await loadProxies();
     }
     catch (e) {
-        toast("读取代理列表失败：" + e.message, true);
+        toast(i18nText("读取代理列表失败：") + e.message, true);
         if (cache.length)
             renderProxies(); // 有上一份就还原回去，别让刷新失败清空视野
         return;
@@ -67,10 +68,10 @@ function renderBridgeState() {
     const on = bridge.bridge_up;
     dot.className = "mon-dot" + (on ? " on" : "");
     const text = !cache.length
-        ? "代理池为空，桥接未启动"
+        ? i18nText("代理池为空，桥接未启动")
         : on
-            ? "桥接监听中 · 容器经 " + bridge.bridge_host + " 出网"
-            : "桥接未监听，绑定了代理的账号会请求失败" + (bridge.bridge_error ? "：" + bridge.bridge_error : "");
+            ? i18nText("桥接监听中 · 容器经 ") + bridge.bridge_host + i18nText(" 出网")
+            : i18nText("桥接未监听，绑定了代理的账号会请求失败") + (bridge.bridge_error ? "：" + bridge.bridge_error : "");
     el.append(dot, document.createTextNode(text));
     el.classList.toggle("bad", !!cache.length && !on);
 }
@@ -98,7 +99,7 @@ function proxyRow(p) {
     name.className = "px-name";
     const dot = document.createElement("span");
     dot.className = "mon-dot" + (p.disabled ? "" : " on");
-    setTip(dot, p.disabled ? "已停用" : "正常");
+    setTip(dot, () => p.disabled ? i18nText("已停用") : i18nText("正常"));
     name.append(dot, document.createTextNode(p.name || p.host));
     const scheme = document.createElement("td");
     const chip = document.createElement("span");
@@ -110,21 +111,21 @@ function proxyRow(p) {
     const addrBtn = document.createElement("button");
     addrBtn.type = "button";
     addrBtn.className = "px-copy mono";
-    actionButton(addrBtn, p.host + ":" + p.port, "copy", "复制代理地址");
-    addrBtn.setAttribute("aria-label", "复制代理地址");
-    setTip(addrBtn, "点击复制");
+    actionButton(addrBtn, p.host + ":" + p.port, "copy", () => i18nText("复制代理地址"));
+    setAttrRender(addrBtn, "aria-label", () => i18nText("复制代理地址"));
+    setTip(addrBtn, () => i18nText("点击复制"));
     addrBtn.addEventListener("click", async () => {
         try {
             await navigator.clipboard.writeText(p.host + ":" + p.port);
-            toast("地址已复制");
+            toast(i18nText("地址已复制"));
         }
         catch (_) {
-            toast("复制失败，请手动选中", true);
+            toast(i18nText("复制失败，请手动选中"), true);
         }
     });
     addr.appendChild(addrBtn);
     const auth = cell(p.username ? p.username + (p.has_pass ? " · ••••" : "") : "—", "px-auth");
-    const acct = cell(p.accounts ? p.accounts + " 个账号" : "未绑定", "px-acct");
+    const acct = cell(p.accounts ? p.accounts + i18nText(" 个账号") : i18nText("未绑定"), "px-acct");
     if (!p.accounts)
         acct.classList.add("dim");
     const probe = document.createElement("td");
@@ -137,10 +138,10 @@ function proxyRow(p) {
     else if (res.ok) {
         probe.textContent = fmtLatency(res.latency_ms);
         probe.classList.add("good");
-        setTip(probe, "出口 IP " + res.exit_ip + "（" + res.endpoint + "）");
+        setTip(probe, () => i18nText("出口 IP ") + res.exit_ip + "（" + res.endpoint + "）");
     }
     else {
-        probe.textContent = "不通";
+        setText(probe, "不通");
         probe.classList.add("bad");
         setTip(probe, res.error || "");
     }
@@ -148,15 +149,15 @@ function proxyRow(p) {
     acts.className = "px-actions"; // 只有三个动作：全部带字，删除放最后
     const test = document.createElement("button");
     test.className = "btn btn-sm btn-ghost";
-    buttonLabel(test, "测试", "activity");
+    buttonLabel(test, () => i18nText("测试"), "activity");
     test.addEventListener("click", () => runProbe(p, test));
     const edit = document.createElement("button");
     edit.className = "btn btn-sm btn-ghost";
-    actionButton(edit, "编辑", "rename", "编辑代理");
+    actionButton(edit, () => i18nText("编辑"), "rename", () => i18nText("编辑代理"));
     edit.addEventListener("click", () => openProxyDlg(p));
     const del = document.createElement("button");
     del.className = "btn btn-sm btn-ghost btn-danger";
-    actionButton(del, "删除", "trash", "删除代理");
+    actionButton(del, () => i18nText("删除"), "trash", () => i18nText("删除代理"));
     del.addEventListener("click", () => removeProxy(p));
     acts.append(test, edit, del);
     tr.append(name, scheme, addr, auth, acct, probe, acts);
@@ -164,20 +165,20 @@ function proxyRow(p) {
 }
 /* 探测：拿一次出口 IP 回显，量的是「经代理到公网」的整条链路。 */
 async function runProbe(p, btn) {
-    btnBusy(btn, "探测中");
+    btnBusy(btn, () => i18nText("探测中"));
     try {
         const res = await api("/proxies/test", {
             method: "POST", body: JSON.stringify({ id: p.id }),
         });
         probes.set(p.id, res);
         if (res.ok)
-            toast(`${p.name || p.host} 连通 · ${fmtLatency(res.latency_ms)} · 出口 ${res.exit_ip}`);
+            toast(i18nText("{p0} 连通 · {p1} · 出口 {p2}", { p0: String(p.name || p.host), p1: String(fmtLatency(res.latency_ms)), p2: String(res.exit_ip) }));
         else
-            toast(`${p.name || p.host} 不通：${res.error}`, true);
+            toast(i18nText("{p0} 不通：{p1}", { p0: String(p.name || p.host), p1: String(res.error) }), true);
     }
     catch (e) {
         probes.set(p.id, { ok: false, latency_ms: 0, error: e.message });
-        toast("探测失败：" + e.message, true);
+        toast(i18nText("探测失败：") + e.message, true);
     }
     finally {
         btnDone(btn);
@@ -186,24 +187,26 @@ async function runProbe(p, btn) {
 }
 async function removeProxy(p) {
     const bound = p.accounts > 0;
-    const ok = await askConfirm("删除代理「" + (p.name || p.host) + "」？", {
-        title: "删除代理",
-        hint: bound
-            ? `仍有 ${p.accounts} 个账号绑定它。删除后这些账号会解除绑定，改用服务器自身的 IP 直连官方接口。`
-            : "该代理未被任何账号使用。",
-        okLabel: "删除", icon: "trash", danger: true,
+    const ok = await askConfirm(() => i18nText("删除代理「") + (p.name || p.host) + "」？", {
+        get title() { return i18nText("删除代理"); },
+        get hint() {
+            return bound
+                ? i18nText("仍有 {p0} 个账号绑定它。删除后这些账号会解除绑定，改用服务器自身的 IP 直连官方接口。", { p0: String(p.accounts) })
+                : i18nText("该代理未被任何账号使用。");
+        },
+        get okLabel() { return i18nText("删除"); }, icon: "trash", danger: true,
     });
     if (!ok)
         return;
     try {
         await api("/proxies/" + p.id + (bound ? "?force=1" : ""), { method: "DELETE" });
         probes.delete(p.id);
-        toast("代理已删除");
+        toast(i18nText("代理已删除"));
         await openProxiesSection();
         refreshAll(); // 账号行上的代理标签跟着更新
     }
     catch (e) {
-        toast("删除失败：" + e.message, true);
+        toast(i18nText("删除失败：") + e.message, true);
     }
 }
 /* ---------------- 新增 / 编辑弹窗 ---------------- */
@@ -216,7 +219,7 @@ function proxyDlgMsg(text, isErr) {
 }
 export function openProxyDlg(p) {
     editProxy = p;
-    $("proxy-dlg-title").textContent = p ? "编辑代理" : "添加代理";
+    setTextRender($("proxy-dlg-title"), () => p ? i18nText("编辑代理") : i18nText("添加代理"));
     $("proxy-name").value = p ? p.name : "";
     setSelectValue($("proxy-scheme"), p ? p.scheme : "socks5");
     $("proxy-host").value = p ? p.host : "";
@@ -226,7 +229,7 @@ export function openProxyDlg(p) {
     pass.value = "";
     // 密码不下发，编辑时留空即保持原样——占位符把这件事说清楚，免得管理员
     // 以为密码丢了又重敲一遍。
-    pass.placeholder = p && p.has_pass ? "已保存，留空表示不修改" : "可选";
+    setAttrRender(pass, "placeholder", () => p && p.has_pass ? i18nText("已保存，留空表示不修改") : i18nText("可选"));
     setSelectValue($("proxy-state"), p && p.disabled ? "off" : "on");
     proxyDlgMsg("");
     $("dlg-proxy").showModal();
@@ -246,10 +249,10 @@ $("proxy-cancel").addEventListener("click", () => $("dlg-proxy").close());
 $("proxy-test").addEventListener("click", async () => {
     const body = proxyDlgBody();
     if (!body.host || !body.port) {
-        proxyDlgMsg("请先填写主机和端口", true);
+        proxyDlgMsg(i18nText("请先填写主机和端口"), true);
         return;
     }
-    btnBusy($("proxy-test"), "探测中…");
+    btnBusy($("proxy-test"), () => i18nText("探测中…"));
     try {
         const res = await api("/proxies/test", {
             method: "POST", body: JSON.stringify({ id: editProxy ? editProxy.id : "", ...body }),
@@ -259,14 +262,14 @@ $("proxy-test").addEventListener("click", async () => {
                 probes.set(editProxy.id, res);
                 renderProxies();
             }
-            proxyDlgMsg(`连通 · ${fmtLatency(res.latency_ms)} · 出口 IP ${res.exit_ip}`);
+            proxyDlgMsg(i18nText("连通 · {p0} · 出口 IP {p1}", { p0: String(fmtLatency(res.latency_ms)), p1: String(res.exit_ip) }));
         }
         else {
-            proxyDlgMsg("不通：" + res.error, true);
+            proxyDlgMsg(i18nText("不通：") + res.error, true);
         }
     }
     catch (e) {
-        proxyDlgMsg("探测失败：" + e.message, true);
+        proxyDlgMsg(i18nText("探测失败：") + e.message, true);
     }
     btnDone($("proxy-test"));
 });
@@ -274,14 +277,14 @@ $("proxy-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const body = proxyDlgBody();
     if (!body.host) {
-        proxyDlgMsg("请填写主机", true);
+        proxyDlgMsg(i18nText("请填写主机"), true);
         return;
     }
     if (!(body.port >= 1 && body.port <= 65535)) {
-        proxyDlgMsg("端口需在 1-65535 之间", true);
+        proxyDlgMsg(i18nText("端口需在 1-65535 之间"), true);
         return;
     }
-    btnBusy($("proxy-ok"), "保存中…");
+    btnBusy($("proxy-ok"), () => i18nText("保存中…"));
     try {
         if (editProxy) {
             await api("/proxies/" + editProxy.id, { method: "PATCH", body: JSON.stringify(body) });
@@ -290,7 +293,7 @@ $("proxy-form").addEventListener("submit", async (e) => {
             await api("/proxies", { method: "POST", body: JSON.stringify(body) });
         }
         $("dlg-proxy").close();
-        toast(editProxy ? "代理已更新" : "代理已添加");
+        toast(editProxy ? i18nText("代理已更新") : i18nText("代理已添加"));
         await openProxiesSection();
         refreshAll();
     }
@@ -315,16 +318,16 @@ $("proxy-import-form").addEventListener("submit", async (e) => {
     const text = $("proxy-import-text").value;
     if (!text.trim())
         return;
-    btnBusy($("proxy-import-ok"), "导入中…");
+    btnBusy($("proxy-import-ok"), () => i18nText("导入中…"));
     try {
         const res = await api("/proxies/import", {
             method: "POST", body: JSON.stringify({ text }),
         });
-        const parts = [`已导入 ${res.added} 条`];
+        const parts = [i18nText("已导入 {p0} 条", { p0: String(res.added) })];
         if (res.duplicates)
-            parts.push(`跳过重复 ${res.duplicates} 条`);
+            parts.push(i18nText("跳过重复 {p0} 条", { p0: String(res.duplicates) }));
         if (res.errors.length)
-            parts.push(`${res.errors.length} 行无法解析`);
+            parts.push(i18nText("{p0} 行无法解析", { p0: String(res.errors.length) }));
         if (res.errors.length) {
             const msg = $("proxy-import-msg");
             msg.textContent = parts.join("，") + "：" + res.errors.join("；");
@@ -338,7 +341,7 @@ $("proxy-import-form").addEventListener("submit", async (e) => {
     }
     catch (err) {
         const msg = $("proxy-import-msg");
-        msg.textContent = "导入失败：" + err.message;
+        setTextRender(msg, () => i18nText("导入失败：") + err.message);
         msg.classList.remove("hidden");
     }
     finally {
@@ -347,7 +350,7 @@ $("proxy-import-form").addEventListener("submit", async (e) => {
 });
 /* 导出走响应体而不是带 token 的下载直链：导出文本里有代理密码明文。 */
 $("btn-proxy-export").addEventListener("click", async () => {
-    btnBusy($("btn-proxy-export"), "导出中…");
+    btnBusy($("btn-proxy-export"), () => i18nText("导出中…"));
     try {
         const res = await api("/proxies/export");
         const url = URL.createObjectURL(new Blob([res.text], { type: "text/plain" }));
@@ -356,10 +359,10 @@ $("btn-proxy-export").addEventListener("click", async () => {
         a.download = "agentbox-proxies-" + new Date().toISOString().slice(0, 10) + ".txt";
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
-        toast("已导出 " + cache.length + " 条（含密码明文，注意保管）");
+        toast(i18nText("已导出 ") + cache.length + i18nText(" 条（含密码明文，注意保管）"));
     }
     catch (e) {
-        toast("导出失败：" + e.message, true);
+        toast(i18nText("导出失败：") + e.message, true);
     }
     finally {
         btnDone($("btn-proxy-export"));
@@ -373,7 +376,7 @@ export function mountProxyPicker(root) {
     trigger.type = "button";
     trigger.className = "pp-trigger";
     trigger.appendChild(svgIcon("network", 15));
-    trigger.setAttribute("aria-label", "选择出口代理");
+    setAttrRender(trigger, "aria-label", () => i18nText("选择出口代理"));
     const label = document.createElement("span");
     label.className = "pp-label";
     const caret = document.createElement("span");
@@ -386,7 +389,7 @@ export function mountProxyPicker(root) {
     searchWrap.className = "pp-search";
     const search = document.createElement("input");
     search.type = "search";
-    search.placeholder = "搜索代理…";
+    setAttrRender(search, "placeholder", () => i18nText("搜索代理…"));
     search.autocomplete = "off";
     searchWrap.appendChild(search);
     const list = document.createElement("div");
@@ -395,11 +398,11 @@ export function mountProxyPicker(root) {
     root.append(trigger, menu);
     const labelOf = (id) => {
         if (!id)
-            return "无代理（直连服务器出口 IP）";
+            return i18nText("无代理（直连服务器出口 IP）");
         const p = cache.find((x) => x.id === id);
         if (!p)
-            return "已绑定但代理不存在（" + id + "）";
-        return (p.name || p.host) + "（" + p.url + "）" + (p.disabled ? " · 已停用" : "");
+            return i18nText("已绑定但代理不存在（") + id + "）";
+        return (p.name || p.host) + "（" + p.url + "）" + (p.disabled ? i18nText(" · 已停用") : "");
     };
     const paint = () => {
         label.textContent = labelOf(value);
@@ -412,12 +415,12 @@ export function mountProxyPicker(root) {
     const renderList = () => {
         const q = search.value.trim().toLowerCase();
         list.replaceChildren();
-        list.appendChild(optionRow("", "无代理", "账号请求直接从服务器 IP 发出", null));
+        list.appendChild(optionRow("", i18nText("无代理"), i18nText("账号请求直接从服务器 IP 发出"), null));
         for (const p of cache) {
             const hay = (p.name + " " + p.host + " " + p.port + " " + p.scheme).toLowerCase();
             if (q && !hay.includes(q))
                 continue;
-            list.appendChild(optionRow(p.id, p.name || p.host, p.url + (p.disabled ? " · 已停用" : ""), p));
+            list.appendChild(optionRow(p.id, p.name || p.host, p.url + (p.disabled ? i18nText(" · 已停用") : ""), p));
         }
     };
     const optionRow = (id, title, sub, p) => {
@@ -432,16 +435,16 @@ export function mountProxyPicker(root) {
             if (probe) {
                 const badge = document.createElement("span");
                 badge.className = "pp-probe " + (probe.ok ? "good" : "bad");
-                badge.textContent = probe.ok ? fmtLatency(probe.latency_ms) : "不通";
+                setTextRender(badge, () => probe.ok ? fmtLatency(probe.latency_ms) : i18nText("不通"));
                 if (probe.ok)
-                    setTip(badge, "出口 IP " + probe.exit_ip);
+                    setTip(badge, () => i18nText("出口 IP ") + probe.exit_ip);
                 row.appendChild(badge);
             }
             const test = document.createElement("button");
             test.type = "button";
             test.className = "pp-test";
-            buttonLabel(test, "测试", "activity");
-            setTip(test, "测试该代理连通性");
+            buttonLabel(test, () => i18nText("测试"), "activity");
+            setTip(test, () => i18nText("测试该代理连通性"));
             test.addEventListener("click", (e) => {
                 e.stopPropagation(); // 别顺手把这一行选中了
                 runProbe(p, test).then(renderList);

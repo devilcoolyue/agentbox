@@ -1,3 +1,4 @@
+import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
 /* 统一单选下拉。原 select 保留为表单数据源，用户选择仍派发 input/change。
  * 选项、disabled、hidden 等 DOM 变化自动同步；代码赋值请用 setSelectValue，
  * 因为浏览器的 select.value / selectedIndex 属性赋值不会触发 DOM mutation。
@@ -41,7 +42,7 @@ class SelectControl {
         this.panel.setAttribute("popover", "auto");
         this.search.type = "search";
         this.search.className = "select-search";
-        this.search.placeholder = "搜索选项…";
+        setAttrRender(this.search, "placeholder", () => i18nText("搜索选项…"));
         this.search.autocomplete = "off";
         this.search.spellcheck = false;
         this.search.setAttribute("role", "combobox");
@@ -128,10 +129,11 @@ class SelectControl {
     }
     sync() {
         this.trigger.className = "select-trigger " + [...this.select.classList].filter(c => c !== "select-native").join(" ");
+        this.panel.classList.toggle("select-panel-compact", this.select.hasAttribute("data-language-select"));
         this.trigger.hidden = this.select.hidden;
         this.trigger.disabled = this.select.matches(":disabled");
         this.trigger.tabIndex = this.tabIndex;
-        this.caption.textContent = this.select.selectedOptions[0]?.label || "请选择";
+        setTextRender(this.caption, () => this.select.selectedOptions[0]?.label || i18nText("请选择"));
         if (this.select.title)
             this.trigger.title = this.select.title;
         else
@@ -144,10 +146,10 @@ class SelectControl {
             copy.querySelectorAll("select, button, .hint, .tag, .field-hint").forEach(el => el.remove());
             return copy.textContent?.trim();
         }).filter(Boolean).join("，");
-        const name = this.select.getAttribute("aria-label") || labelText || this.select.dataset.tip || "选择选项";
+        const name = this.select.getAttribute("aria-label") || labelText || this.select.dataset.tip || i18nText("选择选项");
         this.trigger.setAttribute("aria-label", name);
         this.list.setAttribute("aria-label", name);
-        this.search.setAttribute("aria-label", `搜索${name}`);
+        setAttrRender(this.search, "aria-label", () => i18nText("搜索{p0}", { p0: String(name) }));
         for (const attr of ["aria-describedby", "data-tip"]) {
             const value = this.select.getAttribute(attr);
             if (value)
@@ -194,7 +196,7 @@ class SelectControl {
             this.rows.push({ option, element: row, index });
         });
         this.empty.hidden = this.rows.length > 0;
-        this.empty.textContent = query ? "没有匹配的选项" : "暂无可选项";
+        setTextRender(this.empty, () => query ? i18nText("没有匹配的选项") : i18nText("暂无可选项"));
         const enabled = this.rows.filter(r => !this.disabled(r.option));
         const active = enabled.find(r => r.option === previous) || enabled.find(r => r.option.selected) || enabled[0];
         this.setActive(active?.index ?? -1);
@@ -317,7 +319,8 @@ class SelectControl {
         const above = Math.max(0, rect.top - y - gap - margin);
         const up = below < 260 && above > below;
         const available = up ? above : below;
-        this.panel.style.width = `${Math.min(Math.max(rect.width, 200), width - margin * 2)}px`;
+        const minWidth = this.select.hasAttribute("data-language-select") ? 156 : 200;
+        this.panel.style.width = `${Math.min(Math.max(rect.width, minWidth), width - margin * 2)}px`;
         this.panel.style.maxHeight = `${available}px`;
         this.panel.style.left = `${Math.max(x + margin, Math.min(rect.left, x + width - this.panel.offsetWidth - margin))}px`;
         this.panel.style.top = `${up ? rect.top - this.panel.offsetHeight - gap : rect.bottom + gap}px`;

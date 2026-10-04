@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.8 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.10 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.8
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.10
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.8_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.10_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.8_linux_arm64/install.sh --version v0.1.8
+sudo bash agentbox_v0.1.10_linux_arm64/install.sh --version v0.1.10
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,26 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### 升级至 v0.1.10
+
+本版为网页控制台与 abox-link 面板加入简体中文、繁体中文和英文，默认跟随系统，不支持时回退英文；可在网页登录页／用户菜单和 abox-link 面板顶部即时切换，偏好保存在当前设备。表单草稿和终端连接保留，终端输出、用户内容与服务端原始诊断不翻译。
+
+从 v0.1.9 升级保持 schema 10，无新增数据库迁移；API、WebSocket 和配对协议不变，同步仍默认关闭。从 v0.1.8 升级仍会执行 schema 9 → 10 迁移，按下节先验证备份，不能将迁移后的数据库直接交给 v0.1.8。使用「关于与更新」或已校验发布包内的 `deploy/release.py` 升级，不要重复运行首次安装命令。
+
+v0.1.10 包含 Linux amd64/arm64 服务端与五个平台 abox-link，共七个归档及 `release.json`、`SHA256SUMS`。服务端升级会更新网页和可下载的 abox-link 文件；本机运行的旧 abox-link 仍需手动下载替换。本次不发布新的桌面安装包，已发布 Desktop 0.1.2 不含多语言，升级服务端不会改变其界面或安装版本。服务端与工作空间镜像仍独立管理。
+
+### v0.1.8 升级至 v0.1.9
+
+v0.1.9 是 Desktop 0.1.2 的配套服务端，新增桌面能力发现、配对登录、逻辑项目、独立 AI/Shell 多终端及目录同步接口。现有网页和 abox-link 继续使用原有接口；Desktop 0.1.2 连接 v0.1.8 时仅提供登录、空间选择、共享终端和手动文件传输。
+
+标准 Linux/systemd 版本目录安装可在「关于与更新」升级并重启，也可下载校验后使用包内 `deploy/release.py install/activate`。首次启动自动将数据库从 schema 9 升至 10，新增项目和终端元数据，不移动空间文件。先保存并验证配套备份；**不能把迁移后的数据库交给 v0.1.8**。回退须恢复升级前兼容备份到新目录，并另行保全升级后变化的文件。
+
+同步默认关闭（`desktop_sync_enabled=false`，能力 `sync=0`）。准备使用同步时，管理员可在 `config.json` 中设为 `true` 后重启服务，或向管理员接口 `PUT /api/settings` 提交 `{"desktop_sync_enabled":true}`；客户端重新登录后显示同步页。开启入口不会自动建立本地映射，仍需在客户端选择目录并确认同步计划。停用前先停止持续同步并核对未完成批次；恢复记录核对、导出与清理独立可用。
+
+该设置控制客户端能力发现与正常同步入口，不封禁所有底层同步接口，也不会强杀已有租约的在途写入。备份恢复到新安装后会生成新的服务端实例身份，客户端需重新确认同步基线。
+
+桌面安装包在 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2) 单独下载，支持 Mac Apple Silicon、Mac Intel 和 Windows x64；当前为未签名测试版，需手动安装。安装桌面包不会升级服务端，升级服务端也不自动更换空间镜像。主仓库与 `agentbox-releases` 的 v0.1.9 服务端附件使用同一份构建和校验和。
 
 ### v0.1.7 升级至 v0.1.8
 
@@ -104,7 +124,7 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 服务端包附带可选浏览器镜像配方。在解包目录运行（基础镜像名按当前配置替换）：
 
 ```bash
-AGENTBOX_BROWSER_BASE_IMAGE=agentbox-agent:v0.1.8 ./scripts/build-browser-image.sh
+AGENTBOX_BROWSER_BASE_IMAGE=agentbox-agent:v0.1.10 ./scripts/build-browser-image.sh
 ```
 
 然后在「系统设置 → 容器」将镜像设为 `agentbox-agent:browser`，停止并重新启动需要浏览器的空间。Linux amd64 使用固定版本 Google Chrome for Testing，ARM 使用 Chromium。推荐每空间 2 GiB 内存、2 CPU、512 PID。服务器需允许非特权用户命名空间，Chrome 沙箱保持开启。

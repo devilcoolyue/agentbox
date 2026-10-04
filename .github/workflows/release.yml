@@ -29,8 +29,12 @@ jobs:
           test -f LICENSE
       - name: Validate Go
         run: |
+          set -o pipefail
           go build ./...
-          go test ./...
+          go list -f '{{if ne .ImportPath "agentbox/internal/server"}}{{.ImportPath}}{{end}}' ./... | xargs -r go test
+          AGENTBOX_CHOWN_DENIAL_TEST=1 go test ./internal/server -run '^TestSyncMutationLinuxChownDeniedPreservesTarget$' -count=1 -v
+          # Build as the runner; only the server test process needs production UID/GID permissions.
+          go test -exec 'sudo -n --' ./internal/server -count=1
           go vet ./...
       - name: Validate installer
         run: |

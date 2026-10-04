@@ -48,7 +48,13 @@ You bring the server and your own Claude / Codex subscription, API key, or compa
 
 <p align="center"><a href="docs/media/agentbox-tour.mp4?raw=1"><strong>Download the full-resolution MP4</strong></a> · <a href="#screenshots">Browse full-resolution screenshots</a></p>
 
-<sub>Screenshots use 2× pixel density. All media is captured from the actual browser UI with synthetic projects, conversations, command output, and usage records. These are interface demonstrations, not live model benchmarks. The pictured source UI is in Chinese; release builds may differ.</sub>
+<sub>Screenshots use 2× pixel density. All media is captured from the actual browser UI with synthetic projects, conversations, command output, and usage records. These are interface demonstrations, not live model benchmarks. The media was captured before multilingual support was added and shows the Chinese interface; v0.1.10 also supports Traditional Chinese and English.</sub>
+
+## Interface languages
+
+The **Web console and abox-link v0.1.10** support **简体中文 · 繁體中文 · English**. Choose a language on the login page, in the Web console’s user menu, or at the top of the abox-link panel. The default follows your browser/system language, falling back to English when unsupported; explicit choices are saved on the current device.
+
+Switch immediately while keeping drafts and terminal connections. User content, model responses, terminal output, and server diagnostics remain in their original language. [Language behavior and desktop availability →](docs/i18n.md)
 
 ## Quick start
 
@@ -62,7 +68,7 @@ The installer downloads and verifies the server package, builds the workspace im
 
 - **Host:** Linux x86_64 / arm64, systemd, and local Docker Engine. Ubuntu 22.04+ / Debian 12+ install missing dependencies automatically. For other distributions, see the [prerequisites](deploy/README.md#一键安装).
 - **Sign in:** open `http://YOUR_SERVER_IP:8180` and use `boxadmin` with the generated password printed by the installer. Allow TCP 8180 through your firewall if connecting directly; configure [HTTPS](deploy/README.md#https-与-websocket-反向代理) for ongoing public access.
-- **Stable server:** [v0.1.9](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.9). The command selects the latest stable release; append `-s -- --version v0.1.9` to pin it, or `-s -- --listen 127.0.0.1:8180` to bind only to localhost.
+- **Stable server:** [v0.1.10](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.10). The command selects the latest stable release; append `-s -- --version v0.1.10` to pin it, or `-s -- --listen 127.0.0.1:8180` to bind only to localhost.
 - **Existing installation:** use the console's update entry or the [upgrade guide](docs/releases.md#升级与回退). The installer preserves existing deployments and will not overwrite them.
 
 Configuration lives in `/etc/agentbox`, data in `/var/lib/agentbox`. Each workspace defaults to a 2 GiB memory limit and 2 CPUs; size your server for the number of concurrent workspaces. See [installation and recovery](deploy/README.md#一键安装) for all options.
@@ -152,7 +158,7 @@ Filter by time, user, agent, and model. Inspect token counts, recorded costs, pr
 
 Browse, edit, upload, and download from project and shared directories. The source viewer includes syntax highlighting, line numbers, and fullscreen mode. Switch between source and rendered Markdown or HTML to inspect generated documents and pages.
 
-[![File browser and source editor](docs/images/files.png)](docs/images/files.png)
+[![File browser with project directories and files](docs/images/files.png)](docs/images/files.png)
 
 [![Rendered Markdown document in the workspace](docs/images/preview.png)](docs/images/preview.png)
 
@@ -202,7 +208,7 @@ The [capture guide](docs/development.md#文档截图) explains how to reproduce 
 | **abox-link** | Allowlisted private-network access from cloud workspaces | Optional; local panel or headless command line on Windows, macOS, and Linux |
 | **HTTP / WebSocket API** | Script workspace operations and usage queries | [API reference](docs/api.md) |
 
-The desktop app has packages for Mac Apple Silicon, Mac Intel, and Windows x64. It connects to your server; it does not replace or upgrade it. Server v0.1.8 provides basic mode; v0.1.9 adds project terminals, pairing, and the sync backend. **Sync is disabled by default and requires an administrator to enable it.** Desktop 0.1.2 is a manual download: macOS is not notarized, Windows is unsigned, and automatic updates are not enabled. See the [versioned desktop guide](https://github.com/devilcoolyue/agentbox/blob/v0.1.9/desktop/README.md) for source, setup, and validation limits.
+The desktop app has packages for Mac Apple Silicon, Mac Intel, and Windows x64. It connects to your server; it does not replace or upgrade it. Server v0.1.8 provides basic mode; v0.1.9 adds project terminals, pairing, and the sync backend. **Sync is disabled by default and requires an administrator to enable it.** Desktop 0.1.2 is a manual download: macOS is not notarized, Windows is unsigned, and automatic updates are not enabled. This server release does not update the desktop installer: published Desktop 0.1.2 does not include multilingual UI, while the current desktop source does. See the [desktop guide](desktop/README.md) for source, setup, and validation limits.
 
 An optional [remote browser image](docs/remote-browser.md) adds a full browser desktop inside a workspace, with persistent website login, clipboard support, and downloads. It is separate from CLI authorization and requires the browser-enabled image.
 
@@ -228,6 +234,7 @@ English and Chinese READMEs cover the same overview and setup. Detailed guides a
 | Connect private services | [Proxies and abox-link](docs/networking.md) |
 | Install, upgrade, back up, or recover | [Deployment](deploy/README.md) · [Releases](docs/releases.md) · [CLI compatibility](docs/compatibility.md) |
 | Configure or integrate the server | [Configuration](docs/configuration.md) · [API reference](docs/api.md) |
+| Choose an interface language | [Languages and preferences](docs/i18n.md) |
 | Resolve an error | [Troubleshooting](docs/troubleshooting.md) |
 | Contribute code | [Development guide](docs/development.md) · [Contributing](CONTRIBUTING.md) |
 

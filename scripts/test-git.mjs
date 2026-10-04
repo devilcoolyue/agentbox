@@ -8,6 +8,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export async function smoke(page) {
+ await page.addInitScript(() => { if (window === window.top && /^https?:$/.test(location.protocol)) localStorage.setItem("agentbox.language", "zh-CN"); });
  const root = resolve(fileURLToPath(new URL('../internal/web/static/', import.meta.url)));
  const server = createServer(async (req,res) => {
   try {

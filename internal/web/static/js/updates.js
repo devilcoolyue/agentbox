@@ -1,3 +1,4 @@
+import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
 import { api } from "./api.js";
 import { S, emit } from "./state.js";
 import { $, askConfirm, fmtDateTime, fmtTime } from "./util.js";
@@ -33,20 +34,20 @@ export function initUpdates() {
         const job = upgrade?.job;
         const busy = submitting || awaitingSubmission || upgrading();
         const install = $("update-install");
-        buttonLabel(install, info?.comparable === false ? "切换到正式版并重启" : "升级并重启", "download");
+        buttonLabel(install, () => info?.comparable === false ? i18nText("切换到正式版并重启") : i18nText("升级并重启"), "download");
         install.classList.toggle("hidden", !upgrade?.supported || !info?.available);
         install.disabled = busy || readingUpgrade || checking || !!error;
-        $("upgrade-support").textContent = upgrade ? upgrade.reason : "正在读取在线升级支持状态…";
+        setTextRender($("upgrade-support"), () => upgrade ? upgrade.reason : i18nText("正在读取在线升级支持状态…"));
         $("upgrade-progress").classList.toggle("hidden", !job && !upgradeError && !submissionError && !submitting && !awaitingSubmission);
         const verified = job?.phase === "succeeded" && upgrade?.current_version === job.version;
-        $("upgrade-message").textContent = submitting ? "正在提交升级任务…" : awaitingSubmission ? "正在确认升级任务是否已提交…"
-            : verified ? `升级完成，当前运行 ${job.version}。刷新页面加载新版界面。`
-                : job?.phase === "succeeded" ? "任务已结束，但当前运行版本与目标不一致，请检查服务器。"
-                    : job ? `${job.version} · ${job.message}` : "";
+        setTextRender($("upgrade-message"), () => submitting ? i18nText("正在提交升级任务…") : awaitingSubmission ? i18nText("正在确认升级任务是否已提交…")
+            : verified ? i18nText("升级完成，当前运行 {p0}。刷新页面加载新版界面。", { p0: String(job.version) })
+                : job?.phase === "succeeded" ? i18nText("任务已结束，但当前运行版本与目标不一致，请检查服务器。")
+                    : job ? `${job.version} · ${job.message}` : "");
         const detail = upgradeError || submissionError || job?.error || "";
         $("upgrade-error").textContent = detail;
         $("upgrade-error").classList.toggle("hidden", !detail);
-        $("upgrade-log").textContent = job ? `任务日志：journalctl -u agentbox-upgrade-${job.id}.service` : "";
+        setTextRender($("upgrade-log"), () => job ? i18nText("任务日志：journalctl -u agentbox-upgrade-{p0}.service", { p0: String(job.id) }) : "");
         $("upgrade-log").classList.toggle("hidden", !detail && job?.phase !== "failed" && !(job?.phase === "succeeded" && !verified));
         $("upgrade-reload").classList.toggle("hidden", !verified);
         $("upgrade-refresh").disabled = readingUpgrade || submitting;
@@ -59,7 +60,7 @@ export function initUpdates() {
             upgradeTimer = setTimeout(() => void readUpgrade(), 3000);
         }
         else if ((upgrading() || awaitingSubmission) && pollingUntil && Date.now() >= pollingUntil) {
-            upgradeError = "长时间未能确认升级结果，自动查询已暂停。请刷新升级状态或在服务器检查任务日志。";
+            upgradeError = i18nText("长时间未能确认升级结果，自动查询已暂停。请刷新升级状态或在服务器检查任务日志。");
             renderUpgrade();
         }
     }
@@ -93,8 +94,8 @@ export function initUpdates() {
         catch (e) {
             if (!signal.aborted)
                 upgradeError = upgrading() || awaitingSubmission
-                    ? "暂时无法连接服务，正在等待恢复。若持续无法恢复，请在服务器查看服务和升级任务日志。"
-                    : "读取升级状态失败：" + e.message;
+                    ? i18nText("暂时无法连接服务，正在等待恢复。若持续无法恢复，请在服务器查看服务和升级任务日志。")
+                    : i18nText("读取升级状态失败：") + e.message;
         }
         finally {
             readingUpgrade = false;
@@ -107,14 +108,14 @@ export function initUpdates() {
     async function installUpdate() {
         if (!upgrade?.supported || !info?.available || submitting || readingUpgrade || upgrading() || awaitingSubmission)
             return;
-        const version = info.latest_version;
+        const version = info.latest_version, currentVersion = info.current_version;
         const switching = !info.comparable;
         // Lock the UI while the dialog is open; duplicate clicks cannot stack it.
         submitting = true;
         renderUpgrade();
-        const confirmed = await askConfirm(switching ? `从开发构建 ${info.current_version} 切换至正式版 ${version} 并重启服务？` : `升级至 ${version} 并重启服务？`, {
-            title: switching ? "切换到正式版" : "升级服务端", okLabel: switching ? "切换并重启" : "升级并重启", icon: "download",
-            hint: (switching ? "正式版可能不包含当前开发功能；配置或数据库不兼容时会阻止切换。" : "") + "升级前会备份系统数据。正在进行的对话可能中断，网页连接会短暂断开；工作空间文件保留，会话镜像单独管理。",
+        const confirmed = await askConfirm(() => switching ? i18nText("从开发构建 {p0} 切换至正式版 {p1} 并重启服务？", { p0: String(currentVersion), p1: String(version) }) : i18nText("升级至 {p0} 并重启服务？", { p0: String(version) }), {
+            get title() { return switching ? i18nText("切换到正式版") : i18nText("升级服务端"); }, get okLabel() { return switching ? i18nText("切换并重启") : i18nText("升级并重启"); }, icon: "download",
+            get hint() { return (switching ? i18nText("正式版可能不包含当前开发功能；配置或数据库不兼容时会阻止切换。") : "") + i18nText("升级前会备份系统数据。正在进行的对话可能中断，网页连接会短暂断开；工作空间文件保留，会话镜像单独管理。"); },
         });
         if (signal.aborted)
             return;
@@ -150,20 +151,20 @@ export function initUpdates() {
     function render() {
         const available = !!info?.available;
         const version = info ? versionLabel(info.current_version) : "—";
-        const availableStatus = info?.comparable ? `新版本 ${versionLabel(info.latest_version)} 可用` : `可切换至正式版 ${versionLabel(info?.latest_version || "")}`;
-        let status = "尚未检查更新";
+        const availableStatus = info?.comparable ? i18nText("新版本 {p0} 可用", { p0: String(versionLabel(info.latest_version)) }) : i18nText("可切换至正式版 {p0}", { p0: String(versionLabel(info?.latest_version || "")) });
+        let status = i18nText("尚未检查更新");
         if (checking)
-            status = "正在检查更新…";
+            status = i18nText("正在检查更新…");
         else if (error)
-            status = available ? `${availableStatus}（上次检查结果）` : "检查未完成，请重试";
+            status = available ? i18nText("{p0}（上次检查结果）", { p0: String(availableStatus) }) : i18nText("检查未完成，请重试");
         else if (available)
             status = availableStatus;
         else if (info?.checked_at) {
-            status = !info.latest_version ? "暂无正式发布的版本" : !info.comparable ? "开发构建，无法比较版本" : "已是最新版本";
+            status = !info.latest_version ? i18nText("暂无正式发布的版本") : !info.comparable ? i18nText("开发构建，无法比较版本") : i18nText("已是最新版本");
         }
         badge.classList.toggle("has-update", available);
-        $("version-label").textContent = info ? version : "版本";
-        badge.ariaLabel = `当前版本 ${version}，${status}，查看版本与更新`;
+        setTextRender($("version-label"), () => info ? version : i18nText("版本"));
+        setAttrRender(badge, "aria-label", () => i18nText("当前版本 {p0}，{p1}，查看版本与更新", { p0: String(version), p1: String(status) }));
         for (const el of document.querySelectorAll("[data-update-version]"))
             el.textContent = version;
         for (const el of document.querySelectorAll("[data-update-status]")) {
@@ -183,12 +184,12 @@ export function initUpdates() {
             const url = info?.release_url || releasesURL;
             el.href = url === releasesURL || url.startsWith(releasesURL + "/tag/") ? url : releasesURL;
         }
-        const checked = info?.checked_at ? "上次检查 " + fmtTime(info.checked_at) : "尚未检查";
+        const checked = info?.checked_at ? i18nText("上次检查 ") + fmtTime(info.checked_at) : i18nText("尚未检查");
         for (const el of document.querySelectorAll("[data-update-time]"))
             el.textContent = checked;
         $("version-current").classList.toggle("hidden", !(info?.checked_at && info.latest_version && info.comparable && !available && !error && !checking));
         $("version-upgrade").classList.toggle("hidden", !available);
-        $("update-build").textContent = info ? [info.built_at !== "unknown" ? "构建于 " + (isNaN(Date.parse(info.built_at)) ? info.built_at : fmtDateTime(info.built_at, false)) : "", info.revision !== "unknown" ? "提交 " + info.revision.slice(0, 12) : ""].filter(Boolean).join(" · ") : "";
+        setTextRender($("update-build"), () => info ? [info.built_at !== "unknown" ? i18nText("构建于 ") + (isNaN(Date.parse(info.built_at)) ? info.built_at : fmtDateTime(info.built_at, false)) : "", info.revision !== "unknown" ? i18nText("提交 ") + info.revision.slice(0, 12) : ""].filter(Boolean).join(" · ") : "");
         $("update-notes").textContent = info?.notes || "";
         $("update-notes-wrap").classList.toggle("hidden", !info?.notes);
         positionMenu();
@@ -217,7 +218,7 @@ export function initUpdates() {
         }
         catch (e) {
             if (!signal.aborted)
-                error = "检查更新失败：" + e.message;
+                error = i18nText("检查更新失败：") + e.message;
         }
         finally {
             checking = false;

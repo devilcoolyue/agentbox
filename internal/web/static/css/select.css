@@ -52,8 +52,13 @@
 .select-option[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
 .select-group { padding: 9px 11px 5px; color: var(--muted); font-size: 11px; }
 .select-empty { padding: 20px 12px; color: var(--muted); text-align: center; }
+/* Four language choices use a compact menu, independent of settings selects. */
+.select-panel-compact { padding: 4px; border-radius: 8px; font-size: 12px; line-height: 18px; }
+.select-panel-compact .select-option { min-height: 30px; padding: 6px 28px 6px 9px; border-radius: 5px; }
+.select-panel-compact .select-option[aria-selected="true"]::after { right: 11px; top: 50%; transform: translateY(-65%) rotate(-45deg); }
 @keyframes select-enter { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
 @media (pointer: coarse) { .select-option { min-height: 42px; padding-top: 12px; padding-bottom: 12px; } }
+@media (pointer: coarse) { .select-panel-compact .select-option { min-height: 42px; padding-top: 12px; padding-bottom: 12px; } }
 @media (prefers-reduced-motion: reduce) {
   .select-trigger, .select-caret { transition: none; }
   .select-panel:popover-open { animation: none; }

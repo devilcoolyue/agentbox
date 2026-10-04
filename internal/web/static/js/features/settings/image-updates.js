@@ -1,3 +1,4 @@
+import { setText, setTextRender, t as i18nText } from "../../i18n.js";
 import { api } from "../../api.js";
 import { S } from "../../state.js";
 import { $, toast, fmtTime, askConfirm } from "../../util.js";
@@ -21,7 +22,7 @@ export function fillImageUpdateSettings(p) {
 }
 function buttons() {
     const dirty = isDirty();
-    $("image-update-dirty").textContent = dirty ? "上方的更新设置还没保存，保存后才能执行下面的操作。" : "";
+    setTextRender($("image-update-dirty"), () => dirty ? i18nText("上方的更新设置还没保存，保存后才能执行下面的操作。") : "");
     $("image-update-dirty").hidden = !dirty;
     for (const action of ["check", "update", "rollback"]) {
         $("image-update-" + action).disabled = pending || dirty || !!latest?.status.running || !latest || (action === "rollback" && !latest.previous_image);
@@ -38,12 +39,12 @@ function render(v) {
     if (!isDirty())
         fillImageUpdateSettings(v.settings);
     const st = v.status;
-    const labels = { checking: "正在检查", building: "正在构建并验证镜像", failed: "任务失败", done: "任务完成" };
-    $("image-update-status").textContent = (labels[st.phase] || "尚未检查客户端版本") + (st.available ? " · 有可用更新" : "") + (st.finished_at ? " · " + fmtTime(st.finished_at) : "") + (st.error ? "：" + st.error : "");
-    $("image-update-versions").textContent = st.current.claude ? `上次检查：Claude ${st.current.claude} / Codex ${st.current.codex}` + (st.target.claude ? ` → 目标 Claude ${st.target.claude} / Codex ${st.target.codex}` : "") : "点击“立即检查”读取镜像版本和所选渠道的最新版本。";
-    $("image-update-active").textContent = "当前镜像：" + v.agent_image;
-    $("image-update-schedule").textContent = `系统时区 ${v.timezone} · ${v.settings.enabled ? `每天 ${v.settings.time} 自动检查并应用，当天错过后补跑` : "自动更新已关闭"}。stable 可能落后于 latest；不会自动降级。`;
-    $("image-update-log").textContent = st.log || "暂无日志";
+    const labels = { get checking() { return i18nText("正在检查"); }, get building() { return i18nText("正在构建并验证镜像"); }, get failed() { return i18nText("任务失败"); }, get done() { return i18nText("任务完成"); } };
+    setTextRender($("image-update-status"), () => (labels[st.phase] || i18nText("尚未检查客户端版本")) + (st.available ? i18nText(" · 有可用更新") : "") + (st.finished_at ? " · " + fmtTime(st.finished_at) : "") + (st.error ? "：" + st.error : ""));
+    setTextRender($("image-update-versions"), () => st.current.claude ? i18nText("上次检查：Claude {p0} / Codex {p1}", { p0: String(st.current.claude), p1: String(st.current.codex) }) + (st.target.claude ? i18nText(" → 目标 Claude {p0} / Codex {p1}", { p0: String(st.target.claude), p1: String(st.target.codex) }) : "") : i18nText("点击“立即检查”读取镜像版本和所选渠道的最新版本。"));
+    setTextRender($("image-update-active"), () => i18nText("当前镜像：") + v.agent_image);
+    setTextRender($("image-update-schedule"), () => i18nText("系统时区 {p0} · {p1}。stable 可能落后于 latest；不会自动降级。", { p0: String(v.timezone), p1: String(v.settings.enabled ? i18nText("每天 {p0} 自动检查并应用，当天错过后补跑", { p0: String(v.settings.time) }) : i18nText("自动更新已关闭")) }));
+    setTextRender($("image-update-log"), () => st.log || i18nText("暂无日志"));
     buttons();
 }
 async function refresh(signal) {
@@ -64,7 +65,7 @@ export function startImageUpdates() {
         }
         catch (e) {
             if (!signal.aborted)
-                $("image-update-status").textContent = "读取更新状态失败：" + e.message;
+                setTextRender($("image-update-status"), () => i18nText("读取更新状态失败：") + e.message);
         }
     });
 }
@@ -84,14 +85,14 @@ export function initImageUpdates(signal) {
             pending = true;
             buttons();
             try {
-                if (action !== "check" && !await askConfirm(action === "rollback" ? "回退到上次镜像并暂停自动更新？" : "按已保存的渠道检查、构建并应用客户端更新？", { title: "客户端更新", hint: "运行中的空间保持不变，停止再启动后使用切换后的镜像。", okLabel: action === "rollback" ? "回退" : "更新" }))
+                if (action !== "check" && !await askConfirm(() => action === "rollback" ? i18nText("回退到上次镜像并暂停自动更新？") : i18nText("按已保存的渠道检查、构建并应用客户端更新？"), { get title() { return i18nText("客户端更新"); }, get hint() { return i18nText("运行中的空间保持不变，停止再启动后使用切换后的镜像。"); }, get okLabel() { return action === "rollback" ? i18nText("回退") : i18nText("更新"); } }))
                     return;
                 if (signal.aborted)
                     return;
                 const v = await api("/image-updates/" + action, { method: "POST", signal });
                 if (!signal.aborted) {
                     render(v);
-                    toast("任务已启动，可在此查看进度");
+                    toast(i18nText("任务已启动，可在此查看进度"));
                 }
             }
             catch (e) {

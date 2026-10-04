@@ -1,3 +1,4 @@
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 /* chat-threads：对话线程 —— 一个会话里可开多条对话，各自独立上下文，随时
  * 切回继续。顶部切换栏显示当前对话标题（也是历史面板入口），右侧滑出面板
  * 列出全部对话：点击切换续聊、可新建 / 删除。服务端按线程记录 provider
@@ -17,7 +18,7 @@ import { setTip } from "./tip.js";
 
 /* 预览文案：附件占位符只留类别名，不展示容器内路径 */
 function previewText(s: string | undefined) {
-  return String(s || "").replace(USER_ATTACH_RE, "[$1]") || "（无文字消息）";
+  return String(s || "").replace(USER_ATTACH_RE, "[$1]") || i18nText("（无文字消息）");
 }
 
 /* ---- 顶部切换栏 ---- */
@@ -32,7 +33,7 @@ let titled = false;
 export function setThreadBar(thread: Thread | null) {
   S.thread = thread && thread.id ? thread : null;
   titled = false; // 已登记 S.thread 后改由下面的 id 比对把关
-  $("thread-title").textContent = S.thread ? previewText(S.thread.title) : "新对话";
+  setTextRender($("thread-title"), () => S.thread ? previewText(S.thread.title) : i18nText("新对话"));
 }
 
 /* 空的新对话发出首条消息后，标题立即跟上，不必等下一次历史加载。标题只由开场
@@ -81,7 +82,7 @@ async function refreshList() {
   const list = $("tp-list");
   const load = document.createElement("div");
   load.className = "tp-empty";
-  load.append(withSpin("加载中…"));
+  load.append(withSpin(() => i18nText("加载中…")));
   list.replaceChildren(load);
   $("tp-count").textContent = "";
   try {
@@ -91,7 +92,7 @@ async function refreshList() {
     activeID = active;
     renderList();
   } catch (e) {
-    if (panelOpen()) toast("加载历史对话失败：" + (e as Error).message, true);
+    if (panelOpen()) toast(i18nText("加载历史对话失败：") + (e as Error).message, true);
   }
 }
 
@@ -105,21 +106,21 @@ function renderList() {
   if (!allThreads.length) {
     const d = document.createElement("div");
     d.className = "tp-empty";
-    d.textContent = "还没有对话记录。发出第一条消息后，这里会出现历史对话。";
+    setText(d, "还没有对话记录。发出第一条消息后，这里会出现历史对话。");
     list.replaceChildren(d);
     return;
   }
   if (!shown.length) {
     const d = document.createElement("div");
     d.className = "tp-empty";
-    d.textContent = `没有标题匹配「${q}」的对话。`;
+    setText(d, "没有标题匹配「{p0}」的对话。", { p0: String(q) });
     list.replaceChildren(d);
-    $("tp-count").textContent = `0 / ${allThreads.length} 条`;
+    setText($("tp-count"), "0 / {p0} 条", { p0: String(allThreads.length) });
     return;
   }
-  $("tp-count").textContent = q
-    ? `${shown.length} / ${allThreads.length} 条`
-    : allThreads.length + " 条";
+  setTextRender($("tp-count"), () => q
+    ? i18nText("{p0} / {p1} 条", { p0: String(shown.length), p1: String(allThreads.length) })
+    : allThreads.length + i18nText(" 条"));
   list.replaceChildren(...shown.map((t) => threadItem(t, t.id === activeID)));
 }
 
@@ -133,30 +134,30 @@ function threadItem(t: Thread, on: boolean) {
   open.type = "button";
   open.className = "tp-open";
   open.appendChild(svgIcon("clock", 15));
-  setTip(open, on ? "当前对话" : "切换到这条对话继续");
+  setTip(open, () => on ? i18nText("当前对话") : i18nText("切换到这条对话继续"));
   const title = document.createElement("span");
   title.className = "tp-title";
   title.textContent = previewText(t.title);
   const meta = document.createElement("span");
   meta.className = "tp-meta";
-  meta.textContent = [fmtTime(t.updated || t.ts), `${t.turns || 0} 轮`, on ? "当前" : ""]
-    .filter(Boolean).join(" · ");
+  setTextRender(meta, () => [fmtTime(t.updated || t.ts), i18nText("{p0} 轮", { p0: String(t.turns || 0) }), on ? i18nText("当前") : ""]
+    .filter(Boolean).join(" · "));
   open.append(title, meta);
   open.addEventListener("click", () => { if (on) closeThreadPanel(); else switchThread(t); });
 
   const ren = document.createElement("button");
   ren.type = "button";
   ren.className = "tp-del"; // 与删除同一套图标按钮样式
-  ren.setAttribute("aria-label", "重命名这条对话");
-  setTip(ren, "重命名这条对话");
+  setAttrRender(ren, "aria-label", () => i18nText("重命名这条对话"));
+  setTip(ren, () => i18nText("重命名这条对话"));
   ren.appendChild(svgIcon("rename", 15));
   ren.addEventListener("click", (e) => { e.stopPropagation(); renameThread(t); });
 
   const del = document.createElement("button");
   del.type = "button";
   del.className = "tp-del";
-  del.setAttribute("aria-label", "删除这条对话");
-  setTip(del, "删除这条对话");
+  setAttrRender(del, "aria-label", () => i18nText("删除这条对话"));
+  setTip(del, () => i18nText("删除这条对话"));
   del.appendChild(svgIcon("trash", 15));
   del.addEventListener("click", (e) => { e.stopPropagation(); delThread(t); });
 
@@ -167,11 +168,11 @@ function threadItem(t: Thread, on: boolean) {
 async function renameThread(t: Thread) {
   const sess = S.current; if (!sess) return;
   const name = await askPrompt({
-    title: "重命名对话",
-    label: "对话标题",
+    get title() { return i18nText("重命名对话"); },
+    get label() { return i18nText("对话标题"); },
     value: previewText(t.title),
-    hint: "留作辨认用；不会影响对话内容与上下文。",
-    validate: (v) => (v.trim() ? "" : "标题不能为空"),
+    get hint() { return i18nText("留作辨认用；不会影响对话内容与上下文。"); },
+    validate: (v) => (v.trim() ? "" : i18nText("标题不能为空")),
   });
   if (name === null) return;
   try {
@@ -183,15 +184,15 @@ async function renameThread(t: Thread) {
     t.title = res.title;
     if (S.thread && S.thread.id === t.id) applyThreadTitle(t.id, res.title);
     renderList();
-    toast("已重命名");
-  } catch (e) { toast("重命名失败：" + (e as Error).message, true); }
+    toast(i18nText("已重命名"));
+  } catch (e) { toast(i18nText("重命名失败：") + (e as Error).message, true); }
 }
 
 /* ---- 动作 ---- */
 
 function busy() {
   if (S.chatState !== "running") return false;
-  toast("Agent 执行中，请先等待完成或中断", true);
+  toast(i18nText("Agent 执行中，请先等待完成或中断"), true);
   return true;
 }
 
@@ -203,9 +204,9 @@ async function switchThread(t: Thread) {
     closeThreadPanel();
     emit("thread-changed");
     if (!res.resumable) {
-      toast("这条对话较早，没有可续聊的上下文标识；继续将从全新上下文开始（记录仍完整保留）");
+      toast(i18nText("这条对话较早，没有可续聊的上下文标识；继续将从全新上下文开始（记录仍完整保留）"));
     }
-  } catch (e) { toast("切换对话失败：" + (e as Error).message, true); }
+  } catch (e) { toast(i18nText("切换对话失败：") + (e as Error).message, true); }
 }
 
 export async function newThread() {
@@ -216,11 +217,11 @@ export async function newThread() {
     closeThreadPanel();
     if (res.created) {
       emit("thread-changed");
-      toast("已新建对话，之前的对话可在历史列表中继续");
+      toast(i18nText("已新建对话，之前的对话可在历史列表中继续"));
     } else {
-      toast("当前已是新对话");
+      toast(i18nText("当前已是新对话"));
     }
-  } catch (e) { toast("新建对话失败：" + (e as Error).message, true); }
+  } catch (e) { toast(i18nText("新建对话失败：") + (e as Error).message, true); }
 }
 
 async function delThread(t: Thread) {
@@ -228,15 +229,15 @@ async function delThread(t: Thread) {
   const isCur = !!(S.thread && S.thread.id === t.id);
   if (isCur && busy()) return;
   const name = previewText(t.title);
-  const ok = await askConfirm(`删除对话「${name.length > 24 ? name.slice(0, 24) + "…" : name}」？`, {
-    title: "删除对话", hint: "该对话的全部消息记录不可恢复。", okLabel: "删除", icon: "trash", danger: true,
+  const ok = await askConfirm(() => i18nText("删除对话「{p0}」？", { p0: String(name.length > 24 ? name.slice(0, 24) + "…" : name) }), {
+    get title() { return i18nText("删除对话"); }, get hint() { return i18nText("该对话的全部消息记录不可恢复。"); }, get okLabel() { return i18nText("删除"); }, icon: "trash", danger: true,
   });
   if (!ok) return;
   try {
     await api(`/sessions/${sess.id}/chat/threads/${t.id}`, { method: "DELETE" });
     if (isCur) emit("thread-changed"); // 服务端已自动切到最近一条
     await refreshList();
-  } catch (e) { toast("删除失败：" + (e as Error).message, true); }
+  } catch (e) { toast(i18nText("删除失败：") + (e as Error).message, true); }
 }
 
 /* ---- 静态装饰与事件挂载 ---- */
@@ -251,4 +252,9 @@ $("tp-close").addEventListener("click", closeThreadPanel);
 $("tp-scrim").addEventListener("click", closeThreadPanel);
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && panelOpen()) closeThreadPanel();
+});
+
+window.addEventListener("agentbox-language-change", () => {
+  if (!S.thread && !titled) setText($("thread-title"), "新对话");
+  if (panelOpen()) renderList();
 });

@@ -1,3 +1,4 @@
+import { setAttrRender, setText, t as i18nText } from "./i18n.js";
 /* Shared mobile navigation and overflow actions. Move the existing controls so
  * listeners, disabled states and form values remain authoritative on both layouts. */
 import { S, bus } from "./state.js";
@@ -7,7 +8,7 @@ const mobile = matchMedia("(max-width: 760px)");
 const byId = (id: string) => document.getElementById(id)!;
 
 /* always=true：桌面端也收起（一行超过三个操作时，次要与破坏性动作统一进 ⋯）。 */
-function overflow(host: HTMLElement, id: string, nodes: HTMLElement[], title: string, always = false) {
+function overflow(host: HTMLElement, id: string, nodes: HTMLElement[], title: string | (() => string), always = false) {
   const anchors = nodes.map(node => {
     const anchor = document.createComment("responsive action");
     node.before(anchor);
@@ -22,7 +23,8 @@ function overflow(host: HTMLElement, id: string, nodes: HTMLElement[], title: st
   panel.id = id + "-panel";
   panel.className = "action-popover";
   panel.setAttribute("popover", "auto");
-  panel.setAttribute("aria-label", title);
+  if (typeof title === "function") setAttrRender(panel, "aria-label", title);
+  else panel.setAttribute("aria-label", title);
   trigger.setAttribute("aria-controls", panel.id);
   trigger.popoverTargetElement = panel;
   host.append(trigger, panel);
@@ -54,9 +56,9 @@ function overflow(host: HTMLElement, id: string, nodes: HTMLElement[], title: st
 }
 
 overflow(document.querySelector<HTMLElement>(".fv-actions")!, "fv-more",
-  ["fv-auto-wrap", "fv-newtab", "fv-download", "fv-meta"].map(byId), "文件更多操作");
+  ["fv-auto-wrap", "fv-newtab", "fv-download", "fv-meta"].map(byId), () => i18nText("文件更多操作"));
 overflow(document.querySelector<HTMLElement>(".changes-actions")!, "changes-more",
-  ["btn-changes-clone", "btn-changes-profile", "btn-changes-discard-all"].map(byId), "仓库更多操作", true);
+  ["btn-changes-clone", "btn-changes-profile", "btn-changes-discard-all"].map(byId), () => i18nText("仓库更多操作"), true);
 
 // The same navigation buttons drive both desktop and mobile. Their labels also
 // carry live counts, avoiding a second list that can drift as accounts change.
@@ -156,8 +158,8 @@ function compactIntros(root: ParentNode) {
     details.className = "section-help";
     details.open = !mobile.matches;
     const summary = document.createElement("summary");
-    summary.textContent = "说明";
-    summary.setAttribute("aria-label", heading.textContent + "说明");
+    setText(summary, "说明");
+    setAttrRender(summary, "aria-label", () => heading.textContent + i18nText("说明"));
     heading.after(details); // 紧跟标题
     details.append(summary, copy, ...intro.querySelectorAll<HTMLElement>(":scope > .learn-more"));
     intro.classList.add("compact-intro");

@@ -1,6 +1,7 @@
 /* login：账号密码登录 / 登出 / 进入主界面。
  * 登录成功后服务端签发会话令牌，存 localStorage；/me 返回角色，
  * 普通用户隐藏侧栏「系统设置」入口（服务端接口同样有管理员校验）。 */
+import { t as i18nText } from "./i18n.js";
 "use strict";
 import { S, bus, emit } from "./state.js";
 import { $, btnBusy, btnDone } from "./util.js";
@@ -12,7 +13,7 @@ import { buttonLabel } from "./icons.js";
 function setPasswordVisible(visible) {
     $("login-pass").type = visible ? "text" : "password";
     const toggle = $("login-password-toggle");
-    const label = visible ? "隐藏密码" : "显示密码";
+    const label = visible ? i18nText("隐藏密码") : i18nText("显示密码");
     toggle.setAttribute("aria-label", label);
     toggle.dataset.tip = label;
     buttonLabel(toggle, "", visible ? "eye-off" : "eye");
@@ -42,7 +43,7 @@ export async function tryEnter() {
         // Non-401 failures previously disappeared, leaving stored-token startup
         // blank or a submitted login waiting without a useful retry path.
         if (token === S.token)
-            showLogin("读取登录状态失败，请重试：" + error.message);
+            showLogin(i18nText("读取登录状态失败，请重试：") + error.message);
         return;
     }
     if (token !== S.token)
@@ -71,11 +72,11 @@ export async function tryEnter() {
     startPolling();
     startPing();
 }
-bus.addEventListener("unauthorized", () => showLogin("登录已过期，请重新登录"));
+bus.addEventListener("unauthorized", () => showLogin(i18nText("登录已过期，请重新登录")));
 $("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     $("login-error").classList.add("hidden");
-    btnBusy($("login-btn"), "登录中…");
+    btnBusy($("login-btn"), () => i18nText("登录中…"));
     try {
         const res = await fetch("/api/login", {
             method: "POST",
@@ -87,7 +88,7 @@ $("login-form").addEventListener("submit", async (e) => {
             }),
         });
         if (!res.ok) {
-            let msg = "账号或密码错误";
+            let msg = i18nText("账号或密码错误");
             if (res.status !== 401) {
                 try {
                     msg = (await res.json()).error || msg;
@@ -103,7 +104,7 @@ $("login-form").addEventListener("submit", async (e) => {
         await tryEnter();
     }
     catch (_) {
-        showLogin("无法连接服务器，请稍后重试");
+        showLogin(i18nText("无法连接服务器，请稍后重试"));
     }
     finally {
         btnDone($("login-btn"));
@@ -117,3 +118,4 @@ $("btn-logout").addEventListener("click", async () => {
     localStorage.removeItem("agentbox_token");
     location.reload();
 });
+window.addEventListener("agentbox-language-change", () => setPasswordVisible($("login-pass").type === "text"));

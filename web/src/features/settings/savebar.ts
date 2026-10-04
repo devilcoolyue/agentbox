@@ -1,3 +1,4 @@
+import { setTextRender, t as i18nText } from "../../i18n.js";
 /* 系统设置的统一保存条。
  *
  * 以前每张卡片各有一个「保存」，一页五六个，只有两处会提示未保存；有的卡片
@@ -69,7 +70,7 @@ export function renderBar() {
   const dirty = dirtyGroups();
   const bar = $("set-savebar");
   bar.hidden = !dirty.length;
-  $("set-savebar-text").textContent = dirty.length ? "未保存的修改：" + dirty.map((g) => g.label).join("、") : "";
+  setTextRender($("set-savebar-text"), () => dirty.length ? i18nText("未保存的修改：") + dirty.map((g) => g.label).join("、") : "");
 }
 
 /** 合并所有改动过的组，一次提交。put 由设置页提供（负责请求、重填表单与提示）。 */
@@ -82,16 +83,16 @@ export async function saveDirty(put: (patch: SettingsPatch, okMsg: string) => Pr
     if (!part) return; // 校验没过：控件已经弹出提示，整次不提交
     Object.assign(patch, part);
   }
-  const saved = await put(patch, "已保存：" + dirty.map((g) => g.label).join("、"));
+  const saved = await put(patch, i18nText("已保存：") + dirty.map((g) => g.label).join("、"));
   if (saved) for (const g of dirty) g.done?.(saved);
 }
 
 /** 有未保存的改动时先确认；确认放弃则调 discard 还原表单。 */
-export async function confirmDiscard(discard: () => void, action = "切换分区") {
+export async function confirmDiscard(discard: () => void, action = i18nText("切换分区")) {
   const dirty = dirtyGroups();
   if (!dirty.length) return true;
-  const ok = await askConfirm(`「${dirty.map((g) => g.label).join("、")}」有未保存的修改，${action}后会丢失。`, {
-    title: "放弃未保存的修改？", okLabel: "放弃修改", icon: "undo", danger: true,
+  const ok = await askConfirm(() => i18nText("「{p0}」有未保存的修改，{p1}后会丢失。", { p0: String(dirty.map((g) => g.label).join("、")), p1: String(action) }), {
+    get title() { return i18nText("放弃未保存的修改？"); }, get okLabel() { return i18nText("放弃修改"); }, icon: "undo", danger: true,
   });
   if (ok) discard();
   return ok;

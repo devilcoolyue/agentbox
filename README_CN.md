@@ -48,7 +48,13 @@
 
 <p align="center"><a href="docs/media/agentbox-tour.mp4?raw=1"><strong>下载高清完整版 MP4</strong></a> · <a href="#界面预览">查看高清界面截图</a></p>
 
-<sub>截图按 2 倍像素密度采集；截图与演示来自实际浏览器界面，使用合成项目、对话、命令输出和用量记录，不代表模型实测效果。图中源码界面为中文，发布版本可能存在差异。</sub>
+<sub>截图按 2 倍像素密度采集；截图与演示来自实际浏览器界面，使用合成项目、对话、命令输出和用量记录，不代表模型实测效果。素材采集于多语言接入前，展示中文界面；v0.1.10 另支持繁体中文和英文。</sub>
+
+## 界面语言
+
+**网页控制台与 abox-link v0.1.10** 支持 **简体中文 · 繁體中文 · English**。可在登录页、网页用户菜单或 abox-link 面板顶部切换。默认跟随浏览器／系统语言，不支持时回退英文；主动选择后保存在当前设备。
+
+切换即时生效，保留编辑草稿与终端连接。用户内容、模型回复、终端输出和服务端原始诊断保持原文。[语言规则与桌面支持范围 →](docs/i18n.md)
 
 ## 快速开始
 
@@ -62,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 - **运行环境：** Linux x86_64 / arm64、systemd 与本机 Docker Engine。Ubuntu 22.04+ / Debian 12+ 会自动安装缺失依赖；其他发行版见[安装前提](deploy/README.md#一键安装)。
 - **打开登录：** 访问 `http://服务器IP:8180`，使用安装完成时显示的 `boxadmin` 和随机密码。直接远程访问需放行 TCP 8180；公网长期使用请配置 [HTTPS](deploy/README.md#https-与-websocket-反向代理)。
-- **服务端正式版：** [v0.1.9](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.9)。命令默认安装最新正式版；末尾加 `-s -- --version v0.1.9` 可固定版本，加 `-s -- --listen 127.0.0.1:8180` 可限制为仅本机监听。
+- **服务端正式版：** [v0.1.10](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.10)。命令默认安装最新正式版；末尾加 `-s -- --version v0.1.10` 可固定版本，加 `-s -- --listen 127.0.0.1:8180` 可限制为仅本机监听。
 - **已有部署：** 使用控制台更新入口或[升级指南](docs/releases.md#升级与回退)。安装器会保留已有部署，不覆盖安装。
 
 配置位于 `/etc/agentbox`，数据位于 `/var/lib/agentbox`。每个空间默认限制 2 GiB 内存、2 CPU，请按并发空间数准备资源。完整选项与失败恢复见[安装说明](deploy/README.md#一键安装)。
@@ -152,7 +158,7 @@ sudo ./agentbox -config config.json
 
 在项目和共享目录中浏览、编辑、上传与下载。源码视图提供语法着色、行号与全屏；可在源码与 Markdown / HTML 渲染预览之间切换，检查生成的文档和页面。
 
-[![文件浏览与源码编辑](docs/images/files.png)](docs/images/files.png)
+[![文件浏览：项目目录与文件](docs/images/files.png)](docs/images/files.png)
 
 [![工作空间中的 Markdown 文档预览](docs/images/preview.png)](docs/images/preview.png)
 
@@ -202,7 +208,7 @@ sudo ./agentbox -config config.json
 | **abox-link** | 让云端空间访问白名单内的内网服务 | 可选工具；Windows、macOS、Linux 本机面板或无头命令行 |
 | **HTTP / WebSocket API** | 脚本管理空间、查询用量 | [API 文档](docs/api.md) |
 
-桌面应用提供 Mac Apple Silicon、Mac Intel 和 Windows x64 安装包，连接已有服务端，不替代或升级服务端。v0.1.8 服务端提供基础模式；v0.1.9 增加项目终端、配对和同步后端。**同步默认关闭，需管理员显式启用。** 桌面 0.1.2 需手动下载安装，macOS 未公证、Windows 未签名，尚未启用自动更新。源码、配置和验收范围见[对应版本的桌面指南](https://github.com/devilcoolyue/agentbox/blob/v0.1.9/desktop/README.md)。
+桌面应用提供 Mac Apple Silicon、Mac Intel 和 Windows x64 安装包，连接已有服务端，不替代或升级服务端。v0.1.8 服务端提供基础模式；v0.1.9 增加项目终端、配对和同步后端。**同步默认关闭，需管理员显式启用。** 桌面 0.1.2 需手动下载安装，macOS 未公证、Windows 未签名，尚未启用自动更新。本次服务端发布不更新桌面安装包：已发布的 Desktop 0.1.2 不含多语言界面，当前桌面源码已接入。源码、配置和验收范围见[桌面指南](desktop/README.md)。
 
 可选的[远程浏览器镜像](docs/remote-browser.md)还能在空间中提供完整浏览器桌面，保留网站登录状态，支持剪贴板和下载。网页登录与 CLI 授权独立，需要管理员选用带浏览器的镜像。
 
@@ -228,6 +234,7 @@ sudo ./agentbox -config config.json
 | 访问内网服务 | [代理与 abox-link](docs/networking.md) |
 | 安装、升级、备份与恢复 | [部署手册](deploy/README.md) · [版本发布](docs/releases.md) · [CLI 兼容性](docs/compatibility.md) |
 | 配置服务端或接入脚本 | [配置参考](docs/configuration.md) · [API 文档](docs/api.md) |
+| 选择界面语言 | [语言与偏好](docs/i18n.md) |
 | 排查错误 | [常见问题](docs/troubleshooting.md) |
 | 参与开发 | [开发指南](docs/development.md) · [贡献说明](CONTRIBUTING.md) |
 

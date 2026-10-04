@@ -1,6 +1,7 @@
+import { t as i18nText, setTextRender } from "./i18n.js";
 import { S, bus } from "./state.js";
 import { $ } from "./util.js";
-import { decorateIcons } from "./icons.js";
+import { decorateIcons, buttonLabel } from "./icons.js";
 import { enhanceSelects } from "./select.js";
 const panels = new Set();
 let clearing = false;
@@ -12,8 +13,12 @@ export function createGitSurface(title, markup) {
     const scroll = host.scrollTop;
     const d = document.createElement(inline ? "section" : "dialog");
     d.className = inline ? "git-surface" : "dlg-git-connections";
-    d.innerHTML = `<div class="dlg-head"><h2></h2><button type="button" class="btn btn-sm btn-ghost" data-close data-icon="${inline ? "arrow-left" : "close"}">${inline ? "返回" : "关闭"}</button></div>` + markup;
-    d.querySelector("h2").textContent = title;
+    d.innerHTML = `<div class="dlg-head"><h2></h2><button type="button" class="btn btn-sm btn-ghost" data-close data-icon="${inline ? "arrow-left" : "close"}">${inline ? i18nText("返回") : i18nText("关闭")}</button></div>` + markup;
+    if (typeof title === "function")
+        setTextRender(d.querySelector("h2"), title);
+    else
+        d.querySelector("h2").textContent = title;
+    buttonLabel(d.querySelector("[data-close]"), () => inline ? i18nText("返回") : i18nText("关闭"), inline ? "arrow-left" : "close");
     if (inline) {
         Object.defineProperty(d, "open", { get: () => d.isConnected });
         d.close = () => {

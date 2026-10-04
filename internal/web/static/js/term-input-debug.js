@@ -1,6 +1,7 @@
 /* 终端输入诊断（默认关闭）：地址带 ?imedebug 时，记录 xterm 输入框收到的键盘、组字与输入
  * 事件，以及最终发往 PTY 的数据，点「上传」存进共享目录的附件区（/shared/.file/），用来排查
  * 移动端输入法在真机上的事件顺序。只在开启期间记录（会包含这期间输入的字符），不自动上传。 */
+import { t as i18nText } from "./i18n.js";
 "use strict";
 import { S } from "./state.js";
 import { $, toast } from "./util.js";
@@ -48,24 +49,24 @@ export function attachTermInputDebug(host, ta) {
     }
     const box = document.createElement("div");
     box.className = "term-input-debug";
-    const label = Object.assign(document.createElement("span"), { textContent: "输入诊断 · " });
+    const label = Object.assign(document.createElement("span"), { textContent: i18nText("输入诊断 · ") });
     count = Object.assign(document.createElement("b"), { textContent: "0" });
-    label.append(count, " 条");
+    label.append(count, i18nText(" 条"));
     const button = (text, fn) => {
         const b = Object.assign(document.createElement("button"), { type: "button", className: "btn btn-sm", textContent: text });
         b.addEventListener("click", fn);
         return b;
     };
-    box.append(label, button("清空", () => { log.length = 0; push({ ev: "clear" }); }), button("上传", async () => {
+    box.append(label, button(i18nText("清空"), () => { log.length = 0; push({ ev: "clear" }); }), button(i18nText("上传"), async () => {
         if (!S.current)
             return;
         const body = JSON.stringify({ ua: navigator.userAgent, at: new Date().toISOString(), events: log }, null, 1);
         try {
             const res = await uploadAttachment(new File([body], "term-input.txt", { type: "text/plain" }));
-            toast("已上传：" + res.path);
+            toast(i18nText("已上传：") + res.path);
         }
         catch (e) {
-            toast("上传失败：" + e.message, true);
+            toast(i18nText("上传失败：") + e.message, true);
         }
     }));
     $("tab-term").append(box);

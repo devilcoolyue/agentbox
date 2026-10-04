@@ -1,0 +1,23 @@
+Microsoft Edge WebView2 Runtime
+
+The full Windows Agentbox installer includes Microsoft's Evergreen WebView2
+Runtime Standalone Installer for offline first installation when the runtime
+is absent. The Runtime and its installer are Microsoft proprietary software,
+not part of Agentbox's Apache-2.0 license or its open-source dependency inventory.
+
+Microsoft's applicable Runtime license terms and notices govern this component.
+The unmodified Microsoft-signed installer includes the Microsoft distribution;
+do not treat Agentbox's open-source license inventory as granting Runtime rights.
+Microsoft provides the Runtime downloads and applicable terms at:
+https://developer.microsoft.com/en-us/microsoft-edge/webview2/
+
+Official deployment and licensing information:
+https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution
+
+The Evergreen Runtime is shared with other applications and receives Microsoft's
+updates when connectivity is available. Uninstalling Agentbox does not uninstall
+this shared Runtime. Offline bundling supplies installation bytes; it does not
+freeze the Runtime version or provide future security updates while offline.
+
+The release audit records the actual bundled Microsoft installer SHA-256,
+Microsoft Authenticode signature, source URL, architecture selection and size.

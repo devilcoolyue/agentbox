@@ -1,0 +1,18 @@
+{
+  "name": "defmt-parser",
+  "version": "1.0.0",
+  "license": "MIT OR Apache-2.0",
+  "commit": "4a8cdb44891ed57b8ff5a023b6bec7137c48708f",
+  "files": [
+    {
+      "file": "LICENSE-MIT",
+      "url": "https://raw.githubusercontent.com/knurling-rs/defmt/4a8cdb44891ed57b8ff5a023b6bec7137c48708f/LICENSE-MIT",
+      "sha256": "2710a622a896bba67356913d4d0492cab5465f61b2ecce6d880aeb483834fb50"
+    },
+    {
+      "file": "LICENSE-APACHE",
+      "url": "https://raw.githubusercontent.com/knurling-rs/defmt/4a8cdb44891ed57b8ff5a023b6bec7137c48708f/LICENSE-APACHE",
+      "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+    }
+  ]
+}

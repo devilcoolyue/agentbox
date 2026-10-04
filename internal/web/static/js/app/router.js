@@ -1,3 +1,4 @@
+import { t as i18nText } from "../i18n.js";
 import { S, bus, emit } from "../state.js";
 import { openHome, openSession } from "../sessions.js";
 import { SET_SECS } from "../settings.js";
@@ -55,7 +56,7 @@ export function initRouter() {
                 }
                 else {
                     openHome();
-                    toast("该工作空间不存在或无权访问", true);
+                    toast(i18nText("该工作空间不存在或无权访问"), true);
                 }
             }
             else {

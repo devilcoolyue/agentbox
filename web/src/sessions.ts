@@ -1,3 +1,4 @@
+import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* sessions：会话的打开/切换、生命周期（启动/停止/删除，含窄屏 ⋯ 菜单）、
  * 新建会话弹窗、工作台标签页。 */
 "use strict";
@@ -83,8 +84,8 @@ export function renderHead() {
   const state = sessionState(sess);
   const pill = $("wb-state");
   pill.className = "state-pill " + state.cls;
-  pill.textContent = state.label;
-  setTip(pill, state.tip);
+  setTextRender(pill, () => sessionState(sess).label);
+  setTip(pill, () => sessionState(sess).tip);
   if (!S.actionBusy) { // 启动/停止执行中由按钮自己管理，轮询刷新不得把另一个按钮换回来
     $("btn-start").classList.toggle("hidden", running);
     $("btn-stop").classList.toggle("hidden", !running);
@@ -137,11 +138,11 @@ async function doStart() {
   const s = S.current; if (!s || S.actionBusy) return;
   S.actionBusy = true;
   wbBusy("start");
-  btnBusy($("btn-start"), "启动中…");
+  btnBusy($("btn-start"), () => i18nText("启动中…"));
   try {
     const res = await api<Session>(`/sessions/${s.id}/start`, { method: "POST" });
     if (S.current && S.current.id === s.id) S.current = res; // 期间切换了会话则不覆盖
-  } catch (e) { toast("启动失败：" + (e as Error).message, true); }
+  } catch (e) { toast(i18nText("启动失败：") + (e as Error).message, true); }
   S.actionBusy = false;
   wbIdle();
   btnDone($("btn-start"));
@@ -152,13 +153,13 @@ async function doStop() {
   const s = S.current; if (!s || S.actionBusy) return;
   S.actionBusy = true;
   wbBusy("stop");
-  btnBusy($("btn-stop"), "停止中…");
+  btnBusy($("btn-stop"), () => i18nText("停止中…"));
   try {
     const res = await api<Session>(`/sessions/${s.id}/stop`, { method: "POST" });
     if (S.current && S.current.id === s.id) S.current = res;
     browserDisconnect();
     termDisconnect(); // 容器停了收掉连接，但保留终端画面
-  } catch (e) { toast("停止失败：" + (e as Error).message, true); }
+  } catch (e) { toast(i18nText("停止失败：") + (e as Error).message, true); }
   S.actionBusy = false;
   wbIdle();
   btnDone($("btn-stop"));
@@ -167,7 +168,7 @@ async function doStop() {
 
 function openDeleteDlg() {
   if (!S.current) return;
-  $("del-text").textContent = `确认删除工作空间「${S.current.name}」？空间将从列表移除，容器被删除。文件、配置和对话记录默认保留在服务器磁盘上。`;
+  setText($("del-text"), "确认删除工作空间「{p0}」？空间将从列表移除，容器被删除。文件、配置和对话记录默认保留在服务器磁盘上。", { p0: String(S.current.name) });
   $<HTMLInputElement>("del-purge").checked = false;
   syncDeleteLabel();
   $<HTMLDialogElement>("dlg-del").showModal();
@@ -176,7 +177,7 @@ function openDeleteDlg() {
 /* 勾选「同时清除」后按钮写明后果，不让同一个「删除」承担两种轻重 */
 function syncDeleteLabel() {
   const purge = $<HTMLInputElement>("del-purge").checked;
-  actionButton($("del-ok"), purge ? "删除并清除文件" : "删除", "trash");
+  actionButton($("del-ok"), () => purge ? i18nText("删除并清除文件") : i18nText("删除"), "trash");
 }
 $("del-purge").addEventListener("change", syncDeleteLabel);
 
@@ -190,11 +191,11 @@ function sessionMenu(withPower: boolean): MenuItem[] {
   if (!s) return [];
   const running = s.status === "running";
   return [
-    { label: "启动", icon: "play", run: doStart, hidden: !withPower || running, disabled: S.actionBusy },
-    { label: "停止", icon: "stop", run: doStop, hidden: !withPower || !running, disabled: S.actionBusy, tip: "停止工作空间，保留文件与对话" },
-    { label: "查看账号额度", icon: "gauge", run: openAcctUsage, hidden: agentKey(s.agent) !== "claude", sep: true, tip: "该账号订阅的 5 小时 / 每周用量窗口" },
-    { label: "重命名", icon: "rename", run: renameSession, sep: agentKey(s.agent) !== "claude" },
-    { label: "删除工作空间…", icon: "trash", danger: true, sep: true, run: openDeleteDlg, disabled: S.actionBusy },
+    { label: i18nText("启动"), icon: "play", run: doStart, hidden: !withPower || running, disabled: S.actionBusy },
+    { label: i18nText("停止"), icon: "stop", run: doStop, hidden: !withPower || !running, disabled: S.actionBusy, tip: i18nText("停止工作空间，保留文件与对话") },
+    { label: i18nText("查看账号额度"), icon: "gauge", run: openAcctUsage, hidden: agentKey(s.agent) !== "claude", sep: true, tip: i18nText("该账号订阅的 5 小时 / 每周用量窗口") },
+    { label: i18nText("重命名"), icon: "rename", run: renameSession, sep: agentKey(s.agent) !== "claude" },
+    { label: i18nText("删除工作空间…"), icon: "trash", danger: true, sep: true, run: openDeleteDlg, disabled: S.actionBusy },
   ];
 }
 bindMenu($("btn-wb-more"), () => sessionMenu(false));
@@ -203,14 +204,14 @@ bindMenu($("btn-kebab"), () => sessionMenu(true));
 async function renameSession() {
   const sess = S.current; if (!sess) return;
   const name = await askPrompt({
-    title: "重命名工作空间",
-    label: "工作空间名称",
+    get title() { return i18nText("重命名工作空间"); },
+    get label() { return i18nText("工作空间名称"); },
     value: sess.name,
-    hint: "1–64 个字符，仅修改空间名称，文件与对话记录保留。",
+    get hint() { return i18nText("1–64 个字符，仅修改空间名称，文件与对话记录保留。"); },
     validate: (v) => {
       const t = v.trim();
-      if (!t) return "名称不能为空";
-      if ([...t].length > 64) return "名称最多 64 个字符";
+      if (!t) return i18nText("名称不能为空");
+      if ([...t].length > 64) return i18nText("名称最多 64 个字符");
       return "";
     },
   });
@@ -225,8 +226,8 @@ async function renameSession() {
     renderHead();
     renderSidebar();
     refreshAll();
-    toast("工作空间已重命名");
-  } catch (e) { toast("重命名失败：" + (e as Error).message, true); }
+    toast(i18nText("工作空间已重命名"));
+  } catch (e) { toast(i18nText("重命名失败：") + (e as Error).message, true); }
 }
 
 $("del-cancel").addEventListener("click", () => $<HTMLDialogElement>("dlg-del").close());
@@ -237,7 +238,7 @@ $("del-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const s = S.current; if (!s || delBusy) return;
   delBusy = true;
-  btnBusy($("del-ok"), "删除中…");
+  btnBusy($("del-ok"), () => i18nText("删除中…"));
   $<HTMLButtonElement>("del-cancel").disabled = true;
   $<HTMLButtonElement>("del-close").disabled = true;
   const purge = $<HTMLInputElement>("del-purge").checked ? "?purge=1" : "";
@@ -252,7 +253,7 @@ $("del-form").addEventListener("submit", async (e) => {
     renderHome();
     emit("navigation-changed");
     refreshAll();
-  } catch (err) { toast("删除失败：" + (err as Error).message, true); }
+  } catch (err) { toast(i18nText("删除失败：") + (err as Error).message, true); }
   delBusy = false;
   btnDone($("del-ok"));
   $<HTMLButtonElement>("del-cancel").disabled = false;
@@ -293,14 +294,14 @@ $("btn-new").addEventListener("click", async () => {
   $<HTMLDialogElement>("dlg-new").showModal();
   const token = S.token;
   const picker = $<HTMLSelectElement>("new-git-connection");
-  picker.replaceChildren(Object.assign(document.createElement("option"), {value:"",textContent:"不绑定"}));
+  picker.replaceChildren(Object.assign(document.createElement("option"), {value:"",textContent:i18nText("不绑定")}));
   picker.disabled = true;
   try {
     const [cs, def] = await Promise.all([api<GitConnection[]>("/git/connections"),api<{connection_id:string}>("/me/git/default")]);
     if (token !== S.token || !$<HTMLDialogElement>("dlg-new").open) return;
     for (const c of cs) if (c.enabled) picker.append(Object.assign(document.createElement("option"),{value:c.id,textContent:c.label}));
     setSelectValue(picker,def.connection_id);
-  } catch (e) { if(token === S.token) toast("读取 Git 连接失败，可选择不绑定后创建："+(e as Error).message,true); }
+  } catch (e) { if(token === S.token) toast(i18nText("读取 Git 连接失败，可选择不绑定后创建：")+(e as Error).message,true); }
   finally { picker.disabled = false; }
 });
 $("new-cancel").addEventListener("click", () => $<HTMLDialogElement>("dlg-new").close());
@@ -316,13 +317,13 @@ function fillAccountSelect() {
   for (const a of S.accounts.filter((x) => x.type === agent)) {
     const o = document.createElement("option");
     o.value = a.id;
-    o.textContent = `${a.label}（${a.sessions} 个工作空间在用）`;
+    setText(o, "{p0}（{p1} 个工作空间在用）", { p0: String(a.label), p1: String(a.sessions) });
     sel.appendChild(o);
   }
   if (!sel.children.length) {
     const o = document.createElement("option");
     o.value = "";
-    o.textContent = "该类型下没有可用账号";
+    setText(o, "该类型下没有可用账号");
     sel.appendChild(o);
   }
 }
@@ -336,7 +337,7 @@ $("new-form").addEventListener("submit", async (e) => {
     account_id: $<HTMLSelectElement>("new-account").value,
     git_connection_id: $<HTMLSelectElement>("new-git-connection").value,
   };
-  btnBusy($("new-ok"), "创建中…");
+  btnBusy($("new-ok"), () => i18nText("创建中…"));
   $<HTMLButtonElement>("new-cancel").disabled = true;
   try {
     const sess = await api<Session>("/sessions", { method: "POST", body: JSON.stringify(body) });

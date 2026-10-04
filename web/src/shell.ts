@@ -1,3 +1,4 @@
+import { htmlText as trHTML, setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
 /* shell：应用外壳 —— 抽屉、主区视图切换（工作台/设置）、顶栏标题、侧栏渲染。
  * 点击会话卡片 / 系统设置入口通过 bus 广播，由 sessions.js / settings.js 接管，
  * 保持 shell 不反向依赖任何功能模块。 */
@@ -32,11 +33,11 @@ function cancelUserMenuClose() {
 }
 
 function renderUserMenu() {
-  const role = S.role === "admin" ? "管理员" : "普通用户";
+  const role = () => S.role === "admin" ? i18nText("管理员") : i18nText("普通用户");
   $("sidebar-user-name").textContent = S.user;
-  $("sidebar-user-role").textContent = role;
+  setTextRender($("sidebar-user-role"), role);
   $("side-user-label").textContent = S.user;
-  userButton.setAttribute("aria-label", `${S.user} · ${role}，用户菜单`);
+  setAttrRender(userButton, "aria-label", () => i18nText("{p0} · {p1}，用户菜单", { p0: String(S.user), p1: String(role()) }));
 }
 
 function closeUserMenu(restoreFocus = false) {
@@ -111,7 +112,7 @@ function syncSidebar() {
   main.inert = topbar.inert = open;
   $("btn-menu").setAttribute("aria-expanded", String(open));
   const collapsed = !narrowMQ.matches && document.documentElement.dataset.sidebarCollapsed === "true";
-  const label = narrowMQ.matches ? "关闭菜单" : collapsed ? "展开侧栏" : "收起侧栏";
+  const label = narrowMQ.matches ? i18nText("关闭菜单") : collapsed ? i18nText("展开侧栏") : i18nText("收起侧栏");
   toggle.setAttribute("aria-expanded", String(narrowMQ.matches ? open : !collapsed));
   toggle.setAttribute("aria-label", label);
   setTip(toggle, label);
@@ -161,7 +162,7 @@ syncSidebar();
 /* ---- 顶栏：设置视图显示标题，工作台视图显示 状态灯+会话名+⋯菜单 ---- */
 
 const VIEW_TITLE: Record<string, string> = {
-  git: "Git 管理", settings: "系统设置", usage: "使用记录", tunnel: "内网隧道",
+  get git() { return i18nText("Git 管理"); }, get settings() { return i18nText("系统设置"); }, get usage() { return i18nText("使用记录"); }, get tunnel() { return i18nText("内网隧道"); },
 };
 
 export function updateTopbarTitle() {
@@ -216,8 +217,8 @@ export function renderSidebar() {
   if (!S.sessions.length) {
     const p = document.createElement("p");
     p.className = "session-empty";
-    p.innerHTML = '<span class="session-empty-icon" aria-hidden="true">—</span><span class="session-empty-text">还没有工作空间，点击上方新建。</span>';
-    setTip(p, "还没有工作空间，点击上方新建");
+    p.innerHTML = `<span class="session-empty-icon" aria-hidden="true">—</span><span class="session-empty-text"><span data-i18n="还没有工作空间，点击上方新建。">${trHTML("还没有工作空间，点击上方新建。")}</span></span>`;
+    setTip(p, () => i18nText("还没有工作空间，点击上方新建"));
     list.appendChild(p);
   }
   for (const sess of S.sessions) {
@@ -228,10 +229,9 @@ export function renderSidebar() {
     card.dataset.sessionId = sess.id;
     if (active) card.setAttribute("aria-current", "page");
     const state = sessionState(sess);
-    const status = state.label;
     card.classList.add("st-" + state.cls);
-    card.setAttribute("aria-label", `${sess.name}（${agentName(sess.agent)}，${status}）`);
-    setTip(card, `${sess.name}\n${sess.account_label} · ${agentName(sess.agent)} · ${status}\n#${sess.id}`);
+    setAttrRender(card, "aria-label", () => `${sess.name} (${agentName(sess.agent)}, ${sessionState(sess).label})`);
+    setTip(card, () => `${sess.name}\n${sess.account_label} · ${agentName(sess.agent)} · ${sessionState(sess).label}\n#${sess.id}`);
     const av = agentAvatar(sess.agent, { led: true });
     if (sess.status === "running") av.querySelector(".led")!.classList.add("on");
     // 收起侧栏时只剩头像，同一种 Agent 的空间图标一模一样：改显示空间名首字
@@ -254,7 +254,7 @@ export function renderSidebar() {
     if (state.cls !== "off") {
       const st = document.createElement("span");
       st.className = "sc-state " + state.cls;
-      st.textContent = state.label;
+      setTextRender(st, () => sessionState(sess).label);
       meta.append(document.createTextNode(" · "), st);
     }
     card.append(av, body);
