@@ -31,8 +31,11 @@ Chat, terminal, files, and code review share one persistent workspace.
 ## Why agentbox?
 
 The optional Windows/macOS client in [`desktop/`](desktop/README.md) provides unsigned test packages.
-Older servers support login, workspace selection, the shared terminal and manual file transfers.
-Extended servers add pairing, logical projects, independent AI/shell tabs, local directory mappings,
+The [Desktop 0.1.2 public test release](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)
+is available for Mac Apple Silicon, Mac Intel and Windows x64, with checksums and third-party notices.
+It requires manual installation; application updates are not enabled in this unsigned build.
+Existing servers, including v0.1.8, support login, workspace selection, the shared terminal and manual file transfers.
+Servers built from the current desktop integration source add pairing, logical projects, independent AI/shell tabs, local directory mappings,
 sync previews, per-file conflict handling and continuous synchronization while preserving workspace
 account rules. The client follows the existing web console's branding, icons, themes and interaction patterns.
 The header and sidebar show server workspace state, while the terminal toolbar shows its connection state.

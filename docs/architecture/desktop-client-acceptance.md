@@ -21,7 +21,33 @@
 “自动化通过”不替代最后一列。默认测试中有明确 opt-in/ignored 的用例，只有设置实际资源并
 单独运行成功才计入证据；不会把跳过或设置声明记为实机通过。
 
-## 最终候选验证
+## 0.1.2 公开测试版验证
+
+版本 **0.1.2**，源码提交 `96149c57625734d1337f73b5265d6070891585a9`，
+[GitHub Actions run 37186392972](https://github.com/devilcoolyue/agentbox/actions/runs/37186392972)。
+该 run 的六项任务全部为 `success`；以下为 0.1.2 的独立结果，不沿用下方 0.1.1 的证据。
+
+| 任务 | 本次 job | 验收状态 |
+| --- | --- | --- |
+| Mac ARM64 构建、安装探针、原生界面和故障恢复 | 111389099672 | 通过 |
+| Mac Intel 构建、安装探针、原生界面和故障恢复 | 111389099668 | 通过 |
+| Windows x64 构建、NSIS 安装/诊断/卸载、原生界面 | 111389099671 | 通过 |
+| Windows→WSL2 Linux 真实同步和终止恢复 | 111389099706 | 通过 |
+| 冻结旧服务端、网页和 abox-link 兼容 | 111389099577 | 通过 |
+| Linux 真实 ENOSPC 和 SIGKILL 恢复 | 111389099776 | 通过 |
+
+59 项前端测试全部通过，其中新增 11 项空间刷新并发/生命周期回归。
+0.1.2 原生界面增加空间状态刷新回归，覆盖共享终端及项目终端连接后的顶部/侧栏状态一致性。
+正常安装包与独立 smoke 构建的原生界面测试仍分别记录；后者不是用户下载的应用。
+已公开的 [desktop-v0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)
+为未签名预发布，三平台正常安装包附 `SHA256SUMS`、`provenance.json` 和 `THIRD_PARTY_NOTICES.txt`。
+六份远端附件的大小和 SHA-256 均与本地原文件一致；安装包不包含 smoke 测试构建。
+发布前使用 gitleaks v8.24.3 扫描已获取 refs 的历史、跟踪源码，以及三架构解包后的自有
+程序/sidecar 字符串和许可资源，均为 0 项命中。这项扫描不覆盖微软专有 Runtime；后者由 CI
+单独核对官方来源字节和有效的 Microsoft Authenticode，不据此作全面安全声明。
+正式签名、公证、最低系统、真实物理交互以及缺失 WebView2 的离线 Windows 仍不在已验收范围内。
+
+## 0.1.1 历史候选验证
 
 版本 **0.1.1**，源码提交 `926690df08edd84ab67bf67a805d526538c8eaed`，
 [GitHub Actions run 37183406848](https://github.com/devilcoolyue/agentbox/actions/runs/37183406848)。

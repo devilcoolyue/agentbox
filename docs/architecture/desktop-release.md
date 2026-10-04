@@ -1,7 +1,26 @@
 # 桌面候选包、更新通道与验收
 
-0.1.1 未签名测试版的三平台自动化验收、候选来源和仍需外部资源的发布条件见
-[开发验收表](desktop-client-acceptance.md)。下面保留构建、签名及正式发布的操作约定。
+## 0.1.2 未签名公开测试版
+
+已手动公开发布 [desktop-v0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)，
+源码固定为 `96149c57625734d1337f73b5265d6070891585a9`，候选来自
+[run 37186392972](https://github.com/devilcoolyue/agentbox/actions/runs/37186392972)。
+该 run 的六项任务已全部通过，含 59 项前端测试；六份远端附件的大小和 SHA-256 均与本地原文件一致，
+安装包为正常应用构建，不包含 smoke 测试构建。
+Release（ID `402907654`）使用 `prerelease=true`，发布命令显式指定 `--latest=false`。
+发布前后确认服务端 `releases/latest` 均为 `v0.1.8`（Release ID `401867374`），
+冻结旧安装器的发布前解析通过；原服务端稳定发布未被替换。
+本版不发布或修改 `desktop-stable/latest.json`，应用内自动更新未启用，用户手动下载安装。
+
+附件为 `Agentbox-0.1.2-macos-arm64.dmg`、`Agentbox-0.1.2-macos-intel.dmg`、
+`Agentbox-0.1.2-windows-x64.exe`，以及 `SHA256SUMS`、`provenance.json`、`THIRD_PARTY_NOTICES.txt`。
+Mac 仅使用 ad-hoc 签名，未完成 Developer ID 签名和公证；Windows 无 Authenticode 签名。
+该预发布不改变生产服务端或同步开关，不代表最低系统、实体设备交互和正式签名升级已经验收。
+精确验收范围与独立保留的 0.1.1 历史证据见[开发验收表](desktop-client-acceptance.md)。
+
+本次附件用于手动安装，不包含签名更新清单和 Mac `.app.tar.gz`，不能直接传给下面的
+`previous_tag` 下载探针；后续升级测试需使用匹配的旧包准备流程，不能伪造更新签名。
+下面保留构建、签名及正式发布的操作约定。
 
 桌面与 Linux 服务端独立构建。桌面版本标签为 `desktop-vX.Y.Z`；稳定更新清单位于
 `https://github.com/devilcoolyue/agentbox/releases/download/desktop-stable/latest.json`。

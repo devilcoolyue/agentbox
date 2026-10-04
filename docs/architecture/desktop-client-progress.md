@@ -1,5 +1,22 @@
 # 桌面客户端实施记录
 
+## 2026-10-04：发布 Desktop 0.1.2 公开测试版
+
+已将本次新增桌面客户端发布到 GitHub Releases：
+[desktop-v0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)（Release ID `402907654`）。
+固定源码为 `96149c57625734d1337f73b5265d6070891585a9`，三平台原始包来自
+[run 37186392972](https://github.com/devilcoolyue/agentbox/actions/runs/37186392972)。六项 CI 均已通过，
+包括三平台构建/安装/原生界面、服务端兼容、Windows→Linux 同步及 Linux 故障恢复，含 59 项前端测试。
+Mac ARM64、Mac Intel、Windows x64 正常安装包随附校验和、来源记录与第三方许可说明，
+共六份附件，远端文件大小和 SHA-256 与本地一致；安装包不包含 smoke 测试构建。
+发布前对源码历史、跟踪源码与三架构自有制品运行 gitleaks v8.24.3，0 项命中；
+扫描范围和微软 Runtime 的独立验证见开发验收表。
+发布按未签名预发布处理，显式 `prerelease=true`、`--latest=false`；
+不修改 `desktop-stable` 更新清单，本版手动下载安装。
+发布前后服务端 `releases/latest` 均为 `v0.1.8`（Release ID `401867374`），
+冻结旧安装器的发布前解析通过，桌面预发布未替换原服务端稳定入口。
+本次不部署生产服务端，也不打开默认关闭的同步入口。0.1.1 的历史验证记录保持原样。
+
 ## 2026-10-04：0.1.2 修复工作空间运行状态滞后
 
 用户实测发现兼容模式终端已连接且CLI正常显示，顶部及侧栏仍显示登录时的stopped快照。

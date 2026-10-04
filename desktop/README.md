@@ -1,8 +1,15 @@
-# Agentbox Desktop（未签名测试版）
+# Agentbox Desktop 0.1.2（未签名公开测试版）
 
-同仓库、独立构建的 Windows/macOS 客户端。目前实现旧服务端基础连接：用户名/密码登录、
+[0.1.2 下载与发布说明](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)：
+已提供 Mac Apple Silicon、Mac Intel 和 Windows x64 安装包，以及 `SHA256SUMS`、`provenance.json`
+和 `THIRD_PARTY_NOTICES.txt`。这是独立桌面预发布，不替换服务端稳定版本。
+Mac 使用 ad-hoc 签名、未公证；Windows 没有 Authenticode 签名，系统可能提示未知发布者。
+本版需要手动下载安装，应用内更新未启用。
+
+同仓库、独立构建的 Windows/macOS 客户端。现有服务端（含稳定版 v0.1.8）提供基础连接：用户名/密码登录、
 系统凭证库保存/恢复、工作空间列表、共享终端、重连、搜索、字号和主题。
-连接当前开发版服务端还支持配对登录、逻辑项目管理、独立 AI/Shell 多终端标签。
+连接从当前桌面集成源码构建的扩展服务端，还支持配对登录、逻辑项目管理、独立 AI/Shell 多终端标签。
+下载安装桌面包不会升级服务端；扩展入口按服务端声明的能力显示。
 可通过系统文件夹选择器检查本地目录的扫描结果与跨平台名称兼容性。附件粘贴、手动文件传输、同步
 预览与持续同步已接入；服务端默认仍为 `sync=0`。管理员可显式配置同步入口，独立恢复记录
 与清理按各自能力显示。
@@ -11,8 +18,9 @@
 与[开发验收表](../docs/architecture/desktop-client-acceptance.md)；历史过程见
 [实施记录](../docs/architecture/desktop-client-progress.md)。
 
-0.1.1 的 Mac ARM64、Mac Intel、Windows x64 未签名包已通过三平台CI构建与自动化验收；
-对应源码、安装/原生界面的覆盖范围及剩余发布条件均记录在开发验收表中。
+0.1.2 的 Mac ARM64、Mac Intel、Windows x64 构建与自动化验收，以及服务端兼容、
+Windows→Linux 同步和 Linux 故障恢复六项 CI 均已通过，含 59 项前端测试。
+精确源码与运行记录见开发验收表；0.1.1 的历史证据单独保留。
 0.1.2 修复终端已连接时顶部/侧栏仍显示“已停止”的旧快照问题：连接状态变化触发空间刷新，
 窗口可见时每5秒轮询，重新切回窗口即时核对。状态以服务端为准，刷新保留现有终端连接；
 并发请求合并并补读，退出登录后丢弃旧账号结果。
@@ -214,7 +222,7 @@ AGENTBOX_SYNC_SMOKE_BINARY="$PWD/desktop/src-tauri/target/debug/bundle/macos/Age
 开发包更新公钥为空时，界面明确显示未配置更新。正式包使用独立桌面清单、签名且绑定版本的
 更新资源；启动时自动检查需要用户启用，安装需二次确认。凭证不发送到 GitHub 更新接口。
 三架构候选流水线、签名 secrets、许可证清单及安装探针见
-[桌面发布与验收](../docs/architecture/desktop-release.md)。目前未执行正式签名、公证或公开发布。
+[桌面发布与验收](../docs/architecture/desktop-release.md)。正式签名、公证仍待验收；本测试版不启用自动更新。
 
 
 ## 目录手动上传与后台同步
