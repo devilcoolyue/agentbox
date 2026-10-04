@@ -30,6 +30,7 @@ jobs:
             bundles: nsis
             executable: agentbox-desktop.exe
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: desktop
