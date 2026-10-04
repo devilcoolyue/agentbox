@@ -7,7 +7,7 @@ required. GUI preferences, credentials and the updater installation path are not
 exercised; sync state is explicitly passed to the bundled private sidecar.
 """
 import argparse
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timedelta, timezone
 import hashlib
 import importlib.util
@@ -312,7 +312,7 @@ def sidecar_command(sidecar, state, server, kind, **fields):
 
 
 def state_snapshot(state):
-    with sqlite3.connect(state / 'sync.db') as database:
+    with closing(sqlite3.connect(state / 'sync.db')) as database, database:
         if database.execute('PRAGMA integrity_check').fetchone() != ('ok',):
             raise ValueError('Sync state failed SQLite integrity check')
         return {'schema': database.execute('PRAGMA user_version').fetchone()[0], **{name: database.execute(f'SELECT * FROM {name} ORDER BY 1,2').fetchall() for name in ('metadata', 'bindings', 'batches')}}

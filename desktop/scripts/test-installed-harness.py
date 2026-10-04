@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Upgrade-harness regression checks; optional real bundled sidecar integration."""
 import argparse
+from contextlib import closing
 import copy
 import hashlib
 import importlib.util
@@ -194,13 +195,13 @@ class UpgradeHarnessTests(unittest.TestCase):
             state, local, binding_id, original = probe.seed_state(SIDECAR, root, server)
             # This is deliberately a synthetic schema-4 migration fixture, not
             # evidence that an actual previous desktop package was installed.
-            with sqlite3.connect(state / 'sync.db') as database:
+            with closing(sqlite3.connect(state / 'sync.db')) as database, database:
                 database.execute('PRAGMA user_version=4')
             before = probe.state_snapshot(state)
             result = probe.verify_retention(SIDECAR, state, local, binding_id, before, server)
             self.assertEqual(result['schema_after'], original['schema'])
             self.assertTrue(result['schema_migrated'])
-            with sqlite3.connect(state / 'sync.db') as database:
+            with closing(sqlite3.connect(state / 'sync.db')) as database, database:
                 database.execute("UPDATE metadata SET value=? WHERE key='device'", ('b' * 32,))
             with self.assertRaisesRegex(ValueError, 'device, binding, baseline or history'):
                 probe.verify_retention(SIDECAR, state, local, binding_id, before, server)
