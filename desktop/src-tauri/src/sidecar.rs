@@ -318,6 +318,15 @@ impl Sidecar {
         let _ = self.stop_with_grace(Duration::from_secs(3)).await;
     }
 
+    // Updates must know the old executable is no longer in use before handing
+    // its bundle to an installer. Ordinary cancellation still uses best effort.
+    pub async fn stop_for_update(self) -> Result<()> {
+        self.stop_with_grace(Duration::from_secs(3))
+            .await
+            .ok_or_else(|| Error::new("sidecar_stop", "后台尚未确认退出，请稍后重新检查更新"))?;
+        Ok(())
+    }
+
     async fn stop_with_grace(mut self, grace: Duration) -> Option<std::process::ExitStatus> {
         drop(self.input);
         // EOF cancels inspection and lets Go close its pinned handles. On macOS

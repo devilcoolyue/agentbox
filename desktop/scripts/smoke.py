@@ -95,7 +95,8 @@ def stop_owned_application(binary, report):
 
 
 def print_diagnostics(report):
-    for suffix, label in (('.stages', 'Completed smoke stages'), ('.window.jsonl', 'Native window diagnostics')):
+    for suffix, label in (('.stages', 'Completed smoke stages'), ('.timings.jsonl', 'Smoke stage elapsed milliseconds'),
+                          ('.window.jsonl', 'Native window diagnostics')):
         path = report.with_suffix(suffix)
         print(label + ':', path.read_text(encoding='utf-8')[-16384:] if path.exists() else 'none', flush=True)
 

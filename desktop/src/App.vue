@@ -11,6 +11,7 @@ import DesktopUpdate from './DesktopUpdate.vue';
 import UiIcon from './UiIcon.vue';
 import BrandMark from './BrandMark.vue';
 import UiDialog from './UiDialog.vue';
+import { listenForAttachmentDrops } from './attachment-drop';
 import { version as desktopVersion } from '../package.json';
 import { AppZoom, savedZoom, zoomPreference, zoomShortcut } from './app-zoom';
 
@@ -52,6 +53,14 @@ const copiedServer = ref(false);
 let copyTimer: ReturnType<typeof setTimeout>|undefined;
 let listGeneration = 0;
 let disposed = false;
+let stopDrops: (() => void)|undefined;
+onMounted(async () => {
+  try {
+    const stop = await listenForAttachmentDrops(message => { if (!disposed) error.value = message; });
+    if (disposed) stop(); else stopDrops = stop;
+  } catch { if (!disposed) error.value = '文件拖放暂时不可用，请使用上传按钮。'; }
+});
+onBeforeUnmount(() => stopDrops?.());
 const serverHost = computed(() => { try { return new URL(connection.value?.server || server.value).host; } catch { return connection.value?.server || '服务器'; } });
 const platformName = /Mac/.test(navigator.platform) ? 'macOS' : /Win/.test(navigator.platform) ? 'Windows' : 'Desktop';
 const tabs = computed(() => [

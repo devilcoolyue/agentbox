@@ -23,6 +23,7 @@ pub(crate) struct Fixture {
     project_mode: bool,
     terminal_inputs: Arc<Mutex<HashSet<String>>>,
     report: std::path::PathBuf,
+    started: std::time::Instant,
     attachment: Arc<AtomicBool>,
     directory_upload: Arc<AtomicBool>,
     input: Arc<AtomicBool>,
@@ -224,7 +225,21 @@ pub(crate) fn smoke_stage(
         .append(true)
         .open(fixture.report.with_extension("stages"))
         .map_err(|_| "stage file")?;
-    writeln!(file, "{stage}").map_err(|_| "stage write".into())
+    writeln!(file, "{stage}").map_err(|_| "stage write")?;
+    // Keep the established stage-name trace unchanged; timing has its own
+    // credential-free stream so a slow runner exposes cumulative versus stuck
+    // work instead of forcing an arbitrary increase in the overall deadline.
+    let mut timings = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(fixture.report.with_extension("timings.jsonl"))
+        .map_err(|_| "stage timing file")?;
+    writeln!(
+        timings,
+        "{}",
+        json!({"stage":stage,"elapsed_ms":fixture.started.elapsed().as_millis()})
+    )
+    .map_err(|_| "stage timing write".into())
 }
 
 #[tauri::command]
@@ -330,13 +345,13 @@ pub fn plugin() -> TauriPlugin<Wry> {
                 return Err("conflicting smoke fixtures".into());
             }
             app.manage(Fixture { server: compat.server.clone(), compat: Some(compat), sync: None, project_mode: false,
-                terminal_inputs: Arc::new(Mutex::new(HashSet::new())), report: report.into(),
+                terminal_inputs: Arc::new(Mutex::new(HashSet::new())), report: report.into(), started: std::time::Instant::now(),
                 directory_upload:Arc::new(AtomicBool::new(false)),attachment: Arc::new(AtomicBool::new(false)), input: Arc::new(AtomicBool::new(false)), resize: Arc::new(AtomicBool::new(false)) });
             return Ok(());
         }
         if let Some(sync) = super::smoke_sync::SyncFixture::from_environment()? {
             app.manage(Fixture { server: sync.server.clone(), compat: None, sync: Some(sync), project_mode: true,
-                terminal_inputs: Arc::new(Mutex::new(HashSet::new())), report: report.into(),
+                terminal_inputs: Arc::new(Mutex::new(HashSet::new())), report: report.into(), started: std::time::Instant::now(),
                 directory_upload:Arc::new(AtomicBool::new(false)),attachment: Arc::new(AtomicBool::new(false)), input: Arc::new(AtomicBool::new(false)), resize: Arc::new(AtomicBool::new(false)) });
             return Ok(());
         }
@@ -350,7 +365,7 @@ pub fn plugin() -> TauriPlugin<Wry> {
         let terminal_inputs=Arc::new(Mutex::new(HashSet::new()));
         let projects=Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
         let terminals=Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
-        app.manage(Fixture { server, compat: None, sync: None, project_mode, terminal_inputs:terminal_inputs.clone(), report: report.into(), directory_upload:directory_upload.clone(),attachment:attachment.clone(),input: input.clone(), resize: resize.clone() });
+        app.manage(Fixture { server, compat: None, sync: None, project_mode, terminal_inputs:terminal_inputs.clone(), report: report.into(), started: std::time::Instant::now(), directory_upload:directory_upload.clone(),attachment:attachment.clone(),input: input.clone(), resize: resize.clone() });
         tauri::async_runtime::spawn(async move {
             let listener = tokio::net::TcpListener::from_std(listener).unwrap();
             while let Ok((mut stream, _)) = listener.accept().await {

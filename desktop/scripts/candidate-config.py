@@ -9,6 +9,10 @@ import tomllib
 
 DESKTOP=Path(__file__).resolve().parents[1]
 
+def valid_version(value):
+    match = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?', value)
+    return bool(match and (not match[4] or all(not part.isdigit() or part == '0' or not part.startswith('0') for part in match[4].split('.'))))
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version',required=True)
@@ -16,7 +20,7 @@ def main():
     parser.add_argument('--signed',action='store_true')
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
-    if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?',args.version):raise SystemExit('Invalid version')
+    if not valid_version(args.version):raise SystemExit('Invalid version')
     versions=[json.loads((DESKTOP/'package.json').read_text(encoding='utf-8'))['version'],json.loads((DESKTOP/'src-tauri/tauri.conf.json').read_text(encoding='utf-8'))['version'],tomllib.loads((DESKTOP/'src-tauri/Cargo.toml').read_text(encoding='utf-8'))['package']['version']]
     if any(version!=args.version for version in versions):raise SystemExit('Version must match reviewed package.json, Cargo.toml and tauri.conf.json')
     bundle={'createUpdaterArtifacts':args.signed,'resources':{'../third-party/':'third-party/','../vendor-notices/':'third-party/vendor/'},'windows':{'nsis':{'installMode':'currentUser','installerHooks':'windows/webview2-hooks.nsh'},'webviewInstallMode':{'type':'offlineInstaller','silent':True}}}

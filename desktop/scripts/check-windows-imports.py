@@ -3,10 +3,10 @@
 import argparse
 import ctypes
 import json
-import os
 from pathlib import Path
 import struct
 import sys
+import xml.etree.ElementTree as ET
 
 
 def imports(binary):
@@ -61,6 +61,39 @@ def imports(binary):
     return result
 
 
+def embedded_manifest(kernel, binary):
+    # AS_DATAFILE | AS_IMAGE_RESOURCE maps only resources, never DLL entrypoints.
+    kernel.LoadLibraryExW.argtypes = [ctypes.c_wchar_p, ctypes.c_void_p, ctypes.c_uint32]
+    kernel.LoadLibraryExW.restype = ctypes.c_void_p
+    kernel.FindResourceW.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+    kernel.FindResourceW.restype = ctypes.c_void_p
+    kernel.SizeofResource.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel.SizeofResource.restype = ctypes.c_uint32
+    kernel.LoadResource.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel.LoadResource.restype = ctypes.c_void_p
+    kernel.LockResource.argtypes = [ctypes.c_void_p]
+    kernel.LockResource.restype = ctypes.c_void_p
+    kernel.FreeLibrary.argtypes = [ctypes.c_void_p]
+    handle = kernel.LoadLibraryExW(str(binary.resolve()), None, 0x22)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        resource = kernel.FindResourceW(handle, ctypes.c_void_p(1), ctypes.c_void_p(24))
+        if not resource:
+            raise ValueError('Executable has no embedded activation manifest')
+        size = kernel.SizeofResource(handle, resource)
+        memory = kernel.LockResource(kernel.LoadResource(handle, resource))
+        if not memory or not 0 < size <= 1024 * 1024:
+            raise ValueError('Invalid activation manifest resource')
+        document = ET.fromstring(ctypes.string_at(memory, size))
+        for element in document.iter('{urn:schemas-microsoft-com:asm.v1}assemblyIdentity'):
+            if element.get('name') == 'Microsoft.Windows.Common-Controls' and element.get('version') == '6.0.0.0':
+                return {'common_controls': '6.0.0.0', 'resource_id': 1}
+        raise ValueError('Common Controls v6 dependency missing from test executable')
+    finally:
+        kernel.FreeLibrary(handle)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
@@ -77,8 +110,12 @@ def main():
     kernel.GetModuleFileNameW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_uint32]
     kernel.GetModuleFileNameW.restype = ctypes.c_uint32
     kernel.SetErrorMode(0x0001 | 0x0002 | 0x8000)
-    rows, missing = [], []
+    rows, missing, manifests = [], [], []
     for binary in binaries:
+        try:
+            manifests.append({'binary': binary.name, **embedded_manifest(kernel, binary)})
+        except (OSError, ValueError, ET.ParseError) as error:
+            missing.append({'binary': binary.name, 'manifest_error': str(error)})
         for module, functions in imports(binary):
             row = {'binary': binary.name, 'module': module, 'missing_exports': []}
             try:
@@ -96,7 +133,7 @@ def main():
                 row['load_error'] = str(error)
                 missing.append(row)
             rows.append(row)
-    result = {'os': sys.getwindowsversion().platform_version, 'imports': rows, 'failures': missing}
+    result = {'os': sys.getwindowsversion().platform_version, 'manifests': manifests, 'imports': rows, 'failures': missing}
     args.report.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'binaries': [p.name for p in binaries], 'failures': missing}, indent=2))
     if missing:

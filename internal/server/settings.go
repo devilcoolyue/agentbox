@@ -25,6 +25,7 @@ type settingsView struct {
 	AgentImage     string                          `json:"agent_image"`
 	PermissionMode string                          `json:"permission_mode"`
 	MaxUploadMB    int64                           `json:"max_upload_mb"`
+	DesktopSync    bool                            `json:"desktop_sync_enabled"`
 	IdleTimeoutMin int64                           `json:"idle_timeout_min"`
 	TimeZone       string                          `json:"timezone"`
 	Container      config.ContainerLimits          `json:"container"`
@@ -50,6 +51,7 @@ func (s *Server) settingsView() settingsView {
 		AgentImage:      s.cfg.GetAgentImage(),
 		PermissionMode:  s.cfg.GetPermissionMode(),
 		MaxUploadMB:     s.cfg.GetMaxUploadMB(),
+		DesktopSync:     s.cfg.GetDesktopSyncEnabled(),
 		IdleTimeoutMin:  s.cfg.GetIdleTimeoutMin(),
 		TimeZone:        s.cfg.GetTimeZone(),
 		Container:       s.cfg.GetContainer(),

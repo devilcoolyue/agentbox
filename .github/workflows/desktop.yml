@@ -73,6 +73,13 @@ jobs:
           cargo test --locked --no-run --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
           python scripts/check-windows-imports.py src-tauri/target/${{ matrix.target }}/debug/deps --report "${{ runner.temp }}/windows-imports.json"
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+      - name: Native credential store persistence and identity isolation
+        env:
+          AGENTBOX_CREDENTIAL_TEST: '1'
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} native_credentials_persist_isolate_and_delete -- --nocapture
+      - name: Real updater disk-full rollback on an isolated image (macOS)
+        if: runner.os == 'macOS'
+        run: python scripts/test-update-disk-full.py --target ${{ matrix.target }} --report "${{ runner.temp }}/updater-enospc.json"
       - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --all-targets -- -D warnings
       - name: Unsigned development installer (never a GitHub Release)
         run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
@@ -153,6 +160,7 @@ jobs:
             ${{ runner.temp }}/webview2-preflight.json
             ${{ runner.temp }}/webview2-hook.json
             ${{ runner.temp }}/windows-imports.json
+            ${{ runner.temp }}/updater-enospc.json
           if-no-files-found: warn
           retention-days: 14
       - uses: actions/upload-artifact@v4

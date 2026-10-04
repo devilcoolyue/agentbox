@@ -19,12 +19,16 @@ func (s *Server) handleClientCapabilities(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusServiceUnavailable, "桌面同步身份不可用，请检查服务端身份文件")
 		return
 	}
+	syncVersion := 0
+	if s.cfg.GetDesktopSyncEnabled() {
+		syncVersion = 1
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"protocol_version": 1,
 		"server_id":        id,
 		"user":             reqUser(r).Name,
-		"features":         map[string]int{"pairing": 1, "project_terminals": 1, "sync": 0, "sync_recovery_gc": 1, "sync_recovery_inspect": 1},
+		"features":         map[string]int{"pairing": 1, "project_terminals": 1, "sync": syncVersion, "sync_recovery_gc": 1, "sync_recovery_inspect": 1},
 		"limits":           map[string]int{"projects_per_workspace": store.ClientProjectLimit, "terminals_per_workspace": store.ClientTerminalLimit},
 	})
 }

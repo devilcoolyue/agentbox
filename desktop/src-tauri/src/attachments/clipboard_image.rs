@@ -377,93 +377,82 @@ fn encode(image: DynamicImage, max: usize) -> Result<Vec<u8>> {
 }
 
 #[cfg(target_os = "macos")]
-pub(super) fn read() -> Result<Option<Vec<u8>>> {
-    use objc2_app_kit::{NSPasteboard, NSPasteboardTypePNG, NSPasteboardTypeTIFF};
-    objc2::rc::autoreleasepool(|_| {
-        let pasteboard = NSPasteboard::generalPasteboard();
-        let revision = pasteboard.changeCount();
-        // Reading NSData can materialize a promised representation inside the
-        // OS. Its size is checked before our copy or any image decode. Do not
-        // use NSImage/TIFFRepresentation, which may rasterize before this check.
-        for (kind, format) in [
-            (unsafe { NSPasteboardTypePNG }, Format::Png),
-            (unsafe { NSPasteboardTypeTIFF }, Format::Tiff),
-        ] {
-            if let Some(data) = pasteboard.dataForType(kind) {
-                check_source_len(data.length())?;
-                let snapshot = data.to_vec();
-                if pasteboard.changeCount() != revision {
-                    return Err(Error::new("changed", "剪贴板已变化，请重新粘贴"));
-                }
-                return decode(&snapshot, format).map(Some);
+fn pasteboard_image(
+    pasteboard: &objc2_app_kit::NSPasteboard,
+    revision: isize,
+) -> Result<Option<Vec<u8>>> {
+    use objc2_app_kit::{NSPasteboardTypePNG, NSPasteboardTypeTIFF};
+    if pasteboard.changeCount() != revision {
+        return Err(super::clipboard_native::changed());
+    }
+    // NSData can materialize a promised representation inside the OS. Bound
+    // it before our copy/decode; never rasterize via NSImage/TIFFRepresentation.
+    for (kind, format) in [
+        (unsafe { NSPasteboardTypePNG }, Format::Png),
+        (unsafe { NSPasteboardTypeTIFF }, Format::Tiff),
+    ] {
+        if let Some(data) = pasteboard.dataForType(kind) {
+            check_source_len(data.length())?;
+            let snapshot = data.to_vec();
+            if pasteboard.changeCount() != revision {
+                return Err(super::clipboard_native::changed());
             }
+            return decode(&snapshot, format).map(Some);
         }
-        Ok(None)
+    }
+    if pasteboard.changeCount() != revision {
+        return Err(super::clipboard_native::changed());
+    }
+    Ok(None)
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn read() -> Result<Option<Vec<u8>>> {
+    objc2::rc::autoreleasepool(|_| {
+        let board = objc2_app_kit::NSPasteboard::generalPasteboard();
+        pasteboard_image(&board, board.changeCount())
     })
 }
 
 #[cfg(windows)]
+unsafe fn global_image(
+    handle: windows_sys::Win32::Foundation::HGLOBAL,
+    format: Format,
+) -> Result<Vec<u8>> {
+    unsafe {
+        super::clipboard_native::with_global_bytes(handle, MAX_SOURCE_BYTES, |bytes| {
+            dimensions(bytes, format)?;
+            Ok(bytes.to_vec())
+        })
+    }
+}
+
+#[cfg(windows)]
 pub(super) fn read() -> Result<Option<Vec<u8>>> {
-    use windows_sys::Win32::System::{
-        DataExchange::{
-            CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
-            RegisterClipboardFormatW,
-        },
-        Memory::{GlobalLock, GlobalSize, GlobalUnlock},
+    use windows_sys::Win32::System::DataExchange::{
+        GetClipboardData, IsClipboardFormatAvailable, RegisterClipboardFormatW,
     };
-    struct ClipboardGuard;
-    impl Drop for ClipboardGuard {
-        fn drop(&mut self) {
-            unsafe {
-                CloseClipboard();
-            }
-        }
-    }
-    struct MemoryGuard(windows_sys::Win32::Foundation::HGLOBAL);
-    impl Drop for MemoryGuard {
-        fn drop(&mut self) {
-            unsafe {
-                GlobalUnlock(self.0);
-            }
-        }
-    }
     let snapshot = {
-        if unsafe { OpenClipboard(std::ptr::null_mut()) } == 0 {
-            return Err(Error::new("clipboard", "系统剪贴板正忙，请重试"));
-        }
-        let _clipboard = ClipboardGuard;
+        let _clipboard = super::clipboard_native::ClipboardGuard::open()?;
+        let revision = super::clipboard_native::revision();
         let png = unsafe { RegisterClipboardFormatW([80_u16, 78, 71, 0].as_ptr()) };
         if png == 0 {
             return Err(invalid());
         }
         let mut result = None;
-        // CF_DIBV5 = 17, CF_DIB = 8. Both expose a memory block without the
-        // BITMAPFILEHEADER; retaining the clipboard lock pins that block.
+        // The OS clipboard lock pins the HGLOBAL while the bounded snapshot is
+        // copied. Tests invoke the same reader with their own allocated block.
         for (kind, format) in [(png, Format::Png), (17, Format::Dib), (8, Format::Dib)] {
             if unsafe { IsClipboardFormatAvailable(kind) } == 0 {
                 continue;
             }
-            let handle = unsafe { GetClipboardData(kind) };
-            if handle.is_null() {
-                return Err(invalid());
-            }
-            let len = unsafe { GlobalSize(handle) };
-            check_source_len(len)?;
-            let pointer = unsafe { GlobalLock(handle) };
-            if pointer.is_null() {
-                return Err(invalid());
-            }
-            let _memory = MemoryGuard(handle);
-            // GlobalSize is bounded before forming a slice. The clipboard and
-            // global memory remain locked until the one snapshot copy finishes.
-            let bytes = unsafe { std::slice::from_raw_parts(pointer.cast::<u8>(), len) };
-            dimensions(bytes, format)?;
-            result = Some((bytes.to_vec(), format));
+            let bytes = unsafe { global_image(GetClipboardData(kind), format) }?;
+            result = Some((bytes, format));
             break;
         }
+        super::clipboard_native::ensure_current(revision)?;
         result
     };
-    // Release the OS clipboard before spending time decoding/encoding pixels.
     snapshot
         .map(|(bytes, format)| decode(&bytes, format))
         .transpose()
@@ -521,6 +510,90 @@ mod tests {
         }
         long(&mut bytes, 0, little);
         bytes
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn private_macos_pasteboard_png_tiff_and_change_contract() {
+        use objc2_app_kit::{NSPasteboardTypePNG, NSPasteboardTypeTIFF};
+        use objc2_foundation::NSData;
+        objc2::rc::autoreleasepool(|_| {
+            let private = super::super::clipboard_native::fixture::PrivatePasteboard::new();
+            let board = &private.0;
+            assert!(pasteboard_image(board, board.changeCount())
+                .unwrap()
+                .is_none());
+            let source = DynamicImage::ImageRgb8(image::RgbImage::from_fn(3, 2, |x, y| {
+                image::Rgb([x as u8 * 50, y as u8 * 80, 160])
+            }));
+            for (native, encoded) in [
+                (unsafe { NSPasteboardTypePNG }, ImageFormat::Png),
+                (unsafe { NSPasteboardTypeTIFF }, ImageFormat::Tiff),
+            ] {
+                board.clearContents();
+                let mut bytes = Cursor::new(Vec::new());
+                source.write_to(&mut bytes, encoded).unwrap();
+                assert!(board.setData_forType(Some(&NSData::from_vec(bytes.into_inner())), native));
+                let revision = board.changeCount();
+                let result = pasteboard_image(board, revision).unwrap().unwrap();
+                assert_eq!(
+                    image::load_from_memory(&result).unwrap().into_rgb8(),
+                    source.to_rgb8()
+                );
+                board.clearContents();
+                assert_eq!(
+                    pasteboard_image(board, revision).unwrap_err().kind,
+                    "changed"
+                );
+            }
+            board.clearContents();
+            assert!(
+                board.setData_forType(Some(&NSData::from_vec(png(2, 2))), unsafe {
+                    NSPasteboardTypePNG
+                })
+            );
+            assert!(
+                board.setData_forType(Some(&NSData::from_vec(vec![1, 2, 3])), unsafe {
+                    NSPasteboardTypeTIFF
+                })
+            );
+            assert!(pasteboard_image(board, board.changeCount())
+                .unwrap()
+                .is_some());
+        });
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_owned_hglobal_image_contract_without_system_clipboard() {
+        use super::super::clipboard_native::{fixture::GlobalData, with_global_bytes};
+        use windows_sys::Win32::System::Memory::GlobalFlags;
+        for (bytes, format) in [
+            (png(2, 2), Format::Png),
+            (standard_bitfield_dib(124), Format::Dib),
+        ] {
+            let data = GlobalData::new(&bytes);
+            let snapshot = unsafe { global_image(data.0, format) }.unwrap();
+            assert!(decode(&snapshot, format).is_ok());
+            assert_eq!(unsafe { GlobalFlags(data.0) } & 0xff, 0);
+        }
+        let mut excessive = png(1, 1);
+        excessive[16..20].copy_from_slice(&u32::MAX.to_be_bytes());
+        let data = GlobalData::new(&excessive);
+        assert_eq!(
+            unsafe { global_image(data.0, Format::Png) }
+                .unwrap_err()
+                .kind,
+            "limit"
+        );
+        assert_eq!(unsafe { GlobalFlags(data.0) } & 0xff, 0);
+        let result = unsafe {
+            with_global_bytes(data.0, 1, |_| -> Result<()> {
+                panic!("oversized native block was exposed")
+            })
+        };
+        assert_eq!(result.unwrap_err().kind, "limit");
+        assert_eq!(unsafe { GlobalFlags(data.0) } & 0xff, 0);
     }
 
     #[test]

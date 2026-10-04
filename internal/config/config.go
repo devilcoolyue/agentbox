@@ -326,6 +326,7 @@ type Config struct {
 	PreviousImage  string                   `json:"previous_agent_image,omitempty"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
+	DesktopSync    bool                     `json:"desktop_sync_enabled"`
 	IdleTimeoutMin int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
 	TimeZone       string                   `json:"timezone"`         // IANA 时区；用于界面时间与用量筛选
 	Container      ContainerLimits          `json:"container"`
@@ -644,6 +645,7 @@ type persistConfig struct {
 	PreviousImage  string                   `json:"previous_agent_image,omitempty"`
 	PermissionMode string                   `json:"permission_mode"`
 	MaxUploadMB    int64                    `json:"max_upload_mb"`
+	DesktopSync    bool                     `json:"desktop_sync_enabled"`
 	IdleTimeoutMin int64                    `json:"idle_timeout_min"`
 	TimeZone       string                   `json:"timezone"`
 	Container      ContainerLimits          `json:"container"`
@@ -675,6 +677,7 @@ func (c *Config) saveLocked() error {
 		PreviousImage:  c.PreviousImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
+		DesktopSync:    c.DesktopSync,
 		IdleTimeoutMin: c.IdleTimeoutMin,
 		TimeZone:       c.TimeZone,
 		Container:      c.Container,
@@ -763,6 +766,14 @@ func (c *Config) GetMaxUploadMB() int64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.MaxUploadMB
+}
+
+// GetDesktopSyncEnabled controls client capability discovery. It defaults to
+// false and does not interrupt a write already admitted by an existing lease.
+func (c *Config) GetDesktopSyncEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.DesktopSync
 }
 
 // GetIdleTimeoutMin returns the idle-stop threshold in minutes; 0 disables the
@@ -992,6 +1003,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		PreviousImage:  c.PreviousImage,
 		PermissionMode: c.PermissionMode,
 		MaxUploadMB:    c.MaxUploadMB,
+		DesktopSync:    c.DesktopSync,
 		IdleTimeoutMin: c.IdleTimeoutMin,
 		TimeZone:       c.TimeZone,
 		Container:      c.Container,
@@ -1028,6 +1040,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.PreviousImage = work.PreviousImage
 	c.PermissionMode = work.PermissionMode
 	c.MaxUploadMB = work.MaxUploadMB
+	c.DesktopSync = work.DesktopSync
 	c.IdleTimeoutMin = work.IdleTimeoutMin
 	c.TimeZone = work.TimeZone
 	c.Container = work.Container
@@ -1057,6 +1070,7 @@ type SettingsPatch struct {
 	AgentImage     *string                  `json:"agent_image"`
 	PermissionMode *string                  `json:"permission_mode"`
 	MaxUploadMB    *int64                   `json:"max_upload_mb"`
+	DesktopSync    *bool                    `json:"desktop_sync_enabled"`
 	IdleTimeoutMin *int64                   `json:"idle_timeout_min"`
 	TimeZone       *string                  `json:"timezone"`
 	Container      *ContainerLimits         `json:"container"`
@@ -1092,6 +1106,9 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.MaxUploadMB != nil {
 			w.MaxUploadMB = *p.MaxUploadMB
+		}
+		if p.DesktopSync != nil {
+			w.DesktopSync = *p.DesktopSync
 		}
 		if p.IdleTimeoutMin != nil {
 			w.IdleTimeoutMin = *p.IdleTimeoutMin

@@ -60,7 +60,12 @@ async function install() {
       if (info.value) info.value.version = null;
     }
   } catch (error) {
-    if (alive) { message.value = errorMessage(error); failed.value = true; confirm.value = false; }
+    if (alive) {
+      message.value = errorMessage(error); failed.value = true; confirm.value = false;
+      // The native candidate is consumed for an installation attempt; the next
+      // action must check the feed again rather than reuse a failed candidate.
+      if (info.value) info.value.version = null;
+    }
   } finally {
     emit('busy', false);
     if (alive) { busy.value = false; installing.value = false; }

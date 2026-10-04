@@ -2,7 +2,7 @@
 //! The renderer gets expiring single-use tickets, never a path-reading command.
 use crate::remote::{Error, Remote, Result};
 use crate::Desktop;
-use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};
+use clipboard_rs::{Clipboard, ClipboardContext};
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -14,8 +14,12 @@ use std::{
 };
 use tauri::{Emitter, Manager, State};
 
+#[path = "attachments/clipboard_files.rs"]
+mod clipboard_files;
 #[path = "attachments/clipboard_image.rs"]
 mod clipboard_image;
+#[path = "attachments/clipboard_native.rs"]
+mod clipboard_native;
 
 pub const MAX_BYTES: u64 = 19 * 1024 * 1024;
 const MAX_FILES: usize = 32;
@@ -25,6 +29,9 @@ pub enum Source {
     File(File, std::fs::Metadata),
     Image(Vec<u8>),
 }
+type SelectedSource = (Source, String, u64);
+type ClipboardSources = (Option<String>, Vec<SelectedSource>);
+
 pub struct Grant {
     remote: Arc<Remote>,
     source: Source,
@@ -159,6 +166,17 @@ impl Grants {
         }
         Ok(result)
     }
+    fn release_owned(&mut self, remote: &Arc<Remote>, tickets: &[String]) {
+        for ticket in tickets {
+            if self
+                .items
+                .get(ticket)
+                .is_some_and(|grant| Arc::ptr_eq(&grant.remote, remote))
+            {
+                self.items.remove(ticket);
+            }
+        }
+    }
     pub fn clear(&mut self) {
         self.items.clear();
     }
@@ -263,32 +281,13 @@ pub async fn read_attachment_clipboard(state: State<'_, Desktop>) -> Result<Clip
         .try_lock()
         .map_err(|_| Error::new("busy", "剪贴板读取正在进行"))?;
     let remote = current(&state).await?;
-    let (text, sources) = tauri::async_runtime::spawn_blocking(|| {
-        let clipboard =
-            ClipboardContext::new().map_err(|_| Error::new("clipboard", "无法读取系统剪贴板"))?;
-        if clipboard.has(ContentFormat::Files) {
-            let files = clipboard
-                .get_files()
-                .map_err(|_| Error::new("clipboard", "无法读取剪贴板文件列表"))?;
-            return Ok((
-                None,
-                open_many(files.into_iter().map(PathBuf::from).collect())?,
-            ));
-        }
-        if let Some(bytes) = clipboard_image::read()? {
-            let size = bytes.len() as u64;
-            return Ok((
-                None,
-                vec![(Source::Image(bytes), "screenshot.png".into(), size)],
-            ));
-        }
-        let text = clipboard
-            .get_text()
-            .map_err(|_| Error::new("clipboard", "剪贴板没有文本、图片或文件"))?;
-        if text.len() > 256 * 1024 {
-            return Err(Error::new("limit", "剪贴板文本超过 256 KiB"));
-        }
-        Ok((Some(text), Vec::new()))
+    let (text, sources) = tauri::async_runtime::spawn_blocking(|| -> Result<_> {
+        let revision = clipboard_native::revision();
+        let result = read_clipboard_sources()?;
+        // Format discovery, file opening and image encoding must describe the
+        // same user paste, even if another app replaces the clipboard meanwhile.
+        clipboard_native::ensure_current(revision)?;
+        Ok(result)
     })
     .await
     .map_err(Error::network)??;
@@ -297,6 +296,28 @@ pub async fn read_attachment_clipboard(state: State<'_, Desktop>) -> Result<Clip
         files: register(&state, remote, sources).await?,
     })
 }
+fn read_clipboard_sources() -> Result<ClipboardSources> {
+    if let Some(paths) = clipboard_files::read()? {
+        return Ok((None, open_many(paths)?));
+    }
+    if let Some(bytes) = clipboard_image::read()? {
+        let size = bytes.len() as u64;
+        return Ok((
+            None,
+            vec![(Source::Image(bytes), "screenshot.png".into(), size)],
+        ));
+    }
+    let clipboard =
+        ClipboardContext::new().map_err(|_| Error::new("clipboard", "无法读取系统剪贴板"))?;
+    let text = clipboard
+        .get_text()
+        .map_err(|_| Error::new("clipboard", "剪贴板没有文本、图片或文件"))?;
+    if text.len() > 256 * 1024 {
+        return Err(Error::new("limit", "剪贴板文本超过 256 KiB"));
+    }
+    Ok((Some(text), Vec::new()))
+}
+
 #[tauri::command]
 pub async fn release_attachments(state: State<'_, Desktop>, tickets: Vec<String>) -> Result<()> {
     if tickets.len() > MAX_FILES {
@@ -324,21 +345,35 @@ pub fn dropped(window: &tauri::Window, paths: Vec<PathBuf>, x: f64, y: f64) {
         };
         let sources = tauri::async_runtime::spawn_blocking(move || open_many(paths)).await;
         let result = match sources {
-            Ok(Ok(sources)) => register(&state, remote, sources).await,
+            Ok(Ok(sources)) => register(&state, remote.clone(), sources).await,
             Ok(Err(error)) => Err(error),
             Err(_) => Err(local_error()),
         };
         match result {
             Ok(files) => {
-                let _ = app.emit_to(
-                    "main",
-                    "attachment-drop",
-                    DroppedFiles {
-                        files,
-                        x: x / scale,
-                        y: y / scale,
-                    },
-                );
+                let tickets = files
+                    .iter()
+                    .map(|file| file.ticket.clone())
+                    .collect::<Vec<_>>();
+                if app
+                    .emit_to(
+                        "main",
+                        "attachment-drop",
+                        DroppedFiles {
+                            files,
+                            x: x / scale,
+                            y: y / scale,
+                        },
+                    )
+                    .is_err()
+                {
+                    state
+                        .inner
+                        .lock()
+                        .await
+                        .attachments
+                        .release_owned(&remote, &tickets);
+                }
             }
             Err(error) => {
                 let _ = app.emit_to("main", "attachment-drop-error", error);
@@ -388,6 +423,29 @@ mod tests {
         );
         assert!(grants.take(&files[0].ticket, &owner).is_err());
     }
+    #[test]
+    fn failed_drop_delivery_releases_only_its_own_tickets() {
+        let mut grants = Grants::default();
+        let owner = remote();
+        let first = grants
+            .insert(
+                owner.clone(),
+                vec![(Source::Image(vec![1]), "first.png".into(), 1)],
+            )
+            .unwrap();
+        let other = grants
+            .insert(
+                owner.clone(),
+                vec![(Source::Image(vec![2]), "other.png".into(), 1)],
+            )
+            .unwrap();
+        grants.release_owned(&remote(), &[other[0].ticket.clone()]);
+        assert!(grants.items.contains_key(&other[0].ticket));
+        grants.release_owned(&owner, &[first[0].ticket.clone()]);
+        assert!(!grants.items.contains_key(&first[0].ticket));
+        assert!(grants.items.contains_key(&other[0].ticket));
+    }
+
     #[test]
     fn capacity_and_expiry_do_not_authorize_extra_sources() {
         let mut grants = Grants::default();

@@ -45,6 +45,15 @@ func TestDesktopSyncNativeSmoke(t *testing.T) {
 	var applied, blocked, canceled atomic.Int32
 	var historySeeded atomic.Int32
 	var historySeedMu sync.Mutex
+	var historyState *syncclient.StateStore
+	var historySeedTime time.Duration
+	t.Cleanup(func() {
+		historySeedMu.Lock()
+		defer historySeedMu.Unlock()
+		if historyState != nil {
+			historyState.Close()
+		}
+	})
 	var verified atomic.Bool
 	var f *engineFixture
 	f = newEngineFixture(t, true, func(next http.Handler) http.Handler {
@@ -147,18 +156,36 @@ func TestDesktopSyncNativeSmoke(t *testing.T) {
 					// snapshots in one request made setup race that deadline.
 					historySeedMu.Lock()
 					defer historySeedMu.Unlock()
+					seedStarted := time.Now()
+					seedSucceeded := false
+					defer func() {
+						historySeedTime += time.Since(seedStarted)
+						if !seedSucceeded && historyState != nil {
+							if err := historyState.Close(); err != nil {
+								t.Error(err)
+							}
+							historyState = nil
+						}
+					}()
 					if historySeeded.Load() >= 21 {
 						t.Error("history fixture seeded more than 21 batches")
 						w.WriteHeader(http.StatusConflict)
 						return
 					}
-					state, err := syncclient.OpenStateContext(r.Context(), stateDir)
-					if err != nil {
-						t.Error(err)
-						w.WriteHeader(500)
-						return
+					// Keep only this fixture's already pinned state root across
+					// seeding requests. Reopening it 21 times repeats macOS volume
+					// discovery and SQLite setup; every batch still takes its own
+					// real Preview/Apply, lease and durable transaction paths.
+					if historyState == nil {
+						var err error
+						historyState, err = syncclient.OpenStateContext(r.Context(), stateDir)
+						if err != nil {
+							t.Error(err)
+							w.WriteHeader(500)
+							return
+						}
 					}
-					defer state.Close()
+					state := historyState
 					bindings, err := state.Bindings(f.saved.Binding.ServerID, "alice")
 					if err != nil || len(bindings) != 1 {
 						t.Error("history seed binding", err)
@@ -178,6 +205,17 @@ func TestDesktopSyncNativeSmoke(t *testing.T) {
 						return
 					}
 					seeded := historySeeded.Add(1)
+					if seeded == 21 {
+						err = historyState.Close()
+						historyState = nil
+						if err != nil {
+							t.Error(err)
+							w.WriteHeader(500)
+							return
+						}
+						t.Logf("native history fixture: 21 real commits took %s", historySeedTime+time.Since(seedStarted))
+					}
+					seedSucceeded = true
 					_ = json.NewEncoder(w).Encode(map[string]int32{"seeded": seeded, "total": 21})
 					return
 				case "choices":

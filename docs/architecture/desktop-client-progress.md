@@ -1,5 +1,39 @@
 # 桌面客户端实施记录
 
+## 2026-10-04：继续完成 P1～P5 开发缺口与未签名验收
+
+本轮以用户确认的“先完成开发与未签名包验收”为边界，继续关闭实际代码缺口：
+
+- 桌面与 abox-link 配对码绑定发行时的用户创建身份和密码快照；重置/删号重建后不能兑换。
+  密码登录和配对兑换原子核对身份再发 token；HTTP 改密与撤销其他 token 同事务，失败回滚。
+  满额时仍允许同用户替换自己的旧配对码。无 schema、URL 或 token 载体变化。
+- 新增默认关闭的 `desktop_sync_enabled`，完整进入配置读写、mutate 与管理员 settings API。
+  新引擎测试使用实际配置开启能力，不再在 HTTP wrapper 中伪造 sync=1；默认部署仍 sync=0。
+- 原生剪贴板文件读取先校验32项/路径长度/总表示上限，严格处理Unicode、ANSI和文件URL，
+  文件/图片/文本读取复核剪贴板修订。Mac私有pasteboard、Windows自有HGLOBAL测试隔离于
+  用户剪贴板。前端统一路由拖放，隐藏页面/弹窗外未接收票据立即释放，原生投递失败也释放。
+- 系统凭证保存、重开读取、服务器/用户隔离和删除使用独立validation namespace实际验收；
+  凭证身份算法及正常服务名不变。应用二次启动恢复最小化窗口，本地后台诊断不再误报同步关闭。
+- 更新排除同步、传输、选择、目录检查并先确认后台退出；失败保留已有终端，失效候选需重新检查。
+  Mac保留原下载/版本签名验证，新增同目录准备收据、受限解包、bundle身份/架构检查、原子交换
+  与旧包恢复引用。真64MiB镜像ENOSPC、真实子进程SIGKILL（解包后/交换后）和下一次更新恢复通过；
+  不涉及用户安装或物理断电。报告 `/tmp/agentbox-updater-real-enospc.json`。
+- 发布资源名、SemVer、512MiB限制、签名文本大小与客户端验证契约对齐。Windows测试程序
+  统一嵌入Common Controls v6 manifest，避免只有主程序带声明；新增PE资源及导入检查。
+  Intel原生同步fixture复用21次历史提交的StateStore，保留真实引擎/持久提交和原时间门槛，
+  补阶段耗时日志；Windows/Intel修复效果待本轮后续CI。
+
+本地已通过 Go 全仓 build/test/vet（server235.068s），账号/配对相关四包定向race，34项前端
+测试与构建，Rust默认58项+两项独立SIGKILL测试、普通/smoke Clippy，9项候选/清单与8项启动器
+回归，随包450项许可证收集。真实Linux Docker冻结schema9→10兼容探针新增中文/特殊字符
+文件、shared/workspace下载ZIP与容器uid1000读取/属主，旧token/abox-link/tmux/备份/purge仍通过；
+报告 `/tmp/agentbox-pairing-unicode-compat-20261004.json`。
+
+先行CI `37172234744` 的Mac ARM完整job、server-compat、disk-full、Windows↔Linux同步均通过；
+Windows遇到测试EXE缺少控件激活声明，Intel在sync_continuous后耗尽整体预算。本节列出的对应
+修复须由新CI验证，不把已找到原因等同于通过。未公开发布、未部署生产；正式签名和最低系统/
+物理交互验收仍按原资源约束单列。
+
 ## 2026-10-04：桌面界面对齐现有网页版
 
 按用户确认，以 Agentbox 现有网页版为视觉基准重做桌面布局：复用原 Logo、94 个动作图标与

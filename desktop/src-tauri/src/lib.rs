@@ -1,4 +1,5 @@
 mod attachments;
+mod credentials;
 pub mod diagnostics;
 mod file_upload;
 mod files;
@@ -17,8 +18,8 @@ mod updates;
 #[cfg(test)]
 mod wire_tests;
 
+use credentials::credential;
 use remote::{Connection, Error, Remote, Result, Session};
-use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -64,7 +65,12 @@ struct InspectionState {
 async fn inspect_local(state: State<'_, Desktop>) -> Result<serde_json::Value> {
     let (cancel, canceled) = oneshot::channel();
     {
-        let mut active = state.inspection.lock().await;
+        let mut active = state.inspection.try_lock().map_err(|_| {
+            Error::new(
+                "inspection_busy",
+                "已有后台操作正在进行，请稍后重试目录检查",
+            )
+        })?;
         if active.running {
             return Err(Error::new("inspection_busy", "已有目录检查正在进行"));
         }
@@ -111,7 +117,10 @@ async fn cancel_inspection(state: State<'_, Desktop>) -> Result<()> {
 
 #[tauri::command]
 async fn backend_status(state: State<'_, Desktop>) -> Result<String> {
-    let mut background = state.sidecar.lock().await;
+    let mut background = state
+        .sidecar
+        .try_lock()
+        .map_err(|_| Error::new("busy", "本地后台正在忙，请稍后重试"))?;
     if background.is_none() {
         let exe =
             std::env::current_exe().map_err(|_| Error::new("sidecar_path", "无法定位后台程序"))?;
@@ -126,19 +135,12 @@ async fn backend_status(state: State<'_, Desktop>) -> Result<String> {
         *background = Some(sidecar::Sidecar::start(&directory.join(name)).await?);
     }
     match background.as_mut().expect("started above").ping().await {
-        Ok(()) => Ok("后台已就绪；同步功能尚未启用".into()),
+        Ok(()) => Ok("本地后台已就绪".into()),
         Err(error) => {
             *background = None;
             Err(error)
         }
     }
-}
-
-fn credential(server: &str, user: &str) -> Result<keyring::Entry> {
-    let identity = serde_json::to_vec(&(server, user)).expect("string pair");
-    let name = format!("{:x}", Sha256::digest(identity));
-    keyring::Entry::new("io.github.devilcoolyue.agentbox.desktop", &name)
-        .map_err(|_| Error::new("credential", "无法访问系统凭证库；不会回退为明文保存"))
 }
 
 #[tauri::command]
@@ -515,6 +517,8 @@ pub fn run() {
         })
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
                 let _ = window.set_focus();
             }
         }))

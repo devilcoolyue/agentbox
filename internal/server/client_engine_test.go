@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"agentbox/internal/config"
 	"agentbox/internal/store"
 	"agentbox/internal/syncclient"
 	"agentbox/internal/syncfs"
@@ -36,24 +36,9 @@ func newEngineFixture(t *testing.T, enabled bool, wrap func(http.Handler) http.H
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream := handler
-	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if enabled && r.URL.Path == "/api/clients/capabilities" {
-			response := httptest.NewRecorder()
-			upstream.ServeHTTP(response, r)
-			var caps syncproto.ServerIdentity
-			if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &caps) != nil {
-				t.Error("fixture capabilities failed")
-				w.WriteHeader(500)
-				return
-			}
-			caps.Features["sync"] = 1
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(caps)
-			return
-		}
-		upstream.ServeHTTP(w, r)
-	})
+	if err := s.cfg.ApplySettings(config.SettingsPatch{DesktopSync: &enabled}); err != nil {
+		t.Fatal(err)
+	}
 	if wrap != nil {
 		handler = wrap(handler)
 	}

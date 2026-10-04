@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -8,7 +9,15 @@ import unittest
 
 SCRIPT=Path(__file__).with_name('candidate-config.py')
 VERSION=json.loads((SCRIPT.parent.parent/'package.json').read_text(encoding='utf-8'))['version']
+spec=importlib.util.spec_from_file_location('candidate_config',SCRIPT)
+candidate=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(candidate)
 class CandidateTests(unittest.TestCase):
+    def test_version_grammar_is_valid_semver_without_ambiguous_components(self):
+        for version in ['01.2.3','1.02.3','1.2.03','1.2.3-01','1.2.3-rc..1','1.2.3-','١.2.3']:
+            self.assertFalse(candidate.valid_version(version),version)
+        for version in ['0.1.1','1.2.3-rc.1','1.2.3-0','1.2.3-01a']:
+            self.assertTrue(candidate.valid_version(version),version)
     def run_config(self,path,*options,**environment):
         env={key:value for key,value in os.environ.items() if not key.startswith(('APPLE_','TAURI_SIGNING_','AGENTBOX_UPDATER_','WINDOWS_CERTIFICATE_'))}
         env.update(environment)

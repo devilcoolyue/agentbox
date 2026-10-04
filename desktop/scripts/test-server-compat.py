@@ -221,7 +221,50 @@ class Fixture:
         subprocess.run(['docker', 'volume', 'rm', self.volume], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
 
 
-def legacy_contract(http, session, phase):
+def unicode_file_scope_contract(fixture, session, phase, scope):
+    """Encoded paths and multipart names must survive both legacy file scopes."""
+    http = fixture.http
+    path = '/api/sessions/' + session
+    name = '报告 +50% #&.bin'
+
+    def directory(stage):
+        return '兼容目录 +50% #& (' + stage + ')'
+
+    def contents(stage):
+        return ('中文文件 ' + scope + ' ' + stage + '\r\n').encode() + b'\0\xff'
+
+    if phase == 'after upgrade':
+        previous = urllib.parse.urlencode({'scope': scope, 'path': directory('before upgrade') + '/' + name, 'dl': '1'})
+        require(http.request(path + '/file?' + previous, raw=True) == contents('before upgrade'),
+                scope + ' Unicode file bytes did not survive upgrade')
+    folder = directory(phase)
+    created = http.request(path + '/files/mkdir', {'scope': scope, 'dir': '', 'name': folder}, 'POST')
+    require(created['path'] == folder, scope + ' Unicode directory name changed')
+    query = urllib.parse.urlencode({'scope': scope, 'path': folder})
+    boundary = 'compat-' + uuid.uuid4().hex
+    payload = contents(phase)
+    upload = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\n'
+              'Content-Type: application/octet-stream\r\n\r\n').encode() + payload + f'\r\n--{boundary}--\r\n'.encode()
+    http.request(path + '/upload?' + query, upload, 'POST', content_type='multipart/form-data; boundary=' + boundary)
+    entries = http.request(path + '/files?' + query)
+    require(len(entries) == 1 and entries[0]['name'] == name and entries[0]['size'] == len(payload),
+            scope + ' Unicode file listing changed')
+    relative = folder + '/' + name
+    query = urllib.parse.urlencode({'scope': scope, 'path': relative, 'dl': '1'})
+    require(http.request(path + '/file?' + query, raw=True) == payload, scope + ' Unicode download bytes changed')
+    with zipfile.ZipFile(io.BytesIO(http.request(path + '/archive?' + urllib.parse.urlencode({'scope': scope}), raw=True))) as archive:
+        require(archive.read(relative) == payload, scope + ' Unicode archive path or bytes changed')
+    container_path = ('/shared/' if scope == 'shared' else '/workspace/') + relative
+    # Read as the actual unprivileged agent, not through the root HTTP process.
+    container = 'agentbox-' + session
+    require(subprocess.check_output(['docker', 'exec', '--user', '1000:1000', container, 'cat', container_path], timeout=15) == payload,
+            scope + ' Unicode upload not readable by agent')
+    require(docker('exec', container, 'stat', '-c', '%u:%g', container_path) == '1000:1000',
+            scope + ' Unicode upload ownership changed')
+
+
+def legacy_contract(fixture, session, phase):
+    http = fixture.http
     path = '/api/sessions/' + session
     require(http.request('/api/me')['role'] == 'admin', 'old token lost')
     require(any(item['id'] == session for item in http.request('/api/sessions')), 'session missing')
@@ -239,6 +282,8 @@ def legacy_contract(http, session, phase):
     require(http.request(path + '/file?path=legacy.bin&dl=1', raw=True) == payload, 'legacy multipart bytes changed')
     with zipfile.ZipFile(io.BytesIO(http.request(path + '/archive', raw=True))) as archive:
         require(archive.read('compat.txt') == contents and archive.read('legacy.bin') == payload, 'workspace archive changed')
+    for scope in ('workspace', 'shared'):
+        unicode_file_scope_contract(fixture, session, phase, scope)
     thread = http.request(path + '/chat/threads', {}, 'POST')['id']
     require(http.request(path + '/chat/threads')['active'] == thread, 'legacy thread selection changed')
     ws = WebSocket(http, path + '/term')
@@ -416,7 +461,7 @@ def main():
             inspect = json.loads(docker('inspect', cid))[0]
             require(inspect['HostConfig']['NetworkMode'] == 'none', 'workspace networking enabled')
             require(all(item['Source'].startswith(fixture.data + '/') for item in inspect['Mounts']), 'non-fixture workspace mount')
-            legacy_contract(fixture.http, session, 'before upgrade')
+            legacy_contract(fixture, session, 'before upgrade')
             if args.desktop_smoke:
                 native_smoke(args.desktop_smoke, fixture, session, temporary)
                 evidence['desktop_native'] = 'passed_against_frozen_server'
@@ -429,6 +474,7 @@ def main():
                 require(not database.execute("SELECT name FROM sqlite_master WHERE name='client_projects'").fetchall(), 'desktop table exists before migration')
             evidence['old_schema'] = old_schema
             evidence['checks'].append('frozen_server_legacy_http_files_archive_threads_terminal')
+            evidence['checks'].append('frozen_server_unicode_encoded_paths_multipart_archive_workspace_shared_agent_uid')
             print('Frozen server: schema 9, legacy API and real terminal passed; upgrading…', flush=True)
             fixture.launch(binary)
             migrated = fixture.http.request('/api/sessions/' + session)
@@ -440,7 +486,8 @@ def main():
             require(capabilities['features']['sync'] == 0, 'sync became enabled')
             for asset in old_assets:
                 require(fixture.http.request(asset, raw=True), 'frozen browser asset URL missing')
-            contents = legacy_contract(fixture.http, session, 'after upgrade')
+            contents = legacy_contract(fixture, session, 'after upgrade')
+            evidence['checks'].append('upgraded_server_unicode_files_survive_and_workspace_shared_contract_unchanged')
             if args.browser_smoke:
                 browser_input = json.dumps({'server': fixture.http.base + '/', 'username': 'boxadmin',
                                             'password': fixture.password, 'session': session,

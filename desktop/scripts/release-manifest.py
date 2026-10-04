@@ -13,10 +13,16 @@ from datetime import datetime, timezone
 
 TARGETS = {'darwin-aarch64': '.app.tar.gz', 'darwin-x86_64': '.app.tar.gz', 'windows-x86_64': '.exe'}
 REPO = 'devilcoolyue/agentbox'
+DOWNLOAD_LIMIT = 512 * 1024 * 1024
+
+
+def valid_version(value):
+    match = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?', value)
+    return bool(match and (not match[4] or all(not part.isdigit() or part == '0' or not part.startswith('0') for part in match[4].split('.'))))
 
 
 def prepare(directory, version, assets, notes=''):
-    if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?', version):
+    if not valid_version(version):
         raise ValueError('invalid desktop semver')
     if set(assets) != set(TARGETS):
         raise ValueError('all three supported architectures are required')
@@ -25,15 +31,18 @@ def prepare(directory, version, assets, notes=''):
     names = set()
     for target, suffix in TARGETS.items():
         name = assets[target]
-        if Path(name).name != name or not name.endswith(suffix) or name in names:
+        if (not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', name)
+                or Path(name).name != name or not name.endswith(suffix) or name in names):
             raise ValueError('invalid or colliding updater filename')
         names.add(name)
         path = directory / name
         signature_path = directory / (name + '.sig')
         if path.is_symlink() or signature_path.is_symlink() or not path.is_file() or not signature_path.is_file():
             raise ValueError('missing or linked asset/signature: ' + name)
+        if not 0 < path.stat().st_size <= DOWNLOAD_LIMIT or not 0 < signature_path.stat().st_size <= 4096:
+            raise ValueError('updater asset/signature exceeds the client download contract')
         signature = signature_path.read_text(encoding='utf-8').strip()
-        if not signature or len(signature) > 4096 or not path.stat().st_size:
+        if not signature or len(signature) > 4096:
             raise ValueError('empty/invalid updater asset or signature')
         # Signatures are verified cryptographically by the candidate gate and
         # by Tauri before installation. This function only assembles the feed.
@@ -57,8 +66,8 @@ def main():
     args = parser.parse_args()
     result = prepare(args.directory, args.version, json.loads(args.assets.read_text(encoding='utf-8')), args.notes.read_text(encoding='utf-8') if args.notes else '')
     for name, value in zip(['latest.json', 'release-request.json', 'channel-request.json'], result[:3]):
-        (args.directory / name).write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
-    (args.directory / 'SHA256SUMS').write_text(result[3])
+        (args.directory / name).write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
+    (args.directory / 'SHA256SUMS').write_text(result[3], encoding='utf-8', newline='\n')
     print('Prepared desktop feed and draft API payloads with make_latest=false; nothing published')
 
 

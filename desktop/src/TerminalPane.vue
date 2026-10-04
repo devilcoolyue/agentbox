@@ -2,7 +2,7 @@
 import { newTaskId } from './task-id';
 import { Channel } from '@tauri-apps/api/core';
 import { byteLabel } from './sync-task';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { attachmentDrops } from './attachment-drop';
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -29,7 +29,7 @@ const uploadedFiles=ref<AttachmentResult[]>([]);
 const attachmentMessage=ref('');
 const attachmentTask=newTaskId();
 let alive=true;
-const unlisten:UnlistenFn[]=[];
+let stopDrops: (() => void)|undefined;
 const searchText = ref('');
 const showSearch = ref(false);
 const searchInput = ref<HTMLInputElement>();
@@ -198,17 +198,6 @@ function cancelUpload() {
  if(!uploadBusy.value){void releaseFiles(pendingFiles.value);pendingFiles.value=[];}
 }
 function insertAttachment(path:string){term.paste(path+' ');term.focus();}
-async function listenForFiles(){
- const stop=await listen<{files:AttachmentInput[];x:number;y:number}>('attachment-drop',({payload})=>{
-  const rect=host.value?.getBoundingClientRect();
-  if(alive&&rect&&rect.width>0&&rect.height>0&&payload.x>=rect.left&&payload.x<=rect.right&&payload.y>=rect.top&&payload.y<=rect.bottom)setFiles(payload.files);
- });
- if(alive)unlisten.push(stop);else stop();
- const stopErrors=await listen<{message:string}>('attachment-drop-error',({payload})=>{
-  if(alive&&host.value?.clientWidth)attachmentMessage.value=payload.message;
- });
- if(alive)unlisten.push(stopErrors);else stopErrors();
-}
 onMounted(() => {
   term.loadAddon(fit); term.loadAddon(search); theme(); term.open(host.value!); fit.fit();
   term.onData(text => connection.input(new TextEncoder().encode(text)));
@@ -229,7 +218,13 @@ onMounted(() => {
   window.addEventListener('resize', viewportChanged);
   window.addEventListener('agentbox-zoom', viewportChanged);
   window.addEventListener('blur', viewportChanged);
-  void listenForFiles();
+  stopDrops = attachmentDrops.register({
+    accepts: (x,y) => {
+      const target = document.elementFromPoint(x,y);
+      return alive && !!target && !!host.value?.contains(target);
+    },
+    receive: setFiles,
+  });
   wakeTimer=setInterval(()=>{const now=Date.now();if(now-lastWakeCheck>45_000){connection.resumeAfterSleep();resize();}lastWakeCheck=now;},10_000);
   observer = new ResizeObserver(resize); observer.observe(host.value!);
   void connection.open(props.session, props.terminal);
@@ -243,7 +238,7 @@ function insertDraft(){
  term.paste(draft.value);term.focus();
 }
 onBeforeUnmount(() => {
-  alive=false;clearInterval(wakeTimer);cancelUpload();void releaseFiles(pendingFiles.value);unlisten.forEach(stop=>stop()); observer?.disconnect(); connection.close(); term.dispose();
+  alive=false;clearInterval(wakeTimer);cancelUpload();void releaseFiles(pendingFiles.value);stopDrops?.(); observer?.disconnect(); connection.close(); term.dispose();
   window.removeEventListener('pointerdown', dismissMenu, true);
   window.removeEventListener('resize', viewportChanged);
   window.removeEventListener('agentbox-zoom', viewportChanged);

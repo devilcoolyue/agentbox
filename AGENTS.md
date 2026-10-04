@@ -440,11 +440,17 @@ data/
 ### 桌面项目与终端
 
 - `desktop/` 为独立 Tauri/Vue/xterm 构建；Rust 原生 HTTP/WS 管令牌，Go `cmd/abox-sync`
-  提供私有 stdio 预检及显式同步批次命令，服务端 sync 仍关闭。桌面不进入服务端 Go 构建依赖。
+  提供私有 stdio 预检及显式同步批次命令，服务端 sync 默认关闭。管理员显式设置
+  `desktop_sync_enabled=true` 后通告 sync v1；该字段须同时保留在 Config mutate/persist/settings。
+  开关控制能力发现与新计划，不强杀在途写入，恢复管理独立。桌面不进入服务端 Go 构建依赖。
 - `internal/syncproto/syncclient/syncfs` 是便携同步基础层。scan 失败不能变空清单，规则变化
   不能当删除，冲突必须暂停项目；写入用预期哈希、受限句柄与恢复副本，不跟随链接/硬链接。
   Windows 原生实现不得依赖 Unix safefs；本地预检路径只由原生 picker 经私有管道授权。
-  执行器与尚未完成的验收边界见 docs/architecture/desktop-sync.md；sync capability 仍为 0。
+  执行器与尚未完成的验收边界见 docs/architecture/desktop-sync.md；sync capability 默认仍为 0。
+- 登录与两条配对通道发 token 时用 `CreateTokenIfUserUnchanged` 原子核对用户的密码 hash 与
+  CreatedAt；HTTP 改密通过 `ResetPasswordIfUserUnchanged` 同事务更新密码和失效其他 token。
+  不能退回先校验再无条件 CreateToken，或拆开改密与撤销；否则重置/同名重建期间能续签旧登录。
+  配对码满额仍允许属主替换自己的旧码，两个通道的码不能互换。
 - 服务端 client_manifest 使用 safefs 而非客户端绝对路径遍历，最多两项并行、空间锁内有界
   扫描；错误不返回部分清单。client_lease 进程内 30 秒租约协调重叠目录，校验设备/令牌/代次，
   重启全部失效。持有租约时禁止编辑/移除项目。

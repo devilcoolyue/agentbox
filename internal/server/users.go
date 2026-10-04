@@ -184,12 +184,22 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "账号或密码错误")
 		return
 	}
-	s.logins.success(ip)
 	tok := newToken()
-	if err := s.store.CreateToken(tok, u.Name); err != nil {
+	// Password verification is intentionally expensive. Bind the issued token
+	// to the exact account snapshot checked above so a reset/recreation while
+	// verification was running cannot resurrect the old login.
+	issued, err := s.store.CreateTokenIfUserUnchanged(tok, u)
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if !issued {
+		s.logins.fail(ip)
+		time.Sleep(loginFailDelay)
+		writeErr(w, http.StatusUnauthorized, "账号或密码错误")
+		return
+	}
+	s.logins.success(ip)
 	writeJSON(w, http.StatusOK, map[string]string{"token": tok, "user": u.Name, "role": u.Role})
 }
 
@@ -312,12 +322,13 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "新密码至少 8 位")
 		return
 	}
-	if err := s.store.SetPassword(u.Name, hashPassword(req.NewPassword)); err != nil {
+	changed, err := s.store.ResetPasswordIfUserUnchanged(u, hashPassword(req.NewPassword), bearerToken(r))
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := s.store.DeleteUserTokensExcept(u.Name, bearerToken(r)); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+	if !changed {
+		writeErr(w, http.StatusConflict, "账号状态已改变，请重新登录后重试")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -382,7 +393,8 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 // （重置自己时当前端保持登录）。
 func (s *Server) handleUserSetPassword(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if _, ok := s.store.GetUser(name); !ok {
+	u, ok := s.store.GetUser(name)
+	if !ok {
 		writeErr(w, http.StatusNotFound, "用户不存在")
 		return
 	}
@@ -397,16 +409,17 @@ func (s *Server) handleUserSetPassword(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "密码至少 8 位")
 		return
 	}
-	if err := s.store.SetPassword(name, hashPassword(req.Password)); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 	keep := ""
 	if name == reqUser(r).Name {
 		keep = bearerToken(r)
 	}
-	if err := s.store.DeleteUserTokensExcept(name, keep); err != nil {
+	changed, err := s.store.ResetPasswordIfUserUnchanged(u, hashPassword(req.Password), keep)
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !changed {
+		writeErr(w, http.StatusConflict, "账号状态已改变，请刷新后重试")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})

@@ -23,7 +23,7 @@
 
 Mac 构建后验证 codesign、Gatekeeper 与 stapled notarization。Windows 验证安装器 Authenticode。
 Tauri 更新签名与上述操作系统签名是两回事，正式候选必须同时满足。Windows 安装使用每用户 NSIS，
-WebView2 缺失时下载引导安装；离线 WebView2 场景仍须单独验收。
+内嵌离线 WebView2 安装器，缺失时从包内安装；真正缺失 Runtime 的离线系统仍须单独验收。
 
 2026-10-04 已生成本项目独立更新签名身份，并配置 `DESKTOP_UPDATER_PRIVATE_KEY` secret 与
 `DESKTOP_UPDATER_PUBLIC_KEY` variable。私钥保存在维护者本机仓库外的
@@ -37,6 +37,9 @@ WebView2 缺失时下载引导安装；离线 WebView2 场景仍须单独验收�
 `desktop/scripts/release-manifest.py` 为三架构签名资源生成 `latest.json`、SHA256SUMS、
 `release-request.json` 和 `channel-request.json`；后两者均显式 `make_latest:"false"`、`draft:true`。
 资源文件名必须跨架构唯一。它验证组成和存在性，**不替代签名的密码学验证或安装测试**。
+候选版本拒绝前导零、空预发布段等无效 SemVer；资源名限定为无需 URL 转义的 ASCII 名称，
+单包最多 512 MiB，与客户端边界一致。清单、说明和校验清单固定 UTF-8/LF 输出，避免 Windows
+区域编码改变说明内容或生成客户端无法使用的下载地址。
 发布版本资产后才能切换稳定清单，清单中的 URL 固定指向版本标签，禁止指向可覆盖的裸下载地址。
 发布前后应核对 GitHub `releases/latest` 仍为服务端 release，并实跑冻结旧安装器的解析结果。
 
@@ -46,8 +49,33 @@ WebView2 缺失时下载引导安装；离线 WebView2 场景仍须单独验收�
 `AGENTBOX_UPDATER_PUBLIC_KEY` 固定；renderer 无权修改公钥、清单端点或提供安装器路径。
 只接受仓库内清单版本对应的精确 `desktop-v<version>` 标签下单个资源的 HTTPS 下载 URL，签名必须绑定清单宣布的版本
 （`requireSignedVersion=true`）。下载限 512 MiB，失败保留旧应用，不自动重试安装。
-安装时排除正在进行的同步和文件传输；下载验签成功后断开本机终端，远端 tmux 继续，
-保留系统凭证及用户配置。应用包路径权限、公证、Windows 杀毒占用和更新中断仍须实际验收。
+安装时排除正在进行的同步、文件传输、目录检查及文件选择/剪贴板读取；保留这些互斥直到
+安装结束，健康 sidecar 必须通过 EOF 收尾并确认进程退出，才会调用安装器。开始下载时消费
+本次候选，下载或安装失败后需重新检查。已连接终端保持到成功重启交接，安装器报错后仍可
+继续使用原连接；等待中的终端打开和文件选择票据会失效。更新不撤销登录、不读取或改写
+keyring，配置与同步状态不在替换范围内。
+
+macOS 继续使用锁定 Tauri 插件的下载及版本签名校验，已验证字节交给独立受限落盘逻辑。
+暂存目录在当前 `.app` 同目录，权限 0700；限制展开大小、条目/深度和链接范围，核对新包
+identifier、版本、主程序架构、sidecar 与许可证资源后同步到磁盘，再用 `RENAME_SWAP` 原子
+交换完整目录。安装目录不可写或文件系统不支持原子交换时明确失败，不能先删除旧应用。
+交换后同步失败会原子回滚；回滚也失败时两个完整目录及收据均保留。
+
+旧包位于同目录 `.agentbox-update-*` 下，直到下一次明确安装才在当前版本、目录身份与
+收据一致时清理。解包前先保存准备意图，解包完成后原子替换为可提交收据；进程中断留下的
+未提交内容也只在原应用和暂存身份仍一致时清理。未知/被替换的恢复目录保留并阻止盲目清理。
+Windows 继续交给 NSIS/Tauri 安装流程；以上 Mac 原子目录保障不代表 Windows 安装中断已验收。
+
+普通 Rust 更新测试只操作临时合成 `.app`，覆盖交换、故障注入回滚、真实目录权限拒绝、
+旧包保留、恢复收据、候选失效与后台收尾，不运行真实应用安装。真实 ENOSPC 可独立运行：
+
+```sh
+python3 desktop/scripts/test-update-disk-full.py --report /tmp/agentbox-updater-real-enospc.json
+```
+
+该探针创建并最终卸载 64 MiB 临时 HFS+ 镜像，在独立空目录核对设备/容量/标记后写满，
+用真实解包空间不足验证旧包仍完整；不接触已安装 App，也不等同于物理断电或系统签名验收。
+应用路径权限、公证、Windows 杀毒占用和真实安装中断仍须实际验收。
 
 ## 随包依赖和许可证
 
