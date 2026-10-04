@@ -15,6 +15,7 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 | 访问本地数据库或公司内网 | [出口代理与内网隧道](networking.md) |
 | 接入脚本或参与开发 | [API 参考](api.md) → [开发指南](development.md) |
 | 参与开源重构 | [重构设计与实施计划](architecture/opensource-refactor.md) |
+| 规划后续迭代 | [维护与用户体验里程碑](roadmap.md) |
 | 遇到错误 | [常见问题](troubleshooting.md) → [部署日志](../deploy/README.md#日志与健康检查) |
 
 ## 文档地图
@@ -32,6 +33,7 @@ docs/
   networking.md                  出口代理、abox-link 与内网访问
   api.md                         HTTP / WebSocket 接口
   development.md                 开发、测试、构建与贡献
+  roadmap.md                     维护与用户体验里程碑、开发范围与验收标准
   troubleshooting.md             常见问题与定位方法
 deploy/README.md                 生产部署、更新、备份与恢复
 AGENTS.md                        代码维护约定与实现细节

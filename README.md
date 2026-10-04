@@ -238,6 +238,20 @@ English and Chinese READMEs cover the same overview and setup. Detailed guides a
 | Resolve an error | [Troubleshooting](docs/troubleshooting.md) |
 | Contribute code | [Development guide](docs/development.md) · [Contributing](CONTRIBUTING.md) |
 
+## Development roadmap
+
+Upcoming iterations focus on first-time setup, reliable daily use, and long-term maintenance. The five milestones below are planned work; see the documentation above for current features and validation status.
+
+| Milestone | Planned focus |
+| --- | --- |
+| **M1 · Troubleshooting and maintenance baseline** | Consistent error codes and operation IDs, expanded environment diagnostics, administrator password recovery, and clearer documentation and test entry points |
+| **M2 · First use and project import** | Setup guidance by role, a connected workspace creation and upload/Git import flow, and clear version and update behavior |
+| **M3 · Reliable daily tasks** | Chat drafts and receipt acknowledgments, idempotent message acceptance, task status checks after disconnects, and workspace search and filters |
+| **M4 · Maintenance and upgrade quality** | Further separation of complex modules, API contracts and layered CI, CLI protocol compatibility checks, and upgrade and recovery validation |
+| **M5 · Stable desktop release and consistency across clients** | OS signing and notarization, real-device and older-package upgrade acceptance, a multilingual desktop release, and a small sync pilot |
+
+Each iteration is initially scoped to **2–3 weeks**. Order and scope may change with user feedback, maintainer availability, and acceptance results; these estimates are not release-date commitments. See the [maintenance and usability roadmap](docs/roadmap.md) (Chinese) for scope, dependencies, acceptance criteria, and the first-iteration checklist. Issues with concrete use cases and suggestions are welcome.
+
 ## Build and contribute
 
 The server uses **Go + SQLite + Docker**; the browser console uses **TypeScript, native ES Modules, and xterm.js**. See the [development guide](docs/development.md) for toolchains and platform-specific checks.
