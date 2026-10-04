@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import struct
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -91,6 +92,59 @@ class WebView2HarnessTests(unittest.TestCase):
             with self.assertRaises(ValueError):support.authenticode(Path('unused'))
         with patch.object(support,'powershell',return_value={'status':'Valid','subject':'CN=Microsoft Corporation, O=Microsoft Corporation, C=US'}):
             self.assertEqual(support.authenticode(Path('unused'))['status'],'Valid')
+
+    def test_powershell_prefers_available_pwsh_and_preserves_its_modules(self):
+        host=r'C:\Program Files\PowerShell\7\pwsh.exe'
+        result=subprocess.CompletedProcess([],0,'\ufeff{"status":"Valid"}','')
+        with patch.object(support.os,'name','nt'), patch.dict(support.os.environ,{'PSModulePath':'pwsh-modules'},clear=True), \
+                patch.object(support.shutil,'which',return_value=host) as locate, \
+                patch.object(support.subprocess,'run',return_value=result) as execute:
+            self.assertEqual(support.powershell('verification',{'FIXTURE_VALUE':'中文'}),{'status':'Valid'})
+            locate.assert_called_once_with('pwsh')
+            self.assertEqual(execute.call_args.args[0][0],host)
+            self.assertEqual(execute.call_args.kwargs['env'],{'PSModulePath':'pwsh-modules','FIXTURE_VALUE':'中文'})
+
+    def test_windows_powershell_fallback_initializes_its_own_module_path(self):
+        host=r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+        result=subprocess.CompletedProcess([],0,'[]','')
+        with patch.object(support.os,'name','nt'), patch.dict(support.os.environ,{'PSModulePath':'incompatible','KEEP':'value'},clear=True), \
+                patch.object(support.shutil,'which',side_effect=[None,host]) as locate, \
+                patch.object(support.subprocess,'run',return_value=result) as execute:
+            self.assertEqual(support.powershell('verification',{'psmodulepath':'also incompatible'}),[])
+            self.assertEqual([call.args[0] for call in locate.call_args_list],['pwsh','powershell.exe'])
+            self.assertEqual(execute.call_args.args[0][0],host)
+            self.assertEqual(execute.call_args.kwargs['env'],{'KEEP':'value'})
+
+    def test_powershell_failure_keeps_bounded_utf8_diagnostic_without_retry(self):
+        diagnostic='discarded prefix '+'中'*5000+' module loading failed'
+        result=subprocess.CompletedProcess([],7,'{"status":"Valid"}',diagnostic)
+        with patch.object(support.os,'name','nt'), patch.object(support.shutil,'which',return_value='pwsh.exe'), \
+                patch.object(support.subprocess,'run',return_value=result) as execute:
+            with self.assertRaises(ValueError) as raised:
+                support.powershell('verification')
+            message=str(raised.exception)
+            self.assertIn('exit_code=7',message)
+            self.assertIn('module loading failed',message)
+            self.assertNotIn('discarded prefix',message)
+            self.assertLessEqual(len(message.split('stderr=',1)[1].encode('utf-8')),4096)
+            execute.assert_called_once()
+
+    def test_powershell_timeout_missing_host_and_invalid_json_fail_closed(self):
+        with patch.object(support.os,'name','nt'), patch.object(support.shutil,'which',return_value='pwsh.exe'), \
+                patch.object(support.subprocess,'run',side_effect=subprocess.TimeoutExpired('fixture',45,stderr='超时详情'.encode('utf-8'))):
+            with self.assertRaisesRegex(ValueError,'timed out.*stderr=超时详情'):
+                support.powershell('verification')
+        with patch.object(support.os,'name','nt'), patch.object(support.shutil,'which',return_value=None), \
+                patch.object(support.subprocess,'run') as execute:
+            with self.assertRaisesRegex(ValueError,'No PowerShell host'):
+                support.powershell('verification')
+            execute.assert_not_called()
+        for output in ('not json','{"status":"Valid"} trailing','NaN'):
+            with self.subTest(output=output), patch.object(support.os,'name','nt'), \
+                    patch.object(support.shutil,'which',return_value='pwsh.exe'), \
+                    patch.object(support.subprocess,'run',return_value=subprocess.CompletedProcess([],0,output,'parse detail')):
+                with self.assertRaisesRegex(ValueError,'invalid JSON; exit_code=0; stderr=parse detail'):
+                    support.powershell('verification')
 
     def test_microsoft_source_mismatch_fails_even_with_valid_metadata(self):
         class Response:

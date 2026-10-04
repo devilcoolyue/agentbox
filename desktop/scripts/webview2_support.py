@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path, PureWindowsPath
 import re
+import shutil
 import struct
 import subprocess
 import tomllib
@@ -70,12 +71,40 @@ def nsis_source(script):
 def powershell(script, values=None):
     if os.name != 'nt':
         raise ValueError('This check requires actual Windows')
+    host = shutil.which('pwsh')
     environment = dict(os.environ)
     environment.update(values or {})
-    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
-                             "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); " + script],
-                            env=environment, capture_output=True, text=True, encoding='utf-8', timeout=45, check=True)
-    return json.loads(result.stdout.lstrip('\ufeff'))
+    if not host:
+        host = shutil.which('powershell.exe')
+        # PowerShell 7's module directories can contain assemblies that Windows
+        # PowerShell 5 cannot load. Let the fallback host initialize its own path.
+        environment = {key: value for key, value in environment.items() if key.upper() != 'PSMODULEPATH'}
+    if not host:
+        raise ValueError('No PowerShell host is available for Windows verification')
+
+    def failure(reason, code, stderr):
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode('utf-8', errors='replace')
+        # Keep a bounded UTF-8 diagnostic, not the command or inherited environment.
+        detail = (stderr or '').encode('utf-8', errors='replace')[-4096:].decode('utf-8', errors='ignore').strip()
+        return ValueError(f'{PureWindowsPath(host).name}: {reason}; exit_code={code}; stderr={detail or "<empty>"}')
+
+    try:
+        result = subprocess.run([host, '-NoProfile', '-NonInteractive', '-Command',
+                                 "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); " + script],
+                                env=environment, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=45)
+    except subprocess.TimeoutExpired as error:
+        raise failure('verification timed out', 'unavailable', error.stderr) from error
+    except OSError as error:
+        raise failure('verification host could not start', 'unavailable', str(error)) from error
+    if result.returncode != 0:
+        raise failure('verification failed', result.returncode, result.stderr)
+    try:
+        def reject_constant(value):
+            raise ValueError('Non-JSON numeric constant: ' + value)
+        return json.loads(result.stdout.lstrip('\ufeff'), parse_constant=reject_constant)
+    except ValueError as error:
+        raise failure('verification returned invalid JSON', result.returncode, result.stderr) from error
 
 
 def authenticode(path):
