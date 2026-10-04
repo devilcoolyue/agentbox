@@ -102,7 +102,8 @@ class WebView2HarnessTests(unittest.TestCase):
             self.assertEqual(support.powershell('verification',{'FIXTURE_VALUE':'中文'}),{'status':'Valid'})
             locate.assert_called_once_with('pwsh')
             self.assertEqual(execute.call_args.args[0][0],host)
-            self.assertEqual(execute.call_args.kwargs['env'],{'PSModulePath':'pwsh-modules','FIXTURE_VALUE':'中文'})
+            self.assertEqual({key.upper():value for key,value in execute.call_args.kwargs['env'].items()},
+                             {'PSMODULEPATH':'pwsh-modules','FIXTURE_VALUE':'中文'})
 
     def test_windows_powershell_fallback_initializes_its_own_module_path(self):
         host=r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
