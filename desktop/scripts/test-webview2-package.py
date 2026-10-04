@@ -12,7 +12,7 @@ import threading
 import time
 import urllib.request
 
-from webview2_support import (MAX_PACKAGE, EMBEDDED_FILENAME, VENDOR_FILENAME, SOURCE_PREFIX,
+from webview2_support import (MAX_PACKAGE, EMBEDDED_FILENAME, REPAIR_FILENAME, VENDOR_FILENAME, SOURCE_PREFIX,
                               SELECTION_URL, authenticode, bounded_file, digest, nsis_source,
                               pe_machine, write_report)
 
@@ -23,10 +23,13 @@ def archive_entry(listing, basename):
         fields = dict(line.split(' = ', 1) for line in block.splitlines() if ' = ' in line)
         if PureWindowsPath(fields.get('Path', '')).name != basename:
             continue
-        size = fields.get('Size', '')
-        if not size.isascii() or not size.isdecimal() or not 0 < int(size) <= MAX_PACKAGE:
+        size = fields.get('Size')
+        # NSIS solid archives do not expose individual unpacked sizes in 7-Zip's
+        # listing. Bound the actual stream instead; vendor/notice bytes are also
+        # compared with independent reviewed inputs after extraction.
+        if size is None or size != '' and (not size.isascii() or not size.isdecimal() or not 0 < int(size) <= MAX_PACKAGE):
             raise ValueError('Embedded artifact has an invalid or excessive size')
-        entries.append((fields['Path'], int(size)))
+        entries.append((fields['Path'], int(size) if size else None))
     if len(entries) != 1:
         raise ValueError('Expected exactly one embedded artifact: ' + basename)
     return entries[0]
@@ -43,10 +46,10 @@ def extract(seven_zip, package, entry, destination):
         with destination.open('xb') as output:
             while chunk := process.stdout.read(1024 * 1024):
                 count += len(chunk)
-                if count > expected or count > MAX_PACKAGE:
+                if count > MAX_PACKAGE or expected is not None and count > expected:
                     raise ValueError('Archive extraction exceeded advertised size')
                 output.write(chunk)
-        if process.wait(timeout=5) != 0 or count != expected:
+        if process.wait(timeout=5) != 0 or count == 0 or expected is not None and count != expected:
             raise ValueError('Archive extraction failed or was truncated')
     finally:
         timer.cancel()
@@ -85,14 +88,17 @@ def audit(package, script, seven_zip, notice):
     with tempfile.TemporaryDirectory(prefix='agentbox-webview2-audit-') as temporary:
         temporary = Path(temporary)
         runtime = temporary / EMBEDDED_FILENAME
+        repair = temporary / REPAIR_FILENAME
         executable = temporary / 'agentbox-desktop.exe'
         bundled_notice = temporary / 'Microsoft-WebView2.txt'
-        for basename, target in [(EMBEDDED_FILENAME, runtime), ('agentbox-desktop.exe', executable),
+        for basename, target in [(EMBEDDED_FILENAME, runtime), (REPAIR_FILENAME, repair), ('agentbox-desktop.exe', executable),
                                  ('Microsoft-WebView2.txt', bundled_notice)]:
             extract(seven_zip, package, archive_entry(listing, basename), target)
         runtime_metadata = bounded_file(runtime)
         if runtime_metadata != source_metadata:
             raise ValueError('NSIS embedded Runtime differs from the reviewed Tauri source file')
+        if bounded_file(repair) != runtime_metadata:
+            raise ValueError('Zero-version repair payload must exactly match the main Microsoft Runtime payload')
         if pe_machine(executable) != 0x8664:
             raise ValueError('Packaged Agentbox executable is not Windows x64')
         signature = authenticode(runtime)
@@ -106,6 +112,7 @@ def audit(package, script, seven_zip, notice):
         'target': 'x86_64-pc-windows-msvc', 'runtime_installer': runtime_metadata,
         'microsoft_signature': signature, 'selection_url': SELECTION_URL,
         'source_url': source_url, 'source_bytes_match': True,
+        'zero_version_repair_payload_matches': True,
         'architecture_evidence': 'NSIS ARCH=x64, Microsoft X64 installer URL, packaged app PE=AMD64',
         'runtime_version': None, 'runtime_version_note': 'Installer ProductVersion is not the installed browser Runtime version',
         'proprietary_notice_present': True, 'updater_download_limit_bytes': MAX_PACKAGE,

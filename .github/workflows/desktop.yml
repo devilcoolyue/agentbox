@@ -50,6 +50,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
+          cache-on-failure: true
       - run: npm ci
       - run: npm run build
       - run: npm test
@@ -57,7 +58,11 @@ jobs:
       - run: python scripts/test-candidate-config.py
       - run: python scripts/test-smoke-harness.py
       - run: python scripts/test-webview2-harness.py
+      - run: python scripts/test-license-encoding.py
       - run: python scripts/collect-licenses.py
+      - name: Record whitelisted macOS volume environment
+        if: runner.os == 'macOS'
+        run: go test ../internal/syncfs -run '^TestDarwinVolumeEnvironmentReport$' -count=1 -v
       - name: Portable Go graph only (the server targets Linux)
         run: go test ../internal/syncclient ../internal/syncfs ../internal/syncproto ../cmd/abox-sync
       - run: npm run sidecar -- ${{ matrix.target }}
@@ -76,6 +81,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Embedded Microsoft Runtime audit failed' }
           python scripts/test-webview2-offline.py $packages[0].FullName --package-audit '${{ runner.temp }}/webview2-package.json' --report '${{ runner.temp }}/webview2-preflight.json'
           if ($LASTEXITCODE -ne 0) { throw 'WebView2 prerequisite inspection failed' }
+      - name: Execute isolated NSIS missing-runtime repair control flows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python scripts/test-webview2-hook.py --makensis "$env:LOCALAPPDATA/tauri/NSIS/makensis.exe" --execute-fixtures --report '${{ runner.temp }}/webview2-hook.json'
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS repair control-flow fixtures failed' }
       - name: Probe installed development bundle (macOS)
         if: runner.os == 'macOS'
         run: python scripts/test-installed.py "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Agentbox.app" --report "${{ runner.temp }}/desktop-installed.json"
@@ -113,6 +124,7 @@ jobs:
             ${{ runner.temp }}/desktop-installed.json
             ${{ runner.temp }}/webview2-package.json
             ${{ runner.temp }}/webview2-preflight.json
+            ${{ runner.temp }}/webview2-hook.json
           if-no-files-found: warn
           retention-days: 14
       - uses: actions/upload-artifact@v4
@@ -211,6 +223,9 @@ jobs:
       - name: Real ENOSPC preserves file bytes and recovery
         run: docker run --rm --read-only --network none --tmpfs /full:rw,nosuid,size=4m --mount "type=bind,src=$RUNNER_TEMP/syncfs-full.test,dst=/probe,readonly" -e AGENTBOX_SYNC_FULL_TEST_ROOT=/full alpine:3.22 /probe -test.run=^TestLinuxDiskFullPreservesOriginalAndRecovery$ -test.v
       - name: Real sidecar SIGKILL and durable recovery (Linux)
-        env:
-          AGENTBOX_SYNC_PROCESS_TEST: '1'
-        run: go test ./internal/server -run '^TestSyncSidecarSIGKILLAfterRemotePublication$' -count=1 -timeout=3m -v
+        run: |
+          CGO_ENABLED=0 go test -c -o "$RUNNER_TEMP/server-kill.test" ./internal/server
+          CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/abox-sync-kill" ./cmd/abox-sync
+          docker run --rm --read-only --network none --tmpfs /tmp:rw,nosuid,size=128m --mount "type=bind,src=$RUNNER_TEMP/server-kill.test,dst=/probe,readonly" --mount "type=bind,src=$RUNNER_TEMP/abox-sync-kill,dst=/sidecar,readonly" -e AGENTBOX_SYNC_PROCESS_TEST=1 -e AGENTBOX_SYNC_SIDECAR_BINARY=/sidecar alpine:3.22 /probe -test.run=^TestSyncSidecarSIGKILLAfterRemotePublication$ -test.v -test.timeout=2m
+      - name: Real engine SQLite and project-volume ENOSPC boundaries
+        run: docker run --rm --read-only --network none --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER --security-opt no-new-privileges --user 0:0 --tmpfs /tmp:rw,nosuid,nodev,size=128m,mode=1777 --tmpfs /sync-full:rw,nosuid,nodev,size=4m,mode=0700 --mount "type=bind,src=$RUNNER_TEMP/server-kill.test,dst=/probe,readonly" -e AGENTBOX_ENGINE_FULL_TEST=1 -e AGENTBOX_ENGINE_FULL_TEST_ROOT=/sync-full alpine:3.22 /probe -test.run=^TestSyncEngineRealENOSPC$ -test.count=1 -test.timeout=2m -test.v

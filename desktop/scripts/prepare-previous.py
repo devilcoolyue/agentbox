@@ -95,8 +95,8 @@ def main():
             raise ValueError('Downloaded asset size mismatch')
         return path
 
-    manifest = json.loads(download('latest.json', 2 << 20).read_text())
-    checksums = download('SHA256SUMS', 64 << 10).read_text()
+    manifest = json.loads(download('latest.json', 2 << 20).read_text(encoding='utf-8'))
+    checksums = download('SHA256SUMS', 64 << 10).read_text(encoding='utf-8')
     archive = download(select_asset(manifest, args.tag, args.target), LIMIT)
     digest = verify_checksum(archive, checksums)
     package = archive if args.target.endswith('windows-msvc') else extract_app(archive, directory / 'extracted')

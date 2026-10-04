@@ -14,6 +14,11 @@ ROOT = DESKTOP.parent
 OUT = DESKTOP / 'third-party'
 
 
+def command_json(command):
+    # Cargo JSON is UTF-8 even when Windows Python's locale is cp1252.
+    return json.loads(subprocess.check_output(command, encoding='utf-8'))
+
+
 def license_files(directory):
     result = []
     for path in sorted(directory.iterdir()):
@@ -27,10 +32,10 @@ def license_files(directory):
 
 def main():
     records, texts = [], []
-    metadata = json.loads(subprocess.check_output(['cargo', 'metadata', '--locked', '--format-version', '1', '--manifest-path', str(DESKTOP / 'src-tauri/Cargo.toml')], text=True))
+    metadata = command_json(['cargo', 'metadata', '--locked', '--format-version', '1', '--manifest-path', str(DESKTOP / 'src-tauri/Cargo.toml')])
     linked = set()
     for target in ('aarch64-apple-darwin','x86_64-apple-darwin','x86_64-pc-windows-msvc'):
-        graph = json.loads(subprocess.check_output(['cargo','metadata','--locked','--format-version','1','--filter-platform',target,'--manifest-path',str(DESKTOP / 'src-tauri/Cargo.toml')],text=True))['resolve']
+        graph = command_json(['cargo','metadata','--locked','--format-version','1','--filter-platform',target,'--manifest-path',str(DESKTOP / 'src-tauri/Cargo.toml')])['resolve']
         nodes = {node['id']:node for node in graph['nodes']}
         pending=[graph['root']]
         visited=set()
@@ -54,12 +59,12 @@ def main():
                 pinned = ROOT / 'third_party' / 'desktop' / (package['name'] + '@' + package['version'])
                 paths = license_files(pinned) if pinned.is_dir() else []
                 if paths:
-                    provenance=json.loads((pinned/'source.json').read_text())
+                    provenance=json.loads((pinned/'source.json').read_text(encoding='utf-8'))
                     for entry in provenance['files']:
                         if hashlib.sha256((pinned/entry['file']).read_bytes()).hexdigest()!=entry['sha256']:
                             raise SystemExit('Pinned license hash mismatch: '+str(pinned))
             packages.append(('cargo', package['name'], package['version'], package.get('license'), paths))
-    lock = json.loads((DESKTOP / 'package-lock.json').read_text())
+    lock = json.loads((DESKTOP / 'package-lock.json').read_text(encoding='utf-8'))
     for relative, item in lock['packages'].items():
         if not relative or item.get('dev'):
             continue
@@ -69,20 +74,20 @@ def main():
             if item.get('optional'):
                 continue
             raise SystemExit('Missing installed npm package: ' + relative)
-        meta = json.loads((directory / 'package.json').read_text())
+        meta = json.loads((directory / 'package.json').read_text(encoding='utf-8'))
         paths=license_files(directory)
         if not paths:
             parent_name = 'esbuild' if meta['name'].startswith('@esbuild/') else 'rollup' if meta['name'].startswith('@rollup/rollup-') else '@tauri-apps/cli' if meta['name'].startswith('@tauri-apps/cli-') else None
             if parent_name:
                 parent=DESKTOP/'node_modules'/parent_name
-                parent_meta=json.loads((parent/'package.json').read_text())
+                parent_meta=json.loads((parent/'package.json').read_text(encoding='utf-8'))
                 if parent_meta['version']!=meta['version']:raise SystemExit('Platform license version differs: '+meta['name'])
                 paths=license_files(parent)
             else:
                 pinned=ROOT/'third_party/desktop'/(meta['name'].replace('/','_')+'@'+meta['version'])
                 if pinned.is_dir():paths=license_files(pinned)
         packages.append(('npm', meta['name'], meta['version'], meta.get('license'), paths))
-    for item in json.loads((ROOT / 'third_party/go-modules.json').read_text()):
+    for item in json.loads((ROOT / 'third_party/go-modules.json').read_text(encoding='utf-8')):
         paths = [ROOT / file['path'] for file in item['files']]
         packages.append(('go', item['module'], item['version'], item.get('license', 'See license text'), paths))
     for ecosystem, name, version, expression, paths in sorted(packages, key=lambda p: (p[0], p[1], p[2])):

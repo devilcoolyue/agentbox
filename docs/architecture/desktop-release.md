@@ -83,6 +83,13 @@ Windows 验证 NSIS 覆盖安装；这两者**都不等于应用内更新器安�
 必须为 WSL2，服务端数据位于 Linux `/tmp`，不得降级为 WSL1 或把 Windows 挂载目录当 Linux 文件系统。
 只允许 GitHub 托管临时 Windows 账号运行该 launcher。结果、独立同步报告和 peer 日志保存为 artifacts。
 
+就绪检查先在 WSL 内部通过固定脚本请求带 run ID 的 `/fixture`，再检查 Windows→localhost。
+WSL 的自动 localhost 转发不可用时，launcher 只从本次 WSL 默认网络接口获取私有 IPv4，
+启动 Python 进程内的 `127.0.0.1` 随机端口 TCP 转发到固定端口 8181；最多 16 个连接，
+连接/空闲/总存活时间都有上限，结束时关闭监听器、连接和线程，不修改 netsh 或防火墙配置。
+客户端仍运行在 Windows、文件仍位于 Windows，服务端仍运行在真实 Linux 内核和文件系统。
+内外两次就绪响应必须属于同一 run ID/空间/项目，报告明确记录失败层和实际传输路径。
+
 共同探针 `desktop/scripts/test-linux-sync.py` 验证双向二进制字节、重启基线、删除恢复、原内容导出
 和永久收据清理，然后执行真实进程强杀：Linux 的生产 HTTP handler 已发布替换、保存 before 和
 applied 日志后，测试包装层扣住响应；Python `Popen.kill()` 在 Windows 调用 `TerminateProcess`

@@ -30,10 +30,11 @@ class WebView2HarnessTests(unittest.TestCase):
 
     def test_declared_offline_policy_and_notice_are_consistent(self):
         root=Path(__file__).resolve().parents[1]
-        config=json.loads((root/'src-tauri/tauri.conf.json').read_text())
+        config=json.loads((root/'src-tauri/tauri.conf.json').read_text(encoding='utf-8'))
         self.assertEqual(config['bundle']['windows']['webviewInstallMode'],{'type':'offlineInstaller','silent':True})
+        self.assertEqual(config['bundle']['windows']['nsis']['installerHooks'],'windows/webview2-hooks.nsh')
         self.assertEqual(config['bundle']['resources']['../vendor-notices/'],'third-party/vendor/')
-        text=(root/'vendor-notices/Microsoft-WebView2.txt').read_text()
+        text=(root/'vendor-notices/Microsoft-WebView2.txt').read_text(encoding='utf-8')
         self.assertIn('Microsoft proprietary software',text)
         self.assertIn('not uninstall',text)
 
@@ -58,6 +59,14 @@ class WebView2HarnessTests(unittest.TestCase):
                         [loopback,{'name':'adapter','type':'Unknown','status':'Down'}]):
             with self.assertRaises(ValueError):support.require_offline(invalid)
 
+    def test_runtime_directory_read_failure_is_not_absence(self):
+        with patch.object(support.os,'scandir',side_effect=PermissionError('denied')):
+            with self.assertRaises(PermissionError):support.runtime_files(Path('unreadable'))
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);version=root/'154.0.1.2';version.mkdir()
+            binary=version/'msedgewebview2.exe';binary.write_bytes(b'presence')
+            self.assertEqual(support.runtime_files(root),[str(binary)])
+
     def test_only_full_x64_offline_nsis_source_is_accepted(self):
         good='!define ARCH "x64"\n!define INSTALLWEBVIEW2MODE "offlineInstaller"\n!define WEBVIEW2INSTALLERPATH "C:\\cache\\x64\\12345678-1234-1234-1234-123456789abc\\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"\n'
         source,url=support.nsis_source(good)
@@ -71,6 +80,7 @@ class WebView2HarnessTests(unittest.TestCase):
     def test_archive_payload_is_unique_bounded_and_exact(self):
         entry=f'Path = $TEMP\\{support.EMBEDDED_FILENAME}\nSize = 123\n'
         self.assertEqual(package.archive_entry(entry,support.EMBEDDED_FILENAME)[1],123)
+        self.assertIsNone(package.archive_entry(entry.replace('123',''),support.EMBEDDED_FILENAME)[1])
         for invalid in ('',entry+'\n'+entry,entry.replace('123','0'),entry.replace('123',str(support.MAX_PACKAGE+1))):
             with self.assertRaises(ValueError):package.archive_entry(invalid,support.EMBEDDED_FILENAME)
 
@@ -96,7 +106,7 @@ class WebView2HarnessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             artifact=Path(directory)/'candidate.exe';artifact.write_bytes(b'candidate')
             audit={'status':'passed','scope':'actual_full_nsis_payload_audit','package':support.bounded_file(artifact),
-                   'target':'x86_64-pc-windows-msvc','source_bytes_match':True,'proprietary_notice_present':True,'microsoft_signature':{'status':'Valid'}}
+                   'target':'x86_64-pc-windows-msvc','source_bytes_match':True,'proprietary_notice_present':True,'zero_version_repair_payload_matches':True,'microsoft_signature':{'status':'Valid'}}
             offline.validate_package_audit(artifact,audit)
             artifact.write_bytes(b'changed')
             with self.assertRaises(ValueError):offline.validate_package_audit(artifact,audit)

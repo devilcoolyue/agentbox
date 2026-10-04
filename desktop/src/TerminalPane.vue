@@ -49,7 +49,12 @@ const connection = new TerminalConnection((bytes, done) => term.write(bytes, don
 let observer: ResizeObserver;
 function resize() { if(composing){pendingResize=true;return;}pendingResize=false; if (host.value?.clientWidth) { fit.fit(); connection.resize(); } }
 function theme() { term.options.theme = props.light ? { background: '#f9fafb', foreground: '#18202c', cursor: '#245dad', selectionBackground: '#b8d4fa' } : { background: '#14181f', foreground: '#dae0e8', cursor: '#e0b572', selectionBackground: '#384965' }; }
-async function copy() { try { await navigator.clipboard.writeText(term.getSelection()); } catch (error) { message.value = errorMessage(error); } }
+async function copy() {
+  const selection = term.getSelection();
+  if (!selection) return;
+  try { await navigator.clipboard.writeText(selection); }
+  catch (error) { message.value = errorMessage(error); }
+}
 function closeMenu(focus = false) {
   menuPosition.value = undefined;
   if (focus && alive) term.focus();

@@ -17,9 +17,9 @@ def main():
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
     if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?',args.version):raise SystemExit('Invalid version')
-    versions=[json.loads((DESKTOP/'package.json').read_text())['version'],json.loads((DESKTOP/'src-tauri/tauri.conf.json').read_text())['version'],tomllib.loads((DESKTOP/'src-tauri/Cargo.toml').read_text())['package']['version']]
+    versions=[json.loads((DESKTOP/'package.json').read_text(encoding='utf-8'))['version'],json.loads((DESKTOP/'src-tauri/tauri.conf.json').read_text(encoding='utf-8'))['version'],tomllib.loads((DESKTOP/'src-tauri/Cargo.toml').read_text(encoding='utf-8'))['package']['version']]
     if any(version!=args.version for version in versions):raise SystemExit('Version must match reviewed package.json, Cargo.toml and tauri.conf.json')
-    bundle={'createUpdaterArtifacts':args.signed,'resources':{'../third-party/':'third-party/','../vendor-notices/':'third-party/vendor/'},'windows':{'nsis':{'installMode':'currentUser'},'webviewInstallMode':{'type':'offlineInstaller','silent':True}}}
+    bundle={'createUpdaterArtifacts':args.signed,'resources':{'../third-party/':'third-party/','../vendor-notices/':'third-party/vendor/'},'windows':{'nsis':{'installMode':'currentUser','installerHooks':'windows/webview2-hooks.nsh'},'webviewInstallMode':{'type':'offlineInstaller','silent':True}}}
     if args.signed:
         required=['TAURI_SIGNING_PRIVATE_KEY','AGENTBOX_UPDATER_PUBLIC_KEY']
         required+=['WINDOWS_CERTIFICATE_THUMBPRINT'] if 'windows' in args.target else ['APPLE_SIGNING_IDENTITY','APPLE_CERTIFICATE','APPLE_CERTIFICATE_PASSWORD','APPLE_API_KEY','APPLE_API_ISSUER','APPLE_API_KEY_PATH']
@@ -37,7 +37,7 @@ def main():
     args.output.parent.mkdir(parents=True,exist_ok=True)
     config={'bundle':bundle}
     if args.signed:config['plugins']={'updater':{'pubkey':os.environ['AGENTBOX_UPDATER_PUBLIC_KEY'],'requireSignedVersion':True}}
-    args.output.write_text(json.dumps(config,indent=2)+'\n')
+    args.output.write_text(json.dumps(config,indent=2)+'\n',encoding='utf-8')
     print('Prepared '+('signed' if args.signed else 'unsigned')+' desktop candidate configuration')
 
 if __name__=='__main__':main()

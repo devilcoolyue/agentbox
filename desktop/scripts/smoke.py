@@ -72,7 +72,7 @@ def stop_owned_application(binary, report):
     pidfile = report.with_suffix('.pid')
     if not pidfile.exists():
         return
-    value = pidfile.read_text().strip()
+    value = pidfile.read_text(encoding='utf-8').strip()
     if not value.isascii() or not value.isdigit() or int(value) < 2 or int(value) == os.getpid():
         raise ValueError('Invalid smoke fixture PID')
     pid = int(value)
@@ -96,7 +96,7 @@ def stop_owned_application(binary, report):
 def print_diagnostics(report):
     for suffix, label in (('.stages', 'Completed smoke stages'), ('.window.jsonl', 'Native window diagnostics')):
         path = report.with_suffix(suffix)
-        print(label + ':', path.read_text()[-16384:] if path.exists() else 'none', flush=True)
+        print(label + ':', path.read_text(encoding='utf-8')[-16384:] if path.exists() else 'none', flush=True)
 
 
 def main():
@@ -124,7 +124,7 @@ def main():
             if not report.exists():
                 print_diagnostics(report)
                 raise SystemExit(f'No smoke report; {launcher} exited {code}')
-            result = json.loads(report.read_text())
+            result = json.loads(report.read_text(encoding='utf-8'))
             result['launcher'] = launcher
             print(json.dumps(result, ensure_ascii=False, indent=2))
             # open's status is not the application's status; the required native

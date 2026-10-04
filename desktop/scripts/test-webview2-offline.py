@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -23,6 +24,7 @@ def validate_package_audit(package, report):
     if (report.get('status') != 'passed' or report.get('scope') != 'actual_full_nsis_payload_audit'
             or report.get('package') != actual or report.get('target') != 'x86_64-pc-windows-msvc'
             or report.get('source_bytes_match') is not True or report.get('proprietary_notice_present') is not True
+            or report.get('zero_version_repair_payload_matches') is not True
             or report.get('microsoft_signature', {}).get('status') != 'Valid'):
         raise ValueError('Require a successful actual-payload audit for this exact NSIS artifact')
     return actual
@@ -121,12 +123,14 @@ def execute_guest(args, report):
 
 
 def main():
+    if hasattr(sys.stdout,'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('package', type=Path)
     parser.add_argument('--package-audit', type=Path, required=True)
     parser.add_argument('--loader', type=Path, help='Trusted x64 WebView2Loader.dll; defaults to the exact Cargo.lock SDK version')
     parser.add_argument('--smoke-binary', type=Path)
-    parser.add_argument('--expected-version', default=json.loads((Path(__file__).resolve().parents[1] / 'package.json').read_text())['version'])
+    parser.add_argument('--expected-version', default=json.loads((Path(__file__).resolve().parents[1] / 'package.json').read_text(encoding='utf-8'))['version'])
     parser.add_argument('--run-in-disposable-offline-guest', action='store_true')
     parser.add_argument('--report', type=Path, required=True)
     args = parser.parse_args()

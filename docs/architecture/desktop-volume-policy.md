@@ -73,3 +73,56 @@ XML 深度上限 16、token 上限 32768、APFS store 上限 32。标准 XML 解
   识别不在本次 macOS 修改范围内；不因测试容器的 overlay/tmpfs 改写受控 Linux 测试限制。
 
 这些检查不是外部 IDE 的事务锁，也不把管理员可修改内核挂载状态的环境视为安全边界。
+
+## Linux 整引擎容量故障证据
+
+2026-10-04，本机 Docker 的 Linux ARM64 内核实跑
+`TestSyncEngineRealENOSPC` 通过（0.50 秒）。测试位于
+`internal/server/client_engine_enospc_linux_test.go`，使用实际 Engine、SQLite 和回环 TCP Go
+服务端路由。它不仅测试 Writer，也检查持久化意图、HTTP 请求以及核对／重新规划后的恢复。
+
+故障只能在显式批准的独立 tmpfs 上制造。入口同时要求
+`AGENTBOX_ENGINE_FULL_TEST=1`、`AGENTBOX_ENGINE_FULL_TEST_ROOT` 为无链接的绝对目录、
+执行用户为容器内 root、文件系统为 tmpfs、容量不超过 8 MiB、与父目录属于不同挂载且初始为空。
+每次填充前再次检查挂载身份，并限制最多写入 8 MiB。填充文件使用真实非稀疏写入，必须观察到
+内核 `ENOSPC` 且该挂载可用块为零才继续测试；没有注入错误、修改 SQLite 页数限制或填宿主盘。
+
+本次使用 4 MiB 故障 tmpfs，观察到以下结果：
+
+- **prepared 意图无法保存**：先填满状态库所在挂载，再执行上传。真实写入 4,165,632 字节后
+  得到 `ENOSPC`；SQLite 返回 `SQLITE_FULL`（13）。没有 pending 或基线变更，HTTP apply
+  请求为零；本地新内容与服务器旧内容均保留。释放填充文件后可正常预览并上传。
+- **started 意图无法保存**：通过只读进度观察到 prepared 已提交后填满状态盘，同样观察到
+  内核 `ENOSPC` 和 SQLite 13。已保存的操作仍为 prepared，HTTP apply 为零。释放空间后
+  pending 仍阻止盲目重放，核对结果为 not_attempted；显式 replan 后新的确认上传成功，最终
+  只有一次 HTTP apply。两个场景都用独立只读 SQLite 连接检查完整数据库及已提交状态，
+  `PRAGMA integrity_check` 为 ok。
+- **真实 HTTP 下载期间项目盘满**：服务端收到下载请求时先从 SQLite 核对 started 已提交，
+  再把项目所在 tmpfs 填满。实际填入 4,190,208 字节；客户端确已读取 3,757 字节 HTTP 响应，
+  随后本地写入返回 `ENOSPC`。原文件、started pending 和旧基线保留。释放空间后核对显示
+  目标仍为 before，错误的 finish 被拒绝；显式 replan 后再次下载成功，并能导出逐字节一致的
+  原内容恢复副本。全程没有远端 apply；共两次真实下载请求。
+
+HTTP 已读取字节数取决于传输分段，测试只要求大于零，不把读取进度当成发布成功。进度／HTTP
+观察仅用于协调填充时点，不返回模拟错误。上述结果证明受控文件系统容量耗尽时的行为，
+**不代表物理断电、存储设备断连或 Windows 磁盘满验收**。
+
+在 Linux 构建测试程序后，可用以下隔离方式复现（Linux 主机架构决定测试二进制架构）：
+
+```sh
+CGO_ENABLED=0 go test -c -o "$RUNNER_TEMP/engine-full.test" ./internal/server
+
+docker run --rm --read-only --network none \
+  --cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER \
+  --security-opt no-new-privileges --user 0:0 \
+  --tmpfs /tmp:rw,nosuid,nodev,size=128m,mode=1777 \
+  --tmpfs /sync-full:rw,nosuid,nodev,size=4m,mode=0700 \
+  --mount "type=bind,src=$RUNNER_TEMP/engine-full.test,dst=/probe,readonly" \
+  -e AGENTBOX_ENGINE_FULL_TEST=1 \
+  -e AGENTBOX_ENGINE_FULL_TEST_ROOT=/sync-full \
+  alpine:3 /probe -test.run '^TestSyncEngineRealENOSPC$' \
+  -test.count=1 -test.timeout=2m -test.v
+```
+
+服务端夹具沿用真实 workspace UID/GID 规则，容器明确授予上面列出的 CHOWN 等文件能力；
+root 文件系统与测试程序挂载只读，普通夹具与故障卷使用两个独立 tmpfs，网络仅使用容器回环。

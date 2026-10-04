@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"debug/buildinfo"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -35,6 +36,9 @@ import (
 func TestSyncSidecarSIGKILLAfterRemotePublication(t *testing.T) {
 	if os.Getenv("AGENTBOX_SYNC_PROCESS_TEST") != "1" {
 		t.Skip("set AGENTBOX_SYNC_PROCESS_TEST=1 to build and SIGKILL the isolated native sidecar")
+	}
+	if runtime.GOOS == "linux" && os.Geteuid() != 0 {
+		t.Fatal("the Linux server fixture requires root for its real container UID/GID ownership rules; run in an isolated root test environment")
 	}
 	binary := buildKilledSidecar(t)
 	var armed atomic.Bool
@@ -71,7 +75,7 @@ func TestSyncSidecarSIGKILLAfterRemotePublication(t *testing.T) {
 			response := httptest.NewRecorder()
 			next.ServeHTTP(response, r)
 			if response.Code != http.StatusOK {
-				state.err = fmt.Errorf("fixture apply returned %d", response.Code)
+				state.err = fmt.Errorf("fixture apply returned %d: %s", response.Code, response.Body.String())
 			} else if err := json.Unmarshal(response.Body.Bytes(), &state.result); err != nil {
 				state.err = err
 			}
@@ -258,6 +262,24 @@ type killedSidecar struct {
 
 func buildKilledSidecar(t *testing.T) string {
 	t.Helper()
+	if binary := os.Getenv("AGENTBOX_SYNC_SIDECAR_BINARY"); binary != "" {
+		info, err := os.Lstat(binary)
+		if !filepath.IsAbs(binary) || err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+			t.Fatal("prebuilt fixture sidecar must be an absolute regular executable")
+		}
+		built, err := buildinfo.ReadFile(binary)
+		if err != nil || built.Path != "agentbox/cmd/abox-sync" {
+			t.Fatal("prebuilt fixture is not the production abox-sync Go entry point", err)
+		}
+		settings := map[string]string{}
+		for _, item := range built.Settings {
+			settings[item.Key] = item.Value
+		}
+		if settings["GOOS"] != runtime.GOOS || settings["GOARCH"] != runtime.GOARCH {
+			t.Fatal("prebuilt sidecar target differs from the actual test runtime")
+		}
+		return binary
+	}
 	binary := filepath.Join(t.TempDir(), "abox-sync")
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()

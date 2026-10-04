@@ -1,5 +1,38 @@
 # 桌面客户端实施记录
 
+## 2026-10-04：首轮真实三平台 CI 与后续修复
+
+首轮代码提交 `fad42f9` 已推送 `codex/desktop-validation-20261004`，实际运行
+https://github.com/devilcoolyue/agentbox/actions/runs/37154757861 。冻结旧服务端/网页/abox-link
+兼容 job 与真实 Linux Writer ENOSPC 通过；Mac Intel/macOS15.7.9 的 Go 图及38项Rust测试
+通过。尚未完成三平台打包/GUI，不能将这些局部成功视为整轮通过。
+
+本轮实跑发现并处理：
+
+- Windows Python 默认cp1252解码Cargo UTF-8元数据失败；JSON子进程和文件读取已明确UTF-8，
+  实际非ASCII子进程/中文路径回归通过。Windows native/NSIS阶段此前均未执行。
+- Intel使用的Clippy1.99新增lint拒绝chunks_exact(12)，改为MSRV支持的as_chunks，10项图片
+  回归通过；后续仍需CI验证。复制快捷键在无选区时保留系统剪贴板内容。
+- Mac ARM卷校验拒绝runner测试目录，现有日志不足以确定具体字段；新增只读白名单环境报告，
+  待下轮采集实际属性后判断，不放宽策略或跳过测试。
+- Windows实际已启动WSL2/Ubuntu24.04/Linux6.18.33.2，但Windows回环连接超时，未开始同步。
+  现增加Linux内部就绪探测、私有接口校验及受进程生命周期约束的回环TCP转发，不改宿主网络配置。
+  12项探针测试与Linux启动脚本实跑通过，Windows效果仍待下轮。
+- Linux原生强杀测试必须按服务端属主规则运行；CI原普通用户导致发布失败，现改为只读、禁外网
+  的隔离root容器，预编译生产sidecar并校验入口/架构。真实Linux内核SIGKILL恢复30.86秒通过。
+
+另新增整引擎真实4MiB tmpfs ENOSPC：prepared/started持久化失败得到SQLITE_FULL(13)，
+远端apply为零、独立SQLite完整性/旧state保持；下载已落started并真实读取3757 HTTP字节后写入
+失败，原文件/pending/基线保留。释放空间、核对/replan/重试及原副本导出通过。测试不注入假错误，
+不填宿主盘；Linux ARM Docker实跑0.50秒。精确边界与命令见desktop-volume-policy.md。
+
+Windows离线修复hook补上pv=0.0.0.0状态，分别核对机器/用户两个Hive；有效机器版本优先，
+否则采用有效用户版本，只有双确定缺失才补装。未知访问/类型/容量错误不会被当成缺失，安装和
+提取失败阻止App复制，正常返回保留寄存器/栈/Errors。实际NSIS编译通过两种安装上下文、21个
+状态fixture和只读registry ABI探针；Windows实际执行及真实缺失Runtime的离线guest仍待验收。
+实际包审计也适配了NSIS solid归档未知Size，流式提取仍限额/限时并核对两个payload同源、微软
+签名及下载哈希。后续修复尚在独立验证分支，不是公开发布或生产部署。
+
 ## 2026-10-04：继续完成 P3/P4 补项与交付验收（进行中）
 
 Mac 卷策略现要求 APFS/HFS、内核与系统元数据类型一致，并核对全部 APFS backing stores；

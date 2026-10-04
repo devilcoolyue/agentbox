@@ -80,7 +80,7 @@ def diagnostics(executable, directory, label):
     for attempt in range(2):
         report = directory / f'{label}-{attempt}.json'
         subprocess.run([str(executable), '--diagnostics-json', str(report)], env=runtime_environment(), check=True, timeout=30)
-        value = json.loads(report.read_text())
+        value = json.loads(report.read_text(encoding='utf-8'))
         if not all(value.get(key) for key in ('ok', 'sidecar', 'licenses')):
             raise ValueError('Installed probe failed')
         semver(value['version'])

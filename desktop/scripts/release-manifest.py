@@ -32,7 +32,7 @@ def prepare(directory, version, assets, notes=''):
         signature_path = directory / (name + '.sig')
         if path.is_symlink() or signature_path.is_symlink() or not path.is_file() or not signature_path.is_file():
             raise ValueError('missing or linked asset/signature: ' + name)
-        signature = signature_path.read_text().strip()
+        signature = signature_path.read_text(encoding='utf-8').strip()
         if not signature or len(signature) > 4096 or not path.stat().st_size:
             raise ValueError('empty/invalid updater asset or signature')
         # Signatures are verified cryptographically by the candidate gate and
@@ -55,7 +55,7 @@ def main():
     parser.add_argument('--assets', type=Path, required=True, help='JSON mapping target to unique asset basename')
     parser.add_argument('--notes', type=Path)
     args = parser.parse_args()
-    result = prepare(args.directory, args.version, json.loads(args.assets.read_text()), args.notes.read_text() if args.notes else '')
+    result = prepare(args.directory, args.version, json.loads(args.assets.read_text(encoding='utf-8')), args.notes.read_text(encoding='utf-8') if args.notes else '')
     for name, value in zip(['latest.json', 'release-request.json', 'channel-request.json'], result[:3]):
         (args.directory / name).write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
     (args.directory / 'SHA256SUMS').write_text(result[3])

@@ -2,9 +2,14 @@
 """Local guard tests for the Windows/WSL2 launcher; never claims Windows execution."""
 import importlib.util
 import io
+import json
 from pathlib import Path
 import queue
+import socket
+import socketserver
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -130,6 +135,78 @@ class CrossOSGuards(unittest.TestCase):
             with self.assertRaises(ValueError):
                 probe.fixture_request(opener, 'http://127.0.0.1:8181', run_id, action, 'POST')
         opener.open.assert_not_called()
+
+    def test_relay_address_must_come_from_one_private_wsl_default_interface(self):
+        routes = [{'dst': 'default', 'dev': 'eth0'}]
+        interfaces = [{'ifname': 'eth0', 'addr_info': [{'family': 'inet', 'scope': 'global', 'local': '172.23.16.2'}]},
+                      {'ifname': 'lo', 'addr_info': [{'family': 'inet', 'scope': 'host', 'local': '127.0.0.1'}]}]
+        self.assertEqual(launcher.wsl_address(routes, interfaces), '172.23.16.2')
+        for value in ['127.0.0.1', '169.254.1.1', '8.8.8.8', '224.1.2.3', '::1', 'fd00::1']:
+            with self.subTest(address=value), self.assertRaises(ValueError):
+                launcher.private_ipv4(value)
+        with self.assertRaises(ValueError):
+            launcher.wsl_address([{'dst': 'default', 'dev': 'missing'}], interfaces)
+
+    def test_linux_internal_readiness_requires_the_same_authenticated_fixture(self):
+        value = {'os': 'linux', 'arch': 'amd64', 'workspace': 'w', 'project': 'p', 'run_id': 'one-run'}
+        response = 'HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n' + json.dumps(value)
+        self.assertEqual(launcher.parse_linux_probe(response, 'one-run'), value)
+        with self.assertRaises(ValueError):
+            launcher.parse_linux_probe(response, 'another-run')
+        with self.assertRaises(ValueError):
+            launcher.parse_linux_probe(response.replace('200 OK', '403 Forbidden'), 'one-run')
+
+    def test_actual_loopback_relay_preserves_bytes_disconnect_and_bounded_cleanup(self):
+        holding = threading.Event()
+        disconnected = threading.Event()
+
+        class Endpoint(socketserver.BaseRequestHandler):
+            def handle(self):
+                mode = self.request.recv(1)
+                if mode == b'H':
+                    holding.set()
+                    if not self.request.recv(1024):
+                        disconnected.set()
+                    return
+                while True:
+                    content = self.request.recv(64 << 10)
+                    if not content:
+                        return
+                    self.request.sendall(content)
+
+        class Server(socketserver.ThreadingTCPServer):
+            daemon_threads = True
+
+        with Server(('127.0.0.1', 0), Endpoint) as backend:
+            backend_thread = threading.Thread(target=backend.serve_forever, daemon=True)
+            backend_thread.start()
+
+            def controlled_connect(address, timeout):
+                self.assertEqual(address, ('172.23.16.2', 8181))
+                return socket.create_connection(backend.server_address, timeout)
+
+            relay = launcher.LoopbackRelay('172.23.16.2', connect=controlled_connect)
+            address = ('127.0.0.1', int(relay.server.rsplit(':', 1)[1]))
+            try:
+                content = '中文\r\n\0'.encode() * 12_000
+                with socket.create_connection(address, timeout=3) as client:
+                    client.sendall(b'E' + content)
+                    received = b''
+                    while len(received) < len(content):
+                        received += client.recv(64 << 10)
+                    self.assertEqual(received, content)
+                with socket.create_connection(address, timeout=3) as client:
+                    client.sendall(b'H')
+                    self.assertTrue(holding.wait(3))
+                self.assertTrue(disconnected.wait(3), 'Native client death must close the Linux request context')
+            finally:
+                relay.close()
+                backend.shutdown()
+                backend_thread.join(timeout=3)
+            self.assertFalse(relay.thread.is_alive())
+            self.assertFalse(any(worker.is_alive() for worker in relay.workers))
+            with self.assertRaises(OSError):
+                socket.create_connection(address, timeout=0.2)
 
 
 if __name__ == '__main__':

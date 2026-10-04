@@ -53,10 +53,52 @@ if ($LASTEXITCODE -ne 0) { throw 'WebView2 payload audit failed' }
 4. 从该 GUID 的微软 x64 原始 URL 重新流式读取并比对哈希，缓存文件被替换不能靠文件名过关。
 5. 闭源 Runtime notice 确实存在于包内。
 
+修复入口 `windows/webview2-hooks.nsh` 还嵌入同源 `AgentboxWebView2Repair.exe` 别名，审计要求它
+与标准入口 payload 的长度、SHA-256 完全相同，再统一核验微软签名及来源。NSIS 会复用相同
+数据块；实际包大小仍单独检查，不能根据这种优化假定永不超限。7-Zip 对 NSIS solid 归档通常
+不给逐文件 Size，脚本因此限制实际提取的流，不把空 Size 误判为零字节或跳过大小限制。
+
 报告保留实际来源 URL、供应商签名指纹、payload/NSIS 大小和哈希。Vendor EXE 的 ProductVersion
 是安装器版本，不能伪装成安装后的浏览器 Runtime 版本。微软安装器外层可能是 x86 自解压 stub，
 所以不能根据它的 PE Machine 宣称内层运行时架构；架构证据来自微软 X64 下载资源、生成脚本
 和实际 Agentbox AMD64 文件。网络/签名/解包失败属于 **audit failed**，不能记为缺少 guest 而跳过。
+
+## 修复 0.0.0.0 注册记录
+
+微软把 `pv=0.0.0.0` 也定义为 Runtime 缺失。锁定 Tauri 模板只对空字符串启动 Runtime 安装，
+所以 Agentbox 使用 `NSIS_HOOK_PREINSTALL` 补这个明确缺项：它在原 WebView2 Section 之后、
+应用文件复制之前，分别读取 HKLM/HKCU 的 pv 和 Win32 返回状态。优先使用有效机器级版本，
+否则使用有效用户级版本；机器残留 0.0.0.0 不能遮蔽正常 HKCU，也不能让非管理员成功写入
+HKCU 后被误判失败。只有两个 Hive 均确认缺失、空或零时才运行上述同源微软安装器。
+拒绝访问、值类型错误、缓冲区不足等未知读取状态不当成缺失。无法提取/启动、退出码非零
+（含未知 HRESULT）、返回后仍无有效版本，
+都中止应用安装。四段版本号须为 0～65535 的数字且至少一段非零，不用宽松前缀转换猜测成功。
+hook 不自行写、删除或重命名任何 EdgeUpdate 注册表项，也不复制整个上游 NSIS 模板。
+
+更新模式和专用 updater 配置不走这个首次安装修复；普通首次安装的空 key 仍由 Tauri 前一
+Section 处理，hook 额外复核其最终注册值。需要真实 Runtime 的离线修复验收仍须由下述 guest
+实际执行，hook 编译或控制流 fixture 成功不能代替真实微软安装器结果。
+
+`test-webview2-hook.py` 用真实 NSIS 编译器验证主安装/更新上下文，并可在托管 Windows 实际
+执行 21 个控制流 fixture：双 Hive 优先级、机器零值与有效用户值、非管理员仅修复用户级、
+拒绝访问/超长/错误类型、供应商失败/未知 HRESULT/无法启动、提取失败时不运行残留 payload、
+安装后仍缺失或版本损坏、两类更新模式等。fixture 仅在编译时把单 Hive I/O 换成临时 INI，
+执行产品的同一双 Hive reader/selector，并
+使用只写临时 marker 的合成 vendor EXE；不触碰宿主 WebView2，也不宣称安装真实 Runtime。
+
+```powershell
+python desktop/scripts/test-webview2-hook.py `
+  --makensis "$env:LOCALAPPDATA/tauri/NSIS/makensis.exe" `
+  --execute-fixtures --report "$env:RUNNER_TEMP/webview2-hook.json"
+if ($LASTEXITCODE -ne 0) { throw 'Actual NSIS control-flow fixture failed' }
+```
+
+成功路径还验证所有调用方通用寄存器、栈和入口 Errors flag 被保留。另有只读原生 registry
+probe 直接执行未替换的 RegGetValueW，并与 Python Windows 注册表 API 核对两 Hive 的原值
+和状态，防止仅通过 INI fixture 掩盖真实 ABI/视图错误。
+
+macOS 本地已通过真实 NSIS 3.13 的两种上下文、21 个 fixture 和原生 reader probe 编译；没有
+执行 Windows EXE。CI 使用 Tauri 下载的锁定 NSIS 工具实跑，报告需明确 `executed=true`。
 
 ## 缺失前提检查：不破坏托管 runner
 
@@ -132,6 +174,8 @@ guest 运行不在此宿主步骤触发：
   run: |
     $packages = @(Get-ChildItem 'src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe')
     if ($packages.Count -ne 1) { throw 'Expected one full NSIS installer' }
+    python scripts/test-webview2-hook.py --makensis "$env:LOCALAPPDATA/tauri/NSIS/makensis.exe" --execute-fixtures --report '${{ runner.temp }}/webview2-hook.json'
+    if ($LASTEXITCODE -ne 0) { throw 'NSIS hook control-flow fixture failed' }
     python scripts/test-webview2-package.py $packages[0].FullName --nsis-script 'src-tauri/target/${{ matrix.target }}/release/nsis/x64/installer.nsi' --report '${{ runner.temp }}/webview2-package.json'
     if ($LASTEXITCODE -ne 0) { throw 'WebView2 payload audit failed' }
     python scripts/test-webview2-offline.py $packages[0].FullName --package-audit '${{ runner.temp }}/webview2-package.json' --report '${{ runner.temp }}/webview2-preflight.json'
@@ -143,6 +187,7 @@ guest 运行不在此宿主步骤触发：
     path: |
       ${{ runner.temp }}/webview2-package.json
       ${{ runner.temp }}/webview2-preflight.json
+      ${{ runner.temp }}/webview2-hook.json
     if-no-files-found: warn
 ```
 

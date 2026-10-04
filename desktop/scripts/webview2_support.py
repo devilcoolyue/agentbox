@@ -16,6 +16,7 @@ RUNTIME_KEY = 'Software\\Microsoft\\EdgeUpdate\\Clients\\' + RUNTIME_GUID
 UNINSTALL_KEY = r'Software\Microsoft\Windows\CurrentVersion\Uninstall\Agentbox'
 VENDOR_FILENAME = 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
 EMBEDDED_FILENAME = 'MicrosoftEdgeWebView2RuntimeInstaller.exe'
+REPAIR_FILENAME = 'AgentboxWebView2Repair.exe'
 SOURCE_PREFIX = 'https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/'
 SELECTION_URL = 'https://go.microsoft.com/fwlink/?linkid=2124701'
 
@@ -145,9 +146,33 @@ def runtime_inventory(loader):
             raise ValueError('Missing Windows system directory variable: ' + variable)
         for product in ('EdgeWebView', 'Edge Beta', 'Edge Dev', 'Edge SxS'):
             directory = Path(root) / 'Microsoft' / product / 'Application'
-            for pattern in ('*/msedgewebview2.exe', 'msedge.exe', '*/msedge.exe'):
-                files.extend(str(path) for path in directory.glob(pattern) if path.is_file())
+            files.extend(runtime_files(directory))
     return {'registry': records, 'loader': loader_version(loader), 'runtime_or_preview_files': sorted(set(files))}
+
+
+def runtime_files(directory):
+    # Path.glob/is_file can suppress an inaccessible directory and make it look
+    # empty. Only an actual not-found result is evidence of absence here.
+    try:
+        with os.scandir(directory) as scan:
+            entries = []
+            for entry in scan:
+                if len(entries) >= 256:
+                    raise ValueError('Unexpectedly large Runtime directory inventory')
+                entries.append(entry)
+    except FileNotFoundError:
+        return []
+    directories = [Path(directory)] + [Path(entry.path) for entry in entries if entry.is_dir()]
+    found = []
+    for folder in directories:
+        for name in ('msedgewebview2.exe', 'msedge.exe'):
+            path = folder / name
+            try:
+                os.lstat(path)
+            except FileNotFoundError:
+                continue
+            found.append(str(path))
+    return found
 
 
 def runtime_is_absent(inventory):
