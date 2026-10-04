@@ -15,6 +15,7 @@ import { terminalShortcut } from './terminal-shortcuts';
 import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{ session: string; terminal?: string; fontSize: number; light: boolean }>();
+const emit = defineEmits<{ (event: 'connection-change', session: string): void }>();
 const host = ref<HTMLDivElement>();
 const message = ref('尚未连接');
 const connected = ref(false);
@@ -50,7 +51,13 @@ let lastWakeCheck=Date.now();
 const term = new Terminal({ cursorBlink: true, scrollback: 5000, fontSize: props.fontSize, fontFamily: 'Menlo, Consolas, "Microsoft YaHei", monospace', allowProposedApi: false });
 const fit = new FitAddon();
 const search = new SearchAddon();
-const connection = new TerminalConnection((bytes, done) => term.write(bytes, done), (text, ready) => { message.value = text; connected.value = ready; }, () => ({ cols: term.cols, rows: term.rows }));
+const connection = new TerminalConnection((bytes, done) => term.write(bytes, done), (text, ready) => {
+  message.value = text;
+  if (connected.value !== ready) {
+    connected.value = ready;
+    if (alive) emit('connection-change', props.session);
+  }
+}, () => ({ cols: term.cols, rows: term.rows }));
 let observer: ResizeObserver;
 function resize() { if(composing){pendingResize=true;return;}pendingResize=false; if (host.value?.clientWidth) { fit.fit(); connection.resize(); } }
 function theme() {
@@ -238,6 +245,7 @@ function insertDraft(){
  term.paste(draft.value);term.focus();
 }
 onBeforeUnmount(() => {
+  if (connected.value) emit('connection-change', props.session);
   alive=false;clearInterval(wakeTimer);cancelUpload();void releaseFiles(pendingFiles.value);stopDrops?.(); observer?.disconnect(); connection.close(); term.dispose();
   window.removeEventListener('pointerdown', dismissMenu, true);
   window.removeEventListener('resize', viewportChanged);

@@ -35,6 +35,9 @@ Older servers support login, workspace selection, the shared terminal and manual
 Extended servers add pairing, logical projects, independent AI/shell tabs, local directory mappings,
 sync previews, per-file conflict handling and continuous synchronization while preserving workspace
 account rules. The client follows the existing web console's branding, icons, themes and interaction patterns.
+The header and sidebar show server workspace state, while the terminal toolbar shows its connection state.
+Workspace state refreshes after connection changes, every five seconds while visible and on window focus;
+detaching a terminal does not mark its workspace stopped.
 
 Synchronization is disabled by default (`desktop_sync_enabled=false`, capability `sync=0`) and requires
 explicit administrator opt-in. Recovery inspection, export and cleanup use independent capabilities;

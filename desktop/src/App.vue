@@ -14,6 +14,7 @@ import UiDialog from './UiDialog.vue';
 import { listenForAttachmentDrops } from './attachment-drop';
 import { version as desktopVersion } from '../package.json';
 import { AppZoom, savedZoom, zoomPreference, zoomShortcut } from './app-zoom';
+import { SessionRefresh } from './session-refresh';
 
 // Only non-secret preferences live in the renderer. Password is cleared after every attempt.
 const server = ref(localStorage.getItem('agentbox.server') || '');
@@ -51,7 +52,6 @@ const updateBusy = ref(false);
 const showPassword = ref(false);
 const copiedServer = ref(false);
 let copyTimer: ReturnType<typeof setTimeout>|undefined;
-let listGeneration = 0;
 let disposed = false;
 let stopDrops: (() => void)|undefined;
 onMounted(async () => {
@@ -73,7 +73,7 @@ function openSettings(tab: 'appearance'|'connection'|'about' = 'appearance') { s
 function agentLabel(agent: string) { return agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : agent; }
 function statusLabel(status: string) { return ({running:'运行中',stopped:'已停止',starting:'启动中',creating:'创建中',error:'异常',idle:'空闲',paused:'已暂停'} as Record<string,string>)[status] || status; }
 async function copyServer() { try { await navigator.clipboard.writeText(connection.value?.server || server.value); copiedServer.value = true; clearTimeout(copyTimer); copyTimer = setTimeout(() => copiedServer.value = false, 1800); } catch { error.value = '复制失败，请选择地址后手动复制。'; } }
-onBeforeUnmount(() => { disposed = true; listGeneration++; clearTimeout(copyTimer); });
+onBeforeUnmount(() => { disposed = true; sessionRefresh.stop(); clearTimeout(copyTimer); });
 const selected = ref<Session | null>(null);
 const active = ref<Session | null>(null);
 const projectSpaces=ref<Session[]>([]);
@@ -82,6 +82,33 @@ const syncStatuses=ref<Record<string,string>>({});
 watch(selected,session=>{if(connection.value?.capabilities?.features.sync===1&&session&&!syncSpaces.value.some(s=>s.id===session.id))syncSpaces.value.push(session);});
 const projectMode=computed(()=>connection.value?.capabilities?.features.project_terminals===1);
 watch(selected,session=>{if(projectMode.value&&session&&!projectSpaces.value.some(s=>s.id===session.id))projectSpaces.value.push(session);});
+const sessionRefresh = new SessionRefresh<Session[]>({
+  load: () => bridge.invoke<Session[]>('list_sessions'),
+  apply: result => {
+    sessions.value = result;
+    if (selected.value) selected.value = result.find(session => session.id === selected.value?.id) || null;
+    if (active.value) active.value = result.find(session => session.id === active.value?.id) || null;
+    projectSpaces.value = projectSpaces.value.flatMap(space => result.filter(session => session.id === space.id));
+    syncSpaces.value = syncSpaces.value.flatMap(space => result.filter(session => session.id === space.id));
+  },
+  error: err => { error.value = errorMessage(err); },
+  loading: value => { refreshing.value = value; },
+  visible: () => document.visibilityState === 'visible',
+});
+function refreshVisible() { if (document.visibilityState === 'visible') void refresh(true); }
+function terminalStatusChanged(session: string) {
+  // A socket can also close while its container keeps running. Always reread
+  // the server's workspace state rather than deriving it from the transport.
+  if (sessions.value.some(item => item.id === session)) void refresh(true);
+}
+onMounted(() => {
+  window.addEventListener('focus', refreshVisible);
+  document.addEventListener('visibilitychange', refreshVisible);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', refreshVisible);
+  document.removeEventListener('visibilitychange', refreshVisible);
+});
 const backend = ref('正在检查后台…');
 async function checkBackend() {
   try { backend.value = await bridge.invoke<string>('backend_status'); }
@@ -146,7 +173,10 @@ async function login(restore = false) {
   if (busy.value) return;
   busy.value = true; error.value = '';
   try {
-    connection.value = loginMode.value==='pair' ? await bridge.invoke<Connection>('connect_pair',{server:server.value,code:pairCode.value,allowHttp:allowHttp.value,remember:remember.value}) : await bridge.invoke<Connection>('connect', { server: server.value, username: username.value, password: restore ? null : password.value, allowHttp: allowHttp.value, remember: remember.value });
+    const connected = loginMode.value==='pair' ? await bridge.invoke<Connection>('connect_pair',{server:server.value,code:pairCode.value,allowHttp:allowHttp.value,remember:remember.value}) : await bridge.invoke<Connection>('connect', { server: server.value, username: username.value, password: restore ? null : password.value, allowHttp: allowHttp.value, remember: remember.value });
+    if (disposed) return;
+    connection.value = connected;
+    sessionRefresh.start();
     localStorage.setItem('agentbox.server', connection.value.server);
     localStorage.setItem('agentbox.user', connection.value.user);
     username.value=connection.value.user;server.value=connection.value.server;
@@ -155,27 +185,16 @@ async function login(restore = false) {
   } catch (err) { error.value = errorMessage(err); }
   finally { password.value = ''; pairCode.value=''; busy.value = false; }
 }
-async function refresh() {
-  if (refreshing.value || !connection.value) return;
-  refreshing.value = true;
-  error.value = '';
-  const identity = connection.value;
-  const generation = ++listGeneration;
-  try {
-    const result = await bridge.invoke<Session[]>('list_sessions');
-    if (disposed || identity !== connection.value || generation !== listGeneration) return;
-    sessions.value = result;
-    if (selected.value) selected.value = result.find(session => session.id === selected.value?.id) || null;
-    projectSpaces.value = projectSpaces.value.filter(space => result.some(session => session.id === space.id));
-    syncSpaces.value = syncSpaces.value.filter(space => result.some(session => session.id === space.id));
-  } catch (err) { if (!disposed && identity === connection.value && generation === listGeneration) error.value = errorMessage(err); }
-  finally { if (!disposed && generation === listGeneration) refreshing.value = false; }
+async function refresh(quiet = false) {
+  if (disposed || !connection.value) return;
+  if (!quiet) error.value = '';
+  await sessionRefresh.refresh(quiet);
 }
 async function logout() {
   if(busy.value||updateBusy.value||pairing.value)return;
-  listGeneration++; refreshing.value = false; busy.value = true; active.value = null; projectSpaces.value=[]; syncSpaces.value=[]; syncStatuses.value={}; issuedPair.value=''; clearTimeout(pairTimer); error.value = '';
+  sessionRefresh.stop(); busy.value = true; active.value = null; projectSpaces.value=[]; syncSpaces.value=[]; syncStatuses.value={}; issuedPair.value=''; clearTimeout(pairTimer); error.value = '';
   try { await bridge.invoke('disconnect'); connection.value = null; sessions.value = []; selected.value = null; settingsOpen.value = false; }
-  catch (err) { error.value = errorMessage(err); }
+  catch (err) { if (!disposed) { error.value = errorMessage(err); if (connection.value) { sessionRefresh.start(); void refresh(true); } } }
   finally { busy.value = false; }
 }
 </script>
@@ -209,7 +228,7 @@ async function logout() {
       <aside class="sidebar">
         <div class="side-head"><button class="side-brand" aria-label="返回工作空间首页" @click="selected=null"><BrandMark compact /></button><span class="edition-label">桌面</span></div>
         <button class="server-switch" title="连接设置" @click="openSettings('connection')"><span class="server-symbol"><UiIcon name="globe" :size="17" /></span><span class="server-identity"><strong>{{ serverHost }}</strong><small>当前服务器</small></span><UiIcon name="chevron-right" :size="14" /></button>
-        <div class="side-section-head"><span>工作空间 <span class="side-count">{{ sessions.length }}</span></span><button class="icon-button" :disabled="refreshing" aria-label="刷新工作空间" title="刷新工作空间" @click="refresh"><UiIcon name="refresh" :class="{rotating:refreshing}" :size="14" /></button></div>
+        <div class="side-section-head"><span>工作空间 <span class="side-count">{{ sessions.length }}</span></span><button class="icon-button" :disabled="refreshing" aria-label="刷新工作空间" title="刷新工作空间" @click="refresh()"><UiIcon name="refresh" :class="{rotating:refreshing}" :size="14" /></button></div>
         <label class="workspace-search"><UiIcon name="search" :size="14" /><input v-model="search" aria-label="搜索工作空间" placeholder="搜索工作空间" type="search"></label>
         <nav class="workspace-list" aria-label="工作空间">
           <p v-if="!visibleSessions.length" class="side-empty">{{ sessions.length?'没有匹配的工作空间':'还没有工作空间' }}</p>
@@ -229,11 +248,11 @@ async function logout() {
         <header class="workspace-header"><div><span class="eyebrow">{{ selected?agentLabel(selected.agent):'AGENTBOX DESKTOP' }}</span><h1>{{ selected?.name || '工作空间' }}</h1></div><span v-if="selected" class="workspace-status" :class="selected.status"><span class="status-dot" :class="selected.status" />{{ statusLabel(selected.status) }}</span><span v-if="selected&&!projectMode" class="mode-label" title="此服务器使用与网页版共享的终端">兼容模式</span></header>
         <p v-if="error&&!settingsOpen" class="error top-error" role="alert"><UiIcon name="alert" />{{ error }}</p>
         <nav v-if="selected" class="workspace-tabs" aria-label="工作区功能"><button v-for="tab in tabs" :key="tab.id" :class="{active:view===tab.id}" :aria-current="view===tab.id?'page':undefined" @click="view=tab.id"><UiIcon :name="tab.icon" :size="16" />{{ tab.label }}<span v-if="tab.id==='sync'&&syncStatuses[selected.id]" class="tab-status-dot" /></button></nav>
-        <div v-if="!selected" class="workspace-welcome"><div class="welcome-mark"><BrandMark icon-only /></div><h2>{{ sessions.length?'选择一个工作空间':'还没有工作空间' }}</h2><p>{{ sessions.length?'从左侧选择空间，继续终端和文件操作。':'在网页版创建工作空间后，刷新列表即可连接。' }}</p><button class="ghost" @click="refresh"><UiIcon name="refresh" />刷新列表</button></div>
+        <div v-if="!selected" class="workspace-welcome"><div class="welcome-mark"><BrandMark icon-only /></div><h2>{{ sessions.length?'选择一个工作空间':'还没有工作空间' }}</h2><p>{{ sessions.length?'从左侧选择空间，继续终端和文件操作。':'在网页版创建工作空间后，刷新列表即可连接。' }}</p><button class="ghost" @click="refresh()"><UiIcon name="refresh" />刷新列表</button></div>
         <div v-show="selected&&view==='terminal'" class="terminal-workspace">
-          <ProjectWorkspace v-for="space in projectSpaces" v-show="selected?.id===space.id" :key="space.id" :session="space" :font-size="fontSize" :light="light" />
+          <ProjectWorkspace v-for="space in projectSpaces" v-show="selected?.id===space.id" :key="space.id" :session="space" :font-size="fontSize" :light="light" @connection-change="terminalStatusChanged" />
           <div v-if="!projectMode&&selected&&selected.id!==active?.id" class="open-workspace"><span class="empty-symbol"><UiIcon name="terminal" :size="30" /></span><h2>连接此工作空间</h2><p>与网页版共享同一终端。连接可能接管网页中的终端；断开不会停止远端任务。</p><button class="primary" @click="active=selected"><UiIcon name="terminal" />连接共享终端</button></div>
-          <TerminalPane v-if="active" v-show="selected?.id===active.id" :key="active.id" :session="active.id" :font-size="fontSize" :light="light" />
+          <TerminalPane v-if="active" v-show="selected?.id===active.id" :key="active.id" :session="active.id" :font-size="fontSize" :light="light" @connection-change="terminalStatusChanged" />
         </div>
         <FileBrowser v-if="selected" v-show="view==='files'" :key="'files-'+selected.id" :session="selected.id" :visible="view==='files'&&!settingsOpen" />
         <div v-show="selected&&view==='sync'" class="workspace-panel sync-panel"><div class="panel-heading"><h2>项目同步</h2><p>绑定本地目录，预览变更后同步到服务器。</p></div><SyncWorkspace v-for="space in syncSpaces" v-show="selected?.id===space.id" :key="space.id" :session="space" @sync-status="syncStatuses[space.id]=$event" /></div>

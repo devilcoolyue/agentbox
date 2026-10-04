@@ -439,6 +439,9 @@ data/
 
 ### 桌面项目与终端
 
+- 顶部/侧栏状态只取服务端sessions结果，不从WebSocket已连接/断开推导容器运行/停止。
+  TerminalPane经ProjectWorkspace向App通知连接变化；SessionRefresh串行合并并补一次尾随读取，
+  可见时5秒轮询、focus/visibility恢复刷新，stop/start代次拒绝旧账号结果，刷新不重建现有终端。
 - `desktop/` 为独立 Tauri/Vue/xterm 构建；Rust 原生 HTTP/WS 管令牌，Go `cmd/abox-sync`
   提供私有 stdio 预检及显式同步批次命令，服务端 sync 默认关闭。管理员显式设置
   `desktop_sync_enabled=true` 后通告 sync v1；该字段须同时保留在 Config mutate/persist/settings。

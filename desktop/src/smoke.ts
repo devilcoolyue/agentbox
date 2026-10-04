@@ -37,6 +37,23 @@ async function selectWorkspaceTab(label: '终端'|'文件'|'同步'|'恢复记�
   await nextTick();
   await until(() => tab.getAttribute('aria-current') === 'page');
 }
+
+async function expectWorkspaceStatus(status: 'stopped'|'running') {
+  const label = status === 'running' ? '运行中' : '已停止';
+  try {
+    await until(() => {
+      const header = document.querySelector('.workspace-status');
+      const selected = document.querySelectorAll('.workspace-item.selected');
+      const dot = selected[0]?.querySelector('.status-dot');
+      return selected.length === 1 && header?.classList.contains(status)
+        && header.textContent?.trim() === label && dot?.classList.contains(status)
+        && dot.getAttribute('aria-label') === label;
+    });
+  } catch {
+    throw new Error(`Workspace status did not become ${status} in both header and selected sidebar item`);
+  }
+  await stage(`workspace_${status}`);
+}
 export async function reportSmokeError(error: unknown) { if(reportedFailure)return;reportedFailure=true;await invoke('smoke_finish', { ok: false, message: String(error) }); }
 
 export async function runSmoke() {
@@ -57,6 +74,9 @@ export async function runSmoke() {
     const workspace = await until(() => document.querySelector<HTMLButtonElement>('.workspace-item'));
     workspace.click();await stage('workspace');
     if(config.sync){await runSyncSmoke();return;}
+    // The synthetic session must expose its stopped login snapshot first.
+    // The frozen-server fixture may already have a running real container.
+    if(!compatibilityMode)await expectWorkspaceStatus('stopped');
     if(compatibilityMode&&(!document.querySelector('.sidebar-note')?.textContent?.includes('基础连接模式')||document.querySelector('.sync-workspace')))throw new Error('Legacy server capability fallback failed');
     if(projectsMode){
       (await until(()=>visibleButton('添加项目',document.querySelector('.project-toolbar')))).click();
@@ -84,6 +104,9 @@ export async function probeTerminal(term: Terminal, connection: TerminalConnecti
   try {
     await until(() => term.element?.closest('.terminal-pane')?.querySelector('.connection-status.connected'));
     await stage('terminal_connected');
+    // Covers legacy, both independent project terminals and the real frozen
+    // server. Reading the status once at login leaves this assertion stopped.
+    await expectWorkspaceStatus('running');
     // Octal prefix prevents the command's own PTY echo from satisfying the
     // real-shell assertion. No model CLI is invoked by this disposable probe.
     connection.input(new TextEncoder().encode(compatibilityMode?"printf '\\101\\102\\117\\130-legacy-中文-✓\\n'; printf '\\101\\102\\117\\130-size:'; stty size\r":'echo 中文 ✓\r'));
@@ -139,7 +162,7 @@ export async function probeTerminal(term: Terminal, connection: TerminalConnecti
       const visible=Array.from(menuTerminals.values()).find(candidate=>candidate.element?.getBoundingClientRect().width);
       if(!visible?.element)throw new Error('No visible terminal for menu probe');
       await probeTerminalMenu(visible, visible.element);
-      await stage('finishing');await invoke('smoke_finish', { ok: true, attachmentPath, message: compatibilityMode?'Frozen server: native login/capability fallback, real tmux UTF-8 shell output and stty resize, confirmed attachment/directory upload with native byte readback passed.':projectsMode?'Project creation and two independent terminal tabs passed in the native WebView.':'Login, legacy fallback, workspace selection, native WebSocket, xterm UTF-8 rendering, input, resize and bundled sidecar passed.' });
+      await stage('finishing');await invoke('smoke_finish', { ok: true, attachmentPath, message: compatibilityMode?'Frozen server: native login/capability fallback, running workspace indicators, real tmux UTF-8 shell output and stty resize, confirmed attachment/directory upload with native byte readback passed.':projectsMode?'Project creation, two independent terminal tabs and stopped-to-running workspace indicators passed in the native WebView.':'Login, legacy fallback, workspace selection, stopped-to-running workspace indicators, native WebSocket, xterm UTF-8 rendering, input, resize and bundled sidecar passed.' });
     }
   } catch (error) { await reportSmokeError(error); }
 }

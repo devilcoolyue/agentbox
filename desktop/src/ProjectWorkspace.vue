@@ -5,6 +5,7 @@ import TerminalPane from './TerminalPane.vue';
 import UiIcon from './UiIcon.vue';
 
 const props = defineProps<{ session: Session; fontSize: number; light: boolean }>();
+const emit = defineEmits<{ (event: 'connection-change', session: string): void }>();
 const projects = ref<Project[]>([]);
 const terminals = ref<ProjectTerminal[]>([]);
 const tabs = ref<ProjectTerminal[]>([]);
@@ -247,7 +248,7 @@ onBeforeUnmount(() => {
       </article>
     </details>
     <nav v-if="tabs.length" class="terminal-tabs" aria-label="独立终端"><div v-for="tab in tabs" :key="tab.id" :class="{active: active === tab.id}"><button class="terminal-tab-title" :aria-current="active === tab.id ? 'page' : undefined" :title="title(tab)" @click="active = tab.id"><UiIcon name="terminal" :size="14" /><span>{{ title(tab) }}</span></button><button class="terminal-tab-close" title="断开标签，远端任务继续运行" aria-label="断开标签" @click="detach(tab.id)"><UiIcon name="close" :size="13" /></button></div></nav>
-    <TerminalPane v-for="tab in tabs" v-show="active === tab.id" :key="tab.id" :session="session.id" :terminal="tab.id" :font-size="fontSize" :light="light" />
+    <TerminalPane v-for="tab in tabs" v-show="active === tab.id" :key="tab.id" :session="session.id" :terminal="tab.id" :font-size="fontSize" :light="light" @connection-change="emit('connection-change', $event)" />
     <div v-if="!tabs.length && projects.length" class="project-hint"><UiIcon name="terminal" :size="30" /><h3>打开一个终端</h3><p>新建 AI 终端开始工作，或展开项目连接已有终端。</p><span>关闭标签只断开连接，远端任务会继续运行。</span></div>
 
     <div v-if="menu" ref="menuElement" class="project-menu" role="menu" aria-label="更多操作" :style="{left: menu.x+'px', top: menu.y+'px'}" @keydown="menuKey">

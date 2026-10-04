@@ -184,6 +184,8 @@ pub(crate) fn smoke_stage(
         "application_zoom",
         "login_submitted",
         "workspace",
+        "workspace_stopped",
+        "workspace_running",
         "project_created",
         "first_terminal",
         "second_terminal",
@@ -363,6 +365,9 @@ pub fn plugin() -> TauriPlugin<Wry> {
         let input = Arc::new(AtomicBool::new(false)); let resize = Arc::new(AtomicBool::new(false));
         let project_mode=std::env::var("AGENTBOX_SMOKE_MODE").as_deref()==Ok("projects");
         let terminal_inputs=Arc::new(Mutex::new(HashSet::new()));
+        // Sessions stay stopped across any number of refresh requests until a
+        // real terminal WebSocket has completed its handshake.
+        let running=Arc::new(AtomicBool::new(false));
         let projects=Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
         let terminals=Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
         app.manage(Fixture { server, compat: None, sync: None, project_mode, terminal_inputs:terminal_inputs.clone(), report: report.into(), started: std::time::Instant::now(), directory_upload:directory_upload.clone(),attachment:attachment.clone(),input: input.clone(), resize: resize.clone() });
@@ -373,6 +378,7 @@ pub fn plugin() -> TauriPlugin<Wry> {
                 let attachment=attachment.clone();
                 let input = input.clone(); let resize = resize.clone();
                 let terminal_inputs=terminal_inputs.clone();let projects=projects.clone();let terminals=terminals.clone();
+                let running=running.clone();
                 tauri::async_runtime::spawn(async move {
                     // Peek keeps the HTTP upgrade bytes available to tungstenite.
                     let mut peek = vec![0u8; 4096];
@@ -385,6 +391,7 @@ pub fn plugin() -> TauriPlugin<Wry> {
                             assert!(!request.headers().contains_key("origin")); Ok(response)
                         }).await;
                         let Ok(mut socket) = socket else { return; };
+                        running.store(true, Ordering::SeqCst);
                         let _ = socket.send(Message::Binary(b"Agentbox synthetic terminal\r\n".to_vec().into())).await;
                         while let Some(Ok(message)) = socket.next().await {
                             match message {
@@ -416,7 +423,10 @@ pub fn plugin() -> TauriPlugin<Wry> {
                     let (kind, body) = if route.starts_with("POST /api/login ") { ("application/json", r#"{"token":"synthetic-smoke"}"#.to_owned()) }
                     else if !header.to_lowercase().contains("authorization: bearer synthetic-smoke\r\n") { return; }
                     else if route.starts_with("GET /api/me ") { ("application/json", r#"{"user":"smoke","role":"user"}"#.to_owned()) }
-                    else if route.starts_with("GET /api/sessions ") { ("application/json", r#"[{"id":"smoke","name":"Synthetic workspace","agent":"claude","status":"running"}]"#.to_owned()) }
+                    else if route.starts_with("GET /api/sessions ") {
+                        let status=if running.load(Ordering::SeqCst) { "running" } else { "stopped" };
+                        ("application/json",json!([{"id":"smoke","name":"Synthetic workspace","agent":"claude","status":status}]).to_string())
+                    }
                     else if route.starts_with("GET /api/sessions/smoke/files?") {
                         ("application/json",r#"[{"name":"directory-upload.bin","is_dir":false,"size":1,"mode":"-rw-r--r--","mtime":"2026-01-01"}]"#.into())
                     }
