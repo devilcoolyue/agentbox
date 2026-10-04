@@ -24,6 +24,23 @@ AGENTBOX_CLI_TEST_IMAGE=agentbox-agent:claude-2.1.280-codex-0.145.0 \
 
 既有 `agentbox-agent:latest` 只是本地兼容别名，不代表构建脚本安装 npm latest。构建同时保留 `agentbox-agent:claude-<版本>-codex-<版本>` 标签，不自动清理旧层。镜像标签仍可被覆盖；需要保留精确镜像时记录 image ID 或自行 `docker save` 归档。
 
+## 桌面客户端与服务端
+
+Agentbox Desktop 独立发布；服务器上的 Claude Code / Codex CLI 镜像更新与桌面应用更新是不同操作。
+
+| 组合 | 可用能力 | 数据与升级要求 |
+| --- | --- | --- |
+| Desktop 0.1.2 → 服务端 v0.1.8 | 基础模式：用户名/密码登录、空间选择、共享终端、手动文件传输 | 沿用服务端 schema 9；无桌面配对、逻辑项目、独立多终端及目录同步接口 |
+| Desktop 0.1.2 → 服务端 v0.1.9，默认配置 | 基础功能，加桌面配对、逻辑项目、独立 AI/Shell 终端及恢复记录管理 | 服务端首次启动将 schema 9 升至 10；同步默认关闭（`desktop_sync_enabled=false`、`sync=0`） |
+| Desktop 0.1.2 → 服务端 v0.1.9，管理员显式开启同步 | 增加本地目录映射、差异预览、逐文件冲突处理、手动/持续同步 | 开启 `desktop_sync_enabled` 后重新登录；仍需客户端确认目录与同步计划 |
+| 既有网页 / abox-link → 服务端 v0.1.9 | 保持原有接口、空间及账号授权规则 | 无需桌面应用；服务端升级不自动更换工作空间镜像 |
+
+客户端按能力发现显示扩展入口，旧服务端返回 404 或页面时进入基础模式；鉴权错误、网络故障和无效响应不会冒充基础模式。新桌面包不会自动升级服务端。
+
+v0.1.9 的 schema 10 只新增项目和终端元数据，不移动空间文件。升级前保存并验证配套备份；v0.1.8 不能直接打开已迁移数据库，回退必须恢复兼容备份到新目录，并保全升级后的文件变化。桌面本地状态另使用 schema 5，不与服务端 schema 混用。详见[数据库迁移与回退](architecture/database-migrations.md)。
+
+Desktop 0.1.2 的 Mac ARM64、Mac Intel 和 Windows x64 构建与自动化验收，以及旧服务端/旧网页/abox-link 兼容、Windows→Linux 同步和 Linux 故障恢复记录见[开发验收表](architecture/desktop-client-acceptance.md)。这些记录不替代最低系统、真实离线 Windows、物理交互及正式签名升级验收；测试包的系统要求与边界见[桌面说明](../desktop/README.md)。
+
 ## 客户端镜像更新
 
 v0.1.7 起，管理员可在「系统设置 → 容器与资源 → 客户端更新」手动检查、更新和回退，也可设置系统时区下的每日检查时间。自动更新默认关闭，Claude 默认 stable 渠道，Codex 默认保持当前版本；选择 latest 渠道或同时更新 Codex 需明确启用。基于当前镜像保留浏览器与自定义功能，通过 CLI 版本验证后才切换；更新后的版本不自动成为本表已验证的固定基线。回退会暂停自动更新，运行中的空间停止再启动后使用所选镜像。

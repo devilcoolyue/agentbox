@@ -34,8 +34,8 @@
 [Desktop 0.1.2 公开测试版](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)
 已发布，包含 Mac Apple Silicon、Mac Intel、Windows x64 安装包、校验和与第三方许可说明。
 测试版需手动下载安装，未启用应用内更新。
-连接现有服务端（含 v0.1.8）时支持登录、空间选择、共享终端与手动文件传输；
-从当前桌面集成源码构建的扩展服务端支持配对、逻辑项目、
+Desktop 0.1.2 连接 v0.1.8 时使用基础模式，支持登录、空间选择、共享终端与手动文件传输；
+配套[服务端 v0.1.9](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.9) 支持配对、逻辑项目、
 独立 AI/Shell 多标签、本地目录映射、同步预览、逐文件冲突处理与持续同步，保留原空间账号规则。
 界面沿用现有网页版的标识、图标、主题与操作习惯。
 顶部和侧栏显示服务端工作空间运行状态，终端工具条显示连接状态；连接变化后立即刷新空间
@@ -43,7 +43,8 @@
 
 同步默认关闭（`desktop_sync_enabled=false`，能力为 `sync=0`），由管理员显式启用。
 恢复记录核对、导出与清理按独立能力开放；清理保留原操作 ID 的永久执行收据，防止重复执行。
-桌面本地状态使用 schema 5（自动迁移 1～4），服务端元数据为 schema 10，回退需要兼容备份。
+桌面本地状态使用 schema 5（自动迁移 1～4）；服务端 v0.1.9 首次启动将 schema 9 升至 10，
+v0.1.8 无法直接打开已迁移的数据库，回退需恢复兼容备份到新目录。下载安装桌面包不会升级服务端。
 正式签名、公证、最低系统和物理交互仍需验收；已通过范围和测试包来源见
 [开发与验收记录](docs/architecture/desktop-client-acceptance.md)。
 
@@ -128,7 +129,7 @@ flowchart LR
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
 ```
 
-当前正式版本为 [v0.1.8](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.8)。安装命令默认选择最新正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.8`。
+当前服务端正式版本为 [v0.1.9](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.9)，配套 Desktop 0.1.2。安装命令默认选择最新服务端正式发布；固定安装此版本可在命令末尾加 `-s -- --version v0.1.9`。
 
 Oracle Linux / RHEL 等启用 SELinux 的系统，若旧版安装包启动时报 `203/EXEC` / `Permission denied`，按[SELinux 安装恢复](deploy/README.md#selinux-安装恢复)修复程序标签后重试激活。
 

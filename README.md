@@ -34,8 +34,8 @@ The optional Windows/macOS client in [`desktop/`](desktop/README.md) provides un
 The [Desktop 0.1.2 public test release](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)
 is available for Mac Apple Silicon, Mac Intel and Windows x64, with checksums and third-party notices.
 It requires manual installation; application updates are not enabled in this unsigned build.
-Existing servers, including v0.1.8, support login, workspace selection, the shared terminal and manual file transfers.
-Servers built from the current desktop integration source add pairing, logical projects, independent AI/shell tabs, local directory mappings,
+Desktop 0.1.2 connects to v0.1.8 in basic mode: login, workspace selection, the shared terminal and manual file transfers.
+The companion [server v0.1.9](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.9) adds pairing, logical projects, independent AI/shell tabs, local directory mappings,
 sync previews, per-file conflict handling and continuous synchronization while preserving workspace
 account rules. The client follows the existing web console's branding, icons, themes and interaction patterns.
 The header and sidebar show server workspace state, while the terminal toolbar shows its connection state.
@@ -45,7 +45,9 @@ detaching a terminal does not mark its workspace stopped.
 Synchronization is disabled by default (`desktop_sync_enabled=false`, capability `sync=0`) and requires
 explicit administrator opt-in. Recovery inspection, export and cleanup use independent capabilities;
 cleanup preserves permanent receipts at the original operation IDs to prevent replay. Desktop local state
-uses schema 5 (migrating schemas 1–4); server metadata uses schema 10. Rollback requires a compatible backup.
+uses schema 5 (migrating schemas 1–4). Server v0.1.9 migrates schema 9 to 10 on first start;
+v0.1.8 cannot open the migrated database. Rollback requires restoring a compatible backup to a new directory.
+Installing the desktop package does not upgrade the server.
 Formal signing, notarization, minimum OS versions and physical interactions still require acceptance;
 see the [development and acceptance record](docs/architecture/desktop-client-acceptance.md) for verified
 coverage and test package provenance.
@@ -132,7 +134,7 @@ Run on a Linux server:
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash
 ```
 
-The current stable release is [v0.1.8](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.8). The installer selects the latest stable release by default. Append `-s -- --version v0.1.8` to pin this version.
+The current stable server release is [v0.1.9](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.9), the companion release for Desktop 0.1.2. The installer selects the latest stable server release by default. Append `-s -- --version v0.1.9` to pin this version.
 
 On SELinux systems such as Oracle Linux / RHEL, if an older package fails to start with `203/EXEC` / `Permission denied`, follow [SELinux installation recovery](deploy/README.md#selinux-安装恢复) to repair executable labels before retrying activation.
 

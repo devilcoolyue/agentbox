@@ -6,9 +6,9 @@
 Mac 使用 ad-hoc 签名、未公证；Windows 没有 Authenticode 签名，系统可能提示未知发布者。
 本版需要手动下载安装，应用内更新未启用。
 
-同仓库、独立构建的 Windows/macOS 客户端。现有服务端（含稳定版 v0.1.8）提供基础连接：用户名/密码登录、
+同仓库、独立构建的 Windows/macOS 客户端。连接 v0.1.8 时使用基础模式：用户名/密码登录、
 系统凭证库保存/恢复、工作空间列表、共享终端、重连、搜索、字号和主题。
-连接从当前桌面集成源码构建的扩展服务端，还支持配对登录、逻辑项目管理、独立 AI/Shell 多终端标签。
+配套[服务端 v0.1.9](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.9) 提供配对登录、逻辑项目管理、独立 AI/Shell 多终端标签及同步后端。
 下载安装桌面包不会升级服务端；扩展入口按服务端声明的能力显示。
 可通过系统文件夹选择器检查本地目录的扫描结果与跨平台名称兼容性。附件粘贴、手动文件传输、同步
 预览与持续同步已接入；服务端默认仍为 `sync=0`。管理员可显式配置同步入口，独立恢复记录
@@ -115,7 +115,7 @@ Windows 可用 `--no-bundle` 后运行 `scripts/smoke.py src-tauri/target/debug/
 
 ## 项目模式（扩展服务端）
 
-新版服务端的 `desktop_sync_enabled` 缺省为 `false`，保持已有部署行为。准备试用同步时，
+v0.1.9 服务端的 `desktop_sync_enabled` 缺省为 `false`（能力 `sync=0`），保持已有部署行为。准备试用同步时，
 管理员可以在 `config.json` 设置为 `true` 后重启服务，或通过现有管理员
 `PUT /api/settings` 提交 `{"desktop_sync_enabled":true}`；客户端重新登录后显示“同步”页。
 开关经统一配置校验与原子持久化，修改其他设置不会丢失它。
@@ -136,8 +136,9 @@ Windows 可用 `--no-bundle` 后运行 `scripts/smoke.py src-tauri/target/debug/
 已登录客户端可生成一次性配对码，另一设备填写相同服务器地址并选择“配对码登录”；码有效期
 10 分钟，重新生成会使同用户上一个码失效。配对与 abox-link 隧道开关和码互相独立。
 
-开发服务端首次启动自动将数据库从 schema 9 升到 10。先保存兼容备份；旧二进制不能直接打开
-schema 10。已有浏览器/abox-link 接口保持原契约，服务端仍可以独立构建。
+v0.1.9 服务端首次启动自动将数据库从 schema 9 升到 10。先保存并验证兼容备份；v0.1.8 不能
+直接打开 schema 10。回退需恢复升级前配套备份到新目录，并另行保全升级后变化的文件。
+已有浏览器/abox-link 接口保持原契约，服务端仍可以独立构建。
 
 新增验证：原生 smoke 脚本加 `--mode projects` 覆盖项目创建和两个独立标签；真实容器测试：
 
@@ -156,7 +157,7 @@ AGENTBOX_CLIENT_TEST_IMAGE=agentbox-client-test:local go test ./internal/server 
 安装探针 `scripts/test-installed.py` 可传 `--previous <真实旧包>`；没有旧包会明确跳过升级部分。
 
 同步后端已有安装身份与本地 SQLite 绑定/基线/未完成操作持久化，以及显式整项目执行器、
-私有 IPC 和绑定/预览/确认/取消界面，以及待定批次核对、明确收尾和原内容导出。服务端 sync 仍为 0，正常连接不会显示同步入口。正常服务重启保留身份，备份恢复生成新身份，需重新确认基线。现有“检查本地目录”
+私有 IPC 和绑定/预览/确认/取消界面，以及待定批次核对、明确收尾和原内容导出。服务端默认 `sync=0`，管理员启用后才显示同步入口。正常服务重启保留身份，备份恢复生成新身份，需重新确认基线。现有“检查本地目录”
 按钮仍只预检，不会建立绑定或启动同步；进展和边界见上述 desktop-sync 文档。
 
 ## 原生同步与恢复验收
@@ -186,7 +187,7 @@ AGENTBOX_SYNC_SMOKE_BINARY="$PWD/desktop/src-tauri/target/debug/bundle/macos/Age
 窗口卡顿不会积累每一次读文件的事件；服务器扫描暂只显示阶段，没有远端逐文件扫描百分比。
 
 原生同步 smoke 已增加慢速分段下载进度和取消后清除断言；只在 Mac ARM64 实跑通过。
-正常服务端仍 sync=0，此界面仍由服务端能力控制。完整字段与资源限制见 desktop-sync 文档。
+服务端默认 `sync=0`，此界面由管理员开关和服务端能力控制。完整字段与资源限制见 desktop-sync 文档。
 
 ## 解绑与重新绑定
 
@@ -201,7 +202,7 @@ AGENTBOX_SYNC_SMOKE_BINARY="$PWD/desktop/src-tauri/target/debug/bundle/macos/Age
 本地同步数据库升级为 schema 5，schema 1/2/3/4 自动迁移，旧版 sidecar 会拒绝打开；服务端 schema 不变。
 历史页按游标分页并显示逻辑容量，没有自动清理。原本没有恢复引用的已完成历史，在所有远端操作均已
 回收后可逐条确认删除本机记录；有原内容引用的批次仍保留审计。Mac ARM64 原生测试已验证解绑、归档副本导出、重绑和新旧记录
-共存；Windows/Intel 与真实系统目录选择器仍待实机验收，服务端 sync 继续为 0。
+共存；Windows/Intel 与真实系统目录选择器仍待实机验收，服务端同步仍默认关闭。
 
 ## 原生附件与文件浏览
 
@@ -264,7 +265,7 @@ AGENTBOX_SYNC_SMOKE_BINARY="$PWD/desktop/src-tauri/target/debug/bundle/macos/Age
 的远端副本不再导出。即使原本没有旧内容，也应先回收远端操作，再清理对应的无副本本机历史，避免丢失入口。
 
 这些实现仍不能代替 P3～P5 的完整验收；Windows/Mac Intel 实机、跨版本兼容、签名公证与真实安装升级
-仍需完成，服务端继续保持 `sync=0`。
+仍需完成，服务端同步仍默认关闭（`sync=0`）。
 
 ### 本机历史丢失后的服务器恢复管理
 
