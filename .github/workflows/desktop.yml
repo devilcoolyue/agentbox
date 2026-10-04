@@ -67,6 +67,11 @@ jobs:
         run: go test ../internal/syncclient ../internal/syncfs ../internal/syncproto ../cmd/abox-sync
       - run: npm run sidecar -- ${{ matrix.target }}
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: Diagnose native Windows loader imports
+        if: runner.os == 'Windows'
+        run: |
+          cargo test --locked --no-run --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
+          python scripts/check-windows-imports.py src-tauri/target/${{ matrix.target }}/debug/deps --report "${{ runner.temp }}/windows-imports.json"
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
       - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }} --all-targets -- -D warnings
       - name: Unsigned development installer (never a GitHub Release)
@@ -147,6 +152,7 @@ jobs:
             ${{ runner.temp }}/webview2-package.json
             ${{ runner.temp }}/webview2-preflight.json
             ${{ runner.temp }}/webview2-hook.json
+            ${{ runner.temp }}/windows-imports.json
           if-no-files-found: warn
           retention-days: 14
       - uses: actions/upload-artifact@v4
