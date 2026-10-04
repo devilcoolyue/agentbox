@@ -142,7 +142,13 @@ func TestClientTerminalsContainerLive(t *testing.T) {
 	if err = ca.WriteMessage(websocket.TextMessage, resize); err != nil {
 		t.Fatal(err)
 	}
-	expect(ca, "printf 'SIZE_'; stty size", "SIZE_34 100")
+	// Docker's resize call updates the outer exec PTY. tmux propagates SIGWINCH
+	// to its pane asynchronously, so the next shell command may still see the
+	// old dimensions. Poll the actual pane until the exact requested size is
+	// visible (35 rows minus tmux's status line), with at most 5 seconds of
+	// retry delay. On exhaustion, print the last size so expect reports it.
+	// Keep the marker separate from the dimensions so echoed input cannot pass.
+	expect(ca, `for i in {1..100}; do size=$(stty size); [ "$size" = "34 100" ] && break; sleep 0.05; done; printf 'SIZE_%s\n' "$size"`, "SIZE_34 100")
 	w := clientRequest(handler, "alice", "DELETE", "/api/sessions/s1/client-terminals/"+a.ID, "")
 	if w.Code != 200 {
 		t.Fatalf("terminate: %d %s", w.Code, w.Body.String())
