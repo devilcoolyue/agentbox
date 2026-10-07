@@ -1,5 +1,5 @@
 import { msg, type DisplayMessage } from './i18n';
-import { bridge, errorMessage, retryable, type TerminalEvent } from './bridge';
+import { bridge, errorNotice, retryable, type TerminalEvent } from './bridge';
 
 export function reconnectClose(code: number): boolean {
   return code === 1001 || code === 1006 || code === 1011 || code === 1012 || code === 1013;
@@ -85,7 +85,7 @@ export class TerminalConnection {
       this.stable = setTimeout(() => { this.attempts = 0; }, 30_000);
     } catch (error) {
       if (generation !== this.generation || this.stopped) return;
-      this.status(errorMessage(error), false);
+      this.status(errorNotice(error), false);
       this.policyClosed=!retryable(error);
       if (retryable(error)) this.schedule(generation);
     }
@@ -110,7 +110,7 @@ export class TerminalConnection {
   resize(): void {
     if (this.id === null) return;
     const { cols, rows } = this.size();
-    void this.transport.invoke('terminal_resize', { id: this.id, cols: Math.min(1000, cols), rows: Math.min(1000, rows) }).catch(error => this.status(errorMessage(error), this.id !== null));
+    void this.transport.invoke('terminal_resize', { id: this.id, cols: Math.min(1000, cols), rows: Math.min(1000, rows) }).catch(error => this.status(errorNotice(error), this.id !== null));
   }
 
   input(bytes: Uint8Array): void {
@@ -125,7 +125,7 @@ export class TerminalConnection {
         await this.transport.invoke('terminal_input', { id, bytes: Array.from(bytes.subarray(start, start + 16 * 1024)) });
       }
     }).catch(error => {
-      if (generation === this.generation) { this.close(); this.status(msg("{p1}；输入可能只发送了一部分，请检查后重连", { p1: (errorMessage(error)) }), false); }
+      if (generation === this.generation) { this.close(); this.status(msg("{p1}；输入可能只发送了一部分，请检查后重连", { p1: (errorNotice(error)) }), false); }
     }).finally(() => { if (generation === this.generation) this.queued -= bytes.length; });
   }
 }

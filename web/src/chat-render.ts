@@ -1,3 +1,4 @@
+import { formatProblem } from "./problems.js";
 import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* chat-render：对话流的纯渲染管线 —— 用户消息、agent 事件（Claude stream-json /
  * Codex --json 新旧两种结构）、轻量 Markdown、附件缩略图。无状态副作用。
@@ -537,7 +538,7 @@ export function renderEntry(raw: HistoryEntry | null | undefined) {
   if (raw.kind === "user") return [renderUserMsg(raw.text)];
   if (raw.kind === "event") return renderEvent(raw.event);
   if (raw.kind === "divider") return [divider(raw.ts ? i18nText("新对话 · ") + fmtTime(raw.ts) : "")];
-  if (raw.kind === "status" && raw.state === "error") return [chip(raw.error!, "err")];
+  if (raw.kind === "status" && raw.state === "error") return [chip(formatProblem(raw, i18nText), "err")];
   return [];
 }
 

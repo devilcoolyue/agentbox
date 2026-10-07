@@ -68,14 +68,20 @@ func TestMigrationFailureRollsBackSchemaAndVersion(t *testing.T) {
 }
 func TestPreVersionedCurrentDatabaseKeepsRows(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.db")
-	st, err := Open(path)
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Build the pre-versioning shape, not today's schema with its version
+	// forged backwards (which would retain tables that did not exist then).
+	if err = runMigrations(db, migrations()[:1]); err != nil {
+		t.Fatal(err)
+	}
+	st := &Store{db: db}
 	if err := st.Put(Session{ID: "legacy", User: "alice", Name: "keep", DefaultModel: "fixture"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.db.Exec("ALTER TABLE usage_events DROP COLUMN price_snapshot; PRAGMA user_version=0"); err != nil {
+	if _, err := st.db.Exec("PRAGMA user_version=0"); err != nil {
 		t.Fatal(err)
 	}
 	st.Close()
@@ -121,10 +127,14 @@ func TestVersionOneUpgradeAndDataPreservation(t *testing.T) {
 
 func TestUsageTimestampMigrationPreservesInstantsAndOrder(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.db")
-	st, err := Open(path)
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err = runMigrations(db, migrations()[:2]); err != nil {
+		t.Fatal(err)
+	}
+	st := &Store{db: db}
 	for _, e := range []struct{ ts, turn string }{
 		{"2026-09-23T23:59:59.999999999+08:00", "yesterday"},
 		{"2026-09-23T17:04:00Z", "today"},
@@ -134,9 +144,6 @@ func TestUsageTimestampMigrationPreservesInstantsAndOrder(t *testing.T) {
 			VALUES (?, 'alice', 's1', ?, 'claude')`, e.ts, e.turn); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if _, err := st.db.Exec("PRAGMA user_version=2"); err != nil {
-		t.Fatal(err)
 	}
 	st.Close()
 	st, err = Open(path)

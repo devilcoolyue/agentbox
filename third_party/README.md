@@ -11,6 +11,9 @@ Agentbox 的项目许可证不替代第三方许可证。发布包携带本目�
 | @xterm/addon-webgl | 0.19.0，npm / xtermjs/xterm.js | MIT | 仅移除末尾 sourceMappingURL 注释 |
 | KaTeX | 0.16.9，npm / KaTeX/KaTeX | MIT；另附字体仓库 MIT 许可 | JS/CSS/20 个 woff2 与 npm 逐字节一致 |
 | Prism | 1.30.0，npm / PrismJS/prism | MIT | 按 vendor.json 中顺序拼接上游压缩核心与语言组件，添加许可头；未修改语法规则 |
+| Marked | 18.1.0，npm / markedjs/marked | MIT | ESM 与 npm 逐字节一致；仅文件 Markdown 预览使用 |
+| DOMPurify | 3.4.16，npm / cure53/DOMPurify | Apache-2.0 OR MPL-2.0 | ESM 与 npm 逐字节一致 |
+| GitHub Markdown CSS | 5.9.0，npm / sindresorhus/github-markdown-css | MIT | 合并 light/dark，选择器限定到文件预览及应用主题 |
 | noVNC | 1.6.0，novnc/noVNC | MPL-2.0，另附 BSD 许可 | core/vendor 原生模块与上游一致 |
 | Playwright seccomp profile | 1.58.2，microsoft/playwright | Apache-2.0 | 无；仅用于可选浏览器镜像的用户命名空间沙箱 |
 | claude-hud | 0.5.1，jarrodwatts/claude-hud @ 10979d16dce075b112b7564bead95c5f236d8a87 | MIT | package.json 和 54 个 dist 文件与上游一致；补入上游 LICENSE |

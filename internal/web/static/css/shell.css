@@ -180,6 +180,12 @@
   display: flex; align-items: center; justify-content: space-between;
   color: var(--muted); font-size: 11px;
 }
+.session-filters { flex: none; display: grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px; padding:0 4px 8px; }
+.session-filters input, .session-filters :is(select, .select-trigger) { width: 100%; min-width: 0; min-height: 36px; font-size: 12px; }
+.session-filter-row { display:flex; align-items:center; gap:4px; max-width:120px; }
+.session-filter-row :is(select, .select-trigger) { flex:1; width:82px; }
+.session-filter-row button { flex: none; min-height: 36px; }
+.session-search-open.side-item { display: none; }
 .side-label { font-size: 11px; letter-spacing: 0.06em; }
 .side-count { font-family: var(--mono); font-size: 10px; }
 .side-foot { position: relative; flex: none; padding: 8px 12px 12px; }
@@ -409,9 +415,10 @@
 @media (min-width: 761px) {
   :root[data-sidebar-collapsed="true"] .sidebar { width: 68px; }
   :root[data-sidebar-collapsed="true"] .side-head { padding: 0; justify-content: center; }
-  :root[data-sidebar-collapsed="true"] :is(.side-brand, .side-item-label, .side-section-head, .sc-body, .session-empty-text) { display: none; }
+  :root[data-sidebar-collapsed="true"] :is(.side-brand, .side-item-label, .side-section-head, .session-filters, .sc-body, .session-empty-text) { display: none; }
   :root[data-sidebar-collapsed="true"] .side-create { padding: 16px 12px 12px; }
   :root[data-sidebar-collapsed="true"] .side-new { padding: 0; justify-content: center; }
+  :root[data-sidebar-collapsed="true"] .session-search-open { display: flex; flex: none; justify-content: center; margin-bottom: 4px; }
   :root[data-sidebar-collapsed="true"] .side-sessions { padding: 0 4px; }
   :root[data-sidebar-collapsed="true"] .session-list { padding: 2px 4px 6px; scrollbar-width: none; }
   /* 68px 的窄栏里滚动条会把头像挤偏；滚轮与触控板照常能滚 */
@@ -460,3 +467,8 @@
 .side-user-menu .language-control :is(select, .select-trigger) { width: 128px; }
 @media (pointer: coarse) { .language-control .select-trigger { min-height: 40px; } }
 html[lang="en"] .side-tools { grid-template-columns: 1fr; }
+
+@media (max-width: 760px) {
+  .session-filters input, .session-filters :is(select, .select-trigger) { min-height: 44px; font-size: 16px; }
+  .session-filter-row button { min-height: 44px; }
+}

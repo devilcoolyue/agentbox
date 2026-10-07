@@ -8,7 +8,14 @@
     "build": "tsc -p tsconfig.json && node scripts/sync-i18n-core.mjs",
     "watch": "tsc -p tsconfig.json --watch",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test:i18n": "node --test scripts/test-i18n.mjs"
+    "test:i18n": "node --test scripts/test-i18n.mjs",
+    "test:problems": "node --test scripts/test-problems.mjs",
+    "test:diagnostics": "node --test scripts/test-diagnostics.mjs",
+    "test:drafts": "node --test scripts/test-drafts.mjs",
+    "test:outbox": "node --test scripts/test-outbox.mjs",
+    "test:contracts": "python3 scripts/generate-contracts.py --check && node --test scripts/test-contracts.mjs",
+    "test:chat-history": "node --test scripts/test-chat-history.mjs",
+    "test:feature-lifetimes": "node --test scripts/test-feature-lifetimes.mjs"
   },
   "devDependencies": {
     "typescript": "~7.0.2"

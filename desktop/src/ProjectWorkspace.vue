@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { t, messageRef } from './i18n';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
-import { bridge, errorMessage, type Project, type ProjectTerminal, type Session } from './bridge';
+import { bridge, errorNotice, type Project, type ProjectTerminal, type Session } from './bridge';
 import TerminalPane from './TerminalPane.vue';
 import UiIcon from './UiIcon.vue';
 
@@ -52,7 +52,7 @@ async function refresh() {
     tabs.value = tabs.value.filter(tab => ts.some(terminal => terminal.id === tab.id && terminal.state === 'open'));
     if (!tabs.value.some(tab => tab.id === active.value)) active.value = tabs.value[0]?.id || '';
   } catch (err) {
-    if (!disposed && current === generation) error.value = errorMessage(err);
+    if (!disposed && current === generation) error.value = errorNotice(err);
   } finally {
     if (!disposed && current === generation) refreshing.value = false;
   }
@@ -162,7 +162,7 @@ async function save() {
     }});
     if (disposed) return;
     await closeDialog(true); await refresh();
-  } catch (err) { if (!disposed) error.value = errorMessage(err); }
+  } catch (err) { if (!disposed) error.value = errorNotice(err); }
   finally { if (!disposed) busy.value = false; }
 }
 function attach(terminal: ProjectTerminal) {
@@ -185,7 +185,7 @@ async function create(project: Project, kind: 'agent'|'shell') {
     if (disposed) return;
     expandedProjects.value = new Set([...expandedProjects.value, project.id]);
     attach(terminal);
-  } catch (err) { if (!disposed) error.value = errorMessage(err); }
+  } catch (err) { if (!disposed) error.value = errorNotice(err); }
   finally { if (!disposed) busy.value = false; }
 }
 async function remove() {
@@ -201,7 +201,7 @@ async function remove() {
     if (disposed) return;
     await closeDialog(true); await refresh();
   } catch (err) {
-    if (!disposed) { error.value = errorMessage(err); await refresh(); }
+    if (!disposed) { error.value = errorNotice(err); await refresh(); }
   } finally { if (!disposed) busy.value = false; }
 }
 function title(terminal: ProjectTerminal) {

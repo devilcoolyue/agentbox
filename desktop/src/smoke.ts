@@ -2,6 +2,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { nextTick } from 'vue';
 import { language } from './i18n';
+import { bridge } from './bridge';
 import type { Terminal } from '@xterm/xterm';
 import type { TerminalConnection } from './terminal-connection';
 let projectsMode=false;
@@ -57,6 +58,46 @@ async function expectWorkspaceStatus(status: 'stopped'|'running') {
 }
 export async function reportSmokeError(error: unknown) { if(reportedFailure)return;reportedFailure=true;await invoke('smoke_finish', { ok: false, message: String(error) }); }
 
+async function setSmokeLanguage(select: HTMLSelectElement, locale: 'zh-CN'|'zh-TW'|'en') {
+  select.value=locale;select.dispatchEvent(new Event('change',{bubbles:true}));await nextTick();
+  await until(()=>document.documentElement.lang===locale);
+}
+async function probeLoginLanguages(server: string) {
+  fill('input[type=url]',server);fill('input[autocomplete=username]','smoke');fill('input[type=password]','synthetic-denied');
+  await nextTick();document.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+  const error=await until(()=>document.querySelector<HTMLElement>('.login-form [role=alert]'));
+  await until(()=>document.querySelector('.login-submit')?.textContent?.trim()==='登录');
+  fill('input[type=password]','synthetic-unsent');await nextTick();
+  const picker=document.querySelector<HTMLSelectElement>('.login-language select')!;
+  for(const [locale,label,reason] of [['en','Sign in','Incorrect username or password'],['zh-TW','登入','帳號或密碼錯誤'],['zh-CN','登录','账号或密码错误']] as const){
+    await setSmokeLanguage(picker,locale);
+    await until(()=>document.querySelector('.login-submit')?.textContent?.trim()===label);
+    if(!error.textContent?.includes(reason)||!error.textContent?.includes('0123456789abcdef0123456789abcdef')||error.textContent?.includes('synthetic-private-detail'))throw new Error('Localized native problem/reference failed');
+    if(document.querySelector<HTMLInputElement>('input[type=password]')?.value!=='synthetic-unsent')throw new Error('Language switch changed login input');
+  }
+  await stage('login_languages');
+}
+async function probeTerminalLanguages(term: Terminal) {
+  const original=bridge.invoke;let opened=0;
+  bridge.invoke=((...args:Parameters<typeof original>)=>{if(args[0]==='terminal_open')opened++;return original(...args);}) as typeof original;
+  const element=term.element;
+  const buffer=()=>Array.from({length:term.buffer.active.length},(_,n)=>term.buffer.active.getLine(n)?.translateToString()||'').join('\n');
+  const before=buffer();
+  try {
+    (await until(()=>visibleButton('客户端设置',document.querySelector('.sidebar')))).click();
+    const picker=await until(()=>Array.from(document.querySelectorAll<HTMLSelectElement>('.settings-section .language-select select')).find(s=>s.getClientRects().length));
+    for(const [locale,label] of [['en','Running'],['zh-TW','執行中'],['zh-CN','运行中']] as const){
+      await setSmokeLanguage(picker,locale);
+      await until(()=>document.querySelector('.workspace-status')?.textContent?.trim()===label);
+      if(element!==term.element||buffer()!==before||opened)throw new Error('Language switch replaced terminal transport or content');
+    }
+    const dialog=Array.from(document.querySelectorAll<HTMLElement>('.ui-dialog')).find(d=>d.getClientRects().length);
+    dialog?.querySelector<HTMLButtonElement>('.dialog-header button')?.click();
+    await until(()=>!dialog?.getClientRects().length);
+    await stage('terminal_languages');
+  } finally {bridge.invoke=original;language.value='zh-CN';await nextTick();}
+}
+
 export async function runSmoke() {
   try {
     // Native smoke fixtures use Chinese labels on every runner OS. This module
@@ -69,6 +110,7 @@ export async function runSmoke() {
     await renderedWindow;
     const server=config.server;projectsMode=config.projects;compatibilityMode=config.compat;
     await until(() => document.querySelector('.login-form'));await stage('login_form');
+    if(!config.sync&&!config.compat)await probeLoginLanguages(server);
     await probeAppZoom();
     fill('input[type=url]', server); fill('input[autocomplete=username]', config.username??(config.sync?'alice':'smoke')); fill('input[type=password]', config.password??'synthetic-password');
     config.password=null;
@@ -166,8 +208,9 @@ export async function probeTerminal(term: Terminal, connection: TerminalConnecti
     if(verifiedTerminals.size===(projectsMode?2:1)){
       const visible=Array.from(menuTerminals.values()).find(candidate=>candidate.element?.getBoundingClientRect().width);
       if(!visible?.element)throw new Error('No visible terminal for menu probe');
+      await probeTerminalLanguages(visible);
       await probeTerminalMenu(visible, visible.element);
-      await stage('finishing');await invoke('smoke_finish', { ok: true, attachmentPath, message: compatibilityMode?'Frozen server: native login/capability fallback, running workspace indicators, real tmux UTF-8 shell output and stty resize, confirmed attachment/directory upload with native byte readback passed.':projectsMode?'Project creation, two independent terminal tabs and stopped-to-running workspace indicators passed in the native WebView.':'Login, legacy fallback, workspace selection, stopped-to-running workspace indicators, native WebSocket, xterm UTF-8 rendering, input, resize and bundled sidecar passed.' });
+      await stage('finishing');await invoke('smoke_finish', { ok: true, attachmentPath, message: 'Three-language terminal continuity passed. '+(compatibilityMode?'Frozen server: native login/capability fallback, running workspace indicators, real tmux UTF-8 shell output and stty resize, confirmed attachment/directory upload with native byte readback passed.':projectsMode?'Project creation, two independent terminal tabs and stopped-to-running workspace indicators passed in the native WebView.':'Login, legacy fallback, workspace selection, stopped-to-running workspace indicators, native WebSocket, xterm UTF-8 rendering, input, resize and bundled sidecar passed.') });
     }
   } catch (error) { await reportSmokeError(error); }
 }

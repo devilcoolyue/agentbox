@@ -1,9 +1,9 @@
+import { openDiagnostics } from "./diagnostics.js";
 import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* sessions：会话的打开/切换、生命周期（启动/停止/删除，含窄屏 ⋯ 菜单）、
  * 新建会话弹窗、工作台标签页。 */
 "use strict";
 import { S, bus, emit } from "./state.js";
-import { setSelectValue } from "./select.js";
 import { $, btnBusy, btnDone, wbBusy, wbIdle, toast, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
@@ -202,6 +202,8 @@ function sessionMenu(withPower) {
     return [
         { label: i18nText("启动"), icon: "play", run: doStart, hidden: !withPower || running, disabled: S.actionBusy },
         { label: i18nText("停止"), icon: "stop", run: doStop, hidden: !withPower || !running, disabled: S.actionBusy, tip: i18nText("停止工作空间，保留文件与对话") },
+        { label: i18nText("使用指引"), icon: "bulb", run: () => emit("workspace-guide-open"), sep: true },
+        { label: i18nText("环境检查"), icon: "activity", run: () => openDiagnostics(s.id), sep: true },
         { label: i18nText("查看账号额度"), icon: "gauge", run: openAcctUsage, hidden: agentKey(s.agent) !== "claude", sep: true, tip: i18nText("该账号订阅的 5 小时 / 每周用量窗口") },
         { label: i18nText("重命名"), icon: "rename", run: renameSession, sep: agentKey(s.agent) !== "claude" },
         { label: i18nText("删除工作空间…"), icon: "trash", danger: true, sep: true, run: openDeleteDlg, disabled: S.actionBusy },
@@ -284,7 +286,7 @@ $("del-form").addEventListener("submit", async (e) => {
 });
 /* ---------------- 新建会话 ---------------- */
 decorateAgentOpts($("new-form"));
-/* 空状态：亮明本箱预装的两家 Agent CLI；CTA 与侧栏「新建会话」同一入口 */
+/* 空状态：列出支持的 Agent 类型，不代表镜像或账号已验证；CTA 与侧栏「新建会话」同一入口 */
 for (const a of ["claude", "codex"]) {
     const chip = document.createElement("span");
     chip.className = "brand-chip agent-" + a;
@@ -306,76 +308,3 @@ export function openHome() {
     renderHome();
 }
 $("btn-home").addEventListener("click", openHome);
-$("btn-new").addEventListener("click", async () => {
-    fillAccountSelect();
-    $("new-error").classList.add("hidden");
-    $("dlg-new").showModal();
-    const token = S.token;
-    const picker = $("new-git-connection");
-    picker.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: i18nText("不绑定") }));
-    picker.disabled = true;
-    try {
-        const [cs, def] = await Promise.all([api("/git/connections"), api("/me/git/default")]);
-        if (token !== S.token || !$("dlg-new").open)
-            return;
-        for (const c of cs)
-            if (c.enabled)
-                picker.append(Object.assign(document.createElement("option"), { value: c.id, textContent: c.label }));
-        setSelectValue(picker, def.connection_id);
-    }
-    catch (e) {
-        if (token === S.token)
-            toast(i18nText("读取 Git 连接失败，可选择不绑定后创建：") + e.message, true);
-    }
-    finally {
-        picker.disabled = false;
-    }
-});
-$("new-cancel").addEventListener("click", () => $("dlg-new").close());
-for (const r of document.querySelectorAll('#new-form input[name="agent"]')) {
-    r.addEventListener("change", fillAccountSelect);
-}
-function fillAccountSelect() {
-    const agent = document.querySelector('#new-form input[name="agent"]:checked').value;
-    const sel = $("new-account");
-    sel.replaceChildren();
-    for (const a of S.accounts.filter((x) => x.type === agent)) {
-        const o = document.createElement("option");
-        o.value = a.id;
-        setText(o, "{p0}（{p1} 个工作空间在用）", { p0: String(a.label), p1: String(a.sessions) });
-        sel.appendChild(o);
-    }
-    if (!sel.children.length) {
-        const o = document.createElement("option");
-        o.value = "";
-        setText(o, "该类型下没有可用账号");
-        sel.appendChild(o);
-    }
-}
-$("new-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const agent = document.querySelector('#new-form input[name="agent"]:checked').value;
-    const body = {
-        name: $("new-name").value.trim(),
-        agent,
-        account_id: $("new-account").value,
-        git_connection_id: $("new-git-connection").value,
-    };
-    btnBusy($("new-ok"), () => i18nText("创建中…"));
-    $("new-cancel").disabled = true;
-    try {
-        const sess = await api("/sessions", { method: "POST", body: JSON.stringify(body) });
-        $("dlg-new").close();
-        $("new-name").value = "";
-        await refreshAll();
-        openSession(sess);
-    }
-    catch (err) {
-        $("new-error").textContent = err.message;
-        $("new-error").classList.remove("hidden");
-    }
-    finally {
-        btnDone($("new-ok"));
-        $("new-cancel").disabled = false;
-    }
-});

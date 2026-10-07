@@ -10,7 +10,7 @@
 - 登录令牌为签发后 30 天的固定有效期，使用不会延长；退出登录和密码变更也可能使其提前失效。
 - 空间接口检查属主，管理员也不能通过这些接口读取其他用户的空间。
 - 普通用户只能读取自己的用量；其传入的其他用户名不会扩大可见范围。
-- JSON 错误通常为 `{"error":"说明"}`，应结合 HTTP 状态处理。不要在调用日志中输出 token、Key 或配对码。
+- JSON 错误保留 `error` 字符串；当前源码的登录、空间启动和聊天等入口增补 `code`、`operation_id`、`hint`、`action`、`retryable`。客户端需容忍新增字段并兼容只有 `error` 的旧响应，详见[错误契约 v1](errors.md)。不要在调用日志中输出 token、Key 或配对码。
 
 | 方法与路径 | 权限 | 请求 / 用途 |
 | --- | --- | --- |
@@ -18,6 +18,7 @@
 | `POST /api/login` | 公开 | `{username, password}` |
 | `POST /api/logout` | 已登录 | 撤销当前令牌 |
 | `GET /api/me` | 已登录 | 当前用户、角色、时区、额度及界面所需信息 |
+| `GET /api/onboarding` | 已登录 | 当前用户的首次准备快照；不联网验证提供方或启动空间 |
 | `POST /api/me/password` | 已登录 | `{old_password, new_password}`；保留当前令牌，撤销其他登录 |
 | `POST /api/tunnel/pair/redeem` | 凭配对码 | 配对码本身是一次性凭证，无需另带登录令牌 |
 
@@ -178,9 +179,16 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `DELETE /api/cache/marketplace` | 清理可重建的技能市场缓存 |
 | `GET /api/diagnostics` | 导出按字段白名单生成的诊断信息 |
 | `GET /api/updates` | 当前构建信息与上次版本检查缓存 |
+| `GET /api/updates/components` | 管理员：只读本地版本观察 v1；服务端版本/schema、配置镜像元数据与桌面协议/同步开关，不检查远端更新、不启动升级 |
 | `POST /api/updates/check` | 检查正式发布；`?force=1` 手动触发，仍受 1 分钟间隔限制 |
 | `GET /api/updates/upgrade` | 管理员：查询在线升级支持情况、当前运行版本及持久化任务；支持结果为 `supported/reason`，任务为 `job` 或 null |
 | `POST /api/updates/upgrade` | 管理员：提交 `{"version":"vX.Y.Z"}`，须匹配成功检查到的新版本；返回 202 与任务。同一进行中目标复用任务，不接受 URL/路径；不支持的部署或过期版本返回 409，提交结果不确定返回 503，应先查询任务再重试 |
+
+`/api/updates/components` 使用 `Cache-Control: no-store`，返回 `version:1`、`observed_at`、`server`、`image`、`desktop`。`server.candidate_compatibility=preflight_required` 表示本接口不证明候选兼容；`image.state=labels_only/unavailable/changed`，版本是当前配置镜像的标签，不能冒充运行中容器或协议验收结果；`desktop.installed_version_state=browser_unknown` 表示网页无法读取本机安装版本。观察范围和更新生效方式见[三类更新](update-components.md)。
+
+## 开发版草稿能力
+
+当前开发版 `/api/me` 增补 `draft_protocol:1` 与 `draft_scope`，仅用于未发送草稿隔离；它不声明 WS 接收确认能力。历史接口可显式携带 `?draft_context=1` 获取稳定的 `active_thread`（空对话会登记不含正文的元数据），附件校验接口为 `POST /api/sessions/{id}/attachments/validate`。权限、上限与恢复边界见[聊天草稿](chat-recovery.md)。
 
 ## 调用示例
 
@@ -432,3 +440,32 @@ PUT /api/git/connections/{connection}/shares  {revision,users:[{user,write:false
 - `DELETE /api/sessions/{id}/git/terminal/{grant}`：撤销本人该空间授权并取消其活动请求。
 
 短期控制网桥复用 `proxy_bridge.bind` 主机与 `proxy_bridge.host`，使用临时端口，仅接受独立能力令牌；不能用作通用用户 API。原生 Git 不继承此授权，请使用响应 `command` 加 `status/fetch/pull/push-preview/push`。状态、获取、快进拉取不包含远程写权限。推送确认使用预览的精确提交编号，不支持 force。登录失效、连接修订变化、解绑、撤权或实例重启后需重新签发。相同空间的程序共享该能力，长期凭证仍保留在服务端。
+
+## 分层环境诊断
+
+管理员 `GET /api/diagnostics` 保留旧字段并增补只读 `environment`；`POST /api/diagnostics` 主动验证数据目录临时写入与 Linux 属主设置。普通用户使用 `POST /api/sessions/{id}/diagnostics`，硬性按空间属主限制，报告不含实例或其他用户详情。
+
+两种路径下的 `/ws` 提供独立、同源、已鉴权的 WebSocket 探测。它不启动空间、不加入聊天房间，不触发模型或用量。每项返回 `passed/failed/not_checked`；HTTP 200 不代表全部检查通过。报告形状、CLI 参数、脱敏范围和实际验证边界见[分层环境诊断](diagnostics.md)。
+
+## 首次使用快照
+
+`GET /api/onboarding` 返回 `{version:1, can_configure, can_create, has_workspaces, accounts, default_models, container_resources}`，使用 `Cache-Control: no-store`。`has_workspaces` 只统计本人；每个账号仅含 `id/type/label/credentials_present`，未授权账号在读取凭证前就被排除，普通用户只收到相应 Agent 的默认模型。`container_resources` 仅含 `cpus/memory_mb/pids_limit`，是当前的新容器配置，不是运行中容器的实际值；不含网络等管理配置。创建收据视图使用相同投影，空间模型仍取其保存值。
+
+`can_create` 表示存在支持且获准使用的账号，不是持久授权凭据，也不证明凭证、上游模型或额度可用。管理员始终可配置；其他客户端仍应以服务端实际创建/启动准入为准。创建成功响应及原有默认模型快照语义不变。
+
+## 创建与项目导入收据
+
+当前开发版使用 schema 11 的 `session-creations` v1 接口，支持同编号创建复用、导入尝试结果查询和未知结果核对。接口、输入、状态、作用域及重放限制见[创建空间与导入项目](project-creation.md)。这些收据不替代聊天消息确认；M3 的聊天可靠性协议仍独立实施。
+
+## 聊天持久接收 v1（开发中）
+
+当前源码的 schema 12 已将独立 HTTP 接收/查询/动作 API 接入原执行器，能力由 `/me` 的 `chat_protocol:1`、`chat_scope` 发现。浏览器按该能力使用新发送路径，旧服务端仍显示兼容限制。完整字段、状态与丢确认恢复规则见[聊天协议](chat-protocol.md)；`draft_protocol` 不是该能力的替代。
+
+| 方法与路径 | 作用 |
+| --- | --- |
+| `PUT /api/sessions/{id}/chat/requests/{request}` | 持久接收冻结消息；同 ID 同内容读取原回执，不重复执行 |
+| `GET /api/sessions/{id}/chat/requests/{request}` | 按 ID 查询状态；无需再次通过模型账号或额度准入 |
+| `GET /api/sessions/{id}/chat/requests` | 最新 50 条回执及独立 pending；thread 过滤最近列表，pending_only=1 仅返回 pending 和空 requests |
+| `POST /api/sessions/{id}/chat/requests/{request}` | 带 scope 的 interrupt / review / abandon；前两项须匹配 revision |
+
+以上均为登录用户自己的空间；写操作只接受 Authorization 头。未知结果阻止旧 WS 和线程变更；review 不把旧结果改成成功。最终回执在既有用量事务和转录同步之后提交，没有新增扣款路径。

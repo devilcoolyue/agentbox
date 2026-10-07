@@ -7,6 +7,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export async function smoke(page) {
+ await page.addInitScript(() => { if (window === window.top && /^https?:$/.test(location.protocol)) localStorage.setItem("agentbox.language", "zh-CN"); });
  const root = resolve(fileURLToPath(new URL('../internal/web/static/', import.meta.url)));
  const server = createServer(async (req, res) => {
   try {
@@ -24,23 +25,32 @@ export async function smoke(page) {
  const base = `http://127.0.0.1:${server.address().port}`;
  const errors = []; page.on('pageerror', e => errors.push(e.message));
  let content = '', saved = '';
+ const documents = new Map(), requestedFiles = [];
+ const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="20"><rect width="96" height="20" fill="#9a701d"/><text x="8" y="14" fill="white" font-size="12">Fixture badge</text></svg>';
+ await page.route('https://img.shields.io/**', route=>route.fulfill({body:svg,contentType:'image/svg+xml'}));
  await page.route('**/api/**', async route => {
   const url = new URL(route.request().url());
   if (url.pathname.endsWith('/file')) {
    if (route.request().method() === 'PUT') { saved = route.request().postData(); await route.fulfill({json:{ok:true}}); }
-   else await route.fulfill({body:content,contentType:'text/plain'});
+   else {
+    const file = url.searchParams.get('path'); requestedFiles.push({file,scope:url.searchParams.get('scope')});
+    const images = ['internal/web/static/img/logo.svg','docs/images/chat-light.png','docs/images/chat-dark.png'];
+    if(images.includes(file)) await route.fulfill({body:await readFile(resolve(root,'../../..',file)),contentType:file.endsWith('.svg')?'image/svg+xml':'image/png'});
+    else if(file?.endsWith('.svg')) await route.fulfill({body:svg,contentType:'image/svg+xml'});
+    else await route.fulfill({body:documents.get(file)||content,contentType:'text/plain'});
+   }
   } else if (url.pathname.endsWith('/preview')) await route.fulfill({json:{url:'/fixture-preview'}});
   else await route.fulfill({json:[]});
  });
  await page.route('**/fixture-preview*', route => route.fulfill({contentType:'text/html',body:'<!doctype html><title>Fixture</title>'}));
- const open = async (name, text) => {
+ const open = async (name, text, scope = 'workspace') => {
   content = text;
-  await page.evaluate(async ({name, size}) => {
+  await page.evaluate(async ({name, size, scope}) => {
    const {S} = await import('/js/state.js'); S.current = {id:'fixture',agent:'codex'}; S.token = 'synthetic';
    const {decorateIcons} = await import('/js/icons.js'); decorateIcons();
    const {openPreview} = await import('/js/preview.js');
-   await openPreview(name, {name,size,mtime:'',mode:'0644',is_dir:false});
-  }, {name,size:Buffer.byteLength(text)});
+   await openPreview(name, {name,size,mtime:'',mode:'0644',is_dir:false}, scope);
+  }, {name,size:Buffer.byteLength(text),scope});
  };
  const close = () => page.locator('#fv-close').click();
  try {
@@ -173,6 +183,56 @@ export async function smoke(page) {
    }
   }
   await close();
+  // Actual README: HTML layout, nested badge links, picture sources and GFM tables.
+  const readme = await readFile(resolve(root,'../../../README.md'),'utf8');
+  await page.setViewportSize({width:1280,height:900});
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  await open('README.md',readme);
+  assert.equal(await page.locator('#fv-md h1').first().innerText(),'agentbox');
+  assert.match(await page.locator('#fv-md > div[align="center"]').first().evaluate(e=>getComputedStyle(e).textAlign),/center/);
+  assert.equal(await page.locator('#fv-md a > img').count()>=4,true,'nested badge links');
+  assert.ok(await page.locator('#fv-md table').count());
+  assert.ok(await page.locator('#fv-md br').count());
+  assert.ok(!(await page.locator('#fv-md').innerText()).includes('<div align='));
+  assert.ok(!(await page.locator('#fv-md').innerText()).includes('![Release]'));
+  assert.equal(await page.locator('#fv-md img[alt="agentbox logo"]').evaluate(e=>e.getBoundingClientRect().width),96);
+  await page.locator('#fv-md img[alt="agentbox logo"]').evaluate(img=>img.decode());
+  const hash=await page.evaluate(()=>location.hash);
+  await page.locator('#fv-md a').filter({hasText:'Quick start'}).first().click();
+  assert.ok(await page.locator('#fv-mdwrap').evaluate(e=>e.scrollTop>100));assert.equal(await page.evaluate(()=>location.hash),hash);
+  await page.locator('#fv-mdwrap').evaluate(e=>e.scrollTop=0);
+  await page.screenshot({path:'output/playwright/markdown-readme-light.png'});
+  await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+  await page.screenshot({path:'output/playwright/markdown-readme-dark.png'});
+  await page.setViewportSize({width:390,height:844});
+  assert.ok(await page.locator('#fv-mdwrap').evaluate(e=>e.scrollWidth<=e.clientWidth));
+  await page.screenshot({path:'output/playwright/markdown-readme-mobile.png'});
+  documents.set('README_CN.md','# 中文文档\n\n跳转成功');
+  await page.locator('#fv-md a').filter({hasText:'简体中文'}).first().click();
+  await page.waitForFunction(()=>document.querySelector('#fv-md h1')?.textContent==='中文文档');
+  await close();
+  // Raw HTML is display content, never an application control or executable document.
+  const hostile = '# Safe\n\n<script>window.previewInjected=true</script>\n<iframe src="/api/me"></iframe><style>body{display:none}</style><form id="fv-save"><input name="location" value="bad"></form>\n<div class="hidden" id="chat-send" style="position:fixed" onclick="window.previewInjected=true">Visible text</div>\n<img src="bad.svg" onerror="window.previewInjected=true"><img src="/api/me"><img src="../../../escape.svg">\n<a href="javascript:window.previewInjected=true">Unsafe</a><a href="/api/me">API</a>\n<svg onload="window.previewInjected=true"><a href="javascript:alert(1)">svg</a></svg>\n\n- [x] Done\n- [ ] Todo\n\n```html\n<div class="hidden">literal</div>\n```';
+  await open('docs/safe.md',hostile);
+  assert.equal(await page.locator('#fv-md script, #fv-md iframe, #fv-md style, #fv-md form, #fv-md svg, #fv-md [onclick], #fv-md [onerror], #fv-md [name], #fv-md [id]').count(),0);
+  assert.equal(await page.locator('#fv-md input:enabled').count(),0);assert.equal(await page.locator('#fv-md input[type="checkbox"]').count(),2);
+  assert.equal(await page.locator('#fv-md a[href]').count(),0);
+  assert.equal(await page.locator('#fv-md .hidden').count(),0);
+  assert.equal(await page.locator('#fv-md pre').innerText(),'<div class="hidden">literal</div>\n');
+  assert.equal(await page.evaluate(()=>window.previewInjected),undefined);
+  assert.equal(await page.locator('#fv-save').count(),1);
+  assert.ok(!requestedFiles.some(r=>r.file?.includes('escape.svg')));
+  await close();
+  documents.set('docs/next.md','# Next\n\nTarget');
+  await open('docs/start.md','[Next](next.md)\n\n![Local](assets/logo%20small.svg)','shared');
+  await page.locator('#fv-md img').evaluate(img=>img.decode());
+  assert.ok(requestedFiles.some(r=>r.file==='docs/assets/logo small.svg'&&r.scope==='shared'));
+  await page.locator('#fv-mode-src').click();await page.locator('#fv-editor').fill('[Next](next.md)\n\nUnsaved');await page.locator('#fv-mode-view').click();
+  await page.locator('#fv-md a').click();await page.locator('#dlg-ask').waitFor({state:'visible'});await page.locator('#ask-cancel').click();assert.equal(await page.locator('#fv-name').innerText(),'start.md');
+  await page.locator('#fv-md a').click();await page.locator('#ask-ok').click();
+  await page.waitForFunction(()=>document.querySelector('#fv-md h1')?.textContent==='Next');
+  assert.ok(requestedFiles.some(r=>r.file==='docs/next.md'&&r.scope==='shared'));
+  await close();
   await open('large.json','{\n'+ '  "value": 1,\n'.repeat(20000)+'}\n');
   assert.match(await page.locator('#fv-language').innerText(),/已简化着色/);
   assert.match(await page.locator('#fv-position').innerText(),/共 20003 行/);
@@ -180,7 +240,7 @@ export async function smoke(page) {
   await close();
   assert.deepEqual(errors,[]);
   console.log('Preview: syntax, HTML glyph alignment, line counts, current line, raw save, Tab, dark/light/mobile, long-line scroll, fullscreen, empty/CRLF/large files, Markdown switching and escaping passed');
- } finally { await page.unroute('**/api/**'); await page.unroute('**/fixture-preview*'); server.closeAllConnections(); await new Promise(r=>server.close(r)); }
+ } finally { await page.unroute('https://img.shields.io/**'); await page.unroute('**/api/**'); await page.unroute('**/fixture-preview*'); server.closeAllConnections(); await new Promise(r=>server.close(r)); }
 }
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
  const {chromium}=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href : 'playwright');

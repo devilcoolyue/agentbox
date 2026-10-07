@@ -8,11 +8,14 @@ import (
 	"agentbox/internal/store"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"path/filepath"
 	"sync"
 	"time"
 )
+
+var ErrCredentials = errors.New("account credentials could not be prepared")
 
 var ErrSessionGone = errors.New("session no longer exists")
 
@@ -144,7 +147,7 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	// 会话里刷新出的新令牌得以写回，池子的新令牌也播发进会话。
 	if acct.CredentialsDir != "" {
 		if err := s.syncCredentials(ctx, acct, cur); err != nil {
-			return store.Session{}, err
+			return store.Session{}, fmt.Errorf("%w: %w", ErrCredentials, err)
 		}
 	}
 	if cur.Status == store.StatusRunning && s.dock.RunningWithMount(ctx, cur.ContainerID, dockerx.SharedMount) {
@@ -178,7 +181,7 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 		log.Printf("seed home template %s: %v", cur.ID, err)
 	}
 	if err := agent.SeedCredentials(cur.Agent, s.HomeDir(cur), acct.CredentialsDir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
-		return store.Session{}, err
+		return store.Session{}, fmt.Errorf("%w: %w", ErrCredentials, err)
 	}
 	if err := agent.SeedDefaultModel(cur.Agent, s.HomeDir(cur), cur.DefaultModel, dockerx.AgentUID, dockerx.AgentGID); err != nil {
 		return store.Session{}, err
@@ -222,6 +225,13 @@ func (s *Service) Create(sess store.Session) error {
 }
 
 func (s *Service) CreateWithGitConnection(sess store.Session, connection string) error {
+	if err := s.prepareDirectories(sess); err != nil {
+		return err
+	}
+	return s.store.PutWithGitDefault(sess, connection)
+}
+
+func (s *Service) prepareDirectories(sess store.Session) error {
 	root, err := safefs.Open(s.cfg.DataDir)
 	if err != nil {
 		return err
@@ -239,7 +249,7 @@ func (s *Service) CreateWithGitConnection(sess store.Session, connection string)
 			return err
 		}
 	}
-	return s.store.PutWithGitDefault(sess, connection)
+	return nil
 }
 func (s *Service) Stop(ctx context.Context, id string) (store.Session, error) {
 	l := s.lock(id)

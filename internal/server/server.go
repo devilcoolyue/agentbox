@@ -92,21 +92,22 @@ type Server struct {
 	priceCatalogOnce sync.Once
 	prices           *pricecatalog.Service
 
-	network     networkState
-	updates     updateState
-	storage     storageState
-	runtimeOnce sync.Once
-	serving     atomic.Bool
-	life        *runtimeState
-	cfg         *config.Config
-	store       *store.Store
-	dock        *dockerx.Manager
-	git         *gitx.Runner
-	chat        *chatManager
-	tunnels     *tunnelHub
-	pairs       *pairStore    // outstanding abox-link pairing codes
-	previews    *previewStore // 短时只读的 HTML 预览通行证
-	mapAuth     mapSourceAuth // source-IP cache for tunnel port-map listeners
+	network      networkState
+	updates      updateState
+	storage      storageState
+	runtimeOnce  sync.Once
+	serving      atomic.Bool
+	life         *runtimeState
+	cfg          *config.Config
+	store        *store.Store
+	dock         *dockerx.Manager
+	git          *gitx.Runner
+	chat         *chatManager
+	attachmentMu sync.Mutex // receipt acceptance and attachment TTL deletion
+	tunnels      *tunnelHub
+	pairs        *pairStore    // outstanding abox-link pairing codes
+	previews     *previewStore // 短时只读的 HTML 预览通行证
+	mapAuth      mapSourceAuth // source-IP cache for tunnel port-map listeners
 
 	tunnelMu   sync.Mutex   // guards the SOCKS listener lifecycle below
 	tunnelLn   net.Listener // nil when the tunnel proxy is not running
@@ -124,6 +125,7 @@ type Server struct {
 
 	credentialsOnce sync.Once
 	credentials     *credentials.Service
+	creationWork    creationWork
 	workspaceOnce   sync.Once
 	workspace       *workspace.Service
 
@@ -158,7 +160,15 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 		st.Close()
 		return nil, err
 	}
+	if err := st.RecoverWorkspaceImports(); err != nil {
+		st.Close()
+		return nil, err
+	}
 	if err := st.RecoverGitOperations(); err != nil {
+		st.Close()
+		return nil, err
+	}
+	if err := st.RecoverChatRequests(); err != nil {
 		st.Close()
 		return nil, err
 	}
@@ -270,6 +280,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/sessions/{id}/client-terminals/{terminal}", s.auth(s.withSession(s.handleClientTerminalDelete)))
 	mux.Handle("GET /api/sessions/{id}/client-terminals/{terminal}/stream", s.auth(s.withSession(s.handleClientTerminalWS)))
 	mux.Handle("GET /api/me", s.auth(http.HandlerFunc(s.handleMe)))
+	mux.Handle("GET /api/onboarding", s.auth(http.HandlerFunc(s.handleOnboarding)))
+	mux.Handle("GET /api/session-creations", s.auth(http.HandlerFunc(s.handleCreationList)))
+	mux.Handle("PUT /api/session-creations/{request}", s.auth(http.HandlerFunc(s.handleCreateSession)))
+	mux.Handle("GET /api/session-creations/{request}", s.auth(http.HandlerFunc(s.handleCreationGet)))
+	mux.Handle("POST /api/session-creations/{request}", s.auth(http.HandlerFunc(s.handleCreationAction)))
+	mux.Handle("POST /api/session-creations/{request}/upload", s.auth(http.HandlerFunc(s.handleProjectUpload)))
+	mux.Handle("POST /api/session-creations/{request}/git", s.auth(http.HandlerFunc(s.handleProjectGit)))
 	mux.Handle("POST /api/me/password", s.auth(http.HandlerFunc(s.handleChangePassword)))
 	mux.Handle("GET /api/me/git", s.auth(http.HandlerFunc(s.handleGitProfile)))
 	mux.Handle("GET /api/git/connections", s.auth(http.HandlerFunc(s.handleGitConnections)))
@@ -330,8 +347,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/storage", s.admin(http.HandlerFunc(s.handleStorage)))
 	mux.Handle("DELETE /api/cache/marketplace", s.admin(http.HandlerFunc(s.handleClearMarketCache)))
 	mux.Handle("GET /api/diagnostics", s.admin(http.HandlerFunc(s.handleDiagnostics)))
+	mux.Handle("POST /api/diagnostics", s.admin(http.HandlerFunc(s.handleCheckDiagnostics)))
+	mux.Handle("GET /api/diagnostics/ws", s.admin(http.HandlerFunc(s.handleDiagnosticWS)))
+	mux.Handle("POST /api/sessions/{id}/diagnostics", s.auth(s.withSession(s.handleSessionDiagnostics)))
+	mux.Handle("GET /api/sessions/{id}/diagnostics/ws", s.auth(s.withSession(func(w http.ResponseWriter, r *http.Request, _ store.Session) { s.handleDiagnosticWS(w, r) })))
 	mux.Handle("GET /api/system", s.admin(http.HandlerFunc(s.handleSystem)))
 	mux.Handle("GET /api/updates", s.admin(http.HandlerFunc(s.handleUpdates)))
+	mux.Handle("GET /api/updates/components", s.admin(http.HandlerFunc(s.handleUpdateComponents)))
 	mux.Handle("POST /api/updates/check", s.admin(http.HandlerFunc(s.handleUpdateCheck)))
 	mux.Handle("GET /api/updates/upgrade", s.admin(http.HandlerFunc(s.handleUpgradeStatus)))
 	mux.Handle("POST /api/updates/upgrade", s.admin(http.HandlerFunc(s.handleUpgradeStart)))
@@ -356,6 +378,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/sessions/{id}/file", s.auth(s.withSession(s.handleFilePut)))
 	mux.Handle("GET /api/sessions/{id}/preview", s.auth(s.withSession(s.handlePreviewGrant)))
 	mux.Handle("POST /api/sessions/{id}/images", s.auth(s.withSession(s.handleImageUpload)))
+	mux.Handle("POST /api/sessions/{id}/attachments/validate", s.auth(s.withSession(s.handleAttachmentValidate)))
 	mux.Handle("POST /api/mcp/import", s.auth(http.HandlerFunc(s.handleMCPUserImport)))
 	mux.Handle("POST /api/sessions/{id}/mcp/import", s.auth(s.withSession(s.handleMCPSessionImport)))
 	mux.Handle("POST /api/sessions/{id}/mcp/{name}/copy", s.auth(s.withSession(s.handleMCPCopy)))
@@ -403,6 +426,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/sessions/{id}/browser/desktop", s.auth(s.withSession(s.handleBrowserWS)))
 	mux.Handle("GET /api/sessions/{id}/term", s.auth(s.withSession(s.handleTermWS)))
 	mux.Handle("GET /api/sessions/{id}/chat", s.auth(s.withSession(s.handleChatWS)))
+	mux.Handle("PUT /api/sessions/{id}/chat/requests/{request}", s.auth(s.withSession(s.handleChatRequestPut)))
+	mux.Handle("GET /api/sessions/{id}/chat/requests/{request}", s.auth(s.withSession(s.handleChatRequestGet)))
+	mux.Handle("POST /api/sessions/{id}/chat/requests/{request}", s.auth(s.withSession(s.handleChatRequestAction)))
+	mux.Handle("GET /api/sessions/{id}/chat/requests", s.auth(s.withSession(s.handleChatRequestList)))
 	mux.Handle("GET /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadList)))
 	mux.Handle("POST /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadNew)))
 	mux.Handle("POST /api/sessions/{id}/chat/threads/{tid}/activate", s.auth(s.withSession(s.handleThreadActivate)))
@@ -423,7 +450,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("/", staticHandler())
 
-	return s.admit(mux)
+	return operationHandler(s.admit(mux))
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -575,7 +602,7 @@ func (s *Server) withSession(fn func(http.ResponseWriter, *http.Request, store.S
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, ok := s.store.Get(r.PathValue("id"))
 		if !ok || sess.User != reqUser(r).Name {
-			writeErr(w, http.StatusNotFound, "session not found")
+			writeProblem(w, r, "session.access", "session_not_found")
 			return
 		}
 		fn(w, r, sess)
@@ -597,12 +624,21 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	u := reqUser(r)
 	q, metered := s.store.GetQuota(u.Name)
+	scope := ""
+	if instance, err := s.clientIdentity(); err == nil {
+		scope = importFingerprint([]string{"chat-drafts-v1", instance, u.Name, u.CreatedAt.UTC().Format(time.RFC3339Nano)})
+	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user":          u.Name,
-		"role":          u.Role,
-		"models":        s.cfg.GetModels(),
-		"terminal_tips": s.cfg.GetTerminalTips(),
-		"timezone":      s.cfg.GetTimeZone(),
+		"draft_scope":    scope,
+		"draft_protocol": 1,
+		"chat_protocol":  1,
+		"chat_scope":     s.chatRequestScope(u),
+		"user":           u.Name,
+		"role":           u.Role,
+		"models":         s.cfg.GetModels(),
+		"terminal_tips":  s.cfg.GetTerminalTips(),
+		"timezone":       s.cfg.GetTimeZone(),
 		// 自己的额度：metered 为 false 就是不限额，前端不必显示余额。
 		"quota": viewQuota(u.Name, q, metered),
 	})

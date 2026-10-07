@@ -17,8 +17,6 @@ import (
 	"time"
 
 	"agentbox/internal/backup"
-	"agentbox/internal/config"
-	"agentbox/internal/store"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 )
@@ -30,20 +28,12 @@ func maintenance(args []string) error {
 	defer stop()
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	switch args[0] {
+	case "admin-reset-password":
+		return resetAdminPassword(ctx, args[1:], os.Stdout, os.Stderr, readAdminPassword)
 	case "git-key-rotate":
 		return rotateGitKeys(ctx, args[1:])
 	case "check-config":
-		path := flags.String("config", "config.json", "configuration path")
-		if err := flags.Parse(args[1:]); err != nil {
-			return err
-		}
-		if flags.NArg() != 0 {
-			return errors.New("unexpected arguments")
-		}
-		if _, err := config.Load(*path); err != nil {
-			return err
-		}
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{"valid": true, "schema_version": store.SchemaVersion, "compatibility_epoch": 1})
+		return checkConfig(ctx, args[1:], os.Stdout)
 	case "backup":
 		cfg := flags.String("config", "config.json", "configuration path")
 		output := flags.String("output", "", "new backup file (default: data_dir/backups)")

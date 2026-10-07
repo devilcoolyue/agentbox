@@ -24,6 +24,8 @@
 | `internal/credentials` | 账号凭证读取/保存、轮换同步、续期与账号级可取消锁。 |
 | `internal/config` | 配置 schema、校验、运行时修改与原子写回。所有设置变更必须经 `Config.mutate`/`ApplySettings`/账号方法。 |
 | `internal/server` | HTTP API、鉴权、用户/账号/设置、会话、文件、聊天 WS、终端 WS、隧道、账号出口代理（`proxy*.go`）、监控、空闲回收、凭证同步、Git 变更审查（`git.go`）、用量计量与额度（`usage.go`/`quota.go`/`usagelog.go`）。 |
+| `internal/chat` | Service 编排聊天回合、历史/用量/回执收尾；Executor 管理 CLI 传输与中断，server 保留准入及 Runtime 适配。 |
+| `internal/protocol` | M1/M3 的版本化错误/聊天封装，与 contracts/ schema 和生成 TS 类型共同校验。 |
 | `internal/usage` | 回合用量归一化、定价快照、结算编排及 Claude/Codex 终端扫描。 |
 | `internal/store` | SQLite(`data/state.db`)：sessions/users/tokens/usage_events/quotas/credit_ledger；首次打开会导入旧版 `state.json`。 |
 | `internal/backup` | 版本化 tar.gz 备份、SQLite 在线快照、清单/哈希验证、恢复到新目录；CLI 在 cmd/agentbox/backup.go。 |
@@ -39,6 +41,14 @@
 | `images/agent` | 会话容器镜像 Dockerfile；内置 Claude Code、Codex CLI、tmux、claude-hud。 |
 | `scripts` | 镜像构建/自动升级、abox-link 交叉编译、域名与账号登录辅助脚本。 |
 | `deploy` | systemd 单元（服务、镜像更新、数据备份）、logrotate、安装/发布脚本、生产参数模板。 |
+
+## 验证入口与证据
+
+- `python3 scripts/verify.py list` 是测试命令目录；`run quick` 执行网页、Go 与本地策略，`run browser/desktop-unit/docker-core/release` 按需选择。资源及当前能力见 `docs/verification.md`、`docs/capabilities.md`。
+- 入口保留每步命令、耗时、退出码、Go skip 和工作树前后摘要；缺条件必须 blocked/failed，不能算通过。报告输出在 gitignored 的 `output/verification/`，已有目录不覆盖；这类日志不是用户脱敏诊断。
+- Linux Go 组先普通用户执行真实 chown 拒绝，再仅用 sudo 执行完整 server 测试；不要去掉闸门或放宽生产 chown。macOS 对 Linux 专属项只能标 not_applicable。
+- 新增 test-* 脚本须在 `scripts/verification_catalog.py` 登记入口、父场景或外部资源条件。默认组清除继承的 live/helper/部分测试开关，付费模型与原生安装继续显式独立验收。
+- 网页产物检查比较完整源/产物集合与重新构建字节，允许开发工作树本来有合法未提交修改；不忽略新生成或遗留 JS。CI 与本地使用同一入口，保留失败报告。
 
 ## 常用命令
 
@@ -243,9 +253,26 @@ data/
 - `SeedDefaultModel` 必须排在 `SeedCredentials` 后，把空间默认模型写进 CLI 配置（含 Codex
   当前启用的 profile）；否则账号池的 config 会覆盖它。只改模型，保留 provider、推理强度、MCP。
 
+### M3 联合测试
+
+- `scripts/test-chat-integration.mjs` 使用真实 agentbox 二进制、SQLite、HTTP/WS 与浏览器，`scripts/fixtures/chat-integration` 仅替代 Docker/CLI 输出，不执行收到的命令，不能标为真实 CLI/provider 验收。控制 API 只属于独立测试 helper，禁止加进产品 Handler。
+- `integration.chat` 为本机入口；完整 Linux 上传/Chown/重启走 `docker.chat-reliability --image <已准备的本地镜像>`。独立卷/网络/随机回环端口、不挂 Docker socket；服务端重启必须保持相同端口，不能通过换 origin 丢掉浏览器 outbox 来“通过”测试。非 root macOS 的附件 chown 拒绝明确记录，不能放宽生产权限来适配。
+- 同时核对 fixture 执行计数与真实回执/usage/ledger/余额；只看到 UI completed 不足以证明不重复扣款。模拟结算错误的 trigger 仅可安装在带 synthetic-only 标记的临时数据库；禁止对已有实例运行。清理失败不得静默算通过。
+
+### 空间搜索
+
+- `features/workspaces/filter.ts` 拥有页面内搜索/状态条件，通过 app/lifecycle 初始化和销毁，不加入 S 或持久化。只按名称 NFKC + trim + 小写子串匹配，状态复用 `sessionState`，running 优先于遗留 stop_reason。不改原 sessions 顺序、首页最近空间或线程搜索。
+- `shell.renderSidebar` 保留列表滚动和仍存在的键盘焦点；筛选使焦点空间消失时回搜索入口。输入法组合期间不应用半成品查询，Esc 不得关闭抽屉；下拉重置必须走 `setSelectValue` 同步增强控件。
+- `browser.workspace-filter` 用百个合成空间覆盖三语/窄屏/轮询及退出，记录本机计时；不能将其当作约定设备或真实触屏性能验收。
+
 ### 聊天
 
+- 未发送草稿在 `features/chat/draft-store.ts` / `drafts.ts`；`/me` 的 `draft_scope` 来自实例身份与用户创建身份，`draft_protocol` 只声明草稿上下文/附件校验，不代表持久消息确认。页面各写自己的记录，会话存储仅保存指针；关闭保存/退出清除副本，刷新先保存。输入、校验和上传都有空间/线程代际，迟到结果不得写入新的输入框。
+- 新网页历史请求带 `draft_context=1`，空线程登记无正文 `draft_context` 事件并返回 `active_thread`，让未发送草稿可从列表返回；该事件不能算用户消息或消耗起标题额度，只有它的空线程继续复用。附件恢复及发送前走属主受限的 `/attachments/validate`，不跟随链接。消息确认独立走 chat 协议，不能用正文相同的广播冒充回执。
 - `GET /api/sessions/{id}/chat` 是一个会话一个 room 的广播模型；同一房间同一时刻只跑一个回合。
+- 网页 outbox 冻结 text/model/effort/control/refs 后先写副本；默认保存失败不提交，明确关闭本机保存后仅保留页内副本。草稿和待确认区分离；重连、刷新、轮询只查询，显式重试也先查原 ID，不换 ID 自动重发。回执须核对空间、线程、输入和单调 revision；旧文字广播不是确认。`pending_only=1` 避免轮询下载历史正文；未知接收 ID 的正文 7 天后过期，但保留标识用于查询/放弃。退出清理副本与本功能确认框，迟到响应不得改变新空间的输入或提示。仅服务端回执恢复附件时也要重建附件元数据并重新校验；不得退化为正文中的裸路径。
+- 登录替换由发起页按 `local-identity.ts` 的不含令牌/正文的范围提示清上一身份副本；收到 storage/迟到 401 的旧页保留较新的 token，只忘掉自己的内存和会话指针，不能重复清持久区，否则冻结旧页恢复时会删除同一用户新登录后保存的内容。`preserveChatCopiesOnSignout` 只控制该次清理，不放宽 API 授权；旧 `/me` 响应还须核对浏览器当前 token 后才能初始化新编辑器。显式未知 chat 版本不得作为旧服务端静默降级。
+- schema 12 的 `store.ChatRequest` 已接入独立 HTTP v1（`chat_protocol`/`chat_scope`），浏览器通过 outbox-store.ts / outbox.ts 接入待确认发送与查询恢复。仅 `AcceptChatRequest` 成功返回 fresh=true 的调用者可安排工作，重放和 reviewed 不获得执行资格；状态推进须使用修订号。启动在 Docker 初始化前将未结束回执改为 uncertain，不能自动重跑；旧 WS、线程变更与删除必须遵守同一持久准入；回执在原用量 flush 和转录同步后完成，结算/历史失败保持 uncertain。`chatReceiptTurn` 只观察原执行器，不另启模型/计费路径；传统 exec 必须检查 Scanner 错误，provider 结束状态由 agent.Adapter 解码。用户中断和服务关闭不得混为一谈。存储连接 WAL + synchronous=FULL；空间/用户删除同事务清正文留 ID 围栏，线程删除先清对应回执正文。附件 TTL 扫描流式读取回执引用，错误时拒绝删除；与接收校验/提交共用 attachmentMu。
 - 消息落盘到当前线程 `chats/<threadID>.jsonl`；`chats/active` 指向当前线程。旧版 `chat.jsonl` 首次访问自动迁移。
 - Claude 走 `claude -p --output-format stream-json`；Codex 优先走 `codex app-server`（真流式增量），握手失败回退 `codex exec --json`。
 - `stream_event`/增量事件只广播不落盘；完整事件落盘并广播。provider 会话 id 用 `agent.ExtractSessionID` 提取，写入 `chat_session` 供 `--resume`/thread resume。
@@ -642,11 +669,11 @@ data/
 
 - 管理端开启 `tunnel.enabled` 后，`applyTunnel` 热启动/停止/重绑 SOCKS5 代理；绑定失败只记错误，不打垮主服务。
 - abox-link 通过 `GET /api/tunnel` 拨入，服务端以 yamux client 维持连接；每个用户一条隧道、一份稳定 SOCKS secret。
-- 容器不会得到全局 `HTTP_PROXY`；只在 exec env 注入 `AGENTBOX_INTRANET_PROXY` / `AGENTBOX_INTRANET_MAPS`，由 agent 按需使用。
+- 隧道本身不设置全局 `HTTP_PROXY`（账号出口代理另有该变量）；兼容模式在 exec env 注入 `AGENTBOX_INTRANET_PROXY` / `AGENTBOX_INTRANET_MAPS`，由 agent 按需使用。服务端与客户端均启用透明模式时，不依赖且不注入这组专用变量。
 - exec env 只到达 exec 出来的那个进程。终端附着的是常驻 tmux，已有会话的 shell 是更早的
   exec fork 出来的，所以 `termCommand` 在 attach 前用 `tmux set-environment -g` 把当前
   env 镜像进 tmux 全局环境（隧道变量缺失时 `-gu` 清除）——否则「会话先开、隧道后连」时
-  终端里的 agent 永远看不到代理变量。运行中的窗格改不了，只能新开窗口或重启 agent。
+  终端里的 agent 永远看不到代理变量。运行中的窗格改不了，须重连后新开 tmux 窗口；在旧 Shell 内仅重启 agent 仍会继承旧环境。
 - 端口映射按来源 IP 鉴权：只有属主用户自己的容器（和宿主机）能连映射端口。
 
 ## 代码约定与注意事项
@@ -691,8 +718,9 @@ data/
   只覆盖会变的令牌。琥珀分两支：`--amber` 画线与文字（浅色下压深才有对比度），
   `--accent` 是实心块底色（两个主题下都要够亮以托住 `--on-accent` 的深色文字），与
   `internal/web/static/css/base.css` 的约定一致。
-- 会话镜像内禁用 CLI 自升级（`DISABLE_AUTOUPDATER=1`）；默认版本由 `images/agent/Dockerfile` 管理。网页「客户端更新」由 `internal/imageupdate` + `internal/dockerx/image_update.go` 执行，服务端生命周期内按系统时区每日调度；旧 `scripts/auto-update-image.sh` / systemd timer 仅供旧部署手动选择，网页管理时保持停用。
-- `image_updates` / `previous_agent_image` 必须进入 Config 的 mutate/persist；更新以当前镜像不可变 ID 为基础保留浏览器层，验证 CLI 版本后通过 `SwitchAgentImage` 比较原镜像与策略再原子切换，不能覆盖构建期间的新设置。回退暂停自动更新。任务单飞、可取消、30 分钟超时，失败不切换、不自动 prune。状态落在 data_dir/image-update-state.json。
+- 会话镜像内禁用 CLI 自升级（`DISABLE_AUTOUPDATER=1`）；默认版本由 `images/agent/Dockerfile` 管理。网页「Agent 镜像更新」（旧名「客户端更新」）由 `internal/imageupdate` + `internal/dockerx/image_update.go` 执行，服务端生命周期内按系统时区每日调度；旧 `scripts/auto-update-image.sh` / systemd timer 仅供旧部署手动选择，网页管理时保持停用。
+- `GET /api/updates/components` 仅管理员，只观察当前构建/schema、配置镜像标签与服务端桌面能力，最多 3 秒 Docker inspect；不访问发行/npm 源或运行 CLI。labels_only 不证明协议兼容，更不代表运行中空间版本；网页不能读取本机桌面安装版本。前端离开页面/退出必须作废请求，三个升级动作仍归原更新器。
+- `image_updates` / `previous_agent_image` 必须进入 Config 的 mutate/persist；更新以当前镜像不可变 ID 为基础保留浏览器层，验证 CLI 版本及隔离合成行为、同步报告后通过 `SwitchAgentImage` 比较原镜像与策略再原子切换，不能覆盖构建期间的新设置。回退暂停自动更新。任务单飞、可取消、30 分钟超时，失败不切换、不自动 prune。状态落在 data_dir/image-update-state.json。
 - `config.json`、`accounts/`、`data/` 含密钥和运行时状态，已在 `.gitignore`；不要提交。
 - 若改动影响用户可见行为、部署步骤、API 或配置字段，同步更新 `README.md` 与 `README_CN.md`，保持中英文内容一致（必要时也更新 `deploy/README.md`）。
 
@@ -709,6 +737,39 @@ data/
 - Manifest 校验内容和元数据，符号链接不跟随；恢复仅允许不存在的新目录，配置中的 data_dir/credentials_dir 重写为恢复目录内相对路径。恢复目录发布使用不覆盖 rename，不能混入旧 WAL。
 - `scripts/backup.sh` 只负责编排内置命令、SHA-256 文件、同类型轮转和可选 rsync；`AGENTBOX_BIN`/`AGENTBOX_CONFIG` 支持独立部署路径。仅用户已授权运行该脚本的远端传输时才使用 BACKUP_REMOTE。
 - 验证：`go test ./internal/backup ./cmd/agentbox`、`scripts/test-backup.sh`；需要实际 Docker 检查时设置 `AGENTBOX_BACKUP_DOCKER_TEST=1`。同 daemon 上不能同时启动带相同 session ID 的旧实例与恢复实例。
+
+### 首次使用与创建入口
+
+- `GET /api/onboarding` 只读并按请求身份过滤，返回授权账号的最小字段及新空间默认模型；凭证存在不等于登录/模型可用，`can_create` 只表示有获准使用的支持账号，不作服务端准入凭据。
+- `web/src/onboarding.ts` 由 app 生命周期初始化/清理；诊断观察仅在本次登录保留，普通用户不显示实例配置动作。离开空间回首页须发 navigation-changed，以同步 URL 和准备状态。
+- 创建弹窗由 `features/workspaces/create.ts` 管理，不把状态再放回全局 S。打开/提交前刷新账号，无账号或读取失败禁止提交；仅一种可用 Agent 时自动选中。撤权不能静默换账号提交，退出清理草稿/账号选项，旧请求不得覆盖新弹窗。
+- 创建流程使用 `PUT /api/session-creations/{request}` 的 schema 11 持久收据，按用户创建身份隔离；ID 与请求参数冲突必须拒绝，删除/放弃保留 tombstone，不能因重试分配新空间。浏览器会话存储只保存待确认 ID/创建参数，不保存文件、Git URL 或凭证。
+- 项目上传在容器挂载外完整校验/计总大小，再不覆盖重命名到新目录；Linux chown 失败拒绝发布。Git 导入复用原 gitx/授权/审计链路，不增加宿主 Git fallback。每次导入另有持久 attempt 收据，running/uncertain 阻止新尝试，先查看文件再显式 review；不能把确认丢失当失败自动重跑。
+- 创建/导入与会话销毁共用原生命周期边界；旧 POST /sessions 仍兼容但不声称具备新协议保证。构建产物、三语词典、browser.onboarding 和 Go/迁移/权限回归一起维护。
+- 创建配置摘要的模型取收据保存的空间值，`container_resources` 只公开 CPU/内存/进程上限，表示当前新容器配置；不把它当作已有容器的实测值或每空间冻结值。摘要与收据返回值不一致时网页先停在核对状态，再允许导入。首任务引导只在用户点击后填入输入框、不覆盖已有输入、不自动发送；工作区 ZIP 显式固定 scope，不能随上次共享目录选择改变下载范围。
+
+### 分层环境诊断
+
+- `internal/diagnostics` 提供固定白名单的 passed/failed/not_checked 观察；不能根据配置、凭证或镜像存在声称模型可用。不得刷新 OAuth、启动容器、调用模型或修复现有文件。
+- `check-config` 默认保持离线配置校验及 schema/compatibility 字段；只有显式 `--environment` 才访问 Docker 和临时写入探测。不得把扩展检查自动加入 release.py 的兼容校验；不创建数据目录/数据库、不执行迁移。
+- `GET /api/diagnostics` 为管理员只读导出，`POST` 才执行独立临时文件探测。空间 `POST …/diagnostics` 严格按属主、持 workspace 锁做只读检查，授权失败不读取账号凭证；不能返回实例计数、路径、账号或其他用户信息。
+- 临时探测使用固定 safefs 根和独立 `.agentbox-diagnostic-*` 目录；只对新文件验证 Linux 1000:1000 chown，失败如实报告。空间根目录元数据检查不替代文件全量权限/真实容器运行验证。
+- `/diagnostics/ws` 和空间对应路径仅回复固定探测帧，仍需登录、同源/属主校验，纳入 server 生命周期；不能加入聊天房间或计费。服务端报告的 WS 保持未检查，浏览器收到匹配编号的响应后才记录 `client_checks`，日志 sent 不等于浏览器已收到。
+- 网页诊断窗口负责请求取消和关闭清理，导出再次白名单过滤；词典/合成协议样本/构建产物同步。验证 `npm run test:diagnostics`、完整浏览器、Go diagnostics/credentials/server/cmd 及 Linux root/非 root 权限回归。
+
+### 错误契约与关联 ID
+
+- `internal/server/problems.go` 的 v1 错误保留 `error`，增补 `code/operation_id/hint/action/retryable`，公开消息和关联日志均走白名单，禁止拼接底层 err.Error/URL/路径/凭证。类型映射覆盖 Docker、镜像、磁盘、容量、授权和聊天准入；新故障优先保留 typed/sentinel error，不能按文案猜类别。
+- HTTP 关联中间件不能包装掉 Hijacker/Flusher；聊天每条提交单独生成 ID，不能复用整个连接 ID。浏览器握手参考仅接受 32 位小写十六进制 `connection_id`，不作身份或幂等凭据；到达服务端前的网络失败可能没有日志。
+- 聊天错误字段随 JSONL 保存并在新旧历史中兼容；嵌入的 `ProblemDetails` 必须导出，否则 encoding/json 无法为历史分配嵌入指针。保留参数拒绝的 retry_text 语义，不据 retryable 自动重放任务。
+- `web/src/problems.ts` 按稳定码翻译，旧/未知码回退服务端文案，纯文本展示；词典、TS、构建产物和 `testdata/problems-v1.json` 同步维护。回归 `npm run test:problems`、`scripts/test-browser.mjs` 与 Go `TestProblems*`；Linux 完整启动回归需要生产 chown 权限。
+
+### 管理员离线密码恢复
+
+- `admin-reset-password --config CONFIG --user ADMIN` 必须显式指定目标，取得 `data_dir/agentbox.lock` 后重新核对配置，只处理已存在的管理员；不能自动停服、建号、提权或删除锁文件。
+- `store.OpenForMaintenance` 仅打开已存在且 schema 与二进制一致的数据库，不迁移、不导入 JSON、不创建空库。密码与全部令牌撤销复用 `ResetPasswordIfUserUnchanged` 事务；不修改空间、额度和流水。
+- 网页与 CLI 共用 `internal/password` 的原 PBKDF2 格式。密码从 `/dev/tty` 两次隐藏输入，不接受 argv/env/stdin；SIGINT/SIGTERM 取消须恢复终端回显。macOS `/dev/tty` 不可靠支持 poll，使用可取消的非阻塞读取。
+- 回归入口 `go test ./cmd/agentbox ./internal/store ./internal/server`；CLI 测试里的 Python 伪终端仅使用隔离的合成数据库，覆盖实际 main 分流、无回显、输入不一致、无终端及信号取消，不连接生产。
 
 ### 开源发布约定
 
@@ -745,7 +806,7 @@ data/
 
 - `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度，终端 UpsertTerminalUsage 绝不扣额度。
 - 新行 `PriceSnapshot` 包含来源、价格键、普通/长上下文档和阈值。终端 upsert 在同一事务读取首份快照，续写不能改用新价；旧行没有快照时不要伪造历史单价。Claude 0 费用按表补算时保存 table 来源。
-- 当前 SQLite schema=10（迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
+- 当前 SQLite schema=12（迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
 - `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。
 - 协议样本放在 agent/usage 的 testdata，全部为合成脱敏数据。Linux 测试脚本必须复制这些 testdata；禁止读取真实用户 rollout 当测试夹具。
 
@@ -860,3 +921,42 @@ data/
 - 词典与编译产物一并维护；`npm run build` 同步生成独立 abox-link 的 `i18n-core.js`。
   改文案跑 `npm run test:i18n` 及合成浏览器/桌面 locale 回归，既有中文断言显式固定 zh-CN。
   详细约定见 `docs/i18n.md`。
+
+### M4/M5 首批维护约定
+
+- `internal/chat.Executor` 不依赖 server；Environment 必须在每次 exec 前重新授权。只有 app-server 提交回合前失败才可回退；取消/中断或无法保持推理选项时不得启动 exec。收据/用量事务仍沿 server 原顺序收尾。
+- 错误与聊天字段优先改 `contracts/chat-errors-v1.schema.json`，运行 `python3 scripts/generate-contracts.py`；Go `protocol`/store、TS 运行时解析与三语字典一起核对。不是全量 API 生成，未知协议不能降级重发。
+- `features/chat/history.ts` 拥有请求、deadline 和代际；重载/切换/退出须 cancel，异步 prepare 和收尾均要核对当前代际。禁止只按空间对象引用判断是否切换。
+- 桌面 remote.rs 仅转发校验后的错误码/操作编号/retryable，不透传原始 error/hint。网页与桌面状态共用 contracts/workspace-state.ts；running 优先，stop_reason=idle 才是休眠。共享契约改动须跑桌面测试。
+- 验证层为 pr / linux-integration / release-full；后者不替代签名、实机、付费或人工门槛。race.chat 包含关闭生命周期。新 npm 子测试在 verification_catalog.COVERED 登记。
+- 冻结兼容脚本按 checkout SchemaVersion（可显式 --expected-schema）校验迁移，不能从待测 DB 自己推断预期；旧二进制应拒绝高 schema。冻结静态页的 Chromium 测试仅可向已校验 loopback 源授予 local-network-access，不能放宽生产浏览器策略。
+
+### M4 候选镜像行为门槛
+
+- `internal/agentprobe` 嵌入固定合成驱动器，Docker ValidateCLIImage 使用不可变 ID、network=none、UID 1000、只读根、受限 tmpfs/caps/资源与清空的镜像 ENV；禁止挂账号、宿主目录或 Docker socket。每次正常/失败/取消均清理本次容器，清理失败不得切换。
+- 实际 CLI 输出需经现有 Adapter/RunCodexTurn/usage 解析核对；固定合成用量只进入内存记录器，不能接真实 store/ledger。未知格式失败并记录白名单 image_validation_failed，不能当作零费用成功。
+- imageupdate 手动/每日自动/回退共用门槛，报告与父目录同步成功后才 Config CAS 并保存验证过的 image ID；保留候选标签，不靠可变标签激活。新报告字段不是已发布协议，真实 provider/MCP 仍另行验收。
+- 独立 `--check-agent-image <本地镜像>` 在配置/服务初始化前分流，旧二进制未知 flag 必须失败；旧自动脚本先构建唯一候选，调用此命令后才改标签，不能提前覆盖活动或旧版本标签。该脚本最后复查不是 Docker CAS，不与其他镜像写入者并发。
+- 可发现入口 docker.cli-candidate（显式 --image）与 ui.image-update-gate；发布候选工作流构建运行时后执行门槛并保留失败证据。独立检查不修改配置/DB、不拉镜像、不使用真实凭证。
+
+### M5 桌面错误与实时语言
+
+- remote.rs 的 JSON/上传/下载 HTTP 错误只读 ≤16 KiB、最多额外 2 秒；超限/断流/停顿仍保留 HTTP 分类和合法响应头操作编号，不透传原始 error/hint。WS 握手复用白名单解析已有正文，连接期限不变；不得按关闭帧原文猜错误码。
+- 桌面显示错误用 errorNotice → messageRef，保留结构化键到渲染时翻译，嵌套 msg 参数也延迟翻译；诊断等需要固定字符串时才用 errorMessage。只捕获安全字段，不保存原始错误对象或重读后来变化的任务参数。
+- native-problems.json 是常见本机 HTTP/网络提示白名单，kind＋文案都匹配才翻译；任意路径/服务器/终端原文保持字节含义。错误 retryable 只能收窄原有重连规则，不授权重试同步/上传写入。
+- Smoke.app 三语场景只在 desktop-smoke/VITE_AGENTBOX_SMOKE=1 中运行：合成失败登录验证实时错误/编号与输入保留，已有终端验证切语言不重开/改写内容。legacy/projects 串行执行，结束恢复普通 renderer；这不是正式签名、真实 IME 或最低系统验收。
+
+### M4 生命周期、恢复与稳定性
+
+- chat.Service 不依赖 HTTP/server，Observation.Finish 必须直接 defer 以保留 panic recover；用量结算先于最终回执，room.end 最后执行。server 保留属主/持久接收准入和具体 Runtime 适配，不新增第二条执行路径。
+- features/chat/sender 冻结输入与 owner，异步校验/旧连接唤醒后重新核对；stream 清理实时和回放 RAF，回调不得操作后来 block。设置 controller 属于一次登录，requests 串行写入、前后废弃旧 GET，退出阻止排队写入；取消已提交请求不等于服务端回滚。所有 disposer 必须幂等且不能清理新实例。
+- docker.recovery-drill 使用显式 --recovery-image，自有 privileged/private-cgroup 的真实 systemd 容器，挂 Docker socket 仅供现有挂载检查；不挂宿主应用/systemd/cgroup 目录、不调用宿主 systemctl、不全局 prune。release.deployment 的 systemctl 仍为模拟。规模/计时/备份排程假设不等于管理员已接受 RTO/RPO。
+- verification_stability.py 在同一 Linux runner 连续执行完整 PR profile；Go 用 -count=1，允许编译缓存，禁止结果缓存。保留全部失败，少于20次/缺步骤/源码工具平台变化/超过600秒不能通过。聚合单测不代表实际采样，新增 CI 不代表已执行。
+
+### 工作台首次分步引导
+
+- first-task.ts 使用原生 manual popover 浮层与独立高亮，不能再给工作台预留大面板高度；首次创建后自动展示，按 draftScope（旧端回退 origin/user）保存已展示标记，禁止用 bearer token 作为偏好键。更多操作可主动重看；示例仅在显式点击后填入且不覆盖已有输入。
+- 关闭/切换/退出取消定位 RAF，销毁 ResizeObserver 和监听；支持 Escape、焦点返回、visualViewport 与 reduced-motion。三语、首次/刷新/后续空间、窄屏和无自动模型调用由 browser.onboarding 回归。
+- 草稿设置在 composer 工具栏，正常保存说明收进弹层；存储失败、禁用保存、附件问题及恢复通知仍显示。不可为了压缩布局隐藏阻止发送的问题。
+
+- 消息确认区默认单行，详情按需展开并限制列表高度；待确认/待核对优先于执行状态，错误文本不能被省略号隐藏。查询按钮只查不展开，不改变原 ID 重试/准入规则；切换空间/线程和发送新任务收起详情，轮询保留展开和键盘焦点。草稿、附件、语音入口统一 18px 图标与 34px 点击区。

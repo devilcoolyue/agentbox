@@ -1,3 +1,4 @@
+import { formatProblem } from "./problems.js";
 import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* chat-render：对话流的纯渲染管线 —— 用户消息、agent 事件（Claude stream-json /
  * Codex --json 新旧两种结构）、轻量 Markdown、附件缩略图。无状态副作用。
@@ -552,7 +553,7 @@ export function renderEntry(raw) {
     if (raw.kind === "divider")
         return [divider(raw.ts ? i18nText("新对话 · ") + fmtTime(raw.ts) : "")];
     if (raw.kind === "status" && raw.state === "error")
-        return [chip(raw.error, "err")];
+        return [chip(formatProblem(raw, i18nText), "err")];
     return [];
 }
 /* 工具入参里指向 HTML 的落盘路径 —— 有它才给 chip 挂「预览」。只认写文件类的

@@ -1,0 +1,30 @@
+name: PR verification stability samples
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sample:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Twenty uncached test runs in the same runner allocation
+        run: python3 scripts/verification_stability.py --require-ci --runs 20 --output output/verification/stability
+      - name: Preserve every successful and failed sample
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-stability-samples
+          path: output/verification/stability/
+          if-no-files-found: error
+# Manual sampling only. Does not publish artifacts as a release or touch an instance.

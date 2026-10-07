@@ -53,7 +53,7 @@ func TestOperationsRequireAdminAndDiagnosticsAreAllowlisted(t *testing.T) {
 		t.Fatal(err)
 	}
 	allowed := map[string]bool{}
-	for _, key := range []string{"version", "revision", "built_at", "go_version", "os", "arch", "schema_version", "started_at", "sessions", "disk_total", "disk_available", "resources", "usage_sync"} {
+	for _, key := range []string{"version", "revision", "built_at", "go_version", "os", "arch", "schema_version", "started_at", "sessions", "disk_total", "disk_available", "resources", "usage_sync", "environment"} {
 		allowed[key] = true
 	}
 	for key := range data {

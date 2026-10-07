@@ -3,6 +3,7 @@
 import { t as i18nText } from "./i18n.js";
 "use strict";
 
+import { responseError } from "./problems.js";
 import { S, emit } from "./state.js";
 import type { FileScope } from "./state.js";
 import type { UploadResult } from "./types.js";
@@ -17,14 +18,11 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
     headers: { ...(opts.headers || {}), Authorization: "Bearer " + S.token },
   });
   if (token !== S.token) throw new Error(i18nText("登录状态已变化"));
-  if (res.status === 401) {
-    emit("unauthorized");
-    throw new Error("unauthorized");
-  }
   if (!res.ok) {
-    let msg = res.statusText;
-    try { msg = ((await res.json()) as { error?: string }).error || msg; } catch (_) {}
-    throw new Error(msg);
+    const error = await responseError(res, i18nText);
+    if (token !== S.token) throw new Error(i18nText("登录状态已变化"));
+    if (res.status === 401) emit("unauthorized", error.message);
+    throw error;
   }
   const data = await res.json() as T;
   if (token !== S.token) throw new Error(i18nText("登录状态已变化"));
@@ -58,8 +56,9 @@ export function skillFileURL(skill: string, path: string, scope: string, dl = fa
 }
 
 /* 整个范围打包成 zip 的下载直链 */
-export function archiveDownloadURL() {
-  return `/api/sessions/${S.current!.id}/archive?token=${encodeURIComponent(S.token)}${scopeQS()}`;
+export function archiveDownloadURL(scope?: FileScope) {
+  const sq=scope?(scope==="shared"?"&scope=shared":""):scopeQS();
+  return `/api/sessions/${S.current!.id}/archive?token=${encodeURIComponent(S.token)}${sq}`;
 }
 
 /* /shared/ 下任意文件（.images 图片、.file 附件）转成可访问的 URL。
@@ -72,9 +71,9 @@ export function imgURLFromPath(containerPath: string) {
 }
 
 /* 上传附件（对话/终端粘贴图片、文件），落到共享目录，48h 后过期 */
-export async function uploadAttachment(blob: File | Blob) {
+export async function uploadAttachment(blob: File | Blob, options?:{session:string;signal:AbortSignal}) {
   const ext = ((blob.type || "").split("/")[1] || "bin").replace("jpeg", "jpg").replace("svg+xml", "svg");
   const fd = new FormData();
   fd.append("file", blob, (blob as File).name || "paste." + ext);
-  return api<UploadResult>(`/sessions/${S.current!.id}/images`, { method: "POST", body: fd });
+  return api<UploadResult>(`/sessions/${options?.session||S.current!.id}/images`, { method: "POST", body: fd,signal:options?.signal });
 }

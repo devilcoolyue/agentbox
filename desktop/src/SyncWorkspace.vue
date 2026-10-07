@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { t, messageRef, msg } from './i18n';
+import { t, messageRef, msg, type DisplayMessage } from './i18n';
 import UiIcon from './UiIcon.vue';
 import { SyncLoop, type LoopState } from './sync-loop';
 import { SyncTask, progressStages, byteLabel, type SyncProgress } from './sync-task';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { bridge, errorMessage, type Project, type Session, type SyncBinding, type SyncPreview, type SyncReview, type RecoveryPage, type AbandonReview, type RemoteCleanupReview } from './bridge';
+import { bridge, errorNotice, type Project, type Session, type SyncBinding, type SyncPreview, type SyncReview, type RecoveryPage, type AbandonReview, type RemoteCleanupReview } from './bridge';
 
 const props=defineProps<{session:Session}>();
 const emit=defineEmits<{(event:'sync-status',value:string):void}>();
@@ -53,7 +53,7 @@ const loop=new SyncLoop({
   if(retry)message.value=msg("连接暂时不可用，{p1} 秒后重新检查（重试 {p2}/{p3}）。", { p1: (retry.delayMs/1000), p2: (retry.attempt), p3: (retry.limit) });
   if(state==='paused'){
    if(value){preview.value=value;choiceBasis=value.plan.digest;}
-   message.value=error?errorMessage(error):msg("持续同步已暂停，请手动核对冲突或需要确认的变更。");
+   message.value=error?errorNotice(error):msg("持续同步已暂停，请手动核对冲突或需要确认的变更。");
    void load().catch(()=>{}).finally(()=>{if(alive)busy.value=false;});
   }
  },
@@ -66,7 +66,7 @@ function startLoop(){
 async function stopLoop(){
  loop.stop();loopState.value='stopped';emit('sync-status','');
  try{await task.cancel();await loop.settled();if(alive){message.value=msg("持续同步已停止。中断的批次需先核对再继续。");await load();}}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive)busy.value=false;}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive)busy.value=false;}
 }
 onBeforeUnmount(()=>{alive=false;loop.stop();task.close();});
 async function load(){
@@ -77,17 +77,17 @@ async function load(){
  projects.value=ps;bindings.value=(result.bindings||[]).filter(item=>item.binding.workspace===props.session.id);
  if(!selected.value)selected.value=ps[0]?.id||(bindings.value[0]?'binding:'+bindings.value[0].id:'');
 }
-async function refresh(){clearDialogs();busy.value=true;message.value='';review.value=null;preview.value=null;history.value=null;try{await load();}catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive)busy.value=false;}}
+async function refresh(){clearDialogs();busy.value=true;message.value='';review.value=null;preview.value=null;history.value=null;try{await load();}catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive)busy.value=false;}}
 async function bind(){
  const project=projects.value.find(item=>item.id===selected.value);if(!project)return;
  busy.value=true;message.value='';
  try{const result=await task.run<{binding:SyncBinding}|null>('sync_bind',{session:props.session.id,project:project.id,projectPath:project.path});if(alive&&result){bindings.value.push(result.binding);preview.value=null;}}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive)busy.value=false;}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive)busy.value=false;}
 }
 async function check(){
  if(!binding.value)return;clearDialogs();busy.value=true;message.value='';preview.value=null;choices.value={};
  try{const result=await task.run<{preview:SyncPreview}>('sync_preview',{bindingId:binding.value.id,direction:direction.value});if(alive){preview.value=result.preview;choiceBasis=result.preview.plan.digest;}}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive)busy.value=false;}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive)busy.value=false;}
 }
 async function previewChoices(){
  if(!binding.value||!preview.value)return;
@@ -95,35 +95,35 @@ async function previewChoices(){
  if(!Object.keys(selectedChoices).length)return;
  busy.value=true;message.value='';
  try{const result=await task.run<{preview:SyncPreview}>('sync_preview',{bindingId:binding.value.id,direction:'automatic',choices:selectedChoices,basisDigest:choiceBasis});if(alive){preview.value=result.preview;}}
- catch(err){if(alive){preview.value=null;choices.value={};message.value=errorMessage(err);}}finally{if(alive)busy.value=false;}
+ catch(err){if(alive){preview.value=null;choices.value={};message.value=errorNotice(err);}}finally{if(alive)busy.value=false;}
 }
 async function apply(){
  if(!binding.value||!preview.value)return;busy.value=true;message.value='';
  try{await task.run('sync_apply',{bindingId:binding.value.id,preview:preview.value,confirmation:preview.value.plan.digest});if(alive)message.value=msg("同步完成");}
- catch(err){if(alive)message.value=errorMessage(err);}
+ catch(err){if(alive)message.value=errorNotice(err);}
  finally{if(alive){preview.value=null;try{await load();}catch{/* Keep the outcome and reload on explicit refresh. */}busy.value=false;}}
 }
 async function reviewAbandon(){
  if(!binding.value)return;clearDialogs();busy.value=true;message.value='';
  try{const result=await task.run<{abandon:AbandonReview}>('sync_abandon_review',{bindingId:binding.value.id});if(alive)abandoning.value=result.abandon;}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive)busy.value=false;}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive)busy.value=false;}
 }
 async function abandonPending(){
  const shown=abandoning.value;if(!shown||abandonPhrase.value!==abandonConfirmation.value)return;
  busy.value=true;message.value='';
  try{await task.run('sync_abandon',{bindingId:shown.binding_id,confirmation:shown.digest});if(alive){resetSelection();await load();selected.value='binding:'+shown.binding_id;message.value=msg("绑定和未核验批次已归档，结果未知，文件与恢复引用均保留。重新绑定后必须重新确认来源。");}}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive){busy.value=false;abandoning.value=null;abandonPhrase.value='';}}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive){busy.value=false;abandoning.value=null;abandonPhrase.value='';}}
 }
 async function inspectPending(){
  if(!binding.value)return;clearDialogs();busy.value=true;message.value='';review.value=null;
  try{const result=await task.run<{review:SyncReview}>('sync_review',{bindingId:binding.value.id});if(alive)review.value=result.review;}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive)busy.value=false;}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive)busy.value=false;}
 }
 async function resolvePending(){
  if(!binding.value||!review.value||!resolving.value)return;
  const action=resolving.value;busy.value=true;message.value='';
  try{await task.run('sync_resolve',{bindingId:binding.value.id,confirmation:review.value.digest,action});if(alive){message.value=action==='finish'?msg("核对完成，同步基线已提交"):msg("旧批次已结束，原基线和恢复记录已保留。请重新检查变更。");review.value=null;await load();}}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive){busy.value=false;resolving.value=null;}}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive){busy.value=false;resolving.value=null;}}
 }
 async function listRecovery(cursor='',previous=false){
  if(!binding.value)return false;clearDialogs();busy.value=true;message.value='';
@@ -132,25 +132,25 @@ async function listRecovery(cursor='',previous=false){
   if(previous)historyCursors.value.pop();else if(!cursor)historyCursors.value=[''];else historyCursors.value.push(cursor);
   return true;
  }return false;}
- catch(err){if(alive)message.value=errorMessage(err);return false;}finally{if(alive)busy.value=false;}
+ catch(err){if(alive)message.value=errorNotice(err);return false;}finally{if(alive)busy.value=false;}
 }
 async function cleanupHistory(){
  const shown=cleaning.value;if(!shown)return;
  busy.value=true;message.value='';
  try{await task.run('sync_history_cleanup',shown);if(alive){cleaning.value=null;await load();await listRecovery();message.value=msg("已清理这条本机历史，仅释放本机元数据和历史条目容量。服务器永久执行收据保留。");}}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive){busy.value=false;cleaning.value=null;}}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive){busy.value=false;cleaning.value=null;}}
 }
 async function discardRecovery(){
  const shown=discarding.value;if(!shown)return;
  busy.value=true;message.value='';
- let failure='';
+ let failure: DisplayMessage='';
  try{await task.run('sync_recovery_discard',{bindingId:shown.bindingId,batchId:shown.batchId,operationId:shown.operationId,revision:shown.revision});}
- catch(err){failure=errorMessage(err);}
+ catch(err){failure=errorNotice(err);}
  finally{if(alive){
   discarding.value=null;
   // Disposal intent can commit before an error/cancel. Reload its revision
   // and resumable state rather than offering a stale confirmation again.
-  try{await load();if(!await listRecovery())failure ||= t("无法重新加载恢复历史");}catch(err){failure ||= errorMessage(err);}
+  try{await load();if(!await listRecovery())failure ||= t("无法重新加载恢复历史");}catch(err){failure ||= errorNotice(err);}
   message.value=failure||msg("本地恢复副本已清理，历史引用保留。当前项目文件和同步基线未修改。");busy.value=false;
  }}
 }
@@ -161,19 +161,19 @@ async function reviewRemoteCleanup(batchId:string){
  try{
   const result=await task.run<{cleanup:RemoteCleanupReview}>('sync_remote_cleanup_review',{bindingId,batchId,revision});
   if(alive)remoteCleaning.value=result.cleanup;
- }catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive)busy.value=false;}
+ }catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive)busy.value=false;}
 }
 async function cleanupRemote(){
  const shown=remoteCleaning.value;if(!shown)return;
  busy.value=true;message.value='';
- let failure='';
+ let failure: DisplayMessage='';
  try{await task.run('sync_remote_cleanup',{bindingId:shown.binding_id,batchId:shown.batch_id,revision:shown.revision,confirmation:shown.digest});}
- catch(err){failure=errorMessage(err);}
+ catch(err){failure=errorNotice(err);}
  finally{if(alive){
   // Server operations may already be retired when a response is interrupted.
   // Never reuse the old confirmation; reload and preview remaining work.
   remoteCleaning.value=null;history.value=null;
-  try{await load();if(!await listRecovery())failure ||= t("无法重新加载恢复历史");}catch(err){failure ||= errorMessage(err);}
+  try{await load();if(!await listRecovery())failure ||= t("无法重新加载恢复历史");}catch(err){failure ||= errorNotice(err);}
   message.value=failure?msg("{p1}。清理可能已部分完成；请重新加载历史并预览服务器清理后续做。", { p1: (failure) }):msg("服务器清理已完成，原内容已永久删除。执行收据保留以防重复执行，当前文件和同步基线保留。");
   busy.value=false;
  }}
@@ -181,7 +181,7 @@ async function cleanupRemote(){
 async function exportRecovery(batchId:string,operationId:string){
  if(!binding.value)return;clearDialogs();busy.value=true;message.value='';
  try{const result=await task.run<{filename:string}|null>('sync_export',{bindingId:binding.value.id,batchId,operationId});if(alive&&result)message.value=msg("副本已导出：{p1}", { p1: (result.filename) });}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive)busy.value=false;}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive)busy.value=false;}
 }
 function clearDialogs(){cleaning.value=null;discarding.value=null;remoteCleaning.value=null;abandoning.value=null;abandonPhrase.value='';archiving.value=null;resolving.value=null;}
 function openHistoryCleanup(batchId:string){
@@ -199,7 +199,7 @@ async function archiveBinding(){
  const shown=archiving.value;if(!shown)return;
  busy.value=true;message.value='';
  try{await task.run('sync_archive',{bindingId:shown.id,revision:shown.revision});if(alive){resetSelection();await load();selected.value='binding:'+shown.id;message.value=msg("已解除绑定，文件、旧基线和恢复记录均已保留。");}}
- catch(err){if(alive)message.value=errorMessage(err);}finally{if(alive){busy.value=false;archiving.value=null;}}
+ catch(err){if(alive)message.value=errorNotice(err);}finally{if(alive){busy.value=false;archiving.value=null;}}
 }
 function chooseRebind(){
  const project=binding.value?.binding.project;if(!project)return;
@@ -207,7 +207,7 @@ function chooseRebind(){
 }
 const observations:Record<string,string>={get before() { return t("目标仍是操作前的内容"); },get after() { return t("目标符合计划结果"); },get diverged() { return t("目标出现其他变化"); }};
 const receipts:Record<string,string>={get local() { return t("本地操作"); },get not_attempted() { return t("尚未发送"); },get missing() { return t("服务器无此操作记录"); },get applied() { return t("服务器已记录成功"); },get uncertain() { return t("服务器结果未确定"); },get retiring() { return t("服务器副本清理中"); },get retired() { return t("服务器副本已清理"); }};
-async function cancel(){if(loopState.value==='checking'||loopState.value==='waiting'){await stopLoop();return;}try{await task.cancel();}catch(err){if(alive)message.value=errorMessage(err);}}
+async function cancel(){if(loopState.value==='checking'||loopState.value==='waiting'){await stopLoop();return;}try{await task.cancel();}catch(err){if(alive)message.value=errorNotice(err);}}
 const operations:Record<string,string>={get replace() { return t("写入服务器文件"); },get delete() { return t("删除服务器文件"); },get mkdir() { return t("新建服务器目录"); },get rmdir() { return t("移除服务器空目录"); },get upload() { return t("上传"); },get download() { return t("下载"); },get delete_local() { return t("删除本地文件"); },get delete_remote() { return t("删除服务器文件"); },get mkdir_local() { return t("新建本地目录"); },get mkdir_remote() { return t("新建服务器目录"); },get rmdir_local() { return t("移除本地空目录"); },get rmdir_remote() { return t("移除服务器空目录"); }};
 const conflicts:Record<string,string>={get both_sides_changed() { return t("两端都有修改"); },get initial_source_required() { return t("首次同步需选择来源"); },get file_directory_type_change() { return t("文件和目录类型不同"); },get directory_contains_retained_changes() { return t("目录内仍有需保留的变更"); },get baseline_not_converged() { return t("两端基线尚未一致"); }};
 onMounted(refresh);

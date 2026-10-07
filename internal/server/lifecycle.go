@@ -59,7 +59,7 @@ func (s *Server) admit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		l := s.runtime()
 		if !l.begin() {
-			writeErr(w, http.StatusServiceUnavailable, "server shutting down")
+			writeProblem(w, r, "admission", "server_stopping")
 			return
 		}
 		defer l.wg.Done()

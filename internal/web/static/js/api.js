@@ -2,6 +2,7 @@
  * 401 时通过 bus 广播 unauthorized（login.ts 负责跳回登录页），避免反向依赖。 */
 import { t as i18nText } from "./i18n.js";
 "use strict";
+import { responseError } from "./problems.js";
 import { S, emit } from "./state.js";
 /* api 的返回类型由调用点用类型参数指定，例如 api<Session[]>("/sessions")。
  * 默认 unknown 而不是 any：忘了标注时，一用到返回值就会报错，逼着把接口形状
@@ -14,17 +15,13 @@ export async function api(path, opts = {}) {
     });
     if (token !== S.token)
         throw new Error(i18nText("登录状态已变化"));
-    if (res.status === 401) {
-        emit("unauthorized");
-        throw new Error("unauthorized");
-    }
     if (!res.ok) {
-        let msg = res.statusText;
-        try {
-            msg = (await res.json()).error || msg;
-        }
-        catch (_) { }
-        throw new Error(msg);
+        const error = await responseError(res, i18nText);
+        if (token !== S.token)
+            throw new Error(i18nText("登录状态已变化"));
+        if (res.status === 401)
+            emit("unauthorized", error.message);
+        throw error;
     }
     const data = await res.json();
     if (token !== S.token)
@@ -54,8 +51,9 @@ export function skillFileURL(skill, path, scope, dl = false) {
         (dl ? "&dl=1" : "") + `&token=${encodeURIComponent(S.token)}`;
 }
 /* 整个范围打包成 zip 的下载直链 */
-export function archiveDownloadURL() {
-    return `/api/sessions/${S.current.id}/archive?token=${encodeURIComponent(S.token)}${scopeQS()}`;
+export function archiveDownloadURL(scope) {
+    const sq = scope ? (scope === "shared" ? "&scope=shared" : "") : scopeQS();
+    return `/api/sessions/${S.current.id}/archive?token=${encodeURIComponent(S.token)}${sq}`;
 }
 /* /shared/ 下任意文件（.images 图片、.file 附件）转成可访问的 URL。
  * 这几个走会话资源的函数都只在有打开会话时才被调用（附件条、终端链接、
@@ -66,9 +64,9 @@ export function imgURLFromPath(containerPath) {
         `&scope=shared&token=${encodeURIComponent(S.token)}`;
 }
 /* 上传附件（对话/终端粘贴图片、文件），落到共享目录，48h 后过期 */
-export async function uploadAttachment(blob) {
+export async function uploadAttachment(blob, options) {
     const ext = ((blob.type || "").split("/")[1] || "bin").replace("jpeg", "jpg").replace("svg+xml", "svg");
     const fd = new FormData();
     fd.append("file", blob, blob.name || "paste." + ext);
-    return api(`/sessions/${S.current.id}/images`, { method: "POST", body: fd });
+    return api(`/sessions/${options?.session || S.current.id}/images`, { method: "POST", body: fd, signal: options?.signal });
 }

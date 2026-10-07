@@ -2,6 +2,7 @@ package imageupdate
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,15 +13,20 @@ import (
 	"testing"
 	"time"
 
+	"agentbox/internal/agentprobe"
 	"agentbox/internal/config"
 )
 
 type fakeBackend struct {
-	images      map[string]Image
-	builds      int
-	buildErr    error
-	beforeBuild func()
-	corrupt     bool
+	images       map[string]Image
+	builds       int
+	buildErr     error
+	beforeBuild  func()
+	corrupt      bool
+	probeErr     error
+	reportChange func(*agentprobe.Report)
+	beforeProbe  func()
+	probes       int
 }
 
 func (b *fakeBackend) InspectCLIImage(_ context.Context, ref string) (Image, error) {
@@ -51,6 +57,23 @@ func (b *fakeBackend) BuildCLIImage(ctx context.Context, base Image, v Versions,
 	b.images[tag] = base
 	b.images[base.ID] = base
 	return nil
+}
+func (b *fakeBackend) ValidateCLIImage(ctx context.Context, id string) (agentprobe.Report, error) {
+	b.probes++
+	if b.beforeProbe != nil {
+		b.beforeProbe()
+	}
+	r := agentprobe.Report{Version: agentprobe.Version, ImageID: id, CheckedAt: time.Now().UnixMilli()}
+	for _, name := range agentprobe.Required {
+		r.Checks = append(r.Checks, agentprobe.Check{Name: name, Passed: true})
+	}
+	if b.reportChange != nil {
+		b.reportChange(&r)
+	}
+	if err := ctx.Err(); err != nil {
+		return r, err
+	}
+	return r, b.probeErr
 }
 func fixture(t *testing.T) (*Service, *fakeBackend, *int) {
 	t.Helper()
@@ -234,5 +257,82 @@ func TestScheduleTimeZoneAndVersions(t *testing.T) {
 	}
 	if !newer("2.1.288", "2.1.99") {
 		t.Fatal("version comparison was lexical")
+	}
+}
+
+func TestCandidateBehaviorGateNeverSwitchesOnFailure(t *testing.T) {
+	for _, scheduled := range []bool{false, true} {
+		for _, kind := range []string{"error", "missing", "foreign", "future", "failed", "cancel", "settings", "persistence"} {
+			t.Run(fmt.Sprintf("scheduled=%v/%s", scheduled, kind), func(t *testing.T) {
+				s, b, _ := fixture(t)
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				switch kind {
+				case "error":
+					b.probeErr = errors.New("synthetic handshake failure")
+				case "missing":
+					b.reportChange = func(r *agentprobe.Report) { r.Checks = r.Checks[:1] }
+				case "foreign":
+					b.reportChange = func(r *agentprobe.Report) { r.ImageID = "unverified-id" }
+				case "future":
+					b.reportChange = func(r *agentprobe.Report) { r.Version++ }
+				case "failed":
+					b.reportChange = func(r *agentprobe.Report) { r.Checks[0].Passed = false }
+				case "cancel":
+					b.beforeProbe = cancel
+				case "settings":
+					b.beforeProbe = func() {
+						p, _, _ := s.cfg.ImageUpdateState()
+						p.Enabled = false
+						if err := s.cfg.ApplySettings(config.SettingsPatch{ImageUpdates: &p}); err != nil {
+							t.Fatal(err)
+						}
+					}
+				case "persistence":
+					b.beforeProbe = func() { s.path = filepath.Join(t.TempDir(), "missing", "state.json") }
+				}
+				job, err := s.Prepare("update", scheduled)
+				if err != nil || job == nil {
+					t.Fatal(err)
+				}
+				job(ctx)
+				_, active, previous := s.cfg.ImageUpdateState()
+				if b.probes != 1 || active != "browser" || previous != "" || s.Snapshot().Phase != "failed" {
+					t.Fatalf("unsafe switch: %+v", s.Snapshot())
+				}
+			})
+		}
+	}
+}
+
+func TestCandidateEvidencePrecedesImmutableActivation(t *testing.T) {
+	s, b, _ := fixture(t)
+	b.beforeProbe = func() {
+		_, active, _ := s.cfg.ImageUpdateState()
+		if active != "browser" {
+			t.Fatal("activated before verification")
+		}
+		var stored Status
+		raw, err := os.ReadFile(s.path)
+		if err != nil || json.Unmarshal(raw, &stored) != nil || stored.Phase != "validating" {
+			t.Fatal("phase not durable")
+		}
+	}
+	run(t, s, "update")
+	st := s.Snapshot()
+	if st.Validation == nil || !st.Validation.Passed("new-id") || st.ResultImage != "new-id" {
+		t.Fatal(st)
+	}
+	// Mutating a caller's snapshot must not mutate persisted verification evidence.
+	st.Validation.Checks[0].Passed = false
+	if !s.Snapshot().Validation.Passed("new-id") {
+		t.Fatal("aliased evidence")
+	}
+	b.beforeProbe = nil
+	b.probeErr = errors.New("rollback candidate incompatible")
+	run(t, s, "rollback")
+	_, active, _ := s.cfg.ImageUpdateState()
+	if active != "new-id" || s.Snapshot().Phase != "failed" {
+		t.Fatal("rollback bypassed validation")
 	}
 }

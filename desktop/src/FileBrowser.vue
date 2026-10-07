@@ -5,7 +5,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import UiIcon from './UiIcon.vue';
 import UiDialog from './UiDialog.vue';
 import { Channel } from '@tauri-apps/api/core';
-import { bridge, errorMessage } from './bridge';
+import { bridge, errorNotice } from './bridge';
 import { byteLabel } from './sync-task';
 const props=withDefaults(defineProps<{session:string;visible?:boolean}>(),{visible:true});
 interface Entry{name:string;is_dir:boolean;size:number;mode:string;mtime:string}
@@ -25,14 +25,14 @@ async function discardPreview(){const shown=uploadPreview.value;uploadPreview.va
 async function load(next=path.value){
  if(busy.value)return;if(next!==path.value)completedUpload.value='';busy.value=true;message.value='';await discardPreview();if(!alive)return;const request=++generation;
  try{const result=await bridge.invoke<Entry[]>('list_files',{session:props.session,path:next,scope:scope.value});if(alive&&generation===request){entries.value=result;path.value=next;page.value=0;loaded.value=true;}}
- catch(error){if(alive&&generation===request)message.value=errorMessage(error);}finally{if(alive&&generation===request)busy.value=false;}
+ catch(error){if(alive&&generation===request)message.value=errorNotice(error);}finally{if(alive&&generation===request)busy.value=false;}
 }
 function join(name:string){return path.value?`${path.value}/${name}`:name;}
 async function download(entry:Entry){
  if(busy.value)return;busy.value=true;downloading.value=true;message.value='';bytes.value=0;total.value=null;const request=++generation;
  const events=new Channel<{bytes:number;total:number|null}>();events.onmessage=value=>{if(alive&&generation===request){bytes.value=value.bytes;total.value=value.total;}};
  try{const saved=await bridge.invoke<boolean>('download_file',{task,session:props.session,path:join(entry.name),scope:scope.value,events});if(alive&&request===generation)message.value=saved?msg("文件已保存"):msg("已取消保存选择");}
- catch(error){if(alive&&request===generation)message.value=errorMessage(error);}finally{if(alive&&request===generation){busy.value=false;downloading.value=false;}}
+ catch(error){if(alive&&request===generation)message.value=errorNotice(error);}finally{if(alive&&request===generation){busy.value=false;downloading.value=false;}}
 }
 async function chooseUpload(){
  if(busy.value||!loaded.value)return;busy.value=true;message.value='';await discardPreview();if(!alive)return;const request=++generation;
@@ -43,7 +43,7 @@ async function chooseUpload(){
   if(files.length!==1){message.value=msg("目录上传每次请选择一个文件或代码压缩包，以便逐项核对覆盖范围。");return;}
   const result=await bridge.invoke<UploadPreview>('preview_file_upload',{request:{session:props.session,path:path.value,scope:scope.value,file:files[0]}});
   if(alive&&props.visible&&request===generation)uploadPreview.value=result;else await bridge.invoke('discard_file_upload',{confirmation:result.confirmation});
- }catch(error){if(alive&&request===generation)message.value=errorMessage(error);}
+ }catch(error){if(alive&&request===generation)message.value=errorNotice(error);}
  finally{if(files.length)await bridge.invoke('release_attachments',{tickets:files.map(f=>f.ticket)}).catch(()=>{});if(alive&&request===generation)busy.value=false;}
 }
 async function upload(){
@@ -51,7 +51,7 @@ async function upload(){
  busy.value=true;uploading.value=true;message.value='';completedUpload.value='';bytes.value=0;total.value=shown.size;const request=++generation;
  const events=new Channel<{bytes:number;total:number|null}>();events.onmessage=value=>{if(alive&&request===generation){bytes.value=value.bytes;total.value=value.total;}};
  try{const result=await bridge.invoke<{mode:string;files:number}>('apply_file_upload',{request:{task,confirmation:shown.confirmation},events});if(alive&&request===generation)completedUpload.value=result.mode==='archive'?msg("压缩包已合并到目标目录（{p1} 个文件）", { p1: (result.files) }):msg("文件已上传到目标目录");}
- catch(error){if(alive&&request===generation)message.value=msg("{p1}；请刷新目录检查实际结果后再重试。", {p1: errorMessage(error)});}
+ catch(error){if(alive&&request===generation)message.value=msg("{p1}；请刷新目录检查实际结果后再重试。", {p1: errorNotice(error)});}
  finally{if(alive&&request===generation){uploadPreview.value=null;uploading.value=false;busy.value=false;}}
 }
 async function cancel(){await bridge.invoke('cancel_attachment',{task}).catch(()=>{});}

@@ -160,10 +160,15 @@ func ParseUsage(line []byte, base store.UsageEvent) (evs []store.UsageEvent, cum
 // Claude 对话按消息 ID 收集，只有独立起标题保留 result 覆盖语义。
 // Codex turn.completed 保持原有增量语义。
 type Tally struct {
-	pricing *config.PricingState
-	evs     []store.UsageEvent
-	claude  *claudeMeter
+	pricing       *config.PricingState
+	evs           []store.UsageEvent
+	claude        *claudeMeter
+	settlementErr error
 }
+
+// SettlementError reports unresolved accounting without adding a second
+// settlement/retry path or changing the ledger transaction.
+func (t *Tally) SettlementError() error { return t.settlementErr }
 
 // observe 把一行事件并进汇总；不是用量事件就什么也不做。
 func (t *Tally) Observe(base store.UsageEvent, line []byte) {

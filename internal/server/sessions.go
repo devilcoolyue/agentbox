@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -75,18 +78,31 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request, sess s
 	writeJSON(w, http.StatusOK, s.view(sess))
 }
 
+type createSessionRequest struct {
+	Name            string  `json:"name"`
+	Agent           string  `json:"agent"`
+	AccountID       string  `json:"account_id"`
+	GitConnectionID *string `json:"git_connection_id"`
+	RequestID       string  `json:"request_id,omitempty"`
+	Source          string  `json:"source,omitempty"`
+	Directory       string  `json:"directory,omitempty"`
+}
+
 func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name            string  `json:"name"`
-		Agent           string  `json:"agent"`
-		AccountID       string  `json:"account_id"`
-		GitConnectionID *string `json:"git_connection_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var req createSessionRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if req.Name == "" || len(req.Name) > 64 {
+	if key := r.PathValue("request"); key != "" {
+		if req.RequestID != "" && req.RequestID != key {
+			writeCreationError(w, r, store.ErrCreationConflict)
+			return
+		}
+		req.RequestID = key
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" || len([]rune(req.Name)) > 64 {
 		writeErr(w, http.StatusBadRequest, "name is required (max 64 chars)")
 		return
 	}
@@ -94,13 +110,58 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "agent must be claude or codex")
 		return
 	}
+	var fingerprint string
+	var requestJSON []byte
+	if req.RequestID != "" {
+		if !operationIDPattern.MatchString(req.RequestID) {
+			writeProblem(w, r, "session.create", "invalid_request")
+			return
+		}
+		if req.Source == "" {
+			req.Source = "empty"
+		}
+		if req.Source != "empty" && req.Source != "upload" && req.Source != "git" {
+			writeProblem(w, r, "session.create", "invalid_request")
+			return
+		}
+		if req.Directory == "" {
+			req.Directory = "project"
+		}
+		if !validProjectDirectory(req.Directory) {
+			writeProblem(w, r, "session.create", "invalid_request")
+			return
+		}
+		payload := req
+		payload.RequestID = ""
+		requestJSON, _ = json.Marshal(payload)
+		sum := sha256.Sum256(requestJSON)
+		fingerprint = hex.EncodeToString(sum[:])
+		prior, err := s.store.WorkspaceCreation(reqUser(r), req.RequestID)
+		if err == nil {
+			if prior.Fingerprint != fingerprint {
+				writeCreationError(w, r, store.ErrCreationConflict)
+				return
+			}
+			sess, err := s.workspaces().CreateReserved(r.Context(), reqUser(r), req.RequestID)
+			if err != nil {
+				writeCreationError(w, r, err)
+				return
+			}
+			writeJSON(w, 200, s.view(sess))
+			return
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			writeCreationError(w, r, err)
+			return
+		}
+	}
 	acct, ok := s.cfg.Account(req.AccountID)
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "unknown account_id")
 		return
 	}
 	if !acct.CanUse(reqUser(r).Name, reqUser(r).Role == store.RoleAdmin) {
-		writeErr(w, http.StatusForbidden, errAccountAccess.Error())
+		writeProblem(w, r, "session.create", "account_access_denied")
 		return
 	}
 	if acct.Type != req.Agent {
@@ -140,8 +201,25 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		Status:       store.StatusStopped,
 		CreatedAt:    time.Now(),
 	}
+	if req.RequestID != "" {
+		// Use the larger receipt namespace; old untracked legacy directories use
+		// 12-character IDs and must not be mistaken for partial preparation.
+		sess.ID = newOperationID()
+		_, err := s.store.ReserveWorkspaceCreation(reqUser(r), store.WorkspaceCreation{RequestID: req.RequestID, Fingerprint: fingerprint, Request: requestJSON, Session: sess, GitConnectionID: gitConnection})
+		if err != nil {
+			writeCreationError(w, r, err)
+			return
+		}
+		sess, err = s.workspaces().CreateReserved(r.Context(), reqUser(r), req.RequestID)
+		if err != nil {
+			writeCreationError(w, r, err)
+			return
+		}
+		writeJSON(w, 201, s.view(sess))
+		return
+	}
 	if err := s.workspaces().CreateWithGitConnection(sess, gitConnection); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeProblem(w, r, "session.create", classifyProblem(err, "internal_error"))
 		return
 	}
 	writeJSON(w, http.StatusCreated, s.view(sess))
@@ -167,14 +245,7 @@ func (s *Server) handleStartSession(w http.ResponseWriter, r *http.Request, sess
 	defer cancel()
 	updated, err := s.startSession(ctx, sess)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, workspace.ErrCapacity) {
-			status = http.StatusTooManyRequests
-		}
-		if err == errAccountAccess {
-			status = http.StatusForbidden
-		}
-		writeErr(w, status, err.Error())
+		writeProblem(w, r, "session.start", classifyProblem(err, "workspace_start_failed"))
 		return
 	}
 	writeJSON(w, http.StatusOK, s.view(updated))

@@ -4,6 +4,7 @@ import { S, emit } from "./state.js";
 import { $, askConfirm, fmtDateTime, fmtTime } from "./util.js";
 import { hideTip } from "./tip.js";
 import { buttonLabel } from "./icons.js";
+import { initUpdateComponents } from "./features/settings/update-components.js";
 const interval = 4 * 60 * 60 * 1000;
 const releasesURL = "https://github.com/devilcoolyue/agentbox/releases";
 const versionLabel = (version) => /^\d/.test(version) ? "v" + version : version;
@@ -14,6 +15,7 @@ export function initUpdates() {
     badge.classList.toggle("hidden", S.role !== "admin");
     if (S.role !== "admin")
         return () => { };
+    const disposeComponents = initUpdateComponents();
     const lifetime = new AbortController();
     const { signal } = lifetime;
     let info;
@@ -291,6 +293,7 @@ export function initUpdates() {
             schedule();
     })();
     return () => {
+        disposeComponents();
         lifetime.abort();
         clearTimeout(timer);
         clearTimeout(upgradeTimer);

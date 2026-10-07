@@ -327,6 +327,10 @@ export interface GitProfile {
 
 /** GET /api/me */
 export interface Me {
+  draft_scope?:string;
+  draft_protocol?:number;
+  chat_protocol?:number;
+  chat_scope?:string;
   user: string;
   /** "admin" | "user"：admin 才能进系统设置 */
   role: string;
@@ -781,7 +785,7 @@ export interface ChatTurnCost {
   partial?: boolean;
 }
 
-export interface HistoryEntry {
+export interface HistoryEntry extends APIProblem {
   turn?: ChatTurnMetadata;
   ts: string;
   /** "user" | "event" | "status" | "chat_session" | "title" | "divider"(旧) */
@@ -794,6 +798,7 @@ export interface HistoryEntry {
 
 /** GET /api/sessions/{id}/history */
 export interface History {
+  active_thread?:string;
   entries: HistoryEntry[];
   thread: Thread | null;
   costs?: Record<string, ChatTurnCost>;
@@ -930,9 +935,15 @@ export interface StreamEvent {
 
 /* ---------------- WebSocket 报文 ---------------- */
 
+// Versioned wire types are generated from contracts/chat-errors-v1.schema.json.
+import type { APIProblem, ChatRequestReceipt } from "./contracts/v1.js";
+export type { APIProblem, ChatRequestInput, ChatRequestReceipt, ChatRequestResponse, ChatRequestList } from "./contracts/v1.js";
+
 /** 对话通道服务端 → 前端。type 决定其余字段，用可选字段而非联合类型，
  *  与 handleChatMsg 的 switch 写法直接对应。 */
-export interface ChatMessage {
+export interface ChatMessage extends APIProblem {
+  version?: number;
+  receipt?: ChatRequestReceipt;
   cost?: ChatTurnCost;
   ts?: string;
   turn?: ChatTurnMetadata;
@@ -1011,3 +1022,54 @@ export interface MCPItem extends MCPEntry {
 }
 export interface MCPView { revision: number; user_revision: number; items: MCPItem[]; project_names: string[]; external?: {name: string; source: "local" | "plugin"}[]; }
 export interface MCPCheck { status: string; tools?: {name: string; description: string}[]; truncated?: boolean; checked_at: string; }
+
+export interface DiagnosticCheck {
+  id: string;
+  state: "passed" | "failed" | "not_checked";
+  code: string;
+  message: string;
+  hint: string;
+}
+export interface DiagnosticReport {
+  version: 1;
+  scope: "instance" | "session" | "configuration";
+  checked_at: number;
+  operation_id?: string;
+  checks: DiagnosticCheck[];
+}
+export interface BrowserDiagnosticCheck extends DiagnosticCheck {
+  source: "browser";
+  checked_at: number;
+  operation_id: string;
+}
+
+/** Read-only first-use snapshot; account presence does not verify a provider. */
+export interface OnboardingSnapshot {
+  version: 1;
+  can_configure: boolean;
+  can_create: boolean;
+  has_workspaces: boolean;
+  accounts: {id:string; type:string; label:string; credentials_present:boolean}[];
+  default_models: Record<string,string>;
+  container_resources: CreationResources;
+}
+
+/** Configured limits for new containers; existing containers retain their limits. */
+export interface CreationResources {cpus:number;memory_mb:number;pids_limit:number;}
+
+export interface WorkspaceCreateSpec {
+ name:string;agent:string;account_id:string;git_connection_id:string;
+ source:"empty"|"upload"|"git";directory:string;
+}
+export interface WorkspaceImport {
+ attempt_id:string;kind:"upload"|"git";directory:string;
+ state:"running"|"succeeded"|"failed"|"uncertain"|"reviewed";
+ result:{directory?:string;files?:number;warning?:string};created_at:string;
+}
+export interface WorkspaceCreation {
+ request_id:string;request:WorkspaceCreateSpec;session:Session;
+ git_connection_id:string;state:"reserved"|"ready"|"complete"|"abandoned";
+ workspace_exists:boolean;busy:boolean;imports:WorkspaceImport[];created_at:string;
+ container_resources:CreationResources;
+}
+export interface WorkspaceCreationIndex {version:1;actor_key:string;creations:WorkspaceCreation[];}

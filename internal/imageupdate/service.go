@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"agentbox/internal/agentprobe"
 	"agentbox/internal/config"
 )
 
@@ -34,22 +36,24 @@ type Versions struct {
 type Backend interface {
 	InspectCLIImage(context.Context, string) (Image, error)
 	BuildCLIImage(context.Context, Image, Versions, string, func(string)) error
+	ValidateCLIImage(context.Context, string) (agentprobe.Report, error)
 }
 type Status struct {
-	Running       bool     `json:"running"`
-	Action        string   `json:"action"`
-	Phase         string   `json:"phase"`
-	StartedAt     int64    `json:"started_at"`
-	FinishedAt    int64    `json:"finished_at"`
-	CheckedAt     int64    `json:"checked_at"`
-	BaseImage     string   `json:"base_image"`
-	Current       Image    `json:"current"`
-	Target        Versions `json:"target"`
-	Available     bool     `json:"available"`
-	ResultImage   string   `json:"result_image"`
-	Error         string   `json:"error"`
-	Log           string   `json:"log"`
-	LastScheduled string   `json:"last_scheduled"`
+	Running       bool               `json:"running"`
+	Action        string             `json:"action"`
+	Phase         string             `json:"phase"`
+	StartedAt     int64              `json:"started_at"`
+	FinishedAt    int64              `json:"finished_at"`
+	CheckedAt     int64              `json:"checked_at"`
+	BaseImage     string             `json:"base_image"`
+	Current       Image              `json:"current"`
+	Target        Versions           `json:"target"`
+	Available     bool               `json:"available"`
+	ResultImage   string             `json:"result_image"`
+	Error         string             `json:"error"`
+	Log           string             `json:"log"`
+	LastScheduled string             `json:"last_scheduled"`
+	Validation    *agentprobe.Report `json:"validation,omitempty"`
 }
 type Service struct {
 	mu       sync.Mutex
@@ -73,7 +77,17 @@ func New(cfg *config.Config, backend Backend) *Service {
 	}
 	return s
 }
-func (s *Service) Snapshot() Status { s.mu.Lock(); defer s.mu.Unlock(); return s.status }
+func (s *Service) Snapshot() Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	status := s.status
+	if status.Validation != nil {
+		report := *status.Validation
+		report.Checks = append([]agentprobe.Check(nil), report.Checks...)
+		status.Validation = &report
+	}
+	return status
+}
 func (s *Service) persistLocked() error {
 	raw, err := json.Marshal(s.status)
 	if err != nil {
@@ -96,7 +110,15 @@ func (s *Service) persistLocked() error {
 	if err = f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(name, s.path)
+	if err := os.Rename(name, s.path); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(s.path))
+	if err != nil {
+		return err
+	}
+	err = dir.Sync()
+	return errors.Join(err, dir.Close())
 }
 func (s *Service) log(line string) {
 	s.mu.Lock()
@@ -225,6 +247,9 @@ func (s *Service) run(ctx context.Context, action string, policy config.ImageUpd
 		if err != nil {
 			return err
 		}
+		if err := s.validate(ctx, old.ID); err != nil {
+			return err
+		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -289,16 +314,57 @@ func (s *Service) run(ctx context.Context, action string, policy config.ImageUpd
 	if built.Claude != target.Claude || built.Codex != target.Codex || built.Browser != img.Browser {
 		return errors.New("新镜像验证失败，未切换")
 	}
+	if err := s.validate(ctx, built.ID); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := s.cfg.SwitchAgentImage(base, policy, tag, img.ID, false); err != nil {
+	if err := s.cfg.SwitchAgentImage(base, policy, built.ID, img.ID, false); err != nil {
 		return err
 	}
 	s.mu.Lock()
-	s.status.ResultImage = tag
+	s.status.ResultImage = built.ID
 	s.status.Available = false
 	s.mu.Unlock()
 	s.log("新镜像验证通过并已切换。运行中的空间保持不变，停止再启动后生效。\n")
 	return nil
+}
+
+// Both manual and scheduled updates (and rollback) use this exact gate. The
+// evidence must be durable before changing configuration; no caller may infer
+// compatibility from version labels or reuse a report for a mutable tag.
+func (s *Service) validate(ctx context.Context, imageID string) error {
+	s.mu.Lock()
+	s.status.Phase = "validating"
+	s.status.Validation = nil
+	err := s.persistLocked()
+	s.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("保存验证阶段失败: %w", err)
+	}
+	report, probeErr := s.backend.ValidateCLIImage(ctx, imageID)
+	s.mu.Lock()
+	s.status.Validation = &report
+	err = s.persistLocked()
+	s.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("保存候选验证结果失败: %w", err)
+	}
+	if probeErr != nil || !report.Passed(imageID) {
+		code := report.Failure
+		if code == "" {
+			code = "probe_incomplete"
+		}
+		log.Printf("image_validation_failed image_id=%s protocol=%d stage=%s code=%s", imageID, report.Version, report.Stage, code)
+		s.log("候选验证失败：" + code + "（" + report.Stage + "）\n")
+	}
+	if probeErr != nil {
+		return probeErr
+	}
+	if !report.Passed(imageID) {
+		return errors.New("候选 CLI 验证缺失或不匹配，未切换镜像")
+	}
+	s.log("候选 CLI 的握手、续聊、中断、MCP 与用量协议检查通过（合成上游，无真实模型调用）。\n")
+	return ctx.Err()
 }

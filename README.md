@@ -75,6 +75,14 @@ Configuration lives in `/etc/agentbox`, data in `/var/lib/agentbox`. Each worksp
 
 ### Your first task
 
+The workspace uses a one-time, three-step tour with Skip and replay under More → Quick tour. It does not reserve workspace space. Workspace filters share one row, and draft settings live in the composer toolbar.
+
+The current source adds a role-based first-use guide: administrators check the environment, connect accounts and review defaults; users see their authorized accounts. Workspace creation refreshes access and disables submission when no account is available. See [M2 progress](docs/milestones/m2.md); the current development source now supports empty, upload and Git project creation with persistent receipts. See [project import and recovery](docs/project-creation.md); this introduces server schema 11 and is not yet released.
+
+The development UI also confirms workspace configuration and offers an editable first-task example. About and updates distinguishes server, Agent image and desktop updates, including version observations and restart scope; see [update components](docs/update-components.md). Desktop UI changes require a separate desktop release.
+
+M3 development adds isolated recovery of unsent chat drafts and attachment checks. The current source also introduces server schema 12 and a versioned chat receipt API connected to the existing runner, with ID deduplication, status queries and recovery after restart. The browser now saves a frozen outgoing copy before sending, queries the original ID after a lost acknowledgement, and provides explicit result review. Unsent drafts stay separate. Local saving can be disabled; older servers retain the legacy send path with a capability notice. Back up before upgrading; older schema 10/11 binaries cannot open schema 12. See [draft recovery](docs/chat-recovery.md) and [M3 progress](docs/milestones/m3.md).
+
 1. **Add an account** in System settings → Account pool (`系统设置 → 账号池`). Choose Claude or Codex and connect a subscription or API / relay account. [Account setup →](docs/accounts-and-models.md)
 2. **Create a workspace** and select its agent and account.
 3. **Bring your project:** upload files, or open Terminal and clone a repository into `/workspace`.
@@ -112,6 +120,8 @@ sudo ./agentbox -config config.json
 ```
 
 Open `http://127.0.0.1:8180` on the server, or run `ssh -N -L 8180:127.0.0.1:8180 user@your-server` on your computer and open that address locally. Sign in as `boxadmin` with the configured `auth_token`. After first startup the password is stored in the database; editing `auth_token` does not reset it.
+
+Forgot the administrator password? The current source adds `agentbox admin-reset-password --config /path/to/config.json --user boxadmin`: stop the service and verify a backup first, then enter the new password twice in a terminal. It revokes that administrator’s login tokens and preserves workspace and billing data. See the [recovery procedure](docs/troubleshooting.md#忘记密码或改了-auth_token-仍不能登录); older release binaries may not include the command.
 
 The server needs Docker access and permission to set mounted directory ownership to `1000:1000`. After stopping this foreground instance, run `sudo ./deploy/install.sh` and `sudo ./deploy/deploy.sh` for a source-based systemd installation. See [deployment](deploy/README.md), [configuration](docs/configuration.md), and [development](docs/development.md) for details.
 
@@ -240,7 +250,9 @@ English and Chinese READMEs cover the same overview and setup. Detailed guides a
 
 ## Development roadmap
 
-Upcoming iterations focus on first-time setup, reliable daily use, and long-term maintenance. The five milestones below are planned work; see the documentation above for current features and validation status.
+Software development for the first round (M1–M5) is largely complete and a development build is deployed, but external acceptance—real-user observations, performance thresholds, recovery targets, and desktop signing—is still pending; see the [first-round record](docs/milestones/backlog.md). The second round (M6–M10) starts on 2026-10-06: first turn the development build into a proper release, then add real-use acceptance and metrics collection, improve daily efficiency based on real feedback, reduce upstream update and installation cost, and finally deliver a stable desktop release if certificates are available. Scope, dependencies, and acceptance are in the [second-round plan](docs/roadmap-2.md) (Chinese).
+
+The current web console source includes translated recovery hints and operation IDs for login, workspace startup, and chat failures; existing clients can still read the `error` field. See the [error contract](docs/errors.md) for scope and limitations. Administrators can run instance environment checks; users can check their own workspaces. Results distinguish passed, failed, and unchecked items, and never claim model availability without a model call. See [layered diagnostics](docs/diagnostics.md).
 
 | Milestone | Planned focus |
 | --- | --- |
@@ -249,10 +261,18 @@ Upcoming iterations focus on first-time setup, reliable daily use, and long-term
 | **M3 · Reliable daily tasks** | Chat drafts and receipt acknowledgments, idempotent message acceptance, task status checks after disconnects, and workspace search and filters |
 | **M4 · Maintenance and upgrade quality** | Further separation of complex modules, API contracts and layered CI, CLI protocol compatibility checks, and upgrade and recovery validation |
 | **M5 · Stable desktop release and consistency across clients** | OS signing and notarization, real-device and older-package upgrade acceptance, a multilingual desktop release, and a small sync pilot |
+| **M6 · Wrap-up and formal release** | Commit the development tree, run hosted CI end to end, release server v0.1.11 and desktop 0.1.3 test build, align documented version status |
+| **M7 · Real-use acceptance and metrics baseline** | In-instance aggregate metrics with redacted export, real task observations, agreed performance thresholds and recovery targets, production-data recovery drill |
+| **M8 · Feedback-driven daily efficiency** | Fix the most frequent blockers found in observations; candidates: workspace archiving, task completion notifications, long-conversation rendering |
+| **M9 · Upstream updates and installation cost** | Prebuilt Agent images, CLI baseline advancement, routine dependency upgrades, broader contract generation |
+| **M10 · Stable desktop release** | OS signing and notarization, minimum OS and real devices, a full sync pilot cycle; downgraded to a test release if certificates are unavailable |
+| **M11 · Additional agents** | Provider registry and ACP transport, optional agents in the image; Kimi Code CLI first, dsh / Antigravity as candidates depending on protocol maturity |
 
-Each iteration is initially scoped to **2–3 weeks**. Order and scope may change with user feedback, maintainer availability, and acceptance results; these estimates are not release-date commitments. See the [maintenance and usability roadmap](docs/roadmap.md) (Chinese) for scope, dependencies, acceptance criteria, and the first-iteration checklist. Issues with concrete use cases and suggestions are welcome.
+Each iteration is initially scoped to **3 weeks**. Order and scope may change with user feedback, maintainer availability, and acceptance results; these estimates are not release-date commitments. See the [first-round roadmap](docs/roadmap.md) and the [second-round plan](docs/roadmap-2.md) (both Chinese) for scope, dependencies, acceptance criteria, the external-resource track, and the kickoff checklist. Issues with concrete use cases and suggestions are welcome.
 
 ## Build and contribute
+
+The [current capability and verification inventory](docs/capabilities.md) separates implemented features, release records, and pending acceptance. Run `python3 scripts/verify.py list` to choose checks or `python3 scripts/verify.py run quick` for local checks with saved reports; see the [verification guide](docs/verification.md).
 
 The server uses **Go + SQLite + Docker**; the browser console uses **TypeScript, native ES Modules, and xterm.js**. See the [development guide](docs/development.md) for toolchains and platform-specific checks.
 

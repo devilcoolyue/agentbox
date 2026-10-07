@@ -10,7 +10,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { TerminalConnection } from './terminal-connection';
-import { bridge, errorMessage } from './bridge';
+import { bridge, errorNotice } from './bridge';
 import { AttachmentQueue, type AttachmentInput, type AttachmentResult } from './attachment-queue';
 import { terminalShortcut } from './terminal-shortcuts';
 import UiIcon from './UiIcon.vue';
@@ -94,7 +94,7 @@ async function copy() {
   const selection = term.getSelection();
   if (!selection) return;
   try { await navigator.clipboard.writeText(selection); }
-  catch (error) { message.value = errorMessage(error); }
+  catch (error) { message.value = errorNotice(error); }
 }
 function closeMenu(focus = false) {
   menuPosition.value = undefined;
@@ -156,7 +156,7 @@ async function paste() {
     const result=await bridge.invoke<{text:string|null;files:(AttachmentInput & {ticket:string})[]}>('read_attachment_clipboard');
     if(!alive){await releaseFiles(result.files);return;}
     if(result.files.length)setFiles(result.files);else if(result.text!==null)term.paste(result.text);
-  }catch(error){if(alive)attachmentMessage.value=errorMessage(error);}
+  }catch(error){if(alive)attachmentMessage.value=errorNotice(error);}
 }
 function reconnect() { term.reset(); void connection.open(props.session, props.terminal); }
 const attachments = new AttachmentQueue(async input => {
@@ -177,7 +177,7 @@ async function uploadFiles(files: readonly AttachmentInput[]) {
     },result=>{if(alive)uploadedFiles.value.push(result);});
     if(alive)attachmentMessage.value=msg("附件已上传，可将路径插入终端；不会自动执行命令。附件沿用服务器 48 小时清理规则。");
   } catch (error) {
-    if(alive)attachmentMessage.value=error instanceof Error?error.message:errorMessage(error);
+    if(alive)attachmentMessage.value=error instanceof Error?error.message:errorNotice(error);
   } finally {
     await releaseFiles(files);
     if(alive){pendingFiles.value=[];uploadBusy.value=false;uploadName.value='';}
@@ -194,7 +194,7 @@ function setFiles(files:AttachmentInput[]){
 }
 async function chooseFiles() {
  try{const files=await bridge.invoke<AttachmentInput[]>('choose_attachments');if(alive)setFiles(files);else await releaseFiles(files);}
- catch(error){if(alive)attachmentMessage.value=errorMessage(error);}
+ catch(error){if(alive)attachmentMessage.value=errorNotice(error);}
 }
 function pasteFiles(event: ClipboardEvent) {
  const files=Array.from(event.clipboardData?.files||[]);

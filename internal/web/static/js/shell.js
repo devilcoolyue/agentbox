@@ -8,6 +8,7 @@ import { $ } from "./util.js";
 import { agentIcon, agentAvatar, agentName } from "./brand.js";
 import { hideTip, setTip } from "./tip.js";
 import { sessionState } from "./session-state.js";
+import { filterWorkspaces, workspaceFilterActive } from "./features/workspaces/filter.js";
 /* ---- 侧栏：桌面收起偏好与移动抽屉各自独立 ---- */
 const narrowMQ = window.matchMedia("(max-width: 760px)");
 const sidebar = $("sidebar");
@@ -162,7 +163,7 @@ window.addEventListener("keydown", (e) => {
     }
     if (e.key !== "Tab")
         return;
-    const targets = [...sidebar.querySelectorAll("button:not(:disabled), [tabindex='0']")]
+    const targets = [...sidebar.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex='0']")]
         .filter(el => !el.closest("[inert]") && el.getClientRects().length && getComputedStyle(el).visibility !== "hidden");
     const first = targets[0], last = targets[targets.length - 1];
     if (e.shiftKey && document.activeElement === first) {
@@ -181,7 +182,7 @@ const VIEW_TITLE = {
 };
 export function updateTopbarTitle() {
     const inWork = S.view === "work" && !!S.current;
-    $("topbar-title").textContent = VIEW_TITLE[S.view] || (S.current ? S.current.name : "");
+    setTextRender($("topbar-title"), () => VIEW_TITLE[S.view] || (S.current ? S.current.name : ""));
     const led = $("tb-led");
     led.classList.toggle("hidden", !inWork);
     led.classList.toggle("on", inWork && S.current.status === "running");
@@ -229,7 +230,21 @@ export function renderSidebar() {
     const scrollTop = list.scrollTop;
     const focusedID = document.activeElement?.closest(".session-card")?.dataset.sessionId;
     list.replaceChildren();
-    $("session-count").textContent = String(S.sessions.length);
+    const sessions = filterWorkspaces(S.sessions);
+    const filtered = workspaceFilterActive();
+    const count = $("session-count");
+    const countText = filtered ? `${sessions.length}/${S.sessions.length}` : String(S.sessions.length);
+    if (count.textContent !== countText)
+        count.textContent = countText;
+    setAttrRender(count, "aria-label", () => i18nText("显示 {shown} / {total} 个工作空间", { shown: String(sessions.length), total: String(S.sessions.length) }));
+    $("session-filter-clear").classList.toggle("hidden", !filtered);
+    $("session-search-open").classList.toggle("active", filtered);
+    if (S.sessions.length && !sessions.length) {
+        const p = document.createElement("p");
+        p.className = "session-empty session-empty-text";
+        setTextRender(p, () => i18nText("没有匹配的工作空间"));
+        list.appendChild(p);
+    }
     if (!S.sessions.length) {
         const p = document.createElement("p");
         p.className = "session-empty";
@@ -237,7 +252,7 @@ export function renderSidebar() {
         setTip(p, () => i18nText("还没有工作空间，点击上方新建"));
         list.appendChild(p);
     }
-    for (const sess of S.sessions) {
+    for (const sess of sessions) {
         const card = document.createElement("button");
         const active = S.view === "work" && S.current?.id === sess.id;
         card.type = "button";
@@ -281,6 +296,10 @@ export function renderSidebar() {
         list.appendChild(card);
         if (focusedID === sess.id)
             card.focus({ preventScroll: true });
+    }
+    if (focusedID && !sessions.some(sess => sess.id === focusedID)) {
+        const search = $("session-search");
+        (search.getClientRects().length ? search : $("session-search-open")).focus({ preventScroll: true });
     }
     list.scrollTop = scrollTop;
 }

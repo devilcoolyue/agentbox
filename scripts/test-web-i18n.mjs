@@ -36,7 +36,9 @@ export async function webI18nSmoke(browser) {
   if(path==='/api/login')body={token:'synthetic-locale-token'};
   else if(path==='/api/me')body={user:'保存',role:'admin',timezone:'Asia/Tokyo',models:{claude:[],codex:[]},quota:{metered:false}};
   else if(path==='/api/sessions')body=[space];
-  else if(path==='/api/accounts')body=[{id:'fixture',label:'取消',agent:'codex',cred_status:'ok',sessions:1}];
+  else if(path==='/api/session-creations')body={version:1,actor_key:'a'.repeat(64),creations:[]};
+  else if(path==='/api/onboarding')body={version:1,can_configure:true,can_create:true,has_workspaces:true,accounts:[{id:'fixture',label:'取消',type:'codex',credentials_present:true}],default_models:{codex:'fixture'},container_resources:{cpus:1,memory_mb:512,pids_limit:128}};
+  else if(path==='/api/accounts')body=[{id:'fixture',label:'取消',type:'codex',cred_status:'ok',sessions:1}];
   else if(path==='/api/settings')body={listen:'127.0.0.1:8180',agent_image:'fixture',permission_mode:'default',max_upload_mb:20,idle_timeout_min:30,timezone:'Asia/Tokyo',container:{memory_mb:512,cpus:1,pids_limit:128,network:'none'},resources:{max_running:0,max_running_per_user:0,min_free_bytes:0},models:{claude:[],codex:[]},default_models:{claude:'fixture',codex:'fixture'},terminal_tips:{tips:['保存'],interval_sec:0,animation:'none'},tunnel:{enabled:false},proxy_bridge:{bind:'127.0.0.1:1081'},pricing:{}};
   else if(path.endsWith('/models'))body={models:[],discovery:'available'};
   else if(path.endsWith('/files'))body=[];
@@ -48,6 +50,7 @@ export async function webI18nSmoke(browser) {
   else if(path==='/api/proxies')body={proxies:[],bridge_up:false,bridge_host:'127.0.0.1'};
   else if(path==='/api/usage/events')body={rows:usageRows,total:{rows:20,turns:20,input_tokens:2000,output_tokens:20000,cache_read_tokens:1600,cache_write_tokens:200,cost_micro_usd:42560},facets:{users:[],agents:[],models:[]},scope:'all',timezone:'Asia/Tokyo',order:'desc',limit:20,offset:0,sync:{last_scan_at:Date.now(),last_success_at:Date.now(),scanning:false,errors:0}};
   else if(path==='/api/updates'||path==='/api/updates/check')body={current_version:'v0.1.9',revision:'0123456789abcdef',built_at:'2026-10-04T08:00:00Z',latest_version:'',available:false,comparable:true,checked_at:0,attempted_at:0,error:''};
+  else if(path==='/api/updates/components')body={version:1,observed_at:Date.now(),server:{version:'v0.1.9',schema:11,candidate_compatibility:'preflight_required'},image:{reference:'fixture',id:'',claude:'',codex:'',state:'unavailable',observed_at:0},desktop:{installed_version_state:'browser_unknown',server_protocol:1,sync_enabled:false}};
   else if(path==='/api/updates/upgrade')body={supported:false,reason:'fixture',current_version:'v0.1.9',job:null};
   await route.fulfill({json:body});
  });

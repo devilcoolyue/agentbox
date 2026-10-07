@@ -123,6 +123,8 @@ func (s *Server) referencedAttachments(userDir string) map[string]bool {
 }
 
 func (s *Server) cleanExpiredImages() {
+	s.attachmentMu.Lock()
+	defer s.attachmentMu.Unlock()
 	userDirs, err := filepath.Glob(filepath.Join(s.cfg.DataDir, "users", "*"))
 	if err != nil {
 		return
@@ -154,6 +156,17 @@ func (s *Server) cleanExpiredImages() {
 			continue // 没有过期候选就不必读转录，省掉绝大多数扫描
 		}
 		refs := s.referencedAttachments(userDir)
+		err = s.store.VisitChatAttachmentInputs(filepath.Base(userDir), func(input store.ChatRequestInput) {
+			for _, path := range input.Attachments {
+				refs[filepath.Base(path)] = true
+			}
+			for _, match := range attachRefRe.FindAllStringSubmatch(input.Text, -1) {
+				refs[match[1]] = true
+			}
+		})
+		if err != nil {
+			continue
+		} // Do not delete when receipt references are unknown.
 		for _, path := range expired {
 			if refs[filepath.Base(path)] {
 				continue // 仍被某条消息引用，留着

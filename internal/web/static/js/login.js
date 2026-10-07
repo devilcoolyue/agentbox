@@ -5,11 +5,13 @@ import { t as i18nText } from "./i18n.js";
 "use strict";
 import { S, bus, emit } from "./state.js";
 import { $, btnBusy, btnDone } from "./util.js";
+import { responseError } from "./problems.js";
 import { api } from "./api.js";
 import { refreshAll, startPolling } from "./data.js";
 import { startPing } from "./ping.js";
 import { renderMyQuota } from "./quota.js";
 import { buttonLabel } from "./icons.js";
+import { clearPreviousChatIdentity, rememberChatIdentity } from "./features/chat/local-identity.js";
 function setPasswordVisible(visible) {
     $("login-pass").type = visible ? "text" : "password";
     const toggle = $("login-password-toggle");
@@ -21,10 +23,19 @@ function setPasswordVisible(visible) {
 $("login-password-toggle").addEventListener("click", () => {
     setPasswordVisible($("login-pass").type === "password");
 });
-export function showLogin(err) {
+export function showLogin(err, keepStoredToken = false) {
     setPasswordVisible(false);
+    // A delayed 401/storage event from an old page must neither remove a newer
+    // token nor clear drafts/outgoing copies saved by that new login.
+    const stored = localStorage.getItem("agentbox_token");
+    if (stored && stored !== S.token)
+        keepStoredToken = true;
+    S.preserveChatCopiesOnSignout = keepStoredToken;
     S.token = "";
-    localStorage.removeItem("agentbox_token");
+    if (!keepStoredToken) {
+        localStorage.removeItem("agentbox_token");
+        clearPreviousChatIdentity(localStorage, sessionStorage);
+    }
     emit("signed-out");
     $("app").classList.add("hidden");
     $("login").classList.remove("hidden");
@@ -46,9 +57,15 @@ export async function tryEnter() {
             showLogin(i18nText("读取登录状态失败，请重试：") + error.message);
         return;
     }
-    if (token !== S.token)
+    if (token !== S.token || localStorage.getItem("agentbox_token") !== token)
         return;
     S.user = me.user;
+    S.draftScope = me.draft_protocol === 1 && /^[a-f0-9]{64}$/.test(me.draft_scope || "") ? me.draft_scope : "";
+    S.draftProtocol = me.draft_protocol === 1 ? 1 : 0;
+    S.chatScope = me.chat_protocol === 1 && /^[a-f0-9]{64}$/.test(me.chat_scope || "") ? me.chat_scope : "";
+    S.chatProtocol = me.chat_protocol === 1 ? 1 : me.chat_protocol === undefined || me.chat_protocol === 0 ? 0 : -1;
+    S.preserveChatCopiesOnSignout = false;
+    rememberChatIdentity(localStorage, S.draftScope, me.chat_scope || "");
     S.role = me.role;
     S.models = me.models || null;
     S.termTips = me.terminal_tips || null;
@@ -72,7 +89,10 @@ export async function tryEnter() {
     startPolling();
     startPing();
 }
-bus.addEventListener("unauthorized", () => showLogin(i18nText("登录已过期，请重新登录")));
+bus.addEventListener("unauthorized", event => {
+    const message = event.detail;
+    showLogin(typeof message === "string" ? message : i18nText("登录已过期，请重新登录"));
+});
 $("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     $("login-error").classList.add("hidden");
@@ -88,19 +108,14 @@ $("login-form").addEventListener("submit", async (e) => {
             }),
         });
         if (!res.ok) {
-            let msg = i18nText("账号或密码错误");
-            if (res.status !== 401) {
-                try {
-                    msg = (await res.json()).error || msg;
-                }
-                catch (_) { }
-            }
-            showLogin(msg);
+            const error = await responseError(res, i18nText, i18nText("账号或密码错误"));
+            showLogin(error.message);
             return;
         }
         const data = (await res.json());
         S.token = data.token;
         localStorage.setItem("agentbox_token", S.token);
+        clearPreviousChatIdentity(localStorage, sessionStorage);
         await tryEnter();
     }
     catch (_) {
@@ -115,7 +130,11 @@ $("btn-logout").addEventListener("click", async () => {
         await api("/logout", { method: "POST" });
     }
     catch (_) { }
-    localStorage.removeItem("agentbox_token");
+    showLogin();
     location.reload();
+});
+window.addEventListener("storage", event => {
+    if (event.key === "agentbox_token" && S.token && event.newValue !== S.token)
+        showLogin(i18nText("其他页面的登录状态已变化，请重新登录。"), true);
 });
 window.addEventListener("agentbox-language-change", () => setPasswordVisible($("login-pass").type === "text"));

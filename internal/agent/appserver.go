@@ -381,7 +381,7 @@ func (c *appServerConn) handleNotification(method string, params json.RawMessage
 			}
 			c.emitJSON(ev)
 		case "interrupted":
-			c.emitJSON(map[string]any{"type": "turn.failed",
+			c.emitJSON(map[string]any{"type": "turn.failed", "status": "interrupted",
 				"error": map[string]any{"message": "回合已中断"}})
 		default:
 			msg := "回合失败"

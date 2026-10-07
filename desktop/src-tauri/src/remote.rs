@@ -11,6 +11,12 @@ const MAX_JSON: usize = 4 * 1024 * 1024;
 pub struct Error {
     pub kind: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retryable: Option<bool>,
 }
 
 impl Error {
@@ -18,6 +24,9 @@ impl Error {
         Self {
             kind: kind.into(),
             message: message.into(),
+            code: None,
+            operation_id: None,
+            retryable: None,
         }
     }
     pub fn network(_: impl std::fmt::Display) -> Self {
@@ -98,6 +107,8 @@ pub struct Session {
     pub agent: String,
     pub status: String,
     #[serde(default)]
+    pub stop_reason: String,
+    #[serde(default)]
     pub account_label: String,
 }
 
@@ -157,6 +168,12 @@ impl Remote {
         }
         let response = request.send().await.map_err(Error::network)?;
         let status = response.status();
+        if !(status.is_success()
+            || path == "api/clients/capabilities" && status == StatusCode::NOT_FOUND
+            || path == "api/logout" && status == StatusCode::UNAUTHORIZED)
+        {
+            return Err(http_error(response).await);
+        }
         let content_type = response
             .headers()
             .get("content-type")
@@ -182,15 +199,12 @@ impl Remote {
             serde_json::json!({"username":username,"password":password}),
         )
         .await
-        .map_err(|error| {
-            if error.kind == "unauthorized" {
-                Error::new(
-                    "invalid_credentials",
-                    "账号或密码错误，请使用与网页版相同的账号密码",
-                )
-            } else {
-                error
+        .map_err(|mut error| {
+            if error.kind == "unauthorized" && error.code.is_none() {
+                error.kind = "invalid_credentials".into();
+                error.message = "账号或密码错误，请使用与网页版相同的账号密码".into();
             }
+            error
         })
     }
 
@@ -208,12 +222,12 @@ impl Remote {
             serde_json::json!({"code":code}),
         )
         .await
-        .map_err(|error| {
-            if error.kind == "unauthorized" {
-                Error::new("invalid_pair", "配对码无效或已过期，请重新生成")
-            } else {
-                error
+        .map_err(|mut error| {
+            if error.kind == "unauthorized" && error.code.is_none() {
+                error.kind = "invalid_pair".into();
+                error.message = "配对码无效或已过期，请重新生成".into();
             }
+            error
         })
     }
 
@@ -289,7 +303,9 @@ impl Remote {
             .send()
             .await
             .map_err(Error::network)?;
-        check_status(response.status())?;
+        if !response.status().is_success() {
+            return Err(http_error(response).await);
+        }
         if response.status() != StatusCode::OK {
             return Err(Error::new("protocol", "下载响应无效"));
         }
@@ -445,8 +461,10 @@ impl Remote {
             .and_then(|value| value.to_str().ok())
             .unwrap_or("")
             .to_lowercase();
+        if !status.is_success() {
+            return Err(http_error(response).await);
+        }
         if status != StatusCode::OK {
-            check_status(status)?;
             return Err(Error::new("protocol", "附件响应状态无效"));
         }
         require_json(&content_type)?;
@@ -475,6 +493,115 @@ fn require_json(content_type: &str) -> Result<()> {
 
 fn parse<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
     serde_json::from_slice(bytes).map_err(|_| Error::new("protocol", "服务器响应格式不兼容"))
+}
+
+// Error bodies are metadata, never downloads. Retain the known HTTP status and
+// safe header reference if the peer truncates, stalls, or sends an oversized body.
+pub(crate) const MAX_PROBLEM: usize = 16 * 1024;
+async fn http_error(response: reqwest::Response) -> Error {
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
+    let reference = response
+        .headers()
+        .get("x-agentbox-operation-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let fallback = || response_problem(status, "", &[], reference.as_deref());
+    if content_type.split(';').next().unwrap_or("").trim() != "application/json"
+        || response
+            .content_length()
+            .is_some_and(|n| n > MAX_PROBLEM as u64)
+    {
+        return fallback();
+    }
+    let read = async {
+        let mut bytes = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.ok()?;
+            if bytes.len() + chunk.len() > MAX_PROBLEM {
+                return None;
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Some(bytes)
+    };
+    match tokio::time::timeout(Duration::from_secs(2), read).await {
+        Ok(Some(bytes)) => response_problem(status, &content_type, &bytes, reference.as_deref()),
+        _ => fallback(),
+    }
+}
+
+pub(crate) fn response_problem(
+    status: StatusCode,
+    content_type: &str,
+    bytes: &[u8],
+    reference: Option<&str>,
+) -> Error {
+    let mut error = response_error(
+        status,
+        content_type,
+        if bytes.len() <= MAX_PROBLEM {
+            bytes
+        } else {
+            &[]
+        },
+    );
+    if error.operation_id.is_none() {
+        error.operation_id = reference
+            .filter(|s| valid_operation_id(s))
+            .map(str::to_owned);
+    }
+    error
+}
+fn valid_operation_id(value: &str) -> bool {
+    value.len() == 32
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+// Forward only machine identifiers, never server/proxy error text, hints or paths.
+fn response_error(status: StatusCode, content_type: &str, bytes: &[u8]) -> Error {
+    let mut error = check_status(status)
+        .err()
+        .unwrap_or_else(|| Error::new("protocol", "服务器响应格式不兼容"));
+    if !content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .eq_ignore_ascii_case("application/json")
+    {
+        return error;
+    }
+    let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
+        return error;
+    };
+    error.code = value
+        .get("code")
+        .and_then(Value::as_str)
+        .filter(|s| {
+            !s.is_empty()
+                && s.len() <= 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        })
+        .map(str::to_owned);
+    error.operation_id = value
+        .get("operation_id")
+        .and_then(Value::as_str)
+        .filter(|s| valid_operation_id(s))
+        .map(str::to_owned);
+    if error.code.is_some() {
+        error.retryable = value.get("retryable").and_then(Value::as_bool);
+    }
+    error
 }
 
 pub fn check_status(status: StatusCode) -> Result<()> {
@@ -546,6 +673,62 @@ fn attachment_path_valid(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_http_fallback_catalog_matches_renderer_allowlist() {
+        let catalog: serde_json::Value =
+            serde_json::from_str(include_str!("../../src/native-problems.json")).unwrap();
+        for status in [400, 401, 403, 404, 409, 429, 302, 503] {
+            let error =
+                super::check_status(reqwest::StatusCode::from_u16(status).unwrap()).unwrap_err();
+            assert_eq!(catalog[&error.kind].as_str(), Some(error.message.as_str()));
+        }
+        let error = super::Error::network("never forward raw detail");
+        assert_eq!(catalog[&error.kind].as_str(), Some(error.message.as_str()));
+    }
+
+    #[test]
+    fn structured_error_contract_redacts_raw_text_and_rejects_invalid_identifiers() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../internal/server/testdata/problems-v1.json"
+        ))
+        .unwrap();
+        for row in fixture["errors"].as_array().unwrap() {
+            let mut body = row.clone();
+            body["error"] = serde_json::json!("synthetic-secret");
+            body["hint"] = serde_json::json!("/private/operator/path");
+            body["operation_id"] = serde_json::json!("0123456789abcdef0123456789abcdef");
+            let status =
+                reqwest::StatusCode::from_u16(row["http_status"].as_u64().unwrap() as u16).unwrap();
+            let error = super::response_error(
+                status,
+                "application/json; charset=utf-8",
+                &serde_json::to_vec(&body).unwrap(),
+            );
+            assert_eq!(error.code.as_deref(), row["code"].as_str());
+            assert_eq!(error.retryable, row["retryable"].as_bool());
+            let raw = serde_json::to_string(&error).unwrap();
+            assert!(!raw.contains("synthetic-secret") && !raw.contains("/private/"));
+        }
+        for body in [
+            r#"{"code":"invalid\ncode","operation_id":"private","retryable":true}"#,
+            r#"{"code":5,"operation_id":null}"#,
+            "<html>private</html>",
+        ] {
+            let error = super::response_error(
+                reqwest::StatusCode::FORBIDDEN,
+                "application/json",
+                body.as_bytes(),
+            );
+            assert!(
+                error.code.is_none() && error.operation_id.is_none() && error.retryable.is_none()
+            );
+        }
+        let old: super::Session = serde_json::from_str(
+            r#"{"id":"s1","name":"fixture","agent":"codex","status":"stopped"}"#,
+        )
+        .unwrap();
+        assert!(old.stop_reason.is_empty());
+    }
     use super::*;
 
     #[test]

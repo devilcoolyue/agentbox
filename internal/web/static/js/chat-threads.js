@@ -25,13 +25,18 @@ let titled = false;
 export function setThreadBar(thread) {
     S.thread = thread && thread.id ? thread : null;
     titled = false; // 已登记 S.thread 后改由下面的 id 比对把关
-    setTextRender($("thread-title"), () => S.thread ? previewText(S.thread.title) : i18nText("新对话"));
+    setTextRender($("thread-title"), () => S.thread?.title ? previewText(S.thread.title) : i18nText("新对话"));
 }
 /* 空的新对话发出首条消息后，标题立即跟上，不必等下一次历史加载。标题只由开场
  * 消息决定，之后每轮消息都不该再动它 —— 已有正式标题时让位。 */
 export function noteThreadTitle(text) {
-    if (!S.thread && !titled)
+    if ((!S.thread || S.thread.turns === 0 && !S.thread.title) && !titled) {
+        if (S.thread) {
+            S.thread.title = text;
+            S.thread.turns = 1;
+        }
         $("thread-title").textContent = previewText(text);
+    }
 }
 /* 服务端异步生成好线程标题后广播过来，即时替换切换栏标题。
  * 新线程发首条消息时前端还没登记 S.thread（仍为 null），但 chat ws 按会话建立，

@@ -5,15 +5,15 @@ import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js"
 
 import { actionButton, buttonLabel } from "./icons.js";
 
-import { S, bus } from "./state.js";
+import { S, bus, emit } from "./state.js";
 import type { Pick } from "./state.js";
 import type {
-  AgentEvent, ChatMessage, History, LiveNode, ModelOption, StreamEvent, ReasoningCapability, SessionModels,
+  ChatMessage, History, ModelOption, ReasoningCapability, SessionModels,
 } from "./types.js";
 import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
-import { chip, renderUserMsg, renderEvent, renderEntry, liveNode, formatText, svgIcon, answerSources } from "./chat-render.js";
+import { chip, renderUserMsg, renderEntry, svgIcon } from "./chat-render.js";
 import { answerFooter, observeAnswer } from "./chat-footer.js";
 import type { AnswerContext } from "./chat-footer.js";
 import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
@@ -27,13 +27,30 @@ import { setTip } from "./tip.js";
  * 服务端把完整事件落盘在线程 JSONL 里，重新拉一次历史即可对齐。
  * 连接本身还兼作「唤醒」：服务端 chat WS 会幂等地拉起已休眠的容器。 */
 
+import { formatProblem } from "./problems.js";
+import { ChatSender } from "./features/chat/sender.js";
+import { createChatStream } from "./features/chat/stream.js";
+import { ChatHistory } from "./features/chat/history.js";
 import { ChatConnection } from "./features/chat/connection.js";
+import {initComposerDrafts} from "./features/chat/drafts.js";
+import type {Draft,DraftAttachment} from "./features/chat/draft-store.js";
+import {initChatOutbox} from "./features/chat/outbox.js";
+let drafts:ReturnType<typeof initComposerDrafts>|undefined;
+let outbox:ReturnType<typeof initChatOutbox>|undefined;
+let composerThread="";
+const legacyDraftVersions=new Map<string,number>();
 const connection = new ChatConnection({
  message: data => { try { handleChatMsg(JSON.parse(data)); } catch (_) {} },
- state: (state, attempt) => { chatAttempt = attempt; setChatConn(state); },
- reconnect: () => { void loadHistory({ silent: true }); },
+ state: (state, attempt, reference) => {
+  chatAttempt = attempt;
+  if (state === "closed") chatConnectionID = reference;
+  if (state === "connected") chatConnectionID = undefined;
+  setChatConn(state);
+ },
+ reconnect: () => { void loadHistory({ silent: true });void outbox?.refresh(); },
 });
 let chatAttempt = 0;
+let chatConnectionID: string | undefined;
 
 /** 对话通道状态条的四种态；connected 表示收起状态条 */
 type ChatConn = "connected" | "connecting" | "waking" | "closed";
@@ -48,7 +65,10 @@ function setChatConn(state: ChatConn) {
   const btn = $("chat-reconnect");
   if (state === "connecting") {
     dot.className = "t-dot warn";
-    setTextRender(text, () => chatAttempt > 1 ? i18nText("对话连接重连中…（第 {p0} 次）", { p0: String(chatAttempt) }) : i18nText("对话连接建立中…"));
+    setTextRender(text, () => {
+      const status = chatAttempt > 1 ? i18nText("对话连接重连中…（第 {p0} 次）", { p0: String(chatAttempt) }) : i18nText("对话连接建立中…");
+      return chatConnectionID ? `${status} ${formatProblem({code:"websocket_failed", operation_id:chatConnectionID}, i18nText)}` : status;
+    });
     btn.classList.add("hidden");
   } else if (state === "waking") {
     dot.className = "t-dot warn";
@@ -56,7 +76,7 @@ function setChatConn(state: ChatConn) {
     btn.classList.add("hidden");
   } else {
     dot.className = "t-dot bad";
-    setText(text, "对话连接已断开，消息无法发送");
+    setTextRender(text, () => formatProblem({code:"websocket_failed", operation_id:chatConnectionID}, i18nText));
     btn.classList.remove("hidden");
   }
 }
@@ -66,274 +86,25 @@ export function connectChat() {
 }
 
 /* 切换/删除会话时收尾：作废重连定时器、关连接、复位状态 */
+const stream = createChatStream({append:appendChat,working:setWorkingLabel,state:()=>S.chatState,
+ footer:()=>turnFooter,log:()=>$("chat-log"),nearBottom});
 let chatEpoch = 0;
 export function chatTeardown() {
+  drafts?.leave();
+  outbox?.leave();composerThread="";
+  sender.cancel();
   ++chatEpoch;
   modelsAbort?.abort();
   pendingPick = null;
   sessionModels = null;
   manualEffort = false;
-  waking = false;
   connection.dispose();
+  chatConnectionID = undefined;
   setChatConn("connected");
   cancelHistoryLoad();
-  replayReset();
+  stream.reset();
   resetAnswerContext();
   setChatStatus("idle");
-}
-
-/* 打字机状态：正在逐字放出的一段文本块。真流式与 codex 整段回放共用这个结构，
- * replay / rate 只在回放时出现（真流式按积压动态加速，不定速）。 */
-interface LiveBlock extends LiveNode {
-  /** "text" | "thinking" */
-  kind: string;
-  /** 已上屏的部分 */
-  shown: string;
-  /** 尚未放出的缓冲 */
-  buf: string;
-  /** 上一帧攒下的不足一个字的余量 */
-  carry: number;
-  /** 上一帧的时间戳 */
-  tick: number;
-  /** requestAnimationFrame 句柄，0 = 当前没有在跑 */
-  raf: number;
-  /** codex 整段回放标记 */
-  replay?: boolean;
-  /** 回放定速（字/秒）；真流式为 undefined */
-  rate?: number;
-}
-
-/* ---------------- 流式增量渲染 ----------------
- * Claude：--include-partial-messages 下，完整 assistant 事件之前会先收到
- * stream_event（content_block_start/delta/stop）。delta 到达节奏不均
- * （常一次一整句），直接上屏会一段一段蹦：先进缓冲，由 rAF 打字机
- * 匀速放出，积压越多放得越快，显示只滞后生成零点几秒。text 块每次
- * 放出后整段重跑 Markdown（与最终渲染同一管线），代码块、列表边生成
- * 边呈现；完整事件到达后移除临时节点交回 renderEvent 正式渲染，
- * 两边产物一致，替换无观感跳变。增量事件服务端只广播不落盘，
- * 历史回放天然只有完整事件。
- *
- * Codex：服务端经 app-server 协议拿到真增量，翻译成与 Claude 相同的
- * stream_event 形状广播，这条管线原样消费——真流式与 Claude 无异；
- * 完整 item.completed 到达时同样移除临时节点交回正式渲染。
- *
- * 兜底（旧容器里的 codex 走 exec --json，没有增量，全文只在
- * item.completed 一次性到达）：把全文喂进同一条 rAF 管线做「整段回放」，
- * 速度取 max(140 字/秒, 全文/3s)，短文按打字节奏、长文封顶 3 秒放完。
- * 回放中到达的其余事件（工具行、回合完成章等）排队，动画完成后按序
- * 补上；回放不因回合结束被截断，但新用户消息 / 出错 / 切线程时立刻放完。 */
-
-let liveEls: HTMLElement[] = []; // 本条消息的临时节点，完整事件到达后整体移除
-let liveBlock: LiveBlock | null = null; // 当前追加目标
-
-/* 回合结束收尾：缓冲余量上屏，临时节点保留在页面上（中断时留住
- * 已生成的部分），只是不再跟踪、去掉光标 */
-function streamSettle() {
-  if (liveBlock && liveBlock.replay) return; // codex 回放自行收尾，不被回合结束截断
-  liveDrain();
-  for (const el of liveEls) el.classList.remove("streaming");
-  liveEls = [];
-  liveBlock = null;
-  turnFooter?.update();
-}
-
-function liveClear() {
-  if (liveBlock && liveBlock.raf) cancelAnimationFrame(liveBlock.raf);
-  for (const el of liveEls) el.remove();
-  liveEls = [];
-  liveBlock = null;
-}
-
-function handleAgentEvent(ev: AgentEvent | undefined) {
-  if (ev && ev.type === "stream_event") { handleStreamEvent(ev.event); return; }
-  // 完整 assistant 事件带全部内容，先移除对应的增量节点再正式渲染
-  if (ev && ev.type === "assistant") liveClear();
-  workLabelFromEvent(ev);
-  if (replayFeed(ev)) return; // codex 整段文本 → 打字机回放
-  for (const node of renderEvent(ev)) replayAppend(node);
-}
-
-/** 回放队列项：带 node 的是排在动画之后补上的成品节点，否则是待打字的文本任务 */
-interface ReplayJob {
-  node?: HTMLElement;
-  kind?: string;
-  text?: string;
-}
-
-/* ---- codex 整段回放队列 ---- */
-
-let replayQueue: ReplayJob[] = [];
-
-function replayActive() { return !!(liveBlock && liveBlock.replay) || replayQueue.length > 0; }
-
-/* codex 的文本事件（新旧两种结构）转打字任务；消费掉返回 true */
-function replayFeed(ev: AgentEvent | undefined) {
-  if (!ev || typeof ev !== "object") return false;
-  let kind = "", text = "";
-  if (ev.type === "item.completed" && ev.item) {
-    if (ev.item.type === "agent_message") { kind = "text"; text = ev.item.text!; }
-    else if (ev.item.type === "reasoning") { kind = "thinking"; text = ev.item.text!; }
-  } else if (ev.msg && typeof ev.msg === "object") {
-    if (ev.msg.type === "agent_message") { kind = "text"; text = ev.msg.message!; }
-    else if (ev.msg.type === "agent_reasoning") { kind = "thinking"; text = ev.msg.text!; }
-  }
-  if (!kind || !text) return false;
-  // 真流式（app-server 增量）已把这条消息现场打出来：清掉临时节点交回
-  // 正式渲染（与 Claude 完整事件同一套路），不再回放
-  if (liveEls.length) { liveClear(); return false; }
-  replayQueue.push({ kind, text });
-  replayPump();
-  return true;
-}
-
-/* 回放进行中时后续事件的节点排队，保持时间线顺序；空闲时直接上屏 */
-function replayAppend(node: HTMLElement) {
-  if (replayActive()) replayQueue.push({ node });
-  else appendChat(node);
-}
-
-function replayPump() {
-  if (liveBlock) return; // 已有动画在放
-  while (replayQueue.length) {
-    const job = replayQueue.shift()!;
-    if (job.node) { appendChat(job.node); continue; }
-    setWorkingLabel(() => job.kind === "thinking" ? i18nText("推理中…") : i18nText("生成回复…"));
-    liveBlock = {
-      ...liveNode(job.kind!), kind: job.kind!, shown: "", buf: "", carry: 0, tick: 0, raf: 0,
-      replay: true, rate: Math.max(140, job.text!.length / 3),
-    };
-    liveBlock.el.classList.add("streaming");
-    appendChat(liveBlock.el);
-    liveFeed(job.text!);
-    return;
-  }
-}
-
-/* 一段回放放完：定格为与正式渲染一致的形态，接着放下一个排队项 */
-function replayFinish() {
-  const b = liveBlock;
-  if (!b || !b.replay) return;
-  if (b.raf) cancelAnimationFrame(b.raf);
-  b.el.classList.remove("streaming", "live-text");
-  if (b.kind === "thinking") (b.el as HTMLDetailsElement).open = false; // 与正式渲染一致：思考默认折叠
-  liveBlock = null;
-  turnFooter?.update();
-  replayPump();
-}
-
-/* 立刻放完全部积压：新用户消息 / 出错时调用，保证时间线完整不乱序 */
-function replayFlush() {
-  while (liveBlock && liveBlock.replay) liveDrain();
-}
-
-/* 丢弃回放状态：切线程 / 切会话时调用，对话流马上要整体重建 */
-function replayReset() {
-  replayQueue = [];
-  if (liveBlock && liveBlock.replay) {
-    if (liveBlock.raf) cancelAnimationFrame(liveBlock.raf);
-    liveBlock = null;
-  }
-}
-
-/* 依据整包事件刷新执行指示的阶段文案（流式的文字/思考在 handleStreamEvent 里更新） */
-function workLabelFromEvent(ev: AgentEvent | undefined) {
-  if (!ev || S.chatState !== "running") return;
-  if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
-    for (const b of ev.message.content) {
-      if (b.type === "tool_use") { setWorkingLabel(() => i18nText("运行工具 ") + b.name + "…"); return; }
-    }
-  } else if (ev.type === "item.started" && ev.item && ev.item.type === "command_execution") {
-    setWorkingLabel(() => i18nText("执行命令…"));
-  } else if (ev.type === "item.completed" && ev.item && ev.item.type === "reasoning") {
-    setWorkingLabel(() => i18nText("推理中…"));
-  }
-}
-
-function handleStreamEvent(e: StreamEvent | undefined) {
-  if (!e || typeof e !== "object") return;
-  switch (e.type) {
-    case "message_start":
-      // 正常流程上一条已被完整事件清掉（此处空转）；若断连错过了完整
-      // 事件则保留残留文本，只停止跟踪，避免删掉用户已看到的内容
-      streamSettle();
-      break;
-    case "content_block_start": {
-      liveDrain(); // 上一块若有残余（丢了 stop 事件）先补齐
-      const t = e.content_block && e.content_block.type;
-      if (t === "text" || t === "thinking") {
-        setWorkingLabel(() => t === "thinking" ? i18nText("思考中…") : i18nText("生成回复…"));
-        liveBlock = { ...liveNode(t), kind: t, shown: "", buf: "", carry: 0, tick: 0, raf: 0 };
-        liveBlock.el.classList.add("streaming");
-        appendChat(liveBlock.el);
-        liveEls.push(liveBlock.el);
-      } else {
-        liveBlock = null; // tool_use 等交给完整事件渲染
-      }
-      break;
-    }
-    case "content_block_delta": {
-      if (!liveBlock || !e.delta) break;
-      const txt = e.delta.type === "text_delta" ? e.delta.text
-        : e.delta.type === "thinking_delta" ? e.delta.thinking : "";
-      if (txt) liveFeed(txt);
-      break;
-    }
-    case "content_block_stop":
-      if (liveBlock) {
-        liveDrain();
-        liveBlock.el.classList.remove("streaming");
-      }
-      liveBlock = null;
-      break;
-  }
-}
-
-/* ---- 打字机：缓冲 → rAF 匀速放出 ---- */
-
-function liveFeed(text: string) {
-  const b = liveBlock!;
-  b.buf += text;
-  if (document.hidden) { liveDrain(); return; } // 后台标签页 rAF 停摆，直接上屏
-  if (!b.raf) {
-    b.tick = performance.now();
-    b.raf = requestAnimationFrame(liveTick);
-  }
-}
-
-function liveTick(now: number) {
-  const b = liveBlock;
-  if (!b || !b.raf) return;
-  b.raf = 0;
-  const dt = Math.min(now - b.tick, 200);
-  if (dt >= 33) { // Markdown 整段重渲染有成本，帧率封顶 ~30fps
-    b.tick = now;
-    // 真流式：基础 80 字/秒，按积压加速（约 0.4s 追平），滞后有上界；
-    // codex 回放：全文早已到齐，按定速放（rate 已封顶总时长）
-    b.carry += (dt / 1000) * (b.rate || Math.max(80, b.buf.length * 2.5));
-    const n = Math.min(b.buf.length, Math.floor(b.carry));
-    if (n > 0) {
-      b.carry -= n;
-      b.shown += b.buf.slice(0, n);
-      b.buf = b.buf.slice(n);
-      liveRender(b);
-    }
-  }
-  if (b.buf) b.raf = requestAnimationFrame(liveTick);
-  else if (b.replay) replayFinish();
-  else b.carry = 0;
-}
-
-/* 缓冲余量一次性上屏（块结束/回合收尾/后台标签页时用） */
-function liveDrain() {
-  const b = liveBlock;
-  if (!b) return;
-  if (b.raf) { cancelAnimationFrame(b.raf); b.raf = 0; }
-  if (b.buf) {
-    b.shown += b.buf;
-    b.buf = "";
-    liveRender(b);
-  }
-  if (b.replay) replayFinish();
 }
 
 /* 贴底判定：用户已在底部附近（正在跟读）才把视口拉到最底，
@@ -364,33 +135,24 @@ function updateScrollBottomButton() {
 
 
 
-function liveRender(b: LiveBlock) {
-  const log = $("chat-log");
-  const stick = nearBottom(log);
-  if (b.kind === "text") {
-    b.body.replaceChildren(formatText(b.shown));
-    answerSources.set(b.el, b.shown);
-    if (turnFooter && b.shown) turnFooter.el.hidden = false;
-  }
-  else b.body.textContent = b.shown; // thinking 与最终渲染一致，保持纯文本
-  if (stick) log.scrollTop = log.scrollHeight;
-}
-
 function handleChatMsg(msg: ChatMessage) {
   switch (msg.type) {
+    case "chat_request":
+      if(msg.version===1)outbox?.message(msg.receipt);
+      break;
     case "user_message":
-      replayFlush(); // 上一回合的回放立刻放完，不让新消息插到它前面
+      stream.flush(); // 上一回合的回放立刻放完，不让新消息插到它前面
       noteThreadTitle(msg.text!);
       appendChat(renderUserMsg(msg.text));
       answerContext.turn = msg.turn;
       break;
     case "agent_event":
       observeAnswer(answerContext, msg.event, msg.ts);
-      handleAgentEvent(msg.event);
+      stream.event(msg.event);
       turnFooter?.update();
       break;
     case "agent_raw":
-      replayAppend(chip(msg.text!)); // 回放中则排队，保持时间线顺序
+      stream.append(chip(msg.text!)); // 回放中则排队，保持时间线顺序
       break;
     case "turn_cost":
       if (msg.cost && msg.cost.turn_id === answerContext.turn?.id) {
@@ -408,9 +170,10 @@ function handleChatMsg(msg: ChatMessage) {
       applyThreadTitle(msg.id!, msg.title!);
       break;
     case "status":
+      outbox?.socketStatus(msg.state||"idle");
       if (!answerContext.ts && msg.ts) answerContext.ts = msg.ts;
-      setChatStatus(msg.state!, msg.error);
-      if (msg.state === "error" && msg.retry_text) {
+      setChatStatus(msg.state!, msg.error ? formatProblem(msg, i18nText) : undefined);
+      if (msg.state === "error" && msg.retry_text && !outbox?.enabled) {
         const input = $<HTMLTextAreaElement>("chat-input");
         if (!input.value.trim()) { input.value = msg.retry_text; autoGrow(); }
         const retry = document.createElement("button");
@@ -427,7 +190,7 @@ function handleChatMsg(msg: ChatMessage) {
       if (msg.state === "idle" || msg.state === "error") refreshAll();
       break;
     case "error":
-      appendChat(chip(msg.error!, "err"));
+      appendChat(chip(formatProblem(msg, i18nText), "err"));
       break;
   }
 }
@@ -438,8 +201,8 @@ function handleChatMsg(msg: ChatMessage) {
  * + 阶段文案（详见 ensureWorking）。 */
 export function setChatStatus(state: string, error?: string) {
   S.chatState = state === "running" ? "running" : "idle";
-  if (state === "error") replayFlush(); // 出错立刻放完，错误提示紧随其后
-  if (S.chatState !== "running") streamSettle();
+  if (state === "error") stream.flush(); // 出错立刻放完，错误提示紧随其后
+  if (S.chatState !== "running") stream.settle();
   const send = $<HTMLButtonElement>("chat-send");
   if (state === "running") {
     // 思考指示接在末尾，若用户正跟读（贴底）就滚出来，免得藏在折叠线下方
@@ -450,7 +213,7 @@ export function setChatStatus(state: string, error?: string) {
     send.classList.add("stop");
     setTip(send, () => i18nText("中断"));
     setAttrRender(send, "aria-label", () => i18nText("中断")); // 纯图标按钮，可访问名称得跟着状态走
-    send.disabled = false;
+    send.disabled = !!outbox?.unsupported;
   } else {
     clearWorking();
     send.classList.remove("stop");
@@ -478,70 +241,43 @@ export function autoGrow() {
   const t = $("chat-input");
   t.style.height = "auto";
   t.style.height = Math.min(t.scrollHeight, 220) + "px";
+  drafts?.save();
 }
 
-export function sendChat() {
-  let text = $<HTMLTextAreaElement>("chat-input").value.trim();
-  if (!text || S.chatState === "running") return;
-  if (chatImgs.uploading > 0) {
-    appendChat(chip(i18nText("附件仍在上传中，请稍候…"), "err"));
-    return;
-  }
-  if (!connection.ready) {
-    // 多半是会话空闲休眠后连接被断开。别让用户先去点启动：重新连一次即可，
-    // 服务端的 chat 通道会幂等地把容器拉起来，连上后自动把这条消息发出去。
-    wakeAndSend();
-    return;
-  }
-  // [Image #N] / [File #N] 占位符替换为容器内真实路径，Agent 可直接读取
-  for (const [n, info] of chatImgs.map) {
-    if (!info.path) continue;
-    text = text.split(`[Image #${n}]`).join(`[图片#${n} ${info.path}]`);
-    text = text.split(`[File #${n}]`).join(`[附件#${n} ${info.path}]`);
-  }
-  connection.send(JSON.stringify({
-    type: "user_message", text,
-    model: S.pick.model, effort: S.pick.effort, effort_control: currentReasoning().control,
-  }));
-  $<HTMLTextAreaElement>("chat-input").value = "";
-  autoGrow();
-  resetChatImgs();
-}
-
-/* 唤醒并重试发送：立刻重连（服务端顺带拉起容器），连上后把输入框里的内容
- * 发出去。等待上限 60 秒——冷启容器 + 播种凭证通常几秒内完成。 */
-let waking = false;
-async function wakeAndSend() {
-  if (waking) return;
-  waking = true;
-  setChatConn("waking");
-  const send = $<HTMLButtonElement>("chat-send");
-  send.disabled = true;
-  chatAttempt = 0;
-  connectChat();
-  const epoch = chatEpoch;
-  const deadline = Date.now() + 60000;
-  try {
-    while (Date.now() < deadline) {
-      if (!S.current || epoch !== chatEpoch) return;
-      if (connection.ready) {
-        waking = false;
-        send.disabled = false;
-        sendChat(); // 连上了，把用户刚才那条发出去
-        refreshAll(); // 状态从「休眠」翻回运行中
-        return;
-      }
-      await new Promise((r) => setTimeout(r, 400));
-    }
-    appendChat(chip(i18nText("唤醒工作空间超时，请稍后重试或手动启动工作空间"), "err"));
-  } finally {
-    if (epoch !== chatEpoch) return;
-    waking = false;
-    send.disabled = chatImgs.uploading > 0;
-  }
+const attachmentFingerprint=()=>JSON.stringify([...chatImgs.map].map(([id,{valid,...a}])=>[id,a]));
+const sender = new ChatSender({
+ allowed:()=>!S.histLoading&&!S.histError&&!outbox?.blocked()&&S.chatState==="idle"&&chatImgs.uploading===0,
+ read:()=>{
+  if(!S.current)return;
+  const raw=$<HTMLTextAreaElement>("chat-input").value;if(!raw.trim())return;
+  const draft=composerDraft(),pick={model:S.pick.model,effort:S.pick.effort,effort_control:currentReasoning().control||""};
+  let text=raw.trim();
+  for(const [n,info] of chatImgs.map){if(!info.path)continue;text=text.split(`[Image #${n}]`).join(`[图片#${n} ${info.path}]`).split(`[File #${n}]`).join(`[附件#${n} ${info.path}]`);}
+  const input={scope:S.chatScope,thread_id:composerThread,text,...pick,attachments:draft.attachments.map(a=>a.path)};
+  return {owner:JSON.stringify([S.token,chatEpoch,S.current.id,composerThread]),content:JSON.stringify([raw,pick,attachmentFingerprint()]),input,draft};
+ },
+ durable:()=>!!outbox?.enabled,connected:()=>connection.ready,
+ connect:()=>{chatAttempt=0;connectChat();},
+ validate:async()=>drafts?await drafts.validate():true,
+ deliver:async(snapshot,current)=>{
+  if(outbox?.enabled){await outbox.send(snapshot.input,snapshot.draft,current);return;}
+  if(!connection.ready||!current())return;
+  const {text,model,effort,effort_control}=snapshot.input;
+  if(!connection.send(JSON.stringify({type:"user_message",text,model,effort,effort_control})))return;
+  $<HTMLTextAreaElement>("chat-input").value="";resetChatImgs();autoGrow();
+ },
+ changed:updateHero,edited:()=>toast(i18nText("输入已变化，请确认后重新发送。")),
+ waking:()=>setChatConn("waking"),awake:()=>{void refreshAll();},
+ timeout:()=>appendChat(chip(i18nText("唤醒工作空间超时，请稍后重试或手动启动工作空间"),"err")),
+});
+export async function sendChat() {
+ if(chatImgs.uploading>0){appendChat(chip(i18nText("附件仍在上传中，请稍候…"),"err"));return;}
+ await sender.send();
 }
 
 function sendInterrupt() {
+  if(outbox?.unsupported)return;
+  if(outbox?.enabled&&outbox.interrupt())return;
   if (connection.ready) {
     connection.send(JSON.stringify({ type: "interrupt" }));
   }
@@ -549,9 +285,15 @@ function sendInterrupt() {
 
 /* ---------------- 附件（粘贴图片 / 上传文件） ---------------- */
 
-const chatImgs = { seq: 0, map: new Map(), uploading: 0 }; // n -> {path, name, orig, kind}
+const chatImgs = { seq: 0, map: new Map<number,Omit<DraftAttachment,"id">>(), uploading: 0 };
+const composerDraft=():Draft=>({text:$<HTMLTextAreaElement>("chat-input").value,attachments:[...chatImgs.map].map(([id,a])=>({id,...a}))});
+const draftFingerprint=(d:Draft)=>JSON.stringify({text:d.text,attachments:d.attachments.map(({valid,...a})=>a)});
+function applyComposerDraft(value:Draft){resetChatImgs();$<HTMLTextAreaElement>("chat-input").value=value.text;for(const {id,...a} of value.attachments){chatImgs.map.set(id,a);chatImgs.seq=Math.max(chatImgs.seq,id);}renderAttach();autoGrow();}
+let attachmentEpoch=0;
+const attachmentUploads=new Set<AbortController>();
 
 export function resetChatImgs() {
+  ++attachmentEpoch;for(const controller of attachmentUploads)controller.abort();attachmentUploads.clear();
   chatImgs.seq = 0;
   chatImgs.map.clear();
   chatImgs.uploading = 0;
@@ -567,6 +309,18 @@ function renderAttach() {
     strip.classList.remove("hidden");
   }
   for (const [n, info] of chatImgs.map) {
+    const remove=document.createElement("button");remove.type="button";remove.className="attach-remove";
+    buttonLabel(remove,"","close");setAttrRender(remove,"aria-label",()=>i18nText("移除附件 #{n}",{n}));setTip(remove,()=>i18nText("移除附件 #{n}",{n}));
+    remove.addEventListener("click",()=>{
+      chatImgs.map.delete(n);
+      const input=$<HTMLTextAreaElement>("chat-input");input.value=input.value.split(`[${info.kind==="img"?"Image":"File"} #${n}]`).join("");
+      autoGrow();renderAttach();updateHero();
+    });
+    if(info.valid===false){
+      const box=document.createElement("div");box.className="attach-file attachment-invalid";
+      const label=document.createElement("span");label.textContent=info.orig||info.name||"#"+n;
+      const note=document.createElement("span");setText(note,"附件待检查或需重新上传");box.append(label,note,remove);strip.append(box);continue;
+    }
     if (info.kind === "file") {
       const box = document.createElement("div");
       box.className = "attach-file mono";
@@ -579,7 +333,7 @@ function renderAttach() {
       } else {
         box.append(spinEl(), name);
       }
-      strip.appendChild(box);
+      box.append(remove);strip.appendChild(box);
       continue;
     }
     const box = document.createElement("div");
@@ -600,13 +354,16 @@ function renderAttach() {
       up.append(spinEl(), document.createTextNode(i18nText("上传中")));
       box.appendChild(up);
     }
-    strip.appendChild(box);
+    box.append(remove);strip.appendChild(box);
   }
   // 附件没传完不许发送（执行中按钮是「中断」，不能动）
-  if (S.chatState !== "running") $<HTMLButtonElement>("chat-send").disabled = chatImgs.uploading > 0;
+  if (S.chatState !== "running") $<HTMLButtonElement>("chat-send").disabled = S.histLoading||!!S.histError||chatImgs.uploading>0||sender.busy||!!drafts?.blocked()||!!outbox?.blocked();
 }
 
 async function attachFile(file: File) {
+  if(!S.current||S.histLoading||S.histError)return;
+  if(chatImgs.map.size>=64){toast(i18nText("每条草稿最多保留 64 个附件。"),true);return;}
+  const session=S.current.id,owner=S.token,epoch=attachmentEpoch,controller=new AbortController();attachmentUploads.add(controller);
   const isImg = (file.type || "").startsWith("image/");
   const tag = isImg ? "Image" : "File";
   const n = ++chatImgs.seq;
@@ -616,15 +373,19 @@ async function attachFile(file: File) {
   chatImgs.uploading++;
   renderAttach();
   try {
-    const res = await uploadAttachment(file);
-    chatImgs.map.set(n, { ...res, kind: isImg ? "img" : "file" });
+    const res = await uploadAttachment(file,{session,signal:controller.signal});
+    if(epoch!==attachmentEpoch||S.current?.id!==session||S.token!==owner||controller.signal.aborted||!chatImgs.map.has(n))return;
+    chatImgs.map.set(n, { ...res,orig:res.orig||file.name||"", kind: isImg ? "img" : "file",valid:true });
   } catch (e) {
+    if(epoch!==attachmentEpoch||S.current?.id!==session||S.token!==owner||controller.signal.aborted)return;
     chatImgs.map.delete(n);
     $<HTMLTextAreaElement>("chat-input").value = $<HTMLTextAreaElement>("chat-input").value.replace(`[${tag} #${n}]`, "");
     appendChat(chip(i18nText("附件上传失败：") + (e as Error).message, "err"));
   } finally {
+    attachmentUploads.delete(controller);
+    if(epoch!==attachmentEpoch||S.current?.id!==session||S.token!==owner)return;
     chatImgs.uploading--;
-    renderAttach();
+    drafts?.save();renderAttach();updateHero();
   }
 }
 
@@ -973,8 +734,9 @@ export function updateHero() {
   updateScrollBottomButton();
   $<HTMLTextAreaElement>("chat-input").disabled = blocked;
   if (S.chatState !== "running") {
-    $<HTMLButtonElement>("chat-send").disabled = blocked || chatImgs.uploading > 0;
+    $<HTMLButtonElement>("chat-send").disabled = blocked || chatImgs.uploading > 0||sender.busy||!!drafts?.blocked()||!!outbox?.blocked();
   }
+  emit("chat-view-updated");
 }
 
 for (const c of document.querySelectorAll<HTMLElement>(".hero-pill")) {
@@ -986,20 +748,9 @@ for (const c of document.querySelectorAll<HTMLElement>(".hero-pill")) {
 
 /* ---------------- 历史对话（当前线程） ---------------- */
 
-const HISTORY_TIMEOUT = 15_000;
-let histGen = 0;   // 并发重载守卫：作废在途的旧加载，防止内容追加进新视图
-let histCtrl: AbortController | null = null;
-
-function historyLoadIsStale(sessID: string, gen: number) {
-  // refreshAll 每 8 秒会用接口返回的新对象刷新 S.current。这里只能比较稳定
-  // 的会话 id；比较对象引用会把普通轮询误判成切换会话，并永远留下加载态。
-  return !S.current || S.current.id !== sessID || gen !== histGen;
-}
-
+const history = new ChatHistory((path, signal) => api<History>(path, {signal}), () => S.current?.id);
 function cancelHistoryLoad() {
-  histGen++;
-  if (histCtrl) histCtrl.abort();
-  histCtrl = null;
+  history.cancel();
   S.histLoading = false;
   S.histError = "";
 }
@@ -1010,16 +761,6 @@ function cancelHistoryLoad() {
 export async function loadHistory(opts: { silent?: boolean } = {}) {
   const sess = S.current; if (!sess) return;
   const silent = !!opts.silent;
-  if (histCtrl) histCtrl.abort();
-  const gen = ++histGen;
-  const ctrl = new AbortController();
-  histCtrl = ctrl;
-  let timedOut = false;
-  let loaded = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    ctrl.abort();
-  }, HISTORY_TIMEOUT);
   const log = $("chat-log");
   const wasAtBottom = silent ? nearBottom(log) : true;
   const prevScroll = log.scrollTop;
@@ -1028,13 +769,15 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
     S.histError = "";
     updateHero(); // 中央显示加载态，加载完一次性呈现，避免先闪新会话引导页
   }
-  try {
-    // 只返回当前对话线程的全文；其余线程在历史对话面板（chat-threads.js）
-    // 里列表展示，切换后经 reloadThread 重新加载
-    const { entries, thread, costs } = await api<History>(`/sessions/${sess.id}/history`, { signal: ctrl.signal });
-    if (historyLoadIsStale(sess.id, gen)) return;
+  let draftThread = "";
+  const result = await history.load(sess.id, `/sessions/${sess.id}/history`+(S.draftProtocol===1?"?draft_context=1":""), async ({active_thread,thread}) => {
+    if(S.draftProtocol===1&&!active_thread)throw new Error(i18nText("无法确认对话草稿的归属，请重新加载历史。"));
+    draftThread=active_thread||thread?.id||"legacy-empty-"+(legacyDraftVersions.get(sess.id)||0);
+    await drafts?.enter(sess.id,draftThread);
+  }, ({entries,thread,costs}) => {
+    composerThread=draftThread;outbox?.enter(sess.id,draftThread);
     setThreadBar(thread);
-    replayReset();
+    stream.reset();
     log.replaceChildren(); // 重连与首次加载都以服务端记录为准
     resetAnswerContext();
     for (const raw of entries) {
@@ -1048,34 +791,28 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
       if (raw.kind === "status" && !answerContext.ts) answerContext.ts = raw.ts;
       turnFooter?.update();
     }
-    loaded = true;
-  } catch (e) {
-    if (historyLoadIsStale(sess.id, gen)) return;
-    if (silent) return; // 补拉失败不打扰：下次重连或手动刷新还有机会
-    S.histError = timedOut
-      ? i18nText("历史对话加载超时")
-      : i18nText("历史对话加载失败：") + ((e as Error).message || i18nText("未知错误"));
-  } finally {
-    clearTimeout(timer);
-    if (histCtrl === ctrl) histCtrl = null;
-    if (!historyLoadIsStale(sess.id, gen)) {
-      if (!silent) {
-        S.histLoading = false;
-        updateHero();
-      }
-      if (loaded) {
-        log.scrollTop = wasAtBottom ? log.scrollHeight : prevScroll;
-        updateScrollBottomButton();
-      }
-    }
+  });
+  if (result.state === "stale" || !result.current()) return;
+  if (result.state === "failed" && !silent) {
+    S.histError = result.timedOut ? i18nText("历史对话加载超时")
+      : i18nText("历史对话加载失败：") + ((result.error as Error).message || i18nText("未知错误"));
+  }
+  if (!silent) { S.histLoading = false; updateHero(); }
+  if (result.state === "loaded") {
+    log.scrollTop = wasAtBottom ? log.scrollHeight : prevScroll;
+    updateScrollBottomButton();
   }
 }
 
 /* 对话线程发生切换（本端操作经 bus，或其它页面广播）后重载对话流 */
 export async function reloadThread() {
   if (!S.current) return;
-  histGen++; // 立刻作废在途加载，clear 之后它们不得再往里追加
-  replayReset(); // 回放动画与积压一并丢弃，历史里有完整内容
+  if(S.draftProtocol!==1)legacyDraftVersions.set(S.current.id,(legacyDraftVersions.get(S.current.id)||0)+1);
+  ++chatEpoch;sender.cancel();
+  drafts?.leave();
+  outbox?.leave();composerThread="";
+  history.cancel(); // 立刻作废在途加载，clear 之后它们不得再往里追加
+  stream.reset(); // 回放动画与积压一并丢弃，历史里有完整内容
   resetAnswerContext();
   $("chat-log").replaceChildren();
   setThreadBar(null);
@@ -1178,7 +915,23 @@ function setWorkingLabel(text: string | (() => string)) {
 let disposeChat: (() => void) | undefined;
 export function initChat() {
  disposeChat?.();
+ legacyDraftVersions.clear();
  const lifetime = new AbortController();
+ drafts=initComposerDrafts({
+  read:composerDraft,
+  apply:applyComposerDraft,
+  validated:(paths,valid)=>{for(const info of chatImgs.map.values())info.valid=!!info.path&&valid[paths.indexOf(info.path)]===true;renderAttach();},
+  changed:updateHero,
+ });
+ outbox=initChatOutbox({
+  connected:()=>connection.ready,
+  changed:()=>{const state=outbox?.executionState();if(state&&S.chatState!==state)setChatStatus(state);else updateHero();},
+  move:expected=>{if(draftFingerprint(composerDraft())===draftFingerprint(expected))applyComposerDraft({text:"",attachments:[]});},
+  restore:value=>{
+   const current=composerDraft();if(current.text||current.attachments.length){toast(i18nText("输入框已有草稿，请先保存或清空后再复制。"),true);return;}
+   applyComposerDraft({...value,attachments:value.attachments.map(a=>({...a,valid:false}))});void drafts?.validate();
+  },
+ });
  window.matchMedia("(max-width: 760px)").addEventListener("change", updateChatPlaceholder, { signal: lifetime.signal });
  updateChatPlaceholder();
  $("chat-reconnect").addEventListener("click", () => {
@@ -1194,7 +947,8 @@ $("chat-scroll-bottom").addEventListener("click", () => {
   });
 }, { signal: lifetime.signal });
 window.addEventListener("resize", updateScrollBottomButton, { signal: lifetime.signal });
-$("chat-send").addEventListener("click", () => {
+$("chat-send").addEventListener("click", event => {
+  if(event.detail>1)return;
   if (S.chatState === "running") sendInterrupt();
   else sendChat();
 }, { signal: lifetime.signal });
@@ -1238,7 +992,7 @@ document.addEventListener("click", (e) => {
 bus.addEventListener("models-updated", () => { void refreshModelCapabilities(); }, { signal: lifetime.signal });
 bus.addEventListener("thread-changed", () => { reloadThread(); }, { signal: lifetime.signal });
 $("chat-loading-retry").addEventListener("click", reloadThread, { signal: lifetime.signal });
- disposeChat = () => { lifetime.abort(); chatTeardown(); };
+ disposeChat = () => { if(lifetime.signal.aborted)return; lifetime.abort();outbox?.dispose();outbox=undefined; drafts?.dispose();drafts=undefined;chatTeardown(); };
  return disposeChat;
 }
 

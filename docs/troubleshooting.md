@@ -4,6 +4,10 @@
 
 先区分故障位于浏览器、服务端、Docker、CLI 还是 provider。首页正常只能证明 HTTP 入口可访问，不能证明空间镜像、账号和 WebSocket 都正常。
 
+当前源码的登录、空间启动和聊天错误会显示处理建议与操作编号，三种界面语言均可读取。反馈时优先保留编号、发生时间和操作类型；管理员在 `journalctl -u agentbox` 中查找同一 `operation_id`。错误目录和兼容范围见[错误码与操作关联](errors.md)。连接在到达服务端前就失败时可能没有对应日志，需继续核对网络和反向代理；不要把连接编号当成任务已接收的证明。
+
+管理员可在「系统设置 → 容器与资源 → 环境检查」运行实例检查；普通用户在自己空间的「更多操作 → 环境检查」查看账号授权、额度和环境依赖。每项明确区分通过、失败和未检查，详情见[分层环境诊断](diagnostics.md)。无法打开网页时，可在服务端主动运行 `agentbox check-config --config /实际配置/config.json --environment`；它不调用模型。
+
 ## 服务无法启动
 
 ```bash
@@ -20,7 +24,7 @@ tail -n 50 /var/log/agentbox.log
 | `address already in use` | 用 `ss -ltnp` 检查监听端口和重复实例 |
 | Docker socket 无权限 / daemon 不可达 | 检查 Docker 服务及运行用户权限 |
 | `Start request repeated too quickly` | 修复原始故障后 `systemctl reset-failed agentbox` 再启动 |
-| 单元指向旧仓库 | 到新目录重新运行 `deploy/install.sh`，再发布 |
+| 单元指向旧仓库或失效路径 | 先用 `systemctl show agentbox -p WorkingDirectory -p ExecStart` 核对布局；版本目录部署用 `deploy/release.py`，不要覆盖为源码目录单元，见[部署布局](architecture/deployment-layout.md) |
 
 代码省略 `listen` 时默认 8080；示例配置是 8180。探活、反向代理和 SSH 转发使用同一个实际端口。
 
@@ -28,9 +32,28 @@ tail -n 50 /var/log/agentbox.log
 
 `auth_token` 只在用户表为空时作为 `boxadmin` 的初始密码，之后登录密码在 SQLite 中。普通用户由管理员重置；已登录管理员可在安全设置改自己的密码。
 
-忘记管理员密码且没有有效管理员登录时，当前没有文档化的一键离线重置命令。先保留数据库备份，再进行针对用户表的维护；不要删除整个 `state.db` 来重置密码，那会一并丢掉空间索引、用量和额度账本。
+忘记管理员密码且没有有效管理员登录时，使用当前源码新增的 `admin-reset-password` 离线命令（旧发布包可能尚未包含）。它只重置已存在的管理员，不创建用户、不提升普通用户权限，也不修改额度、用量、空间索引或项目文件。不要删除 `state.db` 来重置密码。
 
-改密码会使旧令牌失效，其他浏览器和 abox-link 可能需要重新登录 / 配对。
+先核对实际服务布局和配置，使用与数据库 schema 匹配、包含该命令的二进制。以下路径是**版本目录布局示例**；源码部署应换成服务实际使用的二进制和配置路径：
+
+```bash
+systemctl show agentbox -p WorkingDirectory -p ExecStart
+# 按上面的实际路径填写；不要直接复制到未知布局的实例
+RECOVERY_BIN=/opt/agentbox/current/agentbox
+RECOVERY_CONFIG=/etc/agentbox/config.json
+RECOVERY_BACKUP=/安全备份目录/before-admin-reset.tar.gz
+sudo systemctl stop agentbox
+sudo "$RECOVERY_BIN" backup --config "$RECOVERY_CONFIG" --output "$RECOVERY_BACKUP"
+sudo "$RECOVERY_BIN" backup-verify "$RECOVERY_BACKUP"
+sudo "$RECOVERY_BIN" admin-reset-password --config "$RECOVERY_CONFIG" --user boxadmin
+sudo systemctl start agentbox
+```
+
+逐条执行，任一步失败先处理再继续。命令会显示目标配置、数据库和管理员，再要求两次隐藏输入新密码（8～1024 字节）。SSH 操作需有终端，如 `ssh -t`；不接受密码参数、环境变量或 stdin 管道。按 Ctrl+C 可取消。服务未停止/数据目录锁被占用、目标不是管理员、数据库不存在或 schema 不匹配时拒绝执行；不会自动初始化或迁移数据库。**不要删除锁文件绕过检查。**
+
+密码与该管理员的全部登录令牌在同一事务内修改；成功后用新密码登录，原浏览器、桌面和 abox-link 需重新登录或配对。其他用户的令牌保持有效。修改 `auth_token` 仍不参与这次恢复。
+
+密码恢复只修改数据库，默认系统备份足以保存这次修改涉及的状态；系统备份不含项目文件和聊天历史，需要它们的完整快照时按[备份与恢复](../deploy/README.md#备份与恢复)停相关容器并使用 `--full`。恢复异常时保持服务停止，用 `backup-verify` 检查备份，再执行 `restore --to /新的恢复目录 备份包`，核对新目录配置与容器挂载后切换实例；不要覆盖原数据库或混入旧 WAL。恢复备份也恢复旧密码和旧令牌，须在启动恢复实例前重新执行密码重置。
 
 ## 首页正常，但对话或终端连接失败
 
@@ -82,10 +105,10 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 1. 管理员已开启隧道，且页面显示代理实际在线。
 2. 配对码仅可使用一次、10 分钟有效；失效时重新生成。
 3. 确认本机本身能访问目标，目标在 `--allow` 白名单或映射列表中。
-4. 内网域名需使用 `socks5h`，让 DNS 在本机解析；用 `curl --proxy "$AGENTBOX_INTRANET_PROXY" ...` 验证。
+4. 先核对模式：透明模式用原内网地址访问，并确认空间「网络就绪」；兼容模式才显式使用 `socks5h`，例如 `curl --proxy "$AGENTBOX_INTRANET_PROXY" ...`。两种模式的真正域名解析都在本机客户端。
 5. 查看本机面板日志，端口映射可能因冲突、端口低于 1024 或规则错误而失败。
 
-工作空间先开、隧道后连时，旧 Shell 没有最新变量。重连网页终端，然后在 Shell 中执行 `tmux new-window`；默认镜像关闭了 tmux 前缀键，`Ctrl-b c` 不适用。
+兼容模式下，工作空间先开、隧道后连时，旧 Shell 没有最新变量。重连网页终端，然后执行 `tmux new-window`；在旧 Shell 中仅重启 Agent 不能更新继承环境，`Ctrl-b c` 也不适用。透明模式不依赖这些变量，规则生效以空间网络就绪状态为准，已有 Shell 发起的新连接无需重开终端。
 
 下载按钮没有客户端时，检查实际 `<data_dir>/abox-link/`；构建脚本默认输出到仓库的 `data/abox-link/`，自定义数据目录需复制过去。更新客户端前先更新服务端配对接口。
 

@@ -345,7 +345,7 @@ def native_smoke(binary, fixture, session, temporary):
     return result
 
 
-def full_backup(fixture, binary, old_binary, session, contents, project, terminal):
+def full_backup(fixture, binary, old_binary, session, contents, project, terminal, expected_schema):
     # A container mounting the volume itself must not be exempted from the real
     # full-backup mount safety check. Copy the fully stopped fixture instead.
     maintenance = docker('run', '-d', '--network', 'none', '--mount',
@@ -393,7 +393,7 @@ def full_backup(fixture, binary, old_binary, session, contents, project, termina
     docker('cp', maintenance + ':/tmp/restored/data/state.db', str(restored))
     with sqlite3.connect('file:' + str(restored) + '?mode=ro', uri=True) as database:
         require(database.execute('PRAGMA integrity_check').fetchone()[0] == 'ok', 'restored database corrupt')
-        require(database.execute('PRAGMA user_version').fetchone()[0] == 10, 'restored schema changed')
+        require(database.execute('PRAGMA user_version').fetchone()[0] == expected_schema, 'restored schema changed')
         require(database.execute('SELECT id FROM client_projects').fetchall() == [(project,)], 'restored project lost')
         require(database.execute('SELECT id FROM client_terminals').fetchall() == [(terminal,)], 'restored terminal lost')
         require(database.execute('SELECT account_id FROM sessions WHERE id=?', (session,)).fetchone() == ('synthetic',),
@@ -401,7 +401,7 @@ def full_backup(fixture, binary, old_binary, session, contents, project, termina
     # A schema 9 binary must reject upgraded data instead of silently reopening.
     result = subprocess.run(['docker', 'exec', maintenance, '/opt/old-agentbox', '--config', '/tmp/restored/config.json'],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
-    require(result.returncode != 0 and b'unsupported database schema version 10 (maximum 9)' in result.stderr,
+    require(result.returncode != 0 and f'unsupported database schema version {expected_schema} (maximum 9)'.encode() in result.stderr,
             'frozen binary did not reject future schema')
 
 
@@ -413,7 +413,14 @@ def main():
     parser.add_argument('--desktop-smoke', type=Path, help='explicit desktop-smoke bundle executable')
     parser.add_argument('--browser-smoke', action='store_true', help='run actual Chromium with frozen web assets against the new server')
     parser.add_argument('--report', type=Path, help='write a credential-free JSON evidence report')
+    parser.add_argument('--expected-schema', type=int, help='candidate schema; defaults to this checkout SchemaVersion, never the migrated DB')
     args = parser.parse_args()
+    expected_schema = args.expected_schema
+    if expected_schema is None:
+        matches = re.findall(r'^const SchemaVersion = ([0-9]+)$', (ROOT / 'internal/store/migrations.go').read_text(), re.M)
+        require(len(matches) == 1, 'cannot identify checkout schema; specify --expected-schema')
+        expected_schema = int(matches[0])
+    require(expected_schema > 9, 'candidate must migrate beyond frozen schema 9')
     docker('image', 'inspect', args.image)
     docker('image', 'inspect', 'alpine:3')
     arch = {'aarch64': 'arm64', 'arm64': 'arm64', 'x86_64': 'amd64', 'amd64': 'amd64'}[docker('info', '--format', '{{.Architecture}}')]
@@ -547,7 +554,7 @@ def main():
                 chat.close()
             with fixture.database('upgraded') as database:
                 schema = database.execute('PRAGMA user_version').fetchone()[0]
-                require(schema == 10, 'upgraded database is not schema 10')
+                require(schema == expected_schema, f'upgraded database is not schema {expected_schema}')
                 require(database.execute('SELECT COUNT(*) FROM client_projects').fetchone()[0] == 0, 'migration auto-created projects')
                 require(database.execute('SELECT COUNT(*) FROM client_terminals').fetchone()[0] == 0, 'migration auto-created terminals')
             evidence['new_schema'] = schema
@@ -557,9 +564,9 @@ def main():
             require(fixture.http.request('/api/clients/capabilities')['server_id'] == capabilities['server_id'], 'restart changed server identity')
             require(fixture.http.request('/api/sessions/' + session)['status'] == 'running', 'restart lost session state')
             docker('exec', '--user', '1000:1000', cid, 'tmux', 'has-session', '-t', 'compat-survivor')
-            evidence['checks'].append('schema_9_to_10_and_graceful_restart_chat_closed_tmux_preserved')
+            evidence['checks'].append(f'schema_9_to_{expected_schema}_and_graceful_restart_chat_closed_tmux_preserved')
             evidence['checks'].append('frozen_abox_link_real_tcp_bytes_and_reconnect')
-            print('Upgrade/restart: schema 10, old token/API, tmux and frozen abox-link passed.', flush=True)
+            print(f'Upgrade/restart: schema {expected_schema}, old token/API, tmux and frozen abox-link passed.', flush=True)
             link.terminate()
             link.wait(timeout=15)
             link = None
@@ -568,9 +575,9 @@ def main():
             terminal = fixture.http.request(path + '/client-terminals', {'project_id': project, 'kind': 'shell'})['id']
             fixture.http.request(path + '/stop', {}, 'POST')
             fixture.stop()
-            full_backup(fixture, binary, old_binary, session, contents, project, terminal)
+            full_backup(fixture, binary, old_binary, session, contents, project, terminal, expected_schema)
             evidence['checks'].append('offline_full_backup_verify_restore_uid_account_and_desktop_metadata')
-            evidence['checks'].append('frozen_schema_9_server_refuses_schema_10_rollback')
+            evidence['checks'].append(f'frozen_schema_9_server_refuses_schema_{expected_schema}_rollback')
             docker('start', fixture.server)
             fixture.http.ready()
             fixture.http.request(path + '?purge=1', method='DELETE')

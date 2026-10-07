@@ -53,12 +53,33 @@ jobs:
       - name: Build pinned runtime and test synthetic session
         run: |
           ./scripts/build-image.sh
+          python3 scripts/verify.py run --step docker.cli-candidate --image agentbox-agent:latest --timeout 300 --report-dir output/verification/cli-candidate
           python3 scripts/test-release-server.py "$RUNNER_TEMP/release" --image agentbox-agent:latest --usage --restart
       - name: Independent deployment migration and rollback (simulated systemd)
         run: |
           go build -o "$RUNNER_TEMP/agentbox-deployment" ./cmd/agentbox
           python3 scripts/test-deployment-linux.py --binary "$RUNNER_TEMP/agentbox-deployment" --image agentbox-agent:latest
           python3 scripts/test-install-linux.py --binary "$RUNNER_TEMP/agentbox-deployment" --image agentbox-agent:latest
+      - name: Real systemd upgrade and measured recovery on synthetic data
+        run: |
+          docker build -t agentbox-recovery-systemd:ci scripts/fixtures/recovery-drill
+          python3 scripts/verify.py run --step docker.recovery-drill --recovery-image agentbox-recovery-systemd:ci --timeout 600 --report-dir output/verification/recovery
+      - name: Preserve real recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: systemd-recovery-verification
+          path: |
+            output/verification/recovery/
+            output/verification/recovery-drill-*/
+          if-no-files-found: warn
+      - name: Preserve candidate CLI validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-candidate-verification
+          path: output/verification/cli-candidate/
+          if-no-files-found: warn
       - name: Scan history and candidates
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3

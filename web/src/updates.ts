@@ -5,6 +5,7 @@ import { $, askConfirm, fmtDateTime, fmtTime } from "./util.js";
 import { hideTip } from "./tip.js";
 import { buttonLabel } from "./icons.js";
 import type { UpdateInfo, UpgradeInfo } from "./types.js";
+import {initUpdateComponents} from "./features/settings/update-components.js";
 
 const interval = 4 * 60 * 60 * 1000;
 const releasesURL = "https://github.com/devilcoolyue/agentbox/releases";
@@ -16,6 +17,7 @@ export function initUpdates() {
   const menu = $("version-menu");
   badge.classList.toggle("hidden", S.role !== "admin");
   if (S.role !== "admin") return () => {};
+  const disposeComponents=initUpdateComponents();
   const lifetime = new AbortController();
   const { signal } = lifetime;
   let info: UpdateInfo | undefined;
@@ -234,6 +236,7 @@ export function initUpdates() {
     if (!signal.aborted) schedule();
   })();
   return () => {
+    disposeComponents();
     lifetime.abort(); clearTimeout(timer); clearTimeout(upgradeTimer); menu.hidePopover();
     badge.classList.add("hidden"); badge.ariaExpanded = "false";
   };

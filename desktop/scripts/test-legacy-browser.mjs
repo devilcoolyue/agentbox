@@ -2,7 +2,7 @@
 // Frozen browser assets against the current real Linux HTTP/WebSocket server.
 // The isolated compatibility runner supplies temporary credentials on stdin.
 import assert from 'node:assert/strict';
-import { readFile, realpath } from 'node:fs/promises';
+import { readFile, realpath, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -21,21 +21,27 @@ assert.match(config.session,/^[a-zA-Z0-9_-]+$/);
 const root=await realpath(config.static_root);
 const {chromium}=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE?pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href:'playwright');
 const browser=await chromium.launch({headless:true,...(process.env.AGENTBOX_BROWSER_CHANNEL?{channel:process.env.AGENTBOX_BROWSER_CHANNEL}:{})});
-const errors=[],failures=[];
+const errors=[],failures=[],consoleErrors=[];
 const served=new Set();
 const observed=new Set();
 let terminalFrames=0;
 const websocketPaths=[];
+let page;
 try {
   // This frozen frontend has no service worker. Playwright's block init script
   // itself throws when probing navigator.serviceWorker in its sandboxed preview
   // iframe, so use a fresh context and assert that no worker was registered.
   const context=await browser.newContext({viewport:{width:1440,height:960}});
+  // Frozen HTML is fulfilled by Playwright, so Chrome 154 treats its address
+  // space as public. Grant only this validated loopback fixture's permission;
+  // otherwise local-network checks reject WS before any request reaches Go.
+  await context.grantPermissions(['local-network-access'], {origin:base.origin});
   const workers=[];
   context.on('serviceworker',worker=>workers.push(worker.url()));
-  const page=await context.newPage();
+  page=await context.newPage();
   page.setDefaultTimeout(20000);
   page.on('pageerror',error=>errors.push(error.message));
+  page.on('console',message=>{if(message.type()==='error')consoleErrors.push(message.text().replace(/([?&]token=)[^\s\"'&)]+/g,'$1[redacted]'));});
   page.on('response',response=>{
     const url=new URL(response.url());
     if(url.pathname.startsWith('/api/')) {
@@ -121,6 +127,13 @@ try {
   assert.deepEqual(failures,[],'HTTP/static failures');
   assert.deepEqual(workers,[],'unexpected service worker bypasses frozen assets');
   console.log(JSON.stringify({legacy_browser:'passed',frozen_assets:served.size,real_api:true,real_terminal:true,upload_edit_download:true,model_calls:false}));
+} catch (error) {
+  const destination=resolve('output/playwright', 'legacy-browser-'+Date.now());
+  await mkdir(destination,{recursive:true});
+  await page?.screenshot({path:resolve(destination,'failure.png')});
+  await writeFile(resolve(destination,'failure.json'),JSON.stringify({errors,failures,consoleErrors,websocketPaths,terminalFrames,terminalState:await page?.locator('#term-state').textContent().catch(()=>null)},null,2));
+  console.error('Frozen browser evidence:',destination);
+  throw error;
 } finally {
   await browser.close();
 }

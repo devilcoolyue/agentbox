@@ -28,6 +28,7 @@
 <!-- {{BUILD}} 由服务端替换为资源内容哈希：URL 随内容变化，穿透 CF/浏览器缓存 -->
 <link rel="stylesheet" href="/_v/{{BUILD}}/vendor/xterm.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/vendor/katex/katex.min.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/vendor/github-markdown.css">
 <!-- 模块化样式：base 先行（令牌/通用组件），其余按功能域拆分 -->
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/base.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/toast.css">
@@ -189,7 +190,22 @@
       </div>
 
       <section class="side-sessions" aria-label="工作空间" data-i18n-attrs="{&quot;aria-label&quot;:&quot;工作空间&quot;}">
-        <div class="side-section-head"><span class="side-label" data-i18n-text="[&quot;工作空间&quot;]">工作空间</span><span id="session-count" class="side-count">0</span></div>
+        <div class="side-section-head"><span class="side-label" data-i18n-text="[&quot;工作空间&quot;]">工作空间</span><span id="session-count" class="side-count" role="status" aria-live="polite" aria-atomic="true">0</span></div>
+        <button id="session-search-open" type="button" class="session-search-open side-item" aria-label="搜索工作空间" data-i18n-attrs='{"aria-label":"搜索工作空间"}'>
+          <svg width="18" height="18" data-icon="search" aria-hidden="true"></svg>
+        </button>
+        <div class="session-filters">
+          <input id="session-search" type="search" placeholder="搜索空间…" aria-label="搜索空间名称" aria-controls="session-list" autocomplete="off" spellcheck="false" data-i18n-attrs='{"placeholder":"搜索空间…","aria-label":"搜索空间名称"}'>
+          <div class="session-filter-row">
+            <select id="session-filter" aria-label="空间运行状态" aria-controls="session-list" data-i18n-attrs='{"aria-label":"空间运行状态"}'>
+              <option value="all" data-i18n="全部">全部</option>
+              <option value="run" data-i18n="运行中">运行中</option>
+              <option value="idle" data-i18n="休眠">休眠</option>
+              <option value="off" data-i18n="已停止">已停止</option>
+            </select>
+            <button id="session-filter-clear" type="button" data-icon="close" class="btn btn-sm hidden" aria-label="清除筛选" data-i18n-attrs='{"aria-label":"清除筛选"}'></button>
+          </div>
+        </div>
         <div id="session-list" class="session-list"></div>
       </section>
 
@@ -255,8 +271,14 @@
             <h1 class="empty-title" data-i18n-text="[&quot;从一个工作空间开始&quot;]">从一个工作空间开始</h1>
             <p class="empty-sub" data-i18n-text="[&quot;独立运行 Agent，集中管理文件、终端和对话。&quot;,&quot;新建一个工作空间；停止后，文件与对话仍会保留。&quot;]">独立运行 Agent，集中管理文件、终端和对话。<br>新建一个工作空间；停止后，文件与对话仍会保留。</p>
             <button id="empty-new" class="btn btn-primary empty-cta" data-icon="plus" data-i18n-text="[&quot;新建工作空间&quot;]">新建工作空间</button>
-            <div class="empty-ready" data-i18n-text="[&quot;已就绪&quot;]">已就绪<span id="empty-brands" class="empty-brands"></span></div>
+            <div class="empty-ready" data-i18n-text="[&quot;支持的 Agent&quot;]">支持的 Agent<span id="empty-brands" class="empty-brands"></span></div>
           </div>
+          <details id="home-setup" class="home-setup" open>
+            <summary data-i18n-text="[&quot;首次使用指南&quot;]">首次使用指南</summary>
+            <p id="setup-status" class="note" role="status"></p>
+            <ol id="setup-steps"></ol>
+            <button id="setup-refresh" type="button" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新准备状态&quot;]">刷新准备状态</button>
+          </details>
           <section id="home-recent" class="home-recent hidden" aria-labelledby="home-recent-title">
             <div class="home-head">
               <div>
@@ -285,6 +307,20 @@
             </div>
           </header>
 
+          <div id="guide-spotlight" popover="manual" aria-hidden="true"></div>
+          <section id="workspace-guide" class="workspace-guide" popover="manual" role="dialog" aria-labelledby="guide-title" aria-describedby="guide-note">
+            <div class="guide-top"><span id="guide-progress" class="mono"></span><button id="guide-skip" data-icon="close" type="button" class="btn btn-sm" data-i18n="跳过引导">跳过引导</button></div>
+            <h2 id="guide-title"></h2>
+            <p id="guide-note"></p>
+            <p id="guide-config" class="field-hint"></p>
+            <div class="guide-actions">
+              <button id="guide-example" type="button" class="btn btn-sm" data-icon="edit" data-i18n="编辑任务示例">编辑任务示例</button>
+              <button id="guide-files" type="button" class="btn btn-sm" data-icon="folder" data-i18n="查看项目文件">查看项目文件</button>
+              <button id="guide-changes" type="button" class="btn btn-sm" data-icon="branch" data-i18n="审查与推送">审查与推送</button>
+              <button id="guide-download" type="button" class="btn btn-sm" data-icon="download" data-i18n="下载工作区 ZIP">下载工作区 ZIP</button>
+            </div>
+            <div class="guide-bottom"><button id="guide-back" data-icon="arrow-left" type="button" class="btn btn-sm" data-i18n="上一步">上一步</button><button id="guide-next" type="button" data-icon="arrow-right" class="btn btn-sm btn-primary" data-i18n="下一步">下一步</button></div>
+          </section>
           <nav class="tabs">
             <button class="tab active" data-tab="chat">
               <svg class="tab-ic" width="15" height="15" data-icon="message" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;对话&quot;]">对话</span></button>
@@ -370,6 +406,16 @@
                 <svg width="18" height="18" data-icon="arrow-down" aria-hidden="true"></svg>
               </button>
               <div class="composer">
+                <section id="chat-delivery" class="chat-delivery hidden" aria-label="消息确认与恢复" data-i18n-attrs='{"aria-label":"消息确认与恢复"}'>
+                  <div class="delivery-header">
+                    <button id="chat-delivery-toggle" type="button" class="delivery-toggle" aria-expanded="false" aria-controls="chat-delivery-list">
+                      <span class="delivery-dot" aria-hidden="true"></span><span id="chat-delivery-status" role="status"></span><span id="chat-delivery-count" class="hidden"></span><svg class="delivery-chevron" width="14" height="14" data-icon="chevron" aria-hidden="true"></svg>
+                    </button>
+                    <button id="chat-delivery-refresh" type="button" class="icon-btn" aria-label="查询结果" data-tip="查询结果" data-i18n-attrs='{"aria-label":"查询结果","data-tip":"查询结果"}'><svg width="16" height="16" data-icon="refresh" aria-hidden="true"></svg></button>
+                  </div>
+                  <div id="chat-delivery-list" class="hidden"></div>
+                </section>
+                <p id="chat-draft-status" class="hidden" role="status"></p>
                 <div id="chat-attach" class="chat-attach hidden"></div>
                 <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）" data-i18n-attrs="{&quot;placeholder&quot;:&quot;随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）&quot;}"></textarea>
                 <div class="composer-bar">
@@ -379,6 +425,13 @@
                   <button id="btn-voice" class="icon-btn" aria-label="语音输入" data-tip="语音输入：点击说话，再点一次停止并发送" data-i18n-attrs="{&quot;aria-label&quot;:&quot;语音输入&quot;,&quot;data-tip&quot;:&quot;语音输入：点击说话，再点一次停止并发送&quot;}">
                     <svg width="18" height="18" data-icon="mic" aria-hidden="true"></svg>
                   </button>
+                <details id="chat-draft-options" class="chat-drafts">
+                  <summary class="icon-btn" aria-label="草稿与本机保存" data-tip="草稿与本机保存" data-i18n-attrs='{"aria-label":"草稿与本机保存","data-tip":"草稿与本机保存"}'><svg width="18" height="18" data-icon="save" aria-hidden="true"></svg></summary><div class="chat-draft-panel"><p data-i18n="草稿保存在此浏览器 7 天；退出登录会清除。">草稿保存在此浏览器 7 天；退出登录会清除。</p>
+                  <label><input id="chat-draft-enabled" type="checkbox"><span data-i18n="在此浏览器保存输入与待确认内容（7 天）">在此浏览器保存输入与待确认内容（7 天）</span></label>
+                  <p data-i18n="按用户、空间和对话隔离；只保存文字和附件引用，不保存文件内容。关闭后清除本机副本，当前页面输入仍保留。">按用户、空间和对话隔离；只保存文字和附件引用，不保存文件内容。关闭后清除本机副本，当前页面输入仍保留。</p>
+                  <p data-i18n="待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。">待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。</p>
+                  <div><button id="chat-draft-clear" type="button" class="btn btn-sm" data-icon="trash" data-i18n="清除本机副本并关闭保存">清除本机副本并关闭保存</button><button id="chat-draft-check" type="button" class="btn btn-sm" data-icon="refresh" data-i18n="重新检查附件">重新检查附件</button></div>
+                </div></details>
                   <input id="attach-input" type="file" multiple class="hidden">
                   <div id="picker" class="picker">
                     <button id="btn-pick" class="pick-pill"></button>
@@ -688,7 +741,7 @@
               <div class="sec-intro">
                 <div>
                   <h2 data-i18n-text="[&quot;容器与资源&quot;]">容器与资源</h2>
-                  <p data-i18n-text="[&quot;工作空间的容器镜像与资源上限。新启动的空间生效，运行中的空间需停止后再启动。&quot;]">工作空间的容器镜像与资源上限。新启动的空间生效，运行中的空间需停止后再启动。</p>
+                  <p data-i18n-text="[&quot;镜像变更在空间停止再启动后采用；资源上限在容器创建时生效，已有容器保留原值。&quot;]">镜像变更在空间停止再启动后采用；资源上限在容器创建时生效，已有容器保留原值。</p>
                 </div>
               </div>
               <div class="card">
@@ -700,7 +753,7 @@
                 </label>
               </div>
               <div class="card" id="image-update-card">
-                <h3 data-i18n-text="[&quot;客户端更新&quot;]">客户端更新</h3>
+                <h3 data-i18n-text="[&quot;Agent 镜像更新&quot;]">Agent 镜像更新</h3>
                 <p class="card-desc" data-i18n-text="[&quot;更新工作空间里的 Claude Code，可选同时更新 Codex。空间停止再启动后使用新版本。&quot;]">更新工作空间里的 Claude Code，可选同时更新 Codex。空间停止再启动后使用新版本。</p>
                 <div class="field-row">
                   <label class="field"><span data-i18n-text="[&quot;自动更新&quot;]">自动更新</span><select id="image-update-enabled"><option value="off" data-i18n-text="[&quot;关闭 — 手动更新&quot;]">关闭 — 手动更新</option><option value="on" data-i18n-text="[&quot;开启 — 每日检查并应用&quot;]">开启 — 每日检查并应用</option></select></label>
@@ -712,11 +765,13 @@
               </div>
               <!-- 状态与一次性操作单独一张卡，和上面的配置分开 -->
               <div class="card" id="image-update-ops">
-                <h3 data-i18n-text="[&quot;客户端版本&quot;]">客户端版本</h3>
+                <h3 data-i18n-text="[&quot;镜像内 CLI 版本&quot;]">镜像内 CLI 版本</h3>
                 <p id="image-update-dirty" class="note"></p>
-                <p id="image-update-status" class="note" role="status" aria-live="polite" data-i18n-text="[&quot;尚未检查客户端版本&quot;]">尚未检查客户端版本</p>
+                <p id="image-update-validation" class="note" role="status" aria-live="polite"></p>
+                <p id="image-update-status" class="note" role="status" aria-live="polite" data-i18n-text="[&quot;尚未检查镜像内 CLI 版本&quot;]">尚未检查镜像内 CLI 版本</p>
                 <p id="image-update-versions" class="note"></p>
                 <p id="image-update-active" class="note image-update-ref"></p>
+                <p class="note" data-i18n="上方版本属于最近任务的起点与目标，不是所有空间的当前版本。更新会验证 CLI 版本、浏览器组件与合成上游行为；真实账号和模型仍需单独验收。">上方版本属于最近任务的起点与目标，不是所有空间的当前版本。更新会验证 CLI 版本、浏览器组件与合成上游行为；真实账号和模型仍需单独验收。</p>
                 <div class="card-foot">
                   <button id="image-update-check" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;立即检查&quot;]">立即检查</button>
                   <button id="image-update-update" class="btn btn-sm" data-icon="download" data-i18n-text="[&quot;立即更新&quot;]">立即更新</button>
@@ -763,6 +818,7 @@
                 <div class="card-foot">
                   <button id="btn-storage" class="btn btn-sm" data-icon="activity" data-tip="查看磁盘使用统计" data-i18n-text="[&quot;磁盘统计&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;查看磁盘使用统计&quot;}">磁盘统计</button>
                   <button id="btn-clear-cache" class="btn btn-sm" data-icon="trash" data-tip="清理官方市场下载缓存，下次访问时重新下载" data-i18n-text="[&quot;清理缓存&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;清理官方市场下载缓存，下次访问时重新下载&quot;}">清理缓存</button>
+                  <button id="btn-environment-check" class="btn btn-sm" data-icon="activity" data-i18n-text="[&quot;环境检查&quot;]">环境检查</button>
                   <button id="btn-diagnostics" class="btn btn-sm" data-icon="download" data-tip="导出脱敏诊断信息" data-i18n-text="[&quot;导出诊断&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;导出脱敏诊断信息&quot;}">导出诊断</button>
                 </div>
               </div>
@@ -1074,13 +1130,25 @@
                   <p data-i18n-text="[&quot;版本信息、软件更新与服务运行状态。&quot;]">版本信息、软件更新与服务运行状态。</p>
                 </div>
               </div>
+              <section class="update-components" aria-labelledby="component-title">
+                <div class="component-head"><h3 id="component-title" data-i18n="更新对象与生效范围">更新对象与生效范围</h3><button id="component-refresh" type="button" class="btn btn-sm" data-icon="refresh" data-i18n="刷新本地版本信息">刷新本地版本信息</button></div>
+                <p id="component-read-status" class="note" role="status"></p>
+                <table class="component-table">
+                  <thead><tr><th data-i18n="更新对象">更新对象</th><th data-i18n="版本与兼容状态">版本与兼容状态</th><th data-i18n="生效范围">生效范围</th></tr></thead>
+                  <tbody>
+                    <tr><th scope="row" data-i18n="服务端">服务端</th><td><p id="component-server-version"></p><p data-i18n="候选兼容性待升级预检：核对配置与数据库后才切换。版本可比较不代表候选兼容。">候选兼容性待升级预检：核对配置与数据库后才切换。版本可比较不代表候选兼容。</p></td><td><p data-i18n="更新服务端二进制与网页。服务会重启、连接会短暂断开；刷新网页加载新界面。空间无需仅为服务端更新而重启。">更新服务端二进制与网页。服务会重启、连接会短暂断开；刷新网页加载新界面。空间无需仅为服务端更新而重启。</p><p data-i18n="自动备份是系统备份，不包含项目文件；项目恢复需要完整备份。">自动备份是系统备份，不包含项目文件；项目恢复需要完整备份。</p></td></tr>
+                    <tr><th scope="row" data-i18n="Agent 镜像">Agent 镜像</th><td><p id="component-image-version" class="component-version"></p><p id="component-image-state"></p></td><td><p data-i18n="更新空间中的 Claude Code / Codex CLI。运行中的空间继续使用旧镜像，停止再启动后采用所选镜像；不重启服务端或桌面应用。">更新空间中的 Claude Code / Codex CLI。运行中的空间继续使用旧镜像，停止再启动后采用所选镜像；不重启服务端或桌面应用。</p><button id="component-image-open" type="button" class="btn btn-sm" data-icon="settings" data-i18n="管理 Agent 镜像更新">管理 Agent 镜像更新</button></td></tr>
+                    <tr><th scope="row" data-i18n="桌面应用">桌面应用</th><td><p id="component-desktop-version"></p><p id="component-desktop-state"></p></td><td><p data-i18n="在桌面应用内检查并安装；只重启本机应用，连接会暂时断开。服务端与空间无需重启，远端任务继续运行；安装前停止本机同步和文件传输。">在桌面应用内检查并安装；只重启本机应用，连接会暂时断开。服务端与空间无需重启，远端任务继续运行；安装前停止本机同步和文件传输。</p><a href="https://github.com/devilcoolyue/agentbox/blob/main/desktop/README.md" target="_blank" rel="noopener noreferrer" data-i18n="桌面安装与兼容说明">桌面安装与兼容说明</a></td></tr>
+                  </tbody>
+                </table>
+              </section>
               <div class="update-panel">
                 <div class="update-product">
                   <span class="update-mark" data-mark></span>
                   <div><h3>AGENTBOX</h3><p data-i18n-text="[&quot;服务端 &quot;]">服务端 <span data-update-version>—</span></p><p id="update-build" class="update-meta"></p></div>
                 </div>
                 <div class="update-detail">
-                  <div><h3 data-i18n-text="[&quot;软件更新&quot;]">软件更新</h3><p data-i18n-text="[&quot;检查正式发布版本，升级前自动备份。重启服务会短暂断开连接。&quot;]">检查正式发布版本，升级前自动备份。重启服务会短暂断开连接。</p></div>
+                  <div><h3 data-i18n="服务端更新">服务端更新</h3><p data-i18n-text="[&quot;检查正式发布版本，升级前自动备份。重启服务会短暂断开连接。&quot;]">检查正式发布版本，升级前自动备份。重启服务会短暂断开连接。</p></div>
                   <div class="update-detail-main">
                     <div class="update-actions"><button type="button" class="btn" data-update-check data-icon="refresh" data-i18n-text="[&quot;检查更新&quot;]">检查更新</button><button type="button" id="update-install" class="btn btn-primary hidden" data-icon="download" data-i18n-text="[&quot;升级并重启&quot;]">升级并重启</button><a data-update-release target="_blank" rel="noopener noreferrer" data-icon="external" data-i18n-text="[&quot;发行记录&quot;]">发行记录</a></div>
                     <p class="update-status" data-update-status role="status" data-i18n-text="[&quot;尚未检查更新&quot;]">尚未检查更新</p>
@@ -1365,6 +1433,26 @@
       <button type="button" id="new-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
     <p id="new-desc" class="field-hint" data-i18n-text="[&quot;独立运行 Agent，拥有自己的文件、终端和对话。&quot;]">独立运行 Agent，拥有自己的文件、终端和对话。</p>
+    <div id="new-setup" class="new-setup" role="status">
+      <p id="new-setup-message"></p>
+      <div class="new-setup-actions">
+        <button id="new-configure" type="button" class="btn btn-sm" data-icon="settings" data-i18n-text="[&quot;配置账号&quot;]">配置账号</button>
+        <button id="new-refresh" type="button" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新账号&quot;]">刷新账号</button>
+      </div>
+    </div>
+    <div id="new-recover" class="new-setup hidden">
+      <label><span data-i18n="未完成的创建">未完成的创建</span><select id="new-pending"></select></label>
+      <button id="new-resume" type="button" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;继续此创建&quot;]">继续此创建</button>
+    </div>
+    <p id="new-progress" class="field-hint" role="status"></p>
+    <div id="new-flow-actions" class="new-setup-actions hidden">
+      <button id="new-query" type="button" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;查询状态&quot;]">查询状态</button>
+      <button id="new-inspect" type="button" class="btn btn-sm" data-icon="folder" data-i18n-text="[&quot;查看已有文件&quot;]">查看已有文件</button>
+      <button id="new-review" type="button" class="btn btn-sm" data-icon="check" data-i18n-text="[&quot;已核对，允许继续&quot;]">已核对，允许继续</button>
+      <button id="new-restart" type="button" class="btn btn-sm" data-icon="plus" data-i18n-text="[&quot;放弃流程并重新开始&quot;]">放弃流程并重新开始</button>
+    </div>
+    <fieldset id="new-fields">
+    <fieldset id="new-core">
     <label data-i18n-text="[&quot;工作空间名称\n      &quot;]">工作空间名称
       <input id="new-name" type="text" maxlength="64" placeholder="例如：订单服务重构" required data-i18n-attrs="{&quot;placeholder&quot;:&quot;例如：订单服务重构&quot;}">
     </label>
@@ -1381,7 +1469,25 @@
       <select id="new-git-connection"><option value="" data-i18n-text="[&quot;不绑定&quot;]">不绑定</option></select>
     </label>
     <p class="field-hint" data-i18n-text="[&quot;Git 连接用于远程仓库；创建后仍需为具体仓库绑定 remote。&quot;]">Git 连接用于远程仓库；创建后仍需为具体仓库绑定 remote。</p>
-    <p id="new-error" class="login-error hidden"></p>
+    </fieldset>
+    <label><span data-i18n="项目来源">项目来源</span><select id="new-source-kind"><option value="empty" data-i18n="空项目">空项目</option><option value="upload" data-i18n="上传项目">上传项目</option><option value="git" data-i18n="从 Git 导入">从 Git 导入</option></select></label>
+    <div id="new-import-fields" class="hidden">
+      <label><span data-i18n="项目目录">项目目录</span><input id="new-project-dir" type="text" value="project" maxlength="128"></label>
+      <p class="field-hint" data-i18n="导入到工作区内的新目录，保留原有文件，不覆盖已有目录。">导入到工作区内的新目录，保留原有文件，不覆盖已有目录。</p>
+    </div>
+    <div id="new-upload-fields" class="hidden">
+      <label><span data-i18n="上传方式">上传方式</span><select id="new-upload-mode"><option value="archive" data-i18n="项目压缩包">项目压缩包</option><option value="files" data-i18n="多个文件">多个文件</option><option value="directory" data-i18n="本机目录">本机目录</option></select></label>
+      <label><span data-i18n="选择项目文件">选择项目文件</span><input id="new-project-file" type="file" accept=".zip,.tar,.tar.gz,.tgz"></label>
+      <p class="field-hint" data-i18n="支持 ZIP、TAR、TGZ；选择文件或目录时保留相对路径。文件内容不会保存在浏览器会话存储中。">支持 ZIP、TAR、TGZ；选择文件或目录时保留相对路径。文件内容不会保存在浏览器会话存储中。</p>
+    </div>
+    <div id="new-git-fields" class="hidden">
+      <label><span data-i18n="Git 连接">Git 连接</span><select id="new-import-connection"></select></label>
+      <label><span data-i18n="仓库地址">仓库地址</span><input id="new-git-url" type="text" placeholder="https://git.example.com/team/project.git"></label>
+      <button id="new-git-manage" type="button" class="btn btn-sm" data-icon="branch" data-i18n-text="[&quot;管理 Git 连接&quot;]">管理 Git 连接</button>
+    </div>
+    </fieldset>
+    <section id="new-config-summary" class="creation-config hidden" aria-live="polite"></section>
+    <p id="new-error" class="login-error hidden" role="alert"></p>
     <div class="dlg-actions">
       <button type="submit" id="new-ok" class="btn btn-primary" data-icon="plus" data-tip="创建独立的 Agent 工作空间" data-i18n-text="[&quot;创建&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;创建独立的 Agent 工作空间&quot;}">创建</button>
     </div>
@@ -1438,7 +1544,7 @@
                 sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads allow-pointer-lock" data-i18n-attrs="{&quot;title&quot;:&quot;HTML 预览&quot;}"></iframe>
       </div>
       <!-- Markdown 渲染：样式借用对话流的 .msg.agent -->
-      <div id="fv-mdwrap" class="fv-mdwrap hidden"><div id="fv-md" class="fv-md msg agent"></div></div>
+      <div id="fv-mdwrap" class="fv-mdwrap hidden"><div id="fv-md" class="fv-md"></div></div>
       <div id="fv-imgwrap" class="fv-imgwrap hidden"><img id="fv-img" alt=""></div>
       <div id="fv-notice" class="fv-notice hidden"></div>
     </div>

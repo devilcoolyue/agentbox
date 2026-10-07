@@ -255,19 +255,19 @@
 }
 /* Prism 的 tag 等类名也被页面组件使用；着色不能改变字宽、行高或盒模型，
  * 否则可见代码会偏离负责输入的 textarea。先隔离 token，再只赋予颜色。 */
-.fv-highlight .token { all: unset; }
-.fv-highlight .token.comment, .fv-highlight .token.prolog,
-.fv-highlight .token.doctype, .fv-highlight .token.cdata { color: var(--muted); }
-.fv-highlight .token.keyword, .fv-highlight .token.tag,
-.fv-highlight .token.boolean, .fv-highlight .token.important { color: var(--syntax-keyword); }
-.fv-highlight .token.string, .fv-highlight .token.char,
-.fv-highlight .token.attr-value, .fv-highlight .token.inserted { color: var(--green); }
-.fv-highlight .token.number, .fv-highlight .token.constant,
-.fv-highlight .token.symbol, .fv-highlight .token.attr-name { color: var(--amber); }
-.fv-highlight .token.function, .fv-highlight .token.class-name,
-.fv-highlight .token.property, .fv-highlight .token.selector { color: var(--syntax-function); }
-.fv-highlight .token.operator, .fv-highlight .token.punctuation { color: var(--muted); }
-.fv-highlight .token.deleted { color: var(--red); }
+:is(.fv-highlight, .fv-md pre) .token { all: unset; }
+:is(.fv-highlight, .fv-md pre) .token.comment, :is(.fv-highlight, .fv-md pre) .token.prolog,
+:is(.fv-highlight, .fv-md pre) .token.doctype, :is(.fv-highlight, .fv-md pre) .token.cdata { color: var(--muted); }
+:is(.fv-highlight, .fv-md pre) .token.keyword, :is(.fv-highlight, .fv-md pre) .token.tag,
+:is(.fv-highlight, .fv-md pre) .token.boolean, :is(.fv-highlight, .fv-md pre) .token.important { color: var(--syntax-keyword); }
+:is(.fv-highlight, .fv-md pre) .token.string, :is(.fv-highlight, .fv-md pre) .token.char,
+:is(.fv-highlight, .fv-md pre) .token.attr-value, :is(.fv-highlight, .fv-md pre) .token.inserted { color: var(--green); }
+:is(.fv-highlight, .fv-md pre) .token.number, :is(.fv-highlight, .fv-md pre) .token.constant,
+:is(.fv-highlight, .fv-md pre) .token.symbol, :is(.fv-highlight, .fv-md pre) .token.attr-name { color: var(--amber); }
+:is(.fv-highlight, .fv-md pre) .token.function, :is(.fv-highlight, .fv-md pre) .token.class-name,
+:is(.fv-highlight, .fv-md pre) .token.property, :is(.fv-highlight, .fv-md pre) .token.selector { color: var(--syntax-function); }
+:is(.fv-highlight, .fv-md pre) .token.operator, :is(.fv-highlight, .fv-md pre) .token.punctuation { color: var(--muted); }
+:is(.fv-highlight, .fv-md pre) .token.deleted { color: var(--red); }
 @media (forced-colors: active) {
   .fv-highlight { visibility: hidden; }
   .fv-codepane .fv-editor { color: CanvasText; caret-color: CanvasText; }
@@ -314,14 +314,16 @@
 .fv-framewrap[data-vp="tablet"] .fv-frame { width: min(834px, 100%); }
 .fv-framewrap[data-vp="phone"] .fv-frame { width: min(390px, 100%); }
 
-/* Markdown 渲染预览：正文限宽居中，排版直接借用对话流的 .msg.agent */
+/* File Markdown has isolated GitHub typography, independent of chat messages. */
 .fv-mdwrap {
   flex: 1; min-width: 0;
   overflow: auto;
-  background: var(--bg);
-  padding: 20px 24px 40px;
+  background: #0d1117;
+  padding: 32px 40px 48px;
 }
-.fv-md { max-width: 780px; margin: 0 auto; font-size: 14px; }
+:root[data-theme] .fv-md { max-width: 980px; margin: 0 auto; overflow-wrap:anywhere; }
+:root[data-theme="light"] .fv-mdwrap { background:#fff; }
+.fv-md pre .token { background:transparent; border:0; border-radius:0; padding:0; font:inherit; }
 
 /* 全屏：铺满窗口看整页布局 */
 .dlg-file.fv-max {

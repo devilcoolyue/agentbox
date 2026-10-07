@@ -16,6 +16,14 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--check-agent-image" {
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		if err := checkAgentImage(ctx, os.Args[2:], os.Stdout, probeAgentImage); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "network-helper" {
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
@@ -31,7 +39,7 @@ func main() {
 	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "backup", "backup-verify", "restore", "check-config", "git-key-rotate":
+		case "backup", "backup-verify", "restore", "check-config", "git-key-rotate", "admin-reset-password":
 			if err := maintenance(os.Args[1:]); err != nil {
 				log.Fatal(err)
 			}

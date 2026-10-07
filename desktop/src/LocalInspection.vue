@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { t, messageRef } from './i18n';
 import { onBeforeUnmount, ref } from 'vue';
-import { bridge, errorMessage } from './bridge';
+import { bridge, errorNotice } from './bridge';
 import { byteLabel } from './sync-task';
 import UiIcon from './UiIcon.vue';
 
@@ -20,14 +20,14 @@ async function inspect() {
   try {
     const value = await bridge.invoke<Inspection|null>('inspect_local');
     if (alive) result.value = value;
-  } catch (err) { if (alive) error.value = errorMessage(err); }
+  } catch (err) { if (alive) error.value = errorNotice(err); }
   finally { if (alive) { busy.value = false; canceling.value = false; } }
 }
 async function cancel() {
   if (!busy.value || canceling.value) return;
   canceling.value = true;
   try { await bridge.invoke('cancel_inspection'); }
-  catch (err) { if (alive) { error.value = errorMessage(err); canceling.value = false; } }
+  catch (err) { if (alive) { error.value = errorNotice(err); canceling.value = false; } }
 }
 onBeforeUnmount(() => { alive = false; if (busy.value) void cancel(); });
 </script>

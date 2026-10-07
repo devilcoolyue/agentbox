@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -253,6 +254,8 @@ func envKey(kv string) string {
 	return kv
 }
 
+var ErrImageMissing = errors.New("configured agent image is missing")
+
 // EnsureRunning brings the session's container up, reusing an existing one
 // when possible, and returns its id.
 func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct config.Account, workspaceDir, homeDir, sharedDir string) (string, error) {
@@ -338,6 +341,8 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 
 	if img, err := m.cli.ImageInspect(ctx, m.cfg.GetAgentImage()); err == nil {
 		browserContainerOptions(cc, hc, img.Config.Labels)
+	} else if client.IsErrNotFound(err) {
+		return "", fmt.Errorf("%w: %w", ErrImageMissing, err)
 	}
 
 	name := "agentbox-" + sess.ID

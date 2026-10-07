@@ -69,7 +69,10 @@ func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_txlock=immediate")
+	// FULL syncs the WAL on every commit: an acknowledged receipt must survive
+	// before an external runner can start. Put this connection-local setting in
+	// the DSN too so a replacement connection cannot silently revert to NORMAL.
+	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=synchronous(FULL)&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +83,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL"); err != nil {
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -242,6 +245,12 @@ func (s *Store) Delete(id string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if _, err := tx.Exec("UPDATE chat_requests SET state='deleted',request_json='null',revision=revision+1,updated_at=? WHERE session_id=? AND state!='deleted'", usageTimestamp(time.Now()), id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("UPDATE workspace_creations SET state='abandoned' WHERE session_id=?", id); err != nil {
+		return err
+	}
 	for _, query := range []string{"DELETE FROM client_terminals WHERE session_id=?", "DELETE FROM client_projects WHERE session_id=?", "DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
 		if _, err := tx.Exec(query, id); err != nil {
 			return err
@@ -345,6 +354,9 @@ func (s *Store) DeleteUser(name string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if _, err := tx.Exec("UPDATE chat_requests SET state='deleted',request_json='null',revision=revision+1,updated_at=? WHERE user=? AND state!='deleted'", usageTimestamp(time.Now()), name); err != nil {
+		return err
+	}
 	if _, err := tx.Exec("DELETE FROM tokens WHERE user = ?", name); err != nil {
 		return err
 	}

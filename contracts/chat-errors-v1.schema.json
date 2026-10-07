@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentbox.local/contracts/chat-errors-v1.schema.json",
+  "title": "Agentbox additive errors and durable chat v1",
+  "$defs": {
+    "ChatRequestInput": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "thread_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 1048576,
+          "description": "Server also limits UTF-8 bytes to 1 MiB."
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "effort": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "effort_control": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "attachments": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^/shared/\\.(images|file)/[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
+          }
+        }
+      },
+      "required": [
+        "scope",
+        "thread_id",
+        "text",
+        "model",
+        "effort",
+        "effort_control"
+      ],
+      "additionalProperties": false
+    },
+    "ChatRequestReceipt": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "session_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "thread_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "turn_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChatRequestInput"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "accepted",
+            "starting",
+            "running",
+            "completed",
+            "failed",
+            "interrupted",
+            "uncertain",
+            "reviewed",
+            "abandoned",
+            "deleted"
+          ]
+        },
+        "error_code": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "updated_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "session_id",
+        "thread_id",
+        "turn_id",
+        "request",
+        "state",
+        "revision",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": true
+    },
+    "ChatRequestResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "receipt": {
+          "$ref": "#/$defs/ChatRequestReceipt"
+        },
+        "replayed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "version",
+        "receipt"
+      ],
+      "additionalProperties": true
+    },
+    "ChatRequestList": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "scope": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "requests": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/ChatRequestReceipt"
+          }
+        },
+        "pending": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChatRequestReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "scope",
+        "requests",
+        "pending"
+      ],
+      "additionalProperties": true
+    },
+    "ChatRequestEvent": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "chat_request"
+        },
+        "version": {
+          "const": 1
+        },
+        "receipt": {
+          "$ref": "#/$defs/ChatRequestReceipt"
+        }
+      },
+      "required": [
+        "type",
+        "version",
+        "receipt"
+      ],
+      "additionalProperties": true
+    },
+    "APIProblem": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "hint": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    }
+  }
+}

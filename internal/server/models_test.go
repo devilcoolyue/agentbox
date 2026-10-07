@@ -79,7 +79,7 @@ func TestInvalidEffortRejectedBeforeDockerAndUserLog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), `"kind":"user"`) || !strings.Contains(string(raw), "不支持") {
+	if strings.Contains(string(raw), `"kind":"user"`) || !strings.Contains(string(raw), `"code":"chat_options_invalid"`) {
 		t.Fatalf("invalid request was logged as a user turn: %s", raw)
 	}
 	if room.state() != "idle" {

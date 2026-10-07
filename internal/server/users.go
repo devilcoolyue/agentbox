@@ -5,22 +5,17 @@ package server
 
 import (
 	"context"
-	"crypto/pbkdf2"
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"agentbox/internal/password"
 	"agentbox/internal/store"
 )
 
@@ -28,45 +23,9 @@ const adminUser = "boxadmin"
 
 var userNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,31}$`)
 
-// --- 密码哈希（PBKDF2-SHA256，格式 pbkdf2-sha256$iter$salt$key） ---
-
-const pbkdf2Iter = 210_000
-
-func hashPassword(pw string) string {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		panic(err)
-	}
-	key, err := pbkdf2.Key(sha256.New, pw, salt, pbkdf2Iter, 32)
-	if err != nil {
-		panic(err)
-	}
-	return fmt.Sprintf("pbkdf2-sha256$%d$%s$%s", pbkdf2Iter, hex.EncodeToString(salt), hex.EncodeToString(key))
-}
-
-func verifyPassword(stored, pw string) bool {
-	parts := strings.Split(stored, "$")
-	if len(parts) != 4 || parts[0] != "pbkdf2-sha256" {
-		return false
-	}
-	iter, err := strconv.Atoi(parts[1])
-	if err != nil || iter < 1 {
-		return false
-	}
-	salt, err := hex.DecodeString(parts[2])
-	if err != nil {
-		return false
-	}
-	want, err := hex.DecodeString(parts[3])
-	if err != nil || len(want) == 0 {
-		return false
-	}
-	got, err := pbkdf2.Key(sha256.New, pw, salt, iter, len(want))
-	if err != nil {
-		return false
-	}
-	return subtle.ConstantTimeCompare(got, want) == 1
-}
+// Shared with the offline administrator recovery command.
+func hashPassword(pw string) string         { return password.Hash(pw) }
+func verifyPassword(stored, pw string) bool { return password.Verify(stored, pw) }
 
 // dummyHash is a real-format PBKDF2 hash used to run an equivalent password
 // check when the username doesn't exist, so a login attempt costs the same time
@@ -136,7 +95,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, ok := s.store.TokenUser(bearerToken(r))
 		if !ok {
-			writeErr(w, http.StatusUnauthorized, "invalid token")
+			writeProblem(w, r, "authenticate", "authentication_required")
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxUser, u)))
@@ -147,7 +106,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 func (s *Server) admin(next http.Handler) http.Handler {
 	return s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if reqUser(r).Role != store.RoleAdmin {
-			writeErr(w, http.StatusForbidden, "需要管理员权限")
+			writeProblem(w, r, "authorize", "admin_required")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -161,13 +120,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "请求体格式错误")
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
+		writeProblem(w, r, "login", "invalid_request")
 		return
 	}
 	ip := clientIP(r)
 	if s.logins.blocked(ip) {
-		writeErr(w, http.StatusTooManyRequests, "登录尝试过于频繁，请稍后再试")
+		writeProblem(w, r, "login", "login_rate_limited")
 		return
 	}
 	u, ok := s.store.GetUser(strings.TrimSpace(req.Username))
@@ -181,7 +140,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !verifyPassword(stored, req.Password) || !ok {
 		s.logins.fail(ip)
 		time.Sleep(loginFailDelay) // 拖慢在线爆破
-		writeErr(w, http.StatusUnauthorized, "账号或密码错误")
+		writeProblem(w, r, "login", "invalid_credentials")
 		return
 	}
 	tok := newToken()
@@ -190,13 +149,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// verification was running cannot resurrect the old login.
 	issued, err := s.store.CreateTokenIfUserUnchanged(tok, u)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeProblem(w, r, "login", "internal_error")
 		return
 	}
 	if !issued {
 		s.logins.fail(ip)
 		time.Sleep(loginFailDelay)
-		writeErr(w, http.StatusUnauthorized, "账号或密码错误")
+		writeProblem(w, r, "login", "invalid_credentials")
 		return
 	}
 	s.logins.success(ip)

@@ -67,6 +67,14 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-test-') as tmp:
             if meta[key]!=r[key]:raise SystemExit('Metadata mismatch')
         for path in ['LICENSE','NOTICE','third_party/README.md','third_party/vendor.json','third_party/go-modules.json']:
             if not (folder/path).is_file():raise SystemExit('Missing license inventory')
+        for item in json.loads((folder/'third_party/go-modules.json').read_text()):
+            for entry in item['files']:
+                path = Path(entry['path'])
+                if path.is_absolute() or '..' in path.parts or path.parts[0] != 'third_party':
+                    raise SystemExit('Unsafe packaged license path')
+                notice = folder/path
+                if not notice.is_file() or hashlib.sha256(notice.read_bytes()).hexdigest() != entry['sha256']:
+                    raise SystemExit('Missing or changed packaged Go license: ' + entry['path'])
         if r['program']=='agentbox':
             for path in ['images/agent/Dockerfile', 'images/agent/tmux.conf', 'images/agent/bashrc', 'images/agent/vimrc', 'images/browser/Dockerfile', 'images/browser/browser.py', 'scripts/build-browser-image.sh']:
                 if not (folder/path).is_file():raise SystemExit('Missing terminal image resource: '+path)

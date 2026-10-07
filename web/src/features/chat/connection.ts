@@ -8,11 +8,11 @@ export class ChatConnection {
   private url = "";
   constructor(private readonly hooks: {
     message: (data: string) => void;
-    state: (state: "connecting" | "connected" | "closed", attempt: number) => void;
+    state: (state: "connecting" | "connected" | "closed", attempt: number, reference?: string) => void;
     reconnect: () => void;
   }) {}
   get ready() { return this.socket?.readyState === WebSocket.OPEN; }
-  send(data: string) { if (this.ready) this.socket!.send(data); }
+  send(data: string) { if (!this.ready) return false;this.socket!.send(data);return true; }
   connect(url: string) {
     if (this.url && this.url !== url) this.dispose();
     this.url = url;
@@ -20,7 +20,10 @@ export class ChatConnection {
     const gen = ++this.generation;
     this.socket?.close();
     this.hooks.state("connecting", this.attempt);
-    const ws = this.socket = new WebSocket(url);
+    const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join("");
+    const target = new URL(url);
+    target.searchParams.set("connection_id", id);
+    const ws = this.socket = new WebSocket(target.href);
     ws.onopen = () => {
       if (gen !== this.generation) return;
       const reconnect = this.opened;
@@ -32,7 +35,7 @@ export class ChatConnection {
     ws.onclose = e => {
       if (gen !== this.generation) return;
       this.socket = null;
-      this.hooks.state("closed", this.attempt);
+      this.hooks.state("closed", this.attempt, id);
       // Application refusals require user action, never an infinite reconnect loop.
       if (e.code >= 4000 && e.code < 5000) return;
       const delay = [1000, 2000, 4000, 8000, 15000][Math.min(this.attempt++, 4)];

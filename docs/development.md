@@ -42,6 +42,17 @@ agentbox/
 
 涉及核心链路前阅读 [`AGENTS.md`](../AGENTS.md)，其中说明了凭证轮换、配置原子更新、用量口径、文件路径验证和前端约定。
 
+## 统一验证与当前状态
+
+先看[当前能力/版本/验证清单](capabilities.md)，再用[统一验证入口](verification.md)选择本次需要的资源范围：
+
+```bash
+python3 scripts/verify.py list
+python3 scripts/verify.py run quick
+```
+
+本页下面保留原始构建命令和专项测试细节。统一入口会保存逐步日志、失败/跳过/未执行状态及工作树摘要；它不自动运行付费模型、原生安装或生产部署。Linux 的 EPERM 与 root 服务端测试仍严格分开，不以跳过代替生产权限验证。
+
 ## 构建与基本检查
 
 ```bash
@@ -70,6 +81,7 @@ Linux 上试跑使用[快速开始](../README_CN.md#快速开始)的镜像和配
 npm ci
 npm run check
 npm run build
+npm run test:problems   # 错误契约、三语覆盖和连接编号回归
 ```
 
 主控制台使用 TypeScript，由 `tsc` 逐文件编译到 `internal/web/static/js/`，无额外打包器。产物提交到 Git，Go 通过 `go:embed` 嵌入，生产发布只需要 Go。
@@ -184,6 +196,27 @@ PR 描述说明触发场景、行为变化和验证结果。涉及 Linux Docker�
 
 设置 `AGENTBOX_BACKUP_DOCKER_TEST=1` 额外验证完整备份命令及工作区恢复，需要可达的 Docker daemon（非默认 context 设置 `DOCKER_HOST`）。该验证只读取 Docker 挂载列表，不操作已有容器；CI 默认开启。
 
+## 管理员离线密码恢复回归
+
+```bash
+go test ./cmd/agentbox -run TestAdminPassword -count=1 -v
+go test ./internal/store -run 'TestMaintenance|TestPasswordReset' -count=1
+```
+
+只创建临时配置、SQLite 与合成账号，不需要 Docker、生产配置或模型凭证。覆盖数据锁、角色、配置变化、撤销失败回滚，以及恢复前后空间/额度/用量/账本一致性。Python 3 可用时，测试经真实伪终端启动 CLI 主入口，验证隐藏输入、重复输入不一致、SIGINT/SIGTERM 后恢复回显和无终端拒绝；缺 Python 会明确跳过伪终端部分，不能计为通过。CI Linux runner 自带 Python，普通用户即可执行这组测试。
+
+Linux 隔离验收复用最小终端测试镜像（只含 Python/tmux 等，不含模型凭证）：
+
+```bash
+# 镜像不存在时先构建一次
+docker build -t agentbox-client-test:local -f internal/server/testdata/client.Dockerfile internal/server/testdata
+./scripts/test-admin-password-linux.sh
+```
+
+脚本按镜像架构交叉编译测试，在 UID 1000、禁外网、无宿主挂载的临时容器中执行；可用 `AGENTBOX_ADMIN_TEST_IMAGE` 指定已有兼容镜像。仅复制测试二进制和伪终端夹具，结束清理容器及本机暂存目录；不验收 systemd。
+
+操作手册见[管理员密码恢复](troubleshooting.md#忘记密码或改了-auth_token-仍不能登录)。该命令不升级数据库，旧 schema 的实例应先按正式升级流程取得兼容版本，不能靠恢复密码顺带迁移。
+
 ## 真实终端回归
 
 `scripts/test-terminal.mjs` 将当前网页的 xterm 接到临时 Docker 容器，验证空 home 下的 Shell 默认配置、vi/Vim 的插入、退格、方向键、冒号命令、保存、窗口缩放与 tmux 重连。API 使用合成数据，不读取账号或调用模型；需要本机 Docker Unix socket 和 Playwright，结束后删除测试容器。
@@ -281,3 +314,15 @@ python3 scripts/test-mcp-server.py --binary /tmp/agentbox-linux --image agentbox
 ```
 
 `test-mcp-live.py` 使用临时容器、空 home、禁用外网和本地模拟 Anthropic API，验证原生配置写入、stdio/HTTP JSON/SSE 工具发现、Claude 实际工具调用、取消与超时清理。`test-mcp-server.py` 用独立 Docker volume 启动真实 Go 服务，覆盖 HTTP 管理接口、已运行空间同步、冲突接管与删除，并清理自己的容器和卷。两者不读真实凭证、不发付费模型请求，也不代表生产第三方 MCP 的网络或 OAuth 已验收。
+
+## 错误契约与故障回归
+
+范围、协议、测试入口及模拟限制见[错误码与操作关联](errors.md)。`npm run test:problems` 已进入网页 CI，`test-browser.mjs` 默认包含登录/启动/聊天错误、旧错误回退、历史恢复、连接编号和窄屏三语验收；可用 `AGENTBOX_BROWSER_ONLY_PROBLEMS=1` 单独运行该场景。截图在 `output/playwright/problems-english-mobile.png`。
+
+Go 侧 `TestProblemsStartupThroughWorkspace` 使用真实 workspace 启动流程与合成 Docker 运行时，必须按现有 Linux server 测试约定取得 UID 1000 的 chown 权限；不能把普通用户运行时的跳过当成通过。磁盘拒绝通过保留值触发，不填满宿主机磁盘。
+
+## 分层诊断回归
+
+[分层环境诊断](diagnostics.md) 说明检测边界、报告权限及命令语义。`npm run test:diagnostics` 验证 Go/TS 文案目录一致性；完整 `test-browser.mjs` 默认验证诊断窗口三语、失败与重试、模型未检查、脱敏下载、窄屏和关闭生命周期。可用 `AGENTBOX_BROWSER_ONLY_DIAGNOSTICS=1` 单独运行，截图位于 `output/playwright/diagnostics-english-mobile.png`。
+
+`internal/diagnostics` 测试只触碰自己的临时目录；CLI 环境检查测试使用 loopback Docker API。`scripts/test-filesystem-linux.sh` 已纳入新包及其 testdata。应额外在 Linux 非 root 用户下确认容器属主设置被真实拒绝且报告为失败；不要为消除红色检查而降低生产 chown 要求。生产配置/数据库、真实模型与实际代理不进入自动测试夹具。

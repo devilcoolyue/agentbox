@@ -72,6 +72,21 @@ describe('desktop language integration', () => {
     connection.close();
   });
 
+  it('updates a denied terminal error without reconnecting or replaying input', async () => {
+    language.value='zh-CN';
+    const invoke=vi.fn().mockRejectedValue({kind:'forbidden',code:'quota_exhausted',retryable:false,operation_id:'0123456789abcdef0123456789abcdef'});
+    const status=messageRef();
+    const connection=new TerminalConnection(()=>{},text=>{status.value=text;},()=>({cols:80,rows:24}),{invoke,channel:()=>({})} as never);
+    await connection.open('fixture');
+    expect(status.value).toContain(t('额度已用完'));
+    language.value='en';expect(status.value).toContain(t('额度已用完'));
+    language.value='zh-TW';expect(status.value).toContain(t('额度已用完'));
+    expect(status.value).toContain('0123456789abcdef0123456789abcdef');
+    connection.resumeAfterSleep();
+    expect(invoke).toHaveBeenCalledTimes(1);
+    connection.close();
+  });
+
   it('invalidates a typed destructive confirmation after the language changes', () => {
     language.value = 'zh-CN';
     const typed = t('永久清理原内容');

@@ -1,0 +1,309 @@
+{
+  "version": 1,
+  "errors": [
+    {
+      "code": "project_upload_limits",
+      "http_status": 413,
+      "error": "项目上传超过限制",
+      "hint": "请减少文件数量或体积；大小限制可由管理员调整。",
+      "action": "edit_request",
+      "retryable": false
+    },
+    {
+      "code": "creation_conflict",
+      "http_status": 409,
+      "error": "创建信息与已接收记录不一致",
+      "hint": "请继续原创建流程，或明确开始新的创建。",
+      "action": "review_creation",
+      "retryable": false
+    },
+    {
+      "code": "creation_gone",
+      "http_status": 410,
+      "error": "该创建已放弃或空间已删除",
+      "hint": "请刷新空间列表；不会重新创建已删除空间。",
+      "action": "refresh_sessions",
+      "retryable": false
+    },
+    {
+      "code": "import_pending",
+      "http_status": 409,
+      "error": "导入仍在执行或结果待核对",
+      "hint": "请先查询结果或查看已有目录，不要重复提交。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "import_failed",
+      "http_status": 422,
+      "error": "项目导入失败",
+      "hint": "请检查上传内容、仓库地址或 Git 连接，在同一空间重试。",
+      "action": "review_import",
+      "retryable": false
+    },
+    {
+      "code": "import_target_exists",
+      "http_status": 409,
+      "error": "目标目录已存在",
+      "hint": "请查看现有文件，或选择新的目录；不会覆盖原目录。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "invalid_request",
+      "http_status": 400,
+      "error": "请求格式错误",
+      "hint": "请检查输入后重新提交。",
+      "action": "edit_request",
+      "retryable": false
+    },
+    {
+      "code": "invalid_credentials",
+      "http_status": 401,
+      "error": "账号或密码错误",
+      "hint": "请核对用户名和密码后重新登录。",
+      "action": "sign_in",
+      "retryable": false
+    },
+    {
+      "code": "login_rate_limited",
+      "http_status": 429,
+      "error": "登录尝试过于频繁",
+      "hint": "请稍后再登录；忘记密码请联系管理员。",
+      "action": "wait",
+      "retryable": true
+    },
+    {
+      "code": "authentication_required",
+      "http_status": 401,
+      "error": "登录已过期",
+      "hint": "请重新登录后继续。",
+      "action": "sign_in",
+      "retryable": false
+    },
+    {
+      "code": "admin_required",
+      "http_status": 403,
+      "error": "需要管理员权限",
+      "hint": "请联系实例管理员处理。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "session_not_found",
+      "http_status": 404,
+      "error": "工作空间不存在或不可访问",
+      "hint": "请刷新空间列表并重新选择。",
+      "action": "refresh_sessions",
+      "retryable": false
+    },
+    {
+      "code": "account_access_denied",
+      "http_status": 403,
+      "error": "当前用户无权使用该账号",
+      "hint": "请联系管理员调整账号使用范围。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "account_unavailable",
+      "http_status": 500,
+      "error": "空间绑定的账号不可用",
+      "hint": "请联系管理员检查账号配置。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "account_credentials_unavailable",
+      "http_status": 500,
+      "error": "账号凭证无法准备",
+      "hint": "请联系管理员检查凭证并在需要时重新授权账号。",
+      "action": "reauthorize_account",
+      "retryable": false
+    },
+    {
+      "code": "quota_exhausted",
+      "http_status": 403,
+      "error": "额度已用完",
+      "hint": "请联系管理员充值后再继续。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "capacity_exhausted",
+      "http_status": 429,
+      "error": "运行空间数量已达上限",
+      "hint": "请停止不用的空间，或联系管理员调整容量。",
+      "action": "free_capacity",
+      "retryable": false
+    },
+    {
+      "code": "storage_full",
+      "http_status": 429,
+      "error": "数据盘可用空间不足",
+      "hint": "请联系管理员释放磁盘空间后重试。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "storage_permission_denied",
+      "http_status": 500,
+      "error": "数据目录权限不足",
+      "hint": "请联系管理员检查数据目录及容器用户的读写权限。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "docker_unavailable",
+      "http_status": 500,
+      "error": "无法连接 Docker 服务",
+      "hint": "请联系管理员检查 Docker 服务和访问权限。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "agent_image_missing",
+      "http_status": 500,
+      "error": "工作空间镜像不存在",
+      "hint": "请联系管理员构建或安装配置中指定的 Agent 镜像。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "workspace_start_failed",
+      "http_status": 500,
+      "error": "工作空间启动失败",
+      "hint": "请将操作编号交给管理员检查环境，修复后再启动。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "chat_busy",
+      "http_status": 409,
+      "error": "上一条消息仍在处理中",
+      "hint": "请等待当前回合完成，或先中断当前回合。",
+      "action": "wait",
+      "retryable": true
+    },
+    {
+      "code": "chat_options_invalid",
+      "http_status": 400,
+      "error": "对话模型或推理设置不可用",
+      "hint": "请调整模型和推理设置，必要时联系管理员检查 CLI 兼容性。",
+      "action": "edit_request",
+      "retryable": false
+    },
+    {
+      "code": "chat_failed",
+      "http_status": 500,
+      "error": "对话执行失败",
+      "hint": "请先查看对话历史和工作区结果，再决定是否重新发送。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "mcp_configuration_failed",
+      "http_status": 409,
+      "error": "MCP 配置尚未应用",
+      "hint": "请在 MCP 设置中处理冲突或检测配置后重试。",
+      "action": "configure_mcp",
+      "retryable": false
+    },
+    {
+      "code": "operation_timed_out",
+      "http_status": 504,
+      "error": "操作超时",
+      "hint": "请先检查当前空间和任务状态，再决定是否重试。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "operation_cancelled",
+      "http_status": 409,
+      "error": "操作已取消",
+      "hint": "请检查当前空间和任务状态后再继续。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "server_stopping",
+      "http_status": 503,
+      "error": "服务正在重启或停止",
+      "hint": "请稍后重新连接并核对任务状态。",
+      "action": "wait",
+      "retryable": true
+    },
+    {
+      "code": "websocket_failed",
+      "http_status": 400,
+      "error": "对话连接不可用",
+      "hint": "请检查网络及反向代理的 WebSocket 配置后重连。",
+      "action": "reconnect",
+      "retryable": true
+    },
+    {
+      "code": "internal_error",
+      "http_status": 500,
+      "error": "服务暂时无法完成操作",
+      "hint": "请将操作编号交给管理员排查。",
+      "action": "contact_admin",
+      "retryable": false
+    },
+    {
+      "code": "chat_request_conflict",
+      "http_status": 409,
+      "error": "消息编号与已接收内容或状态不一致",
+      "hint": "请查询原消息状态，核对后使用新的消息编号。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "chat_request_gone",
+      "http_status": 410,
+      "error": "该消息已放弃或删除",
+      "hint": "请核对历史和工作区结果；不会重新执行这个消息编号。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "chat_request_not_found",
+      "http_status": 404,
+      "error": "尚未查到该消息的接收记录",
+      "hint": "请保留待确认内容并重试查询，不要换编号重复发送。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "chat_pending",
+      "http_status": 409,
+      "error": "有消息尚未结束或结果待核对",
+      "hint": "请先查询消息状态、查看历史和文件，再明确核对结果。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "chat_scope_changed",
+      "http_status": 409,
+      "error": "消息所属的实例或登录身份已变化",
+      "hint": "请重新登录并核对原任务；不会自动重新发送。",
+      "action": "sign_in",
+      "retryable": false
+    },
+    {
+      "code": "chat_thread_changed",
+      "http_status": 409,
+      "error": "当前对话与消息所属对话不一致",
+      "hint": "请返回原对话并核对输入后再发送。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "chat_attachments_invalid",
+      "http_status": 409,
+      "error": "消息附件已失效或无法验证",
+      "hint": "请移除失效附件或重新上传，核对后再发送。",
+      "action": "edit_request",
+      "retryable": false
+    }
+  ]
+}

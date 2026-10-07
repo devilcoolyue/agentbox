@@ -354,6 +354,25 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		return
 	}
 	tid := s.activeThread(sess)
+	// New composers request a stable identity even for a not-yet-sent thread.
+	// The legacy response/empty-thread behavior stays available to old clients.
+	if r.URL.Query().Get("draft_context") == "1" {
+		var err error
+		tid, err = s.ensureActiveThread(sess)
+		if err != nil {
+			writeProblem(w, r, "chat.history", "internal_error")
+			return
+		}
+		if _, err = os.Stat(s.threadPath(sess, tid)); os.IsNotExist(err) {
+			// A metadata-only entry makes an unsent draft's thread navigable after
+			// switching away. It contains no prompt and is ignored by old renderers.
+			err = s.appendThreadEntry(sess, tid, logEntry{Kind: "draft_context"})
+		}
+		if err != nil {
+			writeProblem(w, r, "chat.history", "internal_error")
+			return
+		}
+	}
 	if tid == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "thread": nil})
 		return
@@ -361,7 +380,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 	raw, err := os.ReadFile(s.threadPath(sess, tid))
 	if err != nil {
 		if os.IsNotExist(err) { // 新开的空对话还没落盘
-			writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "thread": nil})
+			writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "thread": nil, "active_thread": tid})
 			return
 		}
 		writeErr(w, http.StatusInternalServerError, err.Error())
@@ -408,7 +427,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		return
 	}
 	meta, _ := s.scanThread(sess, tid)
-	writeJSON(w, http.StatusOK, map[string]any{"entries": lines, "thread": meta, "costs": costs})
+	writeJSON(w, http.StatusOK, map[string]any{"entries": lines, "thread": meta, "costs": costs, "active_thread": tid})
 }
 
 func (s *Server) handleThreadList(w http.ResponseWriter, r *http.Request, sess store.Session) {
@@ -431,8 +450,8 @@ func (s *Server) handleThreadList(w http.ResponseWriter, r *http.Request, sess s
 // racing in and appending to the wrong thread.
 func (s *Server) handleThreadNew(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	room := s.chat.room(sess.ID)
-	if !room.tryBegin() {
-		writeErr(w, http.StatusConflict, "有消息正在处理中，请等待完成或先中断")
+	if err := room.begin(); err != nil {
+		writeChatRequestError(w, r, err)
 		return
 	}
 	defer room.end()
@@ -447,6 +466,13 @@ func (s *Server) handleThreadNew(w http.ResponseWriter, r *http.Request, sess st
 		if _, err := os.Stat(s.threadPath(sess, tid)); os.IsNotExist(err) {
 			writeJSON(w, http.StatusOK, map[string]any{"id": tid, "created": false})
 			return
+		}
+		if raw, err := os.ReadFile(s.threadPath(sess, tid)); err == nil {
+			entries := parseEntries(raw)
+			if len(entries) == 1 && entries[0].meta.Kind == "draft_context" {
+				writeJSON(w, http.StatusOK, map[string]any{"id": tid, "created": false})
+				return
+			}
 		}
 	}
 	tid := newThreadID(time.Now())
@@ -471,8 +497,8 @@ func (s *Server) handleThreadActivate(w http.ResponseWriter, r *http.Request, se
 		return
 	}
 	room := s.chat.room(sess.ID)
-	if !room.tryBegin() {
-		writeErr(w, http.StatusConflict, "有消息正在处理中，请等待完成或先中断")
+	if err := room.begin(); err != nil {
+		writeChatRequestError(w, r, err)
 		return
 	}
 	defer room.end()
@@ -552,8 +578,8 @@ func (s *Server) handleThreadDelete(w http.ResponseWriter, r *http.Request, sess
 	}
 	room := s.chat.room(sess.ID)
 	// 统一占房：执行中删除当前对话会抽掉正在写的文件，一律等回合结束
-	if !room.tryBegin() {
-		writeErr(w, http.StatusConflict, "有消息正在处理中，请等待完成或先中断")
+	if err := room.begin(); err != nil {
+		writeChatRequestError(w, r, err)
 		return
 	}
 	defer room.end()
@@ -562,6 +588,12 @@ func (s *Server) handleThreadDelete(w http.ResponseWriter, r *http.Request, sess
 	if err := s.migrateThreads(sess); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if u, ok := s.store.GetUser(sess.User); ok {
+		if err := s.store.DeleteChatThreadRequests(u, sess.ID, tid); err != nil {
+			writeChatRequestError(w, r, err)
+			return
+		}
 	}
 	if err := os.Remove(s.threadPath(sess, tid)); err != nil && !os.IsNotExist(err) {
 		writeErr(w, http.StatusInternalServerError, err.Error())

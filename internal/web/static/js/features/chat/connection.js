@@ -11,8 +11,8 @@ export class ChatConnection {
         this.hooks = hooks;
     }
     get ready() { return this.socket?.readyState === WebSocket.OPEN; }
-    send(data) { if (this.ready)
-        this.socket.send(data); }
+    send(data) { if (!this.ready)
+        return false; this.socket.send(data); return true; }
     connect(url) {
         if (this.url && this.url !== url)
             this.dispose();
@@ -21,7 +21,10 @@ export class ChatConnection {
         const gen = ++this.generation;
         this.socket?.close();
         this.hooks.state("connecting", this.attempt);
-        const ws = this.socket = new WebSocket(url);
+        const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join("");
+        const target = new URL(url);
+        target.searchParams.set("connection_id", id);
+        const ws = this.socket = new WebSocket(target.href);
         ws.onopen = () => {
             if (gen !== this.generation)
                 return;
@@ -38,7 +41,7 @@ export class ChatConnection {
             if (gen !== this.generation)
                 return;
             this.socket = null;
-            this.hooks.state("closed", this.attempt);
+            this.hooks.state("closed", this.attempt, id);
             // Application refusals require user action, never an infinite reconnect loop.
             if (e.code >= 4000 && e.code < 5000)
                 return;

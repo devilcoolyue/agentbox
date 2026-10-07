@@ -2,7 +2,8 @@
 import { t, messageRef, msg } from './i18n';
 import LanguageSelect from './LanguageSelect.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { bridge, errorMessage, type Connection, type Session } from './bridge';
+import { bridge, errorNotice, type Connection, type Session } from './bridge';
+import { workspaceState } from '../../web/src/contracts/workspace-state';
 import TerminalPane from './TerminalPane.vue';
 import ProjectWorkspace from './ProjectWorkspace.vue';
 import LocalInspection from './LocalInspection.vue';
@@ -34,7 +35,7 @@ async function issuePair(){
   pairing.value=true;
   error.value='';
   try{const pair=await bridge.invoke<{code:string;expires_in:number}>('issue_pair');if(disposed||identity!==connection.value)return;issuedPair.value=pair.code;clearTimeout(pairTimer);pairTimer=setTimeout(()=>issuedPair.value='',pair.expires_in*1000);}
-  catch(err){if(!disposed&&identity===connection.value)error.value=errorMessage(err);}
+  catch(err){if(!disposed&&identity===connection.value)error.value=errorNotice(err);}
   finally{if(!disposed)pairing.value=false;}
 }
 const allowHttp = ref(false);
@@ -73,7 +74,10 @@ const tabs = computed(() => [
 ]);
 function openSettings(tab: 'appearance'|'connection'|'about' = 'appearance') { settingsTab.value = tab; settingsOpen.value = true; }
 function agentLabel(agent: string) { return agent === 'claude' ? 'Claude Code' : agent === 'codex' ? 'Codex' : agent; }
-function statusLabel(status: string) { return ({running:t("运行中"),stopped:t("已停止"),starting:t("启动中"),creating:t("创建中"),error:t("异常"),idle:t("空闲"),paused:t("已暂停")} as Record<string,string>)[status] || status; }
+function sessionState(session: Session) {
+  const state = workspaceState(session, t);
+  return {...state, cls: {run: 'running', idle: 'idle', off: 'stopped'}[state.cls]};
+}
 async function copyServer() { try { await navigator.clipboard.writeText(connection.value?.server || server.value); copiedServer.value = true; clearTimeout(copyTimer); copyTimer = setTimeout(() => copiedServer.value = false, 1800); } catch { error.value = msg("复制失败，请选择地址后手动复制。"); } }
 onBeforeUnmount(() => { disposed = true; sessionRefresh.stop(); clearTimeout(copyTimer); });
 const selected = ref<Session | null>(null);
@@ -93,7 +97,7 @@ const sessionRefresh = new SessionRefresh<Session[]>({
     projectSpaces.value = projectSpaces.value.flatMap(space => result.filter(session => session.id === space.id));
     syncSpaces.value = syncSpaces.value.flatMap(space => result.filter(session => session.id === space.id));
   },
-  error: err => { error.value = errorMessage(err); },
+  error: err => { error.value = errorNotice(err); },
   loading: value => { refreshing.value = value; },
   visible: () => document.visibilityState === 'visible',
 });
@@ -114,7 +118,7 @@ onBeforeUnmount(() => {
 const backend = messageRef(msg("正在检查后台…"));
 async function checkBackend() {
   try { backend.value = await bridge.invoke<string>('backend_status'); }
-  catch (err) { backend.value = errorMessage(err); }
+  catch (err) { backend.value = errorNotice(err); }
 }
 onMounted(checkBackend);
 const fontSize = ref(Math.max(10, Math.min(24, Number(localStorage.getItem('agentbox.fontSize')) || 14)));
@@ -145,7 +149,7 @@ const zoom = new AppZoom(
     // ResizeObserver delivery is delayed until the next frame.
     window.dispatchEvent(new Event('agentbox-zoom'));
   },
-  error => { zoomError.value = errorMessage(error); },
+  error => { zoomError.value = errorNotice(error); },
 );
 function zoomKey(event: KeyboardEvent) {
   const action = zoomShortcut(event, mac, composing);
@@ -184,7 +188,7 @@ async function login(restore = false) {
     username.value=connection.value.user;server.value=connection.value.server;
     view.value = 'terminal'; search.value = '';
     await refresh();
-  } catch (err) { error.value = errorMessage(err); }
+  } catch (err) { error.value = errorNotice(err); }
   finally { password.value = ''; pairCode.value=''; busy.value = false; }
 }
 async function refresh(quiet = false) {
@@ -196,7 +200,7 @@ async function logout() {
   if(busy.value||updateBusy.value||pairing.value)return;
   sessionRefresh.stop(); busy.value = true; active.value = null; projectSpaces.value=[]; syncSpaces.value=[]; syncStatuses.value={}; issuedPair.value=''; clearTimeout(pairTimer); error.value = '';
   try { await bridge.invoke('disconnect'); connection.value = null; sessions.value = []; selected.value = null; settingsOpen.value = false; }
-  catch (err) { if (!disposed) { error.value = errorMessage(err); if (connection.value) { sessionRefresh.start(); void refresh(true); } } }
+  catch (err) { if (!disposed) { error.value = errorNotice(err); if (connection.value) { sessionRefresh.start(); void refresh(true); } } }
   finally { busy.value = false; }
 }
 </script>
@@ -238,7 +242,7 @@ async function logout() {
           <button v-for="session in visibleSessions" :key="session.id" :title="session.name" class="workspace-item" :class="{selected:selected?.id===session.id}" :aria-current="selected?.id===session.id?'page':undefined" @click="selected=session">
             <UiIcon :name="session.agent==='claude'?'claude':session.agent==='codex'?'codex':'workspace'" :size="19" />
             <span class="workspace-identity"><strong>{{ session.name }}</strong><small>{{ agentLabel(session.agent) }}<span v-if="syncStatuses[session.id]"> · {{ t(syncStatuses[session.id]) }}</span></small></span>
-            <span class="status-dot" :class="session.status" :title="statusLabel(session.status)" :aria-label="statusLabel(session.status)" />
+            <span class="status-dot" :class="sessionState(session).cls" :title="sessionState(session).tip" :aria-label="sessionState(session).label" />
           </button>
         </nav>
         <div class="side-foot">
@@ -248,7 +252,7 @@ async function logout() {
         </div>
       </aside>
       <section class="workspace-content">
-        <header class="workspace-header"><div><span class="eyebrow">{{ selected?agentLabel(selected.agent):'AGENTBOX DESKTOP' }}</span><h1>{{ selected?.name || t("工作空间") }}</h1></div><span v-if="selected" class="workspace-status" :class="selected.status"><span class="status-dot" :class="selected.status" />{{ statusLabel(selected.status) }}</span><span v-if="selected&&!projectMode" class="mode-label" :title="t('此服务器使用与网页版共享的终端')">{{ t("兼容模式") }}</span></header>
+        <header class="workspace-header"><div><span class="eyebrow">{{ selected?agentLabel(selected.agent):'AGENTBOX DESKTOP' }}</span><h1>{{ selected?.name || t("工作空间") }}</h1></div><span v-if="selected" class="workspace-status" :class="sessionState(selected).cls"><span class="status-dot" :class="sessionState(selected).cls" />{{ sessionState(selected).label }}</span><span v-if="selected&&!projectMode" class="mode-label" :title="t('此服务器使用与网页版共享的终端')">{{ t("兼容模式") }}</span></header>
         <p v-if="error&&!settingsOpen" class="error top-error" role="alert"><UiIcon name="alert" />{{ error }}</p>
         <nav v-if="selected" class="workspace-tabs" :aria-label="t('工作区功能')"><button v-for="tab in tabs" :key="tab.id" :class="{active:view===tab.id}" :aria-current="view===tab.id?'page':undefined" @click="view=tab.id"><UiIcon :name="tab.icon" :size="16" />{{ tab.label }}<span v-if="tab.id==='sync'&&syncStatuses[selected.id]" class="tab-status-dot" /></button></nav>
         <div v-if="!selected" class="workspace-welcome"><div class="welcome-mark"><BrandMark icon-only /></div><h2>{{ sessions.length?t("选择一个工作空间"):t("还没有工作空间") }}</h2><p>{{ sessions.length?t("从左侧选择空间，继续终端和文件操作。"):t("在网页版创建工作空间后，刷新列表即可连接。") }}</p><button class="ghost" @click="refresh()"><UiIcon name="refresh" />{{ t("刷新列表") }}</button></div>
@@ -268,7 +272,7 @@ async function logout() {
       <nav class="settings-tabs" :aria-label="t('设置分类')"><button :class="{active:settingsTab==='appearance'}" @click="settingsTab='appearance'">{{ t("外观") }}</button><button v-if="connection" :class="{active:settingsTab==='connection'}" @click="settingsTab='connection'">{{ t("连接") }}</button><button :class="{active:settingsTab==='about'}" @click="settingsTab='about'">{{ t("关于与更新") }}</button></nav>
       <section v-show="settingsTab==='appearance'" class="settings-section"><div class="setting-row"><div><h3>{{ t("界面语言") }}</h3><p>{{ t("立即切换界面语言，不影响终端和进行中的操作。") }}</p></div><LanguageSelect /></div><div class="setting-row"><div><h3>{{ t("主题") }}</h3><p>{{ t("与网页版一致的深浅配色。") }}</p></div><div class="theme-options"><button v-for="option in themeOptions" :key="option.value" :class="{active:themeMode===option.value}" :aria-pressed="themeMode===option.value" @click="themeMode=option.value"><UiIcon :name="option.icon" />{{ option.label }}</button></div></div><div class="setting-row"><div><h3>{{ t("终端字号") }}</h3><p>{{ t("终端保持深色，确保命令输出清晰。") }}</p></div><label class="font-control"><input v-model.number="fontSize" :aria-label="t('终端字号')" type="range" min="10" max="24"><span>{{ fontSize }} px</span></label></div><div class="setting-row"><div><h3>{{ t("界面缩放") }}</h3><p>{{ t("{p1} · 恢复默认比例使用 0", { p1: (zoomKeys) }) }}</p></div><div class="zoom-controls"><button class="icon-button" :disabled="zoomPercent<=80" :aria-label="t('设置中缩小界面')" @click="zoom.change('out')"><UiIcon name="zoom-out" /></button><span>{{ zoomPercent }}%</span><button class="icon-button" :disabled="zoomPercent>=200" :aria-label="t('设置中放大界面')" @click="zoom.change('in')"><UiIcon name="zoom-in" /></button></div></div></section>
       <section v-show="settingsTab==='connection'" class="settings-section"><template v-if="connection"><div class="connection-summary"><span class="server-symbol"><UiIcon name="globe" :size="22" /></span><div><h3>{{ serverHost }}</h3><p>{{ connection.user }} · {{ connection.role==='admin'?t("管理员"):t("用户") }}</p></div></div><label class="field">{{ t("服务器地址") }}<span class="copy-field"><input :value="connection.server" readonly :aria-label="t('当前服务器地址')"><button class="icon-button" :aria-label="copiedServer?t('地址已复制'):t('复制服务器地址')" @click="copyServer"><UiIcon :name="copiedServer?'check':'copy'" /></button></span></label><div v-if="connection.capabilities?.features.pairing===1" class="setting-row"><div><h3>{{ t("配对另一台设备") }}</h3><p>{{ t("生成一个 10 分钟内有效的单次配对码。") }}</p></div><button :disabled="busy||pairing" @click="issuePair"><UiIcon name="link" />{{ t("生成配对码") }}</button></div><div v-if="issuedPair" class="pair-bar"><input :value="issuedPair" readonly :aria-label="t('配对码')" @focus="($event.target as HTMLInputElement).select()"><button class="ghost" @click="issuedPair=''">{{ t("收起") }}</button></div><LocalInspection /><details class="backend-details"><summary><UiIcon name="info" />{{ t("连接诊断") }}</summary><p>{{ backend }}</p><p>{{ projectMode?t("支持独立项目终端"):t("使用网页版共享终端") }} · {{ connection.capabilities?.features.sync===1?t("同步已启用"):t("同步未启用") }}</p><button :disabled="busy" @click="checkBackend"><UiIcon name="refresh" />{{ t("重新检查") }}</button></details><p v-if="error" class="error" role="alert">{{ error }}</p><div class="settings-signout"><button class="ghost danger" :disabled="busy||updateBusy||pairing" @click="logout"><UiIcon name="logout" />{{ t("退出登录") }}</button></div></template></section>
-      <section v-show="settingsTab==='about'" class="settings-section"><div class="about-brand"><BrandMark compact /><span>{{ t("桌面客户端 · {p1}", { p1: (platformName) }) }}</span></div><DesktopUpdate @busy="updateBusy=$event" /></section>
+      <section v-show="settingsTab==='about'" class="settings-section"><div class="about-brand"><BrandMark compact /><span>{{ t("桌面客户端 · {p1}", { p1: (platformName) }) }}</span></div><DesktopUpdate :connection="connection" @busy="updateBusy=$event" /></section>
     </UiDialog>
   </main>
 </template>

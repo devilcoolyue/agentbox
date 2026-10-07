@@ -77,8 +77,8 @@ small { font-size: 11px; }
 .workspace-identity strong { overflow: hidden; text-overflow: ellipsis; font-weight: 500; font-size: 12px; }
 .workspace-identity small { display: block; color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
 .status-dot { display: inline-block; width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--muted); }
-.status-dot.running { background: var(--green); }
-.status-dot.starting, .status-dot.creating { background: var(--warn); }
+.status-dot.running, .status-dot.run { background: var(--green); }
+.status-dot.starting, .status-dot.creating, .status-dot.idle { background: var(--warn); }
 .status-dot.error { background: var(--red); }
 .side-empty { padding: 16px 11px; color: var(--muted); font-size: 12px; }
 .side-foot { padding: 10px 12px 0; border-top: 1px solid var(--line-soft); }

@@ -1,14 +1,18 @@
 #!/usr/bin/env node
+import {featureLifetimeSmoke} from './test-feature-lifetimes-browser.mjs';
+import {diagnosticsSmoke} from './test-diagnostics-browser.mjs';
 // Synthetic API/browser regression. No Docker, real accounts or provider calls.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import {loginProblemsSmoke, problemsSmoke} from './test-problems-browser.mjs';
 import { responsiveSmoke } from './test-responsive.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
 import { remoteBrowserSmoke } from './test-remote-browser.mjs';
 import { imageUpdateSmoke } from './test-image-updates.mjs';
+import {updateComponentsSmoke} from './test-update-components.mjs';
 import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
@@ -28,6 +32,8 @@ export async function smoke(page) {
    res.end(data);
   } catch { res.writeHead(404).end(); }
  });
+ const fixtureSockets=new Set();
+ server.on('connection',socket=>{fixtureSockets.add(socket);socket.once('close',()=>fixtureSockets.delete(socket));});
  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
  const base = `http://127.0.0.1:${server.address().port}`;
  const errors = []; page.on('pageerror', e => { errors.push(e.stack || e.message); console.error('Browser page error:', e.stack || e.message); });
@@ -63,6 +69,7 @@ export async function smoke(page) {
   else if(path === '/api/me/git/default') body={connection_id:''};
   else if(path === '/api/image-updates') body={settings:{enabled:false,channel:'stable',time:'04:00',update_codex:false},agent_image:settings.agent_image,previous_image:'',timezone:'UTC',status:{running:false,current:{},target:{}}};
   else if(path === '/api/updates') { updateReads++; body=release; }
+  else if(path === '/api/updates/components') body={version:1,observed_at:Date.now(),server:{version:release.current_version,schema:11,candidate_compatibility:'preflight_required'},image:{reference:settings.agent_image,id:'',claude:'',codex:'',state:'unavailable',observed_at:0},desktop:{installed_version_state:'browser_unknown',server_protocol:1,sync_enabled:false}};
   else if(path === '/api/updates/upgrade') {
    if(route.request().method()==='POST') {
     upgradeStarts++;
@@ -114,6 +121,7 @@ export async function smoke(page) {
  });
  try {
   await page.goto(base + '/#/settings/container');
+  await loginProblemsSmoke(page);
   await page.locator('#login-user').fill('fixture');await page.locator('#login-pass').fill('fixture-password');
   const password = page.locator('#login-pass'), reveal = page.locator('#login-password-toggle');
   assert.equal(await password.getAttribute('type'),'password');
@@ -139,6 +147,10 @@ export async function smoke(page) {
   await page.locator('#sec-container').waitFor({state:'visible'});
   assert.equal(new URL(page.url()).hash,'#/settings/container','login preserves destination');
   assert.equal(await page.locator('#login-btn').isDisabled(),false);
+  await diagnosticsSmoke(page,base);
+  if (process.env.AGENTBOX_BROWSER_ONLY_DIAGNOSTICS === '1') { assert.deepEqual(errors,[]); return; }
+  await problemsSmoke(page,base,()=>chatSocket,entries=>{historyEntries=entries;});
+  if (process.env.AGENTBOX_BROWSER_ONLY_PROBLEMS === '1') { assert.deepEqual(errors,[]); return; }
   if (process.env.AGENTBOX_BROWSER_ONLY_IMAGE_UPDATES === '1') {
    await imageUpdateSmoke(page); assert.deepEqual(errors,[]); return;
   }
@@ -329,6 +341,7 @@ export async function smoke(page) {
   await page.locator('#set-save').click();
   await page.waitForTimeout(100);assert.equal(settingsWrites,2);
   await imageUpdateSmoke(page);
+  await updateComponentsSmoke(page);
   // Account creation stays in one dialog; authorization failure is retryable.
   await page.locator('#set-nav [data-sec="accounts"]').click();
   await page.locator('#btn-acct-add').click();
@@ -543,6 +556,7 @@ export async function smoke(page) {
   await page.screenshot({path:resolve('output/playwright/reasoning-mobile.png')});
   await page.locator('#pick-menu .pick-opt').filter({hasText:'轻度'}).click();
   await page.setViewportSize({width:1280,height:900});
+  await featureLifetimeSmoke(page);
   await chatFooterSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg))});
   await page.locator('.tab[data-tab="files"]').click();
   await at('#/sessions/fixture-space/files','#tab-files');
@@ -670,7 +684,14 @@ export async function smoke(page) {
   assert.equal(upgradeReads,upgradesBeforeUser,'ordinary user fetched upgrade status');
   assert.deepEqual(errors,[]);
   console.log('Browser: model capabilities/editor/account overrides/safe selection migration, update status/cache/permissions, responsive update popover, unified account creation, Codex OAuth retry, Claude/Codex API keys, mobile account form, login, capacity save, repeated init, usage sync, monitor cleanup, socket generation, mobile re-login, URL refresh/history/deep links/permissions passed');
- } finally { await page.unroute('**/api/**'); server.closeAllConnections(); await new Promise(r=>server.close(r)); }
+ } finally {
+  // Focused runs return while an authenticated page still polls/reconnects.
+  // Dispose it first and close all owned sockets, including upgraded streams.
+  await page.close();
+  const closed=new Promise(r=>server.close(r));
+  server.closeAllConnections();for(const socket of fixtureSockets)socket.destroy();
+  await closed;
+ }
 }
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
  const {chromium}=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href : 'playwright');

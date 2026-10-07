@@ -2,7 +2,7 @@
 import { t, messageRef, msg } from './i18n';
 import UiIcon from './UiIcon.vue';
 import { computed, onBeforeUnmount, ref } from 'vue';
-import { errorMessage } from './bridge';
+import { errorNotice } from './bridge';
 import { SyncTask, byteLabel } from './sync-task';
 import { comparisonLabels, recoveryStatusLabel, type OrphanPage, type OrphanReview, type RemoteRecoveryStatus } from './orphan-recovery';
 
@@ -36,7 +36,7 @@ async function load(cursor: string, reset = false) {
       if (reset) cursors.value = [''];
       else if (cursor !== cursors.value[cursors.value.length - 1]) cursors.value.push(cursor);
     }
-  } catch (error) { if (alive) { page.value = null; message.value = errorMessage(error); } }
+  } catch (error) { if (alive) { page.value = null; message.value = errorNotice(error); } }
   finally { if (alive) busy.value = false; }
 }
 async function previous() {
@@ -49,7 +49,7 @@ async function inspect(status: RemoteRecoveryStatus) {
   try {
     const result = await task.run<{orphan_review: OrphanReview}>('sync_orphan_review', {operation: operation(status)});
     if (alive) review.value = result.orphan_review;
-  } catch (error) { if (alive) message.value = errorMessage(error); }
+  } catch (error) { if (alive) message.value = errorNotice(error); }
   finally { if (alive) busy.value = false; }
 }
 async function exportBefore() {
@@ -58,7 +58,7 @@ async function exportBefore() {
   try {
     const result = await task.run<{filename: string}|null>('sync_orphan_export', {operation: operation(shown.status)});
     if (alive && result) message.value = msg("原内容已导出为 {p1}", { p1: (result.filename) });
-  } catch (error) { if (alive) message.value = errorMessage(error); }
+  } catch (error) { if (alive) message.value = errorNotice(error); }
   finally { if (alive) busy.value = false; }
 }
 async function retire() {
@@ -78,11 +78,11 @@ async function retire() {
       message.value = msg("服务器原内容已清理，执行收据保留。当前文件和同步基线没有改变。");
     }
   } catch (error) {
-    if (alive) message.value = msg("{p1}。清理可能已部分完成，请重新核对该记录后续做。", { p1: (errorMessage(error)) });
+    if (alive) message.value = msg("{p1}。清理可能已部分完成，请重新核对该记录后续做。", { p1: (errorNotice(error)) });
   } finally { if (alive) busy.value = false; }
 }
 async function cancel() {
-  try { await task.cancel(); } catch (error) { if (alive) message.value = errorMessage(error); }
+  try { await task.cancel(); } catch (error) { if (alive) message.value = errorNotice(error); }
 }
 </script>
 

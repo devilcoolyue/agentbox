@@ -3,10 +3,10 @@ name: Desktop development packages
 on:
   workflow_dispatch:
   pull_request:
-    paths: ['desktop/**', 'cmd/abox-sync/**', 'internal/syncclient/**', 'internal/syncfs/**', 'internal/syncproto/**', 'internal/server/client_*.go', 'internal/clientidentity/**', 'go.mod', 'go.sum', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'contracts/**', 'web/src/contracts/**', 'web/src/problems.ts', 'web/src/i18n/**', 'internal/server/testdata/problems-v1.json', 'cmd/abox-sync/**', 'internal/syncclient/**', 'internal/syncfs/**', 'internal/syncproto/**', 'internal/server/client_*.go', 'internal/clientidentity/**', 'go.mod', 'go.sum', '.github/workflows/desktop.yml']
   push:
     branches: [main, 'codex/desktop-validation-*']
-    paths: ['desktop/**', 'cmd/abox-sync/**', 'internal/syncclient/**', 'internal/syncfs/**', 'internal/syncproto/**', 'internal/server/client_*.go', 'internal/clientidentity/**', 'go.mod', 'go.sum', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'contracts/**', 'web/src/contracts/**', 'web/src/problems.ts', 'web/src/i18n/**', 'internal/server/testdata/problems-v1.json', 'cmd/abox-sync/**', 'internal/syncclient/**', 'internal/syncfs/**', 'internal/syncproto/**', 'internal/server/client_*.go', 'internal/clientidentity/**', 'go.mod', 'go.sum', '.github/workflows/desktop.yml']
 
 permissions:
   contents: read

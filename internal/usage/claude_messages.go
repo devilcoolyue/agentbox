@@ -293,8 +293,10 @@ func (s *Service) flushClaudeMessages(t *Tally, wall time.Duration) int {
 	n, err := s.store.InsertUsageMessages(evs...)
 	if err != nil {
 		log.Printf("record Claude messages %s: %v", c.base.SessionID, err)
+		t.settlementErr = err
 		return 0
 	}
 	c.done = true
+	t.settlementErr = nil
 	return n
 }

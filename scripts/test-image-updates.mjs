@@ -5,6 +5,7 @@ export async function imageUpdateSmoke(page) {
  const settings = await page.evaluate(async () => (await import('/_v/{{BUILD}}/js/api.js')).api('/settings'));
  let saves = 0, checks = 0, updates = 0, rollbacks = 0, reads = 0;
  let fail = false;
+ const passed={version:1,image_id:'verified-id',checks:['claude_turn','claude_resume','claude_interrupt','claude_mcp','claude_usage','codex_handshake','codex_turn','codex_resume','codex_interrupt','codex_exec','codex_usage'].map(name=>({name,passed:true}))};
  let view = {settings:{enabled:false,channel:'stable',time:'04:00',update_codex:false},agent_image:settings.agent_image,previous_image:'',timezone:'Asia/Shanghai',status:{running:false,phase:'',action:'',error:'',log:'',current:{claude:'',codex:''},target:{claude:'',codex:''}}};
  const handler = async route => {
   const req = route.request(), path = new URL(req.url()).pathname;
@@ -16,15 +17,15 @@ export async function imageUpdateSmoke(page) {
    if (path.endsWith('/check')) {
     checks++; view.status = {...view.status,phase:'done',available:true,current:{claude:'2.1.280',codex:'0.156.1'},target:{claude:'2.1.285',codex:'0.156.1'},log:'<script>untrusted npm output</script>'};
    } else if (path.endsWith('/update')) {
-    updates++;view.status = {...view.status,running:true,phase:'building',action:'update',error:''};
+    updates++;view.status = {...view.status,running:true,phase:'validating',action:'update',error:'',validation:undefined};
    } else if (path.endsWith('/rollback')) {
     rollbacks++;view.agent_image='old-id';view.settings.enabled=false;view.status={...view.status,running:false,phase:'done',action:'rollback',error:''};
    }
   } else {
    reads++;
    if (view.status.running) {
-    if (fail) view.status={...view.status,running:false,phase:'failed',error:'构建失败，保留当前镜像'};
-    else {view.agent_image='agentbox-agent:cli-test';view.previous_image='old-id';view.status={...view.status,running:false,phase:'done',available:false};}
+    if (fail) view.status={...view.status,running:false,phase:'failed',error:'行为验证失败，保留当前镜像',validation:{...passed,failure:'usage_contract_failed'}};
+    else {view.agent_image='agentbox-agent:cli-test';view.previous_image='old-id';view.status={...view.status,running:false,phase:'done',available:false,validation:passed};}
    }
   }
   await route.fulfill({json:view});
@@ -46,17 +47,23 @@ export async function imageUpdateSmoke(page) {
   await page.locator('#image-update-time').fill('05:30');
   await page.locator('#image-update-time').blur();
   assert.equal(await page.locator('#image-update-check').isDisabled(),true,'unsaved policy used for check');
-  assert.match(await page.locator('#set-savebar-text').innerText(),/客户端自动更新/);
+  assert.match(await page.locator('#set-savebar-text').innerText(),/Agent 镜像自动更新/);
   await page.locator('#set-save').click();
   await page.waitForFunction(()=>!document.querySelector('#image-update-check').disabled);
   assert.equal(saves,1);assert.equal(view.settings.channel,'latest');assert.equal(view.settings.time,'05:30');
   await page.locator('#image-update-check').click();
   await page.locator('#image-update-status').filter({hasText:'有可用更新'}).waitFor();
   assert.equal(checks,1);assert.equal(updates,0);
+  assert.match(await page.locator('#image-update-validation').innerText(),/尚未完成行为验证/);
   assert.equal(await page.locator('#image-update-log script').count(),0);
   await page.locator('#image-update-update').click();
   await page.locator('#ask-ok').click();
   await page.waitForFunction(()=>document.querySelector('#image-update-active').textContent.includes('cli-test'));
+  assert.match(await page.locator('#image-update-validation').innerText(),/11 项行为检查通过/);
+  for(const [locale,label] of [['en','passed 11 behavior checks'],['zh-TW','11 項行為檢查通過'],['zh-CN','11 项行为检查通过']]) {
+   await page.evaluate(async locale=>(await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage(locale),locale);
+   assert.ok((await page.locator('#image-update-validation').innerText()).includes(label));
+  }
   assert.equal(updates,1);assert.equal(await page.locator('#image-update-rollback').isDisabled(),false);
   await page.locator('#image-update-rollback').click();
   await page.locator('#ask-ok').click();
@@ -65,8 +72,9 @@ export async function imageUpdateSmoke(page) {
   fail=true;
   await page.locator('#image-update-update').click();
   await page.locator('#ask-ok').click();
-  await page.locator('#image-update-status').filter({hasText:'构建失败'}).waitFor();
+  await page.locator('#image-update-status').filter({hasText:'行为验证失败'}).waitFor();
   assert.equal(view.agent_image,'old-id');
+  assert.match(await page.locator('#image-update-validation').innerText(),/未切换镜像/);
   await mkdir('output/playwright',{recursive:true});
   await page.locator('#image-update-card').scrollIntoViewIfNeeded();
   await page.screenshot({path:'output/playwright/image-updates-desktop.png'});
@@ -79,7 +87,7 @@ export async function imageUpdateSmoke(page) {
   await page.evaluate(()=>location.hash='#/settings/accounts');
   await page.locator('#sec-accounts').waitFor({state:'visible'});
   const before=reads;await page.waitForTimeout(3200);assert.equal(reads,before,'poller kept running after navigation');
-  console.log('Browser: CLI update settings, channel, scheduling, check/update/rollback, failure, text escaping, mobile layout and polling cleanup passed');
+  console.log('Browser: three-language candidate behavior gate, CLI update settings, channel, scheduling, check/update/rollback, failure, text escaping, mobile layout and polling cleanup passed');
  } finally {
   await page.unroute('**/api/image-updates**',handler);await page.unroute('**/api/settings',handler);
  }

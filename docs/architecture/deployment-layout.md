@@ -26,7 +26,7 @@ sudo python3 "$PACKAGE/deploy/release.py" install --package "$PACKAGE"
 sudo python3 "$PACKAGE/deploy/release.py" activate --version v0.1.0
 ```
 
-版本参数以实际包为准。`install` 校验配置、暂存完整发布目录、拒绝覆盖已有版本、安装并 enable 单元；`activate` 才启动服务。日志写 journald。路径参数 `--app`、`--config`、`--unit-dir` 放在子命令前；部署路径不接受空白、引号、反斜杠和 `%`。`agentbox check-config --config PATH` 只读校验配置并报告当前程序支持的 schema/兼容代号，不连接 Docker 或迁移数据库。
+版本参数以实际包为准。`install` 校验配置、暂存完整发布目录、拒绝覆盖已有版本、安装并 enable 单元；`activate` 才启动服务。日志写 journald。路径参数 `--app`、`--config`、`--unit-dir` 放在子命令前；部署路径不接受空白、引号、反斜杠和 `%`。`agentbox check-config --config PATH` 只读校验配置并报告当前程序支持的 schema/兼容代号，不连接 Docker 或迁移数据库。主动环境诊断需显式增加 `--environment`，不会自动加入发布检查，详见[分层诊断](../diagnostics.md)。
 
 新安装不启用自动追新，也不自动下载镜像。定时备份可复用包内 `scripts/backup.sh`，显式配置 `AGENTBOX_BIN=/opt/agentbox/current/agentbox`、`AGENTBOX_CONFIG=/etc/agentbox/config.json`、`BACKUP_DIR`，按维护者自己的 cron/systemd timer 执行。动态客户端下载仍读取 `data_dir/abox-link/`；开发机可用 `AGENTBOX_CLIENT_OUTPUT=/指定输出目录 scripts/build-clients.sh` 构建，再放到服务器对应目录。
 
@@ -83,13 +83,13 @@ sudo python3 "$PACKAGE/deploy/release.py" migrate \
 
 响应新增 `sync.last_scan_at`、`last_success_at`（毫秒，0 表示尚未完成）、`scanning`、`errors`。时间对应全量扫描，不代表 provider 已写完 transcript；inotify 的单会话更新可能更新。失败文件会重试，终端始终只记账、不扣额度。
 
-管理员可从容量页下载 `GET /api/diagnostics`：白名单字段仅包含版本、构建信息、平台、schema、启动时间、会话数量、容量设置、磁盘水位与同步进度。不包含配置内容、路径、用户身份、账号、环境变量、日志、原始 Docker inspect 或对话。`GET /api/system` 继续为管理员提供本机详情，并新增运行版本信息。
+管理员可从容量页下载 `GET /api/diagnostics`：白名单字段包含版本、构建信息、平台、schema、启动时间、会话数量、容量设置、磁盘水位与同步进度，并新增只读 `environment` 分层检查。主动写入/属主探测从「环境检查」入口运行；只读导出将这两项标为未检查。不包含配置内容、路径、用户身份、账号、环境变量、日志、原始 Docker inspect 或对话。`GET /api/system` 继续为管理员提供本机详情，并新增运行版本信息。
 
 ## 前端模块与兼容
 
 - `web/src/app/lifecycle.ts` 管理 chat/settings 的初始化、登录失效和页面退出清理。
 - `features/chat/connection.ts` 私有持有 WS、重连计时器和代际；旧连接事件不再写到新会话。
-- `features/settings/{state,operations}.ts` 管理设置状态与监控/关于页面；`shared/poller.ts` 提供串行、可取消轮询。
+- `features/chat/{history,sender,stream}.ts` 分别拥有历史请求、冻结发送和渲染帧；`features/settings/{controller,requests,maintenance,state,operations}.ts` 管理登录期控制器、串行设置写入、维护动作及监控/关于页面；`shared/poller.ts` 提供串行、可取消轮询。
 - 全局 S 不再持有聊天 socket、重连代际、设置缓存和列表轮询定时器。其他功能保留兼容入口，后续按需继续提取，不进行框架重写。
 - 嵌套 ES Modules 仍通过 `/_v/<hash>/` 相对导入；TS 与 JS 一起提交。
 
@@ -101,7 +101,7 @@ sudo python3 "$PACKAGE/deploy/release.py" migrate \
 
 `node scripts/test-browser.mjs` 使用合成 API 测试登录、保存容量、重复初始化、监控清理、用量同步显示、WS 代际与窄屏重新登录。需安装固定 `playwright@1.58.2` 及 Chromium；可通过 `AGENTBOX_PLAYWRIGHT_MODULE` 指向临时安装的 index.mjs，`AGENTBOX_BROWSER_CHANNEL=chrome` 使用本机 Chrome。CI 同样执行该脚本。
 
-另有真实 Docker 会话冒烟（容量拒绝、挂载、文件/Git、后台终端用量、SIGTERM 重启）及 Linux 文件系统回归。未执行生产迁移、真实 systemd 服务切换或远端 CI；这些在对应环境的发布窗口验收。
+另有真实 Docker 会话冒烟（容量拒绝、挂载、文件/Git、后台终端用量、SIGTERM 重启）及 Linux 文件系统回归。2026-10-05 新增 [真实 systemd 恢复夹具](../../scripts/fixtures/recovery-drill/README.md)，已验证独立容器内 schema 9→12 升级、重启、系统/完整备份恢复和降级拒绝，并记录文件/账本核验与规模/计时。该批未操作生产、未触发远端 CI；管理员恢复目标及生产规模仍独立验收。
 
 ### 空间紧张时的迁移
 

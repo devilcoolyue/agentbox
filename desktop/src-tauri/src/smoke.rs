@@ -181,6 +181,8 @@ pub(crate) fn smoke_stage(
         "config",
         "window_visible",
         "login_form",
+        "login_languages",
+        "terminal_languages",
         "application_zoom",
         "login_submitted",
         "workspace",
@@ -420,6 +422,11 @@ pub fn plugin() -> TauriPlugin<Wry> {
                     if length > 8192 { return; }
                     let mut body = vec![0; length]; if stream.read_exact(&mut body).await.is_err() { return; }
                     let route = header.lines().next().unwrap_or("");
+                    if route.starts_with("POST /api/login ") && serde_json::from_slice::<serde_json::Value>(&body).ok().is_some_and(|v|v["password"]=="synthetic-denied") {
+                        let problem=r#"{"code":"invalid_credentials","retryable":false,"error":"synthetic-private-detail"}"#;
+                        let response=format!("HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nX-Agentbox-Operation-ID: 0123456789abcdef0123456789abcdef\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{problem}",problem.len());
+                        let _=stream.write_all(response.as_bytes()).await;return;
+                    }
                     let (kind, body) = if route.starts_with("POST /api/login ") { ("application/json", r#"{"token":"synthetic-smoke"}"#.to_owned()) }
                     else if !header.to_lowercase().contains("authorization: bearer synthetic-smoke\r\n") { return; }
                     else if route.starts_with("GET /api/me ") { ("application/json", r#"{"user":"smoke","role":"user"}"#.to_owned()) }

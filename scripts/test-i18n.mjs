@@ -65,6 +65,11 @@ for (const [name, en, tw] of [['web static',enStatic,twStatic], ['web dynamic',e
 test('all marked static web text and attributes have translations', async () => {
   const html = await readFile(new URL('../internal/web/static/index.html', import.meta.url),'utf8');
   const decode = value => value.replaceAll('&quot;','"').replaceAll('&#x27;',"'").replaceAll('&lt;','<').replaceAll('&gt;','>').replaceAll('&amp;','&');
+  for (const match of html.matchAll(/data-i18n="([^"]*)"/g)) {
+    const key=decode(match[1]);
+    assert.ok(Object.hasOwn(enStatic,key)||Object.hasOwn(enDynamic,key), `Missing English: ${key}`);
+    assert.ok(Object.hasOwn(twStatic,key)||Object.hasOwn(twDynamic,key), `Missing Traditional: ${key}`);
+  }
   for (const match of html.matchAll(/data-i18n-(text|attrs)="([^"]*)"/g)) {
     const data = JSON.parse(decode(match[2]));
     for (const key of (Array.isArray(data) ? data : Object.values(data))) {

@@ -39,11 +39,21 @@ function render(v) {
     if (!isDirty())
         fillImageUpdateSettings(v.settings);
     const st = v.status;
-    const labels = { get checking() { return i18nText("正在检查"); }, get building() { return i18nText("正在构建并验证镜像"); }, get failed() { return i18nText("任务失败"); }, get done() { return i18nText("任务完成"); } };
-    setTextRender($("image-update-status"), () => (labels[st.phase] || i18nText("尚未检查客户端版本")) + (st.available ? i18nText(" · 有可用更新") : "") + (st.finished_at ? " · " + fmtTime(st.finished_at) : "") + (st.error ? "：" + st.error : ""));
-    setTextRender($("image-update-versions"), () => st.current.claude ? i18nText("上次检查：Claude {p0} / Codex {p1}", { p0: String(st.current.claude), p1: String(st.current.codex) }) + (st.target.claude ? i18nText(" → 目标 Claude {p0} / Codex {p1}", { p0: String(st.target.claude), p1: String(st.target.codex) }) : "") : i18nText("点击“立即检查”读取镜像版本和所选渠道的最新版本。"));
+    const labels = { get checking() { return i18nText("正在检查"); }, get building() { return i18nText("正在构建并验证镜像"); }, get validating() { return i18nText("正在验证 CLI 行为"); }, get failed() { return i18nText("任务失败"); }, get done() { return i18nText("任务完成"); } };
+    setTextRender($("image-update-status"), () => (labels[st.phase] || i18nText("尚未检查镜像内 CLI 版本")) + (st.available ? i18nText(" · 有可用更新") : "") + (st.finished_at ? " · " + fmtTime(st.finished_at) : "") + (st.error ? "：" + st.error : ""));
+    setTextRender($("image-update-versions"), () => st.current.claude ? i18nText("任务开始时：Claude {p0} / Codex {p1}", { p0: String(st.current.claude), p1: String(st.current.codex) }) + (st.target.claude ? i18nText(" → 目标 Claude {p0} / Codex {p1}", { p0: String(st.target.claude), p1: String(st.target.codex) }) : "") : i18nText("点击“立即检查”读取镜像版本和所选渠道的最新版本。"));
     setTextRender($("image-update-active"), () => i18nText("当前镜像：") + v.agent_image);
     setTextRender($("image-update-schedule"), () => i18nText("系统时区 {p0} · {p1}。stable 可能落后于 latest；不会自动降级。", { p0: String(v.timezone), p1: String(v.settings.enabled ? i18nText("每天 {p0} 自动检查并应用，当天错过后补跑", { p0: String(v.settings.time) }) : i18nText("自动更新已关闭")) }));
+    setTextRender($("image-update-validation"), () => {
+        const report = st.validation;
+        if (!report)
+            return i18nText("候选镜像尚未完成行为验证；版本检查不代表协议兼容。");
+        if (report.version !== 1)
+            return i18nText("无法识别候选镜像验证结果，请升级服务端后重新检查。");
+        if (report.failure || !report.checks?.length || report.checks.some(check => !check.passed))
+            return i18nText("候选镜像行为验证未通过，未切换镜像。请查看任务日志。");
+        return i18nText("候选镜像的 {p0} 项行为检查通过（合成上游）。这不代表真实账号或模型可用。", { p0: String(report.checks.length) });
+    });
     setTextRender($("image-update-log"), () => st.log || i18nText("暂无日志"));
     buttons();
 }
@@ -85,7 +95,7 @@ export function initImageUpdates(signal) {
             pending = true;
             buttons();
             try {
-                if (action !== "check" && !await askConfirm(() => action === "rollback" ? i18nText("回退到上次镜像并暂停自动更新？") : i18nText("按已保存的渠道检查、构建并应用客户端更新？"), { get title() { return i18nText("客户端更新"); }, get hint() { return i18nText("运行中的空间保持不变，停止再启动后使用切换后的镜像。"); }, get okLabel() { return action === "rollback" ? i18nText("回退") : i18nText("更新"); } }))
+                if (action !== "check" && !await askConfirm(() => action === "rollback" ? i18nText("回退到上次镜像并暂停自动更新？") : i18nText("按已保存的渠道检查、构建并应用 Agent 镜像更新？"), { get title() { return i18nText("Agent 镜像更新"); }, get hint() { return i18nText("运行中的空间保持不变，停止再启动后使用切换后的镜像。"); }, get okLabel() { return action === "rollback" ? i18nText("回退") : i18nText("更新"); } }))
                     return;
                 if (signal.aborted)
                     return;

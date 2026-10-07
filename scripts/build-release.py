@@ -43,6 +43,17 @@ flags = f'-s -w -X agentbox/internal/buildinfo.Version={a.version} -X agentbox/i
 def copy_tracked_tree(name, destination, required=()):
     # Never package ignored files, credentials or a developer's extra files.
     files = subprocess.check_output(['git', 'ls-files', '-z', name]).decode().split('\0')
+    if name == 'third_party':
+        # Local dirty candidates may introduce a dependency before its license
+        # is tracked. Include only explicitly inventoried, verified notices.
+        for manifest in ['vendor.json', 'go-modules.json']:
+            for item in json.loads((ROOT / name / manifest).read_text()):
+                for entry in [f['path'] for f in item['files']] + item.get('license_files', []):
+                    path = Path(entry)
+                    if path.is_absolute() or '..' in path.parts:
+                        raise SystemExit('Unsafe third-party inventory path: ' + entry)
+                    if path.parts[0] == name:
+                        files.append(entry)
     # Explicit resources are also required in --allow-dirty local candidates,
     # where newly added default configuration may not be tracked yet.
     for entry in sorted(set(files) | set(required)):

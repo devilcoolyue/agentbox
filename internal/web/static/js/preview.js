@@ -7,18 +7,19 @@ import "./responsive.js";
  * 直链由服务端另发一张限权通行证（见 internal/server/preview.go），iframe 再叠一层
  * sandbox —— 原型里的脚本能跑，但拿不到控制台的登录令牌。
  *
- * Markdown 不用 iframe：源码本来就要拉下来编辑，直接用对话流那套轻量渲染
- * （chat-render.formatText）画在弹窗里，画的是编辑器里的当前内容，所以改一行
- * 切过去就能看到，不必先保存。 */
+ * Markdown 使用独立 GFM 解析器和 HTML 白名单清洗，保留 GitHub 文档排版。
+ * 画的是编辑器里的当前内容，所以改一行切过去就能看到，不必先保存。 */
 "use strict";
 import { actionButton } from "./icons.js";
 import { S } from "./state.js";
 import { $, withSpin, fmtSize, askConfirm, startDownload, fmtClock } from "./util.js";
 import { api, fileDownloadURL } from "./api.js";
 import { loadFiles } from "./files.js";
-import { formatText, splitFrontMatter, frontMatterChips } from "./chat-render.js";
+import { splitFrontMatter, frontMatterChips } from "./chat-render.js";
 import { SourceEditor } from "./source-editor.js";
+import { markdownPreview } from "./markdown-preview.js";
 const sourceEditor = new SourceEditor();
+let scrollMDAnchor;
 const FV = {
     path: "",
     scope: "workspace",
@@ -78,6 +79,7 @@ function syncChrome() {
 }
 /* ---------------- 打开 ---------------- */
 export async function openPreview(fullRel, ent, scope = S.fileScope) {
+    scrollMDAnchor = undefined;
     FV.path = fullRel;
     FV.scope = scope;
     FV.name = fullRel.split("/").pop() || fullRel;
@@ -219,42 +221,70 @@ function renderMD() {
     const parts = [];
     if (meta.length)
         parts.push(frontMatterChips(meta));
-    parts.push(formatText(body, { img: resolveMDImg }));
+    const rendered = markdownPreview(body, { image: resolveMDImg, file: resolveMDLink });
+    parts.push(rendered.content);
+    scrollMDAnchor = rendered.scrollTo;
     $("fv-md").replaceChildren(...parts);
     fvShow("md");
     wrap.scrollTop = top;
 }
-/* md 里的图片地址 → 能取到的 URL。相对路径按 md 文件所在目录解析成文件接口
- * 直链（token 走查询串：<img> 发不了 Authorization 头）；http(s)、data:image
- * 原样放行；javascript: 之类的伪协议和够不着的容器绝对路径一律返回空串，
- * 由渲染层退回成原样文字。 */
+/* Local URLs stay inside the selected workspace/shared root. External resources
+ * never receive the console credential. Raw HTML links use the same resolver. */
+function mdTarget(raw) {
+    if (!raw || /^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith("//") || /[\\\x00-\x1f\x7f]/.test(raw))
+        return;
+    const hash = raw.indexOf("#");
+    let path, anchor;
+    try {
+        path = decodeURIComponent((hash < 0 ? raw : raw.slice(0, hash)).split("?")[0]);
+        anchor = hash < 0 ? "" : decodeURIComponent(raw.slice(hash + 1));
+    }
+    catch {
+        return;
+    }
+    if (/[\\\x00-\x1f\x7f]/.test(path))
+        return;
+    let scope = FV.scope, rel;
+    if (path.startsWith("/workspace/")) {
+        scope = "workspace";
+        rel = joinFrom("", path.slice(11));
+    }
+    else if (path.startsWith("/shared/")) {
+        scope = "shared";
+        rel = joinFrom("", path.slice(8));
+    }
+    else if (path.startsWith("/"))
+        return;
+    else
+        rel = joinFrom(FV.path, path);
+    if (!rel)
+        return;
+    return { rel, scope, anchor };
+}
 function resolveMDImg(src) {
     const raw = src.trim();
     if (!raw || !S.current)
         return "";
     if (/^(https?:\/\/|data:image\/)/i.test(raw))
         return raw;
-    if (/^[a-z][a-z0-9+.-]*:/i.test(raw))
+    const target = mdTarget(raw);
+    if (!target)
         return "";
-    let scope = FV.scope;
-    let rel = "";
-    if (raw.startsWith("/workspace/")) {
-        scope = "workspace";
-        rel = raw.slice("/workspace/".length);
-    }
-    else if (raw.startsWith("/shared/")) {
-        scope = "shared";
-        rel = raw.slice("/shared/".length);
-    }
-    else if (raw.startsWith("/"))
-        return ""; // 容器里的其它绝对路径，文件接口够不着
-    else
-        rel = joinFrom(FV.path, raw);
-    if (!rel)
-        return "";
-    const sq = scope === "shared" ? "&scope=shared" : "";
-    return `/api/sessions/${S.current.id}/file?path=${encodeURIComponent(rel)}` +
+    const sq = target.scope === "shared" ? "&scope=shared" : "";
+    return `/api/sessions/${S.current.id}/file?path=${encodeURIComponent(target.rel)}` +
         `&token=${encodeURIComponent(S.token)}${sq}`;
+}
+function resolveMDLink(raw) {
+    const target = mdTarget(raw);
+    if (!target)
+        return;
+    return () => void (async () => {
+        if (FV.dirty && !await askConfirm(() => i18nText("有未保存的修改，确定关闭？")))
+            return;
+        await openPreview(target.rel, undefined, target.scope);
+        if (FV.path === target.rel && FV.scope === target.scope && target.anchor)
+            scrollMDAnchor?.(target.anchor);
+    })();
 }
 /* 相对 base 文件所在目录解析 src，顺手把 . / .. 折掉；爬出根目录返回空串 */
 function joinFrom(base, src) {
@@ -493,6 +523,7 @@ async function closePreview() {
     $("fv-editor").value = "";
     sourceEditor.load("");
     $("fv-md").replaceChildren();
+    scrollMDAnchor = undefined;
     $("fv-frame").src = "about:blank"; // 别让原型在后台继续跑
     $("dlg-file").classList.remove("fv-max");
     actionButton($("fv-full"), () => i18nText("全屏"), "expand", () => i18nText("全屏预览"));

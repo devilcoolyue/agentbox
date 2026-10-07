@@ -2,11 +2,19 @@
 import { t, messageRef, msg } from './i18n';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { version as bundledVersion } from '../package.json';
-import { bridge, errorMessage } from './bridge';
+import { bridge, errorNotice, type Connection } from './bridge';
 import UiIcon from './UiIcon.vue';
 
 interface UpdateInfo { configured: boolean; current: string; version: string|null; notes: string|null }
 const emit = defineEmits<{(event: 'busy', value: boolean): void}>();
+const props=defineProps<{connection:Connection|null}>();
+const connectionStatus=computed(()=>{
+  if(!props.connection)return t('尚未连接服务器，连接兼容性未检查。');
+  const caps=props.connection.capabilities;
+  if(!caps)return t('当前为基础连接模式；服务端未提供扩展能力。');
+  if(caps.protocol_version!==1)return t('未知桌面协议，请核对客户端与服务端版本。');
+  return t('当前连接：协议 {protocol} · {mode} · {sync}',{protocol:caps.protocol_version,mode:t(caps.features.project_terminals===1?'项目连接模式':'基础连接模式'),sync:t(caps.features.sync===1?'目录同步已启用':'目录同步未启用')});
+});
 const info = ref<UpdateInfo|null>(null);
 const busy = ref(false);
 const installing = ref(false);
@@ -44,7 +52,7 @@ async function check() {
     if (!result.configured) message.value = msg("开发预览版请使用新的安装包更新。");
     else if (!result.version) message.value = msg("当前已是最新版本。");
   } catch (error) {
-    if (alive) { message.value = errorMessage(error); failed.value = true; }
+    if (alive) { message.value = errorNotice(error); failed.value = true; }
   } finally { if (alive) busy.value = false; }
 }
 async function install() {
@@ -62,7 +70,7 @@ async function install() {
     }
   } catch (error) {
     if (alive) {
-      message.value = errorMessage(error); failed.value = true; confirm.value = false;
+      message.value = errorNotice(error); failed.value = true; confirm.value = false;
       // The native candidate is consumed for an installation attempt; the next
       // action must check the feed again rather than reuse a failed candidate.
       if (info.value) info.value.version = null;
@@ -80,9 +88,12 @@ onBeforeUnmount(() => { alive = false; });
 <template>
   <section class="desktop-update" :aria-label="t('版本与更新')">
     <div class="update-row">
-      <div class="update-version"><h3>{{ t("当前版本") }}</h3><span>v{{ currentVersion }}</span><small v-if="info && !info.configured">{{ t("开发预览版") }}</small></div>
+      <div class="update-version"><h3>{{ t("桌面应用版本") }}</h3><span>v{{ currentVersion }}</span><small v-if="info && !info.configured">{{ t("开发预览版") }}</small></div>
       <button :disabled="busy" @click="check"><UiIcon name="refresh" :size="15" :class="{'is-checking': busy && !installing}" />{{ busy && !installing ? t("正在检查…") : t("检查桌面更新") }}</button>
     </div>
+    <p class="update-scope">{{ t('此处只更新本机桌面应用并重启应用；服务端和 Agent 镜像由管理员单独更新，空间无需重启。') }}</p>
+    <p class="update-scope" data-testid="update-connection-state">{{ connectionStatus }}</p>
+    <p class="update-scope">{{ t('连接能力来自本次登录；更新候选与当前服务器的组合仍需按发行说明核对。') }}</p>
     <label class="update-row update-auto"><span><strong>{{ t("启动时检查更新") }}</strong><small>{{ t("打开客户端时检查可用版本。") }}</small></span><input v-model="automatic" type="checkbox" :disabled="busy" @change="preference"></label>
     <div v-if="info?.configured && info.version" class="update-available"><div><UiIcon name="download" :size="16" /><strong>{{ t("发现新版本 v{p1}", { p1: (info.version) }) }}</strong></div><button v-if="!confirm" ref="installButton" class="primary" :disabled="busy" @click="showConfirmation">{{ t("安装此桌面更新…") }}</button></div>
     <details v-if="info?.notes" class="update-notes"><summary>{{ t("更新说明") }}<UiIcon name="chevron" :size="13" /></summary><pre>{{ info.notes }}</pre></details>
@@ -98,6 +109,7 @@ onBeforeUnmount(() => { alive = false; });
 
 <style scoped>
 .desktop-update{padding:0;font-size:12px;color:var(--text)}
+.update-scope{margin:10px 0;color:var(--muted);line-height:1.7;overflow-wrap:anywhere}
 .update-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 0;border-bottom:1px solid var(--line-soft)}
 .update-version{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}.update-version h3{margin:0;font-size:13px;font-weight:500}.update-version>span{font:12px var(--mono);color:var(--muted)}.update-version small{font-size:11px;color:var(--muted)}
 .desktop-update button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:33px;padding:5px 10px;font-size:12px;flex:none}

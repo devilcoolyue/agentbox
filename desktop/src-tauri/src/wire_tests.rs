@@ -22,6 +22,61 @@ use tokio_tungstenite::{
 };
 
 #[tokio::test]
+async fn structured_login_error_preserves_safe_identifiers_and_session_stop_reason() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base =
+        normalize_server(&format!("http://{}", listener.local_addr().unwrap()), false).unwrap();
+    let server = tokio::spawn(async move {
+        for (status, body) in [
+            (
+                "401 Unauthorized",
+                r#"{"code":"invalid_credentials","operation_id":"0123456789abcdef0123456789abcdef","retryable":false,"error":"secret body","hint":"private path"}"#,
+            ),
+            (
+                "200 OK",
+                r#"[{"id":"s1","name":"fixture","agent":"claude","status":"stopped","stop_reason":"idle"}]"#,
+            ),
+        ] {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut headers = vec![];
+            while !headers.ends_with(b"\r\n\r\n") {
+                headers.push(stream.read_u8().await.unwrap());
+                assert!(headers.len() < 8192);
+            }
+            let headers = String::from_utf8(headers).unwrap();
+            let length: usize = headers
+                .lines()
+                .find_map(|line| {
+                    line.to_lowercase()
+                        .strip_prefix("content-length: ")
+                        .map(str::to_owned)
+                })
+                .unwrap_or("0".into())
+                .parse()
+                .unwrap();
+            let mut request_body = vec![0; length];
+            stream.read_exact(&mut request_body).await.unwrap();
+            stream.write_all(format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+        }
+    });
+    let error = Remote::login(base.clone(), "fixture", "synthetic")
+        .await
+        .err()
+        .unwrap();
+    let json = serde_json::to_string(&error).unwrap();
+    assert_eq!(error.code.as_deref(), Some("invalid_credentials"));
+    assert_eq!(
+        error.operation_id.as_deref(),
+        Some("0123456789abcdef0123456789abcdef")
+    );
+    assert_eq!(error.retryable, Some(false));
+    assert!(!json.contains("secret") && !json.contains("private"));
+    let remote = Remote::new(base, "synthetic".into()).unwrap();
+    assert_eq!(remote.sessions().await.unwrap()[0].stop_reason, "idle");
+    server.await.unwrap();
+}
+
+#[tokio::test]
 async fn legacy_login_identity_capabilities_sessions_and_logout() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = normalize_server(
@@ -445,4 +500,150 @@ async fn directory_upload_uses_exact_scope_and_never_clears_directory() {
     assert_eq!(result.mode, "file");
     assert_eq!(result.files, 1);
     server.await.unwrap();
+}
+
+// All request bodies and tokens in these fixtures are synthetic. One accepted
+// connection per operation also verifies that error handling never retries it.
+async fn error_peer(
+    body: Vec<u8>,
+    content_type: &str,
+    framing: &str,
+) -> (Remote, tokio::task::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base =
+        normalize_server(&format!("http://{}", listener.local_addr().unwrap()), false).unwrap();
+    let content_type = content_type.to_owned();
+    let framing = framing.to_owned();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut header = vec![];
+        while !header.ends_with(b"\r\n\r\n") {
+            header.push(stream.read_u8().await.unwrap());
+            assert!(header.len() < 16384);
+        }
+        let header = String::from_utf8(header).unwrap().to_lowercase();
+        assert!(!header.contains("?token="));
+        let length: usize = header
+            .lines()
+            .find_map(|l| l.strip_prefix("content-length: "))
+            .unwrap_or("0")
+            .parse()
+            .unwrap();
+        let mut incoming = vec![0; length];
+        stream.read_exact(&mut incoming).await.unwrap();
+        let framing_header = if framing == "chunked" {
+            "Transfer-Encoding: chunked".to_owned()
+        } else {
+            format!(
+                "Content-Length: {}",
+                if framing == "truncated" || framing == "stalled" {
+                    body.len() + 100
+                } else {
+                    body.len()
+                }
+            )
+        };
+        let response=format!("HTTP/1.1 403 Forbidden\r\nContent-Type: {content_type}\r\nX-Agentbox-Operation-ID: 0123456789abcdef0123456789abcdef\r\n{framing_header}\r\nConnection: close\r\n\r\n");
+        stream.write_all(response.as_bytes()).await.unwrap();
+        if framing == "stalled" {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            return;
+        }
+        if framing == "chunked" {
+            let _ = stream
+                .write_all(format!("{:x}\r\n", body.len()).as_bytes())
+                .await;
+            let _ = stream.write_all(&body).await;
+            let _ = stream.write_all(b"\r\n0\r\n\r\n").await;
+        } else {
+            let _ = stream.write_all(&body).await;
+        }
+    });
+    (
+        Remote::new(base, "synthetic-error-token".into()).unwrap(),
+        server,
+    )
+}
+
+#[tokio::test]
+async fn structured_errors_cover_upload_download_api_and_terminal_handshake() {
+    let body=br#"{"code":"quota_exhausted","operation_id":"invalid","retryable":false,"error":"secret prompt /private/path","hint":"secret token"}"#.to_vec();
+    for operation in ["upload", "download", "api", "terminal"] {
+        let (remote, server) = error_peer(body.clone(), "application/json", "fixed").await;
+        let error = match operation {
+            "upload" => remote
+                .upload_attachment("s1", "fixture.txt", "text/plain", b"synthetic".to_vec())
+                .await
+                .err()
+                .unwrap(),
+            "download" => remote
+                .download_bytes("api/sessions/s1/file", |_, _| {
+                    panic!("error must not report downloaded bytes")
+                })
+                .await
+                .err()
+                .unwrap(),
+            "api" => remote.sessions().await.err().unwrap(),
+            _ => Terminal::open(Arc::new(remote), "s1", None, Channel::new(|_| Ok(())))
+                .await
+                .err()
+                .unwrap(),
+        };
+        assert_eq!(error.kind, "forbidden", "{operation}");
+        assert_eq!(
+            error.code.as_deref(),
+            Some("quota_exhausted"),
+            "{operation}"
+        );
+        assert_eq!(
+            error.operation_id.as_deref(),
+            Some("0123456789abcdef0123456789abcdef"),
+            "{operation}"
+        );
+        assert_eq!(error.retryable, Some(false));
+        let rendered = serde_json::to_string(&error).unwrap();
+        assert!(!rendered.contains("secret") && !rendered.contains("/private/"));
+        server.await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn error_body_bounds_and_deadlines_keep_status_and_safe_reference() {
+    for (body, kind, framing) in [
+        (
+            b"<html>private proxy details</html>".to_vec(),
+            "text/html",
+            "fixed",
+        ),
+        (vec![b'x'; 20000], "application/json", "fixed"),
+        (vec![b'x'; 20000], "application/json", "chunked"),
+        (
+            br#"{"code":"quota_exhausted"}"#.to_vec(),
+            "application/json",
+            "truncated",
+        ),
+        (vec![], "application/json", "stalled"),
+    ] {
+        let (remote, server) = error_peer(body, kind, framing).await;
+        let error = timeout(
+            Duration::from_secs(5),
+            remote.download_bytes("api/sessions/s1/file", |_, _| {}),
+        )
+        .await
+        .expect("error metadata hung the download")
+        .err()
+        .unwrap();
+        assert_eq!(error.kind, "forbidden");
+        assert!(error.code.is_none());
+        assert_eq!(
+            error.operation_id.as_deref(),
+            Some("0123456789abcdef0123456789abcdef")
+        );
+        assert!(!error.message.contains("private"));
+        if framing == "stalled" {
+            server.abort();
+        } else {
+            server.await.unwrap();
+        }
+    }
 }

@@ -1,3 +1,18 @@
+.chat-drafts { color:var(--muted); font-size:11px; }
+.chat-drafts summary { cursor:pointer; padding:0; list-style:none; }
+.chat-drafts summary::-webkit-details-marker { display:none; }
+.chat-drafts summary:hover { background:var(--panel-2); color:var(--text); }
+.chat-drafts[open] summary { color:var(--accent); }
+.chat-draft-panel { position:absolute; bottom:calc(100% + 8px); left:0; width:min(360px,calc(100vw - 40px)); box-sizing:border-box; padding:16px; max-height:50dvh; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 30px rgb(0 0 0 / .14); z-index:20; }
+#chat-draft-status { margin:2px 8px 6px; color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
+.chat-drafts label { display:flex; align-items:center; gap:6px; margin:10px 0; }
+.chat-drafts p { margin:8px 0; line-height:1.6; }
+.chat-draft-panel > div { display:flex; flex-wrap:wrap; gap:8px; }
+.attach-remove { border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:10px; padding:3px; }
+.attach-thumb .attach-remove { position:absolute; right:0; top:0; background:var(--panel); max-width:70px; }
+.attachment-invalid { border-color:var(--red); gap:8px; flex-wrap:wrap; }
+.attachment-invalid > span { overflow-wrap:anywhere; }
+
 /* chat：对话页（OpenWebUI 式对话流 × 机房控制台色板）。
  * 结构：用户消息=右侧圆角气泡；agent 回合=左侧品牌头像 + 内容列（.turn，
  * 由 chat.js 分组）；工具调用/状态为无框细行，不打断阅读流。 */
@@ -399,7 +414,8 @@ details.think.streaming .think-body::after {
   background: var(--panel-2);
   font-size: 12.5px; color: var(--muted);
 }
-.chat-conn .btn { margin-left: auto; }
+.chat-conn .btn { margin-left: auto; flex-shrink: 0; }
+#chat-conn-text { min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 760px) {
   .chat-conn { margin: 6px 8px 0; }
@@ -617,6 +633,7 @@ details.think.streaming .think-body::after {
   outline: 2px solid var(--amber); outline-offset: 2px;
 }
 .composer {
+  position:relative;
   display: flex; flex-direction: column; gap: 2px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -841,3 +858,32 @@ details.think.streaming .think-body::after {
   .send-btn, .composer, .hero-pill, .cb-caret, .chat-scroll-bottom { transition: none; }
   .thread-panel, .tp-scrim { transition: none; }
 }
+/* Receipt details stay behind one status row; long histories scroll independently. */
+.chat-delivery { margin:0 2px 6px; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+.delivery-header { display:flex; align-items:center; gap:4px; min-width:0; }
+.delivery-toggle { display:flex; align-items:center; gap:8px; flex:1; min-width:0; min-height:32px; padding:4px 6px; border:0; border-radius:6px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.delivery-toggle:hover { background:var(--panel-2); color:var(--text); }
+.delivery-toggle:disabled { cursor:default; }
+.delivery-dot { width:5px; height:5px; border-radius:50%; background:currentColor; flex:none; }
+#chat-delivery-status { min-width:0; line-height:1.5; }
+#chat-delivery-count { flex:none; font-size:11px; color:var(--muted); margin-left:auto; white-space:nowrap; }
+.delivery-chevron { flex:none; transition:transform .15s ease; }
+.delivery-toggle[aria-expanded="true"] .delivery-chevron { transform:rotate(180deg); }
+.delivery-toggle:disabled .delivery-chevron { visibility:hidden; }
+.delivery-header .icon-btn { width:30px; height:30px; }
+.delivery-warning .delivery-dot { color:var(--amber); }
+.delivery-warning #chat-delivery-status { color:var(--text); }
+#chat-delivery-list { max-height:min(240px,28dvh); overflow:auto; overscroll-behavior:contain; margin:2px 6px 6px; border-top:1px solid var(--line); }
+.delivery-item + .delivery-item { border-top:1px solid var(--line); }
+.delivery-item summary { display:flex; align-items:center; gap:8px; min-height:32px; cursor:pointer; list-style:none; color:var(--text); }
+.delivery-item summary::-webkit-details-marker { display:none; }
+.delivery-item summary::before { content:""; width:5px; height:5px; border-right:1px solid currentColor; border-bottom:1px solid currentColor; transform:rotate(-45deg); flex:none; margin:0 3px; transition:transform .15s ease; }
+.delivery-item[open] summary::before { transform:rotate(45deg); }
+.delivery-label { flex:none; }
+.delivery-preview { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
+.delivery-item[open] .delivery-preview { visibility:hidden; }
+.delivery-item pre { font:inherit; white-space:pre-wrap; max-height:90px; overflow:auto; margin:2px 0 6px 16px; }
+.delivery-settings { margin:4px 0 8px 16px; font-size:11px; }
+.delivery-actions { display:flex; flex-wrap:wrap; gap:6px; padding:0 0 8px 16px; }
+.delivery-actions .btn { font-size:11px; padding:4px 8px; min-height:28px; }
+@media (prefers-reduced-motion:reduce) { .delivery-chevron, .delivery-item summary::before { transition:none; } }

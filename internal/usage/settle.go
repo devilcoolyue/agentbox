@@ -42,6 +42,7 @@ func (s *Service) Flush(t *Tally, wall time.Duration) int {
 		evs[i] = priceWith(*plan, evs[i])
 	}
 	if err := s.store.InsertUsage(evs...); err != nil {
+		t.settlementErr = err
 		log.Printf("record usage %s: %v", evs[0].SessionID, err)
 		return 0
 	}

@@ -6,22 +6,32 @@ import { agentIcon, agentName } from "../../brand.js";
 import { setTip } from "../../tip.js";
 import { Poller } from "../../shared/poller.js";
 /* ---------------- 关于 ---------------- */
-export async function loadSystem() {
+let systemRead;
+export function stopSystem() { systemRead?.abort(); systemRead = undefined; }
+export async function loadSystem(lifetime) {
+    stopSystem();
+    const controller = new AbortController();
+    systemRead = controller;
+    const current = () => !lifetime.aborted && systemRead === controller && !controller.signal.aborted;
     const kv = $("about-kv");
     kv.replaceChildren();
     kv.classList.add("hidden");
     $("about-loading").classList.remove("hidden");
     let sys;
     try {
-        sys = await api("/system");
+        sys = await api("/system", { signal: AbortSignal.any([lifetime, controller.signal]) });
     }
     catch (e) {
-        toast(i18nText("读取系统信息失败：") + e.message, true);
+        if (current())
+            toast(i18nText("读取系统信息失败：") + e.message, true);
         return;
     }
     finally {
-        $("about-loading").classList.add("hidden"); // 失败时也别留着转圈
+        if (current())
+            $("about-loading").classList.add("hidden"); // 失败时也别留着转圈
     }
+    if (!current())
+        return;
     kv.classList.remove("hidden");
     const add = (k, v) => {
         const dt = document.createElement("dt");

@@ -7,7 +7,7 @@ on:
 
 jobs:
   # 前端产物 internal/web/static/js 提交进仓库（生产机只有 Go 工具链，deploy.sh
-  # 不跑 npm）。这里重新编译一次并要求 git 树干净，挡住「改了 .ts 忘记 build」
+  # 不跑 npm）。这里重新编译并比较产物集合与字节，挡住「改了 .ts 忘记 build」
   # 导致部署出去还是旧脚本的情况。
   web:
     runs-on: ubuntu-latest
@@ -19,30 +19,51 @@ jobs:
           cache: npm
       - name: install
         run: npm ci
-      - name: typecheck
-        run: npm run check
-      - name: build
-        run: npm run build
-      - name: 产物与源码一致性
-        run: |
-          if ! git diff --quiet -- internal/web/static/js internal/linkapp/static/i18n-core.js; then
-            echo "::error::internal/web/static/js 与 web/src 不一致。请在本地执行 npm run build 并提交产物。"
-            git diff --stat -- internal/web/static/js internal/linkapp/static/i18n-core.js
-            exit 1
-          fi
-          echo "前端产物与源码一致。"
-
-      - name: Interface language catalogs and runtime
-        run: npm run test:i18n
+      - name: Web types, generated artifacts and contracts
+        run: python3 scripts/verify.py run web --report-dir output/verification/web
 
       - name: Browser lifecycle regression (synthetic API)
         run: |
           npm install --prefix "$RUNNER_TEMP/browser-tools" --no-package-lock --no-audit --no-fund playwright@1.58.2
           "$RUNNER_TEMP/browser-tools/node_modules/.bin/playwright" install --with-deps chromium
-          AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-browser.mjs
-          AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-git.mjs
-          AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-web-i18n.mjs
-          AGENTBOX_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" node scripts/test-link-i18n.mjs
+          python3 scripts/verify.py run browser --playwright-module "$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" --report-dir output/verification/browser
+      - name: Preserve web verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-web
+          path: output/verification/
+          if-no-files-found: warn
+
+  chat-reliability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prepare browser and isolated Linux test base
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-tools" --no-package-lock --no-audit --no-fund playwright@1.58.2
+          "$RUNNER_TEMP/browser-tools/node_modules/.bin/playwright" install --with-deps chromium
+          docker pull alpine:3.22
+      - name: Real server and browser reliability (synthetic CLI, no paid models)
+        run: |
+          python3 scripts/verify.py run linux-integration --image alpine:3.22 --playwright-module "$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" --timeout 600 --report-dir output/verification/chat-reliability
+      - name: Preserve reliability evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-chat-reliability
+          path: |
+            output/verification/chat-reliability/
+            output/playwright/chat-integration-*/
+          if-no-files-found: warn
 
   build-test:
     runs-on: ubuntu-latest
@@ -52,25 +73,17 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: build
-        run: go build ./...
-      - name: vet
-        run: go vet ./...
-      - name: test
-        run: |
-          set -o pipefail
-          go list -f '{{if ne .ImportPath "agentbox/internal/server"}}{{.ImportPath}}{{end}}' ./... | xargs -r go test
-          AGENTBOX_CHOWN_DENIAL_TEST=1 go test ./internal/server -run '^TestSyncMutationLinuxChownDeniedPreservesTarget$' -count=1 -v
-          # Build as the runner; only the server test process needs production UID/GID permissions.
-          go test -exec 'sudo -n --' ./internal/server -count=1
-      - name: Deployment policy
-        run: |
-          python3 scripts/test-browser-runtime.py
-          python3 scripts/test-deployment.py
-          python3 scripts/test-update.py
-          bash -n install.sh
-          python3 scripts/test-install.py
-          python3 scripts/test-uninstall.py
+      - name: Go build, vet, unit and Linux ownership gates
+        run: python3 scripts/verify.py run go --report-dir output/verification/go
+      - name: Deployment and verification policy
+        run: python3 scripts/verify.py run policy --report-dir output/verification/policy
+      - name: Preserve Go and policy verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-go-policy
+          path: output/verification/
+          if-no-files-found: warn
       - name: backup and restore CLI
         run: AGENTBOX_BACKUP_DOCKER_TEST=1 ./scripts/test-backup.sh
       - name: Git container smoke (no model calls)
@@ -129,10 +142,15 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Verify stable image policy
-        run: python3 scripts/test-image-policy.py
-      - name: Verify bundled sources and licenses
-        run: python3 scripts/verify-third-party.py
+      - name: Verify image policy and bundled licenses
+        run: python3 scripts/verify.py run --step policy.image-policy --step audit.licenses --report-dir output/verification/audit
+      - name: Preserve source verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-source
+          path: output/verification/
+          if-no-files-found: warn
       - name: Scan fetched history and tracked files
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3

@@ -1,5 +1,9 @@
-import { showView } from "../shell.js";
+import { showView, renderSidebar } from "../shell.js";
 import { S, bus } from "../state.js";
+import { initWorkspaceFilter } from "../features/workspaces/filter.js";
+import { initWorkspaceCreation } from "../features/workspaces/create.js";
+import { initFirstTask } from "../features/workspaces/first-task.js";
+import { initOnboarding } from "../onboarding.js";
 import { initChat } from "../chat.js";
 import { initSettings } from "../settings.js";
 import { termTeardown, termSpendPolling } from "../term.js";
@@ -21,12 +25,13 @@ export function initApplication() {
   disposers.splice(0).reverse().forEach(dispose => dispose());
   stopPolling(); stopPing(); termSpendPolling(false); termTeardown();
   settingsState.value = null;
-  S.current = null; S.sessions = []; S.accounts = []; S.user = ""; S.role = "";
+  S.current = null; S.sessions = []; S.accounts = []; S.user = ""; S.role = "";S.draftScope="";S.draftProtocol=0;S.chatScope="";S.chatProtocol=0;
   showView("work");
+  renderSidebar();
  };
  const start = () => {
   disposers.splice(0).reverse().forEach(dispose => dispose());
-  disposers = [initChat(), initMCP(), initSettings(), initUpdates(), initPricing(), initRemoteBrowser()];
+  disposers = [initWorkspaceFilter(renderSidebar), initOnboarding(), initWorkspaceCreation(), initChat(), initFirstTask(), initMCP(), initSettings(), initUpdates(), initPricing(), initRemoteBrowser()];
  };
  bus.addEventListener("signed-in", start, { signal: lifetime.signal });
  bus.addEventListener("signed-out", stop, { signal: lifetime.signal });

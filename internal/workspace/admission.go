@@ -10,6 +10,9 @@ import (
 
 var ErrCapacity = errors.New("容器容量不足")
 
+// ErrDiskSpace remains a capacity refusal for existing callers.
+var ErrDiskSpace = fmt.Errorf("%w：数据盘可用空间低于保留值", ErrCapacity)
+
 // Caller holds the global start gate until Docker and the session record agree.
 // Inspect every known container: saved status may be stale after an external stop.
 func (s *Service) admit(ctx context.Context, current store.Session) error {
@@ -20,7 +23,7 @@ func (s *Service) admit(ctx context.Context, current store.Session) error {
 			return err
 		}
 		if stat.Bavail*uint64(stat.Bsize) < uint64(limits.MinFreeBytes) {
-			return fmt.Errorf("%w：数据盘可用空间低于保留值", ErrCapacity)
+			return ErrDiskSpace
 		}
 	}
 	if limits.MaxRunning == 0 && limits.MaxRunningPerUser == 0 {

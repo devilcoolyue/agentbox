@@ -1,4 +1,4 @@
-use crate::remote::{check_status, valid_session_id, Error, Remote, Result};
+use crate::remote::{response_problem, valid_session_id, Error, Remote, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use std::{sync::Arc, time::Duration};
@@ -74,9 +74,19 @@ impl Terminal {
         .map_err(Error::network)?
         .map_err(|err| {
             if let tokio_tungstenite::tungstenite::Error::Http(response) = &err {
-                if let Err(error) = check_status(response.status()) {
-                    return error;
-                }
+                return response_problem(
+                    response.status(),
+                    response
+                        .headers()
+                        .get("content-type")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or(""),
+                    response.body().as_deref().unwrap_or(&[]),
+                    response
+                        .headers()
+                        .get("x-agentbox-operation-id")
+                        .and_then(|v| v.to_str().ok()),
+                );
             }
             Error::network(err)
         })?;

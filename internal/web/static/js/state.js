@@ -9,6 +9,8 @@
  *   open-tunnel              — 侧栏点击内网隧道
  *   app-ready                — 登录验证及初始数据加载完成，恢复 URL 页面
  *   navigation-changed       — 页面/分区/标签变化，将最终状态写入 URL
+ *   workspace-created        — 创建流程完成；首任务引导在当前登录内记录项目目录
+ *   chat-view-updated        — 历史/执行状态变化，刷新首任务入口可用性
  *   thread-changed           — 对话线程切换/新建/删除，chat.ts 重载对话流
  *   tips-updated             — 终端提示语配置变化（登录下发 / 管理员保存），term.ts 重排轮播
  *   timezone-updated         — 系统界面时区变化，使用记录重绘时间 */
@@ -18,6 +20,11 @@ export const emit = (type, detail) => bus.dispatchEvent(new CustomEvent(type, { 
 export const S = {
     token: localStorage.getItem("agentbox_token") || "",
     user: "",
+    draftScope: "",
+    draftProtocol: 0,
+    chatScope: "",
+    chatProtocol: 0,
+    preserveChatCopiesOnSignout: false,
     role: "",
     sessions: [],
     accounts: [],

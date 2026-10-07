@@ -444,8 +444,14 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// validateLocked checks the whole config; callers must hold at least a read
-// lock (Load runs before the config is shared, which also counts).
+// Check validates the current runtime configuration without modifying it.
+func (c *Config) Check() error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.validateLocked()
+}
+
+// validateLocked requires at least a read lock (or an unshared Load snapshot).
 func (c *Config) validateLocked() error {
 	if err := c.ImageUpdates.normalized().validate(); err != nil {
 		return err

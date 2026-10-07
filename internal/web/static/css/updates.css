@@ -1,4 +1,20 @@
 /* Version entry and update details share the existing theme tokens. */
+.update-components { margin-bottom:24px; }
+.component-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
+.component-head h3 { font-size:16px; margin:0; }
+.component-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; line-height:1.7; }
+.component-table th,.component-table td { padding:14px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+.component-table th:first-child { width:16%; }
+.component-table p { margin:0 0 9px; color:var(--muted); }
+.component-table p:first-child { color:var(--text); }
+.component-table a { color:var(--text); }
+.component-version { white-space:pre-wrap; }
+@media(max-width:760px) {
+ .component-table thead { display:none; }
+ .component-table tr { display:block; border-bottom:1px solid var(--line); padding:12px 0; }
+ .component-table th,.component-table td { display:block; padding:4px 0; border:0; width:100%; }
+ .component-table th:first-child { width:100%; font-size:14px; }
+}
 .side-head:has(.version-badge:not(.hidden)) {
   display: grid; grid-template-columns: minmax(0, 1fr) 28px;
   grid-template-rows: 20px 22px; align-content: center;
