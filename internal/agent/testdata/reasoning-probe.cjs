@@ -49,7 +49,8 @@ async function run(spec) {
       const thread = await call('thread/start', { cwd, model: spec.model, sandbox: 'danger-full-access', approvalPolicy: 'never' });
       if (thread.error) { protocolError = thread.error; child.kill(); return; }
       const result = await call('turn/start', { threadId: thread.result.thread.id, model: spec.model,
-        ...(spec.effort ? { effort: spec.effort } : {}), input: [{ type: 'text', text: 'Reply hello. Do not use tools.' }] });
+        ...(spec.effort ? { effort: spec.effort } : {}), ...(spec.summary ? { summary: spec.summary } : {}),
+        input: [{ type: 'text', text: 'Reply hello. Do not use tools.' }] });
       if (result.error) { protocolError = result.error; child.kill(); }
     })().catch(e => { protocolError = e.message; child.kill(); });
   } else { child.stdout.resume(); child.stdin.end('Reply hello. Do not use tools.'); }

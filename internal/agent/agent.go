@@ -33,6 +33,11 @@ var claudeThinking = map[string]string{
 	"low": "4096", "medium": "13000", "high": "24000", "xhigh": "31999",
 }
 
+// CodexReasoningSummary is requested on every web chat turn (app-server and
+// exec fallback alike). Codex itself omits it for models whose catalog entry
+// does not support reasoning summaries.
+const CodexReasoningSummary = "auto"
+
 var codexEfforts = map[string]bool{
 	"none": true, "minimal": true, "low": true, "medium": true, "high": true, "xhigh": true, "max": true, "ultra": true,
 }
@@ -55,6 +60,11 @@ func ChatCommand(agentType, permissionMode, resumeID, model, effort string, cont
 			"--output-format", "stream-json",
 			"--include-partial-messages",
 			"--verbose",
+			// Opus 4.7+ / Claude 5 的 API 默认 display=omitted，thinking 块只剩
+			// 签名、正文为空，网页的「思考过程」无字可显。显式要摘要；原始推理
+			// 任何模式都拿不到。是否真带上 display 由 Claude Code 按 provider /
+			// 模型自行判断（Haiku 4.5 等不支持的模型不会发）。
+			"--thinking-display", "summarized",
 			"--permission-mode", permissionMode,
 		}
 		if model != "" {
@@ -78,7 +88,10 @@ func ChatCommand(agentType, permissionMode, resumeID, model, effort string, cont
 		}
 	case config.AgentCodex:
 		// The container itself is the sandbox, so codex runs with full access.
-		base := []string{"codex", "exec", "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox"}
+		// Built-in models default to default_reasoning_summary=none, leaving
+		// reasoning items without any text to show. Must match RunCodexTurn.
+		base := []string{"codex", "exec", "--json", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox",
+			"-c", `model_reasoning_summary="` + CodexReasoningSummary + `"`}
 		if model != "" {
 			base = append(base, "-m", model)
 		}

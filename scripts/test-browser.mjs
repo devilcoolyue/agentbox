@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {featureLifetimeSmoke} from './test-feature-lifetimes-browser.mjs';
+import {featureLifetimeSmoke, thinkingStreamSmoke} from './test-feature-lifetimes-browser.mjs';
 import {diagnosticsSmoke} from './test-diagnostics-browser.mjs';
 // Synthetic API/browser regression. No Docker, real accounts or provider calls.
 import assert from 'node:assert/strict';
@@ -557,6 +557,7 @@ export async function smoke(page) {
   await page.locator('#pick-menu .pick-opt').filter({hasText:'轻度'}).click();
   await page.setViewportSize({width:1280,height:900});
   await featureLifetimeSmoke(page);
+  await thinkingStreamSmoke(page);
   await chatFooterSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg))});
   await page.locator('.tab[data-tab="files"]').click();
   await at('#/sessions/fixture-space/files','#tab-files');

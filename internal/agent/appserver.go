@@ -205,6 +205,11 @@ func RunCodexTurn(ctx context.Context, w io.Writer, r io.Reader, abort func(), i
 	if t.Effort != "" {
 		turnParams["effort"] = t.Effort
 	}
+	// 内置模型默认不出推理摘要，reasoning 项的 summary 为空，网页「思考过程」
+	// 无字可显，只能显式要。标记为不支持推理的模型不加任何推理相关覆盖。
+	if !t.RejectInheritedEffort {
+		turnParams["summary"] = CodexReasoningSummary
+	}
 	turnRes, err := c.call(4, "turn/start", turnParams)
 	if err != nil {
 		return fmt.Errorf("turn/start: %w", err)

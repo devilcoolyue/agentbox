@@ -25,6 +25,8 @@ interface LiveBlock extends LiveNode {
   tick: number;
   /** requestAnimationFrame 句柄，0 = 当前没有在跑 */
   raf: number;
+  /** 已插入对话流；thinking 块等到第一段非空文字才插入 */
+  attached?: boolean;
   /** codex 整段回放标记 */
   replay?: boolean;
   /** 回放定速（字/秒）；真流式为 undefined */
@@ -128,7 +130,7 @@ function replayPump() {
     hooks.working(() => job.kind === "thinking" ? i18nText("推理中…") : i18nText("生成回复…"));
     liveBlock = {
       ...liveNode(job.kind!), kind: job.kind!, shown: "", buf: "", carry: 0, tick: 0, raf: 0,
-      replay: true, rate: Math.max(140, job.text!.length / 3),
+      attached: true, replay: true, rate: Math.max(140, job.text!.length / 3),
     };
     liveBlock.el.classList.add("streaming");
     hooks.append(liveBlock.el);
@@ -192,8 +194,10 @@ function handleStreamEvent(e: StreamEvent | undefined) {
         hooks.working(() => t === "thinking" ? i18nText("思考中…") : i18nText("生成回复…"));
         liveBlock = { ...liveNode(t), kind: t, shown: "", buf: "", carry: 0, tick: 0, raf: 0 };
         liveBlock.el.classList.add("streaming");
-        hooks.append(liveBlock.el);
-        liveEls.push(liveBlock.el);
+        // 思考块可能自始至终没有文字（Claude 未要摘要时只有空增量和签名，
+        // codex 没有推理摘要时 reasoning 项为空），等到真有字再插入，
+        // 免得留下空的「思考过程」框；正文块照旧立刻插入亮起光标。
+        if (t === "text") liveAttach(liveBlock);
       } else {
         liveBlock = null; // tool_use 等交给完整事件渲染
       }
@@ -203,7 +207,7 @@ function handleStreamEvent(e: StreamEvent | undefined) {
       if (!liveBlock || !e.delta) break;
       const txt = e.delta.type === "text_delta" ? e.delta.text
         : e.delta.type === "thinking_delta" ? e.delta.thinking : "";
-      if (txt) liveFeed(txt);
+      if (txt) { liveAttach(liveBlock); liveFeed(txt); }
       break;
     }
     case "content_block_stop":
@@ -214,6 +218,14 @@ function handleStreamEvent(e: StreamEvent | undefined) {
       liveBlock = null;
       break;
   }
+}
+
+/* 流式块首次插入对话流，并登记为完整事件到达时要移除的临时节点 */
+function liveAttach(b: LiveBlock) {
+  if (b.attached) return;
+  b.attached = true;
+  hooks.append(b.el);
+  liveEls.push(b.el);
 }
 
 /* ---- 打字机：缓冲 → rAF 匀速放出 ---- */

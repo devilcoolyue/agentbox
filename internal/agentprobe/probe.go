@@ -56,13 +56,14 @@ func (r Report) Passed(imageID string) bool {
 	return true
 }
 
-// Input uses the actual product argv, including its PID wrapper. The only
-// substitution is a strictly validated synthetic session ID for Claude resume.
+// Input uses the actual product argv, including its PID wrapper, and the
+// app-server reasoning summary RunCodexTurn sends. The only substitution is a
+// strictly validated synthetic session ID for Claude resume.
 func Input() []byte {
 	claude, _ := agent.ChatCommand(config.AgentClaude, "bypassPermissions", "", "claude-sonnet-4-6", "")
 	resume, _ := agent.ChatCommand(config.AgentClaude, "bypassPermissions", "AGENTBOX_PROBE_RESUME", "claude-sonnet-4-6", "")
 	codex, _ := agent.ChatCommand(config.AgentCodex, "bypassPermissions", "", "gpt-5.5", "")
-	raw, _ := json.Marshal(map[string]any{"claude": claude, "claude_resume": resume, "codex": codex})
+	raw, _ := json.Marshal(map[string]any{"claude": claude, "claude_resume": resume, "codex": codex, "codex_summary": agent.CodexReasoningSummary})
 	return raw
 }
 

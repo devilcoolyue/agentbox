@@ -58,12 +58,13 @@ func TestRunCodexTurnTranslation(t *testing.T) {
 				ThreadID string `json:"threadId"`
 				Model    string `json:"model"`
 				Effort   string `json:"effort"`
+				Summary  string `json:"summary"`
 				Input    []struct {
 					Text string `json:"text"`
 				} `json:"input"`
 			}
 			json.Unmarshal(m.Params, &p)
-			if p.ThreadID != "T1" || p.Model != "gpt-5.5" || p.Effort != "low" ||
+			if p.ThreadID != "T1" || p.Model != "gpt-5.5" || p.Effort != "low" || p.Summary != "auto" ||
 				len(p.Input) != 1 || p.Input[0].Text != "hi" {
 				t.Fatalf("turn/start 参数不对: %s", m.Params)
 			}

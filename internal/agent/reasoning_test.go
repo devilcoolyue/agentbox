@@ -91,3 +91,29 @@ func TestUnsupportedModelRejectsResumedEffortBeforeSubmission(t *testing.T) {
 		t.Fatalf("submitted unsupported inherited effort: %v %s", err, sent.String())
 	}
 }
+
+// Web chat must ask for displayable reasoning: Claude defaults to an empty
+// thinking display and Codex catalog models default to no summary.
+func TestChatRequestsReasoningSummaries(t *testing.T) {
+	claude, err := ChatCommand("claude", "bypassPermissions", "", "", "")
+	if err != nil || !strings.Contains(strings.Join(claude, " "), "--thinking-display summarized") {
+		t.Fatalf("claude: %v %q", err, claude)
+	}
+	for _, resume := range []string{"", "T1"} {
+		codex, err := ChatCommand("codex", "bypassPermissions", resume, "gpt-5.5", "")
+		if err != nil || !strings.Contains(strings.Join(codex, " "), `-c model_reasoning_summary="auto"`) || codex[len(codex)-1] != "-" {
+			t.Fatalf("codex resume=%q: %v %q", resume, err, codex)
+		}
+	}
+	script := "{\"id\":1,\"result\":{}}\n{\"id\":3,\"result\":{\"thread\":{\"id\":\"T1\"}}}\n{\"id\":4,\"result\":{\"turn\":{\"id\":\"U1\"}}}\n{\"method\":\"turn/completed\",\"params\":{\"turn\":{\"id\":\"U1\",\"status\":\"completed\"}}}\n"
+	for _, unsupported := range []bool{false, true} {
+		var sent bytes.Buffer
+		err := RunCodexTurn(context.Background(), &sent, strings.NewReader(script), func() {}, nil, CodexTurn{Prompt: "x", Model: "fixture", RejectInheritedEffort: unsupported}, func([]byte) {})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(sent.String(), `"summary":"auto"`) == unsupported {
+			t.Fatalf("unsupported=%v sent %s", unsupported, sent.String())
+		}
+	}
+}

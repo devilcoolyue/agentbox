@@ -275,6 +275,7 @@ data/
 - schema 12 的 `store.ChatRequest` 已接入独立 HTTP v1（`chat_protocol`/`chat_scope`），浏览器通过 outbox-store.ts / outbox.ts 接入待确认发送与查询恢复。仅 `AcceptChatRequest` 成功返回 fresh=true 的调用者可安排工作，重放和 reviewed 不获得执行资格；状态推进须使用修订号。启动在 Docker 初始化前将未结束回执改为 uncertain，不能自动重跑；旧 WS、线程变更与删除必须遵守同一持久准入；回执在原用量 flush 和转录同步后完成，结算/历史失败保持 uncertain。`chatReceiptTurn` 只观察原执行器，不另启模型/计费路径；传统 exec 必须检查 Scanner 错误，provider 结束状态由 agent.Adapter 解码。用户中断和服务关闭不得混为一谈。存储连接 WAL + synchronous=FULL；空间/用户删除同事务清正文留 ID 围栏，线程删除先清对应回执正文。附件 TTL 扫描流式读取回执引用，错误时拒绝删除；与接收校验/提交共用 attachmentMu。
 - 消息落盘到当前线程 `chats/<threadID>.jsonl`；`chats/active` 指向当前线程。旧版 `chat.jsonl` 首次访问自动迁移。
 - Claude 走 `claude -p --output-format stream-json`；Codex 优先走 `codex app-server`（真流式增量），握手失败回退 `codex exec --json`。
+- 思考显示：Claude Opus 4.7+/Claude 5 的 API 默认 `display=omitted`，Codex 内置模型默认 `default_reasoning_summary=none`，不显式要就只有空 thinking/reasoning。`ChatCommand` 固定带 `--thinking-display summarized`；Codex app-server `turn/start.summary` 与 exec `-c model_reasoning_summary` 共用 `agent.CodexReasoningSummary`（标记不支持推理的模型不加），agentprobe 以同一值验证候选镜像。原始推理任何参数都拿不到，摘要按段到达、常为英文。前端 `stream.ts` 的 thinking 块等首段非空文字才插入，不能回退成先建空框。
 - `stream_event`/增量事件只广播不落盘；完整事件落盘并广播。provider 会话 id 用 `agent.ExtractSessionID` 提取，写入 `chat_session` 供 `--resume`/thread resume。
 - 用户中断：Codex app-server 优先协议内 `turn/interrupt`，否则用容器里的 PID 文件发 SIGINT。
 

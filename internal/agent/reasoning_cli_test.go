@@ -34,7 +34,7 @@ func TestReasoningCLIWire(t *testing.T) {
 		{"name": "claude-budget", "command": command("claude", "claude-sonnet-4-5", "medium", "budget")},
 		{"name": "claude-default", "command": command("claude", "claude-sonnet-4-6", "", ""), "claudeSettings": map[string]any{"effortLevel": "low"}},
 		{"name": "codex-exec", "command": command("codex", "gpt-5.5", "low", "effort"), "codexConfig": "model_reasoning_effort=\"high\""},
-		{"name": "codex-appserver", "protocol": true, "model": "gpt-5.5", "effort": "low", "codexConfig": "model_reasoning_effort=\"high\""},
+		{"name": "codex-appserver", "protocol": true, "model": "gpt-5.5", "effort": "low", "summary": CodexReasoningSummary, "codexConfig": "model_reasoning_effort=\"high\""},
 		{"name": "codex-default", "protocol": true, "model": "gpt-5.5", "codexConfig": "model_reasoning_effort=\"high\""},
 	}
 	raw, _ := json.Marshal(cases)
@@ -56,14 +56,16 @@ func TestReasoningCLIWire(t *testing.T) {
 			Requests []struct {
 				Model    string `json:"model"`
 				Thinking struct {
-					Type   string `json:"type"`
-					Budget int    `json:"budget_tokens"`
+					Type    string `json:"type"`
+					Budget  int    `json:"budget_tokens"`
+					Display string `json:"display"`
 				} `json:"thinking"`
 				Output struct {
 					Effort string `json:"effort"`
 				} `json:"output_config"`
 				Reasoning struct {
-					Effort string `json:"effort"`
+					Effort  string `json:"effort"`
+					Summary string `json:"summary"`
 				} `json:"reasoning"`
 			} `json:"requests"`
 		}
@@ -74,15 +76,15 @@ func TestReasoningCLIWire(t *testing.T) {
 		r := result.Requests[0]
 		switch result.Name {
 		case "claude-native", "claude-default":
-			if r.Output.Effort != "low" || r.Thinking.Budget != 0 {
+			if r.Output.Effort != "low" || r.Thinking.Budget != 0 || r.Thinking.Display != "summarized" {
 				t.Errorf("%s", line)
 			}
 		case "claude-budget":
-			if r.Thinking.Budget != 13000 || r.Output.Effort != "" {
+			if r.Thinking.Budget != 13000 || r.Output.Effort != "" || r.Thinking.Display != "summarized" {
 				t.Errorf("%s", line)
 			}
 		case "codex-exec", "codex-appserver":
-			if r.Reasoning.Effort != "low" {
+			if r.Reasoning.Effort != "low" || r.Reasoning.Summary != CodexReasoningSummary {
 				t.Errorf("%s", line)
 			}
 		case "codex-default":

@@ -97,7 +97,7 @@ async function cli(name,kind,command,resume='') {
   return terminal?.session_id||'';
  } finally {await proc.stop();server.closeAllConnections();}
 }
-async function protocol(name,resume='') {
+async function protocol(name,summary,resume='') {
  mode=name;requests=[];held=false;
  const proc=launch('codex',['codex','app-server']);
  const send=(id,method,params)=>proc.child.stdin.write(JSON.stringify({id,method,params})+'\n');
@@ -107,7 +107,7 @@ async function protocol(name,resume='') {
   proc.child.stdin.write('{"method":"initialized"}\n');
   const thread=resume?await call(2,'thread/resume',{threadId:resume,model:'gpt-5.5'}):await call(3,'thread/start',{cwd,model:'gpt-5.5',sandbox:'danger-full-access',approvalPolicy:'never'});
   assert.ok(thread.thread?.id,'thread missing');if(resume)assert.equal(thread.thread.id,resume,'resume changed thread');
-  const result=await call(4,'turn/start',{threadId:thread.thread.id,cwd,model:'gpt-5.5',input:[{type:'text',text:'Return the synthetic marker.'}],sandboxPolicy:{type:'dangerFullAccess'},approvalPolicy:'never'});
+  const result=await call(4,'turn/start',{threadId:thread.thread.id,cwd,model:'gpt-5.5',summary,input:[{type:'text',text:'Return the synthetic marker.'}],sandboxPolicy:{type:'dangerFullAccess'},approvalPolicy:'never'});
   assert.ok(result.turn?.id,'turn missing');
   if(name==='codex_interrupt') {await waitUntil(()=>held||proc.closed);assert.ok(held);await call(9,'turn/interrupt',{threadId:thread.thread.id,turnId:result.turn.id});}
   await waitUntil(()=>proc.lines.some(m=>m.method==='turn/completed')||proc.closed);
@@ -126,8 +126,8 @@ async function main(spec) {
  assert.ok(mcpCalls>0,'MCP not called');checks.push('claude_mcp');
  await cli('claude_resume','claude',spec.claude_resume.map(arg=>arg.replaceAll('AGENTBOX_PROBE_RESUME',session)),session);
  await cli('claude_interrupt','claude',spec.claude);
- const thread=await protocol('codex_turn');checks.push('codex_handshake');
- await protocol('codex_resume',thread);await protocol('codex_interrupt',thread);
+ const thread=await protocol('codex_turn',spec.codex_summary);checks.push('codex_handshake');
+ await protocol('codex_resume',spec.codex_summary,thread);await protocol('codex_interrupt',spec.codex_summary,thread);
  await cli('codex_exec','codex',spec.codex);
  console.log(JSON.stringify({version:1,checks,records}));
 }

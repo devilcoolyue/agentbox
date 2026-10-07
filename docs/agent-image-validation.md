@@ -20,7 +20,7 @@ M4-04 的开发源码能力，尚未发布。镜像版本号检查和行为验�
 | Claude 完成、续聊、中断 | 使用产品 headless argv 和 PID 包装；续聊使用实际 session ID，检查前轮回复进入下一请求；保持上游未结束后发送 SIGINT，要求退出信号/130 或失败终结证据 |
 | Claude MCP | 临时 stdio MCP 经 initialize/tools/list/tools/call，合成上游触发实际 echo 调用；检查工具调用记录 |
 | Claude 用量 | 实际 assistant/stream_event 输入原消息 ID 去重解析器，核对输入/缓存/输出合成计数；不使用累计 result 报价代替单轮用量 |
-| Codex 握手、完成、续聊、中断 | 实际 initialize/thread/start/thread/resume/turn/start/turn/interrupt；续聊必须保留线程与前轮内容，中断须有 interrupted 终结；捕获的 RPC 经现有 Go app-server 驱动器回放检查 |
+| Codex 握手、完成、续聊、中断 | 实际 initialize/thread/start/thread/resume/turn/start/turn/interrupt，`turn/start` 带与网页对话相同的推理摘要参数；续聊必须保留线程与前轮内容，中断须有 interrupted 终结；捕获的 RPC 经现有 Go app-server 驱动器回放检查 |
 | Codex exec | 使用产品 exec argv，要求成功退出、回复标记与终结事件 |
 | Codex 用量 | app-server/exec 输出经现有归一化解析，检查未缓存输入、缓存读、输出；reasoning 不重复计入输出 |
 

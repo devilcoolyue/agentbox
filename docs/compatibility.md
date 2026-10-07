@@ -7,7 +7,7 @@ AGENTBOX_CLI_TEST_IMAGE=agentbox-agent:claude-2.1.280-codex-0.145.0 \
   go test ./internal/agent -run 'TestReasoningCLI' -v -count=1
 ```
 
-该测试在本机 Linux Docker 容器以 UID 1000 执行，`network=none`，临时 home 和模拟 HTTP 上游只使用合成凭证，不消耗模型额度。覆盖 Claude 原生 effort、固定预算、默认设置继承，Codex app-server / exec 参数及默认继承，并单独验证 `config/read` + `model/list` 协议。它验证 CLI 发出的请求字段，不证明真实 provider 接受任意模型与档位组合。
+该测试在本机 Linux Docker 容器以 UID 1000 执行，`network=none`，临时 home 和模拟 HTTP 上游只使用合成凭证，不消耗模型额度。覆盖 Claude 原生 effort、固定预算、默认设置继承与思考摘要（`thinking.display=summarized`），Codex app-server / exec 参数、推理摘要（`reasoning.summary`）及默认继承，并单独验证 `config/read` + `model/list` 协议。它验证 CLI 发出的请求字段，不证明真实 provider 接受任意模型与档位组合。
 
 ## 固定基线
 
