@@ -131,7 +131,11 @@ $("btn-logout").addEventListener("click", async () => {
 });
 
 window.addEventListener("storage",event=>{
-  if(event.key==="agentbox_token"&&S.token&&event.newValue!==S.token)showLogin(i18nText("其他页面的登录状态已变化，请重新登录。"),true);
+  if(event.key==="agentbox_token"&&S.token&&event.newValue!==S.token)
+    // A replacement token belongs to the newer page and must retain its
+    // pending copies. A removed token means the account signed out everywhere,
+    // so every page must participate in clearing the old identity's copies.
+    showLogin(i18nText("其他页面的登录状态已变化，请重新登录。"),!!event.newValue);
 });
 
 window.addEventListener("agentbox-language-change", () => setPasswordVisible($<HTMLInputElement>("login-pass").type === "text"));
