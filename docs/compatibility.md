@@ -75,6 +75,53 @@ schema 11 不修改已有会话、模型、用量或额度，首次启动自动�
 
 v0.1.11 同时新增 schema 12 聊天回执存储与启动恢复。HTTP 接收/查询/核对接口已接入原执行器，`chat_protocol:1`、`chat_scope` 独立协商。`draft_protocol:1` 仍仅声明草稿能力；新版浏览器发现 chat v1 后使用持久 HTTP 发送、按 ID 查询和显式核对；仅在服务端未声明该能力时保留旧 WS 发送并提示限制，已选择新协议后不会因错误降级成无 ID 发送。旧 WS 和线程变更也会被持久活动/待核对请求阻止；未知结果不能通过换线程绕过。运行连接改用 WAL + synchronous=FULL；schema 11 和 10 二进制均不能直接打开 12，回退需对应备份。系统备份会包含数据库中的已接收提示词副本，附件内容仍需完整备份。详见[数据库迁移](architecture/database-migrations.md)及 [M3 记录](milestones/m3.md)。
 
+## 从 v0.1.11 回退到 v0.1.10
+
+v0.1.10 只支持 schema ≤10，不能打开 v0.1.11 迁移后的 schema 12 数据库：直接启动会报 `unsupported database schema version 12 (maximum 10)` 并退出，`release.py activate --version v0.1.10` 也会在停服前拒绝，服务继续运行在 v0.1.11。回退的依据是 v0.1.11 激活时由 v0.1.10 生成的兼容备份 `backups/before-v0.1.11-<时间>.tar.gz`（标准布局在 `/var/lib/agentbox/backups/`）。下列步骤已用真实 v0.1.10 / v0.1.11 发布包演练，见 [M6 记录](milestones/m6.md#m6-07-回滚演练)。
+
+回退会丢失升级后写入**数据库**的变化：之后新建的空间（文件仍在磁盘上，但不再出现在列表中）、额度充值和用量流水、聊天回执、改过的密码与登录令牌、系统设置。项目、home、聊天记录与共享目录等**文件**会保留。确有必要再回退，先让用户结束任务。
+
+```bash
+NEW=/opt/agentbox/releases/v0.1.11/agentbox
+OLD=/opt/agentbox/releases/v0.1.10/agentbox
+DATA=/var/lib/agentbox            # 现有 data_dir
+TARGET=/var/lib/agentbox-v0.1.10  # 不存在的新目录，必须与 DATA 在同一文件系统
+
+sudo systemctl stop agentbox
+# 1. 保留升级后的状态，日后核对或补录
+sudo "$NEW" backup --config /etc/agentbox/config.json --output "$DATA/backups/after-upgrade-v0.1.11.tar.gz"
+# 2. 删除会话容器：恢复后数据目录变化，旧容器仍挂载旧路径（容器可写层与 tmux 会丢失，工作区在宿主机）
+docker ps -aq --filter label=agentbox.session | xargs -r docker rm -f
+# 3. 用 v0.1.10 校验并恢复兼容备份到新目录
+B=$(ls -1 "$DATA"/backups/before-v0.1.11-*.tar.gz | tail -1)
+sudo "$OLD" backup-verify "$B"
+sudo "$OLD" restore --to "$TARGET" "$B"
+# 4. 把用户文件移动（不是复制）到恢复后的数据目录
+[ -e "$TARGET/data/users" ] && sudo mv "$TARGET/data/users" "$TARGET/data/users.from-backup"
+sudo mv "$DATA/users" "$TARGET/data/users"
+# 5. 恢复配置使用相对路径，改为绝对路径后替换服务配置
+sudo cp -p /etc/agentbox/config.json /etc/agentbox/config.json.v0.1.11
+sudo python3 - "$TARGET" <<'EOF'
+import json, os, sys
+from pathlib import Path
+root = Path(sys.argv[1]); cfg = json.loads((root / 'config.json').read_text())
+fix = lambda p: str((root / p).resolve()) if p and not os.path.isabs(p) else p
+cfg['data_dir'] = fix(cfg['data_dir']); cfg['cache_dir'] = fix(cfg.get('cache_dir', ''))
+for account in cfg.get('accounts', []): account['credentials_dir'] = fix(account.get('credentials_dir', ''))
+out = Path('/etc/agentbox/config.json.new'); out.write_text(json.dumps(cfg, indent=2)); out.chmod(0o600)
+EOF
+sudo "$OLD" check-config --config /etc/agentbox/config.json.new
+sudo mv /etc/agentbox/config.json.new /etc/agentbox/config.json
+# 6. 由当前（v0.1.11）包内的 release.py 激活 v0.1.10：兼容检查、备份、切换、启动和健康检查
+sudo python3 /opt/agentbox/current/deploy/release.py activate --version v0.1.10
+```
+
+完成后检查 `systemctl is-active agentbox`、本机与公网首页、登录、空间列表、文件、使用记录和额度。账号凭证来自备份时刻：容器里 CLI 续过的令牌会由凭证同步从会话 home 收回；仍显示登录失效的账号重新授权。桌面客户端的实例身份不在备份中，重新连接时需再次确认同步基线。
+
+保留 `$DATA`（含 schema 12 数据库，已不含 `users/`）与 `after-upgrade-v0.1.11.tar.gz`，直到确认回退结果。之后再升级到 v0.1.11 时，按正常升级流程从当前实例迁移；先前升级期间写入数据库的变化不会自动合并回来。
+
+演练使用真实发布二进制与包内 `release.py`，但 systemctl 为模拟、Docker API 为无容器的桩、数据为合成小样本；**没有**覆盖真实 systemd、容器删除与重建、真实账号续期、隧道或桌面同步，也不代表生产规模的耗时。`scripts/test-rollback-drill.py`（`verify.py --step release.rollback`）可对之后的版本组合重复执行。
+
 ## 错误、聊天与多端兼容窗口
 
 M4 的契约覆盖 M1～M3 新增错误/聊天字段，M5 桌面复用错误解释与空间状态；服务端与网页契约随 v0.1.11 发布，桌面改动仍需独立安装包。

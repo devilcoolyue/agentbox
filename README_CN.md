@@ -121,7 +121,7 @@ sudo ./agentbox -config config.json
 
 服务器本机打开 `http://127.0.0.1:8180`；远程使用可在自己的电脑运行 `ssh -N -L 8180:127.0.0.1:8180 user@your-server`，再打开同一地址。使用 `boxadmin` 和配置中的 `auth_token` 登录。首次启动后密码保存在数据库，修改 `auth_token` 不会重置它。
 
-忘记管理员密码时，当前源码新增 `agentbox admin-reset-password --config /配置路径/config.json --user boxadmin`：先停服并验证备份，再在终端隐藏输入两次新密码。命令撤销该管理员的登录令牌，保留空间与账本。完整步骤见[密码恢复](docs/troubleshooting.md#忘记密码或改了-auth_token-仍不能登录)；旧发布包可能尚未包含此命令。
+忘记管理员密码时，v0.1.11 起可用 `agentbox admin-reset-password --config /配置路径/config.json --user boxadmin`：先停服并验证备份，再在终端隐藏输入两次新密码。命令撤销该管理员的登录令牌，保留空间与账本。完整步骤见[密码恢复](docs/troubleshooting.md#忘记密码或改了-auth_token-仍不能登录)；v0.1.10 及更早的发布包不含此命令。
 
 服务端需要 Docker 访问权，以及为挂载目录设置 `1000:1000` 属主的权限。结束前台试跑后，执行 `sudo ./deploy/install.sh` 和 `sudo ./deploy/deploy.sh`，以源码目录方式交给 systemd 托管。详见[部署手册](deploy/README.md)、[配置参考](docs/configuration.md)和[开发指南](docs/development.md)。
 
@@ -250,9 +250,9 @@ sudo ./agentbox -config config.json
 
 ## 开发里程碑
 
-第一轮 M1～M5 的服务端与网页改动已纳入 v0.1.11 正式版，但真实用户观察、性能阈值、恢复目标、桌面签名等外部验收仍未落实；详情见[第一轮记录](docs/milestones/backlog.md)。第二轮 M6～M10 从 2026-10-06 起接续：先把开发版收口为正式发布，再补真实使用验收与指标采集，之后按真实反馈改进日常效率、降低上游追新与安装成本，最后视证书到位情况交付桌面稳定版。范围、依赖和验收见[第二轮计划](docs/roadmap-2.md)。
+第一轮 M1～M5 的服务端与网页改动已纳入 v0.1.11 正式版，但真实用户观察、性能阈值、恢复目标、桌面签名等外部验收仍未落实；详情见[第一轮记录](docs/milestones/backlog.md)。第二轮 M6～M11 从 2026-10-06 起接续：先把开发版收口为正式发布（v0.1.11 已于 2026-10-08 发布，M6 进展见[记录](docs/milestones/m6.md)），再补真实使用验收与指标采集，之后按真实反馈改进日常效率、降低上游追新与安装成本，视证书到位情况交付桌面稳定版，最后有门槛地接入更多 Agent。范围、依赖和验收见[第二轮计划](docs/roadmap-2.md)。
 
-当前网页源码已为登录、空间启动与聊天错误增加三语处理建议和操作编号，保留旧客户端使用的 `error` 字段。覆盖范围及限制见[错误契约](docs/errors.md)。 管理员可主动检查实例，普通用户可检查自己的空间；结果区分通过、失败、未检查，不把本地配置存在当作模型可用。见[分层环境诊断](docs/diagnostics.md)。
+v0.1.11 起，网页为登录、空间启动与聊天错误提供三语处理建议和操作编号，保留旧客户端使用的 `error` 字段。覆盖范围及限制见[错误契约](docs/errors.md)。 管理员可主动检查实例，普通用户可检查自己的空间；结果区分通过、失败、未检查，不把本地配置存在当作模型可用。见[分层环境诊断](docs/diagnostics.md)。
 
 | 里程碑 | 计划重点 |
 | --- | --- |

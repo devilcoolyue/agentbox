@@ -10,7 +10,7 @@
 - 登录令牌为签发后 30 天的固定有效期，使用不会延长；退出登录和密码变更也可能使其提前失效。
 - 空间接口检查属主，管理员也不能通过这些接口读取其他用户的空间。
 - 普通用户只能读取自己的用量；其传入的其他用户名不会扩大可见范围。
-- JSON 错误保留 `error` 字符串；当前源码的登录、空间启动和聊天等入口增补 `code`、`operation_id`、`hint`、`action`、`retryable`。客户端需容忍新增字段并兼容只有 `error` 的旧响应，详见[错误契约 v1](errors.md)。不要在调用日志中输出 token、Key 或配对码。
+- JSON 错误保留 `error` 字符串；v0.1.11 起登录、空间启动和聊天等入口增补 `code`、`operation_id`、`hint`、`action`、`retryable`。客户端需容忍新增字段并兼容只有 `error` 的旧响应，详见[错误契约 v1](errors.md)。不要在调用日志中输出 token、Key 或配对码。
 
 | 方法与路径 | 权限 | 请求 / 用途 |
 | --- | --- | --- |
@@ -186,9 +186,9 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 
 `/api/updates/components` 使用 `Cache-Control: no-store`，返回 `version:1`、`observed_at`、`server`、`image`、`desktop`。`server.candidate_compatibility=preflight_required` 表示本接口不证明候选兼容；`image.state=labels_only/unavailable/changed`，版本是当前配置镜像的标签，不能冒充运行中容器或协议验收结果；`desktop.installed_version_state=browser_unknown` 表示网页无法读取本机安装版本。观察范围和更新生效方式见[三类更新](update-components.md)。
 
-## 开发版草稿能力
+## 草稿能力
 
-当前开发版 `/api/me` 增补 `draft_protocol:1` 与 `draft_scope`，仅用于未发送草稿隔离；它不声明 WS 接收确认能力。历史接口可显式携带 `?draft_context=1` 获取稳定的 `active_thread`（空对话会登记不含正文的元数据），附件校验接口为 `POST /api/sessions/{id}/attachments/validate`。权限、上限与恢复边界见[聊天草稿](chat-recovery.md)。
+v0.1.11 起 `/api/me` 增补 `draft_protocol:1` 与 `draft_scope`，仅用于未发送草稿隔离；它不声明 WS 接收确认能力。历史接口可显式携带 `?draft_context=1` 获取稳定的 `active_thread`（空对话会登记不含正文的元数据），附件校验接口为 `POST /api/sessions/{id}/attachments/validate`。权限、上限与恢复边界见[聊天草稿](chat-recovery.md)。
 
 ## 调用示例
 
