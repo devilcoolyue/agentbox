@@ -1,19 +1,27 @@
 /* Version entry and update details share the existing theme tokens. */
-.update-components { margin-bottom:24px; }
-.component-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
-.component-head h3 { font-size:16px; margin:0; }
-.component-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; line-height:1.7; }
+/* 对比表放在 .update-panel 下方，同一种卡片：边框、圆角与 28px 内边距对齐。 */
+.update-components { margin-bottom:20px; border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden; }
+.component-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:22px 28px 0; }
+.component-head h3 { font-size:16px; font-weight:600; margin:0; }
+#component-read-status { margin:6px 28px 18px; color:var(--muted); font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+.component-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12px; line-height:1.7; border-top:1px solid var(--line); }
 .component-table th,.component-table td { padding:14px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; overflow-wrap:anywhere; }
-.component-table th:first-child { width:16%; }
+.component-table thead th { padding-block:10px; color:var(--muted); font-weight:500; background:color-mix(in srgb, var(--text) 2%, transparent); }
+.component-table tbody tr:last-child > * { border-bottom:0; }
+.component-table th:first-child { width:18%; padding-left:28px; }
+.component-table :is(th,td):last-child { padding-right:28px; }
 .component-table p { margin:0 0 9px; color:var(--muted); }
 .component-table p:first-child { color:var(--text); }
 .component-table a { color:var(--text); }
 .component-version { white-space:pre-wrap; }
 @media(max-width:760px) {
+ .component-head { padding:18px 20px 0; }
+ #component-read-status { margin:6px 20px 14px; }
  .component-table thead { display:none; }
- .component-table tr { display:block; border-bottom:1px solid var(--line); padding:12px 0; }
- .component-table th,.component-table td { display:block; padding:4px 0; border:0; width:100%; }
- .component-table th:first-child { width:100%; font-size:14px; }
+ .component-table tr { display:block; border-bottom:1px solid var(--line); padding:12px 20px; }
+ .component-table tbody tr:last-child { border-bottom:0; }
+ .component-table th,.component-table td,.component-table th:first-child,.component-table :is(th,td):last-child { display:block; padding:4px 0; border:0; width:100%; }
+ .component-table th:first-child { font-size:14px; }
 }
 .side-head:has(.version-badge:not(.hidden)) {
   display: grid; grid-template-columns: minmax(0, 1fr) 28px;
@@ -87,7 +95,25 @@
 .upgrade-progress p { margin: 0 0 10px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .update-notes { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 12px; }
 .update-notes summary { cursor: pointer; color: var(--muted); }
-.update-notes pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.8 var(--sans); max-height: 320px; overflow-y: auto; }
+/* 版本说明来自 GitHub Release 的 Markdown，按面板字号排得紧凑，颜色只用主题令牌。 */
+.update-notes-body { margin-top: 12px; max-height: 440px; overflow-y: auto; padding-right: 8px; font: 12.5px/1.8 var(--sans); color: var(--text); overflow-wrap: anywhere; }
+.update-notes-body > :first-child { margin-top: 0; }
+.update-notes-body > :last-child { margin-bottom: 0; }
+.update-notes-body :is(p, ul, ol, pre, blockquote, table, details) { margin: 0 0 10px; }
+.update-notes-body :is(h1, h2, h3, h4, h5, h6) { margin: 18px 0 6px; font-size: 13px; font-weight: 600; line-height: 1.5; }
+.update-notes-body :is(h1, h2) { font-size: 14px; }
+.update-notes-body :is(ul, ol) { padding-left: 20px; }
+.update-notes-body li + li { margin-top: 4px; }
+.update-notes-body a { color: var(--amber); text-decoration: underline; text-underline-offset: 2px; }
+.update-notes-body a:not([href]) { color: inherit; text-decoration: none; }
+.update-notes-body code { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background: var(--panel-2); }
+.update-notes-body pre { padding: 10px 12px; border-radius: 8px; background: var(--panel-2); overflow-x: auto; white-space: pre; overflow-wrap: normal; }
+.update-notes-body pre code { padding: 0; background: none; line-height: 1.7; }
+.update-notes-body blockquote { padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
+.update-notes-body hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.update-notes-body img { max-width: 100%; height: auto; }
+.update-notes-body table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.update-notes-body :is(th, td) { padding: 4px 10px; border: 1px solid var(--line); text-align: left; }
 [data-update-check].checking svg { animation: version-spin 1s linear infinite; }
 @keyframes version-spin { to { transform: rotate(360deg); } }
 @keyframes version-reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }

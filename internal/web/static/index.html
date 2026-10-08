@@ -1133,18 +1133,6 @@
                   <p data-i18n-text="[&quot;版本信息、软件更新与服务运行状态。&quot;]">版本信息、软件更新与服务运行状态。</p>
                 </div>
               </div>
-              <section class="update-components" aria-labelledby="component-title">
-                <div class="component-head"><h3 id="component-title" data-i18n="更新对象与生效范围">更新对象与生效范围</h3><button id="component-refresh" type="button" class="btn btn-sm" data-icon="refresh" data-i18n="刷新本地版本信息">刷新本地版本信息</button></div>
-                <p id="component-read-status" class="note" role="status"></p>
-                <table class="component-table">
-                  <thead><tr><th data-i18n="更新对象">更新对象</th><th data-i18n="版本与兼容状态">版本与兼容状态</th><th data-i18n="生效范围">生效范围</th></tr></thead>
-                  <tbody>
-                    <tr><th scope="row" data-i18n="服务端">服务端</th><td><p id="component-server-version"></p><p data-i18n="候选兼容性待升级预检：核对配置与数据库后才切换。版本可比较不代表候选兼容。">候选兼容性待升级预检：核对配置与数据库后才切换。版本可比较不代表候选兼容。</p></td><td><p data-i18n="更新服务端二进制与网页。服务会重启、连接会短暂断开；刷新网页加载新界面。空间无需仅为服务端更新而重启。">更新服务端二进制与网页。服务会重启、连接会短暂断开；刷新网页加载新界面。空间无需仅为服务端更新而重启。</p><p data-i18n="自动备份是系统备份，不包含项目文件；项目恢复需要完整备份。">自动备份是系统备份，不包含项目文件；项目恢复需要完整备份。</p></td></tr>
-                    <tr><th scope="row" data-i18n="Agent 镜像">Agent 镜像</th><td><p id="component-image-version" class="component-version"></p><p id="component-image-state"></p></td><td><p data-i18n="更新空间中的 Claude Code / Codex CLI。运行中的空间继续使用旧镜像，停止再启动后采用所选镜像；不重启服务端或桌面应用。">更新空间中的 Claude Code / Codex CLI。运行中的空间继续使用旧镜像，停止再启动后采用所选镜像；不重启服务端或桌面应用。</p><button id="component-image-open" type="button" class="btn btn-sm" data-icon="settings" data-i18n="管理 Agent 镜像更新">管理 Agent 镜像更新</button></td></tr>
-                    <tr><th scope="row" data-i18n="桌面应用">桌面应用</th><td><p id="component-desktop-version"></p><p id="component-desktop-state"></p></td><td><p data-i18n="在桌面应用内检查并安装；只重启本机应用，连接会暂时断开。服务端与空间无需重启，远端任务继续运行；安装前停止本机同步和文件传输。">在桌面应用内检查并安装；只重启本机应用，连接会暂时断开。服务端与空间无需重启，远端任务继续运行；安装前停止本机同步和文件传输。</p><a href="https://github.com/devilcoolyue/agentbox/blob/main/desktop/README.md" target="_blank" rel="noopener noreferrer" data-i18n="桌面安装与兼容说明">桌面安装与兼容说明</a></td></tr>
-                  </tbody>
-                </table>
-              </section>
               <div class="update-panel">
                 <div class="update-product">
                   <span class="update-mark" data-mark></span>
@@ -1164,10 +1152,22 @@
                       <div class="update-actions"><button type="button" id="upgrade-refresh" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新升级状态&quot;]">刷新升级状态</button><button type="button" id="upgrade-reload" class="btn btn-sm hidden" data-icon="refresh" data-i18n-text="[&quot;刷新页面&quot;]">刷新页面</button></div>
                     </div>
                     <a class="update-guide" href="https://github.com/devilcoolyue/agentbox/blob/main/deploy/downloads/README.md#手工安装与升级" target="_blank" rel="noopener noreferrer" data-i18n-text="[&quot;查看升级说明 &quot;]">查看升级说明 <span aria-hidden="true">↗</span></a>
-                    <details id="update-notes-wrap" class="update-notes hidden"><summary data-i18n-text="[&quot;版本说明&quot;]">版本说明</summary><pre id="update-notes"></pre></details>
+                    <details id="update-notes-wrap" class="update-notes hidden"><summary data-i18n-text="[&quot;版本说明&quot;]">版本说明</summary><div id="update-notes" class="update-notes-body"></div></details>
                   </div>
                 </div>
               </div>
+              <section class="update-components" aria-labelledby="component-title">
+                <div class="component-head"><h3 id="component-title" data-i18n="更新对象与生效范围">更新对象与生效范围</h3><button id="component-refresh" type="button" class="btn btn-sm" data-icon="refresh" data-i18n="刷新本地版本信息">刷新本地版本信息</button></div>
+                <p id="component-read-status" class="note" role="status"></p>
+                <table class="component-table">
+                  <thead><tr><th data-i18n="更新对象">更新对象</th><th data-i18n="版本与兼容状态">版本与兼容状态</th><th data-i18n="生效范围">生效范围</th></tr></thead>
+                  <tbody>
+                    <tr><th scope="row" data-i18n="服务端">服务端</th><td><p id="component-server-version"></p><p data-i18n="候选兼容性待升级预检：核对配置与数据库后才切换。版本可比较不代表候选兼容。">候选兼容性待升级预检：核对配置与数据库后才切换。版本可比较不代表候选兼容。</p></td><td><p data-i18n="更新服务端二进制与网页。服务会重启、连接会短暂断开；刷新网页加载新界面。空间无需仅为服务端更新而重启。">更新服务端二进制与网页。服务会重启、连接会短暂断开；刷新网页加载新界面。空间无需仅为服务端更新而重启。</p><p data-i18n="自动备份是系统备份，不包含项目文件；项目恢复需要完整备份。">自动备份是系统备份，不包含项目文件；项目恢复需要完整备份。</p></td></tr>
+                    <tr><th scope="row" data-i18n="Agent 镜像">Agent 镜像</th><td><p id="component-image-version" class="component-version"></p><p id="component-image-state"></p></td><td><p data-i18n="更新空间中的 Claude Code / Codex CLI。运行中的空间继续使用旧镜像，停止再启动后采用所选镜像；不重启服务端或桌面应用。">更新空间中的 Claude Code / Codex CLI。运行中的空间继续使用旧镜像，停止再启动后采用所选镜像；不重启服务端或桌面应用。</p><button id="component-image-open" type="button" class="btn btn-sm" data-icon="settings" data-i18n="管理 Agent 镜像更新">管理 Agent 镜像更新</button></td></tr>
+                    <tr><th scope="row" data-i18n="桌面应用">桌面应用</th><td><p id="component-desktop-version"></p><p id="component-desktop-state"></p></td><td><p data-i18n="在桌面应用内检查并安装；只重启本机应用，连接会暂时断开。服务端与空间无需重启，远端任务继续运行；安装前停止本机同步和文件传输。">在桌面应用内检查并安装；只重启本机应用，连接会暂时断开。服务端与空间无需重启，远端任务继续运行；安装前停止本机同步和文件传输。</p><a href="https://github.com/devilcoolyue/agentbox/blob/main/desktop/README.md" target="_blank" rel="noopener noreferrer" data-i18n="桌面安装与兼容说明">桌面安装与兼容说明</a></td></tr>
+                  </tbody>
+                </table>
+              </section>
               <div class="card">
                 <div id="about-loading" class="loading-block hidden">
                   <span class="spin"></span><span data-i18n-text="[&quot;读取系统信息中…&quot;]">读取系统信息中…</span>

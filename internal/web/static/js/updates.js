@@ -5,6 +5,7 @@ import { $, askConfirm, fmtDateTime, fmtTime } from "./util.js";
 import { hideTip } from "./tip.js";
 import { buttonLabel } from "./icons.js";
 import { initUpdateComponents } from "./features/settings/update-components.js";
+import { markdownPreview } from "./markdown-preview.js";
 const interval = 4 * 60 * 60 * 1000;
 const releasesURL = "https://github.com/devilcoolyue/agentbox/releases";
 const versionLabel = (version) => /^\d/.test(version) ? "v" + version : version;
@@ -31,6 +32,7 @@ export function initUpdates() {
     let awaitingSubmission = false;
     let upgradeTimer;
     let pollingUntil = 0;
+    let renderedNotes;
     const upgrading = () => !!upgrade?.job && !["succeeded", "failed"].includes(upgrade.job.phase);
     function renderUpgrade() {
         const job = upgrade?.job;
@@ -192,8 +194,18 @@ export function initUpdates() {
         $("version-current").classList.toggle("hidden", !(info?.checked_at && info.latest_version && info.comparable && !available && !error && !checking));
         $("version-upgrade").classList.toggle("hidden", !available);
         setTextRender($("update-build"), () => info ? [info.built_at !== "unknown" ? i18nText("构建于 ") + (isNaN(Date.parse(info.built_at)) ? info.built_at : fmtDateTime(info.built_at, false)) : "", info.revision !== "unknown" ? i18nText("提交 ") + info.revision.slice(0, 12) : ""].filter(Boolean).join(" · ") : "");
-        $("update-notes").textContent = info?.notes || "";
-        $("update-notes-wrap").classList.toggle("hidden", !info?.notes);
+        const notes = info?.notes || "";
+        // GitHub release body is Markdown. It goes through the file preview's sanitizer;
+        // only absolute https images load and repository-relative links stay inert.
+        // Re-parse only on change so polling keeps the reader's scroll and selection.
+        if (notes !== renderedNotes) {
+            renderedNotes = notes;
+            $("update-notes").replaceChildren(...notes ? [markdownPreview(notes, {
+                    image: src => /^https:\/\//i.test(src.trim()) ? src.trim() : "",
+                    file: () => undefined,
+                }).content] : []);
+        }
+        $("update-notes-wrap").classList.toggle("hidden", !notes);
         positionMenu();
         renderUpgrade();
     }

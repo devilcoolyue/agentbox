@@ -39,7 +39,7 @@ export async function smoke(page) {
  const errors = []; page.on('pageerror', e => { errors.push(e.stack || e.message); console.error('Browser page error:', e.stack || e.message); });
  let settingsWrites = 0, monitorCalls = 0, updateChecks = 0, updateReads = 0;
  let release = {current_version:'v0.1.0-rc.2-updates2',revision:'0123456789abcdef',built_at:'2026-09-24T08:00:00Z',latest_version:'',available:false,comparable:true,release_url:'https://github.com/devilcoolyue/agentbox/releases',notes:'',checked_at:0,attempted_at:0,error:''};
- let nextRelease = {latest_version:'v0.2.0',available:true,notes:'新增版本提醒。\n<script>untrusted release notes</script>'};
+ let nextRelease = {latest_version:'v0.2.0',available:true,notes:'新增版本提醒。\n\n## 升级说明\n\n- **自动备份**后重启\n- [发行记录](https://github.com/devilcoolyue/agentbox/releases) · [仓库文档](docs/i18n.md) · [坏链接](javascript:window.__notesXSS=1)\n\n```bash\nsudo agentbox --version\n```\n\n<script>window.__notesXSS=1</script>\n<img src="x" onerror="window.__notesXSS=1">'};
  let upgrade = {supported:true,reason:'',current_version:release.current_version,job:null};
  let upgradeStarts = 0, upgradeReads = 0, loseUpgradeResponse = false, upgradeOffline = false;
  const accounts = []; let accountCreates = 0, failOAuthOnce = true, oauthFinishes = 0, keyWrites = 0;
@@ -202,8 +202,14 @@ export async function smoke(page) {
   await page.locator('#sec-about').waitFor({state:'visible'});
   await page.waitForFunction(()=>location.hash==='#/settings/about');
   await page.locator('#update-notes-wrap summary').click();
-  assert.match(await page.locator('#update-notes').innerText(),/<script>/,'release notes must stay plain text');
-  assert.equal(await page.locator('#update-notes script').count(),0);
+  // Release notes render as sanitized Markdown: structure kept, script/handlers/unsafe links dropped.
+  assert.equal(await page.locator('#update-notes h2').innerText(),'升级说明');
+  assert.equal(await page.locator('#update-notes li strong').innerText(),'自动备份');
+  assert.match(await page.locator('#update-notes pre code').innerText(),/sudo agentbox --version/);
+  assert.equal(await page.locator('#update-notes a[href]').count(),1,'only the absolute https link stays clickable');
+  assert.equal(await page.locator('#update-notes a[href]').evaluate(a=>[a.target,a.rel].join(' ')),'_blank noopener noreferrer');
+  assert.equal(await page.locator('#update-notes :is(script,[onerror],img[src])').count(),0);
+  assert.equal(await page.evaluate(()=>window.__notesXSS),undefined);
   await page.locator('#update-notes-wrap summary').click();
   const screenshot = async name => {
    if(process.env.AGENTBOX_UPDATE_SCREENSHOTS) {
