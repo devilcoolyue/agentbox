@@ -264,7 +264,7 @@ export function renderSidebar() {
         card.classList.add("st-" + state.cls);
         setAttrRender(card, "aria-label", () => `${sess.name} (${agentName(sess.agent)}, ${sessionState(sess).label})`);
         setTip(card, () => `${sess.name}\n${sess.account_label} · ${agentName(sess.agent)} · ${sessionState(sess).label}\n#${sess.id}`);
-        const av = agentAvatar(sess.agent, { led: true });
+        const av = agentAvatar(sess.agent, { icon: 18, led: true });
         if (sess.status === "running")
             av.querySelector(".led").classList.add("on");
         // 收起侧栏时只剩头像，同一种 Agent 的空间图标一模一样：改显示空间名首字
@@ -282,15 +282,12 @@ export function renderSidebar() {
         meta.className = "meta";
         meta.textContent = sess.account_label || agentName(sess.agent);
         body.append(h, meta);
-        // 运行中 / 休眠写成文字，不只靠头像角上 7px 的灯区分。休眠 = 空闲自动停机
-        // （数据都在，发消息/开终端即自动唤醒），与用户手动停止区分开。
-        if (state.cls !== "off") {
-            const st = document.createElement("span");
-            st.className = "sc-state " + state.cls;
-            setTextRender(st, () => sessionState(sess).label);
-            meta.append(document.createTextNode(" · "), st);
-        }
-        card.append(av, body);
+        // 状态与桌面版一致收成行尾圆点：运行中=绿、休眠（空闲自动停机）=黄、已停止=灰。
+        // 文字仍在卡片的 aria-label 与悬停提示里，并可用上方的状态筛选；收起侧栏时改由头像角灯表示。
+        const dot = document.createElement("span");
+        dot.className = "sc-dot " + state.cls;
+        dot.setAttribute("aria-hidden", "true");
+        card.append(av, body, dot);
         const open = () => emit("open-session", sess);
         card.addEventListener("click", open);
         list.appendChild(card);

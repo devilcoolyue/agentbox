@@ -175,16 +175,30 @@
   display: flex; flex-direction: column;
   padding: 0 8px;
 }
+/* 计数紧跟标题；按基线对齐，等宽数字才不会比中文标题显得上浮 */
 .side-section-head {
-  flex: none; height: 32px; padding: 0 14px;
-  display: flex; align-items: center; justify-content: space-between;
-  color: var(--muted); font-size: 11px;
+  flex: none; height: 28px; padding: 5px 14px 0;
+  display: flex; align-items: baseline; gap: 6px;
+  color: var(--muted); font-size: 11px; line-height: 18px;
 }
-.session-filters { flex: none; display: grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px; padding:0 4px 8px; }
-.session-filters input, .session-filters :is(select, .select-trigger) { width: 100%; min-width: 0; min-height: 36px; font-size: 12px; }
-.session-filter-row { display:flex; align-items:center; gap:4px; max-width:120px; }
-.session-filter-row :is(select, .select-trigger) { flex:1; width:82px; }
-.session-filter-row button { flex: none; min-height: 36px; }
+/* 搜索框 + 状态筛选同一行；搜索框前置放大镜，外框画在 label 上，点图标也能聚焦输入 */
+.session-filters { flex: none; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 6px; padding: 0 4px 6px; }
+.session-search {
+  display: flex; align-items: center; gap: 6px;
+  min-width: 0; height: 32px; padding: 0 8px;
+  color: var(--muted); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px;
+  cursor: text; transition: border-color 140ms ease;
+}
+.session-search:hover { border-color: color-mix(in srgb, var(--muted) 60%, var(--line)); }
+.session-search:focus-within { border-color: var(--amber-dim); outline: 2px solid var(--amber); outline-offset: 1px; }
+.session-search .ui-icon { flex: none; }
+.session-search input { flex: 1; width: 100%; min-width: 0; padding: 0; border: 0; border-radius: 0; background: none; font-size: 12px; line-height: 30px; }
+.session-search input:focus-visible { outline: none; }
+.session-filter-row { display: flex; align-items: center; gap: 4px; max-width: 112px; }
+.session-filter-row :is(select, .select-trigger) { flex: 1; width: 74px; min-width: 0; min-height: 32px; font-size: 12px; }
+.session-filter-row .select-trigger { gap: 6px; padding: 0 8px 0 10px; border-radius: 6px; line-height: 30px; }
+.session-filter-row button { flex: none; min-height: 32px; }
 .session-search-open.side-item { display: none; }
 .side-label { font-size: 11px; letter-spacing: 0.06em; }
 .side-count { font-family: var(--mono); font-size: 10px; }
@@ -324,37 +338,32 @@
 /* ---- 会话列表：定高行，列表在剩余空间内独立滚动 ---- */
 .session-list {
   flex: 1; min-height: 0;
-  display: flex; flex-direction: column; gap: 3px;
+  display: flex; flex-direction: column; gap: 2px;
   overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
   padding: 2px 4px 6px;
 }
+/* 与桌面版同一套行样式：裸 Agent 图标 + 名称/账号两行 + 行尾状态圆点；选中是浅底加细框。
+ * 头像瓦片与角灯只在收起侧栏时出现（见下方 collapsed 规则）。 */
 .session-card {
   position: relative;
-  flex: none; width: 100%; height: 56px; min-width: 0;
-  display: flex; align-items: center; gap: 11px;
+  flex: none; width: 100%; height: 44px; min-width: 0;
+  display: flex; align-items: center; gap: 10px;
   color: var(--text); text-align: left;
-  background: transparent; border: 0; border-radius: 8px;
-  padding: 0 10px; cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  padding: 0 9px; cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 .session-card:hover { background: var(--side-hover); }
-.session-card.active { background: var(--side-active); }
-/* 选中标记是贴左缘、垂直居中的一小段直线：整条内阴影会顺着 8px 圆角弯成括号状，显得又粗又重 */
-.session-card.active::before {
-  content: ""; position: absolute; left: 0; top: 50%;
-  width: 2px; height: 20px; transform: translateY(-50%);
-  border-radius: 0 2px 2px 0; background: var(--amber);
-}
-.session-card .agent-avatar { border: 0; background: color-mix(in srgb, var(--brand) 9%, transparent); }
-.session-card .agent-avatar .led { border-color: var(--panel); }
-.session-card.active .agent-avatar .led { border-color: var(--side-active); }
-.sc-body { flex: 1; min-width: 0; }
+.session-card.active { background: var(--panel-2); border-color: var(--line); }
+.session-card .agent-avatar { width: 20px; height: 20px; border: 0; border-radius: 0; background: none; }
+.session-card .agent-avatar .led { display: none; border-color: var(--panel); }
+.session-card.active .agent-avatar .led { border-color: var(--panel-2); }
+.sc-body { flex: 1; min-width: 0; line-height: 1.35; }
 .sc-name {
-  display: block; margin: 0 0 3px;
+  display: block; margin: 0 0 1px;
   font-size: 13px; font-weight: 500;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.session-card.active .sc-name { color: var(--amber); }
 .session-card .meta {
   display: block; font-size: 11px; color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -362,11 +371,10 @@
 .session-empty { margin: 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .session-empty-icon { display: none; }
 
-/* 列表里的运行状态文字：运行中=绿，休眠=警告黄（空闲自动停机，与手动停止区分开）。
- * 已停止的空间头像压暗，运行中的一眼就能挑出来。 */
-.sc-state.run { color: var(--green); }
-.sc-state.idle { color: var(--warn); }
-.session-card.st-off .agent-avatar .agent-ico { opacity: 0.55; }
+/* 行尾状态点：运行中=绿，休眠=警告黄（空闲自动停机，与手动停止区分开），已停止=灰。 */
+.sc-dot { flex: none; width: 6px; height: 6px; margin-right: 2px; border-radius: 50%; background: var(--muted); }
+.sc-dot.run { background: var(--green); }
+.sc-dot.idle { background: var(--warn); }
 .sc-initial { display: none; }
 
 /* ---- 抽屉遮罩：仅窄屏显示 ---- */
@@ -424,6 +432,12 @@
   /* 68px 的窄栏里滚动条会把头像挤偏；滚轮与触控板照常能滚 */
   :root[data-sidebar-collapsed="true"] .session-list::-webkit-scrollbar { display: none; }
   :root[data-sidebar-collapsed="true"] .session-card { height: 46px; padding: 0; justify-content: center; }
+  :root[data-sidebar-collapsed="true"] .session-card .agent-avatar {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: color-mix(in srgb, var(--brand) 9%, transparent);
+  }
+  :root[data-sidebar-collapsed="true"] .session-card .agent-avatar .led { display: block; }
+  :root[data-sidebar-collapsed="true"] .sc-dot { display: none; }
   :root[data-sidebar-collapsed="true"] .session-card .agent-ico { display: none; }
   :root[data-sidebar-collapsed="true"] .sc-initial {
     display: block; font-size: 14px; font-weight: 600; line-height: 1; color: var(--brand);
@@ -469,6 +483,10 @@
 html[lang="en"] .side-tools { grid-template-columns: 1fr; }
 
 @media (max-width: 760px) {
-  .session-filters input, .session-filters :is(select, .select-trigger) { min-height: 44px; font-size: 16px; }
-  .session-filter-row button { min-height: 44px; }
+  /* 触屏抽屉：点按区域放大；输入框字号 16px，避免 iOS 聚焦时自动放大页面 */
+  .session-search { height: 40px; }
+  .session-search input { font-size: 16px; line-height: 38px; }
+  .session-filter-row :is(select, .select-trigger) { min-height: 40px; font-size: 14px; line-height: 38px; }
+  .session-filter-row button { min-height: 40px; }
+  .session-card { height: 48px; }
 }
