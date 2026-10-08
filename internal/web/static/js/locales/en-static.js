@@ -700,5 +700,8 @@ export default {
     "处理中…": "Working…",
     "请选择 Git 连接并填写仓库地址。": "Select a Git connection and enter the repository address.",
     "风格": "Style",
-    "界面风格": "Interface style"
+    "界面风格": "Interface style",
+    "切换账号": "Switch account",
+    "切换到账号": "Switch to account",
+    "切换前会先停止工作空间，终端、远程浏览器和正在运行的命令都会中断。文件、对话记录和续聊上下文都会保留，之后的对话和终端改用新账号。": "The workspace stops before switching, so terminals, the remote browser and running commands are interrupted. Files, conversation history and resumable context are kept; later conversations and terminals use the new account."
 };

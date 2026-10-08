@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import {loginProblemsSmoke, problemsSmoke} from './test-problems-browser.mjs';
 import { responsiveSmoke } from './test-responsive.mjs';
 import { skinsSmoke } from './test-skins.mjs';
+import { switchAccountSmoke } from './test-switch-account.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
 import { remoteBrowserSmoke } from './test-remote-browser.mjs';
 import { imageUpdateSmoke } from './test-image-updates.mjs';
@@ -153,6 +154,8 @@ export async function smoke(page) {
   assert.equal(await page.locator('#login-btn').isDisabled(),false);
   await diagnosticsSmoke(page,base);
   if (process.env.AGENTBOX_BROWSER_ONLY_DIAGNOSTICS === '1') { assert.deepEqual(errors,[]); return; }
+  await switchAccountSmoke(page,base);
+  if (process.env.AGENTBOX_BROWSER_ONLY_SWITCH_ACCOUNT === '1') { assert.deepEqual(errors,[]); return; }
   await problemsSmoke(page,base,()=>chatSocket,entries=>{historyEntries=entries;});
   if (process.env.AGENTBOX_BROWSER_ONLY_PROBLEMS === '1') { assert.deepEqual(errors,[]); return; }
   if (process.env.AGENTBOX_BROWSER_ONLY_IMAGE_UPDATES === '1') {

@@ -1787,5 +1787,12 @@ export default {
     "赛博朋克": "Cyberpunk",
     "石墨极简": "Graphite",
     "青野绿意": "Verdant",
-    "工程蓝图": "Blueprint"
+    "工程蓝图": "Blueprint",
+    "切换账号…": "Switch account...",
+    "改用同类型的另一个账号，文件与对话保留": "Use another account of the same type; files and conversations are kept",
+    "当前账号：{account}": "Current account: {account}",
+    "读取账号列表失败：": "Failed to load accounts: ",
+    "没有其他可用的 {agent} 账号。需要更多账号请联系管理员。": "No other {agent} account is available. Contact an administrator for more accounts.",
+    "切换中…": "Switching…",
+    "已切换到账号「{account}」": "Switched to account \"{account}\""
 };

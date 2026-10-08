@@ -364,6 +364,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/sessions/{id}/start", s.auth(s.withSession(s.handleStartSession)))
 	mux.Handle("POST /api/sessions/{id}/stop", s.auth(s.withSession(s.handleStopSession)))
 	mux.Handle("PATCH /api/sessions/{id}", s.auth(s.withSession(s.handleRenameSession)))
+	mux.Handle("PUT /api/sessions/{id}/account", s.auth(s.withSession(s.handleSwitchAccount)))
 	mux.Handle("DELETE /api/sessions/{id}", s.auth(s.withSession(s.handleDeleteSession)))
 	mux.Handle("GET /api/sessions/{id}/models", s.auth(s.withSession(s.handleSessionModels)))
 	mux.Handle("GET /api/sessions/{id}/account/usage", s.auth(s.withSession(s.handleAccountUsage)))

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -272,6 +273,56 @@ func (s *Server) handleRenameSession(w http.ResponseWriter, r *http.Request, ses
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	writeJSON(w, http.StatusOK, s.view(updated))
+}
+
+// handleSwitchAccount 把工作空间改绑到同类型的另一个账号（workspace.SwitchAccount）。
+// 切换要停容器，所以占住对话房间与导入：回合或导入进行中直接拒绝，不拦腰截断。
+// 文件、对话记录与续聊 id 都保留，之后的对话与终端用新账号。
+func (s *Server) handleSwitchAccount(w http.ResponseWriter, r *http.Request, sess store.Session) {
+	var req struct {
+		AccountID string `json:"account_id"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil || req.AccountID == "" {
+		writeProblem(w, r, "session.account", "invalid_request")
+		return
+	}
+	acct, ok := s.cfg.Account(req.AccountID)
+	if !ok || acct.Type != sess.Agent {
+		writeProblem(w, r, "session.account", "invalid_request")
+		return
+	}
+	if !s.canUseAccount(acct, sess.User) {
+		writeProblem(w, r, "session.account", "account_access_denied")
+		return
+	}
+	if req.AccountID == sess.AccountID {
+		writeJSON(w, http.StatusOK, s.view(sess))
+		return
+	}
+	room := s.chat.room(sess.ID)
+	if err := room.begin(); err != nil {
+		writeProblem(w, r, "session.account", chatRequestErrorCode(err))
+		return
+	}
+	defer room.end()
+	if !s.beginCreationWork(sess.ID) {
+		writeProblem(w, r, "session.account", "import_pending")
+		return
+	}
+	defer s.endCreationWork(sess.ID)
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	updated, err := s.workspaces().SwitchAccount(ctx, sess.ID, req.AccountID, s.credentialService().Release)
+	if err != nil {
+		code := classifyProblem(err, "internal_error")
+		if errors.Is(err, workspace.ErrAccountAgent) {
+			code = "invalid_request"
+		}
+		writeProblem(w, r, "session.account", code)
+		return
+	}
+	log.Printf("workspace %s account %s -> %s", sess.ID, sess.AccountID, updated.AccountID)
 	writeJSON(w, http.StatusOK, s.view(updated))
 }
 

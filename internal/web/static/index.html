@@ -1907,6 +1907,27 @@
   </form>
 </dialog>
 
+<!-- 切换工作空间使用的账号 -->
+<dialog id="dlg-switch-acct">
+  <form id="switch-acct-form" method="dialog">
+    <div class="dlg-head">
+      <h2 data-i18n-text="[&quot;切换账号&quot;]">切换账号</h2>
+      <button type="button" id="switch-acct-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
+    </div>
+    <p id="switch-acct-current"></p>
+    <label id="switch-acct-field" data-i18n-text="[&quot;切换到账号\n      &quot;]">切换到账号
+      <select id="switch-acct-select"></select>
+    </label>
+    <p id="switch-acct-empty" class="field-hint hidden"></p>
+    <p class="field-hint" data-i18n-text="[&quot;切换前会先停止工作空间，终端、远程浏览器和正在运行的命令都会中断。文件、对话记录和续聊上下文都会保留，之后的对话和终端改用新账号。&quot;]">切换前会先停止工作空间，终端、远程浏览器和正在运行的命令都会中断。文件、对话记录和续聊上下文都会保留，之后的对话和终端改用新账号。</p>
+    <p id="switch-acct-error" class="login-error hidden"></p>
+    <div class="dlg-actions">
+      <button type="button" id="switch-acct-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+      <button type="submit" id="switch-acct-ok" class="btn btn-primary" data-icon="key" data-i18n-text="[&quot;切换账号&quot;]">切换账号</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- 编辑账号 -->
 <dialog id="dlg-acct-edit">
   <form id="acct-edit-form" method="dialog">

@@ -6,14 +6,15 @@ import { setText, setTextRender, t as i18nText } from "./i18n.js";
 
 import { S, bus, emit } from "./state.js";
 import type { Tab } from "./state.js";
-import type { Session } from "./types.js";
+import type { Account, Session } from "./types.js";
 import { $, btnBusy, btnDone, wbBusy, wbIdle, toast, askPrompt } from "./util.js";
+import { setSelectValue } from "./select.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
 import { showView, renderSidebar, updateTopbarTitle } from "./shell.js";
 import { chatTeardown, resetChatImgs, loadPick, updateHero, loadHistory, connectChat } from "./chat.js";
 import { setThreadBar, closeThreadPanel } from "./chat-threads.js";
-import { termTeardown, termDisconnect, openTerm, termSpendPolling } from "./term.js";
+import { termTeardown, termDisconnect, termReconnect, openTerm, termSpendPolling } from "./term.js";
 import { resetTree, loadFiles } from "./files.js";
 import { loadChanges, resetChangesRepo } from "./changes.js";
 import { loadSkills } from "./skills.js";
@@ -196,7 +197,8 @@ function sessionMenu(withPower: boolean): MenuItem[] {
     { label: i18nText("使用指引"), icon: "bulb", run: () => emit("workspace-guide-open"), sep: true },
     { label: i18nText("环境检查"), icon: "activity", run: () => openDiagnostics(s.id), sep: true },
     { label: i18nText("查看账号额度"), icon: "gauge", run: openAcctUsage, hidden: agentKey(s.agent) !== "claude", sep: true, tip: i18nText("该账号订阅的 5 小时 / 每周用量窗口") },
-    { label: i18nText("重命名"), icon: "rename", run: renameSession, sep: agentKey(s.agent) !== "claude" },
+    { label: i18nText("切换账号…"), icon: "key", run: openSwitchAccount, sep: agentKey(s.agent) !== "claude", disabled: S.actionBusy, tip: i18nText("改用同类型的另一个账号，文件与对话保留") },
+    { label: i18nText("重命名"), icon: "rename", run: renameSession },
     { label: i18nText("删除工作空间…"), icon: "trash", danger: true, sep: true, run: openDeleteDlg, disabled: S.actionBusy },
   ];
 }
@@ -231,6 +233,80 @@ async function renameSession() {
     toast(i18nText("工作空间已重命名"));
   } catch (e) { toast(i18nText("重命名失败：") + (e as Error).message, true); }
 }
+
+/* 切换账号：只能换同类型（claude / codex）且本人有权使用的账号。服务端会先停容器、
+ * 把旧账号续出的新令牌收回账号池，再改绑；之前在运行的空间这里接着拉起来。 */
+let switchBusy = false;
+async function openSwitchAccount() {
+  const sess = S.current; if (!sess || S.actionBusy) return;
+  const dlg = $<HTMLDialogElement>("dlg-switch-acct"), select = $<HTMLSelectElement>("switch-acct-select");
+  setText($("switch-acct-current"), "当前账号：{account}", { account: sess.account_label || sess.account_id });
+  $("switch-acct-error").classList.add("hidden");
+  $("switch-acct-empty").classList.add("hidden");
+  $("switch-acct-field").classList.remove("hidden");
+  select.replaceChildren();
+  $<HTMLButtonElement>("switch-acct-ok").disabled = true;
+  dlg.showModal();
+  let accounts: Account[];
+  try {
+    accounts = await api<Account[]>("/accounts");
+  } catch (e) {
+    if (S.current?.id !== sess.id || !dlg.open) return;
+    $("switch-acct-error").textContent = i18nText("读取账号列表失败：") + (e as Error).message;
+    $("switch-acct-error").classList.remove("hidden");
+    return;
+  }
+  if (S.current?.id !== sess.id || !dlg.open) return;
+  const others = accounts.filter(a => a.type === sess.agent && a.id !== sess.account_id);
+  for (const a of others) select.append(new Option(a.label || a.id, a.id));
+  if (others.length) setSelectValue(select, others[0].id);
+  $("switch-acct-field").classList.toggle("hidden", !others.length);
+  setText($("switch-acct-empty"), "没有其他可用的 {agent} 账号。需要更多账号请联系管理员。", { agent: agentName(sess.agent) });
+  $("switch-acct-empty").classList.toggle("hidden", others.length > 0);
+  $<HTMLButtonElement>("switch-acct-ok").disabled = !others.length;
+}
+function closeSwitchAccount() { if (!switchBusy) $<HTMLDialogElement>("dlg-switch-acct").close(); }
+$("switch-acct-cancel").addEventListener("click", closeSwitchAccount);
+$("switch-acct-close").addEventListener("click", closeSwitchAccount);
+$("dlg-switch-acct").addEventListener("cancel", (e) => { if (switchBusy) e.preventDefault(); });
+$("switch-acct-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const sess = S.current, accountID = $<HTMLSelectElement>("switch-acct-select").value;
+  if (!sess || switchBusy || !accountID) return;
+  const wasRunning = sess.status === "running";
+  switchBusy = true; S.actionBusy = true;
+  btnBusy($("switch-acct-ok"), () => i18nText("切换中…"));
+  for (const id of ["switch-acct-cancel", "switch-acct-close"]) $<HTMLButtonElement>(id).disabled = true;
+  $("switch-acct-error").classList.add("hidden");
+  let res: Session | null = null;
+  try {
+    res = await api<Session>(`/sessions/${sess.id}/account`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: accountID }),
+    });
+  } catch (err) {
+    $("switch-acct-error").textContent = i18nText("切换失败：") + (err as Error).message;
+    $("switch-acct-error").classList.remove("hidden");
+    refreshAll(); // 失败也可能已经停了容器，状态以服务端为准
+  }
+  switchBusy = false; S.actionBusy = false;
+  btnDone($("switch-acct-ok"));
+  for (const id of ["switch-acct-cancel", "switch-acct-close"]) $<HTMLButtonElement>(id).disabled = false;
+  if (!res) return;
+  $<HTMLDialogElement>("dlg-switch-acct").close();
+  if (S.current?.id !== sess.id) { refreshAll(); return; }
+  S.current = res;
+  browserDisconnect();
+  termDisconnect(); // 容器已停，收掉连接；重新启动后终端按新账号重连
+  renderHead(); renderSidebar();
+  emit("models-updated"); // 模型与推理能力按账号配置，重新读一次
+  toast(i18nText("已切换到账号「{account}」", { account: res.account_label || res.account_id }));
+  if (!wasRunning) { refreshAll(); return; }
+  await doStart();
+  // 停在终端页的话直接接上新账号的终端，不用再手动重连
+  if (S.tab === "term" && S.current?.id === sess.id && S.current.status === "running") termReconnect();
+});
 
 $("del-cancel").addEventListener("click", () => $<HTMLDialogElement>("dlg-del").close());
 $("del-close").addEventListener("click", () => $<HTMLDialogElement>("dlg-del").close());

@@ -84,7 +84,7 @@ The UI also confirms workspace configuration and offers an editable first-task e
 v0.1.11 adds isolated recovery of unsent chat drafts and attachment checks. It also introduces server schema 12 and a versioned chat receipt API connected to the existing runner, with ID deduplication, status queries and recovery after restart. The browser now saves a frozen outgoing copy before sending, queries the original ID after a lost acknowledgement, and provides explicit result review. Unsent drafts stay separate. Local saving can be disabled; older servers retain the legacy send path with a capability notice. Back up before upgrading; older schema 10/11 binaries cannot open schema 12. See [draft recovery](docs/chat-recovery.md) and [M3 progress](docs/milestones/m3.md).
 
 1. **Add an account** in System settings → Account pool (`系统设置 → 账号池`). Choose Claude or Codex and connect a subscription or API / relay account. [Account setup →](docs/accounts-and-models.md)
-2. **Create a workspace** and select its agent and account.
+2. **Create a workspace** and select its agent and account. You can later switch it to another account of the same agent from the workspace ⋯ menu.
 3. **Bring your project:** upload files, or open Terminal and clone a repository into `/workspace`.
 4. **Describe the task in Chat**, then inspect files or run commands in Terminal. Both work on the same project files.
 5. **Review Changes** before committing. Download the result, or configure a Git connection to push and open a PR / MR. [Workspace guide →](docs/user-guide.md)
