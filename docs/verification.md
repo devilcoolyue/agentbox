@@ -126,6 +126,8 @@ python3 scripts/verify.py run --step docker.chat-reliability --image alpine:3.22
 
 浏览器失败报告同时保留页面异常、最近 100 条失败请求的路径（不含查询串）和登录/主界面的隐藏状态；只记录令牌是否存在，不记录令牌值。这些仅是隔离夹具证据，不是生产诊断导出。`browser.chat-outbox` 的跨线程场景主动挂起新建响应，确认旧编辑器仍可就绪后才释放响应；必须等新线程历史应用完成再检查旧消息不可重试，不能以输入框可见代替线程切换完成。
 
+聊天联合夹具的版本化静态资源经 Playwright 的 Node HTTP 传输从真实二进制读取并原样交给浏览器，避免 Linux Docker 网卡地址通知以 `ERR_NETWORK_CHANGED` 中断模块加载。无缓存、重定向或自动重试，资源非 200/传输失败仍判失败，次数与错误记录在 `static_transport`。HTML、API、WebSocket 继续走浏览器网络及原故障注入；不把该夹具当作宿主网络变化期间 Chromium 直连静态资源的验收。
+
 ## 版本化契约
 
 `contracts/chat-errors-v1.schema.json` 仅覆盖本轮高频变动的错误和持久聊天；`python3 scripts/generate-contracts.py` 生成 TS 声明，`web.contracts` 检查是否同步生成及运行时的正反例，Go `internal/protocol` 核对真实 JSON 字段/状态/封装。桌面 Rust 与 Vitest 也读取错误目录样本。它不生成全量 OpenAPI，不用 schema 版本替代能力协商或数据库 schema。

@@ -4,6 +4,17 @@
 Chrome to its real login, session, history, attachment, receipt and WebSocket APIs.
 `chat-integration-harness.mjs` owns startup, signals, evidence and cleanup.
 
+Versioned static assets (`/_v/<hash>/...`) are fetched from that real binary by
+Playwright's Node HTTP transport and forwarded unchanged to Chrome. Linux Docker
+bridge/veth address notifications can otherwise abort Chromium's module graph
+with `ERR_NETWORK_CHANGED` during reload, before the recovery scenario starts.
+This path has no cache, redirects, retries or synthetic asset bodies; non-200
+responses and transport errors fail the test and are recorded. Documents, APIs
+and WebSockets retain their browser network path, including injected faults.
+This matrix therefore does not validate Chromium's direct static-asset transport
+under host network changes. It still executes the real embedded frontend and
+checks same-origin draft/outbox recovery and actual execution/accounting counts.
+
 This helper seeds an empty, explicitly marked temporary SQLite database and acts
 as a **synthetic Docker Engine endpoint**. It never executes submitted commands.
 Codex app-server handshakes terminate before a turn; the production runner takes

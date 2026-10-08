@@ -20,9 +20,28 @@ try {
  });
  context.on('page', p => p.on('pageerror', e => errors.push(e.message))); page.on('pageerror', e => errors.push(e.message));
  await context.addInitScript(() => { if (window === window.top && /^https?:$/.test(location.protocol)) localStorage.setItem('agentbox.language', 'zh-CN'); });
+ h.report.static_transport = { mode: 'real-server-http-via-playwright-request', responses: 0, failures: [] };
  await context.route('**/*', async route => {
   const req = route.request(), url = new URL(req.url());
   if (url.origin !== h.base) { await route.abort(); return; }
+  // Docker bridge/veth address changes on Linux can make Chromium abort the
+  // module graph with ERR_NETWORK_CHANGED even though loopback stays reachable.
+  // Load immutable assets through Playwright's Node HTTP transport, preserving
+  // the real embedded server response. No cache, synthetic body or retry; API,
+  // document and WebSocket traffic still uses the browser's network stack.
+  if (req.method() === 'GET' && /^\/_v\/[a-f0-9]{12}\//.test(url.pathname)) {
+   let response;
+   try {
+    response = await route.fetch({ maxRedirects: 0, maxRetries: 0, timeout: 10000 });
+    assert.equal(response.status(), 200, 'embedded asset ' + url.pathname);
+    await route.fulfill({ response });
+    h.report.static_transport.responses++;
+   } catch (error) {
+    h.report.static_transport.failures.push({ path: url.pathname, error: error.message });
+    await route.abort('failed').catch(() => {});
+   } finally { await response?.dispose(); }
+   return;
+  }
   if (/\/chat\/requests(?:\/|$)/.test(url.pathname)) {
    if (req.method() === 'GET' && blockReads && url.pathname.startsWith('/api/sessions/space-a/')) { await route.abort('internetdisconnected'); return; }
    if (req.method() === 'PUT') {
@@ -200,7 +219,10 @@ try {
  await finish(logoutTurn.input.text); await state(logoutTurn.id, 'completed'); await accounting(logoutTurn.id); await peerLogout.close();
  passed('real logout/relogin, peer-tab signout, token revocation, another-user isolation and server-only pending recovery');
 
- assert.deepEqual(errors, []); const engineState = await h.ctl('state'); assert.deepEqual(engineState.unexpected || [], []);
+ assert.deepEqual(errors, []);
+ assert.ok(h.report.static_transport.responses > 0, 'no embedded assets loaded');
+ assert.deepEqual(h.report.static_transport.failures, [], 'embedded asset transport failed');
+ const engineState = await h.ctl('state'); assert.deepEqual(engineState.unexpected || [], []);
  assert.equal(new Set((engineState.turns || []).map(turn => turn.prompt)).size, (engineState.turns || []).length, 'a task executed twice');
  h.report.audit = await h.ctl('audit'); h.report.engine = engineState; h.report.status = 'passed';
  await page.screenshot({ path: join(h.evidence, 'recovered.png') }); await context.close(); await h.stop();
