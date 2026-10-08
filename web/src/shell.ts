@@ -263,8 +263,15 @@ export function renderSidebar() {
     meta.className = "meta";
     meta.textContent = sess.account_label || agentName(sess.agent);
     body.append(h, meta);
-    // 状态与桌面版一致收成行尾圆点：运行中=绿、休眠（空闲自动停机）=黄、已停止=灰。
-    // 文字仍在卡片的 aria-label 与悬停提示里，并可用上方的状态筛选；收起侧栏时改由头像角灯表示。
+    // 运行中 / 休眠写成文字，不只靠颜色区分。休眠 = 空闲自动停机
+    // （数据都在，发消息/开终端即自动唤醒），与用户手动停止区分开。
+    if (state.cls !== "off") {
+      const st = document.createElement("span");
+      st.className = "sc-state " + state.cls;
+      setTextRender(st, () => sessionState(sess).label);
+      meta.append(document.createTextNode(" · "), st);
+    }
+    // 行尾圆点同桌面版：运行中=绿、休眠=黄、已停止=灰；收起侧栏时改由头像角灯表示。
     const dot = document.createElement("span");
     dot.className = "sc-dot " + state.cls;
     dot.setAttribute("aria-hidden", "true");

@@ -121,9 +121,16 @@
 .shell { flex: 1; min-height: 0; display: flex; }
 
 /* ---- 侧栏：固定头尾，只有中间的会话列表滚动 ---- */
+:root[data-theme="light"] .sidebar {
+  --session-active-bg: var(--panel-2);
+  --session-active-line: var(--line);
+}
 .sidebar {
   --side-hover: color-mix(in srgb, var(--text) 5%, transparent);
   --side-active: color-mix(in srgb, var(--amber) 10%, var(--panel));
+  /* 选中的空间行：暗色下 --panel-2 与侧栏底几乎同色，改用文字色混出更亮的底和描边 */
+  --session-active-bg: color-mix(in srgb, var(--text) 11%, var(--panel));
+  --session-active-line: color-mix(in srgb, var(--text) 24%, var(--panel));
   width: 260px; min-height: 0; flex: none;
   background: var(--panel);
   border-right: 1px solid var(--line);
@@ -354,10 +361,10 @@
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .session-card:hover { background: var(--side-hover); }
-.session-card.active { background: var(--panel-2); border-color: var(--line); }
+.session-card.active { background: var(--session-active-bg); border-color: var(--session-active-line); }
 .session-card .agent-avatar { width: 20px; height: 20px; border: 0; border-radius: 0; background: none; }
 .session-card .agent-avatar .led { display: none; border-color: var(--panel); }
-.session-card.active .agent-avatar .led { border-color: var(--panel-2); }
+.session-card.active .agent-avatar .led { border-color: var(--session-active-bg); }
 .sc-body { flex: 1; min-width: 0; line-height: 1.35; }
 .sc-name {
   display: block; margin: 0 0 1px;
@@ -371,7 +378,10 @@
 .session-empty { margin: 10px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .session-empty-icon { display: none; }
 
-/* 行尾状态点：运行中=绿，休眠=警告黄（空闲自动停机，与手动停止区分开），已停止=灰。 */
+/* 运行状态：账号后的文字与行尾圆点同色。运行中=绿，休眠=警告黄（空闲自动停机，
+ * 与手动停止区分开），已停止只有灰点、不写文字。 */
+.sc-state.run { color: var(--green); }
+.sc-state.idle { color: var(--warn); }
 .sc-dot { flex: none; width: 6px; height: 6px; margin-right: 2px; border-radius: 50%; background: var(--muted); }
 .sc-dot.run { background: var(--green); }
 .sc-dot.idle { background: var(--warn); }
