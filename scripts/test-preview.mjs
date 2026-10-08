@@ -190,7 +190,8 @@ export async function smoke(page) {
    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
    for (const theme of ['dark','light']) {
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
-    await page.waitForFunction(() => { const e=document.querySelector('.fv-head'); return !!e && e.scrollWidth<=e.clientWidth; });
+    await page.waitForFunction(() => { const e=document.querySelector('.fv-head'); return !!e && e.scrollWidth<=e.clientWidth; })
+     .catch(e => { throw new Error(`preview toolbar overflow at ${width}px/${theme}`, {cause: e}); });
     if(width<=760) {
      assert.ok((await page.locator('.fv-head').boundingBox()).height<=124,'mobile preview header too tall');
      await page.locator('#fv-more').click();
