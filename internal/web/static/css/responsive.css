@@ -3,14 +3,14 @@
 .action-popover {
   position: fixed; inset: auto; margin: 0; padding: 6px;
   width: min(280px, calc(100vw - 16px)); max-height: calc(100dvh - 24px); overflow-y: auto;
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   background: var(--panel); color: var(--text); box-shadow: var(--shadow-lg);
 }
 .action-popover:popover-open { display: flex; flex-direction: column; gap: 2px; }
 .action-popover .btn, .action-popover .check {
   width: 100%; min-height: 44px; margin: 0; padding: 10px 12px;
   justify-content: flex-start; border-color: transparent; background: transparent;
-  border-radius: 6px; font-size: 13px;
+  border-radius: calc(6px * var(--radius-scale)); font-size: 13px;
 }
 .action-popover .btn:hover { background: var(--panel-2); }
 .action-popover .fv-meta { white-space: normal; overflow-wrap: anywhere; padding: 10px 12px; border-top: 1px solid var(--line); }
@@ -21,7 +21,7 @@
   width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px;
   font: inherit; font-size: 13px; line-height: 1.5; text-align: left;
   color: var(--text); background: transparent;
-  border: 1px solid var(--line); border-radius: 8px;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
 }
 .mobile-section-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-section-btn[aria-expanded="true"] { border-color: var(--amber-dim); }
@@ -29,7 +29,7 @@
 .section-menu {
   position: fixed; inset: auto; margin: 0; padding: 6px;
   width: min(264px, calc(100vw - 16px)); overflow-y: auto; overscroll-behavior: contain;
-  border: 1px solid var(--line); border-radius: 12px;
+  border: 1px solid var(--line); border-radius: calc(12px * var(--radius-scale));
   background: var(--panel); color: var(--text); box-shadow: var(--shadow-lg);
 }
 .section-menu:popover-open { display: flex; flex-direction: column; gap: 2px; animation: select-enter 120ms ease-out; }
@@ -38,13 +38,13 @@
   display: flex; align-items: center; gap: 12px; flex: none;
   width: 100%; min-height: 44px; padding: 0 12px;
   font: inherit; font-size: 14px; text-align: left;
-  color: var(--text); background: transparent; border: 0; border-radius: 8px;
+  color: var(--text); background: transparent; border: 0; border-radius: calc(8px * var(--radius-scale));
 }
 .section-menu-item .ui-icon { flex: none; color: var(--muted); }
 .section-menu-item .count {
   margin-left: auto; padding: 0 7px;
   font-family: var(--mono); font-size: 11px; color: var(--muted);
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-pill);
 }
 .section-menu-item:hover { background: var(--panel-2); }
 .section-menu-item:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
@@ -116,7 +116,7 @@
   /* Actions are compact only inside explicit tool groups (actions.css). */
   .fv-actions .scope-btn, .changes-view-tabs .seg {
     min-width: 44px; width: 44px; height: 44px; min-height: 44px;
-    padding: 0; gap: 0; flex: none; border-radius: 8px;
+    padding: 0; gap: 0; flex: none; border-radius: calc(8px * var(--radius-scale));
   }
   .fv-actions .scope-btn .action-label, .changes-view-tabs .seg .action-label { display: none; }
   :is(.fv-actions, .changes-actions, .files-actions, .skills-actions, .acct-actions, .u-actions, .px-actions, .sec-intro) .ui-icon { width: 18px; height: 18px; }

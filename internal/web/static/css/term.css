@@ -114,7 +114,7 @@
 .term-overlay-box {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
   background: var(--panel);
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   padding: 20px 28px;
   font-size: 12.5px; color: var(--text);
   box-shadow: var(--shadow-md);
@@ -138,7 +138,7 @@
   .term-keys button {
     display: inline-flex; align-items: center; justify-content: center;
     flex: none; min-width: 44px; height: 44px; padding: 0 8px;
-    border: 0; border-radius: 7px; background: transparent; color: var(--term-cursor);
+    border: 0; border-radius: calc(7px * var(--radius-scale)); background: transparent; color: var(--term-cursor);
     font: 13px var(--mono); white-space: nowrap;
     touch-action: manipulation; user-select: none; -webkit-user-select: none;
     -webkit-touch-callout: none;
@@ -180,6 +180,6 @@
   position: fixed; z-index: 40; right: 8px; top: calc(env(safe-area-inset-top) + 68px);
   display: flex; align-items: center; gap: 6px; padding: 6px 8px;
   color: var(--text); background: var(--panel); border: 1px solid var(--amber-dim);
-  border-radius: 8px; box-shadow: var(--shadow-md); font-size: 12px;
+  border-radius: calc(8px * var(--radius-scale)); box-shadow: var(--shadow-md); font-size: 12px;
 }
 .term-input-debug b { color: var(--amber); font-family: var(--mono); font-weight: 500; }

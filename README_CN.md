@@ -197,9 +197,9 @@ sudo ./agentbox -config config.json
 </details>
 
 <details>
-<summary><strong>浅色主题与手机访问</strong></summary>
+<summary><strong>主题风格与手机访问</strong></summary>
 
-支持浅色、深色和跟随系统；手机布局提供抽屉导航、触屏终端快捷键栏、滚动与长按粘贴。
+支持浅色、深色和跟随系统，并可在用户菜单切换界面风格：琥珀（默认）、液态玻璃、赛博朋克、石墨极简、青野绿意、工程蓝图。风格与明暗互不影响，都保存在当前浏览器；手机布局提供抽屉导航、触屏终端快捷键栏、滚动与长按粘贴。
 
 [![浅色主题下的 Agentbox](docs/images/chat-light.png)](docs/images/chat-light.png)
 

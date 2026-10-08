@@ -34,7 +34,7 @@ export function agentAvatar(agent, { size = 30, icon = 16, led = false } = {}) {
     box.className = "agent-avatar agent-" + k;
     if (size !== 30) {
         box.style.width = box.style.height = size + "px";
-        box.style.borderRadius = Math.round(size * 0.27) + "px";
+        box.style.borderRadius = `calc(${Math.round(size * 0.27)}px * var(--radius-scale))`;
     }
     box.appendChild(agentIcon(k, icon));
     if (led)

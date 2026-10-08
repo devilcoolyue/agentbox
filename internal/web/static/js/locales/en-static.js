@@ -698,5 +698,7 @@ export default {
     "继续并打开空间": "Continue and open workspace",
     "创建并继续": "Create and continue",
     "处理中…": "Working…",
-    "请选择 Git 连接并填写仓库地址。": "Select a Git connection and enter the repository address."
+    "请选择 Git 连接并填写仓库地址。": "Select a Git connection and enter the repository address.",
+    "风格": "Style",
+    "界面风格": "Interface style"
 };

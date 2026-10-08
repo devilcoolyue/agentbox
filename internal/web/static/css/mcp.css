@@ -2,7 +2,7 @@
 .mcp-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px 24px; flex-wrap:wrap; padding:12px 20px; border-bottom:1px solid var(--line); }
 .mcp-scope-group, .mcp-toolbar-actions { display:flex; align-items:center; gap:8px; }
 .mcp-scope-group > label { font-size:12px; color:var(--muted); margin-right:2px; white-space:nowrap; }
-.mcp-toolbar :is(.btn, .select-trigger) { height:32px; min-height:32px; padding:5px 10px; font-size:12.5px; line-height:20px; border-radius:7px; }
+.mcp-toolbar :is(.btn, .select-trigger) { height:32px; min-height:32px; padding:5px 10px; font-size:12.5px; line-height:20px; border-radius:calc(7px * var(--radius-scale)); }
 .mcp-scope-group .select-trigger { min-width:112px; }
 #mcp-content { overflow:auto; padding:16px 20px; min-height:0; container-type:inline-size; container-name:mcp-list; }
 .mcp-meta { color:var(--muted); font-size:12px; line-height:1.7; }
@@ -14,7 +14,7 @@
 .mcp-row-heading { min-width:0; }
 .mcp-row-title { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:5px; }
 .mcp-row-title strong { font-size:14px; font-weight:600; }
-.mcp-transport { font:10px/1.5 var(--mono, monospace); text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+.mcp-transport { font:10px/1.5 var(--mono, monospace); text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border:1px solid var(--line); border-radius:calc(4px * var(--radius-scale)); padding:1px 5px; }
 .mcp-row-heading .mcp-meta { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; }
 .mcp-state { display:inline-flex; align-items:center; gap:6px; }
 .mcp-state::before { content:''; width:5px; height:5px; border-radius:50%; background:var(--muted); flex:none; }
@@ -27,8 +27,8 @@
 .mcp-actions .mcp-test { border:0; background:transparent; color:var(--text); font-size:12px; padding:7px 10px; box-shadow:none; }
 .mcp-actions .mcp-test:hover:not(:disabled) { background:var(--panel-2); }
 .mcp-toggle { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:32px; padding:0 0 0 14px; border:0; border-left:1px solid var(--line); border-radius:0; background:transparent; color:var(--muted); font:12px/1.5 var(--sans, sans-serif); cursor:pointer; white-space:nowrap; }
-.mcp-toggle-track { width:28px; height:16px; padding:2px; border-radius:10px; background:var(--muted); transition:background 140ms ease; }
-.mcp-toggle-track::before { content:''; display:block; width:12px; height:12px; border-radius:50%; background:var(--panel); transition:transform 140ms ease; }
+.mcp-toggle-track { width:28px; height:16px; padding:2px; border-radius:calc(10px * var(--radius-scale)); background:var(--muted); transition:background 140ms ease; }
+.mcp-toggle-track::before { content:''; display:block; width:12px; height:12px; border-radius:var(--radius-round); background:var(--panel); transition:transform 140ms ease; }
 .mcp-toggle[aria-checked="true"] .mcp-toggle-track { background:var(--amber); }
 .mcp-toggle[aria-checked="true"] .mcp-toggle-track::before { transform:translateX(12px); }
 .mcp-toggle:hover { color:var(--text); }
@@ -40,7 +40,7 @@
 #mcp-content[aria-busy="true"] .mcp-actions button { opacity:.55; pointer-events:none; }
 
 /* Native modal: the header/footer stay visible while the fields scroll. */
-#mcp-editor { width:min(640px, calc(100vw - 32px)); max-width:none; max-height:min(820px, calc(100dvh - 48px)); padding:0; overflow:hidden; border-radius:14px; box-shadow:var(--shadow-lg); }
+#mcp-editor { width:min(640px, calc(100vw - 32px)); max-width:none; max-height:min(820px, calc(100dvh - 48px)); padding:0; overflow:hidden; border-radius:calc(14px * var(--radius-scale)); box-shadow:var(--shadow-lg); }
 #mcp-editor[open] { display:flex; flex-direction:column; animation:mcp-dialog-enter 150ms ease-out; }
 #mcp-form { display:flex; flex-direction:column; min-height:0; max-height:inherit; gap:0; }
 .mcp-dialog-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:22px 24px 18px; border-bottom:1px solid var(--line); flex:none; }
@@ -52,9 +52,9 @@
 .mcp-form-body { padding:20px 24px; overflow-y:auto; min-height:0; overscroll-behavior:contain; }
 .mcp-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 #mcp-form label { font-size:12.5px; color:var(--text); gap:7px; }
-#mcp-form :is(input, textarea, .select-trigger) { width:100%; min-width:0; font-size:13px; border-radius:7px; }
+#mcp-form :is(input, textarea, .select-trigger) { width:100%; min-width:0; font-size:13px; border-radius:calc(7px * var(--radius-scale)); }
 #mcp-form :is(input, .select-trigger) { min-height:38px; height:38px; padding:8px 11px; }
-#mcp-form textarea { resize:vertical; padding:10px 12px; line-height:1.6; font-family:var(--mono, monospace); background:var(--bg); }
+#mcp-form textarea { resize:vertical; padding:10px 12px; line-height:1.6; font-family:var(--mono, monospace); background:var(--field); }
 .mcp-field-section { margin-top:18px; }
 #mcp-stdio-fields > label:last-child { margin-top:16px; }
 .mcp-field-format { color:var(--muted); font-size:11px; font-weight:400; }
@@ -82,7 +82,7 @@
 @media(max-width:520px) {
  .mcp-toolbar-actions { width:100%; }
  #mcp-add { margin-right:auto; }
- #mcp-editor { width:calc(100vw - 24px); max-height:calc(100dvh - 24px); border-radius:12px; }
+ #mcp-editor { width:calc(100vw - 24px); max-height:calc(100dvh - 24px); border-radius:calc(12px * var(--radius-scale)); }
  .mcp-dialog-head { padding:18px 18px 14px; }
  .mcp-form-body { padding:16px 18px; }
  .mcp-form-grid { grid-template-columns:1fr; gap:14px; }

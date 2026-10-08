@@ -1784,5 +1784,11 @@ export default {
   "创建并继续": "Create and continue",
   "请选择 Git 连接并填写仓库地址。": "Select a Git connection and enter the repository address.",
   "项目上传超过限制": "Project upload exceeds its limits",
-  "请减少文件数量或体积；大小限制可由管理员调整。": "Reduce the file count or size. An administrator can adjust the size limit."
+  "请减少文件数量或体积；大小限制可由管理员调整。": "Reduce the file count or size. An administrator can adjust the size limit.",
+  "琥珀": "Amber",
+  "液态玻璃": "Liquid Glass",
+  "赛博朋克": "Cyberpunk",
+  "石墨极简": "Graphite",
+  "青野绿意": "Verdant",
+  "工程蓝图": "Blueprint"
 } satisfies Record<string, string>;

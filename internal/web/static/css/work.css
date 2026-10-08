@@ -24,7 +24,7 @@
 .brand-chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--brand) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand) 26%, transparent);
   font-size: 12px; color: var(--text);
@@ -47,7 +47,7 @@
   display: flex; align-items: flex-start; gap: 12px; min-width: 0;
   padding: 14px 16px; text-align: left;
   background: var(--panel); color: var(--text);
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   transition: border-color 140ms ease, background 140ms ease;
 }
 .home-card:hover { border-color: color-mix(in srgb, var(--muted) 55%, var(--line)); background: color-mix(in srgb, var(--panel-2) 45%, var(--panel)); }
@@ -77,7 +77,7 @@
   padding: 14px 20px 10px;
   border-bottom: 1px solid var(--line);
   /* 抬到遮罩之上并铺底色：启动/停止时头部按钮仍露在毛玻璃上方 */
-  position: relative; z-index: 51; background: var(--bg);
+  position: relative; z-index: 51; background: var(--page);
 }
 .wb-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .wb-avatar { display: inline-flex; flex: none; }
@@ -92,7 +92,7 @@
 /* 运行状态胶囊：工作台头部、首页最近空间共用。运行中=绿，休眠=警告黄，已停止=灰 */
 .state-pill {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
-  height: 24px; padding: 0 10px; border-radius: 999px;
+  height: 24px; padding: 0 10px; border-radius: var(--radius-pill);
   border: 1px solid var(--line);
   font-size: 12px; line-height: 1; color: var(--muted); white-space: nowrap;
 }
@@ -129,7 +129,7 @@
   --busy: var(--muted); /* 兜底，实际由 .start/.stop 覆盖成绿/红 */
   position: absolute; inset: 0; z-index: 50;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(11, 14, 20, 0.5);
+  background: var(--busy-veil);
   -webkit-backdrop-filter: blur(10px) saturate(115%);
   backdrop-filter: blur(10px) saturate(115%);
   opacity: 0; visibility: hidden; pointer-events: none;
@@ -142,7 +142,7 @@
 .wb-busy-card {
   display: flex; flex-direction: column; align-items: center; gap: 16px;
   padding: 26px 40px;
-  border-radius: 14px;
+  border-radius: calc(14px * var(--radius-scale));
   background: color-mix(in srgb, var(--panel) 78%, transparent);
   border: 1px solid color-mix(in srgb, var(--busy) 45%, transparent);
   box-shadow: var(--shadow-lg), 0 0 44px -10px color-mix(in srgb, var(--busy) 55%, transparent);
@@ -223,7 +223,7 @@
 }
 .changes-view-tabs {
   display: flex; flex-shrink: 0;
-  border: 1px solid var(--line); border-radius: 7px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: calc(7px * var(--radius-scale)); overflow: hidden;
 }
 .changes-view-tabs .seg {
   padding: 5px 10px; min-height: 32px; font-size: 12px;
@@ -236,14 +236,14 @@
 .changes-diff .filetext { margin: 0; font-size: 12.5px; line-height: 1.55; white-space: pre; color: var(--text); }
 .change-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 7px 8px; border-radius: 7px; cursor: pointer;
+  padding: 7px 8px; border-radius: calc(7px * var(--radius-scale)); cursor: pointer;
 }
 .change-row:hover { background: var(--panel-2); }
 .change-row.active { background: var(--panel-2); outline: 1px solid var(--line); }
 /* 类型标签定宽，路径左边缘对齐；暂存状态是标签后面的小圆点（实心=已暂存，半实心=部分） */
 .change-badge {
   flex-shrink: 0; min-width: 50px; text-align: center;
-  font-size: 11px; padding: 1px 6px; border-radius: 5px;
+  font-size: 11px; padding: 1px 6px; border-radius: calc(5px * var(--radius-scale));
   border: 1px solid var(--line);
 }
 .change-badge.k-add { color: var(--green); border-color: var(--green-line); }
@@ -262,14 +262,14 @@
 .change-discard {
   display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
   flex-shrink: 0; border: none; background: none; color: var(--muted);
-  cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 5px;
+  cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: calc(5px * var(--radius-scale));
 }
 .change-discard:hover { color: var(--red); background: var(--panel); }
 .changes-diff .diff { margin: 0; font-size: 12.5px; line-height: 1.55; white-space: pre; }
 .diff span { display: block; }
-.diff .d-add { color: #3fb950; background: color-mix(in srgb, #3fb950 12%, transparent); }
+.diff .d-add { color: var(--diff-add); background: color-mix(in srgb, var(--diff-add) 12%, transparent); }
 .diff .d-del { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
-.diff .d-hunk { color: #6ea8fe; }
+.diff .d-hunk { color: var(--info); }
 .diff .d-meta { color: var(--muted); }
 .diff .d-ctx { color: var(--text); }
 
@@ -299,7 +299,7 @@
 /* 左侧是一棵树：技能行（带描述）在 depth 0，下面是技能目录里的子目录与文件 */
 .skill-row {
   padding: 8px; padding-left: calc(8px + var(--depth, 0) * 14px);
-  border-radius: 7px; cursor: pointer;
+  border-radius: calc(7px * var(--radius-scale)); cursor: pointer;
 }
 .skill-row:hover { background: var(--panel-2); }
 .skill-row.active { background: var(--panel-2); outline: 1px solid var(--line); }
@@ -326,16 +326,16 @@
 .skill-glyph { flex: none; width: 14px; display: inline-flex; justify-content: center; color: var(--muted); }
 .skill-size { flex: none; margin-left: auto; color: var(--muted); font-size: 11px; }
 .skill-flag {
-  flex: none; font-size: 10px; padding: 0 4px; border-radius: 4px;
+  flex: none; font-size: 10px; padding: 0 4px; border-radius: calc(4px * var(--radius-scale));
   border: 1px solid var(--line); color: var(--muted);
 }
 .skill-hint { cursor: default; color: var(--muted); font-size: 12px; }
 .skill-hint:hover { background: none; }
 .skill-badge {
-  flex-shrink: 0; font-size: 11px; padding: 1px 6px; border-radius: 5px;
+  flex-shrink: 0; font-size: 11px; padding: 1px 6px; border-radius: calc(5px * var(--radius-scale));
   border: 1px solid var(--line); color: var(--muted);
 }
-.skill-badge.s-template { color: #6ea8fe; border-color: color-mix(in srgb, #6ea8fe 45%, transparent); }
+.skill-badge.s-template { color: var(--info); border-color: color-mix(in srgb, var(--info) 45%, transparent); }
 .skill-badge.s-global { color: var(--text); border-color: var(--muted); }
 .skill-desc {
   margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.45;
@@ -369,11 +369,11 @@
 .skill-fm { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .skill-fm-item {
   font-size: 11px; color: var(--muted);
-  border: 1px solid var(--line); border-radius: 5px; padding: 1.5px 7px;
+  border: 1px solid var(--line); border-radius: calc(5px * var(--radius-scale)); padding: 1.5px 7px;
 }
 /* assets/ 里的图标之类：直接内联出来，别让用户为了看一眼去下载 */
 .skill-img {
-  max-width: 100%; border-radius: 8px;
+  max-width: 100%; border-radius: calc(8px * var(--radius-scale));
   background: repeating-conic-gradient(var(--panel-2) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
 }
 
@@ -403,7 +403,7 @@
 .home-setup p { margin: 6px 0; overflow-wrap: anywhere; }
 .setup-account-names { font-size: 12px; color: var(--text); }
 #new-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
-.new-setup { border: 1px solid var(--line); background: var(--panel-2); padding: 12px; border-radius: 8px; font-size: 13px; }
+.new-setup { border: 1px solid var(--line); background: var(--panel-2); padding: 12px; border-radius: calc(8px * var(--radius-scale)); font-size: 13px; }
 .new-setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .agent-opt:has(input:disabled) { opacity: .55; }
 @media (max-width: 600px) {
@@ -424,8 +424,8 @@
 .creation-config dd { margin:0; overflow-wrap:anywhere; }
 .creation-config p { margin:8px 0 0; }
 /* One anchored step at a time; popovers never reserve workbench space. */
-#guide-spotlight { position:fixed; inset:auto; margin:0; padding:0; border:2px solid var(--accent); border-radius:14px; background:transparent; pointer-events:none; box-shadow:0 0 0 100vmax rgb(0 0 0 / .18); transition:top .2s ease,left .2s ease,width .2s ease,height .2s ease; }
-.workspace-guide { position:fixed; inset:auto; margin:0; box-sizing:border-box; width:min(340px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:16px; background:var(--panel); color:var(--text); box-shadow:0 12px 40px rgb(0 0 0 / .18); font-size:13px; }
+#guide-spotlight { position:fixed; inset:auto; margin:0; padding:0; border:2px solid var(--accent); border-radius:calc(14px * var(--radius-scale)); background:transparent; pointer-events:none; box-shadow:0 0 0 100vmax rgb(0 0 0 / .18); transition:top .2s ease,left .2s ease,width .2s ease,height .2s ease; }
+.workspace-guide { position:fixed; inset:auto; margin:0; box-sizing:border-box; width:min(340px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:calc(16px * var(--radius-scale)); background:var(--panel); color:var(--text); box-shadow:0 12px 40px rgb(0 0 0 / .18); font-size:13px; }
 .workspace-guide:popover-open { animation:guide-enter .18s ease-out; }
 .guide-top,.guide-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .guide-top { color:var(--muted); font-size:11px; }

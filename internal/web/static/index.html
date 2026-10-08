@@ -5,17 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n-text="[&quot;AGENTBOX 控制台&quot;]">AGENTBOX 控制台</title>
 <meta name="theme-color" content="#12151c">
-<!-- 主题：在样式表之前落 data-theme-mode（system|light|dark）与实际生效的
-     data-theme（dark|light），避免跟随系统/浅色用户刷新时闪一帧错误底色。
-     默认跟随系统，切换与持久化见 js/theme.js。 -->
+<!-- 主题：在样式表之前落 data-theme-mode（system|light|dark）、实际生效的
+     data-theme（dark|light）与界面风格 data-skin，避免刷新时闪一帧错误配色。
+     默认跟随系统 + 琥珀风格；切换与持久化见 js/theme.js，地址栏颜色由它按 --bg 校正。 -->
 <script>
   try {
     var mode = localStorage.getItem("agentbox_theme") || "system";
     if (mode !== "light" && mode !== "dark") mode = "system";
     var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
     var theme = mode === "system" ? (dark ? "dark" : "light") : mode;
+    var skin = localStorage.getItem("agentbox_skin");
+    if (["glass", "cyberpunk", "graphite", "verdant", "blueprint"].indexOf(skin) < 0) skin = "amber";
     document.documentElement.dataset.themeMode = mode;
     document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.skin = skin;
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = theme === "light" ? "#f5f2ea" : "#12151c";
   } catch (e) {}
@@ -31,6 +34,7 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/vendor/github-markdown.css">
 <!-- 模块化样式：base 先行（令牌/通用组件），其余按功能域拆分 -->
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/base.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/skins.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/toast.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/select.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/shell.css">
@@ -49,6 +53,8 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/dialogs.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/responsive.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/actions.css">
+<!-- 风格专属形态放最后：同等选择器下要压过各功能域的样式 -->
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/skin-effects.css">
 </head>
 <body>
 
@@ -256,6 +262,7 @@
               </div>
             </div>
             <label class="language-control"><span data-i18n-text="[&quot;语言&quot;]">语言</span><select id="app-language" data-language-select aria-label="界面语言" data-i18n-attrs="{&quot;aria-label&quot;:&quot;界面语言&quot;}"></select></label>
+            <label class="language-control skin-control"><span data-i18n-text="[&quot;风格&quot;]">风格</span><select id="app-skin" class="skin-select" data-skin-select aria-label="界面风格" data-i18n-attrs="{&quot;aria-label&quot;:&quot;界面风格&quot;}"></select></label>
             <button id="btn-logout" type="button" class="side-logout"><span class="glyph">
               <svg width="17" height="17" data-icon="logout" aria-hidden="true"></svg>
             </span><span data-i18n-text="[&quot;退出登录&quot;]">退出登录</span></button>

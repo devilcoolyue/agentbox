@@ -15,7 +15,7 @@
   background: var(--panel);
   background: color-mix(in srgb, var(--panel) 94%, transparent);
   border: 1px solid color-mix(in srgb, var(--toast-tone) 32%, var(--line));
-  border-radius: 14px;
+  border-radius: calc(14px * var(--radius-scale));
   color: var(--text);
   font-family: var(--sans); font-size: 14px; font-weight: 500; line-height: 1.6;
   white-space: pre-line; overflow-wrap: anywhere;
@@ -30,7 +30,7 @@
   display: grid; place-items: center;
   width: 30px; height: 30px;
   transform: translateY(-50%);
-  border-radius: 10px;
+  border-radius: calc(10px * var(--radius-scale));
   background: color-mix(in srgb, var(--toast-tone) 16%, transparent);
   color: var(--toast-tone);
 }
@@ -38,7 +38,7 @@
   content: "";
   position: absolute; left: 0; right: 0; bottom: 0;
   height: 2px;
-  border-radius: 0 0 14px 14px;
+  border-radius: 0 0 calc(14px * var(--radius-scale)) calc(14px * var(--radius-scale));
   background: var(--toast-tone);
   opacity: .65;
   transform: scaleX(1); transform-origin: left;

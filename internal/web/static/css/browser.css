@@ -1,18 +1,18 @@
-#tab-browser { display:flex; flex-direction:column; min-height:0; background:var(--bg); container:browser-work / inline-size; }
+#tab-browser { display:flex; flex-direction:column; min-height:0; background:var(--page); container:browser-work / inline-size; }
 #tab-browser:fullscreen { height:100vh; width:100vw; }
 .browser-toolbar { display:grid; grid-template-columns:auto minmax(180px,1fr) auto auto; align-items:center; gap:12px; padding:10px 16px 6px; flex:none; }
 .browser-lifecycle,.browser-shortcuts,.browser-display { display:flex; align-items:center; gap:4px; }
 .browser-lifecycle { padding-right:10px; border-right:1px solid var(--line); }
-:root #tab-browser .btn.browser-tool { --action-size:36px; --action-inset:0px; border-radius:8px; }
-:root #tab-browser .btn.browser-tool::before { border-radius:8px; }
+:root #tab-browser .btn.browser-tool { --action-size:36px; --action-inset:0px; border-radius:calc(8px * var(--radius-scale)); }
+:root #tab-browser .btn.browser-tool::before { border-radius:calc(8px * var(--radius-scale)); }
 :root #browser-stop:hover:not(:disabled) { color:var(--red); }
-.browser-address { min-width:0; display:flex; align-items:center; gap:8px; margin:0; padding:2px 3px 2px 12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); transition:border-color 140ms ease,box-shadow 140ms ease; }
+.browser-address { min-width:0; display:flex; align-items:center; gap:8px; margin:0; padding:2px 3px 2px 12px; border:1px solid var(--line); border-radius:calc(10px * var(--radius-scale)); background:var(--panel); transition:border-color 140ms ease,box-shadow 140ms ease; }
 .browser-address:focus-within { border-color:var(--amber-dim); box-shadow:0 0 0 2px color-mix(in srgb,var(--amber) 10%,transparent); }
 .browser-address-icon { color:var(--muted); flex:none; }
 #browser-url { flex:1; width:0; min-width:0; height:32px; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; outline:none; font-size:13px; }
 #browser-url::placeholder { color:var(--muted); }
 :root #tab-browser #browser-open { --action-size:32px; }
-.browser-bookmark { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:7px 9px; border:0; border-radius:8px; background:transparent; color:var(--text); font:500 12px var(--sans); white-space:nowrap; cursor:pointer; transition:background 140ms ease,color 140ms ease; }
+.browser-bookmark { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:7px 9px; border:0; border-radius:calc(8px * var(--radius-scale)); background:transparent; color:var(--text); font:500 12px var(--sans); white-space:nowrap; cursor:pointer; transition:background 140ms ease,color 140ms ease; }
 .browser-bookmark .agent-ico { flex:none; }
 .browser-bookmark:hover { background:var(--panel-2); color:var(--text-hi); }
 .browser-bookmark:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }

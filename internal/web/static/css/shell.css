@@ -12,7 +12,7 @@
   width: min(380px, 90vw);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: calc(12px * var(--radius-scale));
   padding: 30px 32px 34px;
   display: flex; flex-direction: column; gap: 14px;
   text-align: center;
@@ -30,7 +30,7 @@
 .login-password input { padding-right: 46px; }
 .login-password-toggle {
   position: absolute; right: 0; top: 0; bottom: 0; width: 44px;
-  padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted);
+  padding: 0; border: 0; border-radius: calc(6px * var(--radius-scale)); background: transparent; color: var(--muted);
 }
 .login-password-toggle:hover { color: var(--amber); }
 .login-password-toggle:focus-visible { outline-offset: -3px; }
@@ -64,7 +64,7 @@
   width: 36px; height: 36px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--panel-2);
-  border: 1px solid var(--line); border-radius: 8px;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
   color: var(--text); padding: 0;
   font-size: 17px; line-height: 1;
 }
@@ -85,14 +85,14 @@
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
   width: 168px;
   background: var(--panel);
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   padding: 5px;
   box-shadow: var(--shadow-lg);
 }
 .kebab-menu button {
   display: flex; align-items: center; gap: 9px;
   width: 100%; text-align: left;
-  background: none; border: none; border-radius: 7px;
+  background: none; border: none; border-radius: calc(7px * var(--radius-scale));
   color: var(--text); font-size: 13.5px;
   padding: 9px 11px;
 }
@@ -153,14 +153,14 @@
 .side-mark {
   width: 32px; height: 32px; flex: none;
   display: grid; place-items: center;
-  border-radius: 9px;
+  border-radius: calc(9px * var(--radius-scale));
   background: color-mix(in srgb, var(--amber) 9%, transparent);
 }
 .side-brand .mark { width: 24px; height: 24px; margin: 0; }
 .side-close {
   display: none; align-items: center; justify-content: center;
   margin-left: auto; width: 36px; height: 36px; flex: none;
-  padding: 0; border: 0; border-radius: 8px;
+  padding: 0; border: 0; border-radius: calc(8px * var(--radius-scale));
   color: var(--muted); background: transparent;
 }
 .side-close:hover { color: var(--text); background: var(--side-hover); }
@@ -168,7 +168,7 @@
 .side-new {
   width: 100%; height: 40px;
   display: flex; align-items: center; justify-content: flex-start; gap: 10px;
-  padding: 0 12px; border: 1px solid var(--amber-dim); border-radius: 8px;
+  padding: 0 12px; border: 1px solid var(--amber-dim); border-radius: calc(8px * var(--radius-scale));
   color: var(--amber); background: var(--side-active);
   font-size: 13px; font-weight: 600; white-space: nowrap;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -191,8 +191,8 @@
 .session-search {
   display: flex; align-items: center; gap: 6px;
   min-width: 0; height: 32px; padding: 0 8px;
-  color: var(--muted); background: var(--bg);
-  border: 1px solid var(--line); border-radius: 6px;
+  color: var(--muted); background: var(--field);
+  border: 1px solid var(--line); border-radius: calc(6px * var(--radius-scale));
   cursor: text; transition: border-color 140ms ease;
 }
 .session-search:hover { border-color: color-mix(in srgb, var(--muted) 60%, var(--line)); }
@@ -202,7 +202,7 @@
 .session-search input:focus-visible { outline: none; }
 .session-filter-row { display: flex; align-items: center; gap: 4px; max-width: 112px; }
 .session-filter-row :is(select, .select-trigger) { flex: 1; width: 74px; min-width: 0; min-height: 32px; font-size: 12px; }
-.session-filter-row .select-trigger { gap: 6px; padding: 0 8px 0 10px; border-radius: 6px; line-height: 30px; }
+.session-filter-row .select-trigger { gap: 6px; padding: 0 8px 0 10px; border-radius: calc(6px * var(--radius-scale)); line-height: 30px; }
 .session-filter-row button { flex: none; min-height: 32px; }
 .session-search-open.side-item { display: none; }
 .side-label { font-size: 11px; letter-spacing: 0.06em; }
@@ -215,7 +215,7 @@
 .side-item {
   display: flex; align-items: center; gap: 10px;
   width: 100%; height: 38px; min-width: 0; text-align: left;
-  background: none; border: 0; border-radius: 7px;
+  background: none; border: 0; border-radius: calc(7px * var(--radius-scale));
   color: var(--muted); padding: 0 12px; font-size: 13px;
   transition: color 0.15s ease, background 0.15s ease;
 }
@@ -239,7 +239,7 @@
 .side-collapse {
   display: inline-flex; align-items: center; justify-content: center;
   flex: none; width: 28px; height: 32px; margin-left: auto;
-  border: 0; border-radius: 6px; padding: 0;
+  border: 0; border-radius: calc(6px * var(--radius-scale)); padding: 0;
   background: transparent; color: var(--muted);
 }
 .side-collapse:hover { background: var(--side-hover); color: var(--text); }
@@ -267,7 +267,7 @@
 .side-user-conn .conn-latency { flex: none; padding: 0; height: 28px; font-size: 12px; }
 .side-user-menu {
   position: fixed; z-index: 90; width: 232px; max-width: calc(100vw - 24px);
-  padding: 6px; border: 1px solid var(--line); border-radius: 10px;
+  padding: 6px; border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   background: var(--panel); box-shadow: var(--shadow-lg);
   opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(4px);
   transition: opacity 0.14s ease, transform 0.14s ease;
@@ -278,21 +278,21 @@
   padding: 10px 8px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
 }
 .side-user-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; line-height: 20px; overflow-wrap: anywhere; }
-.side-user-role { flex: none; padding: 0 6px; border-radius: 4px; background: var(--panel-2); color: var(--muted); font-size: 10px; line-height: 20px; }
+.side-user-role { flex: none; padding: 0 6px; border-radius: calc(4px * var(--radius-scale)); background: var(--panel-2); color: var(--muted); font-size: 10px; line-height: 20px; }
 .side-logout {
   display: flex; align-items: center; gap: 8px;
   width: 100%; height: 34px; padding: 0 8px;
-  border: 0; border-radius: 6px; text-align: left;
+  border: 0; border-radius: calc(6px * var(--radius-scale)); text-align: left;
   background: transparent; color: var(--muted); font-size: 12px;
   transition: color 0.15s ease, background 0.15s ease;
 }
 .side-logout .glyph { display: flex; flex: none; }
 .side-logout:hover { color: var(--red); background: var(--side-hover); }
-.theme-options { display: flex; flex: none; gap: 2px; padding: 2px; background: var(--panel-2); border-radius: 7px; }
+.theme-options { display: flex; flex: none; gap: 2px; padding: 2px; background: var(--panel-2); border-radius: calc(7px * var(--radius-scale)); }
 .theme-options button {
   flex: none; width: 30px; height: 30px;
   display: flex; align-items: center; justify-content: center;
-  padding: 0; border: 0; border-radius: 5px; background: transparent;
+  padding: 0; border: 0; border-radius: calc(5px * var(--radius-scale)); background: transparent;
   color: var(--muted);
   transition: color 0.15s ease, background 0.15s ease;
 }
@@ -354,7 +354,7 @@
   flex: none; width: 100%; height: 44px; min-width: 0;
   display: flex; align-items: center; gap: 10px;
   color: var(--text); text-align: left;
-  background: transparent; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; border: 1px solid transparent; border-radius: calc(6px * var(--radius-scale));
   padding: 0 9px; cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
@@ -434,13 +434,13 @@
   :root[data-sidebar-collapsed="true"] .sidebar { width: 68px; --rail-item: 36px; }
   :root[data-sidebar-collapsed="true"] .side-head { padding: 0; justify-content: center; }
   :root[data-sidebar-collapsed="true"] :is(.side-brand, .side-item-label, .side-section-head, .session-filters, .sc-body, .session-empty-text) { display: none; }
-  :root[data-sidebar-collapsed="true"] .side-collapse { margin: 0; width: var(--rail-item); height: var(--rail-item); border-radius: 8px; }
+  :root[data-sidebar-collapsed="true"] .side-collapse { margin: 0; width: var(--rail-item); height: var(--rail-item); border-radius: calc(8px * var(--radius-scale)); }
   :root[data-sidebar-collapsed="true"] .side-collapse svg { transform: rotate(180deg); }
   :root[data-sidebar-collapsed="true"] .side-create { display: flex; justify-content: center; padding: 14px 0 8px; }
-  :root[data-sidebar-collapsed="true"] .side-new { width: var(--rail-item); height: var(--rail-item); min-height: 0; padding: 0; justify-content: center; border-radius: 9px; }
+  :root[data-sidebar-collapsed="true"] .side-new { width: var(--rail-item); height: var(--rail-item); min-height: 0; padding: 0; justify-content: center; border-radius: calc(9px * var(--radius-scale)); }
   :root[data-sidebar-collapsed="true"] .session-search-open {
     display: flex; flex: none; align-self: center; justify-content: center;
-    width: var(--rail-item); height: var(--rail-item); padding: 0; margin-bottom: 6px; border-radius: 8px;
+    width: var(--rail-item); height: var(--rail-item); padding: 0; margin-bottom: 6px; border-radius: calc(8px * var(--radius-scale));
   }
   /* 有筛选条件时放大镜染琥珀提示「列表已过滤」；见方按钮上不画左侧竖条 */
   :root[data-sidebar-collapsed="true"] .session-search-open.active { box-shadow: none; }
@@ -456,13 +456,13 @@
   }
   :root[data-sidebar-collapsed="true"] .session-card::before {
     content: ""; position: absolute; left: 0; top: 50%;
-    width: 3px; height: 18px; margin-top: -9px; border-radius: 0 3px 3px 0;
+    width: 3px; height: 18px; margin-top: -9px; border-radius: 0 calc(3px * var(--radius-scale)) calc(3px * var(--radius-scale)) 0;
     background: color-mix(in srgb, var(--text) 55%, var(--panel)); opacity: 0; transform: scaleY(0.4);
     transition: opacity 0.15s ease, transform 0.15s ease;
   }
   :root[data-sidebar-collapsed="true"] .session-card.active::before { opacity: 1; transform: none; }
   :root[data-sidebar-collapsed="true"] .session-card .agent-avatar {
-    width: var(--rail-item); height: var(--rail-item); border-radius: 10px;
+    width: var(--rail-item); height: var(--rail-item); border-radius: calc(10px * var(--radius-scale));
     background: color-mix(in srgb, var(--brand) 10%, var(--panel));
     transition: background 0.15s ease, box-shadow 0.15s ease;
   }
@@ -491,7 +491,7 @@
   :root[data-sidebar-collapsed="true"] .side-foot { padding-left: 8px; padding-right: 8px; }
   :root[data-sidebar-collapsed="true"] .side-item { padding: 0; justify-content: center; }
   :root[data-sidebar-collapsed="true"] .side-tools { grid-template-columns: 1fr; justify-items: center; }
-  :root[data-sidebar-collapsed="true"] :is(.side-tool, .side-user) { flex: none; width: var(--rail-item); height: var(--rail-item); border-radius: 8px; }
+  :root[data-sidebar-collapsed="true"] :is(.side-tool, .side-user) { flex: none; width: var(--rail-item); height: var(--rail-item); border-radius: calc(8px * var(--radius-scale)); }
   :root[data-sidebar-collapsed="true"] .tunnel-state { position: absolute; right: 6px; bottom: 6px; margin: 0; }
   :root[data-sidebar-collapsed="true"] .side-preferences { flex-direction: column; gap: 2px; padding: 6px 0 0; margin-top: 6px; }
   :root[data-sidebar-collapsed="true"] .theme-options { display: none; }
@@ -526,6 +526,23 @@
 .side-user-menu .language-control { gap: 8px; padding: 4px 8px; }
 .side-user-menu .language-control :is(select, .select-trigger) { width: 128px; }
 @media (pointer: coarse) { .language-control .select-trigger { min-height: 40px; } }
+/* 风格下拉：触发器和每个选项前画一枚该风格的色块（色值见 skins.css 的 --swatch-*） */
+.skin-select.select-trigger { justify-content: flex-start; }
+.skin-select.select-trigger .select-caption { flex: 1; }
+.select-panel-skin .select-option { display: flex; align-items: center; gap: 8px; }
+.skin-select.select-trigger::before,
+.select-panel-skin .select-option::before {
+  content: ""; flex: none; width: 12px; height: 12px;
+  border-radius: calc(3px * var(--radius-scale));
+  background: var(--swatch, var(--panel-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent);
+}
+:is(.skin-select, .select-panel-skin .select-option)[data-value="amber"] { --swatch: var(--swatch-amber); }
+:is(.skin-select, .select-panel-skin .select-option)[data-value="glass"] { --swatch: var(--swatch-glass); }
+:is(.skin-select, .select-panel-skin .select-option)[data-value="cyberpunk"] { --swatch: var(--swatch-cyberpunk); }
+:is(.skin-select, .select-panel-skin .select-option)[data-value="graphite"] { --swatch: var(--swatch-graphite); }
+:is(.skin-select, .select-panel-skin .select-option)[data-value="verdant"] { --swatch: var(--swatch-verdant); }
+:is(.skin-select, .select-panel-skin .select-option)[data-value="blueprint"] { --swatch: var(--swatch-blueprint); }
 html[lang="en"] .side-tools { grid-template-columns: 1fr; }
 
 @media (max-width: 760px) {

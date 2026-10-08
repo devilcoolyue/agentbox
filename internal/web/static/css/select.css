@@ -4,8 +4,8 @@
   display: inline-flex; align-items: center; justify-content: space-between; gap: 12px;
   min-width: 0; min-height: 40px; padding: 8px 12px;
   font: inherit; line-height: 1.5; text-align: left;
-  color: var(--text); background: var(--bg);
-  border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); background: var(--field);
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
   transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 .select-trigger:hover:not(:disabled) { border-color: var(--muted); background: var(--panel-2); }
@@ -24,7 +24,7 @@
 .select-panel {
   position: fixed; inset: auto; margin: 0; padding: 5px;
   width: 240px; max-width: calc(100vw - 16px); max-height: 320px;
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   background: var(--panel); color: var(--text); box-shadow: var(--shadow-md);
   font-family: var(--sans); font-size: 13px; line-height: 1.5;
   overflow: hidden;
@@ -33,13 +33,13 @@
 .select-panel::backdrop { background: transparent; }
 .select-panel .select-search {
   flex: none; width: calc(100% - 8px); min-height: 36px; margin: 4px 4px 8px;
-  padding: 7px 10px; background: var(--bg); border-radius: 6px; font-size: 13px;
+  padding: 7px 10px; background: var(--field); border-radius: calc(6px * var(--radius-scale)); font-size: 13px;
 }
 .select-search::placeholder { color: var(--muted); }
 .select-options { min-height: 0; max-height: 264px; overflow-y: auto; overscroll-behavior: contain; }
 .select-option {
   position: relative; padding: 9px 34px 9px 11px; min-height: 36px;
-  border-radius: 6px; overflow-wrap: anywhere; cursor: pointer;
+  border-radius: calc(6px * var(--radius-scale)); overflow-wrap: anywhere; cursor: pointer;
 }
 .select-option.active { background: var(--panel-2); }
 .select-option[aria-selected="true"] { color: var(--amber); background: color-mix(in srgb, var(--amber) 9%, transparent); }
@@ -53,8 +53,8 @@
 .select-group { padding: 9px 11px 5px; color: var(--muted); font-size: 11px; }
 .select-empty { padding: 20px 12px; color: var(--muted); text-align: center; }
 /* Four language choices use a compact menu, independent of settings selects. */
-.select-panel-compact { padding: 4px; border-radius: 8px; font-size: 12px; line-height: 18px; }
-.select-panel-compact .select-option { min-height: 30px; padding: 6px 28px 6px 9px; border-radius: 5px; }
+.select-panel-compact { padding: 4px; border-radius: calc(8px * var(--radius-scale)); font-size: 12px; line-height: 18px; }
+.select-panel-compact .select-option { min-height: 30px; padding: 6px 28px 6px 9px; border-radius: calc(5px * var(--radius-scale)); }
 .select-panel-compact .select-option[aria-selected="true"]::after { right: 11px; top: 50%; transform: translateY(-65%) rotate(-45deg); }
 @keyframes select-enter { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
 @media (pointer: coarse) { .select-option { min-height: 42px; padding-top: 12px; padding-bottom: 12px; } }

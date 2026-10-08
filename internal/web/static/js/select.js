@@ -5,6 +5,8 @@ import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
  * 新增控件可调用 enhanceSelects(root)，无需手写按钮、菜单或键盘处理。 */
 const controls = new WeakMap();
 let nextID = 0;
+/** 用户菜单里的语言、风格两个短列表用紧凑面板，与设置页下拉区分开 */
+const compactSelect = (select) => select.matches("[data-language-select], [data-skin-select]");
 class SelectControl {
     select;
     trigger = document.createElement("button");
@@ -129,7 +131,10 @@ class SelectControl {
     }
     sync() {
         this.trigger.className = "select-trigger " + [...this.select.classList].filter(c => c !== "select-native").join(" ");
-        this.panel.classList.toggle("select-panel-compact", this.select.hasAttribute("data-language-select"));
+        // 当前值同步到触发器与各行的 data-value，样式可按取值画色块（如风格下拉）
+        this.trigger.dataset.value = this.select.value;
+        this.panel.classList.toggle("select-panel-compact", compactSelect(this.select));
+        this.panel.classList.toggle("select-panel-skin", this.select.hasAttribute("data-skin-select"));
         this.trigger.hidden = this.select.hidden;
         this.trigger.disabled = this.select.matches(":disabled");
         this.trigger.tabIndex = this.tabIndex;
@@ -191,6 +196,7 @@ class SelectControl {
             row.setAttribute("role", "option");
             row.setAttribute("aria-selected", String(option.selected));
             row.setAttribute("aria-disabled", String(this.disabled(option)));
+            row.dataset.value = option.value;
             row.textContent = option.label;
             this.list.append(row);
             this.rows.push({ option, element: row, index });
@@ -319,7 +325,7 @@ class SelectControl {
         const above = Math.max(0, rect.top - y - gap - margin);
         const up = below < 260 && above > below;
         const available = up ? above : below;
-        const minWidth = this.select.hasAttribute("data-language-select") ? 156 : 200;
+        const minWidth = compactSelect(this.select) ? 156 : 200;
         this.panel.style.width = `${Math.min(Math.max(rect.width, minWidth), width - margin * 2)}px`;
         this.panel.style.maxHeight = `${available}px`;
         this.panel.style.left = `${Math.max(x + margin, Math.min(rect.left, x + width - this.panel.offsetWidth - margin))}px`;

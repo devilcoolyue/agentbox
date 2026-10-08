@@ -702,6 +702,7 @@ data/
   前缀，其余模块靠原生 ES Module 的相对 import 继承该前缀（详见 `server.go` 的
   `staticHandler`），一个 .ts 对一个 .js 才能维持这套长缓存。
 - 单选下拉统一走 `web/src/select.ts` + `css/select.css`：入口 `enhanceSelects()` 增强现有 `<select>`，原元素继续提供表单值与 `input/change` 事件。动态插入控件后调用 `enhanceSelects(root)`；代码赋值用 `setSelectValue(select, value)`，因为原生 `.value` / `.selectedIndex` 赋值不触发 MutationObserver。选项列表和禁用/隐藏属性变更自动同步，不要另写一套菜单。
+- 界面风格（`<html data-skin>`）与明暗（`data-theme`）正交。琥珀就是 `base.css` 的默认令牌；其余五种在 `css/skins.css` 各写全明暗两套，新增颜色令牌须十套都补（`scripts/test-skins.mjs` 查漏回琥珀）。风格专属形态在 `css/skin-effects.css`，选择器必须挂 `:root[data-skin=…]`。像素圆角写 `calc(Npx * var(--radius-scale))`，胶囊用 `--radius-pill`、大号圆形按钮用 `--radius-round`，否则直角风格收不成 0。液态玻璃只给浮层（弹窗、菜单、气泡、窄屏抽屉）加 `backdrop-filter`，画布不做动画，免得背景模糊每帧重算。偏好只存 localStorage（`agentbox_skin`），改键名或取值要同步 `index.html` 首屏脚本。
 - 可滚动的弹层/列表不要在 `pointerdown` 上无条件 `preventDefault()`：Safari 26.5 起这会取消这次触摸的滚动。只对 `pointerType === "mouse"` 拦截。
 - 获焦提示与按钮焦点环只给键盘操作：iOS / Safari 点按钮不获焦，随后 `showModal()` 或菜单用程序挪过去的焦点会被判成 `:focus-visible`（手指点开的弹窗，关闭按钮上带框带「关闭」气泡）。`modality.ts` 在 `<html data-input>` 记最近一次是键盘还是指针；新写「获焦就显示」的逻辑要同时核对 `keyboardInput()`。
 - 窄屏顶栏的分区切换（系统设置 / Git 管理，`responsive.ts` 的 `mobile-section-menu`）是导航菜单，不是表单下拉：条目照桌面导航按钮生成，一次列全、竖屏不滚动，没有搜索框（获焦就弹键盘、把列表挤成一小截）。别把它并回 `select.ts`；分区多到一屏放不下时再考虑分组。

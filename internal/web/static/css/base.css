@@ -3,10 +3,14 @@
  * base：设计令牌、基础元素、跨页面通用组件（按钮/状态灯/转圈/气泡/字标）。
  * 断点约定：全站移动端断点统一为 max-width: 760px，各文件就近写自己的窄屏规则。
  *
- * 主题切换：js/theme.js 在 <html> 上写 data-theme-mode="system|light|dark"
- * （用户选择）与 data-theme="dark|light"（实际生效；index.html 头部有一段
- * 内联脚本先行落属性，避免首屏闪白）。全站颜色一律走下面的令牌，
- * 任何新样式都不要再写死色值，否则浅色主题下会漏色。 */
+ * 主题有两个互不相干的维度，js/theme.js 都写在 <html> 上：
+ *   data-skin  = 界面风格（amber 默认 / glass / cyberpunk / graphite / verdant / blueprint）
+ *   data-theme = 明暗（dark / light；data-theme-mode 记用户选的 system|light|dark）
+ * index.html 头部有一段内联脚本先行落这几个属性，避免首屏闪色。
+ * 本文件的 :root 与 :root[data-theme="light"] 就是默认的琥珀风格；其余风格的
+ * 整套令牌在 css/skins.css，风格专属的形态在 css/skin-effects.css。
+ * 全站颜色、圆角一律走下面的令牌：新样式不要写死色值（浅色和其他风格会漏色），
+ * 像素圆角写成 calc(Npx * var(--radius-scale))，直角风格才收得成 0。 */
 
 :root {
   /* ---- 表面与文字 ---- */
@@ -67,6 +71,22 @@
   --shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.55);
   --checker-a: #161a22;  /* 图片预览的透明棋盘格 */
   --checker-b: #12151c;
+
+  /* ---- 其余固定配色：diff/徽章的亮绿亮蓝、工作台启停遮罩 ---- */
+  --diff-add: #3fb950;
+  --info: #6ea8fe;
+  --busy-veil: rgba(11, 14, 20, 0.5);
+
+  /* ---- 风格维度的形状与质感（琥珀取原值，其他风格在 skins.css 覆盖） ---- */
+  --radius-scale: 1;     /* 全站像素圆角的倍数；直角风格取 0 */
+  --radius-pill: 999px;  /* 胶囊（标签、进度条、滚动条） */
+  --radius-round: 50%;   /* 大号圆形按钮/头像；小圆点、转圈固定写 50% 不跟它 */
+  --field: var(--bg);    /* 输入框、搜索框、凹槽的底色 */
+  --page: var(--bg);     /* 需要「铺一层页面底色」的元素（工作台头部等） */
+  --app-canvas: none;    /* 页面底下的背景层：玻璃色斑 / 蓝图网格 */
+  /* 侧栏、弹窗等固定层的背景模糊。必须是 none 而不是 blur(0)：
+   * blur(0) 照样让浏览器为这些层建合成层，看不见还白白付钱 */
+  --blur-panel: none;
 
   --claude: #d97757; /* Claude 官方陶土橙（simple-icons 品牌色） */
   --openai: #10a37f; /* ChatGPT 官方青绿 */
@@ -132,7 +152,7 @@
   ::-webkit-scrollbar-track { background: transparent; margin: 3px; }
   ::-webkit-scrollbar-thumb {
     background: var(--scroll-thumb); background-clip: padding-box;
-    border: 2px solid transparent; border-radius: 999px;
+    border: 2px solid transparent; border-radius: var(--radius-pill);
     min-height: 28px; min-width: 28px;
   }
   ::-webkit-scrollbar-thumb:hover { background-color: var(--scroll-thumb-hover); }
@@ -155,6 +175,13 @@ body {
   font-size: 14px;
   line-height: 1.6;
 }
+/* 风格背景层（--app-canvas 为 none 时什么也不画）。z-index:-1 落在页面底色之上、
+ * 全部内容之下；fixed 让它不随列表滚动，只有固定层的背景模糊才看得到它在动。 */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background: var(--app-canvas);
+  pointer-events: none;
+}
 .hidden { display: none !important; }
 .mono { font-family: var(--mono); }
 
@@ -162,9 +189,9 @@ button { font: inherit; cursor: pointer; }
 input, textarea, select {
   font: inherit;
   color: var(--text);
-  background: var(--bg);
+  background: var(--field);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: calc(6px * var(--radius-scale));
   padding: 8px 10px;
 }
 input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible {
@@ -214,7 +241,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: calc(8px * var(--radius-scale));
   padding: 8px 13px;
   font-size: 13px; font-weight: 500; line-height: 20px;
   white-space: nowrap; text-decoration: none; vertical-align: middle;
@@ -270,7 +297,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   position: relative;
   width: 30px; height: 30px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 8px;
+  border-radius: calc(8px * var(--radius-scale));
   background: color-mix(in srgb, var(--brand) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand) 32%, transparent);
 }
@@ -342,7 +369,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   width: max-content; max-width: min(300px, 78vw);
   padding: 6px 10px;
   background: var(--panel);
-  border: 1px solid var(--amber-dim); border-radius: 7px;
+  border: 1px solid var(--amber-dim); border-radius: calc(7px * var(--radius-scale));
   color: var(--text);
   font-size: 12px; line-height: 1.5;
   white-space: pre-line; /* 让文案里的 \n 生效，与原生 title 的行为一致 */

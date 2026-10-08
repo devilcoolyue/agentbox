@@ -13,12 +13,12 @@
 /* 工作区 / 共享目录切换 */
 .scope-switch {
   display: inline-flex; align-items: center; gap: 2px;
-  padding: 3px; border: 1px solid var(--line); border-radius: 9px;
-  background: var(--bg); max-width: 100%;
+  padding: 3px; border: 1px solid var(--line); border-radius: calc(9px * var(--radius-scale));
+  background: var(--field); max-width: 100%;
 }
 .scope-btn {
   background: transparent;
-  border: 1px solid transparent; border-radius: 6px;
+  border: 1px solid transparent; border-radius: calc(6px * var(--radius-scale));
   color: var(--muted);
   font-family: var(--sans); font-size: 12px; line-height: 20px;
   padding: 4px 10px; min-height: 30px; white-space: nowrap;
@@ -51,7 +51,7 @@
   position: absolute; top: 24px; left: -12px; z-index: 30;
   width: min(340px, 72vw);
   background: var(--panel);
-  border: 1px solid var(--line); border-radius: 8px;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
   padding: 10px 12px;
   color: var(--text);
   font-size: 12.5px; line-height: 1.7; text-align: left;
@@ -61,7 +61,7 @@
 .help-tip b { color: var(--text-hi); font-weight: 600; }
 .help-tip code {
   font-family: var(--mono); font-size: 11.5px;
-  background: var(--code-bg); border-radius: 4px; padding: 1px 5px;
+  background: var(--code-bg); border-radius: calc(4px * var(--radius-scale)); padding: 1px 5px;
 }
 .help:hover .help-tip, .help:focus .help-tip, .help:focus-within .help-tip { display: block; }
 .files-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -135,7 +135,7 @@
   width: 28px; height: 28px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0;
-  border: 1px solid transparent; border-radius: 6px;
+  border: 1px solid transparent; border-radius: calc(6px * var(--radius-scale));
   background: transparent; color: var(--muted);
 }
 .file-act:hover, .file-act:focus-visible {
@@ -309,7 +309,7 @@
 .fv-framewrap[data-vp="tablet"] .fv-frame,
 .fv-framewrap[data-vp="phone"] .fv-frame {
   flex: none; height: 100%;
-  border-radius: 10px; box-shadow: var(--shadow-sm);
+  border-radius: calc(10px * var(--radius-scale)); box-shadow: var(--shadow-sm);
 }
 .fv-framewrap[data-vp="tablet"] .fv-frame { width: min(834px, 100%); }
 .fv-framewrap[data-vp="phone"] .fv-frame { width: min(390px, 100%); }
@@ -378,7 +378,7 @@
   padding: 8px 20px; border-bottom: 1px solid var(--line-soft);
 }
 .upload-progress-track {
-  flex: 1; height: 6px; border-radius: 3px;
+  flex: 1; height: 6px; border-radius: calc(3px * var(--radius-scale));
   background: var(--panel-2); overflow: hidden;
 }
 #upload-progress-fill {
@@ -404,7 +404,7 @@
 .file-name-field { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .file-name-field label { font-size: 13px; color: var(--muted); }
 .file-name-field input {
-  padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 11px; border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
   background: var(--panel-2); color: var(--text); font-family: var(--mono);
 }
 .file-name-field input:focus-visible { outline: none; border-color: var(--amber); }

@@ -3,7 +3,7 @@
 .chat-drafts summary::-webkit-details-marker { display:none; }
 .chat-drafts summary:hover { background:var(--panel-2); color:var(--text); }
 .chat-drafts[open] summary { color:var(--accent); }
-.chat-draft-panel { position:absolute; bottom:calc(100% + 8px); left:0; width:min(360px,calc(100vw - 40px)); box-sizing:border-box; padding:16px; max-height:50dvh; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 30px rgb(0 0 0 / .14); z-index:20; }
+.chat-draft-panel { position:absolute; bottom:calc(100% + 8px); left:0; width:min(360px,calc(100vw - 40px)); box-sizing:border-box; padding:16px; max-height:50dvh; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:calc(12px * var(--radius-scale)); box-shadow:0 8px 30px rgb(0 0 0 / .14); z-index:20; }
 #chat-draft-status { margin:2px 8px 6px; color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
 .chat-drafts label { display:flex; align-items:center; gap:6px; margin:10px 0; }
 .chat-drafts p { margin:8px 0; line-height:1.6; }
@@ -54,7 +54,7 @@
   align-self: flex-end;
   max-width: 78%;
   background: var(--panel-2);
-  border-radius: 18px 18px 6px 18px;
+  border-radius: calc(18px * var(--radius-scale)) calc(18px * var(--radius-scale)) calc(6px * var(--radius-scale)) calc(18px * var(--radius-scale));
   padding: 10px 16px;
   margin-top: 8px;
   white-space: pre-wrap;
@@ -87,7 +87,7 @@
 .answer-copy {
   flex: none; width: 32px; height: 32px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  border: 0; border-radius: 7px; background: transparent; color: var(--muted);
+  border: 0; border-radius: calc(7px * var(--radius-scale)); background: transparent; color: var(--muted);
   cursor: pointer; transition: background 140ms, color 140ms;
 }
 .answer-copy:hover { background: var(--panel-2); color: var(--text); }
@@ -156,13 +156,13 @@
 /* 文档里的图片：没写尺寸时不许撑破正文；透明 PNG/SVG 铺棋盘格才看得清边界 */
 .md-img {
   max-width: 100%; height: auto;
-  vertical-align: middle; border-radius: 6px;
+  vertical-align: middle; border-radius: calc(6px * var(--radius-scale));
   background: repeating-conic-gradient(var(--panel-2) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
 }
 .md-tablewrap {
   max-width: 100%; overflow-x: auto;
   margin: 2px 0 10px;
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
 }
 .md-table { border-collapse: collapse; font-size: 13.5px; min-width: 100%; }
 .md-table th, .md-table td {
@@ -180,7 +180,7 @@
   color: var(--text-hi);
   background: var(--code-bg);
   border: 1px solid var(--code-line);
-  border-radius: 5px;
+  border-radius: calc(5px * var(--radius-scale));
   padding: 1.5px 6px;
 }
 
@@ -188,7 +188,7 @@
 .codeblock {
   margin: 2px 0 10px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: calc(12px * var(--radius-scale));
   background: var(--code-bg);
   overflow: hidden;
 }
@@ -202,7 +202,7 @@
 .cb-toggle {
   display: inline-flex; align-items: center; gap: 7px;
   min-width: 0;
-  background: none; border: none; border-radius: 6px;
+  background: none; border: none; border-radius: calc(6px * var(--radius-scale));
   color: var(--muted);
   padding: 3px 8px 3px 5px;
 }
@@ -217,7 +217,7 @@
 .cb-count { font-size: 11px; opacity: 0.65; }
 .cb-copy {
   display: inline-flex; align-items: center; gap: 5px;
-  background: none; border: none; border-radius: 6px;
+  background: none; border: none; border-radius: calc(6px * var(--radius-scale));
   color: var(--muted);
   font-family: var(--sans); font-size: 12px;
   padding: 3px 8px;
@@ -270,7 +270,7 @@
 .chip-open {
   margin-left: 9px; padding: 0 8px; height: 18px;
   border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
-  border-radius: 9px; background: transparent;
+  border-radius: calc(9px * var(--radius-scale)); background: transparent;
   color: var(--amber); font: inherit; font-size: 11px; line-height: 16px;
   vertical-align: 1px; cursor: pointer;
 }
@@ -280,7 +280,7 @@
 /* 错误 / 警告是中文句子，用正文字体（等宽字体里没有中文字形） */
 .chip.err, .chip.warn {
   font-family: var(--sans); font-size: 12.5px;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--radius-scale));
   padding: 8px 13px;
   white-space: pre-wrap; overflow: visible; text-overflow: clip;
   word-break: break-word;
@@ -306,7 +306,7 @@ details.think summary {
   cursor: pointer; list-style: none;
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 12px;
-  border-radius: 6px;
+  border-radius: calc(6px * var(--radius-scale));
 }
 details.think summary::-webkit-details-marker { display: none; }
 details.think summary::before {
@@ -345,7 +345,7 @@ details.think.streaming .think-body::after {
 }
 .attach-file {
   display: inline-flex; align-items: center; gap: 7px;
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   background: var(--panel-2);
   padding: 6px 10px;
   font-size: 12px; color: var(--text);
@@ -356,7 +356,7 @@ details.think.streaming .think-body::after {
 .file-link {
   display: inline-flex; align-items: center; gap: 6px;
   margin: 3px 4px;
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   background: var(--code-bg);
   padding: 5px 10px;
   font-size: 12px; color: var(--text);
@@ -367,7 +367,7 @@ details.think.streaming .think-body::after {
 .attach-thumb {
   position: relative;
   width: 64px; height: 64px;
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   overflow: hidden;
   background: var(--code-bg);
   display: flex; align-items: center; justify-content: center;
@@ -378,7 +378,7 @@ details.think.streaming .think-body::after {
   background: var(--overlay-chip);
   color: #fff;
   font-family: var(--mono); font-size: 10px;
-  padding: 1px 5px; border-radius: 4px;
+  padding: 1px 5px; border-radius: calc(4px * var(--radius-scale));
 }
 .attach-thumb .up {
   display: flex; flex-direction: column; align-items: center; gap: 5px;
@@ -389,7 +389,7 @@ details.think.streaming .think-body::after {
 .msg.user .chat-thumb {
   display: inline-block; vertical-align: middle;
   max-width: 200px; max-height: 110px;
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   margin: 3px 4px;
   cursor: zoom-in;
 }
@@ -410,7 +410,7 @@ details.think.streaming .think-body::after {
   display: flex; align-items: center; gap: 8px;
   margin: 8px max(20px, calc((100% - 800px) / 2)) 0;
   padding: 7px 12px;
-  border: 1px solid var(--line); border-radius: 9px;
+  border: 1px solid var(--line); border-radius: calc(9px * var(--radius-scale));
   background: var(--panel-2);
   font-size: 12.5px; color: var(--muted);
 }
@@ -423,7 +423,7 @@ details.think.streaming .think-body::after {
 .thread-cur {
   display: inline-flex; align-items: center; gap: 7px;
   min-width: 0;
-  background: none; border: none; border-radius: 999px;
+  background: none; border: none; border-radius: var(--radius-pill);
   color: var(--muted);
   font-size: 12.5px;
   padding: 6px 12px;
@@ -438,7 +438,7 @@ details.think.streaming .think-body::after {
 .chat-network {
   position: relative; display: inline-flex; align-items: center; gap: 6px; flex: none;
   min-height: 32px; margin-left: 4px; padding: 5px 8px;
-  border: 0; border-radius: 6px; background: transparent;
+  border: 0; border-radius: calc(6px * var(--radius-scale)); background: transparent;
   color: var(--muted); font: 400 12px/1.5 var(--sans);
   white-space: nowrap; transition: background 140ms ease, color 140ms ease;
 }
@@ -462,7 +462,7 @@ details.think.streaming .think-body::after {
 .thread-new {
   flex: none; margin-left: auto;
   background: none;
-  border: 1px solid var(--line); border-radius: 8px;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
   color: var(--text);
   font-size: 12px; font-weight: 500;
   min-height: 32px; padding: 4px 10px;
@@ -500,7 +500,7 @@ details.think.streaming .think-body::after {
 .tp-search {
   flex: none; margin: 0 16px 10px 18px;
   padding: 7px 10px;
-  border: 1px solid var(--line); border-radius: 8px;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
   background: var(--panel-2); color: var(--text);
   font-size: 13px;
 }
@@ -513,14 +513,14 @@ details.think.streaming .think-body::after {
 }
 .tp-item {
   display: flex; align-items: stretch;
-  border-radius: 10px;
+  border-radius: calc(10px * var(--radius-scale));
 }
 .tp-item:hover { background: var(--panel-2); }
 .tp-item.on { background: color-mix(in srgb, var(--amber) 9%, transparent); }
 .tp-open {
   flex: 1; min-width: 0; text-align: left;
   display: grid; grid-template-columns: 15px minmax(0, 1fr); gap: 3px 7px;
-  background: none; border: none; border-radius: 10px 0 0 10px;
+  background: none; border: none; border-radius: calc(10px * var(--radius-scale)) 0 0 calc(10px * var(--radius-scale));
   padding: 9px 4px 9px 10px;
 }
 .tp-open > .ui-icon { grid-row: 1 / 3; align-self: center; color: var(--muted); }
@@ -535,7 +535,7 @@ details.think.streaming .think-body::after {
   flex: none; align-self: center;
   width: 30px; height: 30px; margin: 0 6px 0 2px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: none; border: none; border-radius: 8px;
+  background: none; border: none; border-radius: calc(8px * var(--radius-scale));
   color: var(--muted);
 }
 .tp-del:hover { color: var(--red); background: var(--panel); }
@@ -608,7 +608,7 @@ details.think.streaming .think-body::after {
   color: var(--text);
   background: color-mix(in srgb, var(--panel) 78%, transparent);
   border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   box-shadow: var(--shadow-sm);
   -webkit-backdrop-filter: blur(10px) saturate(120%);
   backdrop-filter: blur(10px) saturate(120%);
@@ -637,7 +637,7 @@ details.think.streaming .think-body::after {
   display: flex; flex-direction: column; gap: 2px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 24px;
+  border-radius: calc(24px * var(--radius-scale));
   padding: 12px 12px 10px 16px;
   box-shadow: var(--shadow-md);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -664,7 +664,7 @@ details.think.streaming .think-body::after {
   width: 34px; height: 34px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent;
-  border: none; border-radius: 50%;
+  border: none; border-radius: var(--radius-round);
   color: var(--muted);
   line-height: 1;
 }
@@ -683,7 +683,7 @@ details.think.streaming .think-body::after {
   width: 34px; height: 34px; flex: none;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--accent);
-  border: none; border-radius: 50%;
+  border: none; border-radius: var(--radius-round);
   color: var(--on-accent);
   line-height: 1;
   margin-left: 6px;
@@ -705,7 +705,7 @@ details.think.streaming .think-body::after {
   max-width: 100%;
   display: inline-flex; align-items: center; gap: 6px;
   background: transparent;
-  border: none; border-radius: 999px;
+  border: none; border-radius: var(--radius-pill);
   color: var(--muted);
   font-size: 12.5px;
   padding: 8px 12px;
@@ -721,7 +721,7 @@ details.think.streaming .think-body::after {
   position: absolute; right: 0; bottom: calc(100% + 10px); z-index: 40;
   width: 268px; max-height: 60vh; overflow-y: auto;
   background: var(--panel);
-  border: 1px solid var(--line); border-radius: 14px;
+  border: 1px solid var(--line); border-radius: calc(14px * var(--radius-scale));
   padding: 6px;
   box-shadow: var(--shadow-lg);
 }
@@ -730,7 +730,7 @@ details.think.streaming .think-body::after {
   position: absolute; z-index: 41;
   width: 210px; max-height: 60vh; overflow-y: auto;
   background: var(--panel);
-  border: 1px solid var(--line); border-radius: 14px;
+  border: 1px solid var(--line); border-radius: calc(14px * var(--radius-scale));
   padding: 6px;
   box-shadow: var(--shadow-lg);
 }
@@ -745,7 +745,7 @@ details.think.streaming .think-body::after {
 .pick-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   width: 100%; text-align: left;
-  background: none; border: none; border-radius: 9px;
+  background: none; border: none; border-radius: calc(9px * var(--radius-scale));
   color: var(--text);
   font-size: 13px;
   padding: 9px 11px;
@@ -764,7 +764,7 @@ details.think.streaming .think-body::after {
 .pick-opt {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   width: 100%; text-align: left;
-  background: none; border: none; border-radius: 9px;
+  background: none; border: none; border-radius: calc(9px * var(--radius-scale));
   color: var(--text);
   font-size: 13px;
   padding: 7px 11px;
@@ -790,7 +790,7 @@ details.think.streaming .think-body::after {
 }
 .hero-avatar .agent-avatar {
   width: 60px; height: 60px;
-  border-radius: 50%;
+  border-radius: var(--radius-round);
   box-shadow: 0 0 44px color-mix(in srgb, var(--brand) 22%, transparent);
 }
 .chat-hero h2 {
@@ -814,7 +814,7 @@ details.think.streaming .think-body::after {
 .hero-pill {
   display: inline-flex; align-items: center; gap: 8px;
   background: transparent;
-  border: 1px solid var(--line); border-radius: 999px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
   color: var(--muted);
   font-size: 13.5px;
   padding: 9px 18px;
@@ -837,7 +837,7 @@ details.think.streaming .think-body::after {
   .turn-avatar .agent-ico { width: 22px; height: 22px; }
   .chip { max-width: 100%; }
   .composer-wrap { padding: 4px 10px 12px; }
-  .composer { border-radius: 20px; padding: 10px 10px 8px 12px; }
+  .composer { border-radius: calc(20px * var(--radius-scale)); padding: 10px 10px 8px 12px; }
   /* iOS 聚焦时字号 <16px 会强制放大整页 */
   .composer textarea { font-size: 16px; min-height: 32px; }
   .chat-hero { justify-content: flex-start; padding-top: 13vh; gap: 15px; }
@@ -861,7 +861,7 @@ details.think.streaming .think-body::after {
 /* Receipt details stay behind one status row; long histories scroll independently. */
 .chat-delivery { margin:0 2px 6px; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
 .delivery-header { display:flex; align-items:center; gap:4px; min-width:0; }
-.delivery-toggle { display:flex; align-items:center; gap:8px; flex:1; min-width:0; min-height:32px; padding:4px 6px; border:0; border-radius:6px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.delivery-toggle { display:flex; align-items:center; gap:8px; flex:1; min-width:0; min-height:32px; padding:4px 6px; border:0; border-radius:calc(6px * var(--radius-scale)); background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
 .delivery-toggle:hover { background:var(--panel-2); color:var(--text); }
 .delivery-toggle:disabled { cursor:default; }
 .delivery-dot { width:5px; height:5px; border-radius:50%; background:currentColor; flex:none; }

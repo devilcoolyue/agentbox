@@ -197,9 +197,9 @@ Keep subscription, API key, and relay accounts in one pool with access scopes. P
 </details>
 
 <details>
-<summary><strong>Light theme and mobile access</strong></summary>
+<summary><strong>Themes, styles and mobile access</strong></summary>
 
-Choose light, dark, or system themes. Phone layouts include drawer navigation and a touch terminal shortcut bar, with scrolling and long-press paste.
+Choose light, dark, or system themes, and pick an interface style from the user menu: Amber (default), Liquid Glass, Cyberpunk, Graphite, Verdant, or Blueprint. Style and light/dark are independent and saved in the current browser. Phone layouts include drawer navigation and a touch terminal shortcut bar, with scrolling and long-press paste.
 
 [![Agentbox in the light theme](docs/images/chat-light.png)](docs/images/chat-light.png)
 

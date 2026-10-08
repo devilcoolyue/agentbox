@@ -38,6 +38,17 @@ const RESET_INPUT_MODES =
   "\x1b[?25h\x1b[?7h";                                     // 显示光标、自动换行
 
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// 配色取 css/base.css 的 --term-* 令牌（深浅主题下都是深色，见那里的说明）；各界面风格只换
+// 底色色调、光标和选区。xterm 只在创建时读一次，换风格/明暗时由 theme.ts 的事件重新下发。
+const termTheme = () => ({
+  background: token("--term-bg"),
+  foreground: token("--term-fg"),
+  cursor: token("--term-cursor"),
+  selectionBackground: token("--term-sel"),
+});
+window.addEventListener("agentbox-theme-change", () => {
+  if (S.term) S.term.options.theme = termTheme();
+});
 
 /** 顶栏状态：connecting/connected/reconnecting 各有专属文案，其余一律按 closed 处理 */
 type ConnState = "connecting" | "connected" | "reconnecting" | "closed";
@@ -223,13 +234,7 @@ function ensureTerm() {
     fontFamily: "JetBrains Mono, Menlo, Consolas, monospace",
     fontSize: isMobile() ? 12 : 13, // 窄屏降一号，约 46 列
     cursorBlink: true,
-    // 配色取 css/base.css 的 --term-* 令牌（深浅主题下都是深色，见那里的说明）
-    theme: {
-      background: token("--term-bg"),
-      foreground: token("--term-fg"),
-      cursor: token("--term-cursor"),
-      selectionBackground: token("--term-sel"),
-    },
+    theme: termTheme(),
   });
   const fit = new FitAddonClass!();
   term.loadAddon(fit);

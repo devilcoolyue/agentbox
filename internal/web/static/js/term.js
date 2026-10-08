@@ -31,6 +31,18 @@ const RESET_INPUT_MODES = "\x1b[?9l\x1b[?1000l\x1b[?1001l\x1b[?1002l\x1b[?1003l"
     "\x1b[?1049l\x1b[?1047l\x1b[?47l" + // 退出备用屏
     "\x1b[?25h\x1b[?7h"; // 显示光标、自动换行
 const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// 配色取 css/base.css 的 --term-* 令牌（深浅主题下都是深色，见那里的说明）；各界面风格只换
+// 底色色调、光标和选区。xterm 只在创建时读一次，换风格/明暗时由 theme.ts 的事件重新下发。
+const termTheme = () => ({
+    background: token("--term-bg"),
+    foreground: token("--term-fg"),
+    cursor: token("--term-cursor"),
+    selectionBackground: token("--term-sel"),
+});
+window.addEventListener("agentbox-theme-change", () => {
+    if (S.term)
+        S.term.options.theme = termTheme();
+});
 /* ---------------- 连接状态展示（顶栏右侧：状态点 + 文案 + 重连钮） ---------------- */
 function setConnStatus(state) {
     syncTermKeys(state === "connected");
@@ -257,13 +269,7 @@ function ensureTerm() {
         fontFamily: "JetBrains Mono, Menlo, Consolas, monospace",
         fontSize: isMobile() ? 12 : 13, // 窄屏降一号，约 46 列
         cursorBlink: true,
-        // 配色取 css/base.css 的 --term-* 令牌（深浅主题下都是深色，见那里的说明）
-        theme: {
-            background: token("--term-bg"),
-            foreground: token("--term-fg"),
-            cursor: token("--term-cursor"),
-            selectionBackground: token("--term-sel"),
-        },
+        theme: termTheme(),
     });
     const fit = new FitAddonClass();
     term.loadAddon(fit);

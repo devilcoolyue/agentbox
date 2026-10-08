@@ -10,7 +10,7 @@
 .tun-status {
   display: flex; align-items: center; gap: 12px;
   padding: 14px 16px;
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   background: var(--panel-2);
   margin-bottom: 12px;
 }
@@ -21,7 +21,7 @@
 .tun-maps {
   display: flex; flex-direction: column; gap: 4px;
   padding: 10px 14px;
-  border: 1px dashed var(--line); border-radius: 8px;
+  border: 1px dashed var(--line); border-radius: calc(8px * var(--radius-scale));
   margin-bottom: 12px;
 }
 .tun-map { font-size: 12px; color: var(--text); white-space: pre; overflow-x: auto; }
@@ -35,7 +35,7 @@
 .tun-guide code {
   font-family: var(--mono); font-size: 12px;
   background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: 5px; padding: 1px 5px;
+  border-radius: calc(5px * var(--radius-scale)); padding: 1px 5px;
 }
 .tun-dl { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .tun-dl-btn { text-decoration: none; }
@@ -43,7 +43,7 @@
   display: flex; align-items: center; gap: 8px;
   margin: 8px 0 0;
   padding: 6px 8px 6px 14px;
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
 }
 .tun-cmd {
   flex: 1; min-width: 0; margin: 0; padding: 6px 0;

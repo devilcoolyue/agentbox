@@ -1,6 +1,6 @@
 /* Version entry and update details share the existing theme tokens. */
 /* 对比表放在 .update-panel 下方，同一种卡片：边框、圆角与 28px 内边距对齐。 */
-.update-components { margin-bottom:20px; border:1px solid var(--line); border-radius:10px; background:var(--panel); overflow:hidden; }
+.update-components { margin-bottom:20px; border:1px solid var(--line); border-radius:calc(10px * var(--radius-scale)); background:var(--panel); overflow:hidden; }
 .component-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:22px 28px 0; }
 .component-head h3 { font-size:16px; font-weight:600; margin:0; }
 #component-read-status { margin:6px 28px 18px; color:var(--muted); font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
@@ -39,7 +39,7 @@
   display: inline-flex; align-items: center; gap: 5px; flex: none;
   grid-area: 2 / 1; justify-self: start; margin-left: 50px;
   min-height: 22px; max-width: calc(100% - 50px); padding: 3px 6px;
-  border: 1px solid transparent; border-radius: 6px;
+  border: 1px solid transparent; border-radius: calc(6px * var(--radius-scale));
   background: var(--panel-2); color: var(--muted);
   font: 10px var(--mono); white-space: nowrap;
   transition: background .16s ease, color .16s ease;
@@ -53,18 +53,18 @@
 .version-menu {
   position: fixed; inset: auto; margin: 0; padding: 0;
   width: min(288px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto;
-  border: 1px solid var(--line); border-radius: 10px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   background: var(--panel); color: var(--text); box-shadow: var(--shadow-lg);
 }
 .version-menu:popover-open { animation: version-reveal .14s ease-out; }
 .version-menu header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .version-menu header strong { font-size: 12px; font-weight: 500; }
-.version-check { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
+.version-check { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: calc(6px * var(--radius-scale)); background: transparent; color: var(--muted); }
 .version-check:hover { color: var(--text); background: var(--panel-2); }
 .version-menu-body { padding: 25px 16px; text-align: center; }
 .version-number { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
 .version-number > [data-update-version] { min-width: 0; }
-.version-current { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; flex: none; color: var(--green); background: color-mix(in srgb, var(--green) 13%, transparent); }
+.version-current { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--radius-round); flex: none; color: var(--green); background: color-mix(in srgb, var(--green) 13%, transparent); }
 .version-current svg { width: 15px; height: 15px; }
 .update-status { color: var(--muted); font-size: 13px; margin: 12px 0; line-height: 1.6; }
 .update-status.available { color: var(--amber); }
@@ -75,9 +75,9 @@
 .version-menu-footer:hover { background: var(--panel-2); color: var(--text); }
 .version-menu-footer [data-update-time] { display: block; }
 .update-error { color: var(--red); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; margin: 12px 0 0; }
-.update-panel { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 20px; background: var(--panel); }
+.update-panel { border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale)); margin-bottom: 20px; background: var(--panel); }
 .update-product { display: flex; align-items: center; gap: 20px; padding: 28px; }
-.update-product > .mark { width: 64px; height: 64px; flex: none; padding: 10px; border-radius: 14px; background: var(--panel-2); }
+.update-product > .mark { width: 64px; height: 64px; flex: none; padding: 10px; border-radius: calc(14px * var(--radius-scale)); background: var(--panel-2); }
 .update-panel h3 { margin: 0 0 10px; font-size: 16px; font-weight: 600; }
 .update-product h3 { font-size: 22px; letter-spacing: .03em; }
 .update-product p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
@@ -91,7 +91,7 @@
 .update-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 22px; }
 .update-actions a, .update-guide { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; text-decoration: none; }
 .update-meta { color: var(--muted); font-size: 11px !important; overflow-wrap: anywhere; }
-.upgrade-progress { padding: 14px; margin: 14px 0; border: 1px solid var(--line); border-radius: 8px; }
+.upgrade-progress { padding: 14px; margin: 14px 0; border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale)); }
 .upgrade-progress p { margin: 0 0 10px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .update-notes { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 12px; }
 .update-notes summary { cursor: pointer; color: var(--muted); }
@@ -106,8 +106,8 @@
 .update-notes-body li + li { margin-top: 4px; }
 .update-notes-body a { color: var(--amber); text-decoration: underline; text-underline-offset: 2px; }
 .update-notes-body a:not([href]) { color: inherit; text-decoration: none; }
-.update-notes-body code { font: 11.5px var(--mono); padding: 1px 5px; border-radius: 4px; background: var(--panel-2); }
-.update-notes-body pre { padding: 10px 12px; border-radius: 8px; background: var(--panel-2); overflow-x: auto; white-space: pre; overflow-wrap: normal; }
+.update-notes-body code { font: 11.5px var(--mono); padding: 1px 5px; border-radius: calc(4px * var(--radius-scale)); background: var(--panel-2); }
+.update-notes-body pre { padding: 10px 12px; border-radius: calc(8px * var(--radius-scale)); background: var(--panel-2); overflow-x: auto; white-space: pre; overflow-wrap: normal; }
 .update-notes-body pre code { padding: 0; background: none; line-height: 1.7; }
 .update-notes-body blockquote { padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
 .update-notes-body hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }

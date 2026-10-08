@@ -1,0 +1,146 @@
+/* skin-effects：风格专属的形态。颜色、圆角、模糊强度已经由 skins.css 的令牌换过一轮，
+ * 这里只写「琥珀压根没有这个东西」的部分：玻璃的模糊层与高光、赛博朋克的品红描边、
+ * 蓝图的错位实影与虚线。石墨、绿意只靠令牌，没有专属形态。
+ * 规矩：本文件所有选择器都必须挂在 :root[data-skin="…"] 下，漏掉前缀就会漏进琥珀，
+ * 那正是切回默认风格以后「怎么还有残留」的来源。
+ * 弹窗规则一律排除图片灯箱 .dlg-img：它刻意透明无边，只让图片浮在深色背板上。 */
+
+/* ============================================================================
+   液态玻璃
+   ----------------------------------------------------------------------------
+   哪些层吃 backdrop-filter（想给别的层加之前先读完）：
+   只有「浮在内容上、背后有文字滚过去」的层——弹窗、菜单、下拉、气泡、抽屉。
+   背后只有画布色斑的层（桌面侧栏、工作台、卡片）不模糊：对一片平滑渐变做高斯
+   模糊，结果和原图几乎一样，花的却是实打实的 GPU；列表里几十行各挂一个模糊，
+   滚动时每帧都要重采样，是玻璃风网页掉帧的头号原因。
+   画布也刻意不做漂移动画：任何一层背景模糊压在会动的画布上，就得每帧重算，
+   这是一个整天开着的工作台，不能拿电量换这点动感。
+   ========================================================================= */
+:root[data-skin="glass"][data-theme="dark"] {
+  --glass-pop: rgba(28, 32, 54, .84);   /* 浮层底色：比面板实，文字压在内容上要读得清 */
+  --glass-glint: rgba(255, 255, 255, .16);
+  --glass-edge: rgba(255, 255, 255, .14);
+}
+:root[data-skin="glass"][data-theme="light"] {
+  --glass-pop: rgba(255, 255, 255, .88);
+  --glass-glint: rgba(255, 255, 255, .80);
+  --glass-edge: rgba(255, 255, 255, .85);
+}
+
+/* 浮层：更实的底色 + 背景模糊 + 上缘一道镜面高光 */
+:root[data-skin="glass"] :is(
+  dialog:not(.dlg-img), .kebab-menu, .select-panel, .side-user-menu, .tip, .toast,
+  .action-popover, .section-menu, .version-menu, .date-range-popover,
+  .thread-panel, .chat-draft-panel, .workspace-guide
+) {
+  background-color: var(--glass-pop);
+  -webkit-backdrop-filter: var(--blur-panel);
+  backdrop-filter: var(--blur-panel);
+}
+:root[data-skin="glass"] .tip::after { background: var(--glass-pop); }
+:root[data-skin="glass"] :is(dialog:not(.dlg-img), .kebab-menu, .select-panel, .side-user-menu, .action-popover, .section-menu, .version-menu, .date-range-popover, .workspace-guide) {
+  background-image: linear-gradient(180deg, var(--glass-glint) 0, transparent 96px);
+}
+:root[data-skin="glass"] dialog::backdrop {
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* 侧栏：桌面上背后只有画布，不模糊；半透明面板挨着内容的那条边换成高光切面 */
+:root[data-skin="glass"] .sidebar {
+  border-right-color: var(--glass-edge);
+  box-shadow: 1px 0 0 color-mix(in srgb, var(--glass-edge) 40%, transparent);
+}
+/* 窄屏抽屉压在内容上：这时模糊才有意义，遮罩也一起磨砂 */
+@media (max-width: 760px) {
+  :root[data-skin="glass"] .sidebar {
+    background-color: var(--glass-pop);
+    -webkit-backdrop-filter: var(--blur-panel);
+    backdrop-filter: var(--blur-panel);
+  }
+  :root[data-skin="glass"] .topbar {
+    -webkit-backdrop-filter: var(--blur-panel);
+    backdrop-filter: var(--blur-panel);
+  }
+  :root[data-skin="glass"] .scrim.show {
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
+    backdrop-filter: blur(6px) saturate(140%);
+  }
+}
+
+/* 玻璃块的「厚度」靠上缘那道内高光，比加大阴影管用：输入区、按钮、输入框各补一道 */
+:root[data-skin="glass"] .composer {
+  box-shadow: var(--shadow-md), inset 0 1px 0 var(--glass-glint);
+}
+:root[data-skin="glass"] .composer:focus-within {
+  box-shadow: var(--shadow-md), inset 0 1px 0 var(--glass-glint),
+    0 0 0 3px color-mix(in srgb, var(--amber) 14%, transparent);
+}
+:root[data-skin="glass"] :is(.btn:not(.btn-ghost), .select-trigger) {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-glint) 70%, transparent);
+}
+/* 只给自带边框的输入框：输入区、搜索框、日期框里的无边框输入由外层画框，
+ * 再补一道高光就成了框中间一条横线 */
+:root[data-skin="glass"] :is(input:not([type="checkbox"], [type="radio"], [type="range"]), textarea):not(.composer *, .session-search *, .dr-inputs *) {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-glint) 70%, transparent);
+}
+/* 主按钮：实色块上也压一层竖向高光，否则像贴上去的 */
+:root[data-skin="glass"] :is(.btn-primary, .send-btn:not(.stop)) {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .22), transparent 60%);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 34%, transparent), inset 0 1px 0 rgba(255, 255, 255, .32);
+}
+:root[data-skin="glass"] .theme-options button.active {
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--glass-glint);
+}
+
+/* ============================================================================
+   赛博朋克：青色是界面的「电流」，品红只出现在边角——品牌栏下沿、主按钮的错位
+   实影、选中行的切角。不加发光阴影刷满屏，霓虹感靠少量硬边线来给。
+   ========================================================================= */
+:root[data-skin="cyberpunk"] .side-head {
+  box-shadow: inset 0 -2px 0 var(--skin-detail);
+}
+:root[data-skin="cyberpunk"] :is(.btn-primary, .send-btn:not(.stop)) {
+  box-shadow: 2px 2px 0 var(--skin-detail);
+}
+:root[data-skin="cyberpunk"] :is(.btn-primary, .send-btn:not(.stop)):active:not(:disabled) {
+  box-shadow: 1px 1px 0 var(--skin-detail);
+}
+/* 收起的窄栏另有贴边指示条（shell.css），这里只管展开的侧栏和窄屏抽屉 */
+:root[data-skin="cyberpunk"]:not([data-sidebar-collapsed="true"]) .session-card.active {
+  box-shadow: inset 2px 0 0 var(--amber);
+}
+@media (max-width: 760px) {
+  :root[data-skin="cyberpunk"] .session-card.active { box-shadow: inset 2px 0 0 var(--amber); }
+}
+:root[data-skin="cyberpunk"] .btn:hover:not(:disabled, .btn-primary, .btn-ghost, .btn-danger) {
+  border-color: var(--amber-dim);
+}
+/* 弹窗顶边一道青色，像终端窗口的标题条 */
+:root[data-skin="cyberpunk"] dialog:not(.dlg-img) {
+  border-top: 2px solid var(--amber);
+}
+:root[data-skin="cyberpunk"][data-theme="dark"] .composer:focus-within {
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--amber-dim), 0 0 22px -8px var(--amber);
+}
+
+/* ============================================================================
+   工程蓝图：阴影是右下错位的实线（--shadow-sm 已经是），分隔线改虚线，
+   像图纸上的辅助线。主按钮与输入区各带一道实影。
+   ========================================================================= */
+:root[data-skin="blueprint"] :is(.side-nav, .side-preferences) {
+  border-top-style: dashed;
+}
+:root[data-skin="blueprint"] :is(.btn-primary, .send-btn:not(.stop)) {
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--amber) 45%, transparent);
+}
+:root[data-skin="blueprint"] .composer,
+:root[data-skin="blueprint"] .composer:focus-within {
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--amber) 22%, transparent);
+}
+:root[data-skin="blueprint"] .composer:focus-within {
+  border-color: var(--amber);
+}
+:root[data-skin="blueprint"] dialog:not(.dlg-img) {
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--amber) 28%, transparent), var(--shadow-md);
+}

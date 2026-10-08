@@ -13,14 +13,14 @@
   max-width: var(--action-size);
   padding: 0; gap: 0; flex: none;
   align-items: center; justify-content: center;
-  border: 0; border-radius: 7px;
+  border: 0; border-radius: calc(7px * var(--radius-scale));
   background: transparent; box-shadow: none;
   color: var(--muted); line-height: 1;
   transform: none;
 }
 :root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label))::before {
   content: ''; position: absolute; inset: var(--action-inset);
-  border-radius: 7px; pointer-events: none;
+  border-radius: calc(7px * var(--radius-scale)); pointer-events: none;
   background: transparent; transition: background 140ms ease;
 }
 :root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)) > .action-label { display: none; }

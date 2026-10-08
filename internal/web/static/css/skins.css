@@ -1,0 +1,670 @@
+/* skins：界面风格（<html data-skin>）的整套令牌。默认的琥珀风格就是 base.css 的
+ * :root 与 :root[data-theme="light"]，这里只放其余五种风格。
+ *
+ * 风格与明暗是两个正交维度：每个「风格 × 明暗」都是一套**写全**的取值，不要只写和
+ * 琥珀的差异——漏掉的令牌会落回琥珀的值（浅色下还会是琥珀浅色），换风格后就会冒出
+ * 几处琥珀色的残留。新增颜色令牌时，这里的十套都要补齐。
+ *
+ * 选择器统一写 :root[data-skin][data-theme]（三段），稳稳压过 base.css 两段的
+ * :root[data-theme="light"]，跟样式表加载顺序无关。
+ * 终端（--term-*）在所有风格、明暗下都保持深色，原因见 base.css；各风格只换底色色调、
+ * 光标和选区。风格专属的形态（高光、描边、模糊层）在 skin-effects.css。 */
+
+/* 风格下拉里的色块：与明暗无关，两个主题下用同一组 */
+:root {
+  --swatch-amber: linear-gradient(135deg, #12151c 50%, #e8a33d 51%);
+  --swatch-glass: linear-gradient(135deg, #7e60ff 0%, #1ca8dc 48%, #e24a9a 100%);
+  --swatch-cyberpunk: linear-gradient(135deg, #15171b 48%, #36e4e9 49%, #36e4e9 72%, #f266b4 73%);
+  --swatch-graphite: linear-gradient(135deg, #424242 50%, #d8d8d8 51%);
+  --swatch-verdant: linear-gradient(135deg, #e7efe8 44%, #368866 45%, #368866 76%, #c1a574 77%);
+  --swatch-blueprint: repeating-linear-gradient(0deg, transparent 0 4px, rgba(255, 255, 255, .44) 4px 5px), repeating-linear-gradient(90deg, #245fb6 0 4px, #90b5e6 4px 5px);
+}
+
+/* ============================================================================
+   液态玻璃
+   ----------------------------------------------------------------------------
+   1) 面板底色一律半透明：玻璃是「让背后的色斑透上来」才成立的，给实色就退化成
+      琥珀加了圈亮边。深色用带蓝紫色调的暗膜而不是白膜——白膜一层叠一层会发灰，
+      这套界面里面板套面板（弹窗里的卡片、侧栏里的按钮）很常见。
+   2) --muted 比其他风格明显提亮：半透明面板背后是渐变而不是纯色，同样的灰在色斑
+      亮处会直接糊掉。
+   3) 浅色是「磨砂白」：分隔线必须用冷灰，白线画在白面板上等于没画；悬停底色往暗里
+      走（面板本身已经发白，再加白就看不出高亮）。
+   ========================================================================= */
+:root[data-skin="glass"] {
+  --radius-scale: 1.45;
+  --radius-pill: 999px;
+  --radius-round: 50%;
+  /* saturate 不是装饰：把透上来的像素提饱和，才有「背后的颜色渗进玻璃」的观感，
+   * 只 blur 出来的是一块脏灰。只有固定不动的几层吃这个值，见 skin-effects.css */
+  --blur-panel: blur(28px) saturate(170%);
+}
+:root[data-skin="glass"][data-theme="dark"] {
+  --bg: #0b0e1c;
+  /* 色斑 alpha 别再往下调：背景压得太暗就没东西可透，整页退回灰底加白框 */
+  --app-canvas:
+    radial-gradient(1200px 820px at 12% -12%, rgba(139, 92, 246, .50), transparent 62%),
+    radial-gradient(1000px 700px at 88% 4%, rgba(34, 211, 238, .32), transparent 64%),
+    radial-gradient(940px 900px at 74% 96%, rgba(244, 114, 182, .30), transparent 62%),
+    radial-gradient(820px 640px at 22% 88%, rgba(59, 130, 246, .38), transparent 64%),
+    linear-gradient(160deg, #0b0e1c 0%, #141838 46%, #0d1024 100%);
+  --panel: rgba(22, 26, 46, .62);
+  --panel-2: rgba(255, 255, 255, .09);
+  --line: rgba(255, 255, 255, .13);
+  --line-soft: rgba(255, 255, 255, .07);
+  --text: #eef1f8;
+  --text-hi: #fff;
+  --muted: #b2bbcf;
+  --scroll-thumb: rgba(255, 255, 255, .22);
+  --scroll-thumb-hover: rgba(255, 255, 255, .38);
+
+  --amber: #8cbcff;
+  --amber-dim: rgba(140, 188, 255, .42);
+  --accent: #3d7ff2;
+  --accent-hi: #5592f7;
+  --on-accent: #fff;
+
+  --green: #55d69c;
+  --green-line: rgba(85, 214, 156, .30);
+  --red: #ff8080;
+  --red-hi: #ff9a9a;
+  --red-line: rgba(255, 128, 128, .32);
+  --on-red: #2a0b0b;
+  --warn: #f5c451;
+  --warn-line: rgba(245, 196, 81, .30);
+
+  --code-bg: rgba(6, 8, 20, .55);
+  --code-head: rgba(255, 255, 255, .06);
+  --code-line: rgba(255, 255, 255, .10);
+  --syntax-keyword: #d3adff;
+  --syntax-function: #7fd3f5;
+
+  --term-bg: #0c1020;
+  --term-fg: #e2e7f2;
+  --term-cursor: #8cbcff;
+  --term-sel: #2a3354;
+
+  --scrim: rgba(6, 8, 16, .45);
+  --backdrop: rgba(6, 8, 16, .52);
+  --backdrop-strong: rgba(6, 8, 16, .82);
+  --overlay-chip: rgba(6, 8, 16, .72);
+  --shadow-sm: 0 6px 20px rgba(0, 0, 0, .30);
+  --shadow-md: 0 14px 40px rgba(0, 0, 0, .42);
+  --shadow-lg: 0 20px 56px rgba(0, 0, 0, .52);
+  --checker-a: #171b30;
+  --checker-b: #0f1224;
+
+  --diff-add: #55d69c;
+  --info: #7cb2ff;
+  --busy-veil: rgba(8, 10, 22, .42);
+  --field: rgba(255, 255, 255, .06);
+  --page: transparent;
+  color-scheme: dark;
+}
+:root[data-skin="glass"][data-theme="light"] {
+  --bg: #eef1fa;
+  --app-canvas:
+    radial-gradient(1100px 780px at 8% -6%, rgba(167, 139, 250, .55), transparent 60%),
+    radial-gradient(1000px 760px at 92% 6%, rgba(103, 232, 249, .48), transparent 62%),
+    radial-gradient(980px 900px at 74% 96%, rgba(251, 146, 190, .42), transparent 62%),
+    radial-gradient(900px 700px at 20% 86%, rgba(147, 178, 255, .44), transparent 62%),
+    linear-gradient(160deg, #eaeefe 0%, #e2e9fb 48%, #f4eafb 100%);
+  /* 透明度别再往不透明调：一旦接近纯白，背后的色斑全被盖住，浅色玻璃就和琥珀浅色
+   * 长得差不多了 */
+  --panel: rgba(255, 255, 255, .56);
+  --panel-2: rgba(58, 70, 110, .09);
+  --line: rgba(64, 76, 120, .18);
+  --line-soft: rgba(64, 76, 120, .10);
+  --text: #121624;
+  --text-hi: #000;
+  --muted: #4b5468;
+  --scroll-thumb: rgba(64, 76, 120, .28);
+  --scroll-thumb-hover: rgba(64, 76, 120, .46);
+
+  --amber: #2a63de;
+  --amber-dim: rgba(42, 99, 222, .36);
+  --accent: #2f6bea;
+  --accent-hi: #255cd6;
+  --on-accent: #fff;
+
+  --green: #0f8048;
+  --green-line: rgba(15, 128, 72, .30);
+  --red: #c93434;
+  --red-hi: #b02a2a;
+  --red-line: rgba(201, 52, 52, .30);
+  --on-red: #fff;
+  --warn: #8f6200;
+  --warn-line: rgba(143, 98, 0, .30);
+
+  --code-bg: rgba(255, 255, 255, .62);
+  --code-head: rgba(233, 237, 250, .82);
+  --code-line: rgba(64, 76, 120, .14);
+  --syntax-keyword: #7a3fb0;
+  --syntax-function: #1d63a8;
+
+  --term-bg: #0f1324;
+  --term-fg: #e2e7f2;
+  --term-cursor: #8cbcff;
+  --term-sel: #2a3354;
+
+  --scrim: rgba(40, 48, 80, .22);
+  --backdrop: rgba(40, 48, 80, .26);
+  --backdrop-strong: rgba(20, 24, 40, .72);
+  --overlay-chip: rgba(10, 14, 28, .66);
+  --shadow-sm: 0 6px 20px rgba(60, 70, 120, .12);
+  --shadow-md: 0 14px 36px rgba(40, 50, 90, .18);
+  --shadow-lg: 0 20px 52px rgba(40, 50, 90, .24);
+  --checker-a: #e3e7f3;
+  --checker-b: #f3f5fb;
+
+  --diff-add: #13864f;
+  --info: #2563c9;
+  --busy-veil: rgba(236, 240, 252, .42);
+  --field: rgba(255, 255, 255, .64);
+  --page: transparent;
+  color-scheme: light;
+}
+
+/* ============================================================================
+   赛博朋克：青色主色 + 品红点缀，全直角，主按钮带一道错位实影。
+   品红只当点缀（--skin-detail：品牌横线、主按钮影、代码关键字），不承担语义，
+   语义仍归绿/红/黄。
+   ========================================================================= */
+:root[data-skin="cyberpunk"] {
+  --radius-scale: 0;
+  --radius-pill: 0;
+  --radius-round: 0;
+  --blur-panel: none;
+}
+:root[data-skin="cyberpunk"][data-theme="dark"] {
+  --bg: #101113;
+  --app-canvas: none;
+  --panel: #181b1d;
+  --panel-2: #242a2d;
+  --line: #344145;
+  --line-soft: #252d30;
+  --text: #e9efee;
+  --text-hi: #fff;
+  --muted: #a4b2b5;
+  --scroll-thumb: #3b4a4e;
+  --scroll-thumb-hover: #567175;
+
+  --amber: #36e4e9;
+  --amber-dim: #23676a;
+  --accent: #36e4e9;
+  --accent-hi: #86f4f4;
+  --on-accent: #0b1e20;
+  --skin-detail: #f266b4;
+
+  --green: #62d6a0;
+  --green-line: #24493a;
+  --red: #ff879b;
+  --red-hi: #ffa3b2;
+  --red-line: #5a2c37;
+  --on-red: #2a0d14;
+  --warn: #f0d35d;
+  --warn-line: #574d24;
+
+  --code-bg: #0c0e0f;
+  --code-head: #15181a;
+  --code-line: #262d30;
+  --syntax-keyword: #f585c4;
+  --syntax-function: #5feaee;
+
+  --term-bg: #0b0d0e;
+  --term-fg: #d8e4e3;
+  --term-cursor: #36e4e9;
+  --term-sel: #24383b;
+
+  --scrim: rgba(0, 0, 0, .50);
+  --backdrop: rgba(0, 0, 0, .65);
+  --backdrop-strong: rgba(0, 0, 0, .84);
+  --overlay-chip: rgba(0, 0, 0, .72);
+  --shadow-sm: 0 4px 14px rgba(0, 0, 0, .40);
+  --shadow-md: 0 12px 30px rgba(0, 0, 0, .55);
+  --shadow-lg: 0 18px 44px rgba(0, 0, 0, .62);
+  --checker-a: #191c1e;
+  --checker-b: #111314;
+
+  --diff-add: #62d6a0;
+  --info: #8fb0ff;
+  --busy-veil: rgba(8, 10, 11, .60);
+  --field: #121516;
+  --page: var(--bg);
+  color-scheme: dark;
+}
+:root[data-skin="cyberpunk"][data-theme="light"] {
+  --bg: #f1f5f5;
+  --app-canvas: none;
+  --panel: #ffffff;
+  --panel-2: #e6f1f1;
+  --line: #c3d7d9;
+  --line-soft: #d8e4e5;
+  --text: #12292d;
+  --text-hi: #000;
+  --muted: #4b6266;
+  --scroll-thumb: #a9c3c5;
+  --scroll-thumb-hover: #6f9599;
+
+  --amber: #006f78;
+  --amber-dim: #86bcc0;
+  --accent: #087f89;
+  --accent-hi: #00616b;
+  --on-accent: #fff;
+  --skin-detail: #b5387c;
+
+  --green: #177d51;
+  --green-line: #b5dccb;
+  --red: #c13c59;
+  --red-hi: #a52f4a;
+  --red-line: #e3b1bd;
+  --on-red: #fff;
+  --warn: #866400;
+  --warn-line: #dccb8a;
+
+  --code-bg: #eaf2f2;
+  --code-head: #dfeaea;
+  --code-line: #c9dbdb;
+  --syntax-keyword: #b5387c;
+  --syntax-function: #006f78;
+
+  --term-bg: #0e1213;
+  --term-fg: #d8e4e3;
+  --term-cursor: #36e4e9;
+  --term-sel: #24383b;
+
+  --scrim: rgba(15, 37, 40, .25);
+  --backdrop: rgba(15, 37, 40, .38);
+  --backdrop-strong: rgba(10, 24, 26, .72);
+  --overlay-chip: rgba(8, 20, 22, .72);
+  --shadow-sm: 0 3px 10px rgba(27, 64, 68, .10);
+  --shadow-md: 0 12px 30px rgba(27, 64, 68, .20);
+  --shadow-lg: 0 18px 44px rgba(27, 64, 68, .24);
+  --checker-a: #e2eded;
+  --checker-b: #f1f5f5;
+
+  --diff-add: #177d51;
+  --info: #2a5fb0;
+  --busy-veil: rgba(225, 236, 236, .55);
+  --field: #ffffff;
+  --page: var(--bg);
+  color-scheme: light;
+}
+
+/* ============================================================================
+   石墨极简：只有灰阶，强调色就是最亮（深色）/最暗（浅色）的那一档，
+   靠明度和字重区分选中态。小圆角。
+   ========================================================================= */
+:root[data-skin="graphite"] {
+  --radius-scale: .5;
+  --radius-pill: 4px;
+  --radius-round: 50%;
+  --blur-panel: none;
+}
+:root[data-skin="graphite"][data-theme="dark"] {
+  --bg: #161616;
+  --app-canvas: none;
+  --panel: #1e1e1e;
+  --panel-2: #2b2b2b;
+  --line: #383838;
+  --line-soft: #2a2a2a;
+  --text: #e6e6e6;
+  --text-hi: #fff;
+  --muted: #a8a8a8;
+  --scroll-thumb: #4a4a4a;
+  --scroll-thumb-hover: #6a6a6a;
+
+  --amber: #f2f2f2;
+  --amber-dim: #5e5e5e;
+  --accent: #e5e5e5;
+  --accent-hi: #fff;
+  --on-accent: #1b1b1b;
+
+  --green: #87bc9a;
+  --green-line: #2f4537;
+  --red: #e59595;
+  --red-hi: #eeaaaa;
+  --red-line: #5a3a3a;
+  --on-red: #1b1b1b;
+  --warn: #d7bd7b;
+  --warn-line: #4f4630;
+
+  --code-bg: #121212;
+  --code-head: #1a1a1a;
+  --code-line: #2c2c2c;
+  --syntax-keyword: #c4a7d6;
+  --syntax-function: #8fbcd4;
+
+  --term-bg: #111;
+  --term-fg: #e0e0e0;
+  --term-cursor: #e0e0e0;
+  --term-sel: #3a3a3a;
+
+  --scrim: rgba(0, 0, 0, .48);
+  --backdrop: rgba(0, 0, 0, .62);
+  --backdrop-strong: rgba(0, 0, 0, .84);
+  --overlay-chip: rgba(0, 0, 0, .72);
+  --shadow-sm: 0 4px 14px rgba(0, 0, 0, .35);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, .48);
+  --shadow-lg: 0 16px 44px rgba(0, 0, 0, .55);
+  --checker-a: #1d1d1d;
+  --checker-b: #161616;
+
+  --diff-add: #6fc28f;
+  --info: #8fb4d8;
+  --busy-veil: rgba(12, 12, 12, .55);
+  --field: #141414;
+  --page: var(--bg);
+  color-scheme: dark;
+}
+:root[data-skin="graphite"][data-theme="light"] {
+  --bg: #f6f6f6;
+  --app-canvas: none;
+  --panel: #fff;
+  --panel-2: #eee;
+  --line: #d7d7d7;
+  --line-soft: #e6e6e6;
+  --text: #202020;
+  --text-hi: #000;
+  --muted: #5b5b5b;
+  --scroll-thumb: #b5b5b5;
+  --scroll-thumb-hover: #8a8a8a;
+
+  --amber: #1f1f1f;
+  --amber-dim: #b1b1b1;
+  --accent: #343434;
+  --accent-hi: #171717;
+  --on-accent: #fff;
+
+  --green: #3b7851;
+  --green-line: #bcd3c3;
+  --red: #b44f4f;
+  --red-hi: #9c3f3f;
+  --red-line: #e0bcbc;
+  --on-red: #fff;
+  --warn: #7f611a;
+  --warn-line: #dccfa8;
+
+  --code-bg: #f0f0f0;
+  --code-head: #e6e6e6;
+  --code-line: #d8d8d8;
+  --syntax-keyword: #6f4a8e;
+  --syntax-function: #2a5f80;
+
+  --term-bg: #141414;
+  --term-fg: #e0e0e0;
+  --term-cursor: #e0e0e0;
+  --term-sel: #3a3a3a;
+
+  --scrim: rgba(0, 0, 0, .23);
+  --backdrop: rgba(0, 0, 0, .32);
+  --backdrop-strong: rgba(0, 0, 0, .72);
+  --overlay-chip: rgba(0, 0, 0, .66);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, .07);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, .13);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, .18);
+  --checker-a: #e8e8e8;
+  --checker-b: #f6f6f6;
+
+  --diff-add: #2f7a49;
+  --info: #2f5f8f;
+  --busy-veil: rgba(240, 240, 240, .55);
+  --field: #fff;
+  --page: var(--bg);
+  color-scheme: light;
+}
+
+/* ============================================================================
+   青野绿意：苔绿主色 + 麦色点缀，圆角与琥珀相同。状态绿与主色同属绿系，
+   所以主色取偏灰的苔绿、状态绿取更亮更纯的一档，两者靠饱和度拉开。
+   ========================================================================= */
+:root[data-skin="verdant"] {
+  --radius-scale: 1;
+  --radius-pill: 999px;
+  --radius-round: 50%;
+  --blur-panel: none;
+}
+:root[data-skin="verdant"][data-theme="dark"] {
+  --bg: #151916;
+  --app-canvas: none;
+  --panel: #1d241f;
+  --panel-2: #2b352d;
+  --line: #3b463d;
+  --line-soft: #2a332c;
+  --text: #e9eee7;
+  --text-hi: #fff;
+  --muted: #a7b5a6;
+  --scroll-thumb: #4a5a4d;
+  --scroll-thumb-hover: #66796a;
+
+  --amber: #9fd2ae;
+  --amber-dim: #3f6a4c;
+  --accent: #8aca9e;
+  --accent-hi: #a7ddba;
+  --on-accent: #16261a;
+  --skin-detail: #d1b882;
+
+  --green: #6fd38e;
+  --green-line: #2f4a37;
+  --red: #e79085;
+  --red-hi: #eea69c;
+  --red-line: #5a3a35;
+  --on-red: #2a1210;
+  --warn: #ddbe78;
+  --warn-line: #4d4430;
+
+  --code-bg: #121613;
+  --code-head: #1a201b;
+  --code-line: #2a332c;
+  --syntax-keyword: #d1b882;
+  --syntax-function: #8ec7d6;
+
+  --term-bg: #0f1310;
+  --term-fg: #dfe7dc;
+  --term-cursor: #8aca9e;
+  --term-sel: #2e3d31;
+
+  --scrim: rgba(10, 17, 11, .46);
+  --backdrop: rgba(10, 17, 11, .62);
+  --backdrop-strong: rgba(6, 10, 7, .84);
+  --overlay-chip: rgba(6, 10, 7, .72);
+  --shadow-sm: 0 4px 14px rgba(0, 0, 0, .30);
+  --shadow-md: 0 12px 30px rgba(0, 0, 0, .44);
+  --shadow-lg: 0 18px 44px rgba(0, 0, 0, .52);
+  --checker-a: #1c221d;
+  --checker-b: #151916;
+
+  --diff-add: #6fd38e;
+  --info: #8ab4e0;
+  --busy-veil: rgba(10, 14, 11, .55);
+  --field: #121613;
+  --page: var(--bg);
+  color-scheme: dark;
+}
+:root[data-skin="verdant"][data-theme="light"] {
+  --bg: #f3f6f2;
+  --app-canvas: none;
+  --panel: #fff;
+  --panel-2: #e9f0e6;
+  --line: #d2ddd0;
+  --line-soft: #e2e9df;
+  --text: #243126;
+  --text-hi: #000;
+  --muted: #526751;
+  --scroll-thumb: #b5c5b2;
+  --scroll-thumb-hover: #7f977c;
+
+  --amber: #2c6a43;
+  --amber-dim: #a9c6b0;
+  --accent: #32754b;
+  --accent-hi: #245c3a;
+  --on-accent: #fff;
+  --skin-detail: #8a6c34;
+
+  --green: #237a45;
+  --green-line: #b9d3bf;
+  --red: #b34f41;
+  --red-hi: #9a4236;
+  --red-line: #e3bcb3;
+  --on-red: #fff;
+  --warn: #84601c;
+  --warn-line: #dccda3;
+
+  --code-bg: #eef3e9;
+  --code-head: #e3ebdd;
+  --code-line: #d3ddcd;
+  --syntax-keyword: #8a5a1c;
+  --syntax-function: #2b6f80;
+
+  --term-bg: #111612;
+  --term-fg: #dfe7dc;
+  --term-cursor: #8aca9e;
+  --term-sel: #2e3d31;
+
+  --scrim: rgba(30, 46, 31, .23);
+  --backdrop: rgba(30, 46, 31, .34);
+  --backdrop-strong: rgba(18, 28, 19, .72);
+  --overlay-chip: rgba(14, 22, 15, .68);
+  --shadow-sm: 0 3px 10px rgba(43, 70, 47, .08);
+  --shadow-md: 0 12px 30px rgba(43, 70, 47, .16);
+  --shadow-lg: 0 18px 44px rgba(43, 70, 47, .20);
+  --checker-a: #e6ece3;
+  --checker-b: #f3f6f2;
+
+  --diff-add: #237a45;
+  --info: #2f6a9a;
+  --busy-veil: rgba(236, 242, 234, .55);
+  --field: #fff;
+  --page: var(--bg);
+  color-scheme: light;
+}
+
+/* ============================================================================
+   工程蓝图：蓝灰底 + 网格画布，全直角，阴影是右下错位的实线。
+   页面区（--page）透明，让网格从工作台头部一路铺下来；面板仍是实色，
+   文字从不直接压在网格线上读。
+   ========================================================================= */
+:root[data-skin="blueprint"] {
+  --radius-scale: 0;
+  --radius-pill: 0;
+  --radius-round: 0;
+  --blur-panel: none;
+}
+:root[data-skin="blueprint"][data-theme="dark"] {
+  --bg: #171b20;
+  --app-canvas:
+    linear-gradient(rgba(130, 167, 209, .06) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, rgba(130, 167, 209, .06) 1px, transparent 1px) 0 0 / 24px 24px;
+  --panel: #1d242c;
+  --panel-2: #2b3642;
+  --line: #435469;
+  --line-soft: #2f3b48;
+  --text: #e6edf5;
+  --text-hi: #fff;
+  --muted: #a7b7c8;
+  --scroll-thumb: #46586c;
+  --scroll-thumb-hover: #5f7894;
+
+  --amber: #8bbbf0;
+  --amber-dim: #3e5a7a;
+  --accent: #a0c7f4;
+  --accent-hi: #c0dcfa;
+  --on-accent: #16334d;
+  --skin-detail: #e3c078;
+
+  --green: #87c7ab;
+  --green-line: #2f4a42;
+  --red: #f0968e;
+  --red-hi: #f5aca5;
+  --red-line: #5e3d3b;
+  --on-red: #2a1210;
+  --warn: #e3c078;
+  --warn-line: #54492f;
+
+  --code-bg: #141920;
+  --code-head: #1b222b;
+  --code-line: #2c3846;
+  --syntax-keyword: #e3c078;
+  --syntax-function: #8bd0e0;
+
+  --term-bg: #11161c;
+  --term-fg: #dfe8f2;
+  --term-cursor: #8bbbf0;
+  --term-sel: #2c3e52;
+
+  --scrim: rgba(9, 16, 25, .46);
+  --backdrop: rgba(9, 16, 25, .62);
+  --backdrop-strong: rgba(6, 10, 16, .84);
+  --overlay-chip: rgba(6, 10, 16, .72);
+  --shadow-sm: 2px 2px 0 rgba(10, 17, 26, .45);
+  --shadow-md: 0 12px 30px rgba(0, 0, 0, .48);
+  --shadow-lg: 0 18px 44px rgba(0, 0, 0, .55);
+  --checker-a: #1e252d;
+  --checker-b: #171b20;
+
+  --diff-add: #87c7ab;
+  --info: #8bbbf0;
+  --busy-veil: rgba(12, 18, 26, .55);
+  --field: #141a21;
+  --page: transparent;
+  color-scheme: dark;
+}
+:root[data-skin="blueprint"][data-theme="light"] {
+  --bg: #f0f5fb;
+  --app-canvas:
+    linear-gradient(rgba(48, 105, 175, .08) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, rgba(48, 105, 175, .08) 1px, transparent 1px) 0 0 / 24px 24px;
+  --panel: #fff;
+  --panel-2: #e5eefa;
+  --line: #b3c9e3;
+  --line-soft: #d1deee;
+  --text: #23364d;
+  --text-hi: #000;
+  --muted: #516983;
+  --scroll-thumb: #a9c0dc;
+  --scroll-thumb-hover: #7393bd;
+
+  --amber: #285fa8;
+  --amber-dim: #9dbbe0;
+  --accent: #285fa8;
+  --accent-hi: #1c4883;
+  --on-accent: #fff;
+  --skin-detail: #9a6a1f;
+
+  --green: #2d7d64;
+  --green-line: #b4d6cb;
+  --red: #c1524d;
+  --red-hi: #a6443f;
+  --red-line: #e6bab7;
+  --on-red: #fff;
+  --warn: #85601d;
+  --warn-line: #dccb9f;
+
+  --code-bg: #eaf1fa;
+  --code-head: #dde8f6;
+  --code-line: #c9d9ec;
+  --syntax-keyword: #9a5b1a;
+  --syntax-function: #1f6a8a;
+
+  --term-bg: #121820;
+  --term-fg: #dfe8f2;
+  --term-cursor: #8bbbf0;
+  --term-sel: #2c3e52;
+
+  --scrim: rgba(26, 48, 76, .24);
+  --backdrop: rgba(26, 48, 76, .34);
+  --backdrop-strong: rgba(14, 26, 42, .72);
+  --overlay-chip: rgba(12, 22, 36, .68);
+  --shadow-sm: 2px 2px 0 rgba(55, 102, 160, .12);
+  --shadow-md: 0 12px 30px rgba(31, 70, 120, .18);
+  --shadow-lg: 0 18px 44px rgba(31, 70, 120, .22);
+  --checker-a: #e1eaf5;
+  --checker-b: #f0f5fb;
+
+  --diff-add: #2d7d64;
+  --info: #285fa8;
+  --busy-veil: rgba(232, 240, 250, .55);
+  --field: #fff;
+  --page: transparent;
+  color-scheme: light;
+}
