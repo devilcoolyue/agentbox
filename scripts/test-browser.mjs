@@ -289,11 +289,13 @@ export async function smoke(page) {
   assert.equal(await page.locator('#update-install').isVisible(),false);
   upgrade={supported:true,reason:'',current_version:release.current_version,job:null};
   await check(); await status('可切换至正式版 v0.2.0');
+  // Collapsed rail hides the version entry; a pending update leaves only a dot on the expand button.
   await page.locator('#btn-sidebar-toggle').click();
-  await page.locator('#version-badge').click();
+  await page.locator('#version-badge').waitFor({state:'hidden'});
+  assert.equal(await page.locator('#btn-sidebar-toggle').evaluate(el=>getComputedStyle(el,'::after').content),'""','collapsed rail lost update indicator');
   await screenshot('collapsed');
-  await page.keyboard.press('Escape');
   await page.locator('#btn-sidebar-toggle').click();
+  await page.locator('#version-badge').waitFor({state:'visible'});
   await page.setViewportSize({width:390,height:844});
   await screenshot('mobile-about');
   assert.equal(await page.locator('#sec-about').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'mobile update panel overflows');

@@ -92,13 +92,17 @@
 @keyframes version-spin { to { transform: rotate(360deg); } }
 @keyframes version-reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 @media (min-width: 761px) {
-  :root[data-sidebar-collapsed="true"] .side-head:has(.version-badge:not(.hidden)) { display: flex; height: 94px; flex-direction: column; gap: 5px; padding: 0; }
-  :root[data-sidebar-collapsed="true"] .side-head:has(.version-badge:not(.hidden)) .side-brand { display: none; }
-  /* 68px 宽放不下版本号（会被截成「v0…」）：收起时只留一个圆点，版本号在气泡和弹层里 */
-  :root[data-sidebar-collapsed="true"] .version-badge { order: 1; margin-left: 0; width: 22px; min-height: 22px; padding: 0; justify-content: center; }
-  :root[data-sidebar-collapsed="true"] .version-badge > :is(.ui-icon, #version-label) { display: none; }
-  :root[data-sidebar-collapsed="true"] .version-badge .version-dot { display: block; width: 7px; height: 7px; background: var(--muted); }
-  :root[data-sidebar-collapsed="true"] .version-badge.has-update .version-dot { background: var(--amber); }
+  /* 68px 窄栏放不下版本号，收起时整块不显示，标题栏回到只有展开按钮的样子；
+   * 有新版本时只在展开按钮角上留一个琥珀点，展开后从版本入口查看。 */
+  :root[data-sidebar-collapsed="true"] .side-head:has(.version-badge:not(.hidden)) { display: flex; padding: 0; justify-content: center; }
+  :root[data-sidebar-collapsed="true"] .side-head:has(.version-badge:not(.hidden)) .side-brand,
+  :root[data-sidebar-collapsed="true"] .version-badge { display: none; }
+  :root[data-sidebar-collapsed="true"] .side-head:has(.version-badge.has-update:not(.hidden)) .side-collapse { position: relative; }
+  :root[data-sidebar-collapsed="true"] .side-head:has(.version-badge.has-update:not(.hidden)) .side-collapse::after {
+    content: ""; position: absolute; top: 5px; right: 5px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--amber); box-shadow: 0 0 0 2px var(--panel);
+  }
 }
 @media (max-width: 760px) {
   .side-head:has(.version-badge:not(.hidden)) { padding-inline: 16px; grid-template-columns: minmax(0, 1fr) 36px; }

@@ -45,11 +45,9 @@
    * （clip 不产生新的滚动容器；fixed 定位的面板/弹层不受影响） */
   overflow: clip;
 }
-/* 页面标题栏随侧栏的版本入口和折叠状态保持等高。 */
+/* 页面标题栏与侧栏的版本入口保持等高；收起侧栏时版本入口隐藏，高度不跟着变，
+ * 展开/收起不会让主区标题栏上下跳。 */
 .app:has(.version-badge:not(.hidden)) { --page-head-height: 76px; }
-@media (min-width: 761px) {
-  :root[data-sidebar-collapsed="true"] .app:has(.version-badge:not(.hidden)) { --page-head-height: 94px; }
-}
 @media (max-height: 600px) {
   .app { --page-head-height: 52px; }
 }
@@ -429,39 +427,73 @@
 @media (min-width: 761px) {
   .kebab-wrap { display: none; } /* 桌面端会话操作在工作台头部 */
 }
-/* 收起偏好在首屏脚本中恢复；窄屏始终展示完整抽屉。 */
+/* 收起偏好在首屏脚本中恢复；窄屏始终展示完整抽屉。
+ * 窄栏是一条居中的图标列：新建、搜索、空间头像、管理入口、用户与主题都用同一个
+ * --rail-item 见方，不再各自撑满不同宽度。版本入口收起时不显示（见 updates.css）。 */
 @media (min-width: 761px) {
-  :root[data-sidebar-collapsed="true"] .sidebar { width: 68px; }
+  :root[data-sidebar-collapsed="true"] .sidebar { width: 68px; --rail-item: 36px; }
   :root[data-sidebar-collapsed="true"] .side-head { padding: 0; justify-content: center; }
   :root[data-sidebar-collapsed="true"] :is(.side-brand, .side-item-label, .side-section-head, .session-filters, .sc-body, .session-empty-text) { display: none; }
-  :root[data-sidebar-collapsed="true"] .side-create { padding: 16px 12px 12px; }
-  :root[data-sidebar-collapsed="true"] .side-new { padding: 0; justify-content: center; }
-  :root[data-sidebar-collapsed="true"] .session-search-open { display: flex; flex: none; justify-content: center; margin-bottom: 4px; }
-  :root[data-sidebar-collapsed="true"] .side-sessions { padding: 0 4px; }
-  :root[data-sidebar-collapsed="true"] .session-list { padding: 2px 4px 6px; scrollbar-width: none; }
+  :root[data-sidebar-collapsed="true"] .side-collapse { margin: 0; width: var(--rail-item); height: var(--rail-item); border-radius: 8px; }
+  :root[data-sidebar-collapsed="true"] .side-collapse svg { transform: rotate(180deg); }
+  :root[data-sidebar-collapsed="true"] .side-create { display: flex; justify-content: center; padding: 14px 0 8px; }
+  :root[data-sidebar-collapsed="true"] .side-new { width: var(--rail-item); height: var(--rail-item); min-height: 0; padding: 0; justify-content: center; border-radius: 9px; }
+  :root[data-sidebar-collapsed="true"] .session-search-open {
+    display: flex; flex: none; align-self: center; justify-content: center;
+    width: var(--rail-item); height: var(--rail-item); padding: 0; margin-bottom: 6px; border-radius: 8px;
+  }
+  /* 有筛选条件时放大镜染琥珀提示「列表已过滤」；见方按钮上不画左侧竖条 */
+  :root[data-sidebar-collapsed="true"] .session-search-open.active { box-shadow: none; }
+  :root[data-sidebar-collapsed="true"] .side-sessions { padding: 0; }
+  :root[data-sidebar-collapsed="true"] .session-list { gap: 2px; padding: 2px 0 6px; scrollbar-width: none; }
   /* 68px 的窄栏里滚动条会把头像挤偏；滚轮与触控板照常能滚 */
   :root[data-sidebar-collapsed="true"] .session-list::-webkit-scrollbar { display: none; }
-  :root[data-sidebar-collapsed="true"] .session-card { height: 46px; padding: 0; justify-content: center; }
-  :root[data-sidebar-collapsed="true"] .session-card .agent-avatar {
-    width: 30px; height: 30px; border-radius: 8px;
-    background: color-mix(in srgb, var(--brand) 9%, transparent);
+  /* 整行仍是点按区域，但不画底和框：悬停、选中都落在头像瓦片本身，避免「框里套框」。
+   * 选中 = 品牌色描边环 + 贴栏左缘的指示条。 */
+  :root[data-sidebar-collapsed="true"] .session-card {
+    height: 44px; padding: 0; justify-content: center;
+    background: none; border: 0; border-radius: 0;
   }
-  :root[data-sidebar-collapsed="true"] .session-card .agent-avatar .led { display: block; }
+  :root[data-sidebar-collapsed="true"] .session-card::before {
+    content: ""; position: absolute; left: 0; top: 50%;
+    width: 3px; height: 18px; margin-top: -9px; border-radius: 0 3px 3px 0;
+    background: color-mix(in srgb, var(--text) 55%, var(--panel)); opacity: 0; transform: scaleY(0.4);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  :root[data-sidebar-collapsed="true"] .session-card.active::before { opacity: 1; transform: none; }
+  :root[data-sidebar-collapsed="true"] .session-card .agent-avatar {
+    width: var(--rail-item); height: var(--rail-item); border-radius: 10px;
+    background: color-mix(in srgb, var(--brand) 10%, var(--panel));
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+  }
+  :root[data-sidebar-collapsed="true"] .session-card:hover .agent-avatar { background: color-mix(in srgb, var(--brand) 17%, var(--panel)); }
+  :root[data-sidebar-collapsed="true"] .session-card.active .agent-avatar {
+    background: color-mix(in srgb, var(--brand) 16%, var(--panel));
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px color-mix(in srgb, var(--brand) 75%, var(--panel));
+  }
+  :root[data-sidebar-collapsed="true"] .session-card:focus-visible { outline: none; }
+  :root[data-sidebar-collapsed="true"] .session-card:focus-visible .agent-avatar { outline: 2px solid var(--amber); outline-offset: 5px; }
+  /* 角灯：运行中绿、休眠黄，已停止不亮灯、首字变淡。窄栏里不做呼吸光晕，
+   * 那圈半透明的扩散在小尺寸上只会糊成一团灰边。外圈与侧栏同色，像从瓦片上挖出来。 */
+  :root[data-sidebar-collapsed="true"] .session-card .agent-avatar .led {
+    display: block; right: -3px; bottom: -3px; width: 10px; height: 10px;
+    border: 2px solid var(--panel); background: var(--muted); animation: none; box-shadow: none;
+  }
+  :root[data-sidebar-collapsed="true"] .session-card.st-run .agent-avatar .led { background: var(--green); }
+  :root[data-sidebar-collapsed="true"] .session-card.st-idle .agent-avatar .led { background: var(--warn); }
+  :root[data-sidebar-collapsed="true"] .session-card.st-off .agent-avatar .led { display: none; }
   :root[data-sidebar-collapsed="true"] .sc-dot { display: none; }
   :root[data-sidebar-collapsed="true"] .session-card .agent-ico { display: none; }
   :root[data-sidebar-collapsed="true"] .sc-initial {
     display: block; font-size: 14px; font-weight: 600; line-height: 1; color: var(--brand);
   }
-  :root[data-sidebar-collapsed="true"] .session-card.st-off .sc-initial { opacity: 0.6; }
+  :root[data-sidebar-collapsed="true"] .session-card.st-off .sc-initial { opacity: 0.55; }
   :root[data-sidebar-collapsed="true"] .side-foot { padding-left: 8px; padding-right: 8px; }
   :root[data-sidebar-collapsed="true"] .side-item { padding: 0; justify-content: center; }
   :root[data-sidebar-collapsed="true"] .side-tools { grid-template-columns: 1fr; justify-items: center; }
-  :root[data-sidebar-collapsed="true"] .side-collapse { margin: 0; width: 36px; height: 36px; }
-  :root[data-sidebar-collapsed="true"] .side-collapse svg { transform: rotate(180deg); }
-  :root[data-sidebar-collapsed="true"] .side-tool { width: 38px; }
-  :root[data-sidebar-collapsed="true"] .tunnel-state { position: absolute; right: 5px; bottom: 5px; margin: 0; }
-  :root[data-sidebar-collapsed="true"] .side-preferences { flex-direction: column; gap: 2px; padding: 4px 0 0; margin-top: 4px; }
-  :root[data-sidebar-collapsed="true"] .side-user { flex: none; width: 38px; padding: 0; }
+  :root[data-sidebar-collapsed="true"] :is(.side-tool, .side-user) { flex: none; width: var(--rail-item); height: var(--rail-item); border-radius: 8px; }
+  :root[data-sidebar-collapsed="true"] .tunnel-state { position: absolute; right: 6px; bottom: 6px; margin: 0; }
+  :root[data-sidebar-collapsed="true"] .side-preferences { flex-direction: column; gap: 2px; padding: 6px 0 0; margin-top: 6px; }
   :root[data-sidebar-collapsed="true"] .theme-options { display: none; }
   :root[data-sidebar-collapsed="true"] .side-theme-cycle { display: flex; }
   :root[data-sidebar-collapsed="true"] .session-empty { margin: 12px auto; }
@@ -471,14 +503,18 @@
 @media (max-height: 600px) {
   .side-head { height: 52px; }
   .side-create { padding-top: 8px; padding-bottom: 6px; }
-  :root[data-sidebar-collapsed="true"] .side-create { padding-top: 8px; padding-bottom: 6px; }
   .side-section-head { height: 26px; }
   .side-foot { padding-top: 4px; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
   .side-nav { padding: 4px 0; }
   .side-item { height: 32px; }
 }
+@media (min-width: 761px) and (max-height: 600px) {
+  :root[data-sidebar-collapsed="true"] .sidebar { --rail-item: 32px; }
+  :root[data-sidebar-collapsed="true"] .side-create { padding-top: 8px; padding-bottom: 6px; }
+  :root[data-sidebar-collapsed="true"] .session-card { height: 38px; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .sidebar, .scrim, .side-new, .side-item, .session-card, .side-collapse svg, .side-user-menu, .side-logout, .theme-options button { transition: none; }
+  .sidebar, .scrim, .side-new, .side-item, .session-card, .session-card::before, .session-card .agent-avatar, .side-collapse svg, .side-user-menu, .side-logout, .theme-options button { transition: none; }
 }
 
 /* Local language preference: shared with the standard select control. */
