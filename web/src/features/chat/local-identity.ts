@@ -15,6 +15,9 @@ export function clearPreviousChatIdentity(storage:DraftStorage,hints:DraftStorag
   const prefixes=[scope.test(value.draft||"")?`agentbox.chat-draft.v1.${value.draft}.`:"",scope.test(value.chat||"")?`agentbox.chat-outbox.v1.${value.chat}.`:""].filter(Boolean);
   for(let i=storage.length-1;i>=0;i--){const name=storage.key(i);if(name&&!name.endsWith('.enabled')&&prefixes.some(p=>name.startsWith(p)))storage.removeItem(name);}
   if(scope.test(value.draft||"")){const prefix=`agentbox.chat-hint.v1.${value.draft}.`;for(let i=hints.length-1;i>=0;i--){const name=hints.key(i);if(name?.startsWith(prefix))hints.removeItem(name);}}
-  if(storage.getItem(key)===raw)storage.removeItem(key);
+  // Keep the opaque previous identity marker so a suspended peer that receives
+  // the sign-out event can clear a late local write from the same identity.
+  // A subsequent login replaces it with the new scope; it contains no token or
+  // user content.
  }catch{}
 }

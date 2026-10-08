@@ -28,8 +28,10 @@ export function clearPreviousChatIdentity(storage, hints) {
                     hints.removeItem(name);
             }
         }
-        if (storage.getItem(key) === raw)
-            storage.removeItem(key);
+        // Keep the opaque previous identity marker so a suspended peer that receives
+        // the sign-out event can clear a late local write from the same identity.
+        // A subsequent login replaces it with the new scope; it contains no token or
+        // user content.
     }
     catch { }
 }

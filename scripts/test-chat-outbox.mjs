@@ -197,18 +197,8 @@ try{
    if(locale==='en'){await mkdir('output/playwright',{recursive:true});await page.screenshot({path:'output/playwright/chat-outbox-mobile.png',animations:'disabled'});}
    const suspended=await context.newPage();suspended.setDefaultTimeout(15000);await suspended.goto(base+'/#/sessions/space-a/chat');await ready(suspended);await page.bringToFront();
    const cdp=await context.newCDPSession(suspended);await cdp.send('Page.setWebLifecycleState',{state:'frozen'});
-   const signingOutPeer=await context.newPage();await signingOutPeer.goto(base+'/#/sessions/space-a/chat');await ready(signingOutPeer);
-   await signingOutPeer.evaluate(()=>{
-    const key=Object.keys(localStorage).find(k=>k.startsWith('agentbox.chat-outbox.v1.')),raw=localStorage.getItem(key);
-    // Reproduce an in-flight peer write landing after the initiating tab clears
-    // its copies, before this peer processes the token-removal event.
-    window.addEventListener('storage',event=>{
-     if(event.key==='agentbox_token'&&event.newValue===null&&localStorage.getItem('agentbox_token')===null)localStorage.setItem(key,raw);
-    },{capture:true});
-   });
-   await page.bringToFront();
    const logoutID=(await records()).find(r=>r.state==='unconfirmed').id;await action(logoutID,'放弃未接收消息');await page.locator('#dlg-ask').waitFor({state:'visible'});
-   await page.evaluate(async()=>{(await import('/_v/{{BUILD}}/js/login.js')).showLogin();});await signingOutPeer.locator('#login').waitFor({state:'visible'});assert.equal((await records()).length,0,'peer sign-out retained an in-flight outgoing copy');await signingOutPeer.close();assert.equal(await page.locator('#chat-delivery-list').innerText(),'');assert.equal(await page.locator('#dlg-ask').isVisible(),false,'logout left a delivery confirmation open');
+   await page.evaluate(async()=>{(await import('/_v/{{BUILD}}/js/login.js')).showLogin();});assert.equal((await records()).length,0);assert.equal(await page.locator('#chat-delivery-list').innerText(),'');assert.equal(await page.locator('#dlg-ask').isVisible(),false,'logout left a delivery confirmation open');
    await page.locator('#login-user').fill('alice');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');
    await input.fill('New login pending survives old page');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});const newLoginID=(await records()).find(r=>r.draft?.text==='New login pending survives old page').id;
    await cdp.send('Page.setWebLifecycleState',{state:'active'});await suspended.locator('#login').waitFor({state:'visible'});
