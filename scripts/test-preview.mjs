@@ -24,7 +24,7 @@ export async function smoke(page) {
  await new Promise(r => server.listen(0, '127.0.0.1', r));
  const base = `http://127.0.0.1:${server.address().port}`;
  const errors = []; page.on('pageerror', e => errors.push(e.message));
- let content = '', saved = '', localImageGate;
+ let content = '', saved = '', localImageGate, sourceGate;
  const documents = new Map(), requestedFiles = [];
  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="20"><rect width="96" height="20" fill="#9a701d"/><text x="8" y="14" fill="white" font-size="12">Fixture badge</text></svg>';
  await page.route('https://img.shields.io/**', route=>route.fulfill({body:svg,contentType:'image/svg+xml'}));
@@ -40,7 +40,10 @@ export async function smoke(page) {
      if(file==='docs/assets/logo small.svg')await localImageGate;
      await route.fulfill({body:svg,contentType:'image/svg+xml'});
     }
-    else await route.fulfill({body:documents.get(file)||content,contentType:'text/plain'});
+    else {
+     if(file==='fixture.html')await sourceGate;
+     await route.fulfill({body:documents.get(file)||content,contentType:'text/plain'});
+    }
    }
   } else if (url.pathname.endsWith('/preview')) await route.fulfill({json:{url:'/fixture-preview'}});
   else await route.fulfill({json:[]});
@@ -104,10 +107,18 @@ export async function smoke(page) {
   await close();
   const html = '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>源码预览 · SVG 动画</title>\n  <style>\n    body { margin: 0; color: #123456; }\n  </style>\n</head>\n<body>\n' + '<div class="stage">中文与嵌套 <span>标签</span></div>\n'.repeat(60) + '</body>\n</html>\n';
   await open('fixture.html',html);
-  await page.locator('#fv-mode-src').click();
+  let releaseSource;sourceGate=new Promise(resolve=>{releaseSource=resolve;});
+  const sourceRequest=page.waitForRequest(request=>new URL(request.url()).searchParams.get('path')==='fixture.html'&&new URL(request.url()).pathname.endsWith('/file'));
+  try{
+   await page.locator('#fv-mode-src').click();await sourceRequest;
+   assert.equal(await page.locator('#fv-editor').isVisible(),false,'source must still be loading while its response is held');
+  }finally{releaseSource();sourceGate=undefined;}
+  await page.locator('#fv-editor').waitFor({state:'visible'});
+  await page.waitForFunction(html=>document.querySelector('#fv-editor').value===html,html);
   // Compare actual glyph positions with an unstyled text mirror, not just the
   // parent's line-height: global .tag badge styles can distort nested tokens.
   const checkGlyphs = async () => {
+   assert.equal(await page.locator('#fv-highlight').textContent(),html+'\n','glyph comparison requires the loaded HTML, not an empty editor');
    const differences = await page.locator('#fv-highlight').evaluate(highlight => {
     const plain = highlight.cloneNode(false); plain.removeAttribute('id');
     plain.textContent = highlight.textContent; plain.style.visibility='hidden';
@@ -176,9 +187,10 @@ export async function smoke(page) {
   assert.equal(await page.locator('#fv-mdwrap').isVisible(),true);
   for (const width of [360,390,430,768,1280,1440]) {
    await page.setViewportSize({width,height:900});
+   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
    for (const theme of ['dark','light']) {
     await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
-    assert.ok(await page.locator('.fv-head').evaluate(e=>e.scrollWidth<=e.clientWidth),'preview toolbar overflow');
+    await page.waitForFunction(() => { const e=document.querySelector('.fv-head'); return !!e && e.scrollWidth<=e.clientWidth; });
     if(width<=760) {
      assert.ok((await page.locator('.fv-head').boundingBox()).height<=124,'mobile preview header too tall');
      await page.locator('#fv-more').click();
