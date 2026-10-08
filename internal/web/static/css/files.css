@@ -50,7 +50,7 @@
   display: none;
   position: absolute; top: 24px; left: -12px; z-index: 30;
   width: min(340px, 72vw);
-  background: var(--panel);
+  background: var(--panel-solid);
   border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
   padding: 10px 12px;
   color: var(--text);

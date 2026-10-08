@@ -4,11 +4,11 @@
   position: fixed; inset: auto; margin: 0; padding: 6px;
   width: min(280px, calc(100vw - 16px)); max-height: calc(100dvh - 24px); overflow-y: auto;
   border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
-  background: var(--panel); color: var(--text); box-shadow: var(--shadow-lg);
+  background: var(--panel-solid); color: var(--text); box-shadow: var(--shadow-lg);
 }
 .action-popover:popover-open { display: flex; flex-direction: column; gap: 2px; }
 .action-popover .btn, .action-popover .check {
-  width: 100%; min-height: 44px; margin: 0; padding: 10px 12px;
+  width: 100%; min-height: 40px; margin: 0; padding: 8px 12px;
   justify-content: flex-start; border-color: transparent; background: transparent;
   border-radius: calc(6px * var(--radius-scale)); font-size: 13px;
 }
@@ -18,7 +18,7 @@
 /* 窄屏顶栏的分区菜单：全部分区一次列出，竖屏无需滚动（矮屏才在菜单内原生滚动） */
 .mobile-section-btn {
   display: inline-flex; align-items: center; justify-content: space-between; gap: 10px;
-  width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px;
+  width: 100%; min-width: 0; min-height: 36px; padding: 6px 10px;
   font: inherit; font-size: 13px; line-height: 1.5; text-align: left;
   color: var(--text); background: transparent;
   border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
@@ -30,13 +30,13 @@
   position: fixed; inset: auto; margin: 0; padding: 6px;
   width: min(264px, calc(100vw - 16px)); overflow-y: auto; overscroll-behavior: contain;
   border: 1px solid var(--line); border-radius: calc(12px * var(--radius-scale));
-  background: var(--panel); color: var(--text); box-shadow: var(--shadow-lg);
+  background: var(--panel-solid); color: var(--text); box-shadow: var(--shadow-lg);
 }
 .section-menu:popover-open { display: flex; flex-direction: column; gap: 2px; animation: select-enter 120ms ease-out; }
 .section-menu::backdrop { background: transparent; }
 .section-menu-item {
   display: flex; align-items: center; gap: 12px; flex: none;
-  width: 100%; min-height: 44px; padding: 0 12px;
+  width: 100%; min-height: 40px; padding: 0 12px;
   font: inherit; font-size: 14px; text-align: left;
   color: var(--text); background: transparent; border: 0; border-radius: calc(8px * var(--radius-scale));
 }
@@ -83,8 +83,8 @@
 
 @media (max-width: 760px) {
   .mobile-only { display: inline-flex; }
-  .topbar { min-height: 60px; padding: 8px 12px; gap: 8px; }
-  .menu-btn { width: 44px; height: 44px; background: transparent; border-color: transparent; }
+  .topbar { min-height: 52px; padding: 6px 10px; gap: 6px; }
+  .menu-btn { width: 40px; height: 40px; background: transparent; border-color: transparent; }
   .mobile-section { margin-left: auto; min-width: 0; max-width: 52%; }
   #view-settings > .set-head, #view-git > .set-head, #view-tunnel > .set-head { display: none; }
   .usage-head > div:first-child { display: none; }
@@ -97,7 +97,7 @@
   .sec-intro > .compact-intro { flex: 1; min-width: 0; }
   .compact-intro:has(.section-help[open]) { flex-basis: 100%; order: 2; }
   .compact-intro > h2 { display: none; }
-  .section-help > summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; gap: 6px; }
+  .section-help > summary { display: inline-flex; align-items: center; min-height: 32px; cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; gap: 6px; }
   .section-help > summary::before { content: '?'; display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid var(--line); border-radius: 50%; font: 11px var(--mono); }
   .section-help > summary::-webkit-details-marker { display: none; }
   .section-help:not([open]) > :not(summary) { display: none; }
@@ -115,18 +115,18 @@
 
   /* Actions are compact only inside explicit tool groups (actions.css). */
   .fv-actions .scope-btn, .changes-view-tabs .seg {
-    min-width: 44px; width: 44px; height: 44px; min-height: 44px;
+    min-width: 36px; width: 36px; height: 36px; min-height: 36px;
     padding: 0; gap: 0; flex: none; border-radius: calc(8px * var(--radius-scale));
   }
   .fv-actions .scope-btn .action-label, .changes-view-tabs .seg .action-label { display: none; }
   :is(.fv-actions, .changes-actions, .files-actions, .skills-actions, .acct-actions, .u-actions, .px-actions, .sec-intro) .ui-icon { width: 18px; height: 18px; }
   .action-popover .btn[data-icon] { width: 100%; padding: 10px 12px; gap: 9px; }
   .action-popover .action-label { display: inline; }
-  .fv-head { padding: max(8px, env(safe-area-inset-top)) 12px 8px; gap: 4px 8px; grid-template-columns: minmax(0, 1fr) 44px; }
-  .fv-title { flex-basis: auto; height: 44px; align-items: center; }
+  .fv-head { padding: max(8px, env(safe-area-inset-top)) 12px 8px; gap: 4px 8px; grid-template-columns: minmax(0, 1fr) 36px; }
+  .fv-title { flex-basis: auto; height: 36px; align-items: center; }
   .fv-name { font-size: 14px; }
   .fv-state { font-size: 11px; }
-  #fv-close { width: 44px; height: 44px; }
+  #fv-close { width: 36px; height: 36px; }
   .fv-actions { grid-row: 2; gap: 4px; flex-wrap: nowrap; width: 100%; }
   .fv-actions .scope-switch { padding: 2px; gap: 0; }
   .fv-head > .fv-meta { display: none; }
@@ -148,11 +148,11 @@
   .changes-view-bar { padding: 6px 12px; gap: 8px; }
   .changes-view-tabs { border: 0; gap: 2px; }
   .changes-view-tabs .seg + .seg { border: 0; }
-  .change-row { min-height: 48px; }
-  .change-discard { width: 44px; height: 44px; }
+  .change-row { min-height: 44px; }
+  .change-discard { width: 36px; height: 36px; }
   .files-bar, .skills-bar { padding: 8px 12px; gap: 8px; }
   .files-actions { gap: 4px; }
-  .file-act { width: 44px; height: 44px; }
+  .file-act { width: 36px; height: 36px; }
   .files-head, .file-row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px; padding-inline: 0; }
   .file-row .factions { min-width: 0; }
   .file-row .fname { padding-left: min(calc(var(--depth, 0) * 12px), 48px); gap: 4px; }
@@ -183,7 +183,7 @@
 }
 @container (max-width: 560px) {
   .acct-actions { gap: 4px; }
-  .acct-actions .btn { min-height: 44px; }
+  .acct-actions .btn { min-height: 34px; }
   .acct-actions .btn:not(.btn-primary) { background: transparent; border-color: transparent; }
   .acct-actions .more-btn { margin-left: auto; }
   .model-row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }

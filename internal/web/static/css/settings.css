@@ -312,7 +312,7 @@
 .mon-table th, .mon-table td { padding: 9px 14px; text-align: left; white-space: nowrap; }
 .mon-table th {
   color: var(--muted); font-size: 11.5px; font-weight: 500;
-  border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel);
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel-solid);
 }
 .mon-table th.num, .mon-table td.num { text-align: right; font-family: var(--mono); }
 .mon-table tbody tr { border-bottom: 1px solid var(--line-soft); }
@@ -448,7 +448,7 @@
   position: sticky; bottom: 12px; z-index: 5;
   display: flex; align-items: center; gap: 10px;
   margin-top: 16px; padding: 10px 12px 10px 16px;
-  background: var(--panel); border: 1px solid var(--warn-line); border-radius: calc(10px * var(--radius-scale));
+  background: var(--panel-solid); border: 1px solid var(--warn-line); border-radius: calc(10px * var(--radius-scale));
   box-shadow: var(--shadow-md);
 }
 .set-savebar[hidden] { display: none; }

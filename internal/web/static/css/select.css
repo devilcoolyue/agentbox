@@ -25,7 +25,7 @@
   position: fixed; inset: auto; margin: 0; padding: 5px;
   width: 240px; max-width: calc(100vw - 16px); max-height: 320px;
   border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
-  background: var(--panel); color: var(--text); box-shadow: var(--shadow-md);
+  background: var(--panel-solid); color: var(--text); box-shadow: var(--shadow-md);
   font-family: var(--sans); font-size: 13px; line-height: 1.5;
   overflow: hidden;
 }
@@ -57,8 +57,8 @@
 .select-panel-compact .select-option { min-height: 30px; padding: 6px 28px 6px 9px; border-radius: calc(5px * var(--radius-scale)); }
 .select-panel-compact .select-option[aria-selected="true"]::after { right: 11px; top: 50%; transform: translateY(-65%) rotate(-45deg); }
 @keyframes select-enter { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
-@media (pointer: coarse) { .select-option { min-height: 42px; padding-top: 12px; padding-bottom: 12px; } }
-@media (pointer: coarse) { .select-panel-compact .select-option { min-height: 42px; padding-top: 12px; padding-bottom: 12px; } }
+@media (pointer: coarse) { .select-option { min-height: 38px; padding-top: 9px; padding-bottom: 9px; } }
+@media (pointer: coarse) { .select-panel-compact .select-option { min-height: 38px; padding-top: 9px; padding-bottom: 9px; } }
 @media (prefers-reduced-motion: reduce) {
   .select-trigger, .select-caret { transition: none; }
   .select-panel:popover-open { animation: none; }

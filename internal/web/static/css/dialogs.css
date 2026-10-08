@@ -2,7 +2,7 @@
  * 文件预览弹窗（结构特殊、全屏化）在 files.css。 */
 
 dialog {
-  background: var(--panel);
+  background: var(--panel-solid);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: calc(10px * var(--radius-scale));
@@ -318,7 +318,7 @@ dialog label.check input { margin: 0; flex: none; }
 .pp-menu {
   position: absolute; z-index: 5;
   left: 0; right: 0; top: calc(100% + 6px);
-  background: var(--panel);
+  background: var(--panel-solid);
   border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
   box-shadow: var(--shadow-md);
   overflow: hidden;
@@ -445,5 +445,5 @@ dialog label.check input { margin: 0; flex: none; }
 .diagnostic-heading [data-state="failed"] { color: var(--red); }
 .diagnostic-checks p { margin: 6px 0 0; font-size: 13px; }
 .diagnostic-reference, .diagnostics-dialog p { overflow-wrap: anywhere; }
-.diagnostics-dialog .dlg-actions { position: sticky; bottom: -26px; padding: 12px 0; background: var(--panel); flex-wrap: wrap; }
+.diagnostics-dialog .dlg-actions { position: sticky; bottom: -26px; padding: 12px 0; background: var(--panel-solid); flex-wrap: wrap; }
 @media (max-width: 600px) { .diagnostics-dialog { padding: 18px; } .diagnostics-dialog .dlg-actions { bottom: -18px; } }

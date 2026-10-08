@@ -76,8 +76,8 @@
  #mcp-content { padding:14px 12px; }
  .mcp-row { grid-template-columns:minmax(0, 1fr); gap:12px; padding:18px 0; }
  .mcp-actions { grid-column:1; grid-row:auto; justify-content:flex-start; gap:8px; }
- .mcp-toggle { margin-left:auto; min-height:44px; padding-left:10px; }
- .mcp-actions .mcp-test { min-height:44px; }
+ .mcp-toggle { margin-left:auto; min-height:36px; padding-left:10px; }
+ .mcp-actions .mcp-test { min-height:34px; }
 }
 @media(max-width:520px) {
  .mcp-toolbar-actions { width:100%; }
@@ -88,7 +88,7 @@
  .mcp-form-grid { grid-template-columns:1fr; gap:14px; }
  .mcp-dialog-footer { padding:12px 18px; }
  .mcp-dialog-footer > span { max-width:96px; line-height:1.5; }
- .mcp-dialog-buttons .btn { min-height:40px; }
+ .mcp-dialog-buttons .btn { min-height:38px; }
 }
 @media(max-width:360px) { .mcp-toggle > span:last-child { display:none; } }
 @media(prefers-reduced-motion:reduce) { #mcp-editor[open] { animation:none; } }

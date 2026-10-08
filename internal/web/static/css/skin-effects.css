@@ -8,37 +8,27 @@
 /* ============================================================================
    液态玻璃
    ----------------------------------------------------------------------------
-   哪些层吃 backdrop-filter（想给别的层加之前先读完）：
-   只有「浮在内容上、背后有文字滚过去」的层——弹窗、菜单、下拉、气泡、抽屉。
-   背后只有画布色斑的层（桌面侧栏、工作台、卡片）不模糊：对一片平滑渐变做高斯
-   模糊，结果和原图几乎一样，花的却是实打实的 GPU；列表里几十行各挂一个模糊，
-   滚动时每帧都要重采样，是玻璃风网页掉帧的头号原因。
-   画布也刻意不做漂移动画：任何一层背景模糊压在会动的画布上，就得每帧重算，
-   这是一个整天开着的工作台，不能拿电量换这点动感。
+   玻璃感只给「背后是画布」的层：侧栏、工作台、卡片用半透明 --panel，透出色斑。
+   凡是压在正文上的层——弹窗、菜单、下拉、气泡、抽屉、吸顶表头——一律用不透明的
+   --panel-solid（各自的基础样式里已经写好），不要改回半透明再指望背景模糊：
+   半透明底下的字即便糊过也是一团团字形，和上层文字叠在一起照样看不清；嵌套的
+   backdrop-filter 还只采样到最近的模糊祖先（窄屏抽屉里的用户菜单），根本糊不掉。
+   所以玻璃风格不给任何面板挂 backdrop-filter，只给弹窗、抽屉背后的遮罩磨砂：
+   遮罩本来就是半透明的，磨一下让底下的页面退成背景，不和上层抢眼。
+   画布刻意不做漂移动画：遮罩的模糊压在会动的画布上就得每帧重算。
    ========================================================================= */
 :root[data-skin="glass"][data-theme="dark"] {
-  --glass-pop: rgba(28, 32, 54, .84);   /* 浮层底色：比面板实，文字压在内容上要读得清 */
   --glass-glint: rgba(255, 255, 255, .16);
   --glass-edge: rgba(255, 255, 255, .14);
 }
 :root[data-skin="glass"][data-theme="light"] {
-  --glass-pop: rgba(255, 255, 255, .88);
   --glass-glint: rgba(255, 255, 255, .80);
   --glass-edge: rgba(255, 255, 255, .85);
 }
 
-/* 浮层：更实的底色 + 背景模糊 + 上缘一道镜面高光 */
-:root[data-skin="glass"] :is(
-  dialog:not(.dlg-img), .kebab-menu, .select-panel, .side-user-menu, .tip, .toast,
-  .action-popover, .section-menu, .version-menu, .date-range-popover,
-  .thread-panel, .chat-draft-panel, .workspace-guide
-) {
-  background-color: var(--glass-pop);
-  -webkit-backdrop-filter: var(--blur-panel);
-  backdrop-filter: var(--blur-panel);
-}
-:root[data-skin="glass"] .tip::after { background: var(--glass-pop); }
-:root[data-skin="glass"] :is(dialog:not(.dlg-img), .kebab-menu, .select-panel, .side-user-menu, .action-popover, .section-menu, .version-menu, .date-range-popover, .workspace-guide) {
+/* 浮层：上缘一道镜面高光。提示条（toast）的基础底色故意留了 6% 透明，玻璃下压实 */
+:root[data-skin="glass"] .toast { background-color: var(--panel-solid); }
+:root[data-skin="glass"] :is(dialog:not(.dlg-img), .kebab-menu, .select-panel, .side-user-menu, .action-popover, .section-menu, .version-menu, .date-range-popover, .workspace-guide, .pick-menu) {
   background-image: linear-gradient(180deg, var(--glass-glint) 0, transparent 96px);
 }
 :root[data-skin="glass"] dialog::backdrop {
@@ -51,18 +41,9 @@
   border-right-color: var(--glass-edge);
   box-shadow: 1px 0 0 color-mix(in srgb, var(--glass-edge) 40%, transparent);
 }
-/* 窄屏抽屉压在内容上：这时模糊才有意义，遮罩也一起磨砂 */
+/* 窄屏抽屉、历史面板压在内容上：抽屉本身不透明，背后的遮罩磨砂 */
 @media (max-width: 760px) {
-  :root[data-skin="glass"] .sidebar {
-    background-color: var(--glass-pop);
-    -webkit-backdrop-filter: var(--blur-panel);
-    backdrop-filter: var(--blur-panel);
-  }
-  :root[data-skin="glass"] .topbar {
-    -webkit-backdrop-filter: var(--blur-panel);
-    backdrop-filter: var(--blur-panel);
-  }
-  :root[data-skin="glass"] .scrim.show {
+  :root[data-skin="glass"] :is(.scrim, .tp-scrim).show {
     -webkit-backdrop-filter: blur(6px) saturate(140%);
     backdrop-filter: blur(6px) saturate(140%);
   }

@@ -45,10 +45,10 @@
 :root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)).loading .spin { border-color: var(--amber-dim); border-top-color: var(--amber); }
 .acct-actions { gap: 4px; }
 @media (max-width: 760px), (pointer: coarse) {
-  /* Keep touch targets generous while the visible hover surface stays 32px. */
-  :root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)) { --action-size: 44px; --action-inset: 6px; }
-  /* 留着文字的主操作 / 危险操作同样给足触控高度 */
-  :root .action-tools > .btn.action-control:is(.btn-primary, .btn-danger, .keep-label) { min-height: 44px; }
+  /* 触屏点按区 36px，可见的悬停底仍是 32px；再大一排图标就比内容还抢眼 */
+  :root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label)) { --action-size: 36px; --action-inset: 2px; }
+  /* 留着文字的主操作 / 危险操作与图标同高，一排工具对齐 */
+  :root .action-tools > .btn.action-control:is(.btn-primary, .btn-danger, .keep-label) { min-height: 36px; }
 }
 @media (prefers-reduced-motion: reduce) {
   :root .btn:is(.action-icon, .action-tools > .action-control:not(.btn-primary, .btn-danger, .keep-label))::before { transition: none; }

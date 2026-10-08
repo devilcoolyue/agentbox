@@ -52,15 +52,30 @@ export async function skinsSmoke(page, base) {
   await ready();
 
   // Every style × theme defines a complete set: nothing falls back to amber.
+  // Layers stacked over content (menus, dialogs, sticky headers) must stay opaque,
+  // or text underneath shows through translucent styles such as glass.
+  const solidAlpha = () => page.evaluate(() => {
+    const probe = document.body.appendChild(document.createElement('div'));
+    probe.style.background = 'var(--panel-solid)';
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const parts = color.match(/[\d.]+/g) || [];
+    return parts.length > 3 ? Number(parts[3]) : 1;
+  });
   for (const theme of ['dark', 'light']) {
     await page.evaluate(theme => { document.documentElement.dataset.theme = theme; document.documentElement.dataset.skin = 'amber'; }, theme);
     const amber = await tokens(DISTINCT);
+    assert.equal(await solidAlpha(), 1, `amber/${theme} --panel-solid is translucent`);
     for (const skin of SKINS.slice(1)) {
       await page.evaluate(skin => { document.documentElement.dataset.skin = skin; }, skin);
       const values = await tokens(DISTINCT);
       for (const name of DISTINCT) assert.notEqual(values[name], amber[name], `${skin}/${theme} ${name} leaks amber`);
+      assert.equal(await solidAlpha(), 1, `${skin}/${theme} --panel-solid is translucent`);
     }
   }
+  // The glass user menu used to let the drawer's links show through it.
+  await page.evaluate(() => { document.documentElement.dataset.skin = 'glass'; });
+  assert.equal(await page.locator('#sidebar-user-menu').evaluate(el => getComputedStyle(el).backgroundColor.match(/[\d.]+/g).length), 3, 'glass user menu is opaque');
 
   await page.evaluate(() => localStorage.setItem('agentbox_skin', 'unknown'));
   await page.reload();
@@ -68,5 +83,5 @@ export async function skinsSmoke(page, base) {
   await page.evaluate(() => localStorage.removeItem('agentbox_skin'));
   await page.reload();
   await ready();
-  console.log('Skins: six-style picker, switching, light/dark independence, first-paint restore, complete token sets and fallback passed');
+  console.log('Skins: six-style picker, switching, light/dark independence, first-paint restore, complete token sets, opaque overlays and fallback passed');
 }

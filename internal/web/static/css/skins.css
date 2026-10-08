@@ -23,9 +23,11 @@
 /* ============================================================================
    液态玻璃
    ----------------------------------------------------------------------------
-   1) 面板底色一律半透明：玻璃是「让背后的色斑透上来」才成立的，给实色就退化成
+   1) 贴在画布上的面板半透明：玻璃是「让背后的色斑透上来」才成立的，给实色就退化成
       琥珀加了圈亮边。深色用带蓝紫色调的暗膜而不是白膜——白膜一层叠一层会发灰，
       这套界面里面板套面板（弹窗里的卡片、侧栏里的按钮）很常见。
+      压在正文上的层（浮层、抽屉、吸顶表头）例外，用不透明的 --panel-solid，
+      否则底下的字透上来和上层文字叠在一起。
    2) --muted 比其他风格明显提亮：半透明面板背后是渐变而不是纯色，同样的灰在色斑
       亮处会直接糊掉。
    3) 浅色是「磨砂白」：分隔线必须用冷灰，白线画在白面板上等于没画；悬停底色往暗里
@@ -35,9 +37,6 @@
   --radius-scale: 1.45;
   --radius-pill: 999px;
   --radius-round: 50%;
-  /* saturate 不是装饰：把透上来的像素提饱和，才有「背后的颜色渗进玻璃」的观感，
-   * 只 blur 出来的是一块脏灰。只有固定不动的几层吃这个值，见 skin-effects.css */
-  --blur-panel: blur(28px) saturate(170%);
 }
 :root[data-skin="glass"][data-theme="dark"] {
   --bg: #0b0e1c;
@@ -49,6 +48,8 @@
     radial-gradient(820px 640px at 22% 88%, rgba(59, 130, 246, .38), transparent 64%),
     linear-gradient(160deg, #0b0e1c 0%, #141838 46%, #0d1024 100%);
   --panel: rgba(22, 26, 46, .62);
+  /* 压在正文上的层（浮层、抽屉、吸顶表头）用它：.62 的面板叠在文字上会字压字 */
+  --panel-solid: #1b1f36;
   --panel-2: rgba(255, 255, 255, .09);
   --line: rgba(255, 255, 255, .13);
   --line-soft: rgba(255, 255, 255, .07);
@@ -112,6 +113,7 @@
   /* 透明度别再往不透明调：一旦接近纯白，背后的色斑全被盖住，浅色玻璃就和琥珀浅色
    * 长得差不多了 */
   --panel: rgba(255, 255, 255, .56);
+  --panel-solid: #f9faff;
   --panel-2: rgba(58, 70, 110, .09);
   --line: rgba(64, 76, 120, .18);
   --line-soft: rgba(64, 76, 120, .10);
@@ -174,7 +176,6 @@
   --radius-scale: 0;
   --radius-pill: 0;
   --radius-round: 0;
-  --blur-panel: none;
 }
 :root[data-skin="cyberpunk"][data-theme="dark"] {
   --bg: #101113;
@@ -299,7 +300,6 @@
   --radius-scale: .5;
   --radius-pill: 4px;
   --radius-round: 50%;
-  --blur-panel: none;
 }
 :root[data-skin="graphite"][data-theme="dark"] {
   --bg: #161616;
@@ -422,7 +422,6 @@
   --radius-scale: 1;
   --radius-pill: 999px;
   --radius-round: 50%;
-  --blur-panel: none;
 }
 :root[data-skin="verdant"][data-theme="dark"] {
   --bg: #151916;
@@ -548,7 +547,6 @@
   --radius-scale: 0;
   --radius-pill: 0;
   --radius-round: 0;
-  --blur-panel: none;
 }
 :root[data-skin="blueprint"][data-theme="dark"] {
   --bg: #171b20;

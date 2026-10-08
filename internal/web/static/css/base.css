@@ -83,10 +83,10 @@
   --radius-round: 50%;   /* 大号圆形按钮/头像；小圆点、转圈固定写 50% 不跟它 */
   --field: var(--bg);    /* 输入框、搜索框、凹槽的底色 */
   --page: var(--bg);     /* 需要「铺一层页面底色」的元素（工作台头部等） */
+  /* 压在别的内容上方的层：浮层、抽屉、吸顶表头、底部保存条。半透明风格的 --panel
+   * 透得过文字，这些层叠在正文上会字压字，所以单列一个必须不透明的表面 */
+  --panel-solid: var(--panel);
   --app-canvas: none;    /* 页面底下的背景层：玻璃色斑 / 蓝图网格 */
-  /* 侧栏、弹窗等固定层的背景模糊。必须是 none 而不是 blur(0)：
-   * blur(0) 照样让浏览器为这些层建合成层，看不见还白白付钱 */
-  --blur-panel: none;
 
   --claude: #d97757; /* Claude 官方陶土橙（simple-icons 品牌色） */
   --openai: #10a37f; /* ChatGPT 官方青绿 */
@@ -281,10 +281,13 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   border-top-color: var(--on-accent);
 }
 
+/* 触屏密度：普通按钮与桌面同高（38px），小按钮只补 2px。不要再统一拉到 44px：
+ * 手机本来就窄，一排排 44px 的大块按钮把内容挤掉一半，看着比桌面笨重得多。
+ * 图标按钮的点按区由 actions.css 的 --action-size 统一给。 */
 @media (pointer: coarse) {
-  .btn { min-height: 44px; }
-  .dlg-x { min-width: 44px; min-height: 44px; }
-  .scope-btn, .thread-new { min-height: 40px; }
+  .btn-sm { min-height: 34px; }
+  .dlg-x { min-width: 36px; min-height: 36px; }
+  .scope-btn, .thread-new { min-height: 34px; }
 }
 
 /* ---- Agent 品牌标识：官方 logo + 品牌色，跨侧栏/工作台/弹窗/设置复用 ----
@@ -350,7 +353,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   position: fixed; top: 0; left: 0; right: 0; z-index: 120;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 7px 14px;
-  background: var(--panel);
+  background: var(--panel-solid);
   border-bottom: 1px solid var(--red-line);
   color: var(--red);
   font-size: 12.5px;
@@ -368,7 +371,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   margin: 0;
   width: max-content; max-width: min(300px, 78vw);
   padding: 6px 10px;
-  background: var(--panel);
+  background: var(--panel-solid);
   border: 1px solid var(--amber-dim); border-radius: calc(7px * var(--radius-scale));
   color: var(--text);
   font-size: 12px; line-height: 1.5;
@@ -388,7 +391,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .tip::after {
   content: ""; position: absolute;
   width: 8px; height: 8px;
-  background: var(--panel);
+  background: var(--panel-solid);
   border: 1px solid var(--amber-dim);
   transform: rotate(45deg);
 }

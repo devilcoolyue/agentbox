@@ -54,7 +54,7 @@
   position: fixed; inset: auto; margin: 0; padding: 0;
   width: min(288px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto;
   border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
-  background: var(--panel); color: var(--text); box-shadow: var(--shadow-lg);
+  background: var(--panel-solid); color: var(--text); box-shadow: var(--shadow-lg);
 }
 .version-menu:popover-open { animation: version-reveal .14s ease-out; }
 .version-menu header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }

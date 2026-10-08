@@ -60,7 +60,7 @@
 
 @media (max-width: 760px) {
   .tun-body { padding: 14px 16px 28px; }
-  .tun-pair-copy { width: 44px; height: 44px; }
+  .tun-pair-copy { width: 36px; height: 36px; }
 }
 
 /* Card gap owns vertical spacing; browser paragraph margins must not stack

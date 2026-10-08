@@ -122,7 +122,8 @@
   border-bottom: 1px solid var(--line-soft);
   white-space: nowrap;
   position: sticky; top: 0;
-  background: color-mix(in srgb, var(--panel-2) 35%, var(--panel));
+  /* 吸顶：底色必须不透明（--panel-solid），否则滚上来的行会透过表头 */
+  background: linear-gradient(color-mix(in srgb, var(--panel-2) 35%, transparent), color-mix(in srgb, var(--panel-2) 35%, transparent)), var(--panel-solid);
   z-index: 1;
 }
 /* 一行里最高的是会话/模型/Token 这类两行格，单行格（类型、费用、时间）跟着居中，
@@ -320,7 +321,7 @@
   .usage-table, .usage-table tbody, .usage-table tr, .usage-table td { display: block; }
   /* 表头本身在卡片布局里没用了，但排序箭头得留着——整条表头压成一行，只显示
    * 时间那一格，当卡片列表的排序条 */
-  .usage-table thead { display: block; position: sticky; top: 0; z-index: 1; background: var(--panel); }
+  .usage-table thead { display: block; position: sticky; top: 0; z-index: 1; background: var(--panel-solid); }
   .usage-table thead th { display: none; }
   .usage-table thead tr { display: flex; justify-content: flex-end; padding: 8px 12px; }
   .usage-table th.col-time {

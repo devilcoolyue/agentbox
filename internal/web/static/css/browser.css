@@ -56,5 +56,5 @@
  .browser-clipboard textarea { flex-basis:100%; }
 }
 @media(max-width:600px) { .tabs { overflow-x:auto; flex-shrink:0; } .tab { flex-shrink:0; white-space:nowrap; } }
-@media(pointer:coarse) { :root #tab-browser .btn.browser-tool { --action-size:40px; } .browser-bookmark { min-height:40px; } }
+@media(pointer:coarse) { :root #tab-browser .btn.browser-tool { --action-size:36px; } .browser-bookmark { min-height:34px; } }
 @media(prefers-reduced-motion:reduce) { .browser-address,.browser-bookmark { transition:none; } }

@@ -179,7 +179,7 @@
 @media (max-width: 760px) {
   .wb-head { display: none; }
   .tabs { padding: 0; gap: 0; }
-  .tab { flex: 1 1 0; min-width: 0; padding: 0; height: 44px; }
+  .tab { flex: 1 1 0; min-width: 0; padding: 0; height: 40px; }
   .tab:not(.active) .t {
     position: absolute; width: 1px; height: 1px; overflow: hidden;
     clip-path: inset(50%); white-space: nowrap;
@@ -425,7 +425,7 @@
 .creation-config p { margin:8px 0 0; }
 /* One anchored step at a time; popovers never reserve workbench space. */
 #guide-spotlight { position:fixed; inset:auto; margin:0; padding:0; border:2px solid var(--accent); border-radius:calc(14px * var(--radius-scale)); background:transparent; pointer-events:none; box-shadow:0 0 0 100vmax rgb(0 0 0 / .18); transition:top .2s ease,left .2s ease,width .2s ease,height .2s ease; }
-.workspace-guide { position:fixed; inset:auto; margin:0; box-sizing:border-box; width:min(340px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:calc(16px * var(--radius-scale)); background:var(--panel); color:var(--text); box-shadow:0 12px 40px rgb(0 0 0 / .18); font-size:13px; }
+.workspace-guide { position:fixed; inset:auto; margin:0; box-sizing:border-box; width:min(340px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:calc(16px * var(--radius-scale)); background:var(--panel-solid); color:var(--text); box-shadow:0 12px 40px rgb(0 0 0 / .18); font-size:13px; }
 .workspace-guide:popover-open { animation:guide-enter .18s ease-out; }
 .guide-top,.guide-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .guide-top { color:var(--muted); font-size:11px; }

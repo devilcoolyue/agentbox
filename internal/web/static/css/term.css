@@ -137,7 +137,7 @@
   .term-keys-scroll::-webkit-scrollbar { display: none; }
   .term-keys button {
     display: inline-flex; align-items: center; justify-content: center;
-    flex: none; min-width: 44px; height: 44px; padding: 0 8px;
+    flex: none; min-width: 40px; height: 38px; padding: 0 8px;
     border: 0; border-radius: calc(7px * var(--radius-scale)); background: transparent; color: var(--term-cursor);
     font: 13px var(--mono); white-space: nowrap;
     touch-action: manipulation; user-select: none; -webkit-user-select: none;
@@ -179,7 +179,7 @@
 .term-input-debug {
   position: fixed; z-index: 40; right: 8px; top: calc(env(safe-area-inset-top) + 68px);
   display: flex; align-items: center; gap: 6px; padding: 6px 8px;
-  color: var(--text); background: var(--panel); border: 1px solid var(--amber-dim);
+  color: var(--text); background: var(--panel-solid); border: 1px solid var(--amber-dim);
   border-radius: calc(8px * var(--radius-scale)); box-shadow: var(--shadow-md); font-size: 12px;
 }
 .term-input-debug b { color: var(--amber); font-family: var(--mono); font-weight: 500; }

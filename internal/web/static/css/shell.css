@@ -84,7 +84,7 @@
 .kebab-menu {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
   width: 168px;
-  background: var(--panel);
+  background: var(--panel-solid);
   border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   padding: 5px;
   box-shadow: var(--shadow-lg);
@@ -113,7 +113,7 @@
 }
 .kebab-menu.menu-pop button { white-space: nowrap; }
 @media (pointer: coarse) {
-  .kebab-menu.menu-pop button { min-height: 44px; }
+  .kebab-menu.menu-pop button { min-height: 40px; }
 }
 
 .shell { flex: 1; min-height: 0; display: flex; }
@@ -268,7 +268,7 @@
 .side-user-menu {
   position: fixed; z-index: 90; width: 232px; max-width: calc(100vw - 24px);
   padding: 6px; border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
-  background: var(--panel); box-shadow: var(--shadow-lg);
+  background: var(--panel-solid); box-shadow: var(--shadow-lg);
   opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(4px);
   transition: opacity 0.14s ease, transform 0.14s ease;
 }
@@ -405,6 +405,7 @@
     width: min(300px, 84vw);
     transform: translateX(-100%);
     transition: transform 0.22s ease;
+    background: var(--panel-solid); /* 抽屉压在正文上 */
     box-shadow: var(--shadow-lg);
   }
   .sidebar.open { transform: translateX(0); }
@@ -414,13 +415,13 @@
 
   .side-close { display: inline-flex; }
   .side-head { padding: 0 16px; }
-  .side-item { height: 42px; }
+  .side-item { height: 40px; }
   .side-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
   .side-collapse { display: none; }
-  .side-tool { height: 42px; }
-  .side-user { height: 44px; }
-  .theme-options button { width: 36px; height: 40px; }
-  .side-logout { height: 44px; }
+  .side-tool { height: 40px; }
+  .side-user { height: 40px; }
+  .theme-options button { width: 34px; height: 34px; }
+  .side-logout { height: 40px; }
   .side-user-menu { position: absolute; width: auto; left: 0; right: 0; bottom: calc(100% + 8px); }
 
 }
@@ -525,7 +526,7 @@
 .login-language { align-self: center; margin-top: 2px; }
 .side-user-menu .language-control { gap: 8px; padding: 4px 8px; }
 .side-user-menu .language-control :is(select, .select-trigger) { width: 128px; }
-@media (pointer: coarse) { .language-control .select-trigger { min-height: 40px; } }
+@media (pointer: coarse) { .language-control .select-trigger { min-height: 34px; } }
 /* 风格下拉：触发器和每个选项前画一枚该风格的色块（色值见 skins.css 的 --swatch-*） */
 .skin-select.select-trigger { justify-content: flex-start; }
 .skin-select.select-trigger .select-caption { flex: 1; }
@@ -546,10 +547,10 @@
 html[lang="en"] .side-tools { grid-template-columns: 1fr; }
 
 @media (max-width: 760px) {
-  /* 触屏抽屉：点按区域放大；输入框字号 16px，避免 iOS 聚焦时自动放大页面 */
-  .session-search { height: 40px; }
-  .session-search input { font-size: 16px; line-height: 38px; }
-  .session-filter-row :is(select, .select-trigger) { min-height: 40px; font-size: 14px; line-height: 38px; }
-  .session-filter-row button { min-height: 40px; }
-  .session-card { height: 48px; }
+  /* 触屏抽屉：点按区域略放大；输入框字号 16px，避免 iOS 聚焦时自动放大页面 */
+  .session-search { height: 36px; }
+  .session-search input { font-size: 16px; line-height: 34px; }
+  .session-filter-row :is(select, .select-trigger) { min-height: 36px; font-size: 14px; line-height: 34px; }
+  .session-filter-row button { min-height: 36px; }
+  .session-card { height: 44px; }
 }

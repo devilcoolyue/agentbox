@@ -37,7 +37,8 @@ export async function fileActionSmoke(page) {
         // WebKit 26 ends an icon + label button's innerText with a newline.
         assert.equal((await page.locator('#btn-' + id).innerText()).trim(), id === 'upload' ? '上传' : '');
         assert.ok(await page.locator('#btn-' + id).getAttribute('aria-label'));
-        if (width <= 760) assert.ok((await page.locator('#btn-' + id).boundingBox()).height >= 44);
+        // 窄屏工具按钮统一 36px：够手指点，又不像 44px 那样一排大块压过内容
+        if (width <= 760) { const { height } = await page.locator('#btn-' + id).boundingBox(); assert.ok(height >= 36 && height <= 40, `${id} toolbar button is ${height}px on narrow screens`); }
       }
       // No standing "clear before upload" switch: clearing is a one-off menu action.
       assert.equal(await page.locator('#upload-clear').count(), 0);
