@@ -24,7 +24,7 @@ export async function smoke(page) {
  await new Promise(r => server.listen(0, '127.0.0.1', r));
  const base = `http://127.0.0.1:${server.address().port}`;
  const errors = []; page.on('pageerror', e => errors.push(e.message));
- let content = '', saved = '';
+ let content = '', saved = '', localImageGate;
  const documents = new Map(), requestedFiles = [];
  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="20"><rect width="96" height="20" fill="#9a701d"/><text x="8" y="14" fill="white" font-size="12">Fixture badge</text></svg>';
  await page.route('https://img.shields.io/**', route=>route.fulfill({body:svg,contentType:'image/svg+xml'}));
@@ -36,7 +36,10 @@ export async function smoke(page) {
     const file = url.searchParams.get('path'); requestedFiles.push({file,scope:url.searchParams.get('scope')});
     const images = ['internal/web/static/img/logo.svg','docs/images/chat-light.png','docs/images/chat-dark.png'];
     if(images.includes(file)) await route.fulfill({body:await readFile(resolve(root,'../../..',file)),contentType:file.endsWith('.svg')?'image/svg+xml':'image/png'});
-    else if(file?.endsWith('.svg')) await route.fulfill({body:svg,contentType:'image/svg+xml'});
+    else if(file?.endsWith('.svg')) {
+     if(file==='docs/assets/logo small.svg')await localImageGate;
+     await route.fulfill({body:svg,contentType:'image/svg+xml'});
+    }
     else await route.fulfill({body:documents.get(file)||content,contentType:'text/plain'});
    }
   } else if (url.pathname.endsWith('/preview')) await route.fulfill({json:{url:'/fixture-preview'}});
@@ -53,6 +56,17 @@ export async function smoke(page) {
   }, {name,size:Buffer.byteLength(text),scope});
  };
  const close = () => page.locator('#fv-close').click();
+ const decodeImage = async selector => {
+  const image = page.locator(selector);
+  // Markdown images are lazy. Attaching the DOM does not mean Chromium has
+  // selected/loaded a source; decode() can reject during that transition.
+  await image.scrollIntoViewIfNeeded();
+  await page.waitForFunction(selector => {
+   const image = document.querySelector(selector);
+   return image?.complete && image.naturalWidth > 0;
+  }, selector);
+  await image.evaluate(image => image.decode());
+ };
  try {
   await page.setViewportSize({width:1280,height:900});
   await page.goto(base);
@@ -196,7 +210,7 @@ export async function smoke(page) {
   assert.ok(!(await page.locator('#fv-md').innerText()).includes('<div align='));
   assert.ok(!(await page.locator('#fv-md').innerText()).includes('![Release]'));
   assert.equal(await page.locator('#fv-md img[alt="agentbox logo"]').evaluate(e=>e.getBoundingClientRect().width),96);
-  await page.locator('#fv-md img[alt="agentbox logo"]').evaluate(img=>img.decode());
+  await decodeImage('#fv-md img[alt="agentbox logo"]');
   const hash=await page.evaluate(()=>location.hash);
   await page.locator('#fv-md a').filter({hasText:'Quick start'}).first().click();
   assert.ok(await page.locator('#fv-mdwrap').evaluate(e=>e.scrollTop>100));assert.equal(await page.evaluate(()=>location.hash),hash);
@@ -224,8 +238,14 @@ export async function smoke(page) {
   assert.ok(!requestedFiles.some(r=>r.file?.includes('escape.svg')));
   await close();
   documents.set('docs/next.md','# Next\n\nTarget');
-  await open('docs/start.md','[Next](next.md)\n\n![Local](assets/logo%20small.svg)','shared');
-  await page.locator('#fv-md img').evaluate(img=>img.decode());
+  let releaseImage;localImageGate=new Promise(resolve=>{releaseImage=resolve;});
+  const imageRequest=page.waitForRequest(request=>new URL(request.url()).searchParams.get('path')==='docs/assets/logo small.svg');
+  try{
+   await open('docs/start.md','[Next](next.md)\n\n![Local](assets/logo%20small.svg)','shared');
+   await page.locator('#fv-md img').scrollIntoViewIfNeeded();await imageRequest;
+   assert.equal(await page.locator('#fv-md img').evaluate(image=>image.naturalWidth),0,'fixture must hold the lazy image response');
+  }finally{releaseImage();localImageGate=undefined;}
+  await decodeImage('#fv-md img');
   assert.ok(requestedFiles.some(r=>r.file==='docs/assets/logo small.svg'&&r.scope==='shared'));
   await page.locator('#fv-mode-src').click();await page.locator('#fv-editor').fill('[Next](next.md)\n\nUnsaved');await page.locator('#fv-mode-view').click();
   await page.locator('#fv-md a').click();await page.locator('#dlg-ask').waitFor({state:'visible'});await page.locator('#ask-cancel').click();assert.equal(await page.locator('#fv-name').innerText(),'start.md');
