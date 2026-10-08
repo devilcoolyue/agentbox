@@ -34,7 +34,8 @@ export async function fileActionSmoke(page) {
       await page.locator('#scope-' + scope).click();
       for (const id of ['mkdir', 'upload', 'download', 'files-more']) {
         // Upload is the page's primary action and keeps its label; the rest are icons.
-        assert.equal(await page.locator('#btn-' + id).innerText(), id === 'upload' ? '上传' : '');
+        // WebKit 26 ends an icon + label button's innerText with a newline.
+        assert.equal((await page.locator('#btn-' + id).innerText()).trim(), id === 'upload' ? '上传' : '');
         assert.ok(await page.locator('#btn-' + id).getAttribute('aria-label'));
         if (width <= 760) assert.ok((await page.locator('#btn-' + id).boundingBox()).height >= 44);
       }
@@ -50,11 +51,15 @@ export async function fileActionSmoke(page) {
   await page.locator('#btn-download').hover();
   await page.locator('#tip.show').filter({hasText:'下载全部空间文件（ZIP）'}).waitFor();
   await page.keyboard.press('Escape');
-  await page.locator('#btn-upload').focus();
+  // Real Tab focus: WebKit 26 does not count script focus after a click as :focus-visible.
+  await page.locator('#btn-mkdir').focus();
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'btn-upload');
   await page.locator('#tip.show').filter({hasText:'上传文件或代码包到当前目录'}).waitFor();
   // iOS 点按钮不获焦，随后 showModal()/菜单挪过去的焦点被判成 focus-visible。这里让浏览器仍按
-  // 键盘焦点算、最近一次操作却是手指：不弹提示，也不画按钮焦点环（modality.ts）
-  const refocus = () => page.evaluate(() => { document.activeElement?.blur(); document.getElementById('btn-upload').focus(); });
+  // 键盘焦点算、最近一次操作却是手指：不弹提示，也不画按钮焦点环（modality.ts）。焦点从键盘
+  // 聚焦的控件由脚本移走再移回，两种引擎都保持 :focus-visible。
+  const refocus = () => page.evaluate(() => { document.getElementById('btn-mkdir').focus(); document.getElementById('btn-upload').focus(); });
   await page.evaluate(() => document.body.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true, pointerType:'touch'})));
   await refocus();
   assert.deepEqual(await page.evaluate(() => {

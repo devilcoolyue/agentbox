@@ -17,7 +17,7 @@ import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
-import {browserEngine,launchBrowser} from './playwright-launch.mjs';
+import {browserEngine,cancelledFetchError,launchBrowser} from './playwright-launch.mjs';
 
 export async function smoke(page) {
  await page.addInitScript(() => { if (window === window.top && /^https?:$/.test(location.protocol)) localStorage.setItem("agentbox.language", "zh-CN"); });
@@ -37,10 +37,9 @@ export async function smoke(page) {
  server.on('connection',socket=>{fixtureSockets.add(socket);socket.once('close',()=>fixtureSockets.delete(socket));});
  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
  const base = `http://127.0.0.1:${server.address().port}`;
- // WebKit logs fetches cancelled by reload/navigation as access-control errors; Playwright
- // reports them as page errors although refreshAll catches the rejection.
- const cancelledFetch = e => browserEngine() === 'webkit' && /^Fetch API cannot load \S+ due to access control checks\.?$/.test(e.message);
- const errors = []; page.on('pageerror', e => { if (cancelledFetch(e)) return; errors.push(e.stack || e.message); console.error('Browser page error:', e.stack || e.message); });
+ // WebKit reports fetches cancelled by reload/navigation as page errors although refreshAll
+ // catches the rejection; see cancelledFetchError.
+ const errors = []; page.on('pageerror', e => { if (cancelledFetchError(e)) return; errors.push(e.stack || e.message); console.error('Browser page error:', e.stack || e.message); });
  let settingsWrites = 0, monitorCalls = 0, updateChecks = 0, updateReads = 0;
  let release = {current_version:'v0.1.0-rc.2-updates2',revision:'0123456789abcdef',built_at:'2026-09-24T08:00:00Z',latest_version:'',available:false,comparable:true,release_url:'https://github.com/devilcoolyue/agentbox/releases',notes:'',checked_at:0,attempted_at:0,error:''};
  let nextRelease = {latest_version:'v0.2.0',available:true,notes:'新增版本提醒。\n\n## 升级说明\n\n- **自动备份**后重启\n- [发行记录](https://github.com/devilcoolyue/agentbox/releases) · [仓库文档](docs/i18n.md) · [坏链接](javascript:window.__notesXSS=1)\n\n```bash\nsudo agentbox --version\n```\n\n<script>window.__notesXSS=1</script>\n<img src="x" onerror="window.__notesXSS=1">'};
@@ -249,7 +248,8 @@ export async function smoke(page) {
   await check(); await status('暂无正式发布的版本');
   nextRelease={current_version:'dev',latest_version:'v0.2.0',comparable:false,available:true};
   await check(); await status('可切换至正式版 v0.2.0');
-  assert.equal(await page.locator('#update-install').innerText(),'切换到正式版并重启');
+  // WebKit 26 (Playwright 1.58) ends innerText of an icon + label button with a newline.
+  assert.equal((await page.locator('#update-install').innerText()).trim(),'切换到正式版并重启');
   assert.equal(await page.locator('#update-install > svg').count(),1,'switch button lost its icon');
   await page.locator('#update-install').click();
   assert.match(await page.locator('#dlg-ask').innerText(),/从开发构建 dev 切换至正式版 v0.2.0/);
@@ -389,7 +389,7 @@ export async function smoke(page) {
   const acctRow = page.locator('.acct-row').filter({hasText:'codex-key-fixture'});
   // Secondary account actions live in the row menu; delete stays last.
   await acctRow.locator('.more-btn').click();
-  assert.deepEqual(await page.locator('.menu-pop [role=menuitem]').allInnerTexts(),['使用范围 · 全体用户','模型能力','删除账号']);
+  assert.deepEqual((await page.locator('.menu-pop [role=menuitem]').allInnerTexts()).map(t=>t.trim()),['使用范围 · 全体用户','模型能力','删除账号']);
   await page.getByRole('menuitem',{name:'模型能力',exact:true}).click();
   await page.locator('#ask-input-field').fill('fixture');await page.locator('#ask-input-ok').click();
   const overrideDialog=page.locator('dialog[open]').filter({has:page.locator('select[name="support"]')});

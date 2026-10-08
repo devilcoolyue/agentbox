@@ -52,16 +52,16 @@ export async function responsiveSmoke(page, base) {
       }
       await page.locator('#toast.show').waitFor({state:'hidden'});
       assert.ok(await page.locator('#acct-list-box').evaluate(e=>e.scrollWidth<=e.clientWidth), 'account contents overflow');
-      assert.equal(await page.locator('#btn-acct-add').innerText(), '添加账号', 'standalone creation action needs a label');
+      assert.equal((await page.locator('#btn-acct-add').innerText()).trim(), '添加账号', 'standalone creation action needs a label');
       // Account rows show their two common actions with words; the rest live in ⋯.
       for (const row of await page.locator('.acct-row').all()) {
-        assert.deepEqual(await row.locator('.acct-actions .btn').allInnerTexts(), ['认证', '编辑', ''], 'account row actions');
+        assert.deepEqual((await row.locator('.acct-actions .btn').allInnerTexts()).map(t => t.trim()), ['认证', '编辑', ''], 'account row actions');
         assert.ok(await row.locator('.acct-actions .more-btn').getAttribute('aria-label'));
       }
       await page.screenshot({animations:'disabled',path:`output/playwright/responsive-settings-${width}-${theme}.png`});
       if (width > 760) {
         // Git management sits with the other sidebar tools, labelled; the user button names the user.
-        assert.equal(await page.locator('#btn-git-management').innerText(), 'Git 管理');
+        assert.equal((await page.locator('#btn-git-management').innerText()).trim(), 'Git 管理');
         assert.ok((await page.locator('#side-user-label').innerText()).length > 0);
         await page.locator('#btn-user-menu').click();
         await page.screenshot({animations:'disabled',path:`output/playwright/context-menu-${width}-${theme}.png`});

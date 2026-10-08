@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
-import {clipboardPermissions} from './playwright-launch.mjs';
+import {clipboardPermissions, readClipboard} from './playwright-launch.mjs';
 
 // Shared synthetic browser suite: exercises history and real WS rendering,
 // including stream replacement and the Codex exec replay path. No provider calls.
@@ -43,7 +43,7 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  await page.context().grantPermissions(clipboardPermissions());
  await footers.last().getByRole('button',{name:'复制回答',exact:true}).click();
  await footers.last().getByRole('button',{name:'已复制回答',exact:true}).waitFor();
- assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),answer);
+ assert.equal(await readClipboard(page),answer);
  // The footer uses persisted values, even while the composer has another model.
  assert.doesNotMatch(await page.locator('#btn-pick').innerText(),/gpt-5.5/);
  const savedFooter = await footers.last().innerText();
@@ -117,7 +117,7 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  assert.equal(await page.locator('#chat-log .turn').last().locator('.msg.agent').count(),1);
  await footers.last().getByRole('button',{name:'复制回答',exact:true}).click();
  await footers.last().getByRole('button',{name:'已复制回答',exact:true}).waitFor();
- assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),'live **answer**');
+ assert.equal(await readClipboard(page),'live **answer**');
  assert.match(await details(footers.last()),/请求的是 requested-model/);
 
  emit({type:'user_message',text:'replay question',turn:makeTurn('replay','exec-model','xhigh')});
@@ -132,7 +132,7 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  await footers.last().locator('.answer-cost').filter({hasText:'$0.0012'}).waitFor();
  await footers.last().getByRole('button',{name:'复制回答',exact:true}).click();
  await footers.last().getByRole('button',{name:'已复制回答',exact:true}).waitFor();
- assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),'Replay answer one.\n\nReplay answer two.');
+ assert.equal(await readClipboard(page),'Replay answer one.\n\nReplay answer two.');
 
  // A denied clipboard must not show success if the legacy fallback also fails.
  await reload();

@@ -5,7 +5,7 @@ import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {browserEngine,launchBrowser} from './playwright-launch.mjs';
+import {browserEngine,cancelledFetchError,launchBrowser} from './playwright-launch.mjs';
 
 const root=resolve(fileURLToPath(new URL('../internal/web/static/',import.meta.url)));
 const server=createServer(async(req,res)=>{
@@ -28,7 +28,7 @@ try{
   let threadCreationGate;
   const receiptKey=(session,id)=>identity+'/'+session+'/'+id;
   await context.addInitScript(locale=>{if(window===window.top&&/^https?:$/.test(location.protocol))localStorage.setItem('agentbox.language',locale);},locale);
-  context.on('page',p=>p.on('pageerror',e=>errors.push(e.message)));page.on('pageerror',e=>errors.push(e.message));
+  const pageError=e=>{if(!cancelledFetchError(e))errors.push(e.message);};context.on('page',p=>p.on('pageerror',pageError));page.on('pageerror',pageError);
   await context.routeWebSocket('**/api/sessions/*/chat?*',ws=>{
    const socket={ws,session:new URL(ws.url()).pathname.split('/')[3]};sockets.add(socket);ws.onClose(()=>sockets.delete(socket));
    ws.send(JSON.stringify({type:'status',state:'idle'}));ws.onMessage(raw=>{assert.notEqual(JSON.parse(String(raw)).type,'user_message','new client used legacy send');});
