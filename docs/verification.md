@@ -124,6 +124,8 @@ python3 scripts/verify.py run --step docker.chat-reliability --image alpine:3.22
 
 该入口新建并清理自己的测试容器、网络和卷，不触碰其他容器；信号中断也进入清理，清理失败报告为失败。合成日志与逐回合回执/用量/账本保留在 `output/playwright/chat-integration-*/`。CI 的独立 `chat-reliability` job 同时保存这些材料与统一报告；新增工作流不等于已在托管 CI 跑过。
 
+浏览器失败报告同时保留页面异常、最近 100 条失败请求的路径（不含查询串）和登录/主界面的隐藏状态；只记录令牌是否存在，不记录令牌值。这些仅是隔离夹具证据，不是生产诊断导出。`browser.chat-outbox` 的跨线程场景主动挂起新建响应，确认旧编辑器仍可就绪后才释放响应；必须等新线程历史应用完成再检查旧消息不可重试，不能以输入框可见代替线程切换完成。
+
 ## 版本化契约
 
 `contracts/chat-errors-v1.schema.json` 仅覆盖本轮高频变动的错误和持久聊天；`python3 scripts/generate-contracts.py` 生成 TS 声明，`web.contracts` 检查是否同步生成及运行时的正反例，Go `internal/protocol` 核对真实 JSON 字段/状态/封装。桌面 Rust 与 Vitest 也读取错误目录样本。它不生成全量 OpenAPI，不用 schema 版本替代能力协商或数据库 schema。

@@ -6,13 +6,18 @@ import { pathToFileURL } from 'node:url';
 import { harness, until, sleep } from './chat-integration-harness.mjs';
 
 const h = await harness(); let browser, activePage;
+const errors = [], failedRequests = [];
 try {
  const { chromium } = await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href : 'playwright');
  browser = await chromium.launch({ headless: true, ...(process.env.AGENTBOX_BROWSER_CHANNEL ? { channel: process.env.AGENTBOX_BROWSER_CHANNEL } : {}) });
  h.report.browser = browser.version();
  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
  const page = await context.newPage(); activePage = page; page.setDefaultTimeout(15000);
- const errors = [], puts = [], sockets = new Set(); let blockReads = false, dropAck = false, putFault = '', releaseResponse;
+ const puts = [], sockets = new Set(); let blockReads = false, dropAck = false, putFault = '', releaseResponse;
+ context.on('requestfailed', request => {
+  if (failedRequests.length === 100) failedRequests.shift();
+  failedRequests.push({ path: new URL(request.url()).pathname, error: request.failure()?.errorText });
+ });
  context.on('page', p => p.on('pageerror', e => errors.push(e.message))); page.on('pageerror', e => errors.push(e.message));
  await context.addInitScript(() => { if (window === window.top && /^https?:$/.test(location.protocol)) localStorage.setItem('agentbox.language', 'zh-CN'); });
  await context.route('**/*', async route => {
@@ -200,5 +205,17 @@ try {
  h.report.audit = await h.ctl('audit'); h.report.engine = engineState; h.report.status = 'passed';
  await page.screenshot({ path: join(h.evidence, 'recovered.png') }); await context.close(); await h.stop();
  console.log('Evidence: ' + h.evidence);
-} catch (error) { await activePage?.screenshot({ path: join(h.evidence, 'failure.png') }).catch(() => {}); h.report.status = 'failed'; h.report.error = error.stack; throw error; }
+} catch (error) {
+ await activePage?.screenshot({ path: join(h.evidence, 'failure.png') }).catch(() => {});
+ h.report.status = 'failed'; h.report.error = error.stack;
+ h.report.browser_errors = errors; h.report.failed_requests = failedRequests;
+ // Fixture evidence only: preserve startup state without tokens or message text.
+ h.report.page = await activePage?.evaluate(() => ({
+  ready: document.readyState, path: location.pathname, hash: location.hash,
+  appHidden: document.querySelector('#app')?.classList.contains('hidden'),
+  loginHidden: document.querySelector('#login')?.classList.contains('hidden'),
+  hasToken: !!localStorage.getItem('agentbox_token'),
+ })).catch(() => null);
+ throw error;
+}
 finally { await browser?.close(); await h.cleanup(); }

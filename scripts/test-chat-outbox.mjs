@@ -25,6 +25,7 @@ try{
   const actorScope=()=> (identity==='alice'?'a':'b').repeat(64),draftScope=()=> (identity==='alice'?'c':'d').repeat(64);
   const spaces=['a','b'].map(id=>({id:'space-'+id,name:'Space '+id.toUpperCase(),user:'alice',agent:'codex',account_id:'fixture',status:'stopped',default_model:'model-one'}));
   const threads={'space-a':'thread-one','space-b':'thread-one'};
+  let threadCreationGate;
   const receiptKey=(session,id)=>identity+'/'+session+'/'+id;
   await context.addInitScript(locale=>{if(window===window.top&&/^https?:$/.test(location.protocol))localStorage.setItem('agentbox.language',locale);},locale);
   context.on('page',p=>p.on('pageerror',e=>errors.push(e.message)));page.on('pageerror',e=>errors.push(e.message));
@@ -45,7 +46,7 @@ try{
    else if(path.endsWith('/models'))body={models:[{id:'model-one',label:'Model one'},{id:'model-two',label:'Model two'}],discovery:'available'};
    else if(path.endsWith('/history'))body={entries:[{kind:'user',text:'Earlier fixture task',ts:new Date().toISOString()}],thread:{id:threads[session],title:'Fixture conversation',turns:1},active_thread:threads[session],costs:{}};
    else if(path.endsWith('/chat/threads')){
-    if(method==='POST'){threads[session]='thread-two';body={id:'thread-two',created:true};}
+    if(method==='POST'){await threadCreationGate;threads[session]='thread-two';body={id:'thread-two',created:true};}
     else body=[{id:'thread-one',title:'Fixture conversation',turns:1},{id:'thread-two',title:'Another conversation',turns:1}];
    }
    else if(path.includes('/chat/requests')){
@@ -172,8 +173,22 @@ try{
    assert.equal(await entry(expired).getByRole('button',{name:await tr('重试原消息'),exact:true,includeHidden:true}).isDisabled(),true);
    mode='normal';await action(expired,'放弃未接收消息');await confirm();await state(expired,'abandoned');await action(expired,'关闭状态');
    // Switching threads cannot silently move or resend an unconfirmed message.
-   mode='drop-before';await input.fill('Recover into another conversation');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});const transfer=puts.at(-1).id;
-   const beforeThreadSwitch=puts.length;await page.locator('#btn-thread-new').click();await ready();assert.equal(await input.inputValue(),'');await state(transfer,'unconfirmed');
+   // The local row is written before PUT; identify the actual request instead
+   // of sampling puts.at(-1) while delivery may still be queued.
+   mode='drop-before';await input.fill('Recover into another conversation');
+   const transferRequest=page.waitForEvent('requestfailed',{predicate:r=>r.method()==='PUT'&&r.postDataJSON()?.text==='Recover into another conversation'});
+   await page.locator('#chat-send').click();const transfer=new URL((await transferRequest).url()).pathname.split('/').at(-1);await state(transfer,'unconfirmed');
+   const beforeThreadSwitch=puts.length;
+   let releaseThread;threadCreationGate=new Promise(resolve=>{releaseThread=resolve;});
+   const creating=page.waitForRequest(r=>r.method()==='POST'&&new URL(r.url()).pathname.endsWith('/chat/threads'));
+   try{
+    await page.locator('#btn-thread-new').click();await creating;
+    // ready() can already pass on the old, empty composer. Hold the response
+    // to make this race deterministic, then wait for the new history to apply.
+    await ready();assert.equal(await page.evaluate(async()=>(await import('/_v/{{BUILD}}/js/state.js')).S.thread?.id),'thread-one');
+   }finally{releaseThread();threadCreationGate=undefined;}
+   await page.waitForFunction(async()=>{const {S}=await import('/_v/{{BUILD}}/js/state.js');return S.thread?.id==='thread-two'&&!S.histLoading;});
+   await ready();assert.equal(await input.inputValue(),'');await state(transfer,'unconfirmed');
    assert.equal(await entry(transfer).getByRole('button',{name:await tr('重试原消息'),exact:true,includeHidden:true}).isDisabled(),true);
    mode='normal';await action(transfer,'放弃未接收消息');await confirm();await state(transfer,'abandoned');await action(transfer,'复制回输入框');await confirm();await page.waitForFunction(()=>document.querySelector('#chat-input').value==='Recover into another conversation');assert.equal(await input.inputValue(),'Recover into another conversation');assert.equal(puts.length,beforeThreadSwitch);await action(transfer,'关闭状态');
    // Mobile state/action layout and logout/another-user isolation.
