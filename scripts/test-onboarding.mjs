@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
-import {fileURLToPath,pathToFileURL} from 'node:url';
+import {fileURLToPath} from 'node:url';
 import {diagnosticMessages} from '../internal/web/static/js/diagnostic-messages.js';
+import {launchBrowser} from './playwright-launch.mjs';
 
 const root=resolve(fileURLToPath(new URL('../internal/web/static/',import.meta.url)));
 const server=createServer(async(req,res)=>{
@@ -19,8 +20,7 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const base=`http://127.0.0.1:${server.address().port}`;
-const {chromium}=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE?pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href:'playwright');
-const browser=await chromium.launch({headless:true,...(process.env.AGENTBOX_BROWSER_CHANNEL?{channel:process.env.AGENTBOX_BROWSER_CHANNEL}:{})});
+const browser=await launchBrowser();
 try{
  for(const locale of ['zh-CN','zh-TW','en'])for(const role of ['admin','user']){
   const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:900}});

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import {loginProblemsSmoke, problemsSmoke} from './test-problems-browser.mjs';
 import { responsiveSmoke } from './test-responsive.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
@@ -17,6 +17,7 @@ import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
+import {browserEngine,launchBrowser} from './playwright-launch.mjs';
 
 export async function smoke(page) {
  await page.addInitScript(() => { if (window === window.top && /^https?:$/.test(location.protocol)) localStorage.setItem("agentbox.language", "zh-CN"); });
@@ -36,7 +37,10 @@ export async function smoke(page) {
  server.on('connection',socket=>{fixtureSockets.add(socket);socket.once('close',()=>fixtureSockets.delete(socket));});
  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
  const base = `http://127.0.0.1:${server.address().port}`;
- const errors = []; page.on('pageerror', e => { errors.push(e.stack || e.message); console.error('Browser page error:', e.stack || e.message); });
+ // WebKit logs fetches cancelled by reload/navigation as access-control errors; Playwright
+ // reports them as page errors although refreshAll catches the rejection.
+ const cancelledFetch = e => browserEngine() === 'webkit' && /^Fetch API cannot load \S+ due to access control checks\.?$/.test(e.message);
+ const errors = []; page.on('pageerror', e => { if (cancelledFetch(e)) return; errors.push(e.stack || e.message); console.error('Browser page error:', e.stack || e.message); });
  let settingsWrites = 0, monitorCalls = 0, updateChecks = 0, updateReads = 0;
  let release = {current_version:'v0.1.0-rc.2-updates2',revision:'0123456789abcdef',built_at:'2026-09-24T08:00:00Z',latest_version:'',available:false,comparable:true,release_url:'https://github.com/devilcoolyue/agentbox/releases',notes:'',checked_at:0,attempted_at:0,error:''};
  let nextRelease = {latest_version:'v0.2.0',available:true,notes:'新增版本提醒。\n\n## 升级说明\n\n- **自动备份**后重启\n- [发行记录](https://github.com/devilcoolyue/agentbox/releases) · [仓库文档](docs/i18n.md) · [坏链接](javascript:window.__notesXSS=1)\n\n```bash\nsudo agentbox --version\n```\n\n<script>window.__notesXSS=1</script>\n<img src="x" onerror="window.__notesXSS=1">'};
@@ -392,7 +396,8 @@ export async function smoke(page) {
   await overrideDialog.locator('label').filter({hasText:'支持范围'}).getByRole('combobox').click();
   await overrideDialog.getByRole('option',{name:'不支持调整',exact:true}).click();
   await assertActionIcons(page);await overrideDialog.getByRole('button',{name:'保存',exact:true}).click();
-  await page.waitForTimeout(150);
+  // Wait for the account write instead of a fixed delay; slower engines finish later.
+  for(const until=Date.now()+5000;!accounts.find(a=>a.id==='codex-key-fixture').model_reasoning&&Date.now()<until;)await page.waitForTimeout(50);
   assert.equal(accounts.find(a=>a.id==='codex-key-fixture').model_reasoning.fixture.support,'unsupported');
 
   await page.setViewportSize({width:390,height:844});
@@ -640,7 +645,9 @@ export async function smoke(page) {
   await page.keyboard.press('Backspace'); await lastInput('\x7f');
   // Message boundaries depend on whether xterm or the bridge sends the insertion; the PTY sees one byte stream.
   assert.equal(terminalInput.slice(cycleStart).join(''), '\x7f。\x7f？\x7f', 'cycled punctuation must replace the previous symbol');
-  await terminalTouchSmoke(page, {send:data => terminalSocket.send(data), input:() => terminalInput});
+  // Real touch input is driven through CDP, which only Chromium exposes.
+  if (browserEngine() === 'chromium') await terminalTouchSmoke(page, {send:data => terminalSocket.send(data), input:() => terminalInput});
+  else console.log(`Terminal touch: not run in ${browserEngine()} (CDP-only touch input)`);
   await page.locator('#term-keyboard').click();
   assert.equal(await page.locator('.xterm-helper-textarea').evaluate(el=>el===document.activeElement),false);
   await page.locator('#term-keyboard').click();
@@ -703,7 +710,6 @@ export async function smoke(page) {
  }
 }
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
- const {chromium}=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href : 'playwright');
- const browser=await chromium.launch({headless:true,...(process.env.AGENTBOX_BROWSER_CHANNEL ? {channel:process.env.AGENTBOX_BROWSER_CHANNEL}: {})});
+ const browser=await launchBrowser();
  try { await smoke(await browser.newPage()); } finally { await browser.close(); }
 }

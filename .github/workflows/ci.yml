@@ -35,6 +35,32 @@ jobs:
           path: output/verification/
           if-no-files-found: warn
 
+  # 同一批核心场景（主控制台、首次使用、草稿、待确认发送）在 WebKit 中再跑一遍，
+  # 断言不变；不替代真机 Safari / iOS。
+  web-webkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: install
+        run: npm ci
+      - name: Core browser scenarios in WebKit (synthetic API)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-tools" --no-package-lock --no-audit --no-fund playwright@1.58.2
+          "$RUNNER_TEMP/browser-tools/node_modules/.bin/playwright" install --with-deps webkit
+          python3 scripts/verify.py run browser-webkit --playwright-module "$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" --report-dir output/verification/browser-webkit
+      - name: Preserve WebKit verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-web-webkit
+          path: output/verification/
+          if-no-files-found: warn
+
   chat-reliability:
     runs-on: ubuntu-latest
     timeout-minutes: 15

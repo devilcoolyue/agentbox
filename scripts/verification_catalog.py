@@ -20,6 +20,7 @@ STEPS = [
     step('policy.verification-stability', 'offline', ['{python}','scripts/test-verification-stability.py'], 'Synthetic sample aggregation and uncached-test policy; not twenty real CI runs.'),
     step('runner', 'offline', ['{python}','scripts/test-verification.py'], 'Runner evidence, environment isolation and failure/cancellation regression.'),
     *[step('browser.'+name, 'browser', ['node','scripts/test-'+name+'.mjs'], 'Real browser with synthetic API; no Docker or provider.', requires=['node_modules/.bin/tsc']) for name in ['browser','onboarding','chat-drafts','chat-outbox','workspace-filter','git','preview','web-i18n','link-i18n']],
+    *[step('webkit.'+name, 'browser', ['node','scripts/test-'+name+'.mjs'], 'Same synthetic-API scenario in Playwright WebKit; not real Safari, iOS or a device.', env={'AGENTBOX_BROWSER_ENGINE':'webkit'}, requires=['node_modules/.bin/tsc']) for name in ['browser','onboarding','chat-drafts','chat-outbox']],
     step('ui.image-update-gate', 'browser', ['node','scripts/test-browser.mjs'], 'Focused candidate-update UI, preceded by diagnostics/problem fixtures; synthetic API, three languages and narrow layout.', env={'AGENTBOX_BROWSER_ONLY_IMAGE_UPDATES':'1'}),
     step('integration.chat', 'browser', ['node','scripts/test-chat-integration.mjs'], 'Real local agentbox binary/API/SQLite with synthetic Docker/CLI output; native non-root asserts attachment chown denial. Use docker.chat-reliability for the full Linux matrix.'),
     step('docker.chat-reliability', 'docker', ['node','scripts/test-chat-integration.mjs','--linux','--image','{image}'], 'Actual Linux server process, crash/restart, browser HTTP/WS and ledger; synthetic Docker/CLI sidecar, temporary volume, no provider.'),
@@ -39,6 +40,7 @@ STEPS = [
     step('release.archives', 'docker', ['{python}','scripts/test-release.py','{artifacts}'], 'Seven candidate archives/checksums and packaged Linux binaries; no publishing.'),
     step('release.server', 'docker', ['{python}','scripts/test-release-server.py','--binary','{binary}','--image','{image}','--usage','--restart'], 'Real temporary Linux server/container restart and synthetic terminal usage.'),
     step('release.deployment', 'docker', ['{python}','scripts/test-deployment-linux.py','--binary','{binary}','--image','{image}'], 'Isolated actual Linux installation and recovery with simulated systemctl; not real systemd or production.'),
+    step('release.rollback', 'linux', ['{python}','scripts/test-rollback-drill.py','--old','{previous_package}','--new','{package}'], 'Previous and candidate Linux release packages: release.py upgrade, refused direct downgrade, compatible-backup restore to a new directory and previous-release start. Simulated systemctl, stub Docker API, synthetic data; root or UID 1000.', platform='linux'),
     step('release.install', 'docker', ['{python}','scripts/test-install-linux.py','--binary','{binary}','--image','{image}'], 'Isolated Linux install/uninstall; not production.'),
     step('desktop.web', 'offline', ['npm','--prefix','desktop','run','build'], 'Desktop renderer types and bundle.', requires=['desktop/node_modules/.bin/vite']),
     step('desktop.unit', 'offline', ['npm','--prefix','desktop','test'], 'Desktop Vitest, no native app launch.', requires=['desktop/node_modules/.bin/vitest']),
@@ -52,6 +54,7 @@ PROFILES = {
     'go': [s['id'] for s in STEPS if s['id'].startswith('go.')],
     'policy': [s['id'] for s in STEPS if s['id'].startswith('policy.')] + ['runner'],
     'browser': [s['id'] for s in STEPS if s['id'].startswith('browser.')],
+    'browser-webkit': [s['id'] for s in STEPS if s['id'].startswith('webkit.')],
     'docker-core': ['docker.filesystem','docker.admin-recovery'],
     'desktop-unit': ['desktop.web','desktop.unit'] + [s['id'] for s in STEPS if s['id'].startswith('desktop.') and s['category']=='offline' and s['id'] not in ('desktop.web','desktop.unit')],
     'release': ['release.archives','release.server','release.deployment','release.install'],
@@ -60,7 +63,7 @@ PROFILES['quick'] = PROFILES['web'] + PROFILES['go'] + PROFILES['policy']
 # Tier names describe resources; native/signing/manual gates remain explicit.
 PROFILES['pr'] = PROFILES['quick']
 PROFILES['linux-integration'] = ['race.chat', 'docker.chat-reliability']
-PROFILES['release-full'] = PROFILES['quick'] + ['race.chat', 'backup', 'docker.chat-reliability', 'docker.cli-candidate', 'docker.recovery-drill'] + PROFILES['browser'] + PROFILES['desktop-unit'] + PROFILES['release']
+PROFILES['release-full'] = PROFILES['quick'] + ['race.chat', 'backup', 'docker.chat-reliability', 'docker.cli-candidate', 'docker.recovery-drill'] + PROFILES['browser'] + PROFILES['browser-webkit'] + PROFILES['desktop-unit'] + PROFILES['release'] + ['release.rollback']
 
 # These require device/OS/installer/credential or provider authorization and
 # deliberately have no automatic "all" profile. The original interfaces remain.

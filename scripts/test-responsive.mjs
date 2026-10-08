@@ -112,10 +112,11 @@ export async function responsiveSmoke(page, base) {
         await page.waitForURL('**/#/git/connections');
         await page.goBack();
         await page.waitForURL('**/#/git/profile');
-        assert.match(await page.locator('#mobile-section-btn').innerText(),/提交身份/);
+        // The URL changes before the hash handler repaints; wait for the label itself.
+        await page.locator('#mobile-section-btn').filter({hasText:'提交身份'}).waitFor();
         await page.reload();
         await page.locator('#view-git').waitFor({state:'visible'});
-        assert.match(await page.locator('#mobile-section-btn').innerText(),/提交身份/);
+        await page.locator('#mobile-section-btn').filter({hasText:'提交身份'}).waitFor();
       }
     }
   }

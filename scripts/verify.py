@@ -20,6 +20,7 @@ from verification_catalog import STEPS, PROFILES, EXTERNAL, COVERED
 ROOT = Path(__file__).resolve().parent.parent
 BY_ID = {step['id']: step for step in STEPS}
 BROWSER_ENV = {'AGENTBOX_PLAYWRIGHT_MODULE', 'AGENTBOX_BROWSER_CHANNEL'}
+PATH_INPUTS = ('binary', 'client', 'fixture', 'artifacts', 'previous_package', 'package')
 
 
 def clean_env(source=None):
@@ -136,9 +137,9 @@ def resolve_step(step, values, env):
             key = value[1:-1]
             if not values.get(key): raise ValueError('requires --' + key.replace('_', '-'))
             value = str(values[key])
-            if key in ('binary','client','fixture','artifacts') and not Path(value).exists():
-                raise ValueError('missing input for --' + key)
-            if key in ('binary','client','fixture','artifacts'): value = str(Path(value).resolve())
+            if key in PATH_INPUTS and not Path(value).exists():
+                raise ValueError('missing input for --' + key.replace('_', '-'))
+            if key in PATH_INPUTS: value = str(Path(value).resolve())
         return value
     argv = [replace(a) for a in step['argv']]
     overrides = {k: replace(v) for k, v in step.get('env', {}).items()}
@@ -278,7 +279,7 @@ def main():
     run.add_argument('--dry-run', action='store_true')
     run.add_argument('--report-dir', type=Path, help='new directory; existing evidence is never overwritten')
     run.add_argument('--timeout', type=float, help='optional per-command timeout in seconds')
-    for arg in ('binary','client','fixture','artifacts','image','recovery-image','network-image','playwright-module','browser-channel'):
+    for arg in ('binary','client','fixture','artifacts','image','recovery-image','network-image','playwright-module','browser-channel','previous-package','package'):
         run.add_argument('--'+arg)
     args = parser.parse_args()
     if args.command == 'list':

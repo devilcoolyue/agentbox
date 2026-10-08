@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import {clipboardPermissions} from './playwright-launch.mjs';
 
 // Shared synthetic browser suite: exercises history and real WS rendering,
 // including stream replacement and the Codex exec replay path. No provider calls.
@@ -39,7 +40,7 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  assert.equal(await footers.last().locator('.chip.result').isVisible(),true);
  assert.match(await footers.last().innerText(),/入 820 · 出 215 tokens/);
  await footers.last().getByRole('button',{name:'回答详情',exact:true}).click();
- await page.context().grantPermissions(['clipboard-read','clipboard-write']);
+ await page.context().grantPermissions(clipboardPermissions());
  await footers.last().getByRole('button',{name:'复制回答',exact:true}).click();
  await footers.last().getByRole('button',{name:'已复制回答',exact:true}).waitFor();
  assert.equal(await page.evaluate(()=>navigator.clipboard.readText()),answer);

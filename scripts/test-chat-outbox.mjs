@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
-import {fileURLToPath,pathToFileURL} from 'node:url';
+import {fileURLToPath} from 'node:url';
+import {browserEngine,launchBrowser} from './playwright-launch.mjs';
 
 const root=resolve(fileURLToPath(new URL('../internal/web/static/',import.meta.url)));
 const server=createServer(async(req,res)=>{
@@ -16,8 +17,7 @@ const server=createServer(async(req,res)=>{
  }catch{res.writeHead(404).end();}
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
-const {chromium}=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE?pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href:'playwright');
-const browser=await chromium.launch({headless:true,...(process.env.AGENTBOX_BROWSER_CHANNEL?{channel:process.env.AGENTBOX_BROWSER_CHANNEL}:{})});
+const browser=await launchBrowser();
 try{
  for(const locale of ['zh-CN','zh-TW','en']){
   const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();page.setDefaultTimeout(15000);
@@ -104,9 +104,14 @@ try{
   const input=page.locator('#chat-input');
   try{
    await page.goto(base);await page.locator('#login-user').fill('alice');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');
-   // All three tools have the same visible icon and hit target; no draft caption.
+   // All visible tools have the same icon and hit target; no draft caption. Voice is
+   // hidden without Web Speech (Playwright WebKit, Firefox); Chromium must keep it.
+   const speech=await page.evaluate(()=>Boolean(window.SpeechRecognition||window.webkitSpeechRecognition));
+   if(browserEngine()==='chromium')assert.ok(speech,'Chromium lost Web Speech; the voice tool would be hidden');
    const tools=await page.locator('#btn-attach, #btn-voice, #chat-draft-options summary').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect(),s=node.querySelector('svg').getBoundingClientRect();return {width:r.width,height:r.height,iconWidth:s.width,iconHeight:s.height,text:node.textContent.trim()};}));
-   assert.equal(tools.length,3);assert.deepEqual(tools,[tools[0],tools[0],tools[0]]);assert.equal(tools[0].iconWidth,18);assert.equal(tools[0].text,'');
+   assert.equal(tools.length,3);assert.equal(tools[0].iconWidth,18);assert.equal(tools[0].text,'');
+   if(speech)assert.deepEqual(tools,[tools[0],tools[0],tools[0]]);
+   else{assert.deepEqual(tools[1],{width:0,height:0,iconWidth:0,iconHeight:0,text:''});assert.deepEqual(tools[2],tools[0]);}
    if(locale==='zh-CN'){await mkdir('output/playwright',{recursive:true});await page.screenshot({path:'output/playwright/composer-idle-desktop.png'});}
    // Model edits during attachment validation require another explicit send.
    await page.locator('#attach-input').setInputFiles({name:'fixture.txt',mimeType:'text/plain',buffer:Buffer.from('synthetic attachment')});await page.waitForFunction(()=>!document.querySelector('#chat-send').disabled);
@@ -195,16 +200,18 @@ try{
    mode='drop-before';await input.fill('Private pending before logout');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});
    await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    if(locale==='en'){await mkdir('output/playwright',{recursive:true});await page.screenshot({path:'output/playwright/chat-outbox-mobile.png',animations:'disabled'});}
-   const suspended=await context.newPage();suspended.setDefaultTimeout(15000);await suspended.goto(base+'/#/sessions/space-a/chat');await ready(suspended);await page.bringToFront();
-   const cdp=await context.newCDPSession(suspended);await cdp.send('Page.setWebLifecycleState',{state:'frozen'});
+   // A frozen old tab needs CDP Page.setWebLifecycleState, which only Chromium exposes.
+   const freezable=browserEngine()==='chromium';if(!freezable&&locale==='zh-CN')console.log(`Outbox: frozen-tab late sign-out not run in ${browserEngine()} (CDP-only)`);
+   const suspended=freezable?await context.newPage():null;if(suspended){suspended.setDefaultTimeout(15000);await suspended.goto(base+'/#/sessions/space-a/chat');await ready(suspended);await page.bringToFront();}
+   const cdp=suspended&&await context.newCDPSession(suspended);if(cdp)await cdp.send('Page.setWebLifecycleState',{state:'frozen'});
    const logoutID=(await records()).find(r=>r.state==='unconfirmed').id;await action(logoutID,'放弃未接收消息');await page.locator('#dlg-ask').waitFor({state:'visible'});
    await page.evaluate(async()=>{(await import('/_v/{{BUILD}}/js/login.js')).showLogin();});assert.equal((await records()).length,0);assert.equal(await page.locator('#chat-delivery-list').innerText(),'');assert.equal(await page.locator('#dlg-ask').isVisible(),false,'logout left a delivery confirmation open');
    await page.locator('#login-user').fill('alice');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');
    await input.fill('New login pending survives old page');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});const newLoginID=(await records()).find(r=>r.draft?.text==='New login pending survives old page').id;
-   await cdp.send('Page.setWebLifecycleState',{state:'active'});await suspended.locator('#login').waitFor({state:'visible'});
+   if(cdp){await cdp.send('Page.setWebLifecycleState',{state:'active'});await suspended.locator('#login').waitFor({state:'visible'});
    const currentToken=await page.evaluate(()=>localStorage.getItem('agentbox_token'));
    await suspended.evaluate(async()=>{(await import('/_v/{{BUILD}}/js/login.js')).showLogin('synthetic late authentication failure');});
-   assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_token')),currentToken,'a delayed auth failure removed the newer token');await suspended.close();
+   assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_token')),currentToken,'a delayed auth failure removed the newer token');await suspended.close();}
    assert.ok((await records()).some(r=>r.id===newLoginID),'a delayed sign-out cleared new login data');await page.reload();await ready();await state(newLoginID,'unconfirmed');
    await page.evaluate(async()=>{(await import('/_v/{{BUILD}}/js/login.js')).showLogin();});assert.equal((await records()).length,0);
    identity='bob';mode='normal';await page.locator('#login-user').fill('bob');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');assert.equal(await input.inputValue(),'');assert.equal(await page.locator('.delivery-item').count(),0);

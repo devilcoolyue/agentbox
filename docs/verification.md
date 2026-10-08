@@ -29,6 +29,15 @@ python3 scripts/verify.py run browser \
   --playwright-module /本机依赖目录/node_modules/playwright/index.mjs \
   --browser-channel chrome
 
+# 同一批核心场景改用 Playwright WebKit（主控制台、首次使用、草稿、待确认发送）
+python3 scripts/verify.py run browser-webkit \
+  --playwright-module /本机依赖目录/node_modules/playwright/index.mjs
+
+# 上一正式版 → 候选版的升级与回滚演练（Linux，root 或 UID 1000）
+python3 scripts/verify.py run --step release.rollback \
+  --previous-package agentbox_v0.1.10_linux_amd64.tar.gz \
+  --package agentbox_v0.1.11_linux_amd64.tar.gz
+
 # 只检查桌面前端和合成策略，不启动原生应用/安装包
 npm --prefix desktop ci
 python3 scripts/verify.py run desktop-unit
@@ -42,12 +51,13 @@ python3 scripts/verify.py run desktop-unit
 | --- | --- | --- |
 | `pr` | 与 quick 相同的快速 PR 入口；耗时以实际报告为准 | Docker/原生/人工门槛 |
 | `linux-integration` | 定向 race（含 Shutdown）＋真实 Linux 聊天可靠性；需 --image 与 Playwright | 真实 CLI/provider 和 systemd |
-| `release-full` | quick＋race/backup/聊天集成/候选 CLI/真实 systemd 恢复＋browser＋desktop-unit＋release；显式提供 Agent --image、--recovery-image 及全部候选资源 | 正式签名、公证、设备/付费/人工与未列入的专用矩阵 |
+| `release-full` | quick＋race/backup/聊天集成/候选 CLI/真实 systemd 恢复＋browser＋browser-webkit＋desktop-unit＋release＋回滚演练；显式提供 Agent --image、--recovery-image、--previous-package/--package 及全部候选资源 | 正式签名、公证、设备/付费/人工与未列入的专用矩阵 |
 | `quick` | `web` + `go` + `policy` | 浏览器、Docker、原生安装、付费模型；“quick”不是固定 runner 的耗时承诺 |
 | `web` | TS 类型、重新构建及产物字节/集合一致性、语言/错误/诊断及版本化聊天契约、草稿/待确认存储、历史/发送/设置生命周期 | 浏览器布局或真实服务端 |
 | `go` | build/vet、除 server 外的包、Linux EPERM 闸门、完整 server 包 | 显式 opt-in 的 live/native 故障注入；实际跳过列表进入报告 |
 | `policy` | 模拟部署、更新、安装/卸载、浏览器代理、镜像策略、用量修复和入口自测 | 真实 systemd、生产文件或真实安装器 |
 | `browser` | 主控制台、首次使用、草稿/待确认恢复、百空间搜索筛选、Git、文件预览、网页/abox-link 三语；真实浏览器、合成 API | 真实 Docker、模型、桌面 GUI |
+| `browser-webkit` | 主控制台、首次使用、草稿、待确认发送四个场景在 Playwright WebKit 中执行；断言与 Chromium 组相同 | 真实 Safari/iOS、触屏与实机；Linux 需先装 WebKit 系统依赖（`npx playwright install --with-deps webkit`） |
 | `--step integration.chat` | 本机真实 Go 服务/SQLite/API/WS＋浏览器；执行端为合成 Docker/CLI | 非 root macOS 成功附件上传不适用（验证真实 chown 拒绝），由 Linux 矩阵覆盖 |
 | `--step docker.chat-reliability` | 独立 Linux 服务进程/卷＋真实浏览器，崩溃/重启、确认丢失、附件及账本 | 合成执行端，不运行真实 CLI/provider，不挂 Docker socket；需显式本地测试镜像 |
 | `--step docker.cli-candidate` | 同生产候选门槛，真实本地 CLI＋合成上游；network=none，清理本次容器 | 真实提供方/账号、npm 安装或修改当前镜像 |
@@ -55,6 +65,7 @@ python3 scripts/verify.py run desktop-unit
 | `docker-core` | 文件系统/播种/服务端 Linux 回归、管理员恢复/PTY | 生产卷；测试镜像构建可能需依赖网络，运行容器禁外网 |
 | `desktop-unit` | Vue/TS 构建、Vitest、候选/更新清单、原生/跨系统测试编排器的合成回归 | 正式安装、keyring、实机 GUI、原生 Rust 构建 |
 | `release` | 已有发布包验证、隔离 Linux 服务/重启/安装验收（systemctl 为模拟） | 构建发布包、发布、生产部署、签名、公证 |
+| `--step release.rollback` | 两个真实 Linux 发布包与包内 `release.py`：上一版安装与合成数据、升级、直接降级被拒、旧版拒开新库、兼容备份恢复到新目录、移动用户文件、旧版激活后核对账本/空间/文件 | 真实 systemd（模拟）、会话容器（Docker API 为无容器的桩）、生产规模；需 root 或 UID 1000 |
 | `--step desktop.rust` | 当前 OS SDK 上的 Rust 单元测试，真实凭证库 opt-in 关闭 | 正式签名/更新或实体设备验收 |
 | `--step audit.licenses` | vendored 哈希、实际链接模块与许可证目录 | 新一轮漏洞/密钥扫描或法律授权结论 |
 
