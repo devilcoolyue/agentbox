@@ -8,7 +8,13 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.10](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.10)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.11](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.11)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.11：项目创建、聊天恢复与工作台改进
+
+新增空项目、上传和 Git 导入流程、首次任务分步引导、空间搜索/状态筛选、本机草稿和持久消息确认；断线或重启后查询原请求，未知结果须核对，不自动重跑。Markdown 文件预览支持 GFM 与受限 HTML，聊天显示 Claude/Codex 思考摘要，侧栏、确认区和「关于与更新」更紧凑。新增环境诊断、离线管理员密码恢复与候选 Agent 镜像行为验证。完整内容见 [CHANGELOG](../CHANGELOG.md)。
+
+从 v0.1.10 升级会执行 schema 10 → 12 迁移。升级前保存并验证备份；旧 schema 10/11 二进制不能打开新库，回退须恢复兼容备份到新目录，并保全升级后的文件变化。系统备份含已接收聊天正文与回执，项目和附件仍需完整备份。现有旧客户端接口保留，同步默认关闭，空间镜像独立更新。本次仍为两个 Linux 服务端包、五个平台 abox-link、`release.json` 和 `SHA256SUMS`；不发布新桌面安装包。
 
 ### v0.1.10：多语言与项目展示
 
@@ -50,7 +56,7 @@ v0.1.0～v0.1.4 的七个平台包、`release.json` 和 `SHA256SUMS` 从旧仓�
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.10 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.11 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0
@@ -71,8 +77,8 @@ python3 scripts/scan-secrets.py --artifacts /tmp/agentbox-release --output /tmp/
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
-tar -xzf agentbox_v0.1.10_linux_arm64.tar.gz
-cd agentbox_v0.1.10_linux_arm64
+tar -xzf agentbox_v0.1.11_linux_arm64.tar.gz
+cd agentbox_v0.1.11_linux_arm64
 ./agentbox --version
 cp config.example.json config.json
 chmod 600 config.json

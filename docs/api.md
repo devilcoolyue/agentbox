@@ -455,11 +455,11 @@ PUT /api/git/connections/{connection}/shares  {revision,users:[{user,write:false
 
 ## 创建与项目导入收据
 
-当前开发版使用 schema 11 的 `session-creations` v1 接口，支持同编号创建复用、导入尝试结果查询和未知结果核对。接口、输入、状态、作用域及重放限制见[创建空间与导入项目](project-creation.md)。这些收据不替代聊天消息确认；M3 的聊天可靠性协议仍独立实施。
+v0.1.11 包含 schema 11 引入的 `session-creations` v1 接口，支持同编号创建复用、导入尝试结果查询和未知结果核对。接口、输入、状态、作用域及重放限制见[创建空间与导入项目](project-creation.md)。这些收据不替代聊天消息确认；聊天持久接收使用下述独立协议。
 
-## 聊天持久接收 v1（开发中）
+## 聊天持久接收 v1（v0.1.11）
 
-当前源码的 schema 12 已将独立 HTTP 接收/查询/动作 API 接入原执行器，能力由 `/me` 的 `chat_protocol:1`、`chat_scope` 发现。浏览器按该能力使用新发送路径，旧服务端仍显示兼容限制。完整字段、状态与丢确认恢复规则见[聊天协议](chat-protocol.md)；`draft_protocol` 不是该能力的替代。
+v0.1.11 的 schema 12 已将独立 HTTP 接收/查询/动作 API 接入原执行器，能力由 `/me` 的 `chat_protocol:1`、`chat_scope` 发现。浏览器按该能力使用新发送路径，旧服务端仍显示兼容限制。完整字段、状态与丢确认恢复规则见[聊天协议](chat-protocol.md)；`draft_protocol` 不是该能力的替代。
 
 | 方法与路径 | 作用 |
 | --- | --- |

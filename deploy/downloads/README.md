@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.10 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.11 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.10
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.11
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.10_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.11_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.10_linux_arm64/install.sh --version v0.1.10
+sudo bash agentbox_v0.1.11_linux_arm64/install.sh --version v0.1.11
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -83,13 +83,13 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
 
-### 升级至 v0.1.10
+### 升级至 v0.1.11
 
-本版为网页控制台与 abox-link 面板加入简体中文、繁体中文和英文，默认跟随系统，不支持时回退英文；可在网页登录页／用户菜单和 abox-link 面板顶部即时切换，偏好保存在当前设备。表单草稿和终端连接保留，终端输出、用户内容与服务端原始诊断不翻译。
+本版加入三种项目创建/导入方式、首次任务引导、空间搜索与筛选、聊天草稿和持久消息确认、思考摘要、GFM 文件预览、环境诊断及候选镜像行为验证，并整理侧栏和「关于与更新」。断线或服务重启后先查询原请求，未知结果需要核对，不自动重跑。
 
-从 v0.1.9 升级保持 schema 10，无新增数据库迁移；API、WebSocket 和配对协议不变，同步仍默认关闭。从 v0.1.8 升级仍会执行 schema 9 → 10 迁移，按下节先验证备份，不能将迁移后的数据库直接交给 v0.1.8。使用「关于与更新」或已校验发布包内的 `deploy/release.py` 升级，不要重复运行首次安装命令。
+从 v0.1.10 升级会自动执行 schema 10 → 12 迁移，保留原有空间、用户、用量和额度。升级前先保存并验证备份；**v0.1.10 和仅支持 schema 10/11 的旧二进制不能直接打开迁移后的数据库**。回退须恢复兼容备份到新目录，并保全升级后的文件变化。系统备份包含已接收聊天正文和回执，项目文件与附件仍需完整备份。使用「关于与更新」或已校验包内的 `deploy/release.py` 升级，不要重复运行首次安装命令。
 
-v0.1.10 包含 Linux amd64/arm64 服务端与五个平台 abox-link，共七个归档及 `release.json`、`SHA256SUMS`。服务端升级会更新网页和可下载的 abox-link 文件；本机运行的旧 abox-link 仍需手动下载替换。本次不发布新的桌面安装包，已发布 Desktop 0.1.2 不含多语言，升级服务端不会改变其界面或安装版本。服务端与工作空间镜像仍独立管理。
+v0.1.11 包含 Linux amd64/arm64 服务端与五个平台 abox-link，共七个归档及 `release.json`、`SHA256SUMS`。旧网页、abox-link 和桌面接口保留，同步仍默认关闭。服务端升级会更新网页和可下载的 abox-link 文件；本机旧 abox-link 需手动下载替换。本次不发布新的桌面安装包，Desktop 0.1.2 仍独立下载；服务端升级不自动更新本机桌面应用或空间镜像。
 
 ### v0.1.8 升级至 v0.1.9
 

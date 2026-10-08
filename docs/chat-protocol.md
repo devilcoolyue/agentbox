@@ -1,8 +1,8 @@
-# 聊天持久接收协议 v1（开发中）
+# 聊天持久接收协议 v1（v0.1.11）
 
 [API](api.md) · [草稿与恢复](chat-recovery.md) · [M3 进度](milestones/m3.md)
 
-当前源码已实现服务端协议和原执行器接入，尚未发布。浏览器现已接入冻结待确认副本、按原 ID 查询和结果核对界面。存储、服务端合成执行与真实浏览器合成 API 场景分别验证；真实 API 与浏览器 Linux 联合故障矩阵已通过；性能设备/阈值仍待确认。M4 的版本化字段与状态契约见 `contracts/chat-errors-v1.schema.json`，TS 类型由 `scripts/generate-contracts.py` 生成。
+v0.1.11 已实现服务端协议和原执行器接入。浏览器现已接入冻结待确认副本、按原 ID 查询和结果核对界面。存储、服务端合成执行与真实浏览器合成 API 场景分别验证；真实 API 与浏览器 Linux 联合故障矩阵已通过；性能设备/阈值仍待确认。M4 的版本化字段与状态契约见 `contracts/chat-errors-v1.schema.json`，TS 类型由 `scripts/generate-contracts.py` 生成。
 
 ## 能力、身份与请求
 

@@ -2,7 +2,7 @@
 
 [首次使用](user-guide.md) · [M2 进展](milestones/m2.md) · [数据库升级](architecture/database-migrations.md)
 
-当前开发版的创建窗口提供三种来源，均先确认账号授权，再创建一个可复用的空间。该功能尚未发布；创建收据由 schema 11 引入，当前开发源码已继续增加 schema 12 聊天回执存储。首次启动会升级至当前 schema，升级前需保存并验证备份，见[数据库迁移](architecture/database-migrations.md)。
+v0.1.11 的创建窗口提供三种来源，均先确认账号授权，再创建一个可复用的空间。创建收据由 schema 11 引入，本版同时包含 schema 12 聊天回执存储。首次启动会升级至当前 schema，升级前需保存并验证备份，见[数据库迁移](architecture/database-migrations.md)。
 
 ## 三种来源
 
