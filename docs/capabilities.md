@@ -1,14 +1,14 @@
 # 当前能力、版本与验证清单
 
-维护日期：2026-10-08。这是服务端 / 网页 v0.1.11 正式版与当前 `main` 的导航与范围清单；发布内容、自动化通过和外部待验收分别标明。后续排期以[第二轮里程碑 M6～M11](roadmap-2.md)为准，进展见 [M6 记录](milestones/m6.md)；第一轮范围见[里程碑](roadmap.md)和[实施单元](milestones/backlog.md)，实施证据见 [M1 记录](milestones/m1.md)。本文不把旧记录当成本轮重新执行。
+维护日期：2026-10-09。这是服务端 / 网页 v0.1.12 正式版与当前 `main` 的导航与范围清单；发布内容、自动化通过和外部待验收分别标明。后续排期以[第二轮里程碑 M6～M11](roadmap-2.md)为准，进展见 [M6 记录](milestones/m6.md)；第一轮范围见[里程碑](roadmap.md)和[实施单元](milestones/backlog.md)，实施证据见 [M1 记录](milestones/m1.md)。本文不把旧记录当成本轮重新执行。
 
 ## 当前版本口径
 
 | 对象 | 当前依据 | 不能混淆的边界 |
 | --- | --- | --- |
-| 服务端 / abox-link 正式版 | [v0.1.11](releases.md)（2026-10-08，构建提交 `cdaa457`），主仓库与 `agentbox-releases` 同步相同附件与 SHA256SUMS | 第一轮 M1～M5 的服务端与网页改动均已含在此版；生产实例已从开发版切到正式包。发布不等于真实用户、设备、签名和恢复目标等外部验收完成 |
-| 服务端数据库 | v0.1.11：schema 12 | 11 新增创建/导入收据，12 新增聊天回执；v0.1.10 及更早只支持 ≤10，回退须恢复兼容备份到新目录，演练见 [M6 记录](milestones/m6.md#m6-07-回滚演练) |
-| 托管 CI | `cdaa457` 上 CI（web、build-test、source-audit、chat-reliability、govulncheck）与 Release candidate（含 `docker.cli-candidate`、真实 systemd `docker.recovery-drill`、部署迁移/回退）通过；`desktop.yml` 于 `1ea2dae` 通过 | `verification-stability.yml` 与 `desktop-release.yml` 尚未在托管 runner 运行；20 次稳定性采样仍是本机 runner 记录 |
+| 服务端 / abox-link 正式版 | [v0.1.12](releases.md)（2026-10-09，构建提交 `2c7502b`），主仓库与 `agentbox-releases` 同步相同附件与 SHA256SUMS | 第一轮 M1～M5 的服务端与网页改动自 v0.1.11 起包含在内；v0.1.12 增加账号可用模型、空间切换账号、界面风格、动效与 Go 安全更新。生产实例已在线升级到 v0.1.12 正式包。发布不等于真实用户、设备、签名和恢复目标等外部验收完成 |
+| 服务端数据库 | v0.1.11 起 schema 12，v0.1.12 无迁移 | 11 新增创建/导入收据，12 新增聊天回执；v0.1.12 回退 v0.1.11 不涉及数据库，但需保留配置备份（见[兼容矩阵](compatibility.md#从-v0112-回退到-v0111)）；v0.1.10 及更早只支持 ≤10，回退须恢复兼容备份到新目录，演练见 [M6 记录](milestones/m6.md#m6-07-回滚演练) |
+| 托管 CI | `2c7502b` 上 CI（web、web-webkit、build-test、source-audit、chat-reliability、govulncheck）与 Release candidate（含 `docker.cli-candidate`、真实 systemd `docker.recovery-drill`、部署迁移/回退）通过；`desktop.yml` 于 `7848194` 通过 | `verification-stability.yml` 与 `desktop-release.yml` 尚未在托管 runner 运行；20 次稳定性采样仍是本机 runner 记录 |
 | 桌面公开测试版 | 已公开版本 0.1.2；[对应历史 CI/安装证据](architecture/desktop-client-acceptance.md) | 公开测试版未正式签名/公证；源码为 0.1.3-dev（三语、错误解释），尚未公开发布，仅有本地 macOS arm64 测试 ZIP 和旧包替换验收；旧安装包不会自动更新 |
 | Agent 镜像基线 | `images/agent/versions.env`：Claude 2.1.280、Codex 0.145.0、Node 22.23.2 与固定 digest | `latest` 是可变标签；后续在线更新版本不自动成为已验证基线 |
 | 构建工具 | `go.mod`：Go 1.26.9；网页 CI Node 22；包管理版本见 lockfile | 本机 Node、Go 及平台实际值以验证报告为准，不把本机结果当固定 runner 指标 |
