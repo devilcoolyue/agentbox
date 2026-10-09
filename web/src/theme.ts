@@ -1,4 +1,4 @@
-import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
+import { setAttrRender, t as i18nText } from "./i18n.js";
 /* theme：两个互不相干的维度。
  * - 明暗：跟随系统 / 浅色 / 深色三态。选择落在 <html data-theme-mode>，实际生效的
  *   明暗落在 <html data-theme>。
@@ -20,12 +20,12 @@ type ThemeMode = "system" | "light" | "dark";
 /** 实际生效的配色；写在 <html data-theme>，system 由系统偏好解析而来 */
 type Theme = "light" | "dark";
 /** 界面风格；写在 <html data-skin> */
-type Skin = "amber" | "glass" | "cyberpunk" | "graphite" | "verdant" | "blueprint";
+export type Skin = "amber" | "glass" | "cyberpunk" | "graphite" | "verdant" | "blueprint";
 
 const MODES: ThemeMode[] = ["system", "light", "dark"];
 const MODE_LABEL: Record<ThemeMode, string> = { get system() { return i18nText("跟随系统"); }, get light() { return i18nText("浅色"); }, get dark() { return i18nText("深色"); } };
-const SKINS: Skin[] = ["amber", "glass", "cyberpunk", "graphite", "verdant", "blueprint"];
-const SKIN_LABEL: Record<Skin, () => string> = {
+export const SKINS: Skin[] = ["amber", "glass", "cyberpunk", "graphite", "verdant", "blueprint"];
+export const SKIN_LABEL: Record<Skin, () => string> = {
   amber: () => i18nText("琥珀"),
   glass: () => i18nText("液态玻璃"),
   cyberpunk: () => i18nText("赛博朋克"),
@@ -56,7 +56,7 @@ function save(key: string, value: string) {
 
 const root = document.documentElement;
 const currentMode = (): ThemeMode => (root.dataset.themeMode as ThemeMode | undefined) || stored(THEME_KEY, MODES, "system");
-const currentSkin = (): Skin => {
+export const currentSkin = (): Skin => {
   const skin = root.dataset.skin as Skin | undefined;
   return skin && SKINS.includes(skin) ? skin : stored(SKIN_KEY, SKINS, "amber");
 };
@@ -80,7 +80,7 @@ function apply(mode: ThemeMode, skin: Skin, persist = true) {
   if (changed) window.dispatchEvent(new CustomEvent("agentbox-theme-change", { detail: { theme, skin } }));
 }
 
-/* 底栏三态按钮反映已保存的选择，收起侧栏时用单个按钮循环切换；风格下拉在用户菜单里。 */
+/* 底栏三态按钮反映已保存的选择，收起侧栏时用单个按钮循环切换；风格在用户弹层里选。 */
 function syncUI(mode: ThemeMode, skin: Skin) {
   for (const opt of document.querySelectorAll<HTMLElement>("[data-theme-option]")) {
     const active = opt.dataset.themeOption === mode;
@@ -94,27 +94,14 @@ function syncUI(mode: ThemeMode, skin: Skin) {
     setAttrRender(button, "aria-label", label);
     setTip(button, label);
   }
-  for (const select of skinSelects) {
-    if (select.value === skin) continue;
-    select.value = skin;
-    // 只让统一下拉组件刷新显示，不派发 change（那会又调一次 apply）
-    select.dispatchEvent(new Event("input", { bubbles: true }));
-  }
-
   // 移动端浏览器地址栏跟着页面底色走
   const bg = getComputedStyle(root).getPropertyValue("--bg").trim();
   for (const m of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) m.content = bg;
 }
 
-const skinSelects = [...document.querySelectorAll<HTMLSelectElement>("[data-skin-select]")];
-for (const select of skinSelects) {
-  for (const skin of SKINS) {
-    const option = document.createElement("option");
-    option.value = skin;
-    setTextRender(option, SKIN_LABEL[skin]);
-    select.append(option);
-  }
-  select.addEventListener("change", () => apply(currentMode(), select.value as Skin));
+/** 用户弹层的风格选择（shell.ts 的 pref-picker）调用；选中态靠 agentbox-theme-change 回写 */
+export function setSkin(skin: string) {
+  apply(currentMode(), skin as Skin);
 }
 
 for (const opt of document.querySelectorAll<HTMLElement>("[data-theme-option]")) {

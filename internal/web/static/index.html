@@ -261,8 +261,9 @@
                 <span id="conn-text" class="conn-text mono" data-i18n-text="[&quot;连接中…&quot;]">连接中…</span>
               </div>
             </div>
-            <label class="language-control"><span data-i18n-text="[&quot;语言&quot;]">语言</span><select id="app-language" data-language-select aria-label="界面语言" data-i18n-attrs="{&quot;aria-label&quot;:&quot;界面语言&quot;}"></select></label>
-            <label class="language-control skin-control"><span data-i18n-text="[&quot;风格&quot;]">风格</span><select id="app-skin" class="skin-select" data-skin-select aria-label="界面风格" data-i18n-attrs="{&quot;aria-label&quot;:&quot;界面风格&quot;}"></select></label>
+            <!-- 语言、风格的分段选择由 shell.ts 照选项表生成（pref-picker.ts） -->
+            <div id="pref-language"></div>
+            <div id="pref-skin"></div>
             <button id="btn-logout" type="button" class="side-logout"><span class="glyph">
               <svg width="17" height="17" data-icon="logout" aria-hidden="true"></svg>
             </span><span data-i18n-text="[&quot;退出登录&quot;]">退出登录</span></button>

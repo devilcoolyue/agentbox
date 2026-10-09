@@ -1,4 +1,4 @@
-import { htmlText as trHTML, setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
+import { htmlText as trHTML, i18n, languages, setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
 /* shell：应用外壳 —— 抽屉、主区视图切换（工作台/设置）、顶栏标题、侧栏渲染。
  * 点击会话卡片 / 系统设置入口通过 bus 广播，由 sessions.js / settings.js 接管，
  * 保持 shell 不反向依赖任何功能模块。 */
@@ -9,6 +9,8 @@ import { agentIcon, agentAvatar, agentName } from "./brand.js";
 import { hideTip, setTip } from "./tip.js";
 import { sessionState } from "./session-state.js";
 import { filterWorkspaces, workspaceFilterActive } from "./features/workspaces/filter.js";
+import { mountPrefPicker } from "./pref-picker.js";
+import { SKINS, SKIN_LABEL, currentSkin, setSkin } from "./theme.js";
 /* ---- 侧栏：桌面收起偏好与移动抽屉各自独立 ---- */
 const narrowMQ = window.matchMedia("(max-width: 760px)");
 const sidebar = $("sidebar");
@@ -22,6 +24,9 @@ const userButton = $("btn-user-menu");
 const userMenu = $("sidebar-user-menu");
 const hoverMQ = window.matchMedia("(hover: hover) and (pointer: fine)");
 let userMenuCloseTimer;
+/** 在弹层里点过东西（选语言、风格等）、或从展开的语言/风格菜单移出后，不再随鼠标移出
+ * 收起，点别处或 Esc 才关；不靠焦点判断，Safari 点按钮不获焦，结果会与 Chrome 不同。 */
+let userMenuEngaged = false;
 function cancelUserMenuClose() {
     clearTimeout(userMenuCloseTimer);
     userMenuCloseTimer = undefined;
@@ -33,8 +38,33 @@ function renderUserMenu() {
     $("side-user-label").textContent = S.user;
     setAttrRender(userButton, "aria-label", () => i18nText("{p0} · {p1}，用户菜单", { p0: String(S.user), p1: String(role()) }));
 }
+/* 弹层里的语言、风格各占一行：右侧是当前选择和箭头，展开后在上方列出全部选项
+ * （pref-picker.ts）。菜单是弹层的子节点，鼠标移进去不算离开弹层，选完弹层还在。 */
+const prefPickers = [
+    mountPrefPicker($("pref-language"), {
+        title: () => i18nText("语言"),
+        // 语言名用各自的写法，只有「跟随系统」随界面翻译
+        options: languages.map(({ value, label }) => ({ value, label: value === "system" ? () => i18nText(label) : () => label })),
+        value: () => i18n.preference,
+        select: value => i18n.setLanguage(value),
+    }),
+    mountPrefPicker($("pref-skin"), {
+        title: () => i18nText("风格"),
+        options: SKINS.map(skin => ({ value: skin, label: SKIN_LABEL[skin], swatch: `var(--swatch-${skin})` })),
+        value: currentSkin,
+        select: setSkin,
+    }),
+];
+// 其他标签页改了偏好、或系统语言变化时跟着换选中态
+for (const event of ["agentbox-language-change", "agentbox-theme-change"]) {
+    window.addEventListener(event, () => { for (const picker of prefPickers)
+        picker.sync(); });
+}
 function closeUserMenu(restoreFocus = false) {
     cancelUserMenuClose();
+    userMenuEngaged = false;
+    for (const picker of prefPickers)
+        picker.close();
     userMenu.classList.remove("open");
     userMenu.inert = true;
     userButton.setAttribute("aria-expanded", "false");
@@ -83,13 +113,19 @@ for (const el of [userButton, userMenu]) {
         if (!hoverMQ.matches)
             return;
         cancelUserMenuClose();
+        // 从展开的语言/风格菜单移出（它可能伸到弹层外）：只收那个菜单，弹层留着
+        if (prefPickers.some(picker => picker.isOpen())) {
+            userMenuEngaged = true;
+            return;
+        }
         // 留出跨越图标和弹层间隙的时间；键盘操作期间保持打开。
         userMenuCloseTimer = setTimeout(() => {
-            if (!userMenu.contains(document.activeElement))
+            if (!userMenuEngaged && !userMenu.contains(document.activeElement))
                 closeUserMenu();
         }, 200);
     });
 }
+userMenu.addEventListener("pointerdown", () => { userMenuEngaged = true; });
 for (const event of ["pointerdown", "focusin"]) {
     document.addEventListener(event, e => {
         if (userMenu.inert || userMenu.contains(e.target) || userButton.contains(e.target))

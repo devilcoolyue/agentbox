@@ -708,6 +708,7 @@ data/
 - 可滚动的弹层/列表不要在 `pointerdown` 上无条件 `preventDefault()`：Safari 26.5 起这会取消这次触摸的滚动。只对 `pointerType === "mouse"` 拦截。
 - 获焦提示与按钮焦点环只给键盘操作：iOS / Safari 点按钮不获焦，随后 `showModal()` 或菜单用程序挪过去的焦点会被判成 `:focus-visible`（手指点开的弹窗，关闭按钮上带框带「关闭」气泡）。`modality.ts` 在 `<html data-input>` 记最近一次是键盘还是指针；新写「获焦就显示」的逻辑要同时核对 `keyboardInput()`。
 - 窄屏顶栏的分区切换（系统设置 / Git 管理，`responsive.ts` 的 `mobile-section-menu`）是导航菜单，不是表单下拉：条目照桌面导航按钮生成，一次列全、竖屏不滚动，没有搜索框（获焦就弹键盘、把列表挤成一小截）。别把它并回 `select.ts`；分区多到一屏放不下时再考虑分组。
+- 用户弹层的语言、风格各占一行（`pref-picker.ts`）：右侧是当前选择 + 向右箭头，展开后在这一行上方列出全部选项，同样不并回 `select.ts`（登录页语言仍用它）。菜单是弹层的子节点，鼠标移进去不算离开弹层；鼠标悬停展开、移出这一行与菜单收起，触屏点按开关，第一次 Esc 只收菜单。弹层里点过东西、或从展开的菜单移出后（`shell.ts` 的 `userMenuEngaged`）不再随鼠标移出收起，不靠焦点判断——Safari 点按钮不获焦。
 - 前端类型约定：`web/src/types.d.ts` 是 API/WS 报文的接口定义，每个接口对应 Go 侧一个
   结构体，改服务端报文时两边一起改；`web/src/globals.d.ts` 声明 xterm/KaTeX 等
   `<script>` 引入的全局。两个纯类型文件用 `.d.ts`，不产生多余的 js。

@@ -266,7 +266,7 @@
 .side-user-conn { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 4px; }
 .side-user-conn .conn-latency { flex: none; padding: 0; height: 28px; font-size: 12px; }
 .side-user-menu {
-  position: fixed; z-index: 90; width: 232px; max-width: calc(100vw - 24px);
+  position: fixed; z-index: 90; width: 248px; max-width: calc(100vw - 24px);
   padding: 6px; border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   background: var(--panel-solid); box-shadow: var(--shadow-lg);
   opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(4px);
@@ -279,10 +279,11 @@
 }
 .side-user-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; line-height: 20px; overflow-wrap: anywhere; }
 .side-user-role { flex: none; padding: 0 6px; border-radius: calc(4px * var(--radius-scale)); background: var(--panel-2); color: var(--muted); font-size: 10px; line-height: 20px; }
+/* 退出登录靠右，与上面各行右侧的数值、当前选择对齐 */
 .side-logout {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
   width: 100%; height: 34px; padding: 0 8px;
-  border: 0; border-radius: calc(6px * var(--radius-scale)); text-align: left;
+  border: 0; border-radius: calc(6px * var(--radius-scale)); text-align: right;
   background: transparent; color: var(--muted); font-size: 12px;
   transition: color 0.15s ease, background 0.15s ease;
 }
@@ -524,26 +525,62 @@
 .language-control select, .language-control .select-trigger { width: 150px; min-width: 0; }
 .language-control .select-trigger { min-height: 32px; padding: 5px 10px; gap: 8px; font-size: 12px; line-height: 18px; }
 .login-language { align-self: center; margin-top: 2px; }
-.side-user-menu .language-control { gap: 8px; padding: 4px 8px; }
-.side-user-menu .language-control :is(select, .select-trigger) { width: 128px; }
 @media (pointer: coarse) { .language-control .select-trigger { min-height: 34px; } }
-/* 风格下拉：触发器和每个选项前画一枚该风格的色块（色值见 skins.css 的 --swatch-*） */
-.skin-select.select-trigger { justify-content: flex-start; }
-.skin-select.select-trigger .select-caption { flex: 1; }
-.select-panel-skin .select-option { display: flex; align-items: center; gap: 8px; }
-.skin-select.select-trigger::before,
-.select-panel-skin .select-option::before {
-  content: ""; flex: none; width: 12px; height: 12px;
-  border-radius: calc(3px * var(--radius-scale));
+/* 用户弹层里的语言、风格（pref-picker.ts）：与余额、连接延迟同样一行，右侧是当前选择
+ * 加向右箭头；展开时箭头转向上，全部选项在这一行上方弹出（窗口太矮时改到下方）。 */
+.pref-picker { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding: 2px 4px 2px 8px; }
+.pref-picker-title { flex: none; font-size: 12px; color: var(--muted); }
+.pref-trigger {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 30px; padding: 0 4px 0 8px;
+  border: 0; border-radius: calc(6px * var(--radius-scale));
+  background: transparent; color: var(--amber); font-size: 12px; font-weight: 500;
+  transition: background 0.15s ease;
+}
+.pref-current { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pref-trigger svg { flex: none; color: var(--muted); transition: transform 0.16s ease, color 0.15s ease; }
+.pref-trigger:hover, .pref-trigger[aria-expanded="true"] { background: var(--panel-2); }
+.pref-trigger:hover svg, .pref-trigger[aria-expanded="true"] svg { color: var(--text); }
+.pref-trigger[aria-expanded="true"] svg { transform: rotate(-90deg); }
+.pref-picker.below .pref-trigger[aria-expanded="true"] svg { transform: rotate(90deg); }
+.pref-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); z-index: 2;
+  display: flex; flex-direction: column; gap: 2px; padding: 4px;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
+  background: var(--panel-solid); box-shadow: var(--shadow-lg);
+  transform-origin: bottom right; animation: pref-menu-in 0.14s ease-out;
+}
+.pref-picker.below .pref-menu { top: calc(100% + 4px); bottom: auto; transform-origin: top right; }
+.pref-menu[hidden] { display: none; }
+/* 鼠标从箭头跨过空隙进菜单时仍算在这一行里 */
+.pref-picker.open::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 6px; }
+.pref-picker.open.below::before { top: 100%; bottom: auto; }
+.pref-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 5px 8px;
+  border: 0; border-radius: calc(6px * var(--radius-scale)); text-align: left;
+  background: transparent; color: var(--muted); font-size: 12px;
+}
+.pref-menu-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pref-menu-item:is(:hover, :focus-visible) { color: var(--text); background: var(--panel-2); }
+.pref-menu-item.active { color: var(--text); font-weight: 600; background: color-mix(in srgb, var(--amber) 12%, transparent); }
+.pref-menu-check { flex: none; color: var(--amber); visibility: hidden; }
+.pref-menu-item.active .pref-menu-check { visibility: visible; }
+/* 风格色卡：色值见 skins.css 的 --swatch-*，菜单里放大一号 */
+.pref-swatch {
+  flex: none; width: 12px; height: 12px; border-radius: calc(3px * var(--radius-scale));
   background: var(--swatch, var(--panel-2));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent);
 }
-:is(.skin-select, .select-panel-skin .select-option)[data-value="amber"] { --swatch: var(--swatch-amber); }
-:is(.skin-select, .select-panel-skin .select-option)[data-value="glass"] { --swatch: var(--swatch-glass); }
-:is(.skin-select, .select-panel-skin .select-option)[data-value="cyberpunk"] { --swatch: var(--swatch-cyberpunk); }
-:is(.skin-select, .select-panel-skin .select-option)[data-value="graphite"] { --swatch: var(--swatch-graphite); }
-:is(.skin-select, .select-panel-skin .select-option)[data-value="verdant"] { --swatch: var(--swatch-verdant); }
-:is(.skin-select, .select-panel-skin .select-option)[data-value="blueprint"] { --swatch: var(--swatch-blueprint); }
+.pref-swatch[hidden] { display: none; }
+.pref-menu-item .pref-swatch { width: 18px; height: 18px; border-radius: calc(4px * var(--radius-scale)); }
+@keyframes pref-menu-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (pointer: coarse) {
+  .pref-trigger { height: 36px; }
+  .pref-menu-item { min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pref-menu { animation: none; }
+  .pref-trigger svg { transition: none; }
+}
 html[lang="en"] .side-tools { grid-template-columns: 1fr; }
 
 @media (max-width: 760px) {

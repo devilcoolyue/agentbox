@@ -1782,6 +1782,7 @@ export default {
     "石墨极简": "Graphite",
     "青野绿意": "Verdant",
     "工程蓝图": "Blueprint",
+    "{p0}，当前：{p1}": "{p0}, current: {p1}",
     "切换账号…": "Switch account...",
     "改用同类型的另一个账号，文件与对话保留": "Use another account of the same type; files and conversations are kept",
     "当前账号：{account}": "Current account: {account}",

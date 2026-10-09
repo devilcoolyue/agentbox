@@ -1,4 +1,4 @@
-import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
+import { setAttrRender, t as i18nText } from "./i18n.js";
 /* theme：两个互不相干的维度。
  * - 明暗：跟随系统 / 浅色 / 深色三态。选择落在 <html data-theme-mode>，实际生效的
  *   明暗落在 <html data-theme>。
@@ -14,8 +14,8 @@ const THEME_KEY = "agentbox_theme";
 const SKIN_KEY = "agentbox_skin";
 const MODES = ["system", "light", "dark"];
 const MODE_LABEL = { get system() { return i18nText("跟随系统"); }, get light() { return i18nText("浅色"); }, get dark() { return i18nText("深色"); } };
-const SKINS = ["amber", "glass", "cyberpunk", "graphite", "verdant", "blueprint"];
-const SKIN_LABEL = {
+export const SKINS = ["amber", "glass", "cyberpunk", "graphite", "verdant", "blueprint"];
+export const SKIN_LABEL = {
     amber: () => i18nText("琥珀"),
     glass: () => i18nText("液态玻璃"),
     cyberpunk: () => i18nText("赛博朋克"),
@@ -45,7 +45,7 @@ function save(key, value) {
 }
 const root = document.documentElement;
 const currentMode = () => root.dataset.themeMode || stored(THEME_KEY, MODES, "system");
-const currentSkin = () => {
+export const currentSkin = () => {
     const skin = root.dataset.skin;
     return skin && SKINS.includes(skin) ? skin : stored(SKIN_KEY, SKINS, "amber");
 };
@@ -69,7 +69,7 @@ function apply(mode, skin, persist = true) {
     if (changed)
         window.dispatchEvent(new CustomEvent("agentbox-theme-change", { detail: { theme, skin } }));
 }
-/* 底栏三态按钮反映已保存的选择，收起侧栏时用单个按钮循环切换；风格下拉在用户菜单里。 */
+/* 底栏三态按钮反映已保存的选择，收起侧栏时用单个按钮循环切换；风格在用户弹层里选。 */
 function syncUI(mode, skin) {
     for (const opt of document.querySelectorAll("[data-theme-option]")) {
         const active = opt.dataset.themeOption === mode;
@@ -83,27 +83,14 @@ function syncUI(mode, skin) {
         setAttrRender(button, "aria-label", label);
         setTip(button, label);
     }
-    for (const select of skinSelects) {
-        if (select.value === skin)
-            continue;
-        select.value = skin;
-        // 只让统一下拉组件刷新显示，不派发 change（那会又调一次 apply）
-        select.dispatchEvent(new Event("input", { bubbles: true }));
-    }
     // 移动端浏览器地址栏跟着页面底色走
     const bg = getComputedStyle(root).getPropertyValue("--bg").trim();
     for (const m of document.querySelectorAll('meta[name="theme-color"]'))
         m.content = bg;
 }
-const skinSelects = [...document.querySelectorAll("[data-skin-select]")];
-for (const select of skinSelects) {
-    for (const skin of SKINS) {
-        const option = document.createElement("option");
-        option.value = skin;
-        setTextRender(option, SKIN_LABEL[skin]);
-        select.append(option);
-    }
-    select.addEventListener("change", () => apply(currentMode(), select.value));
+/** 用户弹层的风格选择（shell.ts 的 pref-picker）调用；选中态靠 agentbox-theme-change 回写 */
+export function setSkin(skin) {
+    apply(currentMode(), skin);
 }
 for (const opt of document.querySelectorAll("[data-theme-option]")) {
     opt.addEventListener("click", () => apply(opt.dataset.themeOption, currentSkin()));
