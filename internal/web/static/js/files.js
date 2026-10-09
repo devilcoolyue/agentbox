@@ -27,6 +27,32 @@ function filesLoadingRow() {
     d.append(spinEl(), document.createTextNode(i18nText("读取目录中…")));
     return d;
 }
+/* 目录列表的骨架：几行与文件行同一套网格的占位，窄屏隐藏的列跟着隐藏。
+ * 整块晚 150ms 才淡入（base.css），读得快时直接换成内容；读屏只听到「读取目录中…」。 */
+function filesSkeleton() {
+    const wrap = document.createElement("div");
+    wrap.className = "skeleton-list";
+    wrap.setAttribute("role", "status");
+    wrap.setAttribute("aria-label", i18nText("读取目录中…"));
+    for (let i = 0; i < 6; i++) {
+        const row = document.createElement("div");
+        row.className = "file-row skeleton-row";
+        row.setAttribute("aria-hidden", "true");
+        for (const [cls, width] of [["fname", 28 + (i * 17) % 42], ["fperm", 80], ["fsize", 60], ["ftime", 85], ["factions", 0]]) {
+            const cell = document.createElement("span");
+            cell.className = cls;
+            if (width) {
+                const bar = document.createElement("span");
+                bar.className = "skeleton";
+                bar.style.width = width + "%";
+                cell.append(bar);
+            }
+            row.append(cell);
+        }
+        wrap.append(row);
+    }
+    return wrap;
+}
 function filesEmptyRow() {
     const p = document.createElement("p");
     p.className = "files-empty";
@@ -48,7 +74,7 @@ export async function loadFiles() {
         return;
     const gen = ++tree.gen;
     tree.cache.clear(); // 每次都取最新内容，展开状态保留
-    $("files-list").replaceChildren(filesLoadingRow());
+    $("files-list").replaceChildren(filesSkeleton());
     let entries;
     try {
         entries = await api(`/sessions/${sess.id}/files?path=${encodeURIComponent(S.filePath)}${scopeQS()}`);

@@ -15,7 +15,19 @@ export async function launchBrowser(options={}){
  const playwright=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE?pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href:'playwright');
  const engine=browserEngine();
  const channel=engine==='chromium'&&process.env.AGENTBOX_BROWSER_CHANNEL?{channel:process.env.AGENTBOX_BROWSER_CHANNEL}:{};
- return playwright[engine].launch({headless:true,...channel,...options});
+ return reduceMotion(await playwright[engine].launch({headless:true,...channel,...options}));
+}
+
+// Functional regressions run with prefers-reduced-motion: reduce, which the console honours by
+// zeroing its motion tokens. Otherwise exit animations keep a closed dialog, popover or menu on
+// screen for one transition, and assertions that something is hidden right after closing it
+// race the animation. Animation behaviour itself is checked with motion enabled in
+// test-motion.mjs. A context or page can still opt in with reducedMotion:'no-preference'.
+export function reduceMotion(browser){
+ const newContext=browser.newContext.bind(browser),newPage=browser.newPage.bind(browser);
+ browser.newContext=(options={})=>newContext({reducedMotion:'reduce',...options});
+ browser.newPage=(options={})=>newPage({reducedMotion:'reduce',...options});
+ return browser;
 }
 
 // Playwright grants clipboard-write only in Chromium; WebKit writes without it and

@@ -93,6 +93,13 @@
 .answer-copy:hover { background: var(--panel-2); color: var(--text); }
 .answer-copy:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .answer-copy.copied { color: var(--green); }
+/* 复制成功：对勾一笔画出来，按钮轻轻弹一下（回答底部与代码块共用；对勾路径长约 20） */
+:is(.answer-copy.copied, .cb-copy:disabled) .ui-icon[data-icon-name="check"] { animation: copied-pop var(--dur-slow) var(--ease-out); }
+:is(.answer-copy.copied, .cb-copy:disabled) .ui-icon[data-icon-name="check"] path {
+  stroke-dasharray: 20; animation: check-draw var(--dur-slow) var(--ease-out) both;
+}
+@keyframes copied-pop { 45% { scale: 1.2; } }
+@keyframes check-draw { from { stroke-dashoffset: 20; } to { stroke-dashoffset: 0; } }
 .answer-context {
   display: flex; align-items: center; flex-wrap: wrap; gap: 2px 12px;
   flex: 1; min-width: 0; padding: 6px 0;
@@ -698,6 +705,9 @@ details.think.streaming .think-body::after {
 .send-btn.stop:hover { background: var(--red-hi); }
 .send-btn.stop .ic-send { display: none; }
 .send-btn.stop .ic-stop { display: block; }
+/* 发送 ↔ 中断互换时，换上来的图标从小弹到原大（display 切回来就重播一次） */
+.send-btn :is(.ic-send, .ic-stop) { animation: icon-pop var(--dur) var(--ease-out); }
+@keyframes icon-pop { from { opacity: 0; scale: .4; } }
 
 /* ---- 模型 / 思考强度选择胶囊 + 上弹菜单 ---- */
 .picker { margin-left: auto; position: relative; min-width: 0; }

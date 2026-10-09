@@ -90,6 +90,13 @@
 /* 说明行里的运行状态：颜色同侧栏，运行中=绿、休眠=警告黄、已停止=灰 */
 .wb-state.run { color: var(--green); }
 .wb-state.idle { color: var(--warn); }
+/* 运行状态刚变（启动完成、停止、休眠，sessions.ts）：状态字从灰色亮起，头像角灯弹一下 */
+.wb-state.state-changed { animation: state-text 700ms var(--ease-out); }
+@keyframes state-text { from { color: var(--muted); } }
+.wb-avatar .led.state-changed { animation: state-led 700ms var(--ease-out); }
+.wb-avatar .led.on.state-changed { animation: state-led 700ms var(--ease-out), pulse 2s ease-in-out 700ms infinite; }
+@keyframes state-led { from { scale: .3; background-color: var(--line); } 55% { scale: 1.5; } }
+@media (prefers-reduced-motion: reduce) { .wb-state.state-changed, .wb-avatar .led.state-changed, .wb-avatar .led.on.state-changed { animation: none; } }
 .wb-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 
 /* 运行状态胶囊：首页最近空间用。运行中=绿，休眠=警告黄，已停止=灰 */
@@ -122,6 +129,9 @@
 .tab:hover .tab-ic { opacity: 1; }
 .tab.active { color: var(--amber); border-bottom-color: var(--amber); }
 .tab.active .tab-ic { opacity: 1; }
+/* 选中下划线交给 ink.ts 的滑动条：与标签自己的 2px 底边重合，挂上之前仍用底边 */
+.tabs > .ink { top: auto; bottom: 0; height: 2px; transform: translateX(var(--ink-x, 0)); background: var(--amber); }
+.tabs[data-ink-ready] .tab.active { border-bottom-color: transparent; }
 
 .pane { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 
@@ -429,7 +439,7 @@
 /* One anchored step at a time; popovers never reserve workbench space. */
 #guide-spotlight { position:fixed; inset:auto; margin:0; padding:0; border:2px solid var(--accent); border-radius:calc(14px * var(--radius-scale)); background:transparent; pointer-events:none; box-shadow:0 0 0 100vmax rgb(0 0 0 / .18); transition:top .2s ease,left .2s ease,width .2s ease,height .2s ease; }
 .workspace-guide { position:fixed; inset:auto; margin:0; box-sizing:border-box; width:min(340px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto; padding:18px; border:1px solid var(--line); border-radius:calc(16px * var(--radius-scale)); background:var(--panel-solid); color:var(--text); box-shadow:0 12px 40px rgb(0 0 0 / .18); font-size:13px; }
-.workspace-guide:popover-open { animation:guide-enter .18s ease-out; }
+.workspace-guide { --pop-from: 6px; } /* 引导卡片从下方浮上来，与锚点方向无关 */
 .guide-top,.guide-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .guide-top { color:var(--muted); font-size:11px; }
 .guide-top .btn { border:0; color:var(--muted); padding:4px 6px; }
@@ -439,5 +449,4 @@
 .guide-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
 .guide-actions .btn { white-space:normal; text-align:left; }
 .guide-bottom { border-top:1px solid var(--line); padding-top:12px; margin-top:14px; }
-@keyframes guide-enter { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
-@media (prefers-reduced-motion:reduce) { #guide-spotlight { transition:none; } .workspace-guide:popover-open { animation:none; } }
+@media (prefers-reduced-motion:reduce) { #guide-spotlight { transition:none; } }

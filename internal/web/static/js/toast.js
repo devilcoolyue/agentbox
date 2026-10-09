@@ -1,8 +1,11 @@
 /* 全站操作反馈：单例节点、显示层级和计时器统一由组件管理。
  * 样式见 css/toast.css；业务只需 toast(message, isError?)。 */
 import { svgIcon } from "./icons.js";
+import { leave } from "./motion.js";
 let box;
 let timer;
+/** 正在淡出的那一下：新提示到来时取消它，节点直接改回显示状态 */
+let leaving = null;
 function toastBox() {
     if (!box) {
         box = document.createElement("div");
@@ -22,6 +25,9 @@ function toastBox() {
 export function toast(message, isError = false) {
     const el = toastBox();
     clearTimeout(timer);
+    leaving?.cancel();
+    leaving = null;
+    el.inert = false;
     // 重新置顶：当前提示显示期间，用户可能又打开了一个原生 dialog。
     if (el.popover)
         el.hidePopover();
@@ -42,10 +48,16 @@ export function toast(message, isError = false) {
     if (el.popover)
         el.showPopover();
     timer = setTimeout(() => {
-        el.classList.remove("show");
-        if (el.popover)
-            el.hidePopover();
-        el.textContent = "";
         timer = undefined;
+        // 朝入场的方向（上方）淡出；播完先撤掉保持终态的动画，再真正隐藏
+        leaving = leave(el, () => {
+            leaving?.cancel();
+            leaving = null;
+            el.classList.remove("show");
+            if (el.popover)
+                el.hidePopover();
+            el.textContent = "";
+            el.inert = false;
+        }, -8);
     }, isError ? 4200 : 2600);
 }

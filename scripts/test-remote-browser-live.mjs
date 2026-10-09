@@ -1,10 +1,11 @@
+import {reduceMotion} from './playwright-launch.mjs';
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 let raw=''; for await (const chunk of process.stdin) raw+=chunk;
 const {base,password,session,token}=JSON.parse(raw);
 const {chromium}=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href : 'playwright');
-const browser=await chromium.launch({headless:true});
+const browser=reduceMotion(await chromium.launch({headless:true}));
 try {
  const page=await browser.newPage({viewport:{width:1600,height:1100}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));

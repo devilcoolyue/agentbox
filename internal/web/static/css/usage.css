@@ -138,6 +138,8 @@
 .usage-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--page) 80%, var(--panel)); }
 .usage-table tbody tr:hover { background: color-mix(in srgb, var(--amber) 4%, var(--panel)); }
 .usage-table :is(.u-sub, .u-cache, .u-billing) { margin-top: 2px; }
+/* 骨架行（usage.ts）高度对上两行格的真实行，数据换进来时表格不跳 */
+.usage-table .skeleton-row td { padding-top: 17px; padding-bottom: 17px; }
 .usage-table .num { text-align: right; white-space: nowrap; }
 .usage-table th.num { text-align: right; }
 
@@ -343,6 +345,7 @@
     padding: 5px 0; border-bottom: none;
     text-align: left; white-space: normal;
   }
+  .usage-table .skeleton-row td { padding-top: 7px; padding-bottom: 7px; }
   .usage-table td::before {
     content: attr(data-l);
     flex: none; min-width: 44px;

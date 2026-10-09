@@ -56,7 +56,6 @@
   border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   background: var(--panel-solid); color: var(--text); box-shadow: var(--shadow-lg);
 }
-.version-menu:popover-open { animation: version-reveal .14s ease-out; }
 .version-menu header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .version-menu header strong { font-size: 12px; font-weight: 500; }
 .version-check { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: calc(6px * var(--radius-scale)); background: transparent; color: var(--muted); }
@@ -116,7 +115,6 @@
 .update-notes-body :is(th, td) { padding: 4px 10px; border: 1px solid var(--line); text-align: left; }
 [data-update-check].checking svg { animation: version-spin 1s linear infinite; }
 @keyframes version-spin { to { transform: rotate(360deg); } }
-@keyframes version-reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 @media (min-width: 761px) {
   /* 68px 窄栏放不下版本号，收起时整块不显示，标题栏回到只有展开按钮的样子；
    * 有新版本时只在展开按钮角上留一个琥珀点，展开后从版本入口查看。 */
@@ -137,6 +135,6 @@
   .update-detail > div > p { max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .version-menu:popover-open, [data-update-check].checking svg { animation: none; }
+  [data-update-check].checking svg { animation: none; }
   .version-badge { transition: none; }
 }

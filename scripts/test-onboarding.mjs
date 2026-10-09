@@ -187,10 +187,11 @@ try{
     await page.keyboard.press('Escape');assert.equal(await page.locator('#workspace-guide').isVisible(),false);
     await page.reload();await page.locator('#app').waitFor({state:'visible'});
     assert.equal(await page.locator('#workspace-guide').isVisible(),false,'tour reopened after skipping and reload');
+    // The launcher already emulates reduced motion; the guide's popover transition must then be instant.
     await page.emulateMedia({reducedMotion:'reduce'});await replayGuide();
     assert.equal(await page.locator('#workspace-guide').evaluate(el=>getComputedStyle(el).animationName),'none');
+    assert.ok(await page.locator('#workspace-guide').evaluate(el=>getComputedStyle(el).transitionDuration.split(',').every(d=>parseFloat(d)===0)),'reduced motion still animates the guide');
     await page.locator('#guide-next').click();await page.locator('#guide-next').click();await page.locator('#guide-next').click();
-    await page.emulateMedia({reducedMotion:'no-preference'});
     assert.equal(await page.locator('#workspace-guide').isVisible(),false,'finished tour still occupies the workspace');
     if(locale==='en'){await mkdir('output/playwright',{recursive:true});await page.screenshot({path:`output/playwright/guide-dismissed-${role}.png`,animations:'disabled'});}
     await replayGuide();

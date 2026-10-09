@@ -3,6 +3,7 @@ import { S, bus, emit } from "./state.js";
 import { showView } from "./shell.js";
 import { $ } from "./util.js";
 import { decorateIcons } from "./icons.js";
+import { enter } from "./motion.js";
 export function openGitManagement(section = "guide") {
     emit("git-page-cleared");
     S.gitSec = ["guide", "profile", "connections"].includes(section) ? section : "guide";
@@ -22,6 +23,7 @@ export function openGitManagement(section = "guide") {
         renderGuide(content);
     else
         emit("git-section", { section: S.gitSec, host: content });
+    enter(content, 6, "--dur"); // 与设置分区切换同一种进场：内容整块替换，CSS 的 @starting-style 管不到
     content.focus({ preventScroll: true });
 }
 function renderGuide(host) {

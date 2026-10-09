@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Locale behavior against synthetic HTTP/WS only; no real users or model calls.
+import {reduceMotion} from './playwright-launch.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -200,6 +201,6 @@ export async function webI18nSmoke(browser) {
 }
 if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
  const {chromium}=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE?pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href:'playwright');
- const browser=await chromium.launch({headless:true});
+ const browser=reduceMotion(await chromium.launch({headless:true}));
  try {await webI18nSmoke(browser);} finally {await browser.close();}
 }

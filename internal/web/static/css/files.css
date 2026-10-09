@@ -32,6 +32,9 @@
   background: var(--panel);
   position: relative; z-index: 1;
 }
+/* 选中底块交给 ink.ts 的滑动条 */
+.scope-switch > .ink { background: var(--panel); border: 1px solid var(--line); border-radius: calc(6px * var(--radius-scale)); }
+.scope-switch[data-ink-ready] .scope-btn.active { background: transparent; border-color: transparent; }
 .scope-btn:focus-visible { outline-offset: -2px; }
 .scope-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -125,6 +128,9 @@
 .file-row.empty-dir { border-bottom: none; }
 .file-row .muted { color: var(--muted); font-style: normal; }
 .file-row .fperm { color: var(--muted); font-size: 12px; letter-spacing: 0; }
+/* 骨架行（files.ts）：高度对上真实的文件行，大小一列与数字一样靠右 */
+.file-row.skeleton-row { min-height: 35px; }
+.file-row.skeleton-row .fsize .skeleton { margin-left: auto; }
 .file-row .fsize { color: var(--muted); font-size: 12px; text-align: right; }
 .file-row .ftime { color: var(--muted); font-size: 12px; }
 .file-row .factions {

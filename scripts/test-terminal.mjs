@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Real xterm -> Docker PTY -> tmux -> Vim; synthetic API, no accounts/provider calls.
 // Build images/agent first; AGENTBOX_TERMINAL_IMAGE selects the image under test.
+import {reduceMotion} from './playwright-launch.mjs';
 import assert from 'node:assert/strict';
 import { createServer, request } from 'node:http';
 import { execFile, execFileSync } from 'node:child_process';
@@ -46,7 +47,7 @@ let browser, page;
 try {
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const {chromium} = await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href : 'playwright');
- browser = await chromium.launch({headless:true,...(process.env.AGENTBOX_BROWSER_CHANNEL ? {channel:process.env.AGENTBOX_BROWSER_CHANNEL}: {})});
+ browser = reduceMotion(await chromium.launch({headless:true,...(process.env.AGENTBOX_BROWSER_CHANNEL ? {channel:process.env.AGENTBOX_BROWSER_CHANNEL}: {})}));
  page = await browser.newPage({viewport:{width:1440,height:960}});
  page.setDefaultTimeout(15000);
  page.on('pageerror', err=>errors.push(err.message));

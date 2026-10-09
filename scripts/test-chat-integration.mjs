@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Real server/browser reliability matrix. Only the Docker/CLI boundary is synthetic.
+import {reduceMotion} from './playwright-launch.mjs';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,7 +10,7 @@ const h = await harness(); let browser, activePage;
 const errors = [], failedRequests = [];
 try {
  const { chromium } = await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href : 'playwright');
- browser = await chromium.launch({ headless: true, ...(process.env.AGENTBOX_BROWSER_CHANNEL ? { channel: process.env.AGENTBOX_BROWSER_CHANNEL } : {}) });
+ browser = reduceMotion(await chromium.launch({ headless: true, ...(process.env.AGENTBOX_BROWSER_CHANNEL ? { channel: process.env.AGENTBOX_BROWSER_CHANNEL } : {}) }));
  h.report.browser = browser.version();
  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
  const page = await context.newPage(); activePage = page; page.setDefaultTimeout(15000);

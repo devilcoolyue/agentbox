@@ -20,6 +20,7 @@ import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
+import { motionSmoke } from './test-motion.mjs';
 import {browserEngine,cancelledFetchError,launchBrowser} from './playwright-launch.mjs';
 
 export async function smoke(page) {
@@ -614,6 +615,7 @@ export async function smoke(page) {
   await page.reload();
   await at('#/sessions/fixture-space/files','#tab-files');
   await fileActionSmoke(page);
+  await motionSmoke(page,{sessions:()=>sessions,setSessions:list=>{sessions=list;}});
   await page.locator('#btn-home').click();
   await at('#/','#empty');
   await page.goBack();

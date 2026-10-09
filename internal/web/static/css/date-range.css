@@ -20,8 +20,6 @@
   background: var(--panel-solid); color: var(--text); border: 1px solid var(--line); border-radius: calc(14px * var(--radius-scale));
   box-shadow: var(--shadow-lg); font-size: 13px;
 }
-.date-range-popover:popover-open { animation: dr-enter 140ms ease-out; }
-@keyframes dr-enter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 .dr-presets { display: flex; gap: 6px; flex-wrap: wrap; padding-bottom: 15px; margin-bottom: 16px; border-bottom: 1px solid var(--line-soft); }
 .dr-presets button {
   padding: 6px 12px; border: 1px solid var(--line); border-radius: calc(7px * var(--radius-scale));
@@ -86,6 +84,5 @@
   .dr-presets button { padding: 5px 9px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .date-range-popover:popover-open { animation: none; }
   .date-range-trigger, .date-range-trigger > svg:last-child, .dr-bound, .dr-days button, .dr-presets button { transition: none; }
 }

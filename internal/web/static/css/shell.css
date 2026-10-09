@@ -361,6 +361,9 @@
 }
 .session-card:hover { background: var(--side-hover); }
 .session-card.active { background: var(--session-active-bg); border-color: var(--session-active-line); }
+/* 新出现的空间：底色从强调色淡回原样（shell.ts 的 newCard），只从 from 写起，终点就是当前底色 */
+.session-card.flash { animation: card-flash 1.2s var(--ease-out); }
+@keyframes card-flash { from { background-color: color-mix(in srgb, var(--accent) 26%, transparent); } }
 .session-card .agent-avatar { width: 20px; height: 20px; border: 0; border-radius: 0; background: none; }
 .session-card .agent-avatar .led { display: none; border-color: var(--panel); }
 .session-card.active .agent-avatar .led { border-color: var(--session-active-bg); }
@@ -516,6 +519,7 @@
   :root[data-sidebar-collapsed="true"] .session-card { height: 38px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .session-card.flash { animation: none; }
   .sidebar, .scrim, .side-new, .side-item, .session-card, .session-card::before, .session-card .agent-avatar, .side-collapse svg, .side-user-menu, .side-logout, .theme-options button { transition: none; }
 }
 
@@ -547,10 +551,13 @@
   display: flex; flex-direction: column; gap: 2px; padding: 4px;
   border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
   background: var(--panel-solid); box-shadow: var(--shadow-lg);
-  transform-origin: bottom right; animation: pref-menu-in 0.14s ease-out;
+  --pref-from: 4px;
+  transition: opacity var(--dur-fast) var(--ease-out), translate var(--dur-fast) var(--ease-out), display var(--dur-fast) allow-discrete;
 }
-.pref-picker.below .pref-menu { top: calc(100% + 4px); bottom: auto; transform-origin: top right; }
-.pref-menu[hidden] { display: none; }
+.pref-picker.below .pref-menu { top: calc(100% + 4px); bottom: auto; --pref-from: -4px; }
+/* 收起时多留一个过渡时长再 display:none（普通元素的离散过渡各浏览器都有，不像顶层弹层要 overlay） */
+.pref-menu[hidden] { display: none; opacity: 0; translate: 0 var(--pref-from); pointer-events: none; transition-timing-function: var(--ease-in); }
+@starting-style { .pref-menu:not([hidden]) { opacity: 0; translate: 0 var(--pref-from); } }
 /* 鼠标从箭头跨过空隙进菜单时仍算在这一行里 */
 .pref-picker.open::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 6px; }
 .pref-picker.open.below::before { top: 100%; bottom: auto; }
@@ -572,13 +579,11 @@
 }
 .pref-swatch[hidden] { display: none; }
 .pref-menu-item .pref-swatch { width: 18px; height: 18px; border-radius: calc(4px * var(--radius-scale)); }
-@keyframes pref-menu-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (pointer: coarse) {
   .pref-trigger { height: 36px; }
   .pref-menu-item { min-height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pref-menu { animation: none; }
   .pref-trigger svg { transition: none; }
 }
 html[lang="en"] .side-tools { grid-template-columns: 1fr; }

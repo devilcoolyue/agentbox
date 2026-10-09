@@ -11,6 +11,7 @@ import { sessionState } from "./session-state.js";
 import { filterWorkspaces, workspaceFilterActive } from "./features/workspaces/filter.js";
 import { mountPrefPicker } from "./pref-picker.js";
 import { SKINS, SKIN_LABEL, currentSkin, setSkin } from "./theme.js";
+import { ListMotion } from "./motion.js";
 /* ---- 侧栏：桌面收起偏好与移动抽屉各自独立 ---- */
 const narrowMQ = window.matchMedia("(max-width: 760px)");
 const sidebar = $("sidebar");
@@ -260,6 +261,10 @@ $("btn-settings").addEventListener("click", () => emit("open-settings"));
 $("btn-usagelog").addEventListener("click", () => emit("open-usage"));
 $("btn-tunnel").addEventListener("click", () => emit("open-tunnel"));
 /* ---- 侧栏：会话列表 ---- */
+/* 侧栏里新出现的空间（刚新建、别处新建后轮询到）底色闪一下，告诉你它落在了哪。
+ * 登录后第一次拿到的列表只记下、不闪；退出登录后重新记。 */
+const newCard = new ListMotion("flash", "card-flash", 1200);
+let cardsSettled = false;
 export function renderSidebar() {
     renderUserMenu();
     const list = $("session-list");
@@ -334,6 +339,8 @@ export function renderSidebar() {
         const open = () => emit("open-session", sess);
         card.addEventListener("click", open);
         list.appendChild(card);
+        if (cardsSettled)
+            newCard.play(card, sess.id);
         if (focusedID === sess.id)
             card.focus({ preventScroll: true });
     }
@@ -343,4 +350,11 @@ export function renderSidebar() {
     }
     list.scrollTop = scrollTop;
 }
-bus.addEventListener("data-updated", renderSidebar);
+bus.addEventListener("data-updated", () => {
+    if (!cardsSettled) {
+        newCard.settle(S.sessions.map((s) => s.id));
+        cardsSettled = true;
+    }
+    renderSidebar();
+});
+bus.addEventListener("signed-out", () => { newCard.reset(); cardsSettled = false; });

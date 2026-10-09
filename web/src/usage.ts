@@ -27,6 +27,7 @@ import { showView } from "./shell.js";
 import { fmtUSD } from "./quota.js";
 import { agentIcon, agentName } from "./brand.js";
 import { setTip } from "./tip.js";
+import { ListMotion } from "./motion.js";
 
 let pageSize = 20;
 
@@ -300,6 +301,32 @@ function tokenCell(r: UsageEventRow) {
   return td;
 }
 
+/* 明细行进场：换筛选、翻页后整页错落出现；「跟随当前时刻」轮询时只有新到的行进场 */
+const rowMotion = new ListMotion("enter", "list-enter");
+
+/* 骨架行：首次读取、换筛选、翻页时先铺几行占位，列数对上表头里显示着的列。
+ * 骨架整块晚 150ms 才淡入（base.css），读得快时根本看不到。 */
+function skeletonRows() {
+  const cols = [...document.querySelectorAll<HTMLElement>(".usage-table thead th")]
+    .filter((th) => !th.classList.contains("hidden")).length;
+  const rows = Array.from({ length: 6 }, (_, i) => {
+    const tr = document.createElement("tr");
+    tr.className = "skeleton-row";
+    tr.setAttribute("aria-hidden", "true");
+    for (let c = 0; c < cols; c++) {
+      const td = document.createElement("td");
+      const bar = document.createElement("span");
+      bar.className = "skeleton";
+      bar.style.width = `${45 + ((i * 7 + c * 13) % 40)}%`; // 长短错开，像真的数据
+      td.append(bar);
+      tr.append(td);
+    }
+    return tr;
+  });
+  $("usage-rows").replaceChildren(...rows);
+  $("usage-empty").classList.add("hidden");
+}
+
 function renderRows(data: UsageEvents) {
   const body = $("usage-rows");
   body.replaceChildren();
@@ -425,6 +452,7 @@ function renderRows(data: UsageEvents) {
     timev.append(document.createTextNode(stamp.slice(11)), day);
     tr.appendChild(time);
     body.appendChild(tr);
+    rowMotion.play(tr, String(r.id));
   }
 
   $("usage-empty").classList.toggle("hidden", data.rows.length > 0);
@@ -632,7 +660,9 @@ async function load() {
   if (loading) { loadPending = true; return; }
   loading = true;
   syncPagerBusy();
-  $("usage-loading").classList.remove("hidden");
+  // 没有能沿用的行（首次进入、换筛选、翻页）先铺骨架；轮询刷新保留现有行，读完原地更新
+  const blank = !last || resetScroll;
+  if (blank) { rowMotion.reset(); skeletonRows(); }
   const generation = usageGeneration;
   try {
     const f = readFilters();
@@ -670,11 +700,13 @@ async function load() {
       resetScroll = false;
     }
   } catch (e) {
-    if (generation === usageGeneration) toast(i18nText("读取使用记录失败：") + (e as Error).message, true);
+    if (generation === usageGeneration) {
+      if (blank && !loadPending) $("usage-rows").replaceChildren(); // 骨架别一直留着假装还在读
+      toast(i18nText("读取使用记录失败：") + (e as Error).message, true);
+    }
   } finally {
     loading = false;
     syncPagerBusy();
-    $("usage-loading").classList.add("hidden");
     if (loadPending) { loadPending = false; void load(); }
   }
 }
@@ -792,6 +824,7 @@ function clearUsageDisplay() {
   last = null;
   activeCost = null;
   loadPending = false;
+  rowMotion.reset();
   if (costDlg().open) costDlg().close();
   for (const id of ["usage-rows", "usage-summary", "usage-pages", "cost-head", "cost-rows", "cost-note"]) $(id).replaceChildren();
   for (const id of ["usage-page", "uf-active", "usage-sub"]) $(id).textContent = "";

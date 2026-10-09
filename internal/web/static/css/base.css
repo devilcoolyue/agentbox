@@ -88,6 +88,17 @@
   --panel-solid: var(--panel);
   --app-canvas: none;    /* 页面底下的背景层：玻璃色斑 / 蓝图网格 */
 
+  /* ---- 动效：新写的过渡与动画一律取这几档，「减少动态效果」时在文件末尾统一归零。
+   * 只动 opacity / transform / translate，不过渡会让周围重排的宽高与位置，长对话和终端旁
+   * 也不掉帧（滑动指示条是绝对定位的小块，过渡它自己的宽高不牵动别人，是唯一的例外）。 ---- */
+  --dur-fast: 120ms;  /* 悬停、按下、菜单与下拉 */
+  --dur: 180ms;       /* 弹窗、页面切入、滑块 */
+  --dur-slow: 260ms;  /* 抽屉、侧滑面板、展开收起 */
+  --ease-out: cubic-bezier(.2, .8, .2, 1);    /* 进场：快出慢停 */
+  --ease-in: cubic-bezier(.4, 0, 1, 1);       /* 退场：慢起快走 */
+  --ease-move: cubic-bezier(.4, 0, .2, 1);    /* 原地换位置：指示条、滑块 */
+  --enter-y: 6px;     /* 页面与弹窗进场的上移距离 */
+
   --claude: #d97757; /* Claude 官方陶土橙（simple-icons 品牌色） */
   --openai: #10a37f; /* ChatGPT 官方青绿 */
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
@@ -317,6 +328,7 @@ input[type="checkbox"]:disabled, input[type="radio"]:disabled { cursor: default;
   width: 9px; height: 9px; border-radius: 50%;
   background: var(--line);
   display: inline-block; flex: none;
+  transition: background-color var(--dur-slow) var(--ease-out); /* 顶栏的灯是常驻节点，亮灭渐变 */
 }
 .led.on {
   background: var(--green);
@@ -410,4 +422,107 @@ input[type="checkbox"]:disabled, input[type="radio"]:disabled { cursor: default;
   .led.on { animation: none; }
   .spin { animation: none; }
   .tip { transition: none; }
+}
+
+/* ============================================================================
+   动效公共件。令牌在 :root；这里放跨页面复用的几样：
+   页面切入、滑动指示条（ink.ts）、列表错落进场、骨架占位。
+   ========================================================================= */
+
+/* 视图、标签页、设置分区从 display:none 切到显示的那一帧，由 @starting-style 给出起点：
+ * 切换逻辑仍旧只切 .hidden，不用改一行脚本。只做进场不做退场——退场得让两份内容
+ * 同时在场，终端与长对话都经不起。
+ * 祖先从隐藏变显示时，里面的子孙也算「第一次出现」，会一起播：所以外层（主视图、
+ * 首页与工作台）只淡入，位移只给内层（标签页、设置分区），两层叠起来不会挪双份。
+ * 终端、远程浏览器只淡入不位移：动画那一下若正好量尺寸、换算点击坐标，会差几个像素。 */
+.view, #empty, #workbench { transition: opacity var(--dur) var(--ease-out); }
+.pane, .set-section, .mdl-panel {
+  transition: opacity var(--dur) var(--ease-out), translate var(--dur) var(--ease-out);
+}
+@starting-style {
+  .view, #empty, #workbench { opacity: 0; }
+  .pane, .set-section, .mdl-panel { opacity: 0; translate: 0 var(--enter-y); }
+  #tab-term, #tab-browser { translate: none; }
+}
+
+/* 顶层弹层（popover）：下拉、分区菜单、工具菜单、版本菜单、日期面板、分步引导。
+ * 进场淡入并从触发器一侧滑出 4px；退场同弹窗，只在支持 overlay 的浏览器上开（理由见 dialogs.css）。 */
+:is(.select-panel, .section-menu, .action-popover, .version-menu, .date-range-popover, .workspace-guide):popover-open {
+  transition: opacity var(--dur-fast) var(--ease-out), translate var(--dur-fast) var(--ease-out);
+}
+@starting-style {
+  :is(.select-panel, .section-menu, .action-popover, .version-menu, .date-range-popover, .workspace-guide):popover-open {
+    opacity: 0; translate: 0 var(--pop-from, -4px);
+  }
+}
+@supports (overlay: auto) {
+  :is(.select-panel, .section-menu, .action-popover, .version-menu, .date-range-popover, .workspace-guide) {
+    transition: opacity var(--dur-fast) var(--ease-in), translate var(--dur-fast) var(--ease-in),
+      overlay var(--dur-fast) allow-discrete, display var(--dur-fast) allow-discrete;
+  }
+  :is(.select-panel, .section-menu, .action-popover, .version-menu, .date-range-popover, .workspace-guide):not(:popover-open) {
+    opacity: 0; translate: 0 var(--pop-from, -4px); pointer-events: none;
+  }
+}
+
+/* 滑动指示条：ink.ts 量出选中项的位置写进 --ink-x/y/w/h，条本身只做 transform 与尺寸过渡。
+ * 宿主带 data-ink 并 position: relative；条的外观（下划线还是底块）由各组件自己写。 */
+[data-ink] { position: relative; }
+.ink {
+  position: absolute; left: 0; top: 0; z-index: 0;
+  width: var(--ink-w, 0); height: var(--ink-h, 0);
+  transform: translate(var(--ink-x, 0), var(--ink-y, 0));
+  pointer-events: none;
+  transition: transform var(--dur) var(--ease-move), width var(--dur) var(--ease-move), height var(--dur) var(--ease-move), opacity var(--dur-fast);
+}
+[data-ink-still] .ink { transition: none; }
+[data-ink]:not([data-ink-ready]) .ink { opacity: 0; }
+/* 选中项抬到条上面，文字不被底块盖住 */
+[data-ink] > :not(.ink) { position: relative; z-index: 1; }
+/* 差异/完整、认证方式这类分段按钮：各段原本自带底色，挂上滑块后底色交给宿主，
+ * 选中段的底色交给滑块（脚本没挂上时仍是原来的样子） */
+:is(.changes-view-tabs, .auth-modes)[data-ink] { background: var(--panel); }
+:is(.changes-view-tabs, .auth-modes)[data-ink] .seg { background: transparent; }
+:is(.changes-view-tabs, .auth-modes)[data-ink-ready] .seg.active { background: transparent; }
+:is(.changes-view-tabs, .auth-modes) > .ink { background: var(--panel-2); }
+
+/* 列表条目进场（首页卡片、使用记录行）：motion.ts 的 ListMotion 给新出现的条目加 .enter，
+ * 并改写动画的开始时刻做错落与「重绘后接着播」，这里只管动画本身。 */
+.enter { animation: list-enter var(--dur) var(--ease-out) both; }
+@keyframes list-enter { from { opacity: 0; translate: 0 var(--enter-y); } }
+
+/* 骨架占位：首次读取、换目录、换筛选时代替转圈，形状对上真实的行，数据到了整块替换。
+ * 整块晚 150ms 才淡入：读得快时根本不出现，不会先闪一下骨架再换成内容。 */
+.skeleton {
+  display: block; height: 0.9em; max-width: 100%; border-radius: calc(4px * var(--radius-scale));
+  background: linear-gradient(90deg, var(--panel-2) 0, color-mix(in srgb, var(--panel-2) 40%, var(--panel)) 50%, var(--panel-2) 100%) 0 0 / 200% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.skeleton-list, tbody:has(> .skeleton-row) { animation: skeleton-late var(--dur) var(--ease-out) 150ms both; }
+@keyframes skeleton-late { from { opacity: 0; } }
+.skeleton-row { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* 令牌归零：所有取令牌的过渡与动画一并静止，不必逐个组件再写一遍 */
+  :root { --dur-fast: 0s; --dur: 0s; --dur-slow: 0s; --enter-y: 0px; }
+  .enter { animation: none; }
+  .skeleton, .skeleton-list, tbody:has(> .skeleton-row) { animation: none; }
+}
+
+/* 展开收起：内容高度从 0 平滑过渡到 auto。要 interpolate-size 与 ::details-content，
+ * 目前只有 Chromium 系，其余浏览器照旧瞬间展开。内容区得 overflow-y: clip，贴边输入框的
+ * 焦点环会被切掉一截，所以只挂在纯文字/列表的折叠块上，带表单的（高级设置、剪贴板）不挂；
+ * 窄屏的分区说明 .section-help 收起时仍显示正文（responsive.css），也不能挂。 */
+@supports (interpolate-size: allow-keywords) and selector(::details-content) {
+  :is(details.think, details.raw, .learn-more, .price-fold, .price-history, .home-setup, .update-notes, .delivery-item) {
+    interpolate-size: allow-keywords;
+  }
+  :is(details.think, details.raw, .learn-more, .price-fold, .price-history, .home-setup, .update-notes, .delivery-item)::details-content {
+    block-size: 0; overflow-y: clip;
+    transition: block-size var(--dur-slow) var(--ease-move), content-visibility var(--dur-slow) allow-discrete;
+  }
+  :is(details.think, details.raw, .learn-more, .price-fold, .price-history, .home-setup, .update-notes, .delivery-item)[open]::details-content {
+    block-size: auto;
+  }
 }

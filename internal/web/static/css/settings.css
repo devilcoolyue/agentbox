@@ -38,6 +38,12 @@
   background: color-mix(in srgb, var(--amber) 10%, transparent);
   border-color: var(--amber-dim);
 }
+/* 选中底块交给 ink.ts 的滑动条，切换分区时从上一项滑过来 */
+.set-nav > .ink {
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border: 1px solid var(--amber-dim); border-radius: calc(7px * var(--radius-scale));
+}
+.set-nav[data-ink-ready] button.active { background: transparent; border-color: transparent; }
 .set-nav .count {
   margin-left: auto;
   font-family: var(--mono); font-size: 11px;
@@ -473,6 +479,7 @@
     background: var(--panel);
   }
   .set-nav button.active { border-color: var(--amber-dim); }
+  .set-nav > .ink { border-radius: var(--radius-pill); }
 
   .acct-row { grid-template-columns: minmax(0, 1fr); }
   .acct-actions { grid-row: auto; grid-column: 1; padding-top: 4px; flex-wrap: wrap; }

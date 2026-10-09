@@ -11,6 +11,7 @@ import { agentAvatar, agentName } from "./brand.js";
 import { fmtUSD } from "./quota.js";
 import { sessionState } from "./session-state.js";
 import { setTip } from "./tip.js";
+import { ListMotion } from "./motion.js";
 
 const RECENT = 6;
 const EXTRA_TTL = 60_000;
@@ -20,6 +21,8 @@ const EXTRA_TTL = 60_000;
 interface Extra { at: number; title?: string; updated?: string; cost?: number; failed?: boolean; }
 const extras = new Map<string, Extra>();
 const inflight = new Set<string>();
+/* 卡片进场：回到首页时整列错落出现；停在首页时轮询重绘不重播，新出现的空间单独进场 */
+const cardMotion = new ListMotion("enter", "list-enter");
 
 function homeVisible() {
   return S.view === "work" && !S.current && !$("empty").classList.contains("hidden");
@@ -115,11 +118,19 @@ export function renderHome() {
   const running = S.sessions.filter((s) => s.status === "running").length;
   setTextRender($("home-recent-sub"), () => i18nText("共 {p0} 个工作空间，{p1} 个运行中", { p0: String(S.sessions.length), p1: String(running) })
     + (S.sessions.length > RECENT ? i18nText("。这里列出最近的 {p0} 个，其余在左侧列表", { p0: String(RECENT) }) : ""));
-  $("home-list").replaceChildren(...list.map(card));
+  const cards = list.map(card);
+  $("home-list").replaceChildren(...cards);
+  cards.forEach((el, i) => cardMotion.play(el, list[i].id));
   if (homeVisible()) for (const sess of list) void loadExtra(sess);
+}
+
+/* 首页可见就重画；离开首页时忘掉已播过的卡片，下次回来整列重新进场 */
+function syncHome() {
+  if (homeVisible()) queueMicrotask(renderHome);
+  else cardMotion.reset();
 }
 
 $("home-new").addEventListener("click", () => $("btn-new").click());
 bus.addEventListener("data-updated", () => { if (homeVisible()) renderHome(); });
-bus.addEventListener("navigation-changed", () => { if (homeVisible()) queueMicrotask(renderHome); });
-bus.addEventListener("view-changed", () => { if (homeVisible()) queueMicrotask(renderHome); });
+bus.addEventListener("navigation-changed", syncHome);
+bus.addEventListener("view-changed", syncHome);

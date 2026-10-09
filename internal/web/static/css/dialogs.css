@@ -13,6 +13,29 @@ dialog {
   overflow-y: auto;
 }
 dialog::backdrop { background: var(--backdrop); }
+
+/* 进出场：打开时从下方一点、略小处淡入，背板同时淡入；关闭反向淡出。
+ * 进场靠 @starting-style，各浏览器都有。退场要让关掉的弹窗在顶层多留一个过渡时长
+ * （overlay + display 的离散过渡），只有支持 overlay 的浏览器才开：不支持时弹窗一关
+ * 就离开顶层，若还 display 着，会掉回文档流里原地闪一下。Safari、Firefox 因此关闭即消失。 */
+dialog { --dlg-from: translateY(8px) scale(.97); }
+dialog[open] { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
+dialog[open]::backdrop { transition: opacity var(--dur) var(--ease-out); }
+@starting-style {
+  dialog[open] { opacity: 0; transform: var(--dlg-from); }
+  dialog[open]::backdrop { opacity: 0; }
+}
+@supports (overlay: auto) {
+  dialog, dialog::backdrop {
+    transition: opacity var(--dur-fast) var(--ease-in), transform var(--dur-fast) var(--ease-in),
+      overlay var(--dur-fast) allow-discrete, display var(--dur-fast) allow-discrete;
+  }
+  /* 退场途中已不是模态框，不能再挡住底下页面的点击 */
+  dialog:not([open]) { opacity: 0; transform: var(--dlg-from); pointer-events: none; }
+  dialog:not([open])::backdrop { opacity: 0; }
+}
+@media (max-width: 760px) { dialog { --dlg-from: translateY(24px); } }
+
 dialog h2 { margin: 0 0 16px; font-size: 16px; }
 dialog form { display: flex; flex-direction: column; gap: 14px; }
 dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
@@ -155,6 +178,7 @@ dialog label.check input { margin: 0; flex: none; }
   overflow: hidden;
 }
 .dlg-img[open] { display: flex; flex-direction: column; }
+.dlg-img { --dlg-from: scale(.94); } /* 灯箱是从缩略图「放大」出来的，不做上移 */
 .dlg-img::backdrop { background: var(--backdrop-strong); }
 .dlg-img img {
   flex: 1; min-height: 0;

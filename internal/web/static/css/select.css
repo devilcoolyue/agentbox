@@ -29,7 +29,7 @@
   font-family: var(--sans); font-size: 13px; line-height: 1.5;
   overflow: hidden;
 }
-.select-panel:popover-open { display: flex; flex-direction: column; animation: select-enter 120ms ease-out; }
+.select-panel:popover-open { display: flex; flex-direction: column; }
 .select-panel::backdrop { background: transparent; }
 .select-panel .select-search {
   flex: none; width: calc(100% - 8px); min-height: 36px; margin: 4px 4px 8px;
@@ -56,10 +56,8 @@
 .select-panel-compact { padding: 4px; border-radius: calc(8px * var(--radius-scale)); font-size: 12px; line-height: 18px; }
 .select-panel-compact .select-option { min-height: 30px; padding: 6px 28px 6px 9px; border-radius: calc(5px * var(--radius-scale)); }
 .select-panel-compact .select-option[aria-selected="true"]::after { right: 11px; top: 50%; transform: translateY(-65%) rotate(-45deg); }
-@keyframes select-enter { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
 @media (pointer: coarse) { .select-option { min-height: 38px; padding-top: 9px; padding-bottom: 9px; } }
 @media (pointer: coarse) { .select-panel-compact .select-option { min-height: 38px; padding-top: 9px; padding-bottom: 9px; } }
 @media (prefers-reduced-motion: reduce) {
   .select-trigger, .select-caret { transition: none; }
-  .select-panel:popover-open { animation: none; }
 }

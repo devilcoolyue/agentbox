@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Git UI regression against synthetic API responses. No Docker or real Git credentials.
+import {reduceMotion} from './playwright-launch.mjs';
 import assert from 'node:assert/strict';
 import { assertActionIcons } from './test-actions.mjs';
 import { createServer } from 'node:http';
@@ -411,6 +412,6 @@ export async function smoke(page) {
 }
 if(process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
  const {chromium}=await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE?pathToFileURL(process.env.AGENTBOX_PLAYWRIGHT_MODULE).href:'playwright');
- const browser=await chromium.launch({headless:true,...(process.env.AGENTBOX_BROWSER_CHANNEL?{channel:process.env.AGENTBOX_BROWSER_CHANNEL}:{})});
+ const browser=reduceMotion(await chromium.launch({headless:true,...(process.env.AGENTBOX_BROWSER_CHANNEL?{channel:process.env.AGENTBOX_BROWSER_CHANNEL}:{})}));
  try {await smoke(await browser.newPage());} finally {await browser.close();}
 }

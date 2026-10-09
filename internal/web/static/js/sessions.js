@@ -21,6 +21,7 @@ import { showBrowser, browserDisconnect } from "./remote-browser.js";
 import { setTip } from "./tip.js";
 import { bindMenu } from "./menu.js";
 import { sessionState } from "./session-state.js";
+import { ListMotion } from "./motion.js";
 import { renderHome } from "./home.js";
 import { actionButton } from "./icons.js";
 /* ---------------- 打开 / 切换 ---------------- */
@@ -54,6 +55,26 @@ export async function openSession(sess, tab) {
     if (S.current?.id === sess.id)
         connectChat();
 }
+/* 运行状态刚变（启动完成、停止、空闲休眠）时，状态字与头像角灯提示一下。只盯当前打开的空间：
+ * 打开、切换空间时看到的状态不算「变化」。头部随轮询整块重建，ListMotion 按「第几次变化」
+ * 接着播，不会被紧跟着的重绘掐断。 */
+const stateText = new ListMotion("state-changed", "state-text", 700);
+const stateLed = new ListMotion("state-changed", "state-led", 700);
+let headState = { id: "", cls: "", changes: 0 };
+function stateChangeKey(id, cls) {
+    if (headState.id !== id) {
+        headState = { id, cls, changes: 0 };
+        stateText.reset();
+        stateLed.reset();
+        stateText.settle(["0"]);
+        stateLed.settle(["0"]);
+    }
+    else if (headState.cls !== cls) {
+        headState.cls = cls;
+        headState.changes++;
+    }
+    return String(headState.changes);
+}
 export function renderHead() {
     const sess = S.current;
     if (!sess)
@@ -81,6 +102,9 @@ export function renderHead() {
     setTextRender(st, () => sessionState(sess).label);
     setTip(st, () => sessionState(sess).tip);
     meta.append(an, document.createTextNode(` · ${sess.account_label} · `), st, document.createTextNode(" · "), id);
+    const changeKey = stateChangeKey(sess.id, state.cls);
+    stateText.play(st, changeKey);
+    stateLed.play(av.querySelector(".led"), changeKey);
     // 技能是 Claude Code 的机制，codex 会话没有对应目录，页签直接藏掉
     const claude = agentKey(sess.agent) === "claude";
     $("tab-btn-skills").classList.toggle("hidden", !claude);

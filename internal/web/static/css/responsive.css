@@ -32,7 +32,7 @@
   border: 1px solid var(--line); border-radius: calc(12px * var(--radius-scale));
   background: var(--panel-solid); color: var(--text); box-shadow: var(--shadow-lg);
 }
-.section-menu:popover-open { display: flex; flex-direction: column; gap: 2px; animation: select-enter 120ms ease-out; }
+.section-menu:popover-open { display: flex; flex-direction: column; gap: 2px; }
 .section-menu::backdrop { background: transparent; }
 .section-menu-item {
   display: flex; align-items: center; gap: 12px; flex: none;
@@ -52,7 +52,6 @@
 .section-menu-item[aria-checked="true"] :is(.ui-icon, .count) { color: var(--amber); }
 .section-menu-item[aria-checked="true"] .count { border-color: var(--amber-dim); }
 .section-menu-item:disabled { opacity: .4; cursor: not-allowed; }
-@media (prefers-reduced-motion: reduce) { .section-menu:popover-open { animation: none; } }
 .fv-head { display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 6px 12px; }
 .fv-title { min-width: 0; gap: 10px; }
 .fv-name { max-width: 70%; flex-shrink: 1; }
@@ -163,10 +162,6 @@
   .tun-body { padding: 16px; }
   .user-row .u-actions { gap: 4px; }
   .px-head-actions { width: auto; }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .action-popover:popover-open { animation: tool-menu-in 120ms ease-out; }
-  @keyframes tool-menu-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
 }
 
 /* Narrow desktop/tablet windows retain navigation without squeezing forms into

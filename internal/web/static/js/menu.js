@@ -5,6 +5,7 @@ import { t as i18nText, setAttrRender } from "./i18n.js";
 "use strict";
 import { svgIcon } from "./icons.js";
 import { hideTip } from "./tip.js";
+import { enter, leave } from "./motion.js";
 let current = null;
 let dismissedAt = -Infinity;
 export function closeMenu(focusButton = false) {
@@ -12,7 +13,8 @@ export function closeMenu(focusButton = false) {
         return;
     const { pop, btn } = current;
     current = null;
-    pop.remove();
+    // 淡出期间节点还在，但已经 inert、也不再是 current：点击和键盘都落不到它身上
+    leave(pop, () => pop.remove(), pop.dataset.side === "top" ? 4 : -4);
     btn?.setAttribute("aria-expanded", "false");
     if (focusButton)
         btn?.focus();
@@ -29,6 +31,7 @@ function place(pop, btn) {
         top = r.top - gap - h;
     pop.style.left = left + "px";
     pop.style.top = Math.max(edge, top) + "px";
+    pop.dataset.side = top < r.top ? "top" : "bottom";
 }
 function buildMenu(items) {
     const pop = document.createElement("div");
@@ -74,6 +77,7 @@ export function openMenu(btn, items) {
     hideTip(); // 菜单本身就写明了每一项，按钮的「更多操作」气泡会盖住第一行
     current = { pop, btn };
     place(pop, btn);
+    enter(pop, pop.dataset.side === "top" ? 4 : -4); // 从按钮一侧滑出
     pop.querySelector("button:not(:disabled)")?.focus({ preventScroll: true });
 }
 /* 在手指长按处弹出（终端里长按粘贴）：浮在手指上方居中，免得被手指挡住。不挪焦点，点菜单项
@@ -89,6 +93,8 @@ export function openMenuAt(x, y, items) {
     const top = y - gap - h >= edge ? y - gap - h : Math.min(y + gap, innerHeight - h - edge);
     pop.style.left = Math.max(edge, Math.min(x - w / 2, innerWidth - w - edge)) + "px";
     pop.style.top = Math.max(edge, top) + "px";
+    pop.dataset.side = top < y ? "top" : "bottom";
+    enter(pop, pop.dataset.side === "top" ? 4 : -4);
 }
 /* 「⋯」按钮：items 每次打开时重新取，禁用/隐藏状态随当前数据走。 */
 export function moreButton(items, label = () => i18nText("更多操作")) {

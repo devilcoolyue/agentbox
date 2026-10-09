@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // 100 synthetic workspaces in a real browser. No Docker/provider calls.
+import {reduceMotion} from './playwright-launch.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
@@ -23,7 +24,7 @@ const { chromium } = await import(process.env.AGENTBOX_PLAYWRIGHT_MODULE ? pathT
 let browser;
 const report = { device: { platform: platform(), arch: arch(), cpu: cpus()[0]?.model }, browser: '', scope: 'Synthetic API, 100 workspaces; local headless measurements, not agreed device acceptance', locales: [] };
 try {
-  browser = await chromium.launch({ headless: true, ...(process.env.AGENTBOX_BROWSER_CHANNEL ? { channel: process.env.AGENTBOX_BROWSER_CHANNEL } : {}) });
+  browser = reduceMotion(await chromium.launch({ headless: true, ...(process.env.AGENTBOX_BROWSER_CHANNEL ? { channel: process.env.AGENTBOX_BROWSER_CHANNEL } : {}) }));
   report.browser = browser.version();
   await mkdir("output/playwright", { recursive: true });
   for (const locale of ['zh-CN', 'zh-TW', 'en']) {

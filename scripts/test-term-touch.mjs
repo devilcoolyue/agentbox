@@ -43,11 +43,14 @@ export async function terminalTouchSmoke(page, {send, input}) {
   from = input().length;
   await drag(500, 300);
   assert.equal(reports(await sentSince(from), 65), Math.floor(200 / step), 'drag up sends wheel-down reports');
-  // A quick flick keeps scrolling after the finger lifts.
+  // A quick flick keeps scrolling after the finger lifts. Momentum is motion, so it needs
+  // motion enabled (the launcher emulates reduced motion, under which a flick stops at once).
+  await page.emulateMedia({reducedMotion:'no-preference'});
   from = input().length;
   await drag(600, 450, 0, 4);
   await page.waitForTimeout(2000);
   const flicked = reports(await sentSince(from), 65);
+  await page.emulateMedia({reducedMotion:'reduce'});
   assert.ok(flicked > Math.floor(150 / step), `flick keeps scrolling (${flicked} reports)`);
 
   // Two fingers stay with the browser (pinch zoom); one finger never pans the page.

@@ -8,6 +8,7 @@ import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js"
 "use strict";
 import { actionButton, buttonLabel, fileIconName, svgIcon } from "./icons.js";
 import { setSelectValue } from "./select.js";
+import { trackInk } from "./ink.js";
 import { S } from "./state.js";
 import { $, spinEl, toast, askConfirm, fmtBytes, fmtSize, fmtTime, btnBusy, btnDone, startDownload, } from "./util.js";
 import { api, skillFileURL } from "./api.js";
@@ -488,6 +489,7 @@ function docView(label, content, truncated, skipMeta) {
         sw.appendChild(b);
     }
     bar.append(labelEl, sw);
+    trackInk(sw);
     const view = document.createElement("div");
     const tail = truncated ? i18nText("\n…（内容过长，已截断）") : "";
     const paint = () => {

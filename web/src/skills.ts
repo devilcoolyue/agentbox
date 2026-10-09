@@ -10,6 +10,7 @@ import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js"
 import { actionButton, buttonLabel, fileIconName, svgIcon } from "./icons.js";
 
 import { setSelectValue } from "./select.js";
+import { trackInk } from "./ink.js";
 
 import { S } from "./state.js";
 import type {
@@ -526,6 +527,7 @@ function docView(label: string, content: string, truncated: boolean, skipMeta: b
     sw.appendChild(b);
   }
   bar.append(labelEl, sw);
+  trackInk(sw);
 
   const view = document.createElement("div");
   const tail = truncated ? i18nText("\n…（内容过长，已截断）") : "";
