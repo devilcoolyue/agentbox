@@ -78,8 +78,8 @@ func TestOnboardingIsActorScopedAndDoesNotClaimModelAvailability(t *testing.T) {
 		var accounts []map[string]any
 		_ = json.Unmarshal(keys["accounts"], &accounts)
 		for _, account := range accounts {
-			if len(account) != 4 {
-				t.Fatal("account projection gained private fields")
+			if len(account) != 5 || account["default_model"] != s.cfg.GetDefaultModel(account["type"].(string)) {
+				t.Fatal("account projection gained private fields or lost the new-workspace model", account)
 			}
 		}
 	}
@@ -96,6 +96,19 @@ func TestOnboardingIsActorScopedAndDoesNotClaimModelAvailability(t *testing.T) {
 	}
 	if updated.DefaultModels[config.AgentClaude] != "claude-sonnet-5" {
 		t.Fatal("guide returned stale defaults")
+	}
+	// An account with its own model list starts new workspaces on its default.
+	relayDefault := "relay-b"
+	if _, err := s.cfg.UpdateAccount("shared", config.AccountPatch{Models: &[]config.ModelOption{{ID: "relay-a"}, {ID: "relay-b"}}, DefaultModel: &relayDefault}); err != nil {
+		t.Fatal(err)
+	}
+	listed := httptest.NewRecorder()
+	request = httptest.NewRequest("GET", "/api/onboarding", nil)
+	request.Header.Set("Authorization", "Bearer setup-alice")
+	handler.ServeHTTP(listed, request)
+	var own onboardingView
+	if err := json.Unmarshal(listed.Body.Bytes(), &own); err != nil || len(own.Accounts) != 1 || own.Accounts[0].DefaultModel != "relay-b" {
+		t.Fatal("account model list not used for new workspaces", listed.Body.String())
 	}
 	if err := s.cfg.RemoveAccount("shared"); err != nil {
 		t.Fatal(err)

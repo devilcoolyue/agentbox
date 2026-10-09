@@ -61,7 +61,9 @@ func (s *Service) SwitchAccount(ctx context.Context, id, accountID string, relea
 	var updated store.Session
 	err = release(ctx, cur, func() error {
 		var err error
-		updated, err = s.store.Update(id, func(x *store.Session) { x.AccountID = accountID })
+		// A model the new account does not offer would be rejected by every
+		// turn; start from the new account's default instead.
+		updated, err = s.store.Update(id, func(x *store.Session) { x.AccountID = accountID; x.DefaultModel = acct.ResolveModel(x.DefaultModel) })
 		return err
 	})
 	if err != nil {

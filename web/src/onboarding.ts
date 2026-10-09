@@ -7,7 +7,8 @@ import type {OnboardingSnapshot,DiagnosticReport,BrowserDiagnosticCheck} from ".
 
 export function openSetupSettings(section:"accounts"|"models") {
   if(S.role!=="admin")return;
-  S.sec=section;emit("open-settings");
+  // The default model for new workspaces is on the system model list tab.
+  S.sec=section;if(section==="models")S.modelTab="system";emit("open-settings");
 }
 
 /** One authenticated lifetime owns the guide, requests and observations. */

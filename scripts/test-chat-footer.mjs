@@ -28,7 +28,7 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  assert.match(await details(footers.first()),/模型claude-history/);
  assert.match(await details(footers.first()),/推理强度未记录/);
  assert.match(await details(footers.last()),/模型gpt-5.5/);
- assert.match(await details(footers.last()),/推理强度高/);
+ assert.match(await details(footers.last()),/推理强度High/);
  assert.match(await footers.last().innerText(),/2026-09-26 08:22/);
  assert.doesNotMatch(await footers.last().innerText(),/gpt-5.5/,'model belongs in the details');
  assert.equal(await footers.last().locator('.answer-cost').isVisible(),true);
@@ -127,7 +127,7 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  emit({type:'status',state:'idle'});
  await page.waitForFunction(()=>document.querySelector('#chat-log .turn:last-child')?.textContent.includes('Replay answer two.') && !document.querySelector('#chat-log .streaming'));
  assert.match(await details(footers.last()),/exec-model/);
- assert.match(await details(footers.last()),/推理强度极高/);
+ assert.match(await details(footers.last()),/推理强度Extra High/);
  emit({type:'turn_cost',cost:{turn_id:'replay',cost_micro_usd:1234,source:'table'}});
  await footers.last().locator('.answer-cost').filter({hasText:'$0.0012'}).waitFor();
  await footers.last().getByRole('button',{name:'复制回答',exact:true}).click();

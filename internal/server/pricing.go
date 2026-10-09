@@ -29,6 +29,9 @@ type pricingView struct {
 	Warnings          []pricingWarning    `json:"warnings"`
 	WarningsTruncated bool                `json:"warnings_truncated"`
 	WarningError      string              `json:"warning_error,omitempty"`
+	// Price keys that models in use resolve to (exact, undated or agent
+	// fallback): what the editor shows when filtering to models in use.
+	InUse []string `json:"in_use"`
 }
 
 type pricingWarning struct {
@@ -82,7 +85,7 @@ func (s *Server) pricingView() pricingView {
 	active := s.cfg.PricingState()
 	candidate := s.priceCatalog().Snapshot(active.Catalog.URL)
 	v := pricingView{Active: active, Candidate: candidate, Changes: pricingChanges(active, candidate.Catalog), Warnings: []pricingWarning{}}
-	seen := map[string]bool{}
+	seen, inUse := map[string]bool{}, map[string]bool{}
 	add := func(agent, model string) {
 		id := agent + "/" + model
 		if seen[id] {
@@ -90,6 +93,9 @@ func (s *Server) pricingView() pricingView {
 		}
 		seen[id] = true
 		_, key, ok := config.LookupPrice(active.Prices, agent, model)
+		if ok {
+			inUse[key] = true
+		}
 		if ok && key != agent {
 			return
 		}
@@ -98,6 +104,24 @@ func (s *Server) pricingView() pricingView {
 			kind = "fallback"
 		}
 		v.Warnings = append(v.Warnings, pricingWarning{Agent: agent, Model: model, Kind: kind, Key: key})
+	}
+	// What chat can offer: every account's own models, and the system list
+	// for agent types that still have an account without one.
+	systemList := map[string]bool{}
+	for _, acct := range s.cfg.AccountList() {
+		for _, m := range acct.Models {
+			add(acct.Type, m.ID)
+		}
+		if !acct.RestrictsModels() {
+			systemList[acct.Type] = true
+		}
+	}
+	for agent, models := range s.cfg.GetModels() {
+		if systemList[agent] {
+			for _, m := range models {
+				add(agent, m.ID)
+			}
+		}
 	}
 	for agent, model := range s.cfg.GetDefaultModels() {
 		add(agent, model)
@@ -116,6 +140,11 @@ func (s *Server) pricingView() pricingView {
 	sort.Slice(v.Warnings, func(i, j int) bool {
 		return v.Warnings[i].Agent+v.Warnings[i].Model < v.Warnings[j].Agent+v.Warnings[j].Model
 	})
+	v.InUse = make([]string, 0, len(inUse))
+	for key := range inUse {
+		v.InUse = append(v.InUse, key)
+	}
+	sort.Strings(v.InUse)
 	return v
 }
 

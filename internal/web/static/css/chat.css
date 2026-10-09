@@ -739,7 +739,14 @@ details.think.streaming .think-body::after {
   font-size: 11px;
   padding: 5px 11px 6px;
 }
-.pick-sep { border-top: 1px solid var(--line); margin: 5px 0; }
+/* Claude 面板底部的强度行：固定在面板底边，模型再多也不用滚到最下面才能找到。
+ * 负外边距盖住面板内边距，滚动中的列表不会从它下面露出来。 */
+.pick-foot {
+  position: sticky; bottom: -6px; z-index: 1;
+  margin: 5px -6px -6px; padding: 5px 6px 6px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-solid);
+}
 
 /* 主面板行：模型 / 推理强度 → 悬停浮层 */
 .pick-row {

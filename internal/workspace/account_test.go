@@ -18,7 +18,7 @@ func switchFixture(t *testing.T) (*Service, *fakeRuntime, store.Session) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	sess := store.Session{ID: "s1", User: "alice", Agent: config.AgentClaude, AccountID: "previous", ContainerID: "cid", Status: store.StatusRunning, ChatSession: "provider-thread"}
+	sess := store.Session{ID: "s1", User: "alice", Agent: config.AgentClaude, AccountID: "previous", ContainerID: "cid", Status: store.StatusRunning, ChatSession: "provider-thread", DefaultModel: "claude-opus-5"}
 	if err := st.Put(sess); err != nil {
 		t.Fatal(err)
 	}
@@ -26,6 +26,7 @@ func switchFixture(t *testing.T) (*Service, *fakeRuntime, store.Session) {
 		"previous": {ID: "previous", Type: config.AgentClaude},
 		"next":     {ID: "next", Type: config.AgentClaude},
 		"codex":    {ID: "codex", Type: config.AgentCodex},
+		"listed":   {ID: "listed", Type: config.AgentClaude, Models: []config.ModelOption{{ID: "relay-a"}, {ID: "relay-b"}}, DefaultModel: "relay-b"},
 	}
 	runtime := &fakeRuntime{running: true}
 	service := New(&config.Config{DataDir: root}, st, runtime, func(s store.Session) (config.Account, error) {
@@ -96,5 +97,23 @@ func TestSwitchAccountRejectsAndFailsWithoutRebinding(t *testing.T) {
 	}
 	if _, err := s.SwitchAccount(t.Context(), "gone", "next", never); !errors.Is(err, ErrSessionGone) {
 		t.Fatalf("missing workspace: %v", err)
+	}
+}
+
+func TestSwitchAccountMovesDefaultModelIntoTheNewAccountList(t *testing.T) {
+	s, _, sess := switchFixture(t)
+	rebind := func(_ context.Context, _ store.Session, rebind func() error) error { return rebind() }
+	// An account without its own list keeps the workspace model.
+	updated, err := s.SwitchAccount(t.Context(), sess.ID, "next", rebind)
+	if err != nil || updated.DefaultModel != "claude-opus-5" {
+		t.Fatalf("model changed for an unrestricted account: %+v %v", updated, err)
+	}
+	// A list without the model moves the workspace to the account default.
+	updated, err = s.SwitchAccount(t.Context(), sess.ID, "listed", rebind)
+	if err != nil || updated.DefaultModel != "relay-b" {
+		t.Fatalf("model outside the new account's list kept: %+v %v", updated, err)
+	}
+	if cur, _ := s.store.Get(sess.ID); cur.DefaultModel != "relay-b" {
+		t.Fatalf("stored model = %q", cur.DefaultModel)
 	}
 }

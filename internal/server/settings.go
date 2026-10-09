@@ -145,8 +145,10 @@ func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 		ProxyID        string                                 `json:"proxy_id"`
 		Access         *config.AccountAccess                  `json:"access"`
 		ModelReasoning *map[string]config.ReasoningCapability `json:"model_reasoning"`
+		Models         []config.ModelOption                   `json:"models"`
+		DefaultModel   string                                 `json:"default_model"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
@@ -175,6 +177,7 @@ func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 	acct := config.Account{
 		ID: req.ID, Type: req.Type, Label: req.Label,
 		CredentialsDir: credDir, Env: req.Env, Access: req.Access, ProxyID: req.ProxyID,
+		Models: req.Models, DefaultModel: req.DefaultModel,
 	}
 	if req.ModelReasoning != nil {
 		acct.ModelReasoning = *req.ModelReasoning
@@ -182,6 +185,9 @@ func (s *Server) handleAccountCreate(w http.ResponseWriter, r *http.Request) {
 	if err := s.cfg.AddAccount(acct); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	if saved, ok := s.cfg.Account(acct.ID); ok {
+		acct = saved // validation fills in model labels and the default
 	}
 	writeJSON(w, http.StatusCreated, s.accountView(acct, 0))
 }
@@ -198,8 +204,11 @@ func (s *Server) handleAccountPatch(w http.ResponseWriter, r *http.Request) {
 		ProxyID        *string                                `json:"proxy_id"`
 		Access         *config.AccountAccess                  `json:"access"`
 		ModelReasoning *map[string]config.ReasoningCapability `json:"model_reasoning"`
+		// models 整表替换，[] 恢复使用系统模型列表；省略或 null 保持不变。
+		Models       *[]config.ModelOption `json:"models"`
+		DefaultModel *string               `json:"default_model"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
 		return
 	}
@@ -207,7 +216,17 @@ func (s *Server) handleAccountPatch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	patch := config.AccountPatch{Access: req.Access, ModelReasoning: req.ModelReasoning}
+	patch := config.AccountPatch{Access: req.Access, ModelReasoning: req.ModelReasoning, Models: req.Models, DefaultModel: req.DefaultModel}
+	if req.Models != nil && req.DefaultModel == nil {
+		// Keep the current default while the new list still shows it; otherwise
+		// the first shown model becomes the default.
+		next := config.Account{Models: *req.Models}
+		def := ""
+		if len(*req.Models) > 0 && next.ShowsModel(acct.DefaultModel) {
+			def = acct.DefaultModel
+		}
+		patch.DefaultModel = &def
+	}
 	if req.Label != nil {
 		label := strings.TrimSpace(*req.Label)
 		if label == "" {

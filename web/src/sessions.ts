@@ -75,18 +75,20 @@ export function renderHead() {
   const id = document.createElement("span");
   id.className = "mono";
   id.textContent = "#" + sess.id;
-  meta.append(an, document.createTextNode(` · ${sess.account_label} · `), id);
+  // 运行状态写在账号后面，与侧栏「账号 · 运行中」同一口径；按钮区只留启动/停止与 ⋯
+  const state = sessionState(sess);
+  const st = document.createElement("span");
+  st.id = "wb-state";
+  st.className = "wb-state " + state.cls;
+  setTextRender(st, () => sessionState(sess).label);
+  setTip(st, () => sessionState(sess).tip);
+  meta.append(an, document.createTextNode(` · ${sess.account_label} · `), st, document.createTextNode(" · "), id);
   // 技能是 Claude Code 的机制，codex 会话没有对应目录，页签直接藏掉
   const claude = agentKey(sess.agent) === "claude";
   $("tab-btn-skills").classList.toggle("hidden", !claude);
  $("tab-btn-mcp").classList.toggle("hidden", !claude);
   if (!claude && (S.tab === "skills" || S.tab === "mcp")) setTab("chat");
   const running = sess.status === "running";
-  const state = sessionState(sess);
-  const pill = $("wb-state");
-  pill.className = "state-pill " + state.cls;
-  setTextRender(pill, () => sessionState(sess).label);
-  setTip(pill, () => sessionState(sess).tip);
   if (!S.actionBusy) { // 启动/停止执行中由按钮自己管理，轮询刷新不得把另一个按钮换回来
     $("btn-start").classList.toggle("hidden", running);
     $("btn-stop").classList.toggle("hidden", !running);
@@ -197,7 +199,7 @@ function sessionMenu(withPower: boolean): MenuItem[] {
     { label: i18nText("使用指引"), icon: "bulb", run: () => emit("workspace-guide-open"), sep: true },
     { label: i18nText("环境检查"), icon: "activity", run: () => openDiagnostics(s.id), sep: true },
     { label: i18nText("查看账号额度"), icon: "gauge", run: openAcctUsage, hidden: agentKey(s.agent) !== "claude", sep: true, tip: i18nText("该账号订阅的 5 小时 / 每周用量窗口") },
-    { label: i18nText("切换账号…"), icon: "key", run: openSwitchAccount, sep: agentKey(s.agent) !== "claude", disabled: S.actionBusy, tip: i18nText("改用同类型的另一个账号，文件与对话保留") },
+    { label: i18nText("切换账号…"), icon: "switch", run: openSwitchAccount, sep: agentKey(s.agent) !== "claude", disabled: S.actionBusy, tip: i18nText("改用同类型的另一个账号，文件与对话保留") },
     { label: i18nText("重命名"), icon: "rename", run: renameSession },
     { label: i18nText("删除工作空间…"), icon: "trash", danger: true, sep: true, run: openDeleteDlg, disabled: S.actionBusy },
   ];

@@ -308,9 +308,8 @@
               <h1 id="wb-name"></h1>
               <span id="wb-meta" class="wb-meta"></span>
             </div>
-            <!-- 状态 + 一个随状态切换的启动/停止；额度、重命名、删除收进 ⋯，与窄屏顶栏共用 -->
+            <!-- 运行状态在标题旁的说明行里；这里只放随状态切换的启动/停止，额度、重命名、删除收进 ⋯，与窄屏顶栏共用 -->
             <div class="wb-actions">
-              <span id="wb-state" class="state-pill"></span>
               <button id="btn-start" class="btn btn-sm btn-primary" data-icon="play" aria-label="启动工作空间" data-tip="启动工作空间" data-i18n-text="[&quot;启动&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;启动工作空间&quot;,&quot;data-tip&quot;:&quot;启动工作空间&quot;}">启动</button>
               <button id="btn-stop" class="btn btn-sm" data-icon="stop" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话" data-i18n-text="[&quot;停止&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;停止工作空间&quot;,&quot;data-tip&quot;:&quot;停止工作空间，保留文件与对话&quot;}">停止</button>
               <button id="btn-wb-more" class="btn btn-sm" data-icon="more" aria-label="工作空间更多操作" aria-haspopup="menu" aria-expanded="false" data-tip="更多操作" data-i18n-attrs="{&quot;aria-label&quot;:&quot;工作空间更多操作&quot;,&quot;data-tip&quot;:&quot;更多操作&quot;}"></button>
@@ -674,7 +673,6 @@
             <button data-sec="proxies" data-icon="network" data-i18n-text="[&quot;IP 代理 &quot;]">IP 代理 <span id="proxy-count" class="count">0</span></button>
             <button data-sec="container" data-icon="box" data-i18n-text="[&quot;容器与资源&quot;]">容器与资源</button>
             <button data-sec="models" data-icon="cpu" data-i18n-text="[&quot;模型管理&quot;]">模型管理</button>
-            <button data-sec="pricing" data-icon="wallet" data-i18n-text="[&quot;价目表 &quot;]">价目表 <span id="price-count" class="count">0</span></button>
             <button data-sec="interface" data-icon="sliders" data-i18n-text="[&quot;界面与提示&quot;]">界面与提示</button>
             <button data-sec="security" data-icon="shield" data-i18n-text="[&quot;安全与访问&quot;]">安全与访问</button>
             <button data-sec="monitor" data-icon="activity" data-i18n-text="[&quot;运维监控&quot;]">运维监控</button>
@@ -850,109 +848,128 @@
               <div class="sec-intro">
                 <div>
                   <h2 data-i18n-text="[&quot;模型管理&quot;]">模型管理</h2>
-                  <p data-i18n-text="[&quot;分别设置两种 Agent 的默认模型，新建工作空间时生效。也可以维护对话中的可选模型。&quot;]">分别设置两种 Agent 的默认模型，新建工作空间时生效。也可以维护对话中的可选模型。</p>
+                  <p data-i18n-text="[&quot;对话中可选的模型、思考强度和计费单价。&quot;]">对话中可选的模型、思考强度和计费单价。</p>
                 </div>
               </div>
-              <div class="card">
-                <h3 data-agent="claude">Claude Code</h3>
-                <div class="model-default">
-                  <label for="mdl-claude-default" data-i18n-text="[&quot;新空间默认模型&quot;]">新空间默认模型</label>
-                  <select id="mdl-claude-default" aria-label="Claude Code 新空间默认模型" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Claude Code 新空间默认模型&quot;}"></select>
+              <div id="mdl-tabs" class="scope-switch mdl-tabs" role="tablist" aria-label="模型管理" data-i18n-attrs="{&quot;aria-label&quot;:&quot;模型管理&quot;}">
+                <button type="button" id="mdl-tab-accounts" class="scope-btn active" role="tab" aria-selected="true" aria-controls="mdl-panel-accounts" data-tab="accounts" data-icon="users" data-i18n-text="[&quot;账号模型&quot;]">账号模型</button>
+                <button type="button" id="mdl-tab-pricing" class="scope-btn" role="tab" aria-selected="false" aria-controls="mdl-panel-pricing" data-tab="pricing" data-icon="wallet" data-i18n-text="[&quot;价格&quot;]">价格</button>
+                <button type="button" id="mdl-tab-system" class="scope-btn" role="tab" aria-selected="false" aria-controls="mdl-panel-system" data-tab="system" data-icon="list" data-i18n-text="[&quot;系统模型列表&quot;]">系统模型列表</button>
+              </div>
+              <div id="mdl-panel-accounts" class="mdl-panel" role="tabpanel" aria-labelledby="mdl-tab-accounts">
+                <div class="mdl-toolbar">
+                  <input type="search" id="mv-filter" placeholder="筛选账号或模型" autocomplete="off" spellcheck="false" data-i18n-attrs="{&quot;placeholder&quot;:&quot;筛选账号或模型&quot;}">
+                  <span class="help" tabindex="0" aria-label="账号模型说明" data-i18n-attrs="{&quot;aria-label&quot;:&quot;账号模型说明&quot;}">?<span class="help-tip" role="tooltip"><span class="help-line" data-i18n="账号的模型在「账号池 → 可用模型」里读取和勾选；点账号展开它的模型。">账号的模型在「账号池 → 可用模型」里读取和勾选；点账号展开它的模型。</span><span class="help-line" data-i18n="开关控制模型是否出现在对话页的模型下拉里。关闭只是隐藏，模型仍属于账号，默认模型始终显示。">开关控制模型是否出现在对话页的模型下拉里。关闭只是隐藏，模型仍属于账号，默认模型始终显示。</span><span class="help-line" data-i18n="价格是计费实际使用的单价（输入 / 输出，美元每百万 token），点击可直接设置。黄色表示按 agent 兜底价计费或没有价格。">价格是计费实际使用的单价（输入 / 输出，美元每百万 token），点击可直接设置。黄色表示按 agent 兜底价计费或没有价格。</span></span></span>
+                  <button type="button" id="mv-expand" class="btn btn-sm btn-ghost keep-label mdl-toolbar-end" data-icon="expand">全部展开</button>
                 </div>
-                <div class="model-rows" data-agent="claude"></div>
-                <div class="model-add">
-                  <input id="mdl-claude-label" type="text" placeholder="显示名称，如 Fable 5" data-i18n-attrs="{&quot;placeholder&quot;:&quot;显示名称，如 Fable 5&quot;}">
-                  <input id="mdl-claude-id" type="text" placeholder="模型 ID，如 claude-fable-5" class="mono" data-i18n-attrs="{&quot;placeholder&quot;:&quot;模型 ID，如 claude-fable-5&quot;}">
-                  <button class="btn btn-sm mdl-add" data-agent="claude" data-icon="plus" data-i18n-text="[&quot;添加&quot;]">添加</button>
+                <div id="mv-list" class="mv-list"></div>
+              </div>
+              <!-- 价格：原「价目表」分区 -->
+              <div id="mdl-panel-pricing" class="mdl-panel hidden" role="tabpanel" aria-labelledby="mdl-tab-pricing">
+                <div class="mdl-toolbar">
+                  <label class="check price-filter" data-i18n-text="[&quot;只看在用的模型&quot;]"><input type="checkbox" id="price-inuse" checked>只看在用的模型</label>
+                  <span id="price-inuse-note" class="note"></span>
+                  <span class="help" tabindex="0" aria-label="价格说明" data-i18n-attrs="{&quot;aria-label&quot;:&quot;价格说明&quot;}">?<span class="help-tip" role="tooltip"><span class="help-line" data-i18n="每个模型的单价（美元 / 百万 token），用来算对话和终端的花费；没设置单价的模型只记用量、不扣额度。">每个模型的单价（美元 / 百万 token），用来算对话和终端的花费；没设置单价的模型只记用量、不扣额度。</span><span class="help-line" data-i18n="查找顺序：精确模型 ID → 去掉 -20251001 这类日期后缀 → agent 名（claude / codex）兜底价。">查找顺序：精确模型 ID → 去掉 -20251001 这类日期后缀 → agent 名（claude / codex）兜底价。</span><span class="help-line" data-i18n="手动修改单价后，该模型转为自定义。网页回合开始时锁定价格，调价只影响之后的回合。">手动修改单价后，该模型转为自定义。网页回合开始时锁定价格，调价只影响之后的回合。</span><span class="help-line" data-i18n="Claude 网页对话按每次请求分别计价后汇总；独立起标题可以使用客户端上报的金额。">Claude 网页对话按每次请求分别计价后汇总；独立起标题可以使用客户端上报的金额。</span></span></span>
+                  <div class="sec-actions action-tools mdl-toolbar-end">
+                    <button id="price-refresh" class="btn btn-sm" data-icon="undo" data-tip="放弃编辑，重新读取当前生效的价目表" data-i18n-text="[&quot;重新读取&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;放弃编辑，重新读取当前生效的价目表&quot;}">重新读取</button>
+                    <button id="price-check" class="btn btn-sm keep-label" data-icon="refresh" data-tip="检查远程价目目录有没有新价格，只预览不应用" data-i18n-text="[&quot;检查更新&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;检查远程价目目录有没有新价格，只预览不应用&quot;}">检查更新</button>
+                    <button id="price-save" class="btn btn-sm btn-primary" data-icon="save" data-tip="保存价目表" data-i18n-text="[&quot;保存&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;保存价目表&quot;}">保存</button>
+                  </div>
+                </div>
+                <div id="price-warnings" class="price-notice hidden" role="status"></div>
+                <div class="card price-editor">
+                  <div class="price-table-wrap">
+                    <table class="price-table">
+                      <thead>
+                        <tr>
+                          <th data-i18n-text="[&quot;模型 ID / agent&quot;]">模型 ID / agent</th>
+                          <th class="num" data-i18n-text="[&quot;输入&quot;]">输入</th>
+                          <th class="num" data-i18n-text="[&quot;输出&quot;]">输出</th>
+                          <th class="num" data-i18n-text="[&quot;缓存读取&quot;]">缓存读取</th>
+                          <th class="num" data-i18n-text="[&quot;缓存写入&quot;]">缓存写入</th>
+                          <th class="num" data-i18n-text="[&quot;长上下文阈值&quot;]">长上下文阈值</th>
+                          <th class="num" data-i18n-text="[&quot;超阈值单价&quot;]">超阈值单价<br><span class="th-sub" data-i18n-text="[&quot;输入 / 输出 / 缓存读 / 缓存写&quot;]">输入 / 输出 / 缓存读 / 缓存写</span></th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody id="price-rows"></tbody>
+                    </table>
+                  </div>
+                  <p id="price-empty" class="files-empty hidden" data-i18n-text="[&quot;价目表是空的。所有按 token 折算的消耗都会记为「未定价」。&quot;]">价目表是空的。所有按 token 折算的消耗都会记为「未定价」。</p>
+                  <div class="price-add">
+                    <input id="price-new-key" type="text" placeholder="模型 ID 或 agent 名，如 claude-opus-5" class="mono" data-i18n-attrs="{&quot;placeholder&quot;:&quot;模型 ID 或 agent 名，如 claude-opus-5&quot;}">
+                    <button id="price-add" class="btn btn-sm" data-icon="plus" data-tip="添加一个模型或 agent 价格条目" data-i18n-text="[&quot;添加&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;添加一个模型或 agent 价格条目&quot;}">添加</button>
+                  </div>
+                </div>
+                <!-- 价格目录：平时很少改，收起来只显示状态 -->
+                <details id="price-catalog-box" class="card price-catalog price-fold">
+                  <summary>
+                    <span class="price-catalog-head"><span class="price-fold-title" data-i18n-text="[&quot;价格目录&quot;]">价格目录</span><span id="price-catalog-status" role="status" data-i18n-text="[&quot;读取中…&quot;]">读取中…</span></span>
+                  </summary>
+                  <div class="price-fold-body">
+                    <p id="price-catalog-error" class="price-notice hidden" role="status"></p>
+                    <div class="field-row">
+                      <label class="field"><span data-i18n-text="[&quot;远程目录地址（HTTPS）&quot;]">远程目录地址（HTTPS）</span><input id="price-source" type="url" placeholder="填写已发布的价格目录 JSON 地址" data-i18n-attrs="{&quot;placeholder&quot;:&quot;填写已发布的价格目录 JSON 地址&quot;}"></label>
+                      <button id="price-modelsdev" class="btn btn-sm" data-icon="link" data-tip="填入 models.dev 价格源并开启每日检查，保存后生效" data-i18n-text="[&quot;使用 models.dev&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;填入 models.dev 价格源并开启每日检查，保存后生效&quot;}">使用 models.dev</button>
+                      <button id="price-source-save" class="btn btn-sm" data-icon="save" data-tip="保存价格目录来源地址" data-i18n-text="[&quot;保存来源&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;保存价格目录来源地址&quot;}">保存来源</button>
+                      <button id="price-preview" class="btn btn-sm" data-icon="diff" data-tip="预览候选目录与当前价目表的差异" data-i18n-text="[&quot;预览差异&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;预览候选目录与当前价目表的差异&quot;}">预览差异</button>
+                    </div>
+                    <div class="price-sync-row">
+                      <div class="price-sync-options">
+                        <label class="price-auto" data-i18n-text="[&quot;每天自动检查&quot;]"><input id="price-auto" type="checkbox">每天自动检查</label>
+                        <label class="price-auto" data-i18n-text="[&quot;自动跟随已选模型&quot;]"><input id="price-auto-apply" type="checkbox">自动跟随已选模型</label>
+                      </div>
+                      <span class="help" tabindex="0" aria-label="价格目录说明" data-i18n-attrs="{&quot;aria-label&quot;:&quot;价格目录说明&quot;}">?<span class="help-tip" role="tooltip"><span class="help-line" data-i18n="「检查更新」只预览变化；勾选模型并应用后，这些模型会跟随目录价格。">「检查更新」只预览变化；勾选模型并应用后，这些模型会跟随目录价格。</span><span class="help-line" data-i18n="开启自动跟随后，每日检查会更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型和目录里没有的模型不会自动修改。">开启自动跟随后，每日检查会更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型和目录里没有的模型不会自动修改。</span><span class="help-line" data-i18n="models.dev 是第三方价格源，只导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入换算为 1 小时口径；缺失的价格不会按 0 导入。">models.dev 是第三方价格源，只导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入换算为 1 小时口径；缺失的价格不会按 0 导入。</span></span></span>
+                    </div>
+                    <div id="price-source-issues" class="price-notice hidden" role="status"></div>
+                    <div id="price-diff" class="hidden">
+                      <p data-i18n-text="[&quot;勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。&quot;]">勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。</p>
+                      <div id="price-changes" class="price-changes"></div>
+                      <button id="price-apply" class="btn btn-sm btn-primary" data-icon="check" data-tip="应用所选模型的候选价格" data-i18n-text="[&quot;应用&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;应用所选模型的候选价格&quot;}">应用</button>
+                    </div>
+                  </div>
+                </details>
+                <details class="card price-history">
+                  <summary data-i18n-text="[&quot;价格版本记录（最近 10 次）&quot;]">价格版本记录（最近 10 次）</summary>
+                  <div class="price-history-body">
+                    <p class="card-desc" data-i18n-text="[&quot;可恢复修改前的价格及跟随状态，并暂停自动跟随；回退不改变历史账单或远程目录地址。&quot;]">可恢复修改前的价格及跟随状态，并暂停自动跟随；回退不改变历史账单或远程目录地址。</p>
+                    <div id="price-history"></div>
+                  </div>
+                </details>
+              </div>
+              <!-- 系统模型列表：只给没有自己可用模型的账号兜底 -->
+              <div id="mdl-panel-system" class="mdl-panel hidden" role="tabpanel" aria-labelledby="mdl-tab-system">
+                <div class="mdl-toolbar">
+                  <p id="mdl-system-state" class="mdl-system-state"></p>
+                  <span class="help" tabindex="0" aria-label="系统模型列表说明" data-i18n-attrs="{&quot;aria-label&quot;:&quot;系统模型列表说明&quot;}">?<span class="help-tip" role="tooltip"><span class="help-line" data-i18n="没有配置可用模型的账号使用这里的模型和新空间默认模型。">没有配置可用模型的账号使用这里的模型和新空间默认模型。</span><span class="help-line" data-i18n="读取上游模型时，上游没有报告思考强度的模型也会参考这里同名模型的配置。">读取上游模型时，上游没有报告思考强度的模型也会参考这里同名模型的配置。</span></span></span>
+                </div>
+                <div class="card">
+                  <h3 data-agent="claude">Claude Code</h3>
+                  <div class="model-default">
+                    <label for="mdl-claude-default" data-i18n-text="[&quot;新空间默认模型&quot;]">新空间默认模型</label>
+                    <select id="mdl-claude-default" aria-label="Claude Code 新空间默认模型" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Claude Code 新空间默认模型&quot;}"></select>
+                  </div>
+                  <div class="model-rows" data-agent="claude"></div>
+                  <div class="model-add">
+                    <input id="mdl-claude-label" type="text" placeholder="显示名称，如 Fable 5" data-i18n-attrs="{&quot;placeholder&quot;:&quot;显示名称，如 Fable 5&quot;}">
+                    <input id="mdl-claude-id" type="text" placeholder="模型 ID，如 claude-fable-5" class="mono" data-i18n-attrs="{&quot;placeholder&quot;:&quot;模型 ID，如 claude-fable-5&quot;}">
+                    <button class="btn btn-sm mdl-add" data-agent="claude" data-icon="plus" data-i18n-text="[&quot;添加&quot;]">添加</button>
+                  </div>
+                </div>
+                <div class="card">
+                  <h3 data-agent="codex">Codex CLI</h3>
+                  <div class="model-default">
+                    <label for="mdl-codex-default" data-i18n-text="[&quot;新空间默认模型&quot;]">新空间默认模型</label>
+                    <select id="mdl-codex-default" aria-label="Codex 新空间默认模型" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Codex 新空间默认模型&quot;}"></select>
+                  </div>
+                  <div class="model-rows" data-agent="codex"></div>
+                  <div class="model-add">
+                    <input id="mdl-codex-label" type="text" placeholder="显示名称" data-i18n-attrs="{&quot;placeholder&quot;:&quot;显示名称&quot;}">
+                    <input id="mdl-codex-id" type="text" placeholder="模型 ID" class="mono" data-i18n-attrs="{&quot;placeholder&quot;:&quot;模型 ID&quot;}">
+                    <button class="btn btn-sm mdl-add" data-agent="codex" data-icon="plus" data-i18n-text="[&quot;添加&quot;]">添加</button>
+                  </div>
                 </div>
               </div>
-              <div class="card">
-                <h3 data-agent="codex">Codex CLI</h3>
-                <div class="model-default">
-                  <label for="mdl-codex-default" data-i18n-text="[&quot;新空间默认模型&quot;]">新空间默认模型</label>
-                  <select id="mdl-codex-default" aria-label="Codex 新空间默认模型" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Codex 新空间默认模型&quot;}"></select>
-                </div>
-                <div class="model-rows" data-agent="codex"></div>
-                <div class="model-add">
-                  <input id="mdl-codex-label" type="text" placeholder="显示名称" data-i18n-attrs="{&quot;placeholder&quot;:&quot;显示名称&quot;}">
-                  <input id="mdl-codex-id" type="text" placeholder="模型 ID" class="mono" data-i18n-attrs="{&quot;placeholder&quot;:&quot;模型 ID&quot;}">
-                  <button class="btn btn-sm mdl-add" data-agent="codex" data-icon="plus" data-i18n-text="[&quot;添加&quot;]">添加</button>
-                </div>
-              </div>
-            </section>
-
-            <!-- 价目表 -->
-            <section id="sec-pricing" class="set-section hidden">
-              <div class="sec-intro">
-                <div>
-                  <h2 data-i18n-text="[&quot;价目表&quot;]">价目表</h2>
-                  <p data-i18n-text="[&quot;每个模型的单价（美元 / 百万 token），用来算对话和终端的花费。没设置单价的模型只记用量、不扣额度。&quot;]">每个模型的单价（美元 / 百万 token），用来算对话和终端的花费。没设置单价的模型只记用量、不扣额度。</p>
-                  <details class="learn-more"><summary data-i18n-text="[&quot;了解更多&quot;]">了解更多</summary><p data-i18n-text="[&quot;Claude 网页对话按每次请求分别计价后汇总；独立起标题可以使用客户端上报的金额。&quot;]">Claude 网页对话按每次请求分别计价后汇总；独立起标题可以使用客户端上报的金额。</p><p class="sec-hint" data-i18n-text="[&quot;键可以是&quot;,&quot;（如 &quot;,&quot;），也可以是 &quot;,&quot;）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 &quot;,&quot; 这类日期后缀再查 → agent 名。&quot;]">键可以是<b data-i18n-text="[&quot;模型 ID&quot;]">模型 ID</b>（如 <code>claude-opus-5</code>），也可以是 <b data-i18n-text="[&quot;agent 名&quot;]">agent 名</b>（<code>claude</code> / <code>codex</code>）作为该 agent 的兜底价。查找顺序：精确模型 ID → 去掉 <code>-20251001</code> 这类日期后缀再查 → agent 名。</p></details>
-                </div>
-                <div class="sec-actions action-tools">
-                  <button id="price-refresh" class="btn btn-sm" data-icon="undo" data-tip="放弃编辑，重新读取当前生效的价目表" data-i18n-text="[&quot;重新读取&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;放弃编辑，重新读取当前生效的价目表&quot;}">重新读取</button>
-                  <button id="price-check" class="btn btn-sm keep-label" data-icon="refresh" data-tip="检查远程价目目录有没有新价格，只预览不应用" data-i18n-text="[&quot;检查更新&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;检查远程价目目录有没有新价格，只预览不应用&quot;}">检查更新</button>
-                  <button id="price-save" class="btn btn-sm btn-primary" data-icon="save" data-tip="保存价目表" data-i18n-text="[&quot;保存&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;保存价目表&quot;}">保存</button>
-                </div>
-              </div>
-              <div class="card price-catalog">
-                <div class="price-catalog-head">
-                  <h3 data-i18n-text="[&quot;价格目录&quot;]">价格目录</h3>
-                  <p id="price-catalog-status" role="status" data-i18n-text="[&quot;读取中…&quot;]">读取中…</p>
-                </div>
-                <p id="price-catalog-error" class="price-notice hidden" role="status"></p>
-                <div class="field-row">
-                  <label class="field"><span data-i18n-text="[&quot;远程目录地址（HTTPS）&quot;]">远程目录地址（HTTPS）</span><input id="price-source" type="url" placeholder="填写已发布的价格目录 JSON 地址" data-i18n-attrs="{&quot;placeholder&quot;:&quot;填写已发布的价格目录 JSON 地址&quot;}"></label>
-                  <button id="price-modelsdev" class="btn btn-sm" data-icon="link" data-tip="填入 models.dev 价格源并开启每日检查，保存后生效" data-i18n-text="[&quot;使用 models.dev&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;填入 models.dev 价格源并开启每日检查，保存后生效&quot;}">使用 models.dev</button>
-                  <button id="price-source-save" class="btn btn-sm" data-icon="save" data-tip="保存价格目录来源地址" data-i18n-text="[&quot;保存来源&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;保存价格目录来源地址&quot;}">保存来源</button>
-                  <button id="price-preview" class="btn btn-sm" data-icon="diff" data-tip="预览候选目录与当前价目表的差异" data-i18n-text="[&quot;预览差异&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;预览候选目录与当前价目表的差异&quot;}">预览差异</button>
-                </div>
-                <div class="price-sync-options">
-                  <label class="price-auto" data-i18n-text="[&quot;每天自动检查&quot;]"><input id="price-auto" type="checkbox">每天自动检查</label>
-                  <label class="price-auto" data-i18n-text="[&quot;自动跟随已选模型&quot;]"><input id="price-auto-apply" type="checkbox">自动跟随已选模型</label>
-                </div>
-                <p class="card-desc" data-i18n-text="[&quot;「检查更新」只预览变化；勾选模型并应用后，这些模型会跟随目录价格。&quot;]">「检查更新」只预览变化；勾选模型并应用后，这些模型会跟随目录价格。</p>
-                <details class="learn-more"><summary data-i18n-text="[&quot;了解更多&quot;]">了解更多</summary><p data-i18n-text="[&quot;开启自动跟随后，每日检查会更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型和目录里没有的模型不会自动修改。&quot;]">开启自动跟随后，每日检查会更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型和目录里没有的模型不会自动修改。</p><p data-i18n-text="[&quot;models.dev 是第三方价格源，只导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入换算为 1 小时口径；缺失的价格不会按 0 导入。&quot;]">models.dev 是第三方价格源，只导入 Anthropic / OpenAI 文本模型的标准 API 价格。Claude 缓存写入换算为 1 小时口径；缺失的价格不会按 0 导入。</p></details>
-                <div id="price-source-issues" class="price-notice hidden" role="status"></div>
-                <div id="price-diff" class="hidden">
-                  <p data-i18n-text="[&quot;勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。&quot;]">勾选需要应用的模型。勾选自定义行会用目录价格替换，并恢复跟随目录。金额单位：美元 / 百万 token。</p>
-                  <div id="price-changes" class="price-changes"></div>
-                  <button id="price-apply" class="btn btn-sm btn-primary" data-icon="check" data-tip="应用所选模型的候选价格" data-i18n-text="[&quot;应用&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;应用所选模型的候选价格&quot;}">应用</button>
-                </div>
-              </div>
-              <div id="price-warnings" class="price-notice hidden" role="status"></div>
-              <div class="card price-editor">
-                <p id="price-edit-note" class="card-desc" data-i18n-text="[&quot;手动修改单价后，该模型将转为自定义。网页回合开始时锁定价格，调价只影响之后的回合。&quot;]">手动修改单价后，该模型将转为自定义。网页回合开始时锁定价格，调价只影响之后的回合。</p>
-                <div class="price-table-wrap">
-                  <table class="price-table">
-                    <thead>
-                      <tr>
-                        <th data-i18n-text="[&quot;模型 ID / agent&quot;]">模型 ID / agent</th>
-                        <th class="num" data-i18n-text="[&quot;输入&quot;]">输入</th>
-                        <th class="num" data-i18n-text="[&quot;输出&quot;]">输出</th>
-                        <th class="num" data-i18n-text="[&quot;缓存读取&quot;]">缓存读取</th>
-                        <th class="num" data-i18n-text="[&quot;缓存写入&quot;]">缓存写入</th>
-                        <th class="num" data-i18n-text="[&quot;长上下文阈值&quot;]">长上下文阈值</th>
-                        <th class="num" data-i18n-text="[&quot;超阈值单价&quot;]">超阈值单价<br><span class="th-sub" data-i18n-text="[&quot;输入 / 输出 / 缓存读 / 缓存写&quot;]">输入 / 输出 / 缓存读 / 缓存写</span></th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody id="price-rows"></tbody>
-                  </table>
-                </div>
-                <p id="price-empty" class="files-empty hidden" data-i18n-text="[&quot;价目表是空的。所有按 token 折算的消耗都会记为「未定价」。&quot;]">价目表是空的。所有按 token 折算的消耗都会记为「未定价」。</p>
-                <div class="price-add">
-                  <input id="price-new-key" type="text" placeholder="模型 ID 或 agent 名，如 claude-opus-5" class="mono" data-i18n-attrs="{&quot;placeholder&quot;:&quot;模型 ID 或 agent 名，如 claude-opus-5&quot;}">
-                  <button id="price-add" class="btn btn-sm" data-icon="plus" data-tip="添加一个模型或 agent 价格条目" data-i18n-text="[&quot;添加&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;添加一个模型或 agent 价格条目&quot;}">添加</button>
-                </div>
-              </div>
-              <details class="card price-history">
-                <summary data-i18n-text="[&quot;价格版本记录（最近 10 次）&quot;]">价格版本记录（最近 10 次）</summary>
-                <div class="price-history-body">
-                  <p class="card-desc" data-i18n-text="[&quot;可恢复修改前的价格及跟随状态，并暂停自动跟随；回退不改变历史账单或远程目录地址。&quot;]">可恢复修改前的价格及跟随状态，并暂停自动跟随；回退不改变历史账单或远程目录地址。</p>
-                  <div id="price-history"></div>
-                </div>
-              </details>
             </section>
 
             <!-- 界面与提示 -->
@@ -1890,6 +1907,62 @@
   <p id="auth-msg" class="auth-msg hidden" role="status" aria-live="polite"></p>
 </dialog>
 
+<!-- 账号可用模型：从上游读取后勾选，每个模型单独设置思考强度 -->
+<dialog id="dlg-model-price" class="dlg-model-price">
+  <form id="mp-form" method="dialog" novalidate>
+    <div class="dlg-head">
+      <h2 id="mp-title" data-i18n-text="[&quot;模型价格&quot;]">模型价格</h2>
+      <button type="button" id="mp-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
+    </div>
+    <p id="mp-desc" class="field-hint"></p>
+    <div class="mp-grid">
+      <label class="field"><span data-i18n-text="[&quot;输入&quot;]">输入</span><input id="mp-input" type="text" inputmode="decimal" class="mono" placeholder="0" autocomplete="off"></label>
+      <label class="field"><span data-i18n-text="[&quot;输出&quot;]">输出</span><input id="mp-output" type="text" inputmode="decimal" class="mono" placeholder="0" autocomplete="off"></label>
+      <label class="field"><span data-i18n-text="[&quot;缓存读取&quot;]">缓存读取</span><input id="mp-cache_read" type="text" inputmode="decimal" class="mono" placeholder="0" autocomplete="off"></label>
+      <label class="field"><span data-i18n-text="[&quot;缓存写入&quot;]">缓存写入</span><input id="mp-cache_write" type="text" inputmode="decimal" class="mono" placeholder="0" autocomplete="off"></label>
+    </div>
+    <p class="field-hint" data-i18n-text="[&quot;单位：美元 / 百万 token。保存后这一行为自定义价格，只影响之后开始的回合；长上下文档位在「价格」标签页里设置。&quot;]">单位：美元 / 百万 token。保存后这一行为自定义价格，只影响之后开始的回合；长上下文档位在「价格」标签页里设置。</p>
+    <div id="mp-catalog" class="mp-catalog hidden">
+      <p id="mp-catalog-text" class="field-hint"></p>
+      <button type="button" id="mp-follow" class="btn btn-sm" data-icon="link" data-i18n-text="[&quot;跟随目录价格&quot;]">跟随目录价格</button>
+    </div>
+    <p id="mp-error" class="login-error hidden"></p>
+    <div class="dlg-actions">
+      <button type="button" id="mp-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+      <button type="submit" id="mp-ok" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="dlg-acct-models" class="dlg-acct-models">
+  <form id="acct-models-form" method="dialog">
+    <div class="dlg-head">
+      <div class="dlg-title-row">
+        <h2 id="acct-models-title" data-i18n-text="[&quot;可用模型&quot;]">可用模型</h2>
+        <span class="help dlg-help" tabindex="0" aria-label="可用模型说明" data-i18n-attrs="{&quot;aria-label&quot;:&quot;可用模型说明&quot;}">?<span class="help-tip" role="tooltip"><span class="help-line" data-i18n="勾选的模型属于这个账号，使用这个账号的工作空间只能用这些模型对话。">勾选的模型属于这个账号，使用这个账号的工作空间只能用这些模型对话。</span><span class="help-line" data-i18n="不想出现在对话下拉里的模型，可以在「系统设置 → 模型管理」关闭显示，不必取消勾选。">不想出现在对话下拉里的模型，可以在「系统设置 → 模型管理」关闭显示，不必取消勾选。</span><span class="help-line" data-i18n="思考强度按模型设置，对话时只显示所选模型支持的档位。">思考强度按模型设置，对话时只显示所选模型支持的档位。</span></span></span>
+      </div>
+      <button type="button" id="acct-models-close" class="dlg-x" autofocus aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
+    </div>
+    <div class="am-bar">
+      <button type="button" id="acct-models-fetch" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;从上游读取&quot;]">从上游读取</button>
+      <button type="button" id="acct-models-official" class="btn btn-sm btn-ghost" data-icon="list" data-i18n-text="[&quot;官方目录&quot;]">官方目录</button>
+      <input type="search" id="acct-models-filter" placeholder="筛选模型" autocomplete="off" spellcheck="false" data-i18n-attrs="{&quot;placeholder&quot;:&quot;筛选模型&quot;}">
+      <label class="check" data-i18n-text="[&quot; 全选&quot;]"><input type="checkbox" id="acct-models-all"> 全选</label>
+      <button type="button" id="acct-models-bulk" class="btn btn-sm btn-ghost" data-icon="sliders" data-i18n-text="[&quot;批量设置强度&quot;]">批量设置强度</button>
+    </div>
+    <p id="acct-models-status" class="field-hint am-status" role="status" aria-live="polite"></p>
+    <div id="acct-models-list" class="am-list"></div>
+    <div class="am-add">
+      <input type="text" id="acct-models-new" class="mono" placeholder="手动添加模型 ID" autocomplete="off" spellcheck="false" data-i18n-attrs="{&quot;placeholder&quot;:&quot;手动添加模型 ID&quot;}">
+      <button type="button" id="acct-models-add" class="btn btn-sm" data-icon="plus" data-i18n-text="[&quot;添加&quot;]">添加</button>
+    </div>
+    <p id="acct-models-error" class="login-error hidden"></p>
+    <div class="dlg-actions">
+      <button type="button" id="acct-models-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+      <button type="submit" id="acct-models-ok" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- 内网隧道：状态 + 接入指引 -->
 <!-- 删除工作空间确认 -->
 <dialog id="dlg-del">
@@ -1923,7 +1996,7 @@
     <p id="switch-acct-error" class="login-error hidden"></p>
     <div class="dlg-actions">
       <button type="button" id="switch-acct-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
-      <button type="submit" id="switch-acct-ok" class="btn btn-primary" data-icon="key" data-i18n-text="[&quot;切换账号&quot;]">切换账号</button>
+      <button type="submit" id="switch-acct-ok" class="btn btn-primary" data-icon="switch" data-i18n-text="[&quot;切换账号&quot;]">切换账号</button>
     </div>
   </form>
 </dialog>

@@ -173,6 +173,10 @@
 .u-arrow { font-style: normal; color: var(--muted); margin-left: 6px; }
 .u-io .u-arrow:first-child { margin-left: 0; }
 .u-cache { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+/* 模型下面一行：服务方 · 思考强度 */
+.u-sub:has(.u-effort) { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; }
+.u-effort { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.u-effort .ui-icon { color: var(--muted); }
 
 /* 类型 / 计费的小标签 */
 .u-chip {
@@ -186,9 +190,10 @@
 }
 /* 类型只靠墨色深浅区分，不加色相（旁边的计费列已经用了绿/红）：
  * 对话是主体最重，终端次之，服务端自动起标题最轻。 */
-.u-chip.chat { color: var(--text-hi); border-color: var(--line); background: transparent; }
+.u-chip.chat, .u-chip.term, .u-chip.title { border-color: var(--line); background: transparent; }
+.u-chip.chat { color: var(--text-hi); }
 .u-chip.term { color: var(--text); }
-.u-chip.title { color: var(--muted); background: transparent; opacity: 0.8; }
+.u-chip.title { color: var(--muted); }
 .u-chip.bill-provider { border-color: var(--green-line); color: var(--green); background: transparent; }
 .u-chip.bill-none { border-color: var(--red-line); color: var(--red); background: transparent; }
 

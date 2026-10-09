@@ -93,6 +93,9 @@ dialog textarea { resize: vertical; }
 }
 dialog form .dlg-head { margin: 0; } /* form 自带 gap，避免双份间距 */
 .dlg-head h2 { margin: 0; }
+.dlg-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* 弹窗里的「?」：说明框在图标下方居中，免得撑出弹窗 */
+.dlg-help .help-tip { left: 50%; transform: translateX(-50%); width: min(320px, 80vw); font-weight: 400; }
 .dlg-x {
   flex: none;
   width: 32px; height: 32px; padding: 0;
@@ -221,6 +224,64 @@ dialog label.check input { margin: 0; flex: none; }
 .auth-model-chip:hover { border-color: var(--amber); }
 .auth-model-chip.in { color: var(--muted); border-style: dashed; cursor: default; }
 .auth-model-chip.in:hover { border-color: var(--line); }
+
+/* ---- 账号可用模型：勾选 + 每个模型的思考强度 + 默认模型 ---- */
+.dlg-model-price { width: min(460px, 94vw); }
+.dlg-model-price form { gap: 12px; }
+.dlg-model-price .field-hint { margin: 0; }
+.mp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.mp-grid input { width: 100%; }
+.mp-catalog { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale)); }
+.mp-catalog .field-hint { flex: 1; min-width: 200px; }
+.dlg-acct-models { width: min(680px, 94vw); }
+.dlg-acct-models form { gap: 12px; }
+.dlg-acct-models .field-hint { margin: 0; }
+.am-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.am-bar input[type="search"] { flex: 1; min-width: 140px; width: auto; }
+.am-bar label.check { flex: none; color: var(--text); }
+.am-status { white-space: pre-line; }
+.am-list {
+  display: flex; flex-direction: column;
+  max-height: min(46vh, 420px); overflow-y: auto;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
+  background: var(--panel-solid);
+}
+.am-list:empty { display: none; }
+.am-row {
+  /* 强度列定宽，各行的按钮才能对齐 */
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 13.5em auto;
+  align-items: center; gap: 4px 10px;
+  padding: 7px 10px; border-bottom: 1px solid var(--line);
+}
+.am-row:last-child { border-bottom: 0; }
+/* 列号写死：隐藏的标签不占格，自动排布会让后面的格子错位 */
+.am-row > .am-pick { grid-column: 1; }
+.am-row > .am-tag { grid-column: 2; }
+.am-row > .am-effort { grid-column: 3; }
+.am-row > .am-default { grid-column: 4; }
+.am-row.off .am-name, .am-row.off .am-effort, .am-row.off .am-default { opacity: 0.55; }
+dialog label.am-pick { min-width: 0; color: var(--text); }
+.am-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.am-label, .am-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-id { font-size: 11px; color: var(--muted); }
+.am-tag {
+  font-size: 11px; padding: 1px 7px; border-radius: var(--radius-pill);
+  border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+}
+.am-effort { justify-self: start; justify-content: flex-start; font-size: 12px; max-width: 100%; overflow: hidden; white-space: nowrap; color: var(--muted); }
+.am-effort .action-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.am-effort.on { color: var(--text); }
+dialog label.am-default { font-size: 12px; white-space: nowrap; }
+.am-empty { padding: 12px; }
+.am-add { display: flex; gap: 8px; }
+.am-add input { flex: 1; min-width: 0; }
+@media (max-width: 560px) {
+  .am-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .am-row > .am-pick { grid-row: 1; }
+  .am-row > .am-tag { grid-column: 2; grid-row: 1; }
+  .am-row > .am-effort { grid-column: 1; grid-row: 2; margin-left: 18px; }
+  .am-row > .am-default { grid-column: 2; grid-row: 2; }
+}
 
 /* ---- 额度管理弹窗 ---- */
 .dlg-quota { width: min(560px, 94vw); }

@@ -46,16 +46,16 @@
 
 | 字段 | 结构 | 用途 |
 | --- | --- | --- |
-| `accounts` | 账号数组，可为空 | `id`、`type`、`label`、`credentials_dir`、`env`、`proxy_id`、`access`、`model_reasoning` |
+| `accounts` | 账号数组，可为空 | `id`、`type`、`label`、`credentials_dir`、`env`、`proxy_id`、`access`、`model_reasoning`、`models`、`default_model` |
 | `models` | 按 `claude` / `codex` 分组的数组 | 每项含 `id`、`label` 与可选 `reasoning` 能力，维护对话候选模型 |
-| `default_models` | 按 Agent 分组的模型 ID | 初始为 `claude-opus-5` / `gpt-5.5`，必须在对应候选列表中 |
+| `default_models` | 按 Agent 分组的模型 ID | 初始为 `claude-opus-5` / `gpt-5.5`，必须在对应候选列表中；配置了 `models` 的账号改用自己的 `default_model` |
 | `pricing_catalog` | `url` + `auto_check` | 独立 HTTPS 价格目录；默认不联网，自动检查只生成候选，详见 [维护流程](pricing-catalog.md) |
 | `pricing_managed` / `pricing_history` | 跟随目录元数据 / 最近 10 次价格版本 | 由价格管理接口维护，随配置原子持久化 |
 | `pricing` | 模型 ID / Agent 名到单价的映射 | provider 不报价时用于 token 折算；省略则无价格表 |
 
 `accounts[].type` 仅接受 `claude` 或 `codex`。账号 ID 与代理 ID 为 2–32 位小写字母、数字、`-`、`_`，首位为字母或数字，且在各自列表内唯一。账号引用的 `proxy_id` 必须存在于代理池。
 
-`access` 配置 `all` / `users` / `admin` 使用范围，省略时全体共享；`users` 模式用 `users` 数组列出用户名。`model_reasoning` 按模型 ID 覆盖推理能力，字段与示例见[账号与模型](accounts-and-models.md#推理强度与思考预算)。
+`access` 配置 `all` / `users` / `admin` 使用范围，省略时全体共享；`users` 模式用 `users` 数组列出用户名。`model_reasoning` 按模型 ID 覆盖推理能力，字段与示例见[账号与模型](accounts-and-models.md#推理强度与思考预算)。`models` / `default_model` 是账号自己的可用模型和默认模型，非空时网页对话只能使用其中的模型，见[账号可用模型](accounts-and-models.md#账号可用模型)。
 
 `env` 是字符串键值映射，常用于 API Key 和 provider 地址，属于敏感配置。网页创建账号时会使用 `<data_dir>/creds/<id>/` 作为凭证目录。
 

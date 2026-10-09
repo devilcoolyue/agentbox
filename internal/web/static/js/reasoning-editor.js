@@ -49,7 +49,7 @@ export function editReasoning(agent, title, current) {
                 check.checked = current?.control === control.value && !!current.levels?.includes(level);
                 const caption = document.createTextNode("");
                 const budget = control.value === "budget";
-                setTextRender(caption, () => " " + EFFORT_LABELS[level] + (budget ? ` (${BUDGETS[level].toLocaleString("en-US")} tokens)` : ` (${level})`));
+                setTextRender(caption, () => " " + EFFORT_LABELS[level] + (budget ? ` (${BUDGETS[level].toLocaleString("en-US")} tokens)` : EFFORT_LABELS[level].toLowerCase() === level ? "" : ` (${level})`));
                 label.append(check, caption);
                 return label;
             }));

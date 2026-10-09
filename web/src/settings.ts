@@ -1,7 +1,7 @@
 import {createSettingsController} from "./features/settings/controller.js";
 import type {Account} from "./types.js";
 import type {SettingsPatch} from "./features/settings/savebar.js";
-export {SET_SECS} from "./features/settings/controller.js";
+export {MODEL_TABS, SET_SECS} from "./features/settings/controller.js";
 let active:ReturnType<typeof createSettingsController>|undefined;
 export function initSettings(){
  active?.dispose();const controller=createSettingsController();active=controller;

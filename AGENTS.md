@@ -243,6 +243,7 @@ data/
 - `syncRotatingCred` 重新读取当前账号授权，撤权空间不得再参与双向凭证同步；保持同步→刷新→立即播发的原顺序。
 - 授权名单仅发给管理员；普通用户的账号列表过滤范围，空间计数只含本人。文件/历史/停止/删除仍按空间属主授权。
 - 撤权是准入控制，不能撤回已交付凭证或杀死 tmux；终端输入/30 秒心跳复查，关闭码 4004。旧二进制忽略授权字段，不能无条件回退。详见 `docs/accounts-and-models.md`。
+- 账号可用模型（`Account.Models` / `DefaultModel`，`config/account_models.go`）非空即限制：`/sessions/{id}/models` 只返回这些模型并标 `restricted`，`chatRuntime.Options` 与 v1 聊天收据拒绝列表外模型；空间保存的模型不在列表时一律用 `Account.ResolveModel` 解析（启动播种、`execEnv` 的 `ANTHROPIC_MODEL`、空间视图），不改库，切换账号时才改写。能力优先级为账号 `model_reasoning` → 账号模型 → 全局模型。`POST /accounts/{id}/models/discover` 只读，走账号出口；Codex 订阅读 CLI 自用的 ChatGPT 模型目录且不续期令牌（刷新链归 CLI），Claude 订阅先续期再用 OAuth 令牌读 `/v1/models`。Claude 来源解析 `capabilities.effort`（原生档位）/ `thinking.types.enabled`（预算），OpenAI 风格列表没有能力信息；读取结果的强度按账号已有设置 → 上游 → 全局模型 → 官方模型目录取，上游与官方目录都不能覆盖管理员设置。官方目录（`internal/modelcatalog` + `server/official_models.go`）= Agent 镜像里 CLI 未登录时自带的目录（Codex `model/list`、Claude Code `initialize`），由 `dockerx.ReadCLICatalog` 在与候选镜像验证共用的 `runOfflineNode` 隔离容器里读、按镜像 ID 缓存，再叠加随服务端发布的 `builtin.json` 快照；只作为弹窗里的建议（`?source=official`，以及 API Key/中转读不到列表时的回退），对话时不按模型 ID 自动套用——中转站未必转发强度参数。网页对档位已知的模型不发空强度：默认档位取 `/sessions/{id}/models` 的 `client_effort`（账号 CLI 配置）→ Claude high / Codex medium → 居中一档，显示与发送同源（`chat.ts` 的 `effectiveEffort`）；只有出错后的「恢复默认并重试」那一轮不带强度。账号模型的 `hidden`（「系统设置 → 模型管理 → 账号模型」标签页的开关，`model-display.ts`；「系统模型列表」标签页只给无列表账号兜底）只控制对话下拉是否列出：`AllowsModel`/`ResolveModel` 不看它，隐藏模型照常可用；默认模型必须显示（`ShowsModel`），全局 `models` 拒绝该字段，前端当前选中的隐藏模型仍列出。
 - 空间切换账号（`PUT /api/sessions/{id}/account` → `workspace.SwitchAccount` + `credentials.Release`）只接受同 Agent 类型、属主可用的账号，顺序不能动：占住对话房间与导入 → 空间锁内停容器 → 旧账号锁内先收回续出的令牌、再 `agent.ClearCredentials` 删 home 登录文件、最后写库改绑。不停容器，旧 CLI 会把续出的令牌写回 home；不删登录文件，新账号的同步会把旧账号令牌当成较新的一份收进新账号池。续聊 ID 与对话历史保留。
 
 ### 默认模型
@@ -355,7 +356,7 @@ data/
   配成账号 `config.toml` 里的默认模型）。日期回退是必须的：provider 会报
   `claude-haiku-4-5-20251001`，而价目表里配的是系列名。**没配价目表的模型按 0 计**，
   只记不扣。
-- 价目表在「系统设置 → 价目表」里编辑（`web/src/pricing.ts` + `SettingsPatch.Pricing`），
+- 价目表在「系统设置 → 模型管理 → 价格」标签页编辑（`web/src/pricing.ts` + `SettingsPatch.Pricing`；旧路由 `#/settings/pricing` 跳转到 `#/settings/models/pricing`）。「账号模型」标签页每行显示命中的单价（`pricing.ts` 的 `priceLookup` 与 `config.LookupPrice` 同序，仅管理员设置页展示），单独设价走 `saveModelPrice`（读最新修订后整表 PUT 并标自定义）或 `followCatalogPrice`（`/pricing/apply`）；`/api/pricing` 的 warnings 与 `in_use` 计入各账号可用模型及仍被无列表账号使用的系统模型列表。
   **整表提交**而不是逐键合并——删行没法用增量表达。`sanitizePricing` 卡住负数、NaN、
   离谱大的单价（手滑多打几个零会一次扣穿余额）、非法键，以及「配了长上下文单价却
   没有阈值」这种安静失效的组合。

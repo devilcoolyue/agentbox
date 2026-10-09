@@ -13,6 +13,9 @@ type onboardingAccount struct {
 	Type               string `json:"type"`
 	Label              string `json:"label"`
 	CredentialsPresent bool   `json:"credentials_present"`
+	// DefaultModel is what a new workspace on this account starts with; it
+	// differs from default_models when the account has its own model list.
+	DefaultModel string `json:"default_model"`
 }
 
 type onboardingView struct {
@@ -49,7 +52,7 @@ func (s *Server) handleOnboarding(w http.ResponseWriter, r *http.Request) {
 		if !acct.CanUse(u.Name, admin) || acct.Type != config.AgentClaude && acct.Type != config.AgentCodex {
 			continue
 		}
-		view.Accounts = append(view.Accounts, onboardingAccount{acct.ID, acct.Type, acct.Label, credentials.ConfigurationPresent(acct)})
+		view.Accounts = append(view.Accounts, onboardingAccount{acct.ID, acct.Type, acct.Label, credentials.ConfigurationPresent(acct), s.cfg.NewWorkspaceModel(acct)})
 		view.DefaultModels[acct.Type] = s.cfg.GetDefaultModel(acct.Type)
 	}
 	if admin {

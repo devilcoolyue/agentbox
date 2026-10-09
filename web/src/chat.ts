@@ -98,6 +98,7 @@ export function chatTeardown() {
   pendingPick = null;
   sessionModels = null;
   manualEffort = false;
+  omitEffortOnce = false;
   connection.dispose();
   chatConnectionID = undefined;
   setChatConn("connected");
@@ -180,6 +181,7 @@ function handleChatMsg(msg: ChatMessage) {
         retry.className = "btn btn-sm"; actionButton(retry, () => i18nText("重试"), "refresh", () => i18nText("恢复默认设置并重试本轮对话"));
         retry.addEventListener("click", () => {
           S.pick.effort = ""; pendingPick = null; manualEffort = false; savePick(); renderPickPill();
+          omitEffortOnce = true; // 「恢复默认」这一轮不带强度，交给模型和客户端决定
           if (input.value.trim() && input.value.trim() !== msg.retry_text) {
             toast(i18nText("已恢复默认，请确认当前输入后发送")); return;
           }
@@ -250,7 +252,8 @@ const sender = new ChatSender({
  read:()=>{
   if(!S.current)return;
   const raw=$<HTMLTextAreaElement>("chat-input").value;if(!raw.trim())return;
-  const draft=composerDraft(),pick={model:S.pick.model,effort:S.pick.effort,effort_control:currentReasoning().control||""};
+  const effort=omitEffortOnce?"":effectiveEffort();omitEffortOnce=false;
+  const draft=composerDraft(),pick={model:S.pick.model,effort,effort_control:currentReasoning().control||""};
   let text=raw.trim();
   for(const [n,info] of chatImgs.map){if(!info.path)continue;text=text.split(`[Image #${n}]`).join(`[图片#${n} ${info.path}]`).split(`[File #${n}]`).join(`[附件#${n} ${info.path}]`);}
   const input={scope:S.chatScope,thread_id:composerThread,text,...pick,attachments:draft.attachments.map(a=>a.path)};
@@ -428,17 +431,46 @@ interface EffortOpt {
 let sessionModels: SessionModels | null = null;
 let modelsAbort: AbortController | null = null;
 let manualEffort = false;
+/** 出错后点「重试」：这一轮不传强度（真正的客户端默认值），之后恢复正常。 */
+let omitEffortOnce = false;
 let pendingPick: { effort: string; control?: string } | null = null;
 function currentReasoning(): ReasoningCapability {
   const capability = modelOpts().find(m => m.id === S.pick.model)?.reasoning || sessionModels?.default_reasoning;
   return { ...defaultReasoning(pickStyle()), ...capability };
 }
+/* 账号配置了自己的模型列表时按模型走：只有确定支持调整的模型才出现强度选项，
+ * 其余模型直接用默认值，不再提供「手动指定」。 */
+function restricted() { return !!sessionModels?.restricted; }
+function effortHidden() { return restricted() && currentReasoning().support !== "supported"; }
+/* 档位已知的模型不再提供「默认强度」：没手选时用一个具体档位并照实发送，界面显示的就是
+ * 实际使用的。优先账号 CLI 配置里的默认强度（Codex model_reasoning_effort 等），
+ * 否则 Claude 取 high、Codex 取 medium（两家 API 不指定时的默认值），不在档位里取居中一档。 */
+function defaultLevel(r: ReasoningCapability): string {
+  const levels = r.levels || [];
+  const client = r.control === "effort" ? sessionModels?.client_effort : "";
+  if (client && levels.includes(client)) return client;
+  const preferred = pickStyle() === "codex" ? "medium" : "high";
+  return levels.includes(preferred) ? preferred : levels[Math.floor(levels.length / 2)] || "";
+}
+/** 本轮实际使用的强度；空串表示不传，由模型和客户端自行决定（仅档位未知或不支持时）。 */
+function effectiveEffort(): string {
+  const r = currentReasoning();
+  return S.pick.effort || (r.support === "supported" ? defaultLevel(r) : "");
+}
 function effortOpts(): EffortOpt[] {
   const r = currentReasoning();
+  const level = (v: string): EffortOpt => ({ v, l: EFFORT_LABELS[v] || v, sub: r.control === "budget" ? i18nText("预算上限 {p0} tokens", { p0: String(BUDGETS[v].toLocaleString("en-US")) }) : "" });
+  if (r.support === "supported") return (r.levels || []).map(level);
   const opts: EffortOpt[] = [{ v: "", l: i18nText("默认强度"), sub: i18nText("沿用模型和客户端的默认设置，不等于关闭推理") }];
-  if (r.support === "unsupported" || (r.support === "unknown" && !manualEffort)) return opts;
-  const levels = r.support === "supported" ? r.levels || [] : allowedLevels(pickStyle(), r.control);
-  return [...opts, ...levels.map(v => ({ v, l: EFFORT_LABELS[v] || v, sub: r.control === "budget" ? i18nText("预算上限 {p0} tokens", { p0: String(BUDGETS[v].toLocaleString("en-US")) }) : v }))];
+  if (r.support === "unsupported" || !manualEffort) return opts;
+  return [...opts, ...allowedLevels(pickStyle(), r.control).map(level)];
+}
+/** 强度被重置时提示：档位已知的模型直接说改成了哪一档。 */
+function toastEffortReset(byModel: boolean) {
+  const named = currentReasoning().support === "supported";
+  toast(named
+    ? i18nText(byModel ? "新模型不支持原来的强度，已改为 {level}" : "模型能力已变化，强度已改为 {level}", { level: effortLabel("") })
+    : i18nText(byModel ? "新模型的支持范围不同，已恢复为默认强度" : "模型能力已变化，已恢复为默认强度"));
 }
 async function refreshModelCapabilities() {
   const id = S.current?.id, epoch = chatEpoch;
@@ -458,10 +490,21 @@ async function refreshModelCapabilities() {
       if (manualEffort && effortOpts().some(o => o.v === saved.effort)) S.pick.effort = saved.effort;
       previous = r;
     }
+    // The account's list may have dropped the remembered model.
+    if (value.restricted && !value.models.some(m => m.id === S.pick.model)) {
+      const fallback = value.default_model || value.models[0]?.id;
+      if (fallback) {
+        if (localStorage.getItem(pickKey())) toast(i18nText("账号的可用模型已调整，已切换到 {model}", { model: modelLabel(fallback) }));
+        S.pick.model = fallback; S.pick.effort = ""; manualEffort = false;
+        previous = currentReasoning();
+      }
+    }
     const next = currentReasoning();
-    if (S.pick.effort && !(next.support === "unknown" && previous.control === next.control && manualEffort) && !canKeepEffort(previous, next, S.pick.effort)) {
+    if (S.pick.effort && effortHidden()) {
       S.pick.effort = ""; manualEffort = false;
-      toast(i18nText("模型能力已变化，已恢复为默认强度"));
+    } else if (S.pick.effort && !(next.support === "unknown" && previous.control === next.control && manualEffort) && !canKeepEffort(previous, next, S.pick.effort)) {
+      S.pick.effort = ""; manualEffort = false;
+      toastEffortReset(false);
     }
     savePick(); renderPickPill(); closePickMenu();
   } catch (error) {
@@ -472,6 +515,8 @@ async function refreshModelCapabilities() {
 export const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}(\[1m\])?$/;
 
 function modelOpts(): ModelOption[] {
+  // 隐藏的模型不进下拉；当前正在用的那个照常列出，免得选中项凭空消失。
+  if (sessionModels?.restricted) return sessionModels.models.filter(m => !m.hidden || m.id === S.pick.model);
   const agent = (S.current && S.current.agent) as string;
   const fromSrv = sessionModels?.models || (S.models && S.models[agent]);
   const opts = [...(fromSrv?.length ? fromSrv : FALLBACK_MODELS[agent] || FALLBACK_MODELS.claude)];
@@ -489,11 +534,12 @@ function modelLabel(v: string) {
 }
 function effortLabel(v: string) {
   if (currentReasoning().support === "unsupported") return i18nText("不支持调整");
-  return (effortOpts().find(o => o.v === v) || effortOpts()[0]).l;
+  const opts = effortOpts(), e = v || effectiveEffort();
+  return (opts.find(o => o.v === e) || opts[0])?.l || "";
 }
 
 function workspaceModel() {
-  return S.current?.default_model || (S.current?.agent === "codex" ? "gpt-5.5" : "claude-opus-5");
+  return sessionModels?.default_model || S.current?.default_model || (S.current?.agent === "codex" ? "gpt-5.5" : "claude-opus-5");
 }
 
 export function loadPick() {
@@ -519,7 +565,7 @@ function renderPickPill() {
   if (S.current) btn.appendChild(agentIcon(S.current.agent, 13));
   btn.appendChild(Object.assign(document.createElement("span"), {
     className: "t",
-    textContent: `${modelLabel(S.pick.model)} · ${effortLabel(S.pick.effort)}`,
+    textContent: effortHidden() ? modelLabel(S.pick.model) : `${modelLabel(S.pick.model)} · ${effortLabel(S.pick.effort)}`,
   }));
   btn.appendChild(svgIcon("chevron", 12)); // 独立元素：既能垂直居中，也不被文字省略号裁掉
 }
@@ -533,7 +579,7 @@ function renderPickPill() {
 function pickStyle() { return S.current && S.current.agent === "codex" ? "codex" : "claude"; }
 function effortTitle() { return currentReasoning().control === "budget" ? i18nText("思考预算") : i18nText("推理强度"); }
 function customModel() {
-  return S.pick.model && !modelOpts().some((o) => o.id === S.pick.model) ? S.pick.model : "";
+  return !restricted() && S.pick.model && !modelOpts().some((o) => o.id === S.pick.model) ? S.pick.model : "";
 }
 
 function choose(kind: string, v: string) {
@@ -543,7 +589,7 @@ function choose(kind: string, v: string) {
     S.pick.model = v || workspaceModel();
     if (!canKeepEffort(before, currentReasoning(), S.pick.effort)) {
       S.pick.effort = "";
-      toast(i18nText("新模型的支持范围不同，已恢复为默认强度"));
+      toastEffortReset(true);
     }
     manualEffort = false;
   } else S.pick.effort = v;
@@ -574,7 +620,8 @@ function optList(kind: string) {
       setText(info, "此模型不支持调整。CLI 中已配置的强度可能仍需清除。");
       return [info];
     }
-    const opts: HTMLElement[] = effortOpts().map(o => pickOpt(o.l, o.sub || "", S.pick.effort === o.v, () => choose("effort", o.v)));
+    const current = effectiveEffort();
+    const opts: HTMLElement[] = effortOpts().map(o => pickOpt(o.l, o.sub || "", current === o.v, () => choose("effort", o.v)));
     if (r.support === "unknown") {
       const note = document.createElement("p"); note.className = "muted";
       setText(note, "支持情况未知，手动指定可能被模型或中转服务拒绝。");
@@ -589,6 +636,7 @@ function optList(kind: string) {
   for (const o of modelOpts()) {
     out.push(pickOpt(o.label, o.id, S.pick.model === o.id, () => choose("model", o.id)));
   }
+  if (restricted()) return out; // 只能用账号勾选的模型
   const cur = customModel();
   out.push(pickOpt(i18nText("自定义模型…"), cur, !!cur, askCustomModel));
   return out;
@@ -620,7 +668,9 @@ function showFly(row: HTMLElement, kind: string) {
   fly.classList.remove("hidden");
   // 与悬停行顶端对齐，贴在面板左侧；超出视口时上下回拉
   fly.style.right = menu.offsetWidth + 6 + "px";
-  const top = menu.offsetTop + row.offsetTop - menu.scrollTop;
+  // 按实际位置计算：底部固定的强度行不随列表滚动，offsetTop 不可靠。
+  const host = (fly.offsetParent as HTMLElement | null) || menu.parentElement!;
+  const top = row.getBoundingClientRect().top - host.getBoundingClientRect().top - host.clientTop;
   fly.style.top = top + "px";
   const r = fly.getBoundingClientRect();
   let dy = 0;
@@ -653,6 +703,14 @@ function buildPickMain() {
   const menu = $("pick-menu");
   hideFly();
   menu.replaceChildren();
+  if (effortHidden()) {
+    // 当前模型没有可选强度：只列模型，选到支持调整的模型后再出现强度行。
+    const head = document.createElement("div");
+    head.className = "pick-fly-h";
+    setText(head, "模型");
+    menu.append(head, ...optList("model"));
+    return;
+  }
   if (pickStyle() === "codex") {
     menu.append(
       pickRow(i18nText("模型"), modelLabel(S.pick.model), "model"),
@@ -663,9 +721,11 @@ function buildPickMain() {
   const head = document.createElement("div");
   head.className = "pick-fly-h";
   setText(head, "模型");
-  const sep = document.createElement("div");
-  sep.className = "pick-sep";
-  menu.append(head, ...optList("model"), sep, pickRow(effortTitle(), effortLabel(S.pick.effort), "effort"));
+  // 强度行固定在面板底部，模型多时只滚动上面的列表。
+  const foot = document.createElement("div");
+  foot.className = "pick-foot";
+  foot.append(pickRow(effortTitle(), effortLabel(S.pick.effort), "effort"));
+  menu.append(head, ...optList("model"), foot);
 }
 
 /* 移动端二级面板（无悬停可用） */

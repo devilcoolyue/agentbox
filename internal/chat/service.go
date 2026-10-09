@@ -141,6 +141,10 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		}
 		return
 	}
+	// Options may replace a workspace default the account no longer offers.
+	if options.Model != "" {
+		model = options.Model
+	}
 
 	// 记录发消息前该线程的状态：首条消息且尚无标题时，回合成功后据首条
 	// 消息让模型生成一个简洁标题。房间占用期间线程不会被切换，tid 稳定，

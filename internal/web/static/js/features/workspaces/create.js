@@ -21,6 +21,8 @@ export function initWorkspaceCreation() {
     const current = () => !lifetime.signal.aborted && S.token === owner;
     const radios = [...form.querySelectorAll('input[name="agent"]')];
     const agent = () => radios.find(r => r.checked).value;
+    // An account with its own model list starts workspaces on its own default.
+    const newModel = (id, kind) => setup?.accounts.find(a => a.id === id)?.default_model || setup?.default_models[kind] || "";
     const ready = () => accounts.some(a => a.type === agent() && a.id === account.value);
     const showError = (message) => { $("new-error").textContent = message; $("new-error").classList.remove("hidden"); };
     const validAccounts = (rows) => { if (!Array.isArray(rows))
@@ -82,7 +84,7 @@ export function initWorkspaceCreation() {
         $("new-review").classList.toggle("hidden", !uncertain);
         const view = flow.view;
         const resources = view?.container_resources || setup?.container_resources;
-        const model = view?.session.default_model || setup?.default_models[agent()] || "";
+        const model = view?.session.default_model || newModel(account.value, agent());
         renderCreationSummary($("new-config-summary"), view?.session.account_label || accounts.find(a => a.id === account.value)?.label || account.value, model, resources);
         $("new-config-summary").classList.toggle("hidden", loading || missing || loadFailed);
         setTextRender($("new-progress"), () => {
@@ -235,7 +237,7 @@ export function initWorkspaceCreation() {
         if (busy || loading || loadFailed || !current() || !dialog.open || flow.view?.busy || ["running", "uncertain"].includes(flow.latest()?.state || "") || (!flow.requestID && !ready()))
             return;
         const spec = { name: $("new-name").value.trim(), agent: agent(), account_id: account.value, git_connection_id: git.value, source: source.value, directory: source.value === "empty" ? "project" : directory.value.trim() || "project" };
-        const expectedModel = flow.view?.session.default_model || setup?.default_models[spec.agent];
+        const expectedModel = flow.view?.session.default_model || newModel(spec.account_id, spec.agent);
         const expectedResources = resourceKey(flow.view?.container_resources || setup?.container_resources);
         void perform(async (signal) => {
             if (!flow.requestID) {

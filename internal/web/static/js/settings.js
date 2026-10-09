@@ -1,5 +1,5 @@
 import { createSettingsController } from "./features/settings/controller.js";
-export { SET_SECS } from "./features/settings/controller.js";
+export { MODEL_TABS, SET_SECS } from "./features/settings/controller.js";
 let active;
 export function initSettings() {
     active?.dispose();

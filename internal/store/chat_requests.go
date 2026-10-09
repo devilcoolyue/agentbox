@@ -369,3 +369,50 @@ func (s *Store) RecoverChatRequests() error {
 	_, err := s.db.Exec("UPDATE chat_requests SET state='uncertain',error_code='server_restarted',revision=revision+1,updated_at=? WHERE state IN ('accepted','starting','running')", usageTimestamp(time.Now()))
 	return err
 }
+
+// TurnReasoning is the reasoning effort a web chat turn was submitted with.
+type TurnReasoning struct {
+	Effort  string
+	Control string
+}
+
+// TurnReasonings reads, from the chat receipts, the effort each listed turn
+// was sent with. Turns without a receipt (terminal, title, legacy WebSocket),
+// receipts whose body was cleared with a deleted thread or workspace, and
+// turns sent without an explicit effort are absent from the result.
+func (s *Store) TurnReasonings(turnIDs []string) (map[string]TurnReasoning, error) {
+	out := map[string]TurnReasoning{}
+	seen := map[string]bool{}
+	ids := make([]any, 0, len(turnIDs))
+	for _, id := range turnIDs {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	for len(ids) > 0 {
+		chunk := ids[:min(len(ids), 200)]
+		ids = ids[len(chunk):]
+		rows, err := s.db.Query("SELECT turn_id, request_json FROM chat_requests WHERE turn_id != '' AND turn_id IN (?"+strings.Repeat(",?", len(chunk)-1)+")", chunk...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var turn, raw string
+			if err := rows.Scan(&turn, &raw); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			var in ChatRequestInput
+			if json.Unmarshal([]byte(raw), &in) == nil && in.Effort != "" {
+				out[turn] = TurnReasoning{Effort: in.Effort, Control: in.EffortControl}
+			}
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}

@@ -400,3 +400,36 @@ func TestRateUsesSavedSnapshotAfterPriceEdit(t *testing.T) {
 		t.Fatal("legacy reference changed")
 	}
 }
+
+// 网页回合的思考强度取自它的聊天回执；终端、起标题和没有回执的回合留空。
+func TestUsageEventsShowTheTurnsEffort(t *testing.T) {
+	s, _ := newTestServer(t)
+	if err := s.store.CreateUser(store.User{Name: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	u, _ := s.store.GetUser("alice")
+	if err := s.store.Put(store.Session{ID: "space", User: u.Name}); err != nil {
+		t.Fatal(err)
+	}
+	c, _, err := s.store.AcceptChatRequest(u, "space", "request", store.ChatRequestInput{Scope: "scope", ThreadID: "thread", Text: "synthetic", Model: "claude-opus-5-5", Effort: "xhigh", EffortControl: "effort"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := s.store.InsertUsage(
+		store.UsageEvent{TS: now, User: "alice", SessionID: "space", TurnID: c.TurnID, Agent: "claude", Model: "claude-opus-5-5", Kind: store.UsageKindChat, InputTokens: 1},
+		store.UsageEvent{TS: now, User: "alice", SessionID: "space", TurnID: c.TurnID, Agent: "claude", Model: "claude-haiku-5-5", Kind: store.UsageKindTitle, InputTokens: 1},
+		store.UsageEvent{TS: now, User: "alice", SessionID: "space", TurnID: "legacy", Agent: "claude", Model: "claude-opus-5-5", Kind: store.UsageKindChat, InputTokens: 1},
+	); err != nil {
+		t.Fatal(err)
+	}
+	got := getUsageEvents(t, s, "/api/usage/events", "alice", store.RoleUser)
+	efforts := map[string]string{}
+	for _, r := range got.Rows {
+		efforts[r.Kind+"/"+r.TurnID] = r.Effort + "/" + r.EffortControl
+	}
+	if efforts["chat/"+c.TurnID] != "xhigh/effort" || efforts["title/"+c.TurnID] != "/" || efforts["chat/legacy"] != "/" {
+		t.Fatal(efforts)
+	}
+}
+

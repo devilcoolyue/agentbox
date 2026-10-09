@@ -6,7 +6,10 @@ import { openDiagnostics } from "./diagnostics.js";
 export function openSetupSettings(section) {
     if (S.role !== "admin")
         return;
+    // The default model for new workspaces is on the system model list tab.
     S.sec = section;
+    if (section === "models")
+        S.modelTab = "system";
     emit("open-settings");
 }
 /** One authenticated lifetime owns the guide, requests and observations. */

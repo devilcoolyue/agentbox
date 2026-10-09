@@ -86,6 +86,7 @@ try{
         body=accounts;
       }
     }else if(path.endsWith('/apikey')){accounts.find(a=>a.id===path.split('/')[3]).cred_status='ok';body={ok:true};}
+    else if(path.endsWith('/models/discover'))body={source:'api',endpoint:'https://relay.example.invalid/v1/models',latency_ms:1,models:[]};
     else if(path==='/api/sessions'){
       if(method==='POST'){
         const data=route.request().postDataJSON();created++;
@@ -147,8 +148,12 @@ try{
       await page.locator('#btn-acct-add').click();await page.locator('#acct-form label.agent-codex').click();
       await page.locator('#acct-id').fill('codex-fixture');await page.locator('#acct-label').fill('Fixture account');
       await page.locator('#auth-mode-key').click();await page.locator('#auth-apikey').fill('synthetic-key');await page.locator('#auth-savekey').click();
-      await page.locator('#dlg-auth').waitFor({state:'hidden'});await home();
-      await page.locator('#setup-steps > li').nth(2).getByRole('button').click();await page.locator('#sec-models').waitFor({state:'visible'});
+      await page.locator('#dlg-auth').waitFor({state:'hidden'});
+      // Model selection follows a new account; this guide keeps the system list.
+      await page.locator('#dlg-acct-models').waitFor({state:'visible'});await page.locator('#acct-models-cancel').click();
+      await page.locator('#dlg-acct-models').waitFor({state:'hidden'});await home();
+      await page.locator('#setup-steps > li').nth(2).getByRole('button').click();await page.locator('#mdl-panel-system').waitFor({state:'visible'});
+      assert.equal(new URL(page.url()).hash,'#/settings/models/system');
       await page.locator('#mdl-codex-default + .select-trigger').click();
       await page.getByRole('option',{name:'Second · codex-second',exact:true}).click();
       await page.waitForFunction(()=>!document.querySelector('#mdl-codex-default').disabled);await home();

@@ -53,6 +53,10 @@ type Account struct {
 	ProxyID        string                         `json:"proxy_id,omitempty"`
 	Access         *AccountAccess                 `json:"access,omitempty"`
 	ModelReasoning map[string]ReasoningCapability `json:"model_reasoning,omitempty"`
+	// Models 是这个账号可用的模型（含各自的推理能力）。为空表示沿用全局模型
+	// 列表的旧行为；非空时网页对话只能在其中选择，DefaultModel 必须是其中之一。
+	Models       []ModelOption `json:"models,omitempty"`
+	DefaultModel string        `json:"default_model,omitempty"`
 
 	// credentials_dir 在配置文件里的原文（可能是相对路径），写回时保留原样。
 	rawCredDir string
@@ -166,6 +170,9 @@ type ModelOption struct {
 	ID        string               `json:"id"`
 	Label     string               `json:"label"`
 	Reasoning *ReasoningCapability `json:"reasoning,omitempty"`
+	// Hidden (account model lists only) keeps the model on the account but out
+	// of the chat picker. It stays usable: workspaces already on it keep it.
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 // TokenRates is one tier of per-million-token prices in USD. The four buckets
@@ -578,6 +585,9 @@ func (c *Config) validateLocked() error {
 				return fmt.Errorf("account %s model %s: %w", a.ID, model, err)
 			}
 		}
+		if err := a.normalizeModels(); err != nil {
+			return fmt.Errorf("account %s: %w", a.ID, err)
+		}
 		if a.Label == "" {
 			a.Label = a.ID
 		}
@@ -605,6 +615,9 @@ func (c *Config) validateLocked() error {
 			modelSeen[o.ID] = true
 			if err := ValidateReasoning(agent, o.Reasoning); err != nil {
 				return fmt.Errorf("models.%s.%s: %w", agent, o.ID, err)
+			}
+			if o.Hidden {
+				return fmt.Errorf("models.%s.%s: hidden 只用于账号的可用模型", agent, o.ID)
 			}
 			if o.Label == "" || !modelIDRe.MatchString(o.ID) {
 				return fmt.Errorf("models.%s: entry %q/%q invalid", agent, o.Label, o.ID)
@@ -638,6 +651,8 @@ type persistAccount struct {
 	ProxyID        string                         `json:"proxy_id,omitempty"`
 	Access         *AccountAccess                 `json:"access,omitempty"`
 	ModelReasoning map[string]ReasoningCapability `json:"model_reasoning,omitempty"`
+	Models         []ModelOption                  `json:"models,omitempty"`
+	DefaultModel   string                         `json:"default_model,omitempty"`
 }
 
 type persistConfig struct {
@@ -708,6 +723,7 @@ func (c *Config) saveLocked() error {
 		out.Accounts = append(out.Accounts, persistAccount{
 			ID: a.ID, Type: a.Type, Label: a.Label, CredentialsDir: dir,
 			Env: a.Env, ProxyID: a.ProxyID, Access: a.Access, ModelReasoning: a.ModelReasoning,
+			Models: a.Models, DefaultModel: a.DefaultModel,
 		})
 	}
 	raw, err := json.MarshalIndent(out, "", "  ")
@@ -1189,6 +1205,10 @@ type AccountPatch struct {
 	ProxyID        *string
 	Access         *AccountAccess
 	ModelReasoning *map[string]ReasoningCapability
+	// Models replaces the whole list; an empty slice returns the account to the
+	// global model list. DefaultModel "" picks the first listed model.
+	Models       *[]ModelOption
+	DefaultModel *string
 }
 
 func (c *Config) UpdateAccount(id string, p AccountPatch) (Account, error) {
@@ -1209,6 +1229,17 @@ func (c *Config) UpdateAccount(id string, p AccountPatch) (Account, error) {
 			}
 			if p.ModelReasoning != nil {
 				w.Accounts[i].ModelReasoning = cloneReasoningMap(*p.ModelReasoning)
+			}
+			if p.Models != nil {
+				w.Accounts[i].Models = cloneModelOptions(*p.Models)
+			}
+			if p.DefaultModel != nil {
+				w.Accounts[i].DefaultModel = *p.DefaultModel
+			}
+			// Validation repeats this; normalize here so the caller sees the
+			// filled-in labels and default.
+			if err := w.Accounts[i].normalizeModels(); err != nil {
+				return err
 			}
 			if p.Access != nil {
 				w.Accounts[i].Access = cloneAccess(p.Access)

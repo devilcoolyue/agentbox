@@ -32,6 +32,8 @@ export async function switchAccountSmoke(page, base) {
   const dialog = page.locator('#dlg-switch-acct');
   const open = async () => {
     await page.locator('#btn-wb-more').click();
+    // Switching shows two-way arrows, not the key used for authentication.
+    assert.equal(await page.getByRole('menuitem', { name: '切换账号…', exact: true }).locator('.ui-icon').getAttribute('data-icon-name'), 'switch');
     await page.getByRole('menuitem', { name: '切换账号…', exact: true }).click();
     await dialog.waitFor({ state: 'visible' });
   };
@@ -39,11 +41,17 @@ export async function switchAccountSmoke(page, base) {
     await page.goto(base + '/#/sessions/fixture-space/chat');
     await page.reload(); // a hash-only navigation keeps the earlier session list
     await page.locator('#wb-state.run').waitFor();
+    // The state is part of the meta line (same as the sidebar); the action area only holds start/stop and ⋯.
+    assert.equal(await page.locator('.wb-actions .state-pill, .wb-actions #wb-state').count(), 0, 'no state pill beside the buttons');
+    assert.match(await page.locator('#wb-meta').innerText(), / · Fixture · 运行中 · #fixture-space$/);
+    const [head, side] = await page.evaluate(() => ['#wb-state', '.sc-state.run'].map(q => getComputedStyle(document.querySelector(q)).color));
+    assert.equal(head, side, 'header state uses the sidebar colour');
 
     // Refusal (a turn is running): message shown, nothing changes, dialog stays.
     refuse = true;
     await open();
     assert.equal(await page.locator('#switch-acct-current').innerText(), '当前账号：Fixture');
+    assert.equal(await page.locator('#switch-acct-ok .ui-icon').getAttribute('data-icon-name'), 'switch');
     assert.deepEqual(await page.locator('#switch-acct-select option').allInnerTexts(), ['Fixture B'], 'only other accounts of the same agent');
     await page.locator('#switch-acct-ok').click();
     await page.locator('#switch-acct-error').filter({ hasText: '切换失败' }).waitFor();

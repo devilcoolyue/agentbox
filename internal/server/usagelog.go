@@ -20,6 +20,7 @@ package server
 // 凑齐列去编。
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -63,6 +64,11 @@ type usageRowView struct {
 	Kind         string `json:"kind"`
 	Provider     string `json:"provider,omitempty"`
 	Billing      string `json:"billing"`
+	// Effort / EffortControl: the reasoning effort the web turn was sent with,
+	// read from its chat receipt. Empty for terminal and title rows and for
+	// turns without an explicit effort.
+	Effort        string `json:"effort,omitempty"`
+	EffortControl string `json:"effort_control,omitempty"`
 
 	InputTokens      int64 `json:"input_tokens"`
 	OutputTokens     int64 `json:"output_tokens"`
@@ -278,6 +284,22 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 			TTFTMs:           e.TTFTMs,
 			Rate:             s.rateFor(e),
 		})
+	}
+	turns := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r.Kind == store.UsageKindChat {
+			turns = append(turns, r.TurnID)
+		}
+	}
+	// A failed lookup only hides the effort; the spend rows still matter.
+	if reasoning, err := s.store.TurnReasonings(turns); err == nil {
+		for i := range rows {
+			if r, ok := reasoning[rows[i].TurnID]; ok && rows[i].Kind == store.UsageKindChat {
+				rows[i].Effort, rows[i].EffortControl = r.Effort, r.Control
+			}
+		}
+	} else {
+		log.Printf("usage: 读取回合思考强度失败: %v", err)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{

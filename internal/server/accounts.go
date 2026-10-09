@@ -477,12 +477,6 @@ func (s *Server) handleAPIKeyTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 中转站的 base_url 有的带 /v1 有的不带，两种路径都试
-	candidates := []string{baseURL + "/models"}
-	if !strings.HasSuffix(baseURL, "/v1") {
-		candidates = []string{baseURL + "/v1/models", baseURL + "/models"}
-	}
-
 	// 探测也走账号绑定的出口 IP，否则「这里能通」跟容器里能不能通是两回事。
 	client, err := s.acctClient(acct, 20*time.Second)
 	if err != nil {
@@ -490,56 +484,29 @@ func (s *Server) handleAPIKeyTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer client.CloseIdleConnections()
-	var lastErr string
-	for _, u := range candidates {
-		start := time.Now()
-		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
-		if err != nil {
-			lastErr = err.Error()
-			continue
-		}
+	found, err := listProviderModels(r.Context(), client, acct.Type, baseURL, func(req *http.Request) {
 		req.Header.Set("Authorization", "Bearer "+key)
 		if acct.Type == config.AgentClaude {
 			// 官方 /v1/models 认 x-api-key + anthropic-version，中转站认 Bearer
 			req.Header.Set("x-api-key", key)
 			req.Header.Set("anthropic-version", "2023-06-01")
 		}
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = err.Error()
-			continue
-		}
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Sprintf("%s → HTTP %d: %s", u, resp.StatusCode, truncate(strings.TrimSpace(string(raw)), 200))
-			continue
-		}
-		var lst struct {
-			Data []struct {
-				ID string `json:"id"`
-			} `json:"data"`
-		}
-		if json.Unmarshal(raw, &lst) != nil {
-			lastErr = u + " → 响应不是模型列表 JSON"
-			continue
-		}
-		models := make([]string, 0, len(lst.Data))
-		for _, m := range lst.Data {
-			if m.ID != "" {
-				models = append(models, m.ID)
-			}
-		}
-		sort.Strings(models)
-		writeJSON(w, http.StatusOK, map[string]any{
-			"ok":         true,
-			"endpoint":   u,
-			"latency_ms": time.Since(start).Milliseconds(),
-			"models":     models,
-		})
+	})
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "连接失败: "+err.Error())
 		return
 	}
-	writeErr(w, http.StatusBadGateway, "连接失败: "+lastErr)
+	models := make([]string, 0, len(found.Models))
+	for _, m := range found.Models {
+		models = append(models, m.ID)
+	}
+	sort.Strings(models)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"endpoint":   found.Endpoint,
+		"latency_ms": found.LatencyMS,
+		"models":     models,
+	})
 }
 
 func firstNonEmpty(vals ...string) string {

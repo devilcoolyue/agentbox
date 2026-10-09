@@ -19,18 +19,22 @@ import { MODEL_ID_RE } from "../../chat.js";
 import { agentKey, agentName, agentIcon, decorateAgentOpts } from "../../brand.js";
 import { quotaChip, openQuota } from "../../quota.js";
 import { loadProxies, mountProxyPicker, openProxiesSection, refreshProxyCount } from "../../proxies.js";
-import { openPricingSection, refreshPriceCount } from "../../pricing.js";
+import { openPricingSection } from "../../pricing.js";
 import { setTip } from "../../tip.js";
 import { editAccountReasoning, editReasoning, reasoningLabel } from "../../reasoning-editor.js";
 import { accessLabel, editAccountAccess } from "../../account-access.js";
 import { moreButton } from "../../menu.js";
+import { modelCountLabel, openAccountModels } from "../../account-models.js";
+import { refreshModelDisplay, renderModelDisplay } from "../../model-display.js";
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
 for (const h of document.querySelectorAll("h3[data-agent]")) {
     h.classList.add("agent-h3", "agent-" + agentKey(h.dataset.agent));
     h.prepend(agentIcon(h.dataset.agent, 15));
 }
-export const SET_SECS = ["accounts", "proxies", "container", "models", "pricing", "interface", "security", "monitor", "about"];
+export const SET_SECS = ["accounts", "proxies", "container", "models", "interface", "security", "monitor", "about"];
+/** 模型管理里的标签页；价格（原「价目表」分区）是其中之一。 */
+export const MODEL_TABS = ["accounts", "pricing", "system"];
 export function createSettingsController() {
     const owner = S.token, role = S.role, lifetime = new AbortController();
     const scope = new SettingsRequests(httpApi, () => S.token === owner && S.role === role);
@@ -106,8 +110,23 @@ export function createSettingsController() {
             startMonitor();
         if (name === "proxies")
             openProxiesSection();
-        if (name === "pricing")
-            openPricingSection();
+        if (name === "models") {
+            // Account cards show prices too, so the price list loads on every tab.
+            void openPricingSection();
+            setModelTab(S.modelTab);
+        }
+    }
+    function setModelTab(tab) {
+        S.modelTab = MODEL_TABS.includes(tab) ? tab : "accounts";
+        emit("navigation-changed");
+        for (const b of document.querySelectorAll("#mdl-tabs [data-tab]")) {
+            const on = b.dataset.tab === S.modelTab;
+            b.classList.toggle("active", on);
+            b.setAttribute("aria-selected", String(on));
+        }
+        for (const name of MODEL_TABS)
+            $("mdl-panel-" + name).classList.toggle("hidden", name !== S.modelTab);
+        renderModelDisplay();
     }
     /* ---------------- 账号池 ---------------- */
     function acctStateSeg(a) {
@@ -181,6 +200,13 @@ export function createSettingsController() {
         const spaces = document.createElement("span");
         setTextRender(spaces, () => a.sessions > 0 ? a.sessions + i18nText(" 个工作空间在用") : i18nText("暂无工作空间使用"));
         state.append(spaces);
+        const models = document.createElement("button");
+        models.type = "button";
+        models.className = "acct-models-link" + (a.models?.length ? "" : " none");
+        setTextRender(models, () => modelCountLabel(a));
+        setTip(models, () => i18nText("选择这个账号能用的模型和各自的思考强度"));
+        models.addEventListener("click", () => openAccountModels(a));
+        state.append(models);
         // 出口 IP 直接标在账号行上：它决定官方那边看到的是谁，排查封号时第一眼要看的
         // 就是这个，藏进编辑弹窗里等于没有。
         const px = document.createElement("span");
@@ -202,7 +228,9 @@ export function createSettingsController() {
         edit.addEventListener("click", () => openAcctEdit(a));
         const more = moreButton(() => [
             { label: i18nText("使用范围 · ") + accessLabel(a), icon: "users", run: () => editAccountAccess(a) },
-            { label: i18nText("模型能力"), icon: "sliders", run: () => editAccountReasoning(a), tip: i18nText("为这个账号覆盖模型的推理强度能力") },
+            { label: i18nText("可用模型…"), icon: "cpu", run: () => openAccountModels(a), tip: i18nText("选择这个账号能用的模型和各自的思考强度") },
+            // 账号有自己的模型列表时，思考强度在「可用模型」里按模型设置。
+            ...(a.models?.length ? [] : [{ label: i18nText("模型能力"), icon: "sliders", run: () => editAccountReasoning(a), tip: i18nText("为这个账号覆盖模型的推理强度能力") }]),
             { label: i18nText("删除账号"), icon: "trash", danger: true, sep: true, run: () => openAcctDel(a),
                 disabled: a.sessions > 0, tip: a.sessions > 0 ? i18nText("有工作空间在用，请先删除对应工作空间") : undefined },
         ], () => i18nText("{p0} 的更多操作", { p0: String(a.label) }));
@@ -386,45 +414,32 @@ export function createSettingsController() {
         $("auth-apikey").value = "";
         resetAuthCode();
         if (authCreating) {
+            const created = authAcct;
             $("dlg-auth").close();
-            toast(i18nText("账号已添加并完成认证"));
+            toast(i18nText("账号已添加并完成认证，请选择可用模型"));
+            // 新账号认证成功后接着选模型：默认全选，可去掉不需要的。
+            if (created)
+                openAccountModels(created, { discover: true });
         }
         else {
             authMsg(i18nText("认证已保存，下次对话或重新打开终端时使用新配置。"));
         }
         void refreshAll().catch(e => toast(e.message, true));
     }
-    /* 测试连接 = 拉一次 /v1/models：通就显示延迟 + 模型列表，点模型直接入库 */
+    /* 测试连接 = 拉一次 /v1/models：通就显示延迟和模型数量；选哪些模型在「可用模型」里做 */
     function renderAuthModels(models) {
         const box = $("auth-models");
         box.replaceChildren();
-        box.classList.toggle("hidden", !models || !models.length);
-        if (!models)
+        box.classList.toggle("hidden", !models || !models.length || !authAcct);
+        if (!models || !authAcct)
             return;
-        const agent = authAcct.type; // chips 加进当前账号类型对应的模型列表
-        const have = new Set((((settingsState.value && settingsState.value.models) || {})[agent] || []).map((m) => m.id));
-        for (const id of models) {
-            const chip = document.createElement("button");
-            chip.type = "button";
-            chip.className = "auth-model-chip mono" + (have.has(id) ? " in" : "");
-            actionButton(chip, id, have.has(id) ? "check" : "plus", () => have.has(id) ? i18nText("{p0} · 已在模型列表中", { p0: String(id) }) : i18nText("将 {p0} 加入模型列表", { p0: String(id) }));
-            setTip(chip, () => have.has(id) ? i18nText("已在模型列表中") : i18nText("点击加入模型列表"));
-            chip.addEventListener("click", () => {
-                const models = (settingsState.value && settingsState.value.models) || {};
-                if ((models[agent] || []).some((x) => x.id === id)) {
-                    toast(i18nText("模型 ") + id + i18nText(" 已在列表中"));
-                    return;
-                }
-                const next = { ...models, [agent]: [...(models[agent] || []), { id, label: id }] };
-                putSettings({ models: next }, chip, i18nText("已添加 ") + id).then((ok) => {
-                    if (ok) {
-                        chip.classList.add("in");
-                        actionButton(chip, id, "check", () => i18nText("{p0} · 已在模型列表中", { p0: String(id) }));
-                    }
-                });
-            });
-            box.appendChild(chip);
-        }
+        const acct = authAcct;
+        const pick = document.createElement("button");
+        pick.type = "button";
+        pick.className = "btn btn-sm";
+        actionButton(pick, () => i18nText("选择可用模型（{n}）", { n: String(models.length) }), "cpu", () => i18nText("先保存 Key，再从上游读取并勾选这个账号能用的模型"));
+        pick.addEventListener("click", () => openAccountModels(S.accounts.find(a => a.id === acct.id) || acct, { discover: true }));
+        box.append(pick);
     }
     /* ---------------- 容器与资源 / 安全与访问 表单 ---------------- */
     function fillSettingsForms() {
@@ -473,7 +488,6 @@ export function createSettingsController() {
         $("set-tips-interval").value = String(tips.interval_sec != null ? tips.interval_sec : 4);
         setSelectValue($("set-tips-anim"), tips.animation || "scroll");
         renderModels();
-        refreshPriceCount();
         rebaseline();
     }
     async function putSettings(patch, btn, okMsg, keepDirty = true) {
@@ -800,8 +814,16 @@ export function createSettingsController() {
         }, { signal: lifetime.signal });
         bus.addEventListener("open-settings", openSettingsView, { signal: lifetime.signal });
         bus.addEventListener("data-updated", () => {
-            if (S.view === "settings")
+            if (S.view === "settings") {
                 renderSettingsAccounts();
+                refreshModelDisplay();
+            }
+        }, { signal: lifetime.signal });
+        bus.addEventListener("pricing-updated", refreshModelDisplay, { signal: lifetime.signal });
+        $("mdl-tabs").addEventListener("click", (e) => {
+            const tab = e.target.closest("[data-tab]")?.dataset.tab;
+            if (tab && tab !== S.modelTab && scope.current())
+                setModelTab(tab);
         }, { signal: lifetime.signal });
         $("btn-acct-add").addEventListener("click", () => {
             if (authBusy)
@@ -980,7 +1002,7 @@ export function createSettingsController() {
                 method: "POST", body: JSON.stringify({ api_key: $("auth-apikey").value.trim(), base_url: $("auth-baseurl").value.trim() }),
             });
             renderAuthModels(res.models);
-            authMsg(i18nText("连接正常 · {p0}ms · {p1} 个模型，可点击加入模型列表", { p0: String(res.latency_ms), p1: String(res.models.length) }));
+            authMsg(i18nText("连接正常 · {p0}ms · {p1} 个模型", { p0: String(res.latency_ms), p1: String(res.models.length) }));
         }), { signal: lifetime.signal });
         $("auth-clearkey").addEventListener("click", () => authAction("auth-clearkey", async () => {
             if (!authAcct)

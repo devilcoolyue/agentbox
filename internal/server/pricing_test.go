@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,6 +103,37 @@ func TestPricingWarningIncludesFallbackBlankAndRecentModels(t *testing.T) {
 	}
 	if found["fixture-new"] != "fallback" || found[""] != "fallback" || found["fixture-unpriced"] != "unpriced" || found["fixture-old"] != "" {
 		t.Fatal(found)
+	}
+}
+
+func TestPricingWarningIncludesAccountModels(t *testing.T) {
+	s := pricingTestServer(t)
+	rate := config.ModelPrice{TokenRates: config.TokenRates{Input: 1}}
+	s.cfg.Pricing = map[string]config.ModelPrice{"codex": rate, "claude-opus-4-5": rate, "gpt-5.5": rate, "unused-model": rate}
+	s.cfg.Accounts = []config.Account{
+		{ID: "relay", Type: config.AgentCodex, Models: []config.ModelOption{{ID: "gpt-5.5", Label: "GPT-5.5"}, {ID: "deepseek-v4", Label: "DeepSeek"}}},
+		{ID: "sub", Type: config.AgentClaude, Models: []config.ModelOption{{ID: "claude-opus-4-5-20251101", Label: "Opus"}, {ID: "claude-new-6", Label: "New"}}},
+	}
+	// Every account has its own list: the system list is not offered anywhere.
+	s.cfg.Models = map[string][]config.ModelOption{config.AgentCodex: {{ID: "system-only", Label: "S"}}}
+	s.cfg.DefaultModels = map[string]string{config.AgentClaude: "claude-new-6", config.AgentCodex: "gpt-5.5"}
+	v := s.pricingView()
+	found := map[string]string{}
+	for _, w := range v.Warnings {
+		found[w.Agent+"/"+w.Model] = w.Kind + ":" + w.Key
+	}
+	if found["codex/deepseek-v4"] != "fallback:codex" || found["claude/claude-new-6"] != "unpriced:" || found["codex/system-only"] != "" || len(found) != 2 {
+		t.Fatal(found)
+	}
+	// Dated IDs resolve to the undated row; unused rows are not in use.
+	if strings.Join(v.InUse, ",") != "claude-opus-4-5,codex,gpt-5.5" {
+		t.Fatalf("in use: %v", v.InUse)
+	}
+	// An account without its own list makes the system list count again.
+	s.cfg.Accounts = append(s.cfg.Accounts, config.Account{ID: "plain", Type: config.AgentCodex})
+	v = s.pricingView()
+	if !slices.ContainsFunc(v.Warnings, func(w pricingWarning) bool { return w.Model == "system-only" && w.Kind == "fallback" }) {
+		t.Fatal(v.Warnings)
 	}
 }
 

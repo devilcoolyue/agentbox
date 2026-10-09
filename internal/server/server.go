@@ -95,6 +95,7 @@ type Server struct {
 	network      networkState
 	updates      updateState
 	storage      storageState
+	cliCatalog   cliCatalogCache // models the Agent image's CLIs list, per image ID
 	runtimeOnce  sync.Once
 	serving      atomic.Bool
 	life         *runtimeState
@@ -328,6 +329,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/accounts/{id}/apikey", s.admin(http.HandlerFunc(s.handleSetAPIKey)))
 	mux.Handle("DELETE /api/accounts/{id}/apikey", s.admin(http.HandlerFunc(s.handleClearAPIKey)))
 	mux.Handle("POST /api/accounts/{id}/apikey/test", s.admin(http.HandlerFunc(s.handleAPIKeyTest)))
+	mux.Handle("POST /api/accounts/{id}/models/discover", s.admin(http.HandlerFunc(s.handleAccountModelsDiscover)))
 	mux.Handle("GET /api/proxies", s.admin(http.HandlerFunc(s.handleProxyList)))
 	mux.Handle("POST /api/proxies", s.admin(http.HandlerFunc(s.handleProxyCreate)))
 	mux.Handle("POST /api/proxies/test", s.admin(http.HandlerFunc(s.handleProxyTest)))
@@ -656,6 +658,8 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 
 type acctView struct {
 	ModelReasoning map[string]config.ReasoningCapability `json:"model_reasoning,omitempty"`
+	Models         []config.ModelOption                  `json:"models,omitempty"`
+	DefaultModel   string                                `json:"default_model,omitempty"`
 	Access         *config.AccountAccess                 `json:"access,omitempty"`
 	ID             string                                `json:"id"`
 	Type           string                                `json:"type"`
@@ -676,6 +680,7 @@ func (s *Server) accountView(a config.Account, sessions int) acctView {
 	v := acctView{
 		ID: a.ID, Type: a.Type, Label: a.Label, Sessions: sessions,
 		CredStatus: st, ExpiresAt: exp, Env: a.Env, ProxyID: a.ProxyID, Access: a.Access, ModelReasoning: a.ModelReasoning,
+		Models: a.Models, DefaultModel: a.DefaultModel,
 	}
 	if p, bound := s.cfg.AccountProxy(a.ID); bound {
 		v.ProxyLabel = p.Name + " · " + p.DisplayURL()
@@ -712,7 +717,7 @@ func (s *Server) execEnv(sess store.Session) ([]string, error) {
 	}
 	sort.Strings(env)
 	env = append(env, s.proxyEnvList(sess)...)
-	if sess.Agent == config.AgentClaude && sess.DefaultModel != "" {
+	if model := acct.ResolveModel(sess.DefaultModel); sess.Agent == config.AgentClaude && model != "" {
 		// The workspace default takes precedence over an account model override.
 		filtered := env[:0]
 		for _, kv := range env {
@@ -720,7 +725,7 @@ func (s *Server) execEnv(sess store.Session) ([]string, error) {
 				filtered = append(filtered, kv)
 			}
 		}
-		env = append(filtered, "ANTHROPIC_MODEL="+sess.DefaultModel)
+		env = append(filtered, "ANTHROPIC_MODEL="+model)
 	}
 	return append(env, s.tunnelEnvList(sess)...), nil
 }
@@ -755,7 +760,7 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 			// 普通用户建会话只需要账号列表本身，env/base_url 里可能有密钥，
 			// 出口 IP 也属于运维信息，一并摘掉。
 			v.Access = nil
-			v.ModelReasoning = nil
+			v.ModelReasoning, v.Models = nil, nil
 			v.Env, v.BaseURL = nil, ""
 			v.ProxyID, v.ProxyLabel = "", ""
 		}

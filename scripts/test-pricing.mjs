@@ -9,7 +9,7 @@ export async function pricingSmoke(page) {
  let revision=1,failNext=false,applied=[];
  let active={revision:'1',prices:{'fixture-custom':rate(9),'fixture-follow':rate(2),'fixture-removed':rate(3)},managed:{'fixture-follow':origin,'fixture-removed':origin},catalog:{url:'https://example.invalid/catalog.json',auto_check:true,auto_apply:false},history:[]};
  const candidate={revision:'candidate-v2',catalog:{schema:1,version:'fixture-v2',published_at:'2026-09-26T08:00:00Z',issues:[{model:'fixture-incomplete',reason:'缺少缓存读取单价，保留现价'}],entries:{'fixture-custom':entry(1),'fixture-follow':entry(4),'fixture-new':entry(2)}},url:active.catalog.url,bundled:false,checked_at:Date.now(),attempted_at:Date.now(),error:''};
- const response=()=>({active,candidate,changes:[...Object.entries(candidate.catalog.entries).map(([model,candidate])=>({model,candidate,current:active.prices[model],kind:!active.prices[model]?'new':!active.managed[model]?'custom':JSON.stringify(active.prices[model])===JSON.stringify(candidate.price)?'current':'update'})),{model:'fixture-removed',kind:'removed',current:active.prices['fixture-removed']}],warnings:[{agent:'codex',model:'fixture-missing',kind:'unpriced',key:''},{agent:'codex',model:'fixture-fallback',kind:'fallback',key:'codex'}],warnings_truncated:false});
+ const response=()=>({active,candidate,changes:[...Object.entries(candidate.catalog.entries).map(([model,candidate])=>({model,candidate,current:active.prices[model],kind:!active.prices[model]?'new':!active.managed[model]?'custom':JSON.stringify(active.prices[model])===JSON.stringify(candidate.price)?'current':'update'})),{model:'fixture-removed',kind:'removed',current:active.prices['fixture-removed']}],warnings:[{agent:'codex',model:'fixture-missing',kind:'unpriced',key:''},{agent:'codex',model:'fixture-fallback',kind:'fallback',key:'codex'}],warnings_truncated:false,in_use:Object.keys(active.prices).filter(key=>key!=='fixture-removed')});
  const snapshot=()=>({id:active.revision,saved_at:Date.now(),reason:'测试变更',prices:structuredClone(active.prices),managed:structuredClone(active.managed)});
  const handler=async route=>{
   const req=route.request(),path=new URL(req.url()).pathname;
@@ -37,10 +37,24 @@ export async function pricingSmoke(page) {
  };
  await page.route('**/api/pricing**',handler);
  try {
+  // The old price list address opens the Prices tab of 模型管理.
   await page.evaluate(()=>location.hash='#/settings/pricing');
   await page.locator('#price-rows tr[data-key="fixture-follow"]').waitFor();
+  await page.waitForFunction(()=>location.hash==='#/settings/models/pricing');
+  assert.equal(await page.locator('#mdl-tab-pricing').getAttribute('aria-selected'),'true');
   const row = key => page.locator(`#price-rows tr[data-key="${key}"]`);
-  assert.equal(await page.locator('#price-count').innerText(),'3');
+  assert.equal(await page.locator('#mdl-tab-pricing').innerText(),'价格','the tab carries no count');
+  // Only prices in use by default; unused rows stay in the table and in the save.
+  assert.equal(await row('fixture-removed').count(),0);
+  assert.match(await page.locator('#price-inuse-note').innerText(),/另有 1 个未使用的价格已隐藏/);
+  await page.locator('#price-inuse').uncheck();
+  await row('fixture-removed').waitFor();
+  await page.locator('#price-inuse').check();
+  assert.equal(await row('fixture-removed').count(),0);
+  // The catalog card is folded; its header still shows the status.
+  assert.equal(await page.locator('#price-catalog-box').evaluate(el=>el.open),false);
+  assert.match(await page.locator('#price-catalog-status').innerText(),/fixture-v2/);
+  await page.locator('#price-catalog-box > summary').click();
   assert.match(await page.locator('#price-source-issues').innerText(),/fixture-incomplete.*缺少缓存/s);
   assert.match(await row('fixture-custom').innerText(),/自定义/);
   assert.match(await row('fixture-follow').innerText(),/跟随目录/);
@@ -81,6 +95,7 @@ export async function pricingSmoke(page) {
   assert.deepEqual(applied[1].adopt_custom,['fixture-custom']);
   await row('fixture-follow').locator('input.input').fill('7');await page.locator('#price-save').click();
   await page.waitForFunction(()=>document.querySelector('#price-rows tr[data-key="fixture-follow"] small').textContent==='自定义');
+  assert.deepEqual(active.prices['fixture-removed'],rate(3),'a row hidden by the filter was dropped on save');
   await row('fixture-new').getByRole('button',{name:'设为自定义'}).click();await page.locator('#price-save').click();
   await page.waitForFunction(()=>!document.querySelector('#price-save').disabled);
   assert.equal(active.managed['fixture-new'],undefined);

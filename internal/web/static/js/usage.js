@@ -1,5 +1,6 @@
 import { t as i18nText, setText, setTextRender, setAttrRender } from "./i18n.js";
 import { svgIcon } from "./icons.js";
+import { BUDGETS, EFFORT_LABELS } from "./reasoning.js";
 import { cacheHitText } from "./usage-math.js";
 /* usage：使用记录（消耗流水明细）。
  *
@@ -202,6 +203,13 @@ function setSort(next) {
     reload();
 }
 /* ---------------- 渲染 ---------------- */
+/** 思考强度的显示：档位用英文常量，思考预算附上 token 数（与对话页一致）。 */
+function effortText(r) {
+    if (!r.effort)
+        return "";
+    const label = EFFORT_LABELS[r.effort] || r.effort;
+    return r.effort_control === "budget" && BUDGETS[r.effort] ? `${label} (${BUDGETS[r.effort]})` : label;
+}
 const KIND_LABEL = { get chat() { return i18nText("对话"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); } };
 const KIND_HINT = {
     get terminal() { return i18nText("用户在「终端」页签里手敲 CLI 花的量，事后从 CLI 自己的记录里补记；只记账不扣额度"); },
@@ -304,10 +312,21 @@ function renderRows(data) {
         setAttrRender(modelName, "title", () => r.model || agentName(r.agent) + i18nText("（默认模型）"));
         mline.append(agentIcon(r.agent, 15), modelName);
         modelv.appendChild(mline);
-        if (r.provider) {
+        if (r.provider || r.effort) {
             const p = document.createElement("div");
             p.className = "u-sub";
-            setTextRender(p, () => r.provider === "firstParty" ? i18nText("官方直连") : (r.provider || ""));
+            if (r.provider) {
+                const via = document.createElement("span");
+                setTextRender(via, () => r.provider === "firstParty" ? i18nText("官方直连") : (r.provider || ""));
+                p.appendChild(via);
+            }
+            if (r.effort) {
+                const effort = document.createElement("span");
+                effort.className = "u-effort";
+                effort.append(svgIcon("sliders", 12), document.createTextNode(effortText(r)));
+                setTip(effort, () => i18nText("这一回合发送时选择的思考强度"));
+                p.appendChild(effort);
+            }
             modelv.appendChild(p);
         }
         tr.appendChild(model);
@@ -666,7 +685,7 @@ async function exportCSV() {
             toast(i18nText("只导出了{p0}的 {p1} 行（共 {p2} 行），", { p0: String(asc ? i18nText("最早") : i18nText("最近")), p1: String(data.rows.length), p2: String(data.total.rows) }) +
                 i18nText("请缩小时间范围后分批导出"), true);
         }
-        const head = [i18nText("时间（{p0}）", { p0: String(usageTimeZone) }), i18nText("用户"), i18nText("工作空间"), i18nText("工作空间ID"), i18nText("账号"), "Agent", i18nText("模型"), i18nText("类型"), i18nText("计费"),
+        const head = [i18nText("时间（{p0}）", { p0: String(usageTimeZone) }), i18nText("用户"), i18nText("工作空间"), i18nText("工作空间ID"), i18nText("账号"), "Agent", i18nText("模型"), i18nText("思考强度"), i18nText("类型"), i18nText("计费"),
             i18nText("输入"), i18nText("输出"), i18nText("缓存读取"), i18nText("缓存写入"), i18nText("缓存命中率"), i18nText("合计Token"), i18nText("费用USD"),
             i18nText("首字ms"), i18nText("总耗时ms"), i18nText("模型耗时ms"), i18nText("回合ID")];
         const lines = [head.join(",")];
@@ -674,7 +693,7 @@ async function exportCSV() {
             lines.push([
                 fmtUsageTime(r.ts, true),
                 r.user, r.session_name || "", r.session_id, r.account_label || "",
-                r.agent, r.model || "", KIND_LABEL[r.kind] || r.kind, (BILLING[r.billing] || { text: r.billing }).text,
+                r.agent, r.model || "", effortText(r), KIND_LABEL[r.kind] || r.kind, (BILLING[r.billing] || { text: r.billing }).text,
                 r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_tokens, cacheHitText(r), r.total_tokens,
                 // 导出给人算账，这里才把微美元换成美元；六位小数才装得下一次便宜回合。
                 (r.cost_micro_usd / 1e6).toFixed(6),

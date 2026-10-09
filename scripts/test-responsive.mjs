@@ -16,7 +16,7 @@ export async function responsiveSmoke(page, base) {
         assert.equal(await page.locator('#set-nav').isVisible(), false);
         assert.equal(await page.locator('#view-settings > .set-head').isVisible(), false);
         assert.ok((await page.locator('#acct-list-box').boundingBox()).y < 160, 'navigation consumes content space');
-        for (const [label, sec] of [['IP 代理','proxies'],['容器与资源','container'],['模型管理','models'],['价目表','pricing'],['界面与提示','interface'],['安全与访问','security'],['运维监控','monitor'],['关于与更新','about'],['账号池','accounts']]) {
+        for (const [label, sec] of [['IP 代理','proxies'],['容器与资源','container'],['模型管理','models'],['界面与提示','interface'],['安全与访问','security'],['运维监控','monitor'],['关于与更新','about'],['账号池','accounts']]) {
           await choose(label);
           await page.locator('#sec-'+sec).waitFor({state:'visible'});
           assert.equal(await page.locator('#topbar-title').innerText(),'系统设置');
@@ -35,7 +35,7 @@ export async function responsiveSmoke(page, base) {
               checked:menu.querySelector('[aria-checked=true] .action-label')?.textContent.trim(), focused:document.activeElement?.getAttribute('aria-checked'),
               ids:menu.querySelectorAll('[id]').length};
           });
-          assert.deepEqual(menu, {items:9, inputs:0, scrolls:false, inView:true, checked:'账号池', focused:'true', ids:0}, 'section menu shows every section at '+height+'px');
+          assert.deepEqual(menu, {items:8, inputs:0, scrolls:false, inView:true, checked:'账号池', focused:'true', ids:0}, 'section menu shows every section at '+height+'px');
           await page.keyboard.press('ArrowDown');
           assert.match(await page.evaluate(()=>document.activeElement.textContent), /IP 代理/);
           await page.keyboard.press('Escape');
@@ -93,8 +93,8 @@ export async function responsiveSmoke(page, base) {
         await page.locator('#btn-sidebar-toggle').click();
         await sidebarSettled(false);
       }
-      await page.goto(base + '/#/settings/models');
-      await page.locator('#sec-models').waitFor({state:'visible'});
+      await page.goto(base + '/#/settings/models/system');
+      await page.locator('#mdl-panel-system').waitFor({state:'visible'});
       for (const button of await page.locator('.model-row .m-reasoning').all()) {
         assert.match(await button.innerText(), /^模型能力 · /, 'model capability description is visible');
       }

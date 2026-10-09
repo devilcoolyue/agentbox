@@ -11,6 +11,7 @@ import {loginProblemsSmoke, problemsSmoke} from './test-problems-browser.mjs';
 import { responsiveSmoke } from './test-responsive.mjs';
 import { skinsSmoke } from './test-skins.mjs';
 import { switchAccountSmoke } from './test-switch-account.mjs';
+import { accountModelsSmoke } from './test-account-models.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
 import { remoteBrowserSmoke } from './test-remote-browser.mjs';
 import { imageUpdateSmoke } from './test-image-updates.mjs';
@@ -47,7 +48,7 @@ export async function smoke(page) {
  let nextRelease = {latest_version:'v0.2.0',available:true,notes:'新增版本提醒。\n\n## 升级说明\n\n- **自动备份**后重启\n- [发行记录](https://github.com/devilcoolyue/agentbox/releases) · [仓库文档](docs/i18n.md) · [坏链接](javascript:window.__notesXSS=1)\n\n```bash\nsudo agentbox --version\n```\n\n<script>window.__notesXSS=1</script>\n<img src="x" onerror="window.__notesXSS=1">'};
  let upgrade = {supported:true,reason:'',current_version:release.current_version,job:null};
  let upgradeStarts = 0, upgradeReads = 0, loseUpgradeResponse = false, upgradeOffline = false;
- const accounts = []; let accountCreates = 0, failOAuthOnce = true, oauthFinishes = 0, keyWrites = 0;
+ const accounts = []; let accountCreates = 0, failOAuthOnce = true, oauthFinishes = 0, keyWrites = 0, modelDiscoveries = 0;
  let settings = { listen:'127.0.0.1:8180', agent_image:'fixture', permission_mode:'bypassPermissions', max_upload_mb:10,
   idle_timeout_min:30, timezone:'UTC', container:{memory_mb:512,cpus:1,pids_limit:128,network:'none'},
   resources:{max_running:2,max_running_per_user:1,min_free_bytes:0},models:{claude:[],codex:[{id:'fixture',label:'Fixture',reasoning:{support:'supported',control:'effort',levels:['low','high','xhigh']}},{id:'fixture-lite',label:'Fixture Lite',reasoning:{support:'supported',control:'effort',levels:['low','high']}},{id:'fixture-none',label:'No adjustment',reasoning:{support:'unsupported'}},{id:'fixture-custom',label:'Custom'}]}, default_models:{claude:'fixture',codex:'fixture'},
@@ -70,7 +71,7 @@ export async function smoke(page) {
   else if(path === '/api/git/connections') body=[];
   else if(path === '/api/me/git') body={user:'fixture',name:'Fixture',email:'fixture@example.com'};
   else if(path === '/api/proxies') body={proxies:[],bridge_up:false,bridge_host:'127.0.0.1'};
-  else if(path === '/api/pricing') body={active:{revision:'1',prices:{},managed:{},history:[],catalog:{url:'',auto_check:false}},candidate:null,changes:[],warnings:[]};
+  else if(path === '/api/pricing') body={active:{revision:'1',prices:{},managed:{},history:[],catalog:{url:'',auto_check:false}},candidate:{catalog:{schema:1,version:'fixture',published_at:'',entries:{}},revision:'c1',url:'',bundled:true,checked_at:0,attempted_at:0,error:''},changes:[],warnings:[],warnings_truncated:false,in_use:[]};
   else if(path === '/api/me/git/default') body={connection_id:''};
   else if(path === '/api/image-updates') body={settings:{enabled:false,channel:'stable',time:'04:00',update_codex:false},agent_image:settings.agent_image,previous_image:'',timezone:'UTC',status:{running:false,current:{},target:{}}};
   else if(path === '/api/updates') { updateReads++; body=release; }
@@ -110,6 +111,8 @@ export async function smoke(page) {
    if(failOAuthOnce){failOAuthOnce=false;await route.fulfill({status:400,json:{error:'state 不匹配，请重新粘贴回调地址'}});return;}
    accounts.find(a=>a.id===path.split('/')[3]).auth_mode='oauth';
    accounts.find(a=>a.id===path.split('/')[3]).cred_status='ok'; body={ok:true};
+  } else if(path.endsWith('/models/discover')) {
+   modelDiscoveries++; body={source:'api',endpoint:'https://relay.example.invalid/v1/models',latency_ms:5,models:[{id:'fixture',label:'Fixture'}]};
   } else if(path.endsWith('/apikey')) {
    keyWrites++; accounts.find(a=>a.id===path.split('/')[3]).auth_mode='apikey';
    accounts.find(a=>a.id===path.split('/')[3]).cred_status='ok';body={ok:true};
@@ -156,6 +159,8 @@ export async function smoke(page) {
   if (process.env.AGENTBOX_BROWSER_ONLY_DIAGNOSTICS === '1') { assert.deepEqual(errors,[]); return; }
   await switchAccountSmoke(page,base);
   if (process.env.AGENTBOX_BROWSER_ONLY_SWITCH_ACCOUNT === '1') { assert.deepEqual(errors,[]); return; }
+  await accountModelsSmoke(page,base);
+  if (process.env.AGENTBOX_BROWSER_ONLY_ACCOUNT_MODELS === '1') { assert.deepEqual(errors,[]); return; }
   await problemsSmoke(page,base,()=>chatSocket,entries=>{historyEntries=entries;});
   if (process.env.AGENTBOX_BROWSER_ONLY_PROBLEMS === '1') { assert.deepEqual(errors,[]); return; }
   if (process.env.AGENTBOX_BROWSER_ONLY_IMAGE_UPDATES === '1') {
@@ -377,6 +382,11 @@ export async function smoke(page) {
   await page.locator('#auth-finish').click();
   await page.locator('#dlg-auth').waitFor({state:'hidden'});
   assert.equal(accountCreates,1);assert.equal(oauthFinishes,2);
+  // A new account continues to model selection, reading the upstream list at once.
+  await page.locator('#dlg-acct-models').waitFor({state:'visible'});
+  await page.locator('#acct-models-list .am-row').first().waitFor();
+  await page.locator('#acct-models-cancel').click();
+  await page.locator('#dlg-acct-models').waitFor({state:'hidden'});
   for (const type of ['claude','codex']) {
    await page.locator('#btn-acct-add').click();
    await page.locator(`#acct-form label.agent-${type}`).click();
@@ -388,12 +398,15 @@ export async function smoke(page) {
    await page.locator('#auth-baseurl').fill('https://relay.example.invalid/v1');
    await page.locator('#auth-savekey').click();
    await page.locator('#dlg-auth').waitFor({state:'hidden'});
+   await page.locator('#dlg-acct-models').waitFor({state:'visible'});
+   await page.locator('#acct-models-cancel').click();
+   await page.locator('#dlg-acct-models').waitFor({state:'hidden'});
   }
-  assert.equal(accountCreates,3);assert.equal(keyWrites,2);
+  assert.equal(accountCreates,3);assert.equal(keyWrites,2);assert.equal(modelDiscoveries,3);
   const acctRow = page.locator('.acct-row').filter({hasText:'codex-key-fixture'});
   // Secondary account actions live in the row menu; delete stays last.
   await acctRow.locator('.more-btn').click();
-  assert.deepEqual((await page.locator('.menu-pop [role=menuitem]').allInnerTexts()).map(t=>t.trim()),['使用范围 · 全体用户','模型能力','删除账号']);
+  assert.deepEqual((await page.locator('.menu-pop [role=menuitem]').allInnerTexts()).map(t=>t.trim()),['使用范围 · 全体用户','可用模型…','模型能力','删除账号']);
   await page.getByRole('menuitem',{name:'模型能力',exact:true}).click();
   await page.locator('#ask-input-field').fill('fixture');await page.locator('#ask-input-ok').click();
   const overrideDialog=page.locator('dialog[open]').filter({has:page.locator('select[name="support"]')});
@@ -417,21 +430,29 @@ export async function smoke(page) {
   await page.locator('#set-nav [data-sec="monitor"]').click();
   await page.waitForTimeout(100);assert.equal(monitorCalls,1);
   usageRows = [
-    {input_tokens:10,cache_read_tokens:80,cache_write_tokens:10},
-    {input_tokens:100,cache_read_tokens:0,cache_write_tokens:0},
-    {input_tokens:0,cache_read_tokens:0,cache_write_tokens:0},
+    {input_tokens:10,cache_read_tokens:80,cache_write_tokens:10,provider:'firstParty',effort:'xhigh',effort_control:'effort'},
+    {input_tokens:100,cache_read_tokens:0,cache_write_tokens:0,kind:'title'},
+    {input_tokens:0,cache_read_tokens:0,cache_write_tokens:0,effort:'medium',effort_control:'budget'},
   ].map((tokens,i)=>({id:i+1,ts:Date.now(),user:'fixture',session_id:'fixture-space',session_name:'Fixture workspace',thread_id:'thread',turn_id:'turn-'+i,agent:'claude',account_id:'fixture',model:'fixture-model',kind:'chat',billing:'table',output_tokens:1000,total_tokens:1100,cost_micro_usd:1000,ttft_ms:100,wall_ms:1000,duration_ms:900,...tokens}));
   await page.evaluate(async()=>{ const {emit}=await import('/_v/{{BUILD}}/js/state.js');emit('open-usage'); });
   await page.locator('#view-usage').waitFor({state:'visible'});
   await page.locator('#usage-sub').filter({hasText:'终端全量扫描'}).waitFor();
   await page.locator('#usage-rows .u-hit').first().waitFor();
   assert.deepEqual(await page.locator('#usage-rows .u-hit .u-v').allTextContents(),['80.0%','0.0%','—']);
+  // The reasoning effort a web turn was sent with sits under its model.
+  assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['Extra High','Medium (13000)']);
+  assert.match(await page.locator('#usage-rows tr').first().locator('.u-sub:has(.u-effort)').innerText(),/官方直连[\s\S]*Extra High/);
+  // Every type is a tag: title rows are not bare text.
+  const chipBorder=kind=>page.locator(`#usage-rows .u-chip.${kind}`).first().evaluate(el=>getComputedStyle(el).borderTopColor);
+  assert.equal(await chipBorder('title'),await chipBorder('chat'));
   const downloaded=page.waitForEvent('download');
   await page.locator('#uf-export').click();
   const csv=await readFile(await (await downloaded).path(),'utf8');
   const csvLines=csv.trim().split('\r\n'), hitColumn=csvLines[0].split(',').indexOf('缓存命中率');
   assert.ok(hitColumn>=0);
   assert.deepEqual(csvLines.slice(1).map(line=>line.split(',')[hitColumn]),['80.0%','0.0%','—']);
+  const effortColumn=csvLines[0].split(',').indexOf('思考强度');
+  assert.deepEqual(csvLines.slice(1).map(line=>line.split(',')[effortColumn]),['Extra High','','Medium (13000)']);
   if(process.env.AGENTBOX_USAGE_SCREENSHOTS) {
     await mkdir('output/playwright',{recursive:true});
     await page.screenshot({path:'output/playwright/usage-cache-desktop.png',animations:'disabled'});
@@ -487,6 +508,11 @@ export async function smoke(page) {
   await at('#/settings/container','#sec-container');
   await page.locator('#set-nav [data-sec="models"]').click();
   await at('#/settings/models','#sec-models');
+  // The system model list is a tab of 模型管理 with its own address.
+  await page.locator('#mdl-tab-system').click();
+  await at('#/settings/models/system','#mdl-panel-system');
+  await page.reload();
+  await at('#/settings/models/system','#mdl-panel-system');
   const capabilityRow = page.locator('.model-row').filter({hasText:'Fixture Lite'});
   await capabilityRow.getByRole('button',{name:'推理强度 · low / high'}).click();
   const capabilityDialog = page.locator('dialog[open]').filter({hasText:'模型能力'});
@@ -503,10 +529,15 @@ export async function smoke(page) {
   await assertActionIcons(page);await capabilityDialog.getByRole('button',{name:'保存',exact:true}).click();
   await capabilityRow.getByRole('button',{name:'推理强度 · low / high'}).waitFor();
   await page.setViewportSize({width:1280,height:900});
+  // Tabs are history entries too.
+  await page.goBack();
+  await at('#/settings/models','#mdl-panel-accounts');
   await page.goBack();
   await at('#/settings/container','#sec-container');
   await page.goForward();
-  await at('#/settings/models','#sec-models');
+  await at('#/settings/models','#mdl-panel-accounts');
+  await page.goForward();
+  await at('#/settings/models/system','#mdl-panel-system');
   await open('open-tunnel');
   await at('#/tunnel','#view-tunnel');
   await page.locator('#tun-network').waitFor({state:'visible'});
@@ -532,10 +563,10 @@ export async function smoke(page) {
    await page.locator('#pick-fly .pick-opt').filter({hasText:label}).click();
   };
   await page.locator('#btn-pick').filter({hasText:'Fixture'}).waitFor();
-  await pick('推理强度','极高');
+  await pick('推理强度','Extra High');
   await pick('模型','Fixture Lite');
-  assert.match(await page.locator('#btn-pick').innerText(),/默认强度/);
-  await pick('推理强度','高');
+  // Known levels have no "default" entry: the pill names the level a turn uses.
+  assert.match(await page.locator('#btn-pick').innerText(),/Fixture Lite · High/);
   await page.locator('#chat-input').fill('synthetic reasoning message');
   await page.locator('#chat-send').click();
   await page.waitForTimeout(100);
@@ -549,9 +580,9 @@ export async function smoke(page) {
   await page.locator('#pick-menu .pick-row').filter({hasText:'推理强度'}).hover();
   assert.equal(await page.locator('#pick-fly .pick-opt').count(),2,'unknown model must require manual opt-in');
   await page.locator('#pick-fly .pick-opt').filter({hasText:'手动指定'}).click();
-  await page.locator('#pick-menu .pick-opt').filter({hasText:'极高'}).click();
+  await page.locator('#pick-menu .pick-opt').filter({hasText:'Extra High'}).click();
   await page.reload();
-  await page.locator('#btn-pick').filter({hasText:'极高'}).waitFor();
+  await page.locator('#btn-pick').filter({hasText:'Extra High'}).waitFor();
   // Seed the legacy fixture before the next document's application scripts.
   // The pill can render before /models finishes; writing in the live page
   // races with refreshModelCapabilities saving its current v2 selection.
@@ -564,14 +595,16 @@ export async function smoke(page) {
   },base);
   await page.reload();
   await page.locator('#btn-pick').filter({hasText:'Fixture Lite'}).waitFor();
-  assert.match(await page.locator('#btn-pick').innerText(),/默认强度/,'v1 persisted choice must migrate safely');
+  // v1 budgets are never reinterpreted: the stored xhigh is dropped for the model's default level.
+  assert.match(await page.locator('#btn-pick').innerText(),/Fixture Lite · High/,'v1 persisted choice must migrate safely');
+  assert.doesNotMatch(await page.locator('#btn-pick').innerText(),/Extra High/,'v1 persisted choice must migrate safely');
   await page.setViewportSize({width:390,height:844});
   await page.locator('#btn-pick').click();
   await page.locator('#pick-menu .pick-row').filter({hasText:'推理强度'}).click();
-  assert.equal(await page.locator('#pick-menu .pick-opt').count(),3);
+  assert.deepEqual(await page.locator('#pick-menu .pick-opt .lbl').allInnerTexts(),['Low','High']);
   await mkdir(resolve('output/playwright'),{recursive:true});
   await page.screenshot({path:resolve('output/playwright/reasoning-mobile.png')});
-  await page.locator('#pick-menu .pick-opt').filter({hasText:'轻度'}).click();
+  await page.locator('#pick-menu .pick-opt').filter({hasText:'Low'}).click();
   await page.setViewportSize({width:1280,height:900});
   await featureLifetimeSmoke(page);
   await thinkingStreamSmoke(page);

@@ -37,6 +37,10 @@ export interface AccountAccess {
 /** GET /api/accounts 的账号池条目（server.acctView）。 */
 export interface Account {
   model_reasoning?: Record<string, ReasoningCapability>;
+  /** 账号自己的可用模型（仅管理员可见）；缺省表示沿用系统模型列表。 */
+  models?: ModelOption[];
+  /** 账号默认模型，仅在配置了 models 时存在。 */
+  default_model?: string;
   /** 仅管理员可见；缺省表示全体用户共享。 */
   access?: AccountAccess;
   id: string;
@@ -212,6 +216,10 @@ export interface UsageEventRow {
   provider?: string;
   /** "provider" provider 报价 | "table" 价目表折算 | "none" 未定价 */
   billing: string;
+  /** 网页回合发送时选的思考强度（取自聊天回执）；终端、起标题和未指定强度的回合没有 */
+  effort?: string;
+  /** effort：原生档位；budget：Claude 思考预算 */
+  effort_control?: string;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
@@ -353,11 +361,51 @@ export interface SessionModels {
   models: ModelOption[];
   default_reasoning: ReasoningCapability;
   discovery: "available" | "unavailable" | "stopped";
+  /** 账号配置了自己的模型列表：只能在 models 中选择，不能填写自定义 ID。 */
+  restricted?: boolean;
+  /** 不选模型时实际使用的模型（已按账号列表解析）。 */
+  default_model?: string;
+  /** 账号 CLI 配置里的默认推理强度（原生档位），作为档位已知模型的默认选择。 */
+  client_effort?: string;
+}
+
+/** POST /api/accounts/{id}/models/discover 的一行。 */
+export interface DiscoveredModel {
+  id: string;
+  label: string;
+  reasoning?: ReasoningCapability;
+  /** upstream：上游报告；account / global：沿用已配置的能力；official：官方模型目录；缺省：未知。 */
+  reasoning_source?: "upstream" | "account" | "global" | "official";
+  /** 仅官方目录列表：CLI 当前在用的模型，首次读取时预先勾选。 */
+  recommended?: boolean;
+}
+/** 官方模型数据的来源：Agent 镜像里 CLI 自带的目录（cli），或随服务端发布的快照（builtin）。 */
+export interface OfficialSource {
+  kind: "cli" | "builtin";
+  cli_version?: string;
+  verified_at?: string;
+  /** 读不了镜像里的 CLI 目录，改用快照；原因只记在服务端日志。 */
+  cli_unavailable?: boolean;
+}
+export interface ModelDiscovery {
+  /** official：列出的是官方模型目录，而不是账号上游的列表。 */
+  source: "api" | "claude_subscription" | "codex_subscription" | "official";
+  endpoint: string;
+  latency_ms: number;
+  models: DiscoveredModel[];
+  /** CLI 无法安全使用的模型 ID（含 / 等字符），未列入 models。 */
+  skipped?: string[];
+  /** 中转站或 API 读不到模型列表时的原因；此时 models 是官方模型目录。 */
+  upstream_error?: string;
+  /** 用到了官方模型数据（列出模型或补全名称/强度）时才有。 */
+  official?: OfficialSource;
 }
 export interface ModelOption {
   id: string;
   label: string;
   reasoning?: ReasoningCapability;
+  /** 仅账号可用模型：不在对话下拉里显示，但仍属于账号、仍可使用。 */
+  hidden?: boolean;
 }
 
 /** config.TerminalTips：终端页顶栏轮播提示语。interval_sec <= 0 关闭轮播。 */
@@ -454,6 +502,8 @@ export interface PricingView {
   active: PricingState; candidate: PriceCatalogStatus; changes: PriceChange[];
   warnings: { agent: string; model: string; kind: "unpriced" | "fallback"; key: string }[];
   warnings_truncated: boolean; warning_error?: string;
+  /** 在用模型（账号可用模型、默认模型、空间、最近使用）命中的价目表键；旧服务端没有。 */
+  in_use?: string[];
 }
 
 /** 一档单价，美元 / 百万 token。0 表示这一桶免费。 */
@@ -1049,7 +1099,7 @@ export interface OnboardingSnapshot {
   can_configure: boolean;
   can_create: boolean;
   has_workspaces: boolean;
-  accounts: {id:string; type:string; label:string; credentials_present:boolean}[];
+  accounts: {id:string; type:string; label:string; credentials_present:boolean; default_model?:string}[];
   default_models: Record<string,string>;
   container_resources: CreationResources;
 }

@@ -52,6 +52,9 @@
   flex: 1; min-width: 0;
   overflow-y: auto;
   padding-bottom: 40px;
+  /* overflow-y 也会裁掉横向溢出：贴边的输入框焦点环（outline 2px + 偏移 1px）会被切掉一截。
+   * 留出 4px 再用负外边距抵回，内容位置不变。 */
+  padding-inline: 4px; margin-inline: -4px;
 }
 .set-section { display: flex; flex-direction: column; gap: 16px; }
 .set-section > * { flex-shrink: 0; }
@@ -151,6 +154,13 @@
   color: var(--green);
 }
 .acct-proxy.none { color: var(--muted); opacity: 0.75; }
+/* 账号行上的「N 个可用模型」：点开可用模型弹窗 */
+.acct-models-link {
+  padding: 0; border: 0; background: none; font: inherit; color: var(--amber);
+  cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.acct-models-link.none { color: var(--muted); }
+.acct-models-link:hover { color: var(--text); }
 
 /* IP 代理池 */
 .px-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -210,6 +220,109 @@
 .model-add { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
 .model-add input { flex: 1; min-width: 120px; }
 
+/* 模型管理：账号模型 / 价格 / 系统模型列表三个标签页 */
+.mdl-tabs { align-self: flex-start; }
+.mdl-tabs .scope-btn { display: inline-flex; align-items: center; gap: 6px; }
+.mdl-panel { display: flex; flex-direction: column; gap: 16px; }
+.mdl-panel > * { flex-shrink: 0; }
+/* 每个标签页顶部一行：筛选 / 开关 + 「?」说明，操作按钮靠右 */
+.mdl-toolbar { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; min-height: 34px; }
+.mdl-toolbar input[type="search"] { flex: 1; min-width: 160px; max-width: 320px; }
+.mdl-toolbar label.check { color: var(--text); }
+.mdl-toolbar .note { color: var(--muted); font-size: 12px; }
+.mdl-toolbar-end { margin-left: auto; }
+.mdl-system-state { margin: 0; font-size: 12.5px; color: var(--text); }
+.mdl-system-state:empty { display: none; }
+.help-line { display: block; }
+.help-line + .help-line { margin-top: 6px; }
+
+/* 账号模型的显示开关（mv-）：账号模型在对话下拉里的显示开关 */
+.mv-list { display: flex; flex-direction: column; gap: 22px; }
+/* 按协议分组：Claude 协议 / OpenAI 协议 */
+.mv-group { display: flex; flex-direction: column; gap: 10px; }
+.mv-group-head { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 600; }
+.mv-group-sub { font-size: 12px; font-weight: 400; color: var(--muted); }
+.mv-cards { display: flex; flex-direction: column; gap: 8px; }
+/* 账号卡片：收起时只有一行摘要，点开才列模型 */
+.mv-card { padding: 0; gap: 0; }
+.mv-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 6px; min-height: 52px; }
+.mv-head > .mv-title { padding-left: 4px; }
+.mv-toggle {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap;
+  padding: 8px 10px; margin: 0;
+  background: none; border: 0; border-radius: calc(8px * var(--radius-scale));
+  color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.mv-toggle:hover { background: var(--panel-2); }
+.mv-toggle:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+.mv-chev {
+  width: 6px; height: 6px; flex: none; margin: 0 2px 0 4px;
+  border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg); transition: transform 140ms ease;
+}
+.mv-card.open .mv-chev { transform: rotate(45deg); }
+.mv-chev-none { visibility: hidden; margin-left: 14px; }
+.mv-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.mv-account { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mv-slug { font-family: var(--mono); font-size: 11.5px; font-weight: 400; color: var(--muted); white-space: nowrap; }
+.mv-summary { margin-left: auto; display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.mv-warn { color: var(--warn); }
+.mv-warn::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; }
+.mv-rows { display: flex; flex-direction: column; padding: 2px 18px 6px; border-top: 1px solid var(--line-soft); }
+@media (prefers-reduced-motion: reduce) { .mv-chev { transition: none; } }
+.mv-row {
+  display: grid; align-items: center; gap: 4px 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 164px 56px 36px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+.mv-row:last-child { border-bottom: none; }
+.mv-row:has(.mv-switch:disabled) { cursor: default; }
+/* 默认标签可能隐藏，各列显式定位，避免后面的列往前挤 */
+.mv-row > .mv-name { grid-column: 1; }
+.mv-row > .mv-effort { grid-column: 2; }
+.mv-row > .mv-price { grid-column: 3; justify-self: start; }
+.mv-row > .mv-tag { grid-column: 4; justify-self: end; }
+.mv-row > .mv-switch { grid-column: 5; justify-self: end; }
+.mv-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.mv-label, .mv-id, .mv-effort { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-label { font-size: 13.5px; }
+.mv-id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.mv-effort { font-size: 12px; color: var(--muted); }
+.mv-tag {
+  font-size: 11px; color: var(--amber); white-space: nowrap;
+  border: 1px solid var(--amber-dim); border-radius: var(--radius-pill); padding: 1px 8px;
+}
+.mv-row.off .mv-name, .mv-row.off .mv-effort, .mv-row.off .mv-price { opacity: 0.5; }
+/* 价格列：实际计费的输入 / 输出单价；兜底价与未定价用警示色 */
+.mv-price { max-width: 100%; justify-content: flex-start; font-size: 12px; font-family: var(--mono); overflow: hidden; margin-left: -10px; }
+.mv-price .action-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mv-price.warn, .mv-price.warn:hover:not(:disabled) { color: var(--warn); }
+.mv-price[data-kind="unpriced"] { font-family: var(--sans); }
+/* 开关：复选框换成滑块外观，保留原生的键盘操作与选中语义 */
+.mv-switch {
+  appearance: none; -webkit-appearance: none;
+  position: relative; flex: none; margin: 0;
+  width: 34px; height: 20px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--panel-2);
+  cursor: pointer;
+  transition: background-color .15s, border-color .15s;
+}
+.mv-switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: var(--radius-pill);
+  background: var(--muted);
+  transition: transform .15s, background-color .15s;
+}
+.mv-switch:checked { background: var(--accent); border-color: var(--accent); }
+.mv-switch:checked::after { transform: translateX(14px); background: var(--on-accent); }
+.mv-switch:disabled { opacity: 0.55; cursor: default; }
+.mv-switch:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .mv-switch, .mv-switch::after { transition: none; } }
+
 /* 价目表：八列，窄屏允许横向滚动。
  * 单价输入框定宽等宽字体，数字上下对齐才好核对；超阈值那四个挤在一格里。 */
 .sec-hint { font-size: 12px; }
@@ -245,6 +358,24 @@
 }
 .price-table .pt-del:hover { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
 .price-add { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
+/* 价格目录：折叠卡片，标题行只显示来源与状态 */
+.price-fold { display: block; padding: 0; }
+.price-fold > summary { display: flex; align-items: center; gap: 12px; padding: 14px 18px; list-style: none; cursor: pointer; border-radius: inherit; }
+.price-fold > summary::-webkit-details-marker { display: none; }
+.price-fold > summary::before {
+  content: ""; width: 6px; height: 6px; flex: none;
+  border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg); transition: transform 140ms ease;
+}
+.price-fold[open] > summary::before { transform: rotate(45deg); }
+.price-fold > summary:hover { background: var(--panel-2); }
+.price-fold > summary:focus-visible { outline: 2px solid var(--amber); outline-offset: -3px; }
+.price-fold .price-catalog-head { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; min-width: 0; }
+.price-fold-title { font-size: 13.5px; font-weight: 600; }
+.price-fold #price-catalog-status { font-size: 12.5px; color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
+.price-fold-body { display: flex; flex-direction: column; gap: 16px; padding: 2px 18px 18px; }
+.price-sync-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .price-fold > summary::before { transition: none; } }
 .price-add input { flex: 1; min-width: 160px; }
 
 /* 用户管理 */
@@ -351,6 +482,17 @@
   .model-row .m-id { grid-column: 1; grid-row: 2; }
   .model-row .m-reasoning { grid-column: 1; grid-row: 3; justify-self: start; max-width: 100%; margin-left: -11px; }
   .model-row .m-remove { grid-column: 2; grid-row: 1 / 4; }
+  .mv-row { grid-template-columns: minmax(0, 1fr) auto 36px; }
+  .mv-row > .mv-name { grid-column: 1; grid-row: 1; }
+  .mv-row > .mv-effort { grid-column: 1; grid-row: 2; }
+  .mv-row > .mv-price { grid-column: 1; grid-row: 3; }
+  .mv-row > .mv-tag { grid-column: 2; grid-row: 1; }
+  .mv-row > .mv-switch { grid-column: 3; grid-row: 1 / 4; }
+  .mdl-tabs { align-self: stretch; overflow-x: auto; }
+  .mdl-toolbar input[type="search"] { max-width: none; }
+  .mv-summary { margin-left: 0; flex-basis: 100%; padding-left: 20px; }
+  .mv-manage .action-label { display: none; }
+  .mv-rows { padding-inline: 14px; }
   /* 代理表有 7 列，窄屏必然横向滚动；操作列的按钮别再被挤成两行 */
   .px-actions { justify-content: flex-start; }
   .px-head-actions { width: 100%; }

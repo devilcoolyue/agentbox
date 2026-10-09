@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "verified_at": "2026-10-09",
+  "sources": {
+    "claude": "Anthropic Models API（GET /v1/models 的 capabilities）；当前模型按 Claude Code 2.1.295 的模型列表标记",
+    "codex": "Codex CLI 0.158.0 内置模型目录（app-server model/list，未登录）；gpt-5.4 / gpt-5.4-mini / gpt-5.2 取自 Codex CLI 0.145.0"
+  },
+  "models": {
+    "claude": [
+      { "id": "claude-opus-5-5", "label": "Claude Opus 5.5", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "claude-fable-5-1", "label": "Claude Fable 5.1", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "claude-sonnet-5-5", "label": "Claude Sonnet 5.5", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "claude-haiku-5-5", "label": "Claude Haiku 5.5", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "claude-opus-5", "label": "Claude Opus 5", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "claude-fable-5", "label": "Claude Fable 5", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "claude-sonnet-5", "label": "Claude Sonnet 5", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "claude-opus-4-8", "label": "Claude Opus 4.8", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "claude-opus-4-7", "label": "Claude Opus 4.7", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "claude-opus-4-6", "label": "Claude Opus 4.6", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "max"] } },
+      { "id": "claude-sonnet-4-6", "label": "Claude Sonnet 4.6", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "max"] } },
+      { "id": "claude-opus-4-5-20251101", "label": "Claude Opus 4.5", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high"] } },
+      { "id": "claude-haiku-4-5-20251001", "label": "Claude Haiku 4.5", "reasoning": { "support": "supported", "control": "budget", "levels": ["low", "medium", "high", "xhigh"] } },
+      { "id": "claude-sonnet-4-5-20250929", "label": "Claude Sonnet 4.5", "reasoning": { "support": "supported", "control": "budget", "levels": ["low", "medium", "high", "xhigh"] } }
+    ],
+    "codex": [
+      { "id": "gpt-6-astra", "label": "GPT-6-Astra", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max", "ultra"] } },
+      { "id": "gpt-6-sol", "label": "GPT-6-Sol", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max", "ultra"] } },
+      { "id": "gpt-6-luna", "label": "GPT-6-Luna", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "gpt-5.6-sol", "label": "GPT-5.6-Sol", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max", "ultra"] } },
+      { "id": "gpt-5.6-terra", "label": "GPT-5.6-Terra", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max", "ultra"] } },
+      { "id": "gpt-5.6-luna", "label": "GPT-5.6-Luna", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh", "max"] } },
+      { "id": "gpt-5.5", "label": "GPT-5.5", "current": true, "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh"] } },
+      { "id": "gpt-5.4", "label": "GPT-5.4", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh"] } },
+      { "id": "gpt-5.4-mini", "label": "GPT-5.4-Mini", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh"] } },
+      { "id": "gpt-5.2", "label": "GPT-5.2", "reasoning": { "support": "supported", "control": "effort", "levels": ["low", "medium", "high", "xhigh"] } }
+    ]
+  }
+}

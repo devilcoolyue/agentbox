@@ -61,6 +61,8 @@ export interface AppState {
   view: View;
   /** 设置页当前分区 */
   sec: string;
+  /** 模型管理分区里的标签页：accounts / pricing / system */
+  modelTab: string;
   gitSec: string;
   tab: Tab;
   termWS: WebSocket | null;
@@ -104,6 +106,7 @@ export const S: AppState = {
   current: null,
   view: "work",
   sec: "accounts",
+  modelTab: "accounts",
   gitSec: "guide",
   tab: "chat",
   termWS: null,

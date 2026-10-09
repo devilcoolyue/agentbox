@@ -27,7 +27,7 @@
 ```text
 GET    /api/sessions                工作空间列表
 GET    /api/sessions/{id}           单个工作空间详情
-GET    /api/sessions/{id}/models    当前空间的候选模型、推理能力与发现状态（不保证上游调用权限）
+GET    /api/sessions/{id}/models    当前空间的候选模型、推理能力与发现状态（不保证上游调用权限）；restricted/default_model 见账号可用模型，client_effort 是账号 CLI 配置的默认原生强度
 GET    /api/sessions/{id}/account/usage  当前空间账号的订阅额度（校验账号使用权限）
 POST   /api/sessions                新建 {name, agent, account_id}
 POST   /api/sessions/{id}/start     启动容器（幂等）
@@ -124,14 +124,15 @@ GET    /api/usage/events            消耗明细流水（使用记录页）；�
 
 ```text
 GET    /api/accounts                已登录用户可读账号概要，普通用户返回值隐藏敏感配置
-POST   /api/accounts                新增账号 {id, type, label, env?, proxy_id?, access?, model_reasoning?}
+POST   /api/accounts                新增账号 {id, type, label, env?, proxy_id?, access?, model_reasoning?, models?, default_model?}
 DELETE /api/accounts/{id}           删除账号（仍被空间使用则拒绝，凭证目录保留）
 POST   /api/accounts/{id}/oauth/start  Claude / Codex：生成对应 OAuth 授权链接
 POST   /api/accounts/{id}/oauth/finish 提交 {code}；Claude 为授权码，Codex 为完整 localhost 回调 URL
 POST   /api/accounts/{id}/apikey    保存 {api_key, base_url?, wire_api?}
 DELETE /api/accounts/{id}/apikey    清除 Claude 中转配置
 POST   /api/accounts/{id}/apikey/test  探测账号 API Key 配置
-PATCH  /api/accounts/{id}           改账号 {label?, env?, proxy_id?, access?, model_reasoning?}（proxy_id 空串=解绑）
+POST   /api/accounts/{id}/models/discover  读取账号上游的模型列表（只读，不保存）；?source=official 改为列出官方模型目录（Agent 镜像里 CLI 自带的目录 + 内置快照，不访问上游）。API Key / 中转账号读不到列表时同样返回官方目录，并带 upstream_error；响应的 official 说明来源（kind=cli|builtin、cli_version、verified_at），模型的 reasoning_source=official 表示强度来自官方目录
+PATCH  /api/accounts/{id}           改账号 {label?, env?, proxy_id?, access?, model_reasoning?, models?, default_model?}（proxy_id 空串=解绑；models 整表替换，[] 恢复系统模型列表；模型条目的 hidden=true 表示不在对话下拉里显示，默认模型不能隐藏）
 GET    /api/proxies                 IP 代理池 + 桥接状态
 POST   /api/proxies                 新增代理 {name,scheme,host,port,username?,password?,disabled?}
 PATCH  /api/proxies/{id}            改代理（password 留空=不改）
@@ -168,7 +169,7 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `POST /api/users/{name}/credits` | `{micro_usd, ref?, note?}`，正数充值、负数冲正 |
 | `GET /api/settings` | 当前配置视图；不返回管理员初始密码 |
 | `PUT /api/settings` | 配置 patch；`pricing` 是整表替换 |
-| `GET /api/pricing` | 管理员：生效价格/修订、候选目录、差异、缺价与兜底提示、版本历史 |
+| `GET /api/pricing` | 管理员：生效价格/修订、候选目录、差异、缺价与兜底提示（含各账号可用模型）、版本历史；`in_use` 为在用模型实际命中的价格键 |
 | `PUT /api/pricing` | 管理员：`revision` 必填；`prices` 整表编辑、`custom_models` 设为自定义、`catalog: {url, auto_check}` 修改来源 |
 | `POST /api/pricing/check` | 管理员：检查候选更新，间隔至少 1 分钟；失败保留旧价并在响应 `candidate.error` 描述 |
 | `POST /api/pricing/apply` | 管理员：`revision`、`catalog_revision`、`models`；覆盖自定义需逐项列入 `adopt_custom`；修订冲突返回 409 |
@@ -449,7 +450,7 @@ PUT /api/git/connections/{connection}/shares  {revision,users:[{user,write:false
 
 ## 首次使用快照
 
-`GET /api/onboarding` 返回 `{version:1, can_configure, can_create, has_workspaces, accounts, default_models, container_resources}`，使用 `Cache-Control: no-store`。`has_workspaces` 只统计本人；每个账号仅含 `id/type/label/credentials_present`，未授权账号在读取凭证前就被排除，普通用户只收到相应 Agent 的默认模型。`container_resources` 仅含 `cpus/memory_mb/pids_limit`，是当前的新容器配置，不是运行中容器的实际值；不含网络等管理配置。创建收据视图使用相同投影，空间模型仍取其保存值。
+`GET /api/onboarding` 返回 `{version:1, can_configure, can_create, has_workspaces, accounts, default_models, container_resources}`，使用 `Cache-Control: no-store`。`has_workspaces` 只统计本人；每个账号仅含 `id/type/label/credentials_present/default_model`（新空间使用的模型，配置了可用模型的账号取账号默认值），未授权账号在读取凭证前就被排除，普通用户只收到相应 Agent 的默认模型。`container_resources` 仅含 `cpus/memory_mb/pids_limit`，是当前的新容器配置，不是运行中容器的实际值；不含网络等管理配置。创建收据视图使用相同投影，空间模型仍取其保存值。
 
 `can_create` 表示存在支持且获准使用的账号，不是持久授权凭据，也不证明凭证、上游模型或额度可用。管理员始终可配置；其他客户端仍应以服务端实际创建/启动准入为准。创建成功响应及原有默认模型快照语义不变。
 

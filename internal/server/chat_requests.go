@@ -137,7 +137,7 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 		}
 		// Require a concrete model in this protocol, frozen by the client before
 		// any asynchronous attachment check; do not reinterpret an empty default.
-		if input.Model == "" {
+		if input.Model == "" || !acct.AllowsModel(input.Model) {
 			return chatRequestProblem("chat_options_invalid")
 		}
 		if _, err = agent.ResolveTurnOptions(current.Agent, input.Model, input.Effort, input.EffortControl, s.cfg.ConfiguredReasoning(acct, input.Model)); err != nil {

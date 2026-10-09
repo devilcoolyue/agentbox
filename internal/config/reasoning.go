@@ -79,6 +79,9 @@ func cloneReasoningMap(in map[string]ReasoningCapability) map[string]ReasoningCa
 	return out
 }
 
+// CloneModelOptions deep-copies a model list so callers may annotate it.
+func CloneModelOptions(in []ModelOption) []ModelOption { return cloneModelOptions(in) }
+
 func cloneModelOptions(in []ModelOption) []ModelOption {
 	out := slices.Clone(in)
 	for i := range out {
@@ -96,10 +99,16 @@ func cloneModels(in map[string][]ModelOption) map[string][]ModelOption {
 }
 
 // ConfiguredReasoning resolves exact IDs only. Model aliases and relay names
-// are not reliable evidence of capabilities.
+// are not reliable evidence of capabilities. Priority: the account's override,
+// the account's own model list, then the global model list.
 func (c *Config) ConfiguredReasoning(a Account, model string) *ReasoningCapability {
 	if r, ok := a.ModelReasoning[model]; ok {
 		return CloneReasoning(&r)
+	}
+	for _, m := range a.Models {
+		if m.ID == model && m.Reasoning != nil {
+			return CloneReasoning(m.Reasoning)
+		}
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()

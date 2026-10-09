@@ -31,6 +31,7 @@ export const S = {
     current: null,
     view: "work",
     sec: "accounts",
+    modelTab: "accounts",
     gitSec: "guide",
     tab: "chat",
     termWS: null,

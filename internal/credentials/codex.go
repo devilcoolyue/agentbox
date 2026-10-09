@@ -88,6 +88,33 @@ func ReadCodexProvider(credDir string) (baseURL, wireAPI string) {
 	return baseURL, wireAPI
 }
 
+// ReadCodexEffort returns model_reasoning_effort from the pool config.toml
+// (the active profile wins): the effort Codex uses when a turn names none.
+func ReadCodexEffort(credDir string) string {
+	if credDir == "" {
+		return ""
+	}
+	raw, err := readPoolFile(config.Account{CredentialsDir: credDir}, "config.toml")
+	if err != nil {
+		return ""
+	}
+	var settings map[string]any
+	if toml.Unmarshal(raw, &settings) != nil {
+		return ""
+	}
+	effort, _ := settings["model_reasoning_effort"].(string)
+	if profiles, ok := settings["profiles"].(map[string]any); ok {
+		if name, ok := settings["profile"].(string); ok {
+			if profile, ok := profiles[name].(map[string]any); ok {
+				if e, ok := profile["model_reasoning_effort"].(string); ok {
+					effort = e
+				}
+			}
+		}
+	}
+	return effort
+}
+
 // SavedAPIKey 读账号池 auth.json 里已保存的 key，探测时留空复用。
 func SavedAPIKey(credDir string) string {
 	if credDir == "" {

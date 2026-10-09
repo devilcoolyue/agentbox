@@ -199,3 +199,28 @@ func codexAuthMode(raw []byte) string {
 	}
 	return ""
 }
+
+// CodexAccess returns the pool's ChatGPT access token after pulling a newer
+// one back from the account's workspaces. It never refreshes: the Codex CLI
+// owns that rotation chain, and a second refresher would invalidate it.
+func (s *Service) CodexAccess(ctx context.Context, acct config.Account) (accessToken, accountID string, err error) {
+	release, err := s.Lock(ctx, acct.ID)
+	if err != nil {
+		return "", "", err
+	}
+	defer release()
+	current, ok := s.cfg.Account(acct.ID)
+	if !ok {
+		return "", "", fmt.Errorf("account no longer exists")
+	}
+	s.syncAcctCreds(current)
+	auth, err := readCodexAuth(current)
+	if err != nil || auth.Tokens.AccessToken == "" {
+		return "", "", fmt.Errorf("账号尚未完成订阅登录")
+	}
+	accountID = auth.Tokens.AccountID
+	if accountID == "" {
+		accountID = codexAccountID(auth.Tokens.IDToken)
+	}
+	return auth.Tokens.AccessToken, accountID, nil
+}

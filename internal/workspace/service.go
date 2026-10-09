@@ -183,7 +183,7 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	if err := agent.SeedCredentials(cur.Agent, s.HomeDir(cur), acct.CredentialsDir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
 		return store.Session{}, fmt.Errorf("%w: %w", ErrCredentials, err)
 	}
-	if err := agent.SeedDefaultModel(cur.Agent, s.HomeDir(cur), cur.DefaultModel, dockerx.AgentUID, dockerx.AgentGID); err != nil {
+	if err := agent.SeedDefaultModel(cur.Agent, s.HomeDir(cur), acct.ResolveModel(cur.DefaultModel), dockerx.AgentUID, dockerx.AgentGID); err != nil {
 		return store.Session{}, err
 	}
 	// Only advertise the intranet proxy to the agent when the feature is on;

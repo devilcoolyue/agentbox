@@ -2,7 +2,7 @@ import { t as i18nText } from "../i18n.js";
 import { S, bus, emit } from "../state.js";
 import type { Tab } from "../state.js";
 import { openHome, openSession } from "../sessions.js";
-import { SET_SECS } from "../settings.js";
+import { MODEL_TABS, SET_SECS } from "../settings.js";
 import { toast } from "../util.js";
 
 const GIT_SECS = ["guide", "profile", "connections"];
@@ -11,7 +11,7 @@ const TABS: Tab[] = ["chat", "term", "files", "changes", "skills", "mcp", "brows
 
 function currentHash() {
   if (S.view === "git") return `#/git/${S.gitSec}`;
-  if (S.view === "settings") return `#/settings/${S.sec}`;
+  if (S.view === "settings") return S.sec === "models" && S.modelTab !== "accounts" ? `#/settings/models/${S.modelTab}` : `#/settings/${S.sec}`;
   if (S.view !== "work") return `#/${S.view}`;
   return S.current ? `#/sessions/${encodeURIComponent(S.current.id)}/${S.tab}` : "#/";
 }
@@ -42,8 +42,11 @@ export function initRouter() {
         emit(`open-${page}`);
       } else if (page === "git" && parts.length <= 2) {
         emit("open-git", GIT_SECS.includes(id) ? id : "guide");
-      } else if (page === "settings" && parts.length <= 2 && S.role === "admin") {
-        S.sec = SET_SECS.includes(id) ? id : "accounts";
+      } else if (page === "settings" && parts.length <= 3 && S.role === "admin") {
+        // The price list used to be its own section; it is now a tab of 模型管理.
+        const pricing = id === "pricing";
+        S.sec = pricing ? "models" : SET_SECS.includes(id) ? id : "accounts";
+        S.modelTab = pricing ? "pricing" : S.sec === "models" && MODEL_TABS.includes(tab) ? tab : "accounts";
         emit("open-settings");
       } else if (page === "sessions" && id && parts.length <= 3) {
         const session = S.sessions.find(s => s.id === id);

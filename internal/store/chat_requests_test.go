@@ -523,3 +523,33 @@ func TestVersionElevenChatMigrationPreservesData(t *testing.T) {
 		t.Fatal(version, err)
 	}
 }
+
+func TestTurnReasoningsReadTheReceipt(t *testing.T) {
+	s, u, sess, input := chatRequestFixture(t)
+	c, _, err := s.AcceptChatRequest(u, sess.ID, "request", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	advanceChat(t, s, u, c, ChatStarting, ChatRunning, ChatCompleted)
+	plain := input
+	plain.Effort, plain.EffortControl, plain.ThreadID = "", "", "other"
+	d, _, err := s.AcceptChatRequest(u, sess.ID, "request-2", plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.TurnReasonings([]string{c.TurnID, d.TurnID, "", "missing", c.TurnID})
+	if err != nil || len(got) != 1 || got[c.TurnID] != (TurnReasoning{Effort: "high", Control: "native"}) {
+		t.Fatalf("%+v %v", got, err)
+	}
+	// Deleting the thread clears the receipt body, and the effort with it.
+	advanceChat(t, s, u, d, ChatStarting, ChatRunning, ChatCompleted)
+	if err := s.DeleteChatThreadRequests(u, sess.ID, "thread"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err = s.TurnReasonings([]string{c.TurnID}); err != nil || len(got) != 0 {
+		t.Fatalf("cleared receipt still answers: %+v %v", got, err)
+	}
+	if got, err = s.TurnReasonings(nil); err != nil || len(got) != 0 {
+		t.Fatal(got, err)
+	}
+}

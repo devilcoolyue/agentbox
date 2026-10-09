@@ -1,7 +1,7 @@
 import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 import { settingsState } from "./features/settings/state.js";
 import { actionButton, buttonLabel } from "./icons.js";
-import { S } from "./state.js";
+import { S, emit } from "./state.js";
 import { $, toast, askConfirm, fmtTime } from "./util.js";
 import { api } from "./api.js";
 import { setTip } from "./tip.js";
@@ -24,10 +24,21 @@ function rateInput(cls, value, title) {
     el.inputMode = "decimal";
     return el;
 }
+/** 只看在用的模型：服务端算出在用模型命中的键；这次新加、还没保存的行也留着。 */
+function shownKeys(keys) {
+    const inUse = view?.in_use;
+    if (!inUse || !$("price-inuse").checked)
+        return keys;
+    const keep = new Set(inUse);
+    return keys.filter(key => keep.has(key) || !view.active.prices[key]);
+}
 function renderRows() {
     const body = $("price-rows");
     body.replaceChildren();
-    const keys = Object.keys(draft).sort();
+    const all = Object.keys(draft).sort(), keys = shownKeys(all);
+    const hidden = all.length - keys.length;
+    setTextRender($("price-inuse-note"), () => hidden ? i18nText("另有 {n} 个未使用的价格已隐藏", { n: String(hidden) }) : "");
+    $("price-inuse").closest(".price-filter").classList.toggle("hidden", !view?.in_use);
     for (const key of keys) {
         const p = draft[key];
         const tr = document.createElement("tr");
@@ -94,8 +105,7 @@ function renderRows() {
         tr.appendChild(del);
         body.appendChild(tr);
     }
-    $("price-empty").classList.toggle("hidden", keys.length > 0);
-    $("price-count").textContent = String(keys.length);
+    $("price-empty").classList.toggle("hidden", all.length > 0);
 }
 /** 空串按 0 算；填了非数字则返回 NaN，由 readDraft 的调用方拦下。 */
 function parseRate(el) {
@@ -104,9 +114,9 @@ function parseRate(el) {
         return 0;
     return Number(t);
 }
-/** 从 DOM 读回整张表，覆盖 draft。 */
+/** 从 DOM 读回显示中的行，覆盖 draft 里的对应项；筛选隐藏的行保持原值。 */
 function readDraft() {
-    const next = {};
+    const next = { ...draft };
     for (const tr of document.querySelectorAll("#price-rows tr")) {
         const key = tr.dataset.key;
         const get = (cls) => parseRate(tr.querySelector("input." + cls));
@@ -140,6 +150,8 @@ function badCells() {
     }
     return [...new Set(bad)];
 }
+// Keep edits in rows the filter is about to hide.
+$("price-inuse").addEventListener("change", () => { readDraft(); renderRows(); });
 $("price-add").addEventListener("click", () => {
     const el = $("price-new-key");
     const key = el.value.trim();
@@ -174,6 +186,7 @@ export function initPricing() {
         for (const id of ["price-rows", "price-changes", "price-history", "price-warnings", "price-source-issues"])
             $(id).replaceChildren();
         $("price-diff").classList.add("hidden");
+        $("price-catalog-box").open = false;
         setText($("price-catalog-status"), "读取中…");
         $("price-catalog-error").textContent = "";
         $("price-source").value = "";
@@ -186,7 +199,7 @@ export function initPricing() {
 }
 function setBusy(value) {
     busy = value;
-    for (const el of document.querySelectorAll("#sec-pricing button, #sec-pricing input"))
+    for (const el of document.querySelectorAll("#mdl-panel-pricing button, #mdl-panel-pricing input"))
         el.disabled = value;
     // Retired catalog rows have no candidate to select.
     for (const el of document.querySelectorAll("#price-changes input[data-removed]"))
@@ -204,6 +217,7 @@ function accept(next) {
     $("price-auto-apply").checked = !!next.active.catalog.auto_apply;
     renderRows();
     renderCatalog();
+    emit("pricing-updated");
 }
 export async function openPricingSection(force = false) {
     if (S.role !== "admin" || busy || (!force && (dirty || sourceDirty())))
@@ -224,9 +238,6 @@ export async function openPricingSection(force = false) {
             setBusy(false);
     }
 }
-export function refreshPriceCount() {
-    $("price-count").textContent = String(Object.keys(view?.active.prices || settingsState.value?.pricing || {}).length);
-}
 function renderCatalog() {
     if (!view)
         return;
@@ -237,6 +248,9 @@ function renderCatalog() {
     const error = c.error || (!view.active.catalog.url ? i18nText("尚未配置远程目录。内置数据仅供核对，不代表最新官方价格。") : "");
     $("price-catalog-error").textContent = error;
     $("price-catalog-error").classList.toggle("hidden", !error);
+    // The catalog card is folded; a failed check must not stay out of sight.
+    if (c.error)
+        $("price-catalog-box").open = true;
     const issues = $("price-source-issues");
     issues.replaceChildren();
     if (c.catalog.issues?.length) {
@@ -260,7 +274,7 @@ function renderCatalog() {
         setText(title, "需要核对的模型价格");
         warnings.appendChild(title);
         const hint = document.createElement("p");
-        setText(hint, "来自默认模型、现有空间及最近 30 天使用记录；以下为当前定价状态，不会改写历史账单。");
+        setText(hint, "来自账号可用模型、默认模型、现有空间及最近 30 天使用记录；以下为当前定价状态，不会改写历史账单。");
         warnings.appendChild(hint);
         const list = document.createElement("ul");
         for (const row of view.warnings) {
@@ -439,6 +453,7 @@ $("price-check").addEventListener("click", async () => {
         if (ticket === generation) {
             accept(next);
             $("price-diff").classList.remove("hidden");
+            $("price-catalog-box").open = true;
         }
     }
     catch (e) {
@@ -489,3 +504,67 @@ $("price-auto-apply").addEventListener("change", () => {
     if ($("price-auto-apply").checked)
         $("price-auto").checked = true;
 });
+/** 与服务端 config.LookupPrice 同序：精确模型 ID → 去掉 -YYYYMMDD → agent 名。价目表还没读到时返回 null。 */
+export function priceLookup(agent, model) {
+    const prices = view?.active.prices;
+    if (!prices)
+        return null;
+    const has = (key) => key !== "" && Object.hasOwn(prices, key);
+    if (has(model))
+        return { kind: "exact", key: model, price: prices[model] };
+    const base = model.replace(/-\d{8}$/, "");
+    if (base !== model && has(base))
+        return { kind: "dated", key: base, price: prices[base] };
+    if (has(agent))
+        return { kind: "fallback", key: agent, price: prices[agent] };
+    return { kind: "unpriced", key: "" };
+}
+/** 当前价格目录（如 models.dev）里这个键的候选价。 */
+export function catalogPrice(key) {
+    const entries = view?.candidate?.catalog.entries;
+    return entries && Object.hasOwn(entries, key) ? entries[key] : undefined;
+}
+export function followsCatalog(key) {
+    return !!view && Object.hasOwn(view.active.managed, key);
+}
+/** 读最新的价目表再提交一次修改；「价格」标签页有未保存的编辑时拒绝，免得两边互相覆盖。 */
+async function editOne(change) {
+    if (busy)
+        throw new Error(i18nText("价目表正在保存，请稍后再试"));
+    if (dirty || sourceDirty())
+        throw new Error(i18nText("「价格」标签页有未保存的修改，请先保存或放弃"));
+    const ticket = ++generation;
+    setBusy(true);
+    try {
+        const next = await change(await api("/pricing"));
+        if (ticket === generation)
+            accept(next);
+    }
+    finally {
+        if (ticket === generation)
+            setBusy(false);
+    }
+}
+/** 设置一个模型的四档单价，保留它已有的长上下文档，存为自定义价格。 */
+export function saveModelPrice(key, rates) {
+    return editOne(fresh => api("/pricing", { method: "PUT", body: JSON.stringify({
+            revision: fresh.active.revision,
+            prices: { ...fresh.active.prices, [key]: { ...fresh.active.prices[key], ...rates } },
+            custom_models: [key],
+        }) }));
+}
+/** 按价格目录设置这个模型并跟随目录（与「价格」页勾选应用同一个接口）。 */
+export function followCatalogPrice(key) {
+    return editOne(fresh => {
+        if (!Object.hasOwn(fresh.candidate.catalog.entries || {}, key))
+            throw new Error(i18nText("价格目录里已经没有这个模型"));
+        const custom = Object.hasOwn(fresh.active.prices, key) && !Object.hasOwn(fresh.active.managed, key);
+        return api("/pricing/apply", { method: "POST", body: JSON.stringify({
+                revision: fresh.active.revision, catalog_revision: fresh.candidate.revision, models: [key], adopt_custom: custom ? [key] : [],
+            }) });
+    });
+}
+/** 价格目录来源的简称，用在「账号模型」的改价弹窗里。 */
+export function catalogName() {
+    return view?.candidate?.catalog.source === "models.dev" ? "models.dev" : i18nText("价格目录");
+}

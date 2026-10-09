@@ -63,6 +63,9 @@ func (s *Server) view(sess store.Session) sessionView {
 	label := sess.AccountID
 	if a, ok := s.cfg.Account(sess.AccountID); ok {
 		label = a.Label
+		// Report the model the workspace actually uses after the account's
+		// list changed; the stored value is kept for a later list that has it.
+		sess.DefaultModel = a.ResolveModel(sess.DefaultModel)
 	}
 	return sessionView{Session: sess, AccountLabel: label}
 }
@@ -198,7 +201,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		Name:         req.Name,
 		Agent:        req.Agent,
 		AccountID:    req.AccountID,
-		DefaultModel: s.cfg.GetDefaultModel(req.Agent),
+		DefaultModel: s.cfg.NewWorkspaceModel(acct),
 		Status:       store.StatusStopped,
 		CreatedAt:    time.Now(),
 	}

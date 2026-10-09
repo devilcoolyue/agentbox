@@ -32,6 +32,14 @@ func (a chatRuntime) Options(ctx context.Context, sess store.Session, model, eff
 	if err != nil {
 		return agent.TurnOptions{}, err
 	}
+	if !acct.AllowsModel(model) {
+		// A turn without an explicit model inherits the workspace default, which
+		// the account's list may no longer offer; anything else was chosen.
+		if model != sess.DefaultModel {
+			return agent.TurnOptions{Model: model}, fmt.Errorf("%w: 模型 %s 不在账号 %s 的可用模型中", chat.ErrOptions, model, acct.Label)
+		}
+		model = acct.ResolveModel(model)
+	}
 	capability := s.cfg.ConfiguredReasoning(acct, model)
 	if started && capability == nil && effort != "" {
 		discovered, _ := s.discoverReasoning(ctx, sess, acct)
