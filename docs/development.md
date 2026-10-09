@@ -4,7 +4,7 @@
 
 ## 开发环境
 
-- Go 工具链按 [`go.mod`](../go.mod) 使用当前 `1.26.6`；启用 `GOTOOLCHAIN=auto` 时，较旧的 Go 可自动下载所需工具链。
+- Go 工具链按 [`go.mod`](../go.mod) 使用当前 `1.26.9`；启用 `GOTOOLCHAIN=auto` 时，较旧的 Go 可自动下载所需工具链。
 - 修改主控制台需要 Node.js 和 npm，CI 使用 Node.js 22。
 - 完整运行需要 Linux 与 Docker；macOS 可执行构建和单元测试，但不能替代 Linux 容器链路验证。
 - 用户资料、账号凭证、配置和真实数据库不用于测试夹具。

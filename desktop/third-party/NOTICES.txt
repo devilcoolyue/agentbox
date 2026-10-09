@@ -68481,7 +68481,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-===== go: golang.org/x/crypto@v0.56.0 / LICENSE =====
+===== go: golang.org/x/crypto@v0.57.0 / LICENSE =====
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -68511,7 +68511,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== go: golang.org/x/net@v0.57.0 / LICENSE =====
+===== go: golang.org/x/net@v0.60.0 / LICENSE =====
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -68541,7 +68541,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== go: golang.org/x/sys@v0.47.0 / LICENSE =====
+===== go: golang.org/x/sys@v0.48.0 / LICENSE =====
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without
@@ -68571,7 +68571,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-===== go: golang.org/x/text@v0.41.0 / LICENSE =====
+===== go: golang.org/x/text@v0.42.0 / LICENSE =====
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without

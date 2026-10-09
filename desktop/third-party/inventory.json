@@ -6294,18 +6294,6 @@
   {
     "ecosystem": "go",
     "name": "golang.org/x/crypto",
-    "version": "v0.56.0",
-    "license": "See license text",
-    "texts": [
-      {
-        "name": "LICENSE",
-        "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
-      }
-    ]
-  },
-  {
-    "ecosystem": "go",
-    "name": "golang.org/x/net",
     "version": "v0.57.0",
     "license": "See license text",
     "texts": [
@@ -6317,8 +6305,20 @@
   },
   {
     "ecosystem": "go",
+    "name": "golang.org/x/net",
+    "version": "v0.60.0",
+    "license": "See license text",
+    "texts": [
+      {
+        "name": "LICENSE",
+        "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+      }
+    ]
+  },
+  {
+    "ecosystem": "go",
     "name": "golang.org/x/sys",
-    "version": "v0.47.0",
+    "version": "v0.48.0",
     "license": "See license text",
     "texts": [
       {
@@ -6330,7 +6330,7 @@
   {
     "ecosystem": "go",
     "name": "golang.org/x/text",
-    "version": "v0.41.0",
+    "version": "v0.42.0",
     "license": "See license text",
     "texts": [
       {

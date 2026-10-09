@@ -11,7 +11,7 @@
 | 托管 CI | `cdaa457` 上 CI（web、build-test、source-audit、chat-reliability、govulncheck）与 Release candidate（含 `docker.cli-candidate`、真实 systemd `docker.recovery-drill`、部署迁移/回退）通过；`desktop.yml` 于 `1ea2dae` 通过 | `verification-stability.yml` 与 `desktop-release.yml` 尚未在托管 runner 运行；20 次稳定性采样仍是本机 runner 记录 |
 | 桌面公开测试版 | 已公开版本 0.1.2；[对应历史 CI/安装证据](architecture/desktop-client-acceptance.md) | 公开测试版未正式签名/公证；源码为 0.1.3-dev（三语、错误解释），尚未公开发布，仅有本地 macOS arm64 测试 ZIP 和旧包替换验收；旧安装包不会自动更新 |
 | Agent 镜像基线 | `images/agent/versions.env`：Claude 2.1.280、Codex 0.145.0、Node 22.23.2 与固定 digest | `latest` 是可变标签；后续在线更新版本不自动成为已验证基线 |
-| 构建工具 | `go.mod`：Go 1.26.6；网页 CI Node 22；包管理版本见 lockfile | 本机 Node、Go 及平台实际值以验证报告为准，不把本机结果当固定 runner 指标 |
+| 构建工具 | `go.mod`：Go 1.26.9；网页 CI Node 22；包管理版本见 lockfile | 本机 Node、Go 及平台实际值以验证报告为准，不把本机结果当固定 runner 指标 |
 
 ## 能力与证据范围
 

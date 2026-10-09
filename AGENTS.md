@@ -681,7 +681,7 @@ data/
 
 ## 代码约定与注意事项
 
-- Go 版本见 `go.mod`：当前 `go 1.26.6`。提交前至少跑 `go build ./...` 与 `go test ./...`。
+- Go 版本见 `go.mod`：当前 `go 1.26.9`。提交前至少跑 `go build ./...` 与 `go test ./...`。
   这个补丁号不是随手写的：CI 的 govulncheck 用 `go-version-file: go.mod` 决定用哪个
   工具链，stdlib 漏洞（`crypto/tls`、`net/http`、`net/url`、`encoding/asn1` 那批）只能靠
   抬这一行修——它们没法进豁免清单。宿主上的 go 比这行旧时，`go build` 会按
