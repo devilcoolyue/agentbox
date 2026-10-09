@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.11 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.12 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.11
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.12
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.11_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.12_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.11_linux_arm64/install.sh --version v0.1.11
+sudo bash agentbox_v0.1.12_linux_arm64/install.sh --version v0.1.12
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,14 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### 升级至 v0.1.12
+
+本版加入账号级可用模型与官方模型目录、「模型管理」三个标签页、空间切换同类型账号、五种界面风格和网页动效，并收紧触屏按钮尺寸；Go 与 golang.org/x/net 升级修复新安全公告，服务端和 abox-link 均重新构建。
+
+从 v0.1.11 升级不新增数据库迁移，仍为 schema 12；从 v0.1.10 及更早升级仍会执行 schema 10 → 12 迁移，要求与下节相同。配置新增账号的 `models`、`default_model` 和模型条目的 `hidden`；回退到 v0.1.11 时旧程序忽略这些字段，再次保存配置会丢掉它们，回退前保留配置备份。使用「关于与更新」或已校验包内的 `deploy/release.py` 升级。
+
+v0.1.12 包含 Linux amd64/arm64 服务端与五个平台 abox-link，共七个归档及 `release.json`、`SHA256SUMS`。本次不发布新的桌面安装包，Desktop 0.1.2 仍独立下载；服务端升级不自动更新本机桌面应用或空间镜像。
 
 ### 升级至 v0.1.11
 

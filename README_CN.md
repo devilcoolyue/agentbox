@@ -68,7 +68,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 - **运行环境：** Linux x86_64 / arm64、systemd 与本机 Docker Engine。Ubuntu 22.04+ / Debian 12+ 会自动安装缺失依赖；其他发行版见[安装前提](deploy/README.md#一键安装)。
 - **打开登录：** 访问 `http://服务器IP:8180`，使用安装完成时显示的 `boxadmin` 和随机密码。直接远程访问需放行 TCP 8180；公网长期使用请配置 [HTTPS](deploy/README.md#https-与-websocket-反向代理)。
-- **服务端正式版：** [v0.1.11](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.11)。命令默认安装最新正式版；末尾加 `-s -- --version v0.1.11` 可固定版本，加 `-s -- --listen 127.0.0.1:8180` 可限制为仅本机监听。
+- **服务端正式版：** [v0.1.12](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.12)。命令默认安装最新正式版；末尾加 `-s -- --version v0.1.12` 可固定版本，加 `-s -- --listen 127.0.0.1:8180` 可限制为仅本机监听。
 - **已有部署：** 使用控制台更新入口或[升级指南](docs/releases.md#升级与回退)。安装器会保留已有部署，不覆盖安装。
 
 配置位于 `/etc/agentbox`，数据位于 `/var/lib/agentbox`。每个空间默认限制 2 GiB 内存、2 CPU，请按并发空间数准备资源。完整选项与失败恢复见[安装说明](deploy/README.md#一键安装)。

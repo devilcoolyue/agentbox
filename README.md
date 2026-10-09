@@ -68,7 +68,7 @@ The installer downloads and verifies the server package, builds the workspace im
 
 - **Host:** Linux x86_64 / arm64, systemd, and local Docker Engine. Ubuntu 22.04+ / Debian 12+ install missing dependencies automatically. For other distributions, see the [prerequisites](deploy/README.md#一键安装).
 - **Sign in:** open `http://YOUR_SERVER_IP:8180` and use `boxadmin` with the generated password printed by the installer. Allow TCP 8180 through your firewall if connecting directly; configure [HTTPS](deploy/README.md#https-与-websocket-反向代理) for ongoing public access.
-- **Stable server:** [v0.1.11](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.11). The command selects the latest stable release; append `-s -- --version v0.1.11` to pin it, or `-s -- --listen 127.0.0.1:8180` to bind only to localhost.
+- **Stable server:** [v0.1.12](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.12). The command selects the latest stable release; append `-s -- --version v0.1.12` to pin it, or `-s -- --listen 127.0.0.1:8180` to bind only to localhost.
 - **Existing installation:** use the console's update entry or the [upgrade guide](docs/releases.md#升级与回退). The installer preserves existing deployments and will not overwrite them.
 
 Configuration lives in `/etc/agentbox`, data in `/var/lib/agentbox`. Each workspace defaults to a 2 GiB memory limit and 2 CPUs; size your server for the number of concurrent workspaces. See [installation and recovery](deploy/README.md#一键安装) for all options.

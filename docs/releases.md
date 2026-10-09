@@ -8,7 +8,13 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.11](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.11)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.12](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.12)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.12：账号模型、切换账号与界面风格
+
+账号可配置自己的可用模型、默认模型和逐模型推理强度，可读取上游列表或参考 Agent 镜像内 CLI 的官方目录；「模型管理」分为账号模型、价格和系统模型列表三个标签页。空间可切换到同类型、有权使用的其他账号，切换前停止容器并把续出的令牌收回原账号。网页新增五种界面风格与克制的动效，用户弹层改为单行选择，触屏按钮更紧凑。Go 1.26.9 与 golang.org/x/net v0.60.0 修复新安全公告。完整内容见 [CHANGELOG](../CHANGELOG.md)。
+
+相对 v0.1.11 不新增数据库迁移（仍为 schema 12），不改现有聊天、终端和配对协议；新增切换账号与账号模型读取接口，见 [账号与模型](accounts-and-models.md)。配置新增的账号模型字段在回退到 v0.1.11 后会被忽略，旧版再次保存配置会丢掉它们。从 v0.1.10 直接升级仍需 schema 10 → 12 迁移并遵守下节备份、回退约束。本次发布两个 Linux 服务端包、五个平台 abox-link、`release.json` 和 `SHA256SUMS`；不发布新桌面安装包。
 
 ### v0.1.11：项目创建、聊天恢复与工作台改进
 
@@ -56,7 +62,7 @@ v0.1.0～v0.1.4 的七个平台包、`release.json` 和 `SHA256SUMS` 从旧仓�
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.11 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.12 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0
@@ -77,8 +83,8 @@ python3 scripts/scan-secrets.py --artifacts /tmp/agentbox-release --output /tmp/
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
-tar -xzf agentbox_v0.1.11_linux_arm64.tar.gz
-cd agentbox_v0.1.11_linux_arm64
+tar -xzf agentbox_v0.1.12_linux_arm64.tar.gz
+cd agentbox_v0.1.12_linux_arm64
 ./agentbox --version
 cp config.example.json config.json
 chmod 600 config.json

@@ -39,6 +39,8 @@ Agentbox Desktop 独立发布；服务器上的 Claude Code / Codex CLI 镜像�
 
 v0.1.11 的网页与 abox-link 保留三语及旧接口；网页增加创建/导入、草稿与持久聊天 v1。服务端从 schema 10 自动迁移至 12，旧二进制回退须恢复兼容备份。Desktop 0.1.2 沿用既有服务端能力、同步默认关闭，本次不发布新桌面包。
 
+v0.1.12 沿用 schema 12 与 `compatibility_epoch` 1，现有网页、abox-link、聊天、终端和配对接口不变；新增空间切换账号（`PUT /api/sessions/{id}/account`）和账号模型读取接口，见[账号与模型](accounts-and-models.md)。Desktop 0.1.2 能力不变、同步默认关闭，本次不发布新桌面包。
+
 客户端按能力发现显示扩展入口，旧服务端返回 404 或页面时进入基础模式；鉴权错误、网络故障和无效响应不会冒充基础模式。新桌面包不会自动升级服务端。
 
 v0.1.9 的 schema 10 只新增项目和终端元数据，不移动空间文件。升级前保存并验证配套备份；v0.1.8 不能直接打开已迁移数据库，回退必须恢复兼容备份到新目录，并保全升级后的文件变化。桌面本地状态另使用 schema 5，不与服务端 schema 混用。详见[数据库迁移与回退](architecture/database-migrations.md)。
@@ -74,6 +76,17 @@ v0.1.11 包含新增的 `session-creations` v1 协议及服务端 schema 11。�
 schema 11 不修改已有会话、模型、用量或额度，首次启动自动迁移。v0.1.10/schema 10 回退仍须兼容备份，不能直接打开新版数据库。本版同时包含下述 schema 12；历史版本组合与桌面本地 schema 不变。
 
 v0.1.11 同时新增 schema 12 聊天回执存储与启动恢复。HTTP 接收/查询/核对接口已接入原执行器，`chat_protocol:1`、`chat_scope` 独立协商。`draft_protocol:1` 仍仅声明草稿能力；新版浏览器发现 chat v1 后使用持久 HTTP 发送、按 ID 查询和显式核对；仅在服务端未声明该能力时保留旧 WS 发送并提示限制，已选择新协议后不会因错误降级成无 ID 发送。旧 WS 和线程变更也会被持久活动/待核对请求阻止；未知结果不能通过换线程绕过。运行连接改用 WAL + synchronous=FULL；schema 11 和 10 二进制均不能直接打开 12，回退需对应备份。系统备份会包含数据库中的已接收提示词副本，附件内容仍需完整备份。详见[数据库迁移](architecture/database-migrations.md)及 [M3 记录](milestones/m3.md)。
+
+## 从 v0.1.12 回退到 v0.1.11
+
+两版同为 schema 12、`compatibility_epoch` 1，不涉及数据库回退；v0.1.11 的 `check-config` 接受带账号模型字段的配置（已用两版二进制核对）。先备份配置，再由当前包内的 `release.py` 激活旧版本，它照常执行兼容检查、停服备份、切换与健康检查：
+
+```bash
+sudo cp -p /etc/agentbox/config.json /etc/agentbox/config.json.v0.1.12
+sudo python3 /opt/agentbox/current/deploy/release.py activate --version v0.1.11
+```
+
+回退后旧程序忽略账号的 `models`、`default_model` 和模型的 `hidden`：受限账号的对话改为列出全部系统模型，服务端也不再拒绝列表外模型。v0.1.11 每次写回配置（保存系统设置、账号、价格等）都会把这些字段去掉，再次升级前用备份的配置恢复。切换过账号的空间继续使用新账号；官方模型目录缓存留在缓存目录，旧版不读取。
 
 ## 从 v0.1.11 回退到 v0.1.10
 
