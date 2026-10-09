@@ -81,15 +81,30 @@ async function probeTerminalLanguages(term: Terminal) {
   const original=bridge.invoke;let opened=0;
   bridge.invoke=((...args:Parameters<typeof original>)=>{if(args[0]==='terminal_open')opened++;return original(...args);}) as typeof original;
   const element=term.element;
-  const buffer=()=>Array.from({length:term.buffer.active.length},(_,n)=>term.buffer.active.getLine(n)?.translateToString()||'').join('\n');
-  const before=buffer();
+  // Logical lines without cell padding: text such as the attachment panel uses
+  // line-height normal, so a language can change its height; the host refits and
+  // xterm reflows rows/cols. That is a resize, not replaced or rewritten output.
+  const content=()=>{
+    const active=term.buffer.active,lines:string[]=[];
+    for(let n=0;n<active.length;n++){
+      const line=active.getLine(n);if(!line)continue;
+      const text=line.translateToString(!active.getLine(n+1)?.isWrapped);
+      if(line.isWrapped&&lines.length)lines[lines.length-1]+=text;else lines.push(text);
+    }
+    while(lines.length&&!lines[lines.length-1])lines.pop();
+    return lines.join('\n');
+  };
+  const size=()=>`${term.cols}x${term.rows}`;
+  const before=content(),beforeSize=size();
   try {
     (await until(()=>visibleButton('客户端设置',document.querySelector('.sidebar')))).click();
     const picker=await until(()=>Array.from(document.querySelectorAll<HTMLSelectElement>('.settings-section .language-select select')).find(s=>s.getClientRects().length));
     for(const [locale,label] of [['en','Running'],['zh-TW','執行中'],['zh-CN','运行中']] as const){
       await setSmokeLanguage(picker,locale);
       await until(()=>document.querySelector('.workspace-status')?.textContent?.trim()===label);
-      if(element!==term.element||buffer()!==before||opened)throw new Error('Language switch replaced terminal transport or content');
+      if(element!==term.element)throw new Error(`Language switch (${locale}) replaced the terminal element`);
+      if(opened)throw new Error(`Language switch (${locale}) reopened the terminal transport ${opened} time(s)`);
+      if(content()!==before)throw new Error(`Language switch (${locale}) changed terminal content (${beforeSize} -> ${size()})`);
     }
     const dialog=Array.from(document.querySelectorAll<HTMLElement>('.ui-dialog')).find(d=>d.getClientRects().length);
     dialog?.querySelector<HTMLButtonElement>('.dialog-header button')?.click();
