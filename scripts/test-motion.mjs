@@ -42,6 +42,20 @@ export async function motionSmoke(page, fixture) {
   }), ['opacity']);
   await page.locator('.tab[data-tab="files"]').click();
   await settle(page);
+  // A resize places the underline directly. Sliding from the old geometry, which can lie outside a
+  // narrowed, horizontally scrollable tab bar, toggles its scrollbar mid-slide; measuring inside the
+  // ResizeObserver callback made WebKit report a ResizeObserver loop.
+  const desktop = page.viewportSize();
+  await page.setViewportSize({width: 390, height: 844});
+  const snapped = await page.evaluate(() => new Promise(done => {
+   const frames = n => n ? requestAnimationFrame(() => frames(n - 1)) : (() => {
+    const ink = document.querySelector('.tabs > .ink'), a = ink.getBoundingClientRect(), b = document.querySelector('.tab.active').getBoundingClientRect();
+    done({running: ink.getAnimations().length, dx: Math.round(Math.abs(a.left - b.left)), dw: Math.round(Math.abs(a.width - b.width))});
+   })();
+   frames(4);
+  }));
+  await page.setViewportSize(desktop);
+  assert.deepEqual(snapped, {running: 0, dx: 0, dw: 0}, 'resize should place the tab underline without sliding');
 
   // The ⋯ menu slides in; a closing menu stays inert until it fades out, and focus returns.
   await page.locator('#btn-wb-more').click();
@@ -125,7 +139,7 @@ export async function motionSmoke(page, fixture) {
   await page.locator('#btn-wb-more').click();
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.menu-pop').count(), 0, 'reduced motion kept the closed menu');
-  console.log(`Motion: tab underline and pane entry, menu exit/focus, dialog entry${overlay ? '/exit' : ''}, skeleton rows, staggered home cards without replay, new-workspace flash, reduced motion passed`);
+  console.log(`Motion: tab underline slide and resize placement, pane entry, menu exit/focus, dialog entry${overlay ? '/exit' : ''}, skeleton rows, staggered home cards without replay, new-workspace flash, reduced motion passed`);
  } finally {
   await page.emulateMedia({reducedMotion: 'reduce'});
  }

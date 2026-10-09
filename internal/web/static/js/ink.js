@@ -13,6 +13,7 @@ export function trackInk(host) {
     ink.setAttribute("aria-hidden", "true");
     host.append(ink);
     let placed = false; // 上一次量到了有效位置：只有这时才让条滑过去
+    let hostW = 0, hostH = 0;
     const update = () => {
         const item = host.querySelector(":scope > .active");
         if (!item || !item.offsetWidth || !host.offsetWidth) {
@@ -20,21 +21,32 @@ export function trackInk(host) {
             host.removeAttribute("data-ink-ready");
             return;
         }
-        if (!placed)
+        // 宿主自己变了尺寸（改窗口大小、切窄屏）就直接落位：选中项没变，没什么可滑的；
+        // 而且旧位置可能已在变窄的宿主之外，滑回来的途中会把可横向滚动的标签栏撑出滚动条。
+        const still = !placed || host.clientWidth !== hostW || host.clientHeight !== hostH;
+        hostW = host.clientWidth;
+        hostH = host.clientHeight;
+        if (still)
             host.setAttribute("data-ink-still", "");
         host.style.setProperty("--ink-x", item.offsetLeft + "px");
         host.style.setProperty("--ink-y", item.offsetTop + "px");
         host.style.setProperty("--ink-w", item.offsetWidth + "px");
         host.style.setProperty("--ink-h", item.offsetHeight + "px");
         host.setAttribute("data-ink-ready", "");
-        if (!placed) {
+        if (still) {
             void ink.offsetWidth; // 先在无过渡状态下落位，再恢复过渡
             host.removeAttribute("data-ink-still");
             placed = true;
         }
     };
-    // 文字随语言、计数变宽变窄，宿主不一定跟着变：每个选项都要盯
-    const sizes = new ResizeObserver(update);
+    // 文字随语言、计数变宽变窄，宿主不一定跟着变：每个选项都要盯。
+    // 回调里只排到下一帧再量：挪条会改变宿主的滚动溢出，滚动条一出一收就改了宿主自己的尺寸，
+    // 在回调里同步改，浏览器会报 ResizeObserver loop（WebKit 实测）。
+    let frame = 0;
+    const sizes = new ResizeObserver(() => {
+        if (!frame)
+            frame = requestAnimationFrame(() => { frame = 0; update(); });
+    });
     const observeSizes = () => {
         sizes.disconnect();
         sizes.observe(host);
