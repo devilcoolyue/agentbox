@@ -179,6 +179,9 @@
 .px-bridge.bad { color: var(--red); border-color: var(--red-line); border-style: solid; }
 .px-table th, .px-table td { padding-left: 10px; padding-right: 10px; }
 .px-table td { vertical-align: middle; }
+/* 骨架行与带操作按钮的真实行同高 */
+.px-table .skeleton-row td { padding-top: 17px; padding-bottom: 17px; }
+.price-table .skeleton-row td { padding-top: 18px; padding-bottom: 18px; }
 .px-actions .btn { padding-left: 7px; padding-right: 7px; gap: 5px; }
 .px-name { display: flex; align-items: center; gap: 7px; font-weight: 500; }
 .px-scheme {
@@ -424,6 +427,8 @@
   gap: 12px;
   margin-bottom: 16px;
 }
+/* 骨架整块占满磁贴区的一行，内部排成与真实磁贴相同的网格 */
+.mon-tiles-skeleton { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
 .mon-tile {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -591,6 +596,10 @@
 #image-update-dirty[hidden] { display: none; }
 .image-update-log { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; font-size: 12px; }
 .image-update-ref { overflow-wrap: anywhere; }
+/* 任务进度：阶段与百分比一行，下面一条进度条；任务结束后停在终态，离开页面再回来不显示 */
+.image-update-meter { display: flex; flex-direction: column; gap: 6px; padding: 10px 0 2px; }
+.image-update-meter-head { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--text); }
+#image-update-pct { color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ---- 统一保存条：贴在设置内容区底部，有未保存的修改时出现 ---- */
 .set-savebar {

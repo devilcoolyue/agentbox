@@ -92,6 +92,30 @@
 .update-meta { color: var(--muted); font-size: 11px !important; overflow-wrap: anywhere; }
 .upgrade-progress { padding: 14px; margin: 14px 0; border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale)); }
 .upgrade-progress p { margin: 0 0 10px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+/* 升级进度：状态文字与百分比一行，下面是进度条、下载字节和九个步骤 */
+.upgrade-meter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.upgrade-meter-head #upgrade-message { min-width: 0; }
+#upgrade-pct { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.upgrade-meter { margin: 0 0 8px; }
+#upgrade-detail { margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+.upgrade-steps {
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  margin: 4px 0 12px; padding: 0; list-style: none;
+  font-size: 11.5px; color: var(--muted);
+}
+.upgrade-steps li { display: inline-flex; align-items: center; gap: 6px; }
+/* 步骤前的小圆点：做完实心、进行中带光圈、失败转红 */
+.upgrade-steps li::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none;
+  border: 1.5px solid var(--line); box-sizing: border-box;
+  transition: background-color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+}
+.upgrade-steps li.done { color: var(--text); }
+.upgrade-steps li.done::before { background: var(--green); border-color: var(--green); }
+.upgrade-steps li.current { color: var(--amber); font-weight: 600; }
+.upgrade-steps li.current::before { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 22%, transparent); }
+.upgrade-steps li.failed { color: var(--red); font-weight: 600; }
+.upgrade-steps li.failed::before { background: var(--red); border-color: var(--red); }
 .update-notes { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 12px; }
 .update-notes summary { cursor: pointer; color: var(--muted); }
 /* 版本说明来自 GitHub Release 的 Markdown，按面板字号排得紧凑，颜色只用主题令牌。 */

@@ -12,6 +12,7 @@ import { S, bus } from "./state.js";
 import { $, toast, btnBusy, btnDone, askConfirm, fmtTime } from "./util.js";
 import { api } from "./api.js";
 import { setTip } from "./tip.js";
+import { skelBar, skelShell } from "./skeleton.js";
 /* 微美元 → 给人看的金额。默认四位小数：一个便宜回合只有几百微美元，
  * 两位小数会全部显示成 $0.00，看不出扣没扣。负号放 $ 前面。 */
 export function fmtUSD(micro, digits = 4) {
@@ -98,11 +99,28 @@ export async function openQuota(user, onDone) {
     $("q-user").textContent = user;
     $("q-amount").value = "";
     $("q-note").value = "";
-    $("q-balance").textContent = "…";
-    $("q-totals").textContent = "";
-    $("q-ledger").replaceChildren();
+    // 读取期间先铺骨架：余额、汇总、流水各占住自己的位置，弹窗不先缩成一截再撑开
+    $("q-balance").replaceChildren(skelBar("5.5em", "inline text"));
+    $("q-balance").classList.remove("neg");
+    $("q-totals").replaceChildren(skelBar("14em", "inline text"));
+    $("q-ledger").replaceChildren(ledgerSkeleton());
+    for (const r of dlg().querySelectorAll('input[name="q-mode"]'))
+        r.checked = false;
     dlg().showModal();
     await load();
+}
+/* 流水骨架：七行正好填满流水区的最大高度，列宽对上真实行的时间/类型/金额/余额/备注 */
+function ledgerSkeleton() {
+    const wrap = skelShell(i18nText("读取中…"), "q-ledger-skeleton");
+    for (let i = 0; i < 7; i++) {
+        const row = document.createElement("div");
+        row.className = "q-led-row";
+        row.setAttribute("aria-hidden", "true");
+        row.append(skelBar("6.5em", "text q-led-ts"), skelBar("2.2em", "text q-led-reason"), skelBar("82px", "text q-led-delta"), skelBar("5.5em", "text q-led-after"), skelBar(20 + (i * 13) % 25, "text"));
+        row.lastChild.style.marginLeft = "auto"; // 备注靠右，与真实行一致
+        wrap.append(row);
+    }
+    return wrap;
 }
 async function load() {
     let data;
@@ -111,6 +129,12 @@ async function load() {
     }
     catch (e) {
         toast(i18nText("读取额度失败：") + e.message, true);
+        // 第一次就没读到：收起骨架，免得一直像在读取
+        if ($("q-ledger").querySelector(".q-ledger-skeleton")) {
+            $("q-balance").textContent = "—";
+            $("q-totals").textContent = "";
+            $("q-ledger").replaceChildren();
+        }
         return;
     }
     curQuota = data.quota;

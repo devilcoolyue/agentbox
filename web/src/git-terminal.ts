@@ -1,4 +1,5 @@
 import { htmlText as trHTML, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelRows } from "./skeleton.js";
 import { api } from "./api.js";
 import { S,bus } from "./state.js";
 import { askConfirm,fmtTime } from "./util.js";
@@ -36,7 +37,7 @@ export function openGitTerminal(repo:string,remote:string,readOnly:boolean){
  async function run(fn:()=>Promise<void>){
   if(busy||token!==S.token)return;busy=true;error.textContent="";
   for(const b of d.querySelectorAll<HTMLButtonElement>("button"))b.disabled=true;
-  try{await fn();}catch(e){if(d.open&&token===S.token)error.textContent=(e as Error).message;}
+  try{await fn();}catch(e){if(d.open&&token===S.token){error.textContent=(e as Error).message;list.querySelector(".skeleton-list")?.remove();}}
   finally{busy=false;for(const b of d.querySelectorAll<HTMLButtonElement>("button"))b.disabled=false;}
  }
  d.querySelector("[data-create]")!.addEventListener("click",()=>void run(async()=>{
@@ -47,6 +48,7 @@ export function openGitTerminal(repo:string,remote:string,readOnly:boolean){
  d.querySelector("[data-refresh]")!.addEventListener("click",()=>void run(load));
  d.querySelector("[data-close]")!.addEventListener("click",()=>d.close());
  d.addEventListener("cancel",e=>{if(busy)e.preventDefault();});d.addEventListener("close",()=>{dialogs.delete(d);d.remove();});
+ list.append(skelRows(1,i18nText("读取中…"),{rowClass:"git-connection-row",lines:3}));
  document.body.append(d);dialogs.add(d);decorateIcons(d);d.showModal();void run(load);
 }
 bus.addEventListener("signed-out",()=>{for(const d of dialogs)d.close();});

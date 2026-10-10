@@ -1,4 +1,5 @@
 import { htmlText as trHTML, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelRows } from "./skeleton.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { enhanceSelects, setSelectValue } from "./select.js";
@@ -87,8 +88,10 @@ export function openGitReviews(repo, remote, connection, connections) {
             await fn();
         }
         catch (e) {
-            if (d.open && token === S.token)
+            if (d.open && token === S.token) {
                 error.textContent = e.message;
+                list.querySelector(".skeleton-list")?.remove();
+            }
         }
         finally {
             busy = false;
@@ -127,6 +130,7 @@ export function openGitReviews(repo, remote, connection, connections) {
     button("refresh").addEventListener("click", () => void run(() => load()));
     button("next").addEventListener("click", () => void run(() => load((page?.page || 1) + 1)));
     button("close").addEventListener("click", () => d.close());
+    list.append(skelRows(3, i18nText("读取中…"), { lines: 0, title: [40, 40] }));
     d.addEventListener("cancel", e => { if (busy)
         e.preventDefault(); });
     d.addEventListener("close", () => { active = null; d.remove(); });

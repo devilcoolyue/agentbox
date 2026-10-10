@@ -80,6 +80,9 @@ def state_path(app):
 
 
 def save(app, job, phase, error=''):
+    if phase == 'failed' and job.get('phase') not in TERMINAL:
+        # Lets the console mark the step that failed after the phase is gone.
+        job['failed_phase'] = job.get('phase')
     job.update(phase=phase, message=PHASES[phase], error=error, updated_at=int(time.time() * 1000))
     release.atomic_json(state_path(app), job)
 
@@ -161,7 +164,7 @@ class TrustedRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def download(url, destination, limit):
+def download(url, destination, limit, progress=None):
     validate_url(url)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), TrustedRedirect())
     accept = 'application/vnd.github+json' if urllib.parse.urlsplit(url).hostname == 'api.github.com' else 'application/octet-stream'
@@ -178,7 +181,28 @@ def download(url, destination, limit):
                 raise ValueError('Release download exceeds size limit')
             out.write(block)
             digest.update(block)
+            if progress:
+                progress(total)
     return digest.hexdigest()
+
+
+class DownloadProgress:
+    """Publishes archive download bytes in the job state so the console can draw
+    a progress bar. Writes are throttled; the state file stays authoritative."""
+
+    def __init__(self, app, job, total, interval=1.0):
+        self.app, self.job, self.interval, self.last = app, job, interval, 0.0
+        job.update(downloaded=0, total=total)
+        self.publish(0)
+
+    def __call__(self, done):
+        if time.monotonic() - self.last >= self.interval:
+            self.publish(done)
+
+    def publish(self, done):
+        self.last = time.monotonic()
+        self.job.update(downloaded=done, updated_at=int(time.time() * 1000))
+        release.atomic_json(state_path(self.app), self.job)
 
 
 def verify_checksum(path, name, digest):
@@ -261,7 +285,9 @@ def perform(app, config, pid, current, job_id):
                     raise ValueError('Insufficient disk space to download and stage release')
                 sums, archive = tmp / 'SHA256SUMS', tmp / (name + '.tar.gz')
                 download(base + 'SHA256SUMS', sums, 1024 * 1024)
-                digest = download(base + archive.name, archive, MAX_ARCHIVE)
+                meter = DownloadProgress(app, job, archive_size)
+                digest = download(base + archive.name, archive, MAX_ARCHIVE, progress=meter)
+                meter.publish(archive.stat().st_size)
                 save(app, job, 'verifying')
                 verify_checksum(sums, archive.name, digest)
                 package = unpack(archive, tmp, name)

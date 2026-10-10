@@ -1,4 +1,4 @@
-import { api } from "../../api.js";
+import { api, apiUpload } from "../../api.js";
 import { APIError } from "../../problems.js";
 import { t } from "../../i18n.js";
 const id = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
@@ -83,7 +83,7 @@ export class CreationFlow {
         return this.view;
     }
     latest() { return this.view?.imports[0]; }
-    async import(kind, directory, files, uploadMode, connection, url, signal) {
+    async import(kind, directory, files, uploadMode, connection, url, signal, onProgress) {
         await this.reconcile(signal);
         if (this.view?.busy)
             throw new Error(t("导入仍在执行，请稍后查询状态。"));
@@ -104,10 +104,32 @@ export class CreationFlow {
             data.append("paths", JSON.stringify(files.map(file => file.webkitRelativePath || file.name)));
             for (const file of files)
                 data.append("files", file, file.name);
-            result = await api(this.path() + `/upload?attempt_id=${this.pending.attempt}&directory=${encodeURIComponent(directory)}`, { method: "POST", body: data, signal });
+            result = await apiUpload(this.path() + `/upload?attempt_id=${this.pending.attempt}&directory=${encodeURIComponent(directory)}`, data, { signal,
+                onProgress: (loaded, total) => onProgress?.(loaded < total ? { kind: "upload", loaded, total } : { kind: "processing" }) });
         }
         else {
-            result = await api(this.path() + "/git", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attempt_id: this.pending.attempt, connection_id: connection, url, directory }), signal });
+            // 服务端用尝试编号作为 Git 操作编号：只读轮询它的实时进度，不改变导入请求本身
+            const attempt = this.pending.attempt;
+            let polling = true;
+            const poll = async () => {
+                while (polling && !signal.aborted) {
+                    try {
+                        const page = await api("/git/operations", { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) });
+                        if (polling)
+                            onProgress?.({ kind: "git", op: page.active.find(op => op.request_id === attempt) });
+                    }
+                    catch { /* 进度只是观察，读失败不影响导入结果 */ }
+                    await new Promise(resolve => setTimeout(resolve, 700));
+                }
+            };
+            onProgress?.({ kind: "git" });
+            void poll();
+            try {
+                result = await api(this.path() + "/git", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attempt_id: attempt, connection_id: connection, url, directory }), signal });
+            }
+            finally {
+                polling = false;
+            }
         }
         await this.reconcile(signal);
         if (result.state !== "succeeded")

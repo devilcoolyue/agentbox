@@ -1,4 +1,5 @@
 import { htmlText as trHTML, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelRows } from "./skeleton.js";
 import { api } from "./api.js";
 import { S,bus } from "./state.js";
 import { askConfirm,toast } from "./util.js";
@@ -51,12 +52,13 @@ export function openGitBranches(repo:string,refreshed:()=>Promise<void>){
   if(busy||token!==S.token)return;busy=true;error.textContent="";
   const controls=[...d.querySelectorAll<HTMLInputElement|HTMLSelectElement|HTMLButtonElement>("button,input,select")].map(el=>({el,disabled:el.disabled}));
   for(const {el} of controls)el.disabled=true;
-  try{await fn();}catch(e){if(d.open&&token===S.token)error.textContent=(e as Error).message;}
+  try{await fn();}catch(e){if(d.open&&token===S.token){error.textContent=(e as Error).message;list.querySelector(".skeleton-list")?.remove();}}
   finally{busy=false;for(const {el,disabled} of controls)if(el.isConnected)el.disabled=disabled;close.disabled=false;d.querySelector<HTMLButtonElement>("[data-refresh]")!.disabled=false;if(data)create.disabled=data.dirty||data.state.unborn;}
  }
  form.addEventListener("submit",e=>{e.preventDefault();void run(()=>act("create"));});
  d.querySelector("[data-refresh]")!.addEventListener("click",()=>void run(load));close.addEventListener("click",()=>d.close());
  d.addEventListener("cancel",e=>{if(busy)e.preventDefault();});d.addEventListener("close",()=>{active=null;d.remove();});
+ list.append(skelRows(4,i18nText("读取分支中…"),{rowClass:"git-connection-row",lines:1,actions:true}));
  document.body.append(d);decorateIcons(d);enhanceSelects(d);d.showModal();void run(load);
 }
 bus.addEventListener("signed-out",()=>active?.close());

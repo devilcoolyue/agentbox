@@ -1,4 +1,5 @@
 import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
+import { keepCount, skelBar, skelShell } from "./skeleton.js";
 import { actionButton } from "./icons.js";
 import { hideTip } from "./tip.js";
 import { api } from "./api.js";
@@ -103,7 +104,7 @@ export function initMCP() {
         data = null;
         request?.abort();
         request = new AbortController();
-        $("mcp-list").replaceChildren(node("p", () => i18nText("正在读取 MCP 配置…")));
+        $("mcp-list").replaceChildren(mcpSkeleton(keepCount($("mcp-list"), ".mcp-row", 2)));
         try {
             const result = await api(endpoint(), { signal: request.signal });
             if (!current(g))
@@ -115,6 +116,19 @@ export function initMCP() {
             if (current(g))
                 $("mcp-list").replaceChildren(node("p", e.message, "mcp-error"));
         }
+    }
+    /* 读取中的骨架：名称 + 来源状态两行、右侧操作按钮，与 mcp-row 同形 */
+    function mcpSkeleton(count) {
+        const wrap = skelShell(i18nText("正在读取 MCP 配置…"));
+        for (let i = 0; i < count; i++) {
+            const row = node("div", "", "mcp-row");
+            row.setAttribute("aria-hidden", "true");
+            const heading = node("div", "", "mcp-row-heading");
+            heading.append(skelBar(30 + i * 9, "text"), skelBar(45 + i * 7, "text"));
+            row.append(heading, skelBar("9em", "btn-like"));
+            wrap.append(row);
+        }
+        return wrap;
     }
     function showType() {
         const http = $("mcp-type").value === "http";

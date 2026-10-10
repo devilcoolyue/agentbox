@@ -30,6 +30,11 @@ type upgradeJob struct {
 	Error       string `json:"error"`
 	StartedAt   int64  `json:"started_at"`
 	UpdatedAt   int64  `json:"updated_at"`
+	// Archive download progress in bytes; absent from older helpers' state.
+	Downloaded int64 `json:"downloaded,omitempty"`
+	Total      int64 `json:"total,omitempty"`
+	// The phase that was running when the job failed.
+	FailedPhase string `json:"failed_phase,omitempty"`
 }
 
 type upgradeInfo struct {

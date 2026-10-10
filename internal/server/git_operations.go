@@ -37,6 +37,11 @@ type gitLiveOperation struct {
 	mu        sync.Mutex
 	phase     string
 	record    int64
+	// Latest Git --progress meter: whitelisted stage key and Git's own counts.
+	stage      string
+	percent    int
+	stageDone  int64
+	stageTotal int64
 }
 type gitOperationView struct {
 	RequestID       string `json:"request_id"`
@@ -49,12 +54,62 @@ type gitOperationView struct {
 	ReceivedBytes   int64  `json:"received_bytes"`
 	SentBytes       int64  `json:"sent_bytes"`
 	CancelRequested bool   `json:"cancel_requested"`
+	// Stage is empty until Git reports a progress meter; older servers omit it.
+	Stage        string `json:"stage,omitempty"`
+	StagePercent int    `json:"stage_percent"`
+	StageDone    int64  `json:"stage_done"`
+	StageTotal   int64  `json:"stage_total"`
 }
 
 func (op *gitLiveOperation) view() gitOperationView {
 	op.mu.Lock()
 	defer op.mu.Unlock()
-	return gitOperationView{RequestID: op.id, ID: op.record, Operation: op.operation, SessionID: op.session, StartedAt: op.started.UTC().Format(time.RFC3339Nano), ElapsedMS: time.Since(op.started).Milliseconds(), Phase: op.phase, ReceivedBytes: op.read.Load(), SentBytes: op.written.Load(), CancelRequested: op.cancelled.Load()}
+	return gitOperationView{RequestID: op.id, ID: op.record, Operation: op.operation, SessionID: op.session, StartedAt: op.started.UTC().Format(time.RFC3339Nano), ElapsedMS: time.Since(op.started).Milliseconds(), Phase: op.phase, ReceivedBytes: op.read.Load(), SentBytes: op.written.Load(), CancelRequested: op.cancelled.Load(),
+		Stage: op.stage, StagePercent: op.percent, StageDone: op.stageDone, StageTotal: op.stageTotal}
+}
+
+// Git's --progress meters, local ("Receiving objects") or relayed from the
+// remote over the side band ("remote: Compressing objects"). Only these stage
+// names are recognised: other stderr text, including anything a remote sends,
+// never reaches the browser.
+var gitProgressLine = regexp.MustCompile(`^(remote: +)?([A-Z][a-z]+ [a-z]+): +(\d{1,3})% \((\d{1,15})/(\d{1,15})\)`)
+var gitProgressStages = map[string]string{
+	"Counting objects": "counting", "Compressing objects": "compressing",
+	"Receiving objects": "receiving", "Writing objects": "writing",
+	"Resolving deltas": "resolving", "Updating files": "updating",
+	"Checking connectivity": "connectivity",
+}
+
+func parseGitProgress(line string) (stage string, percent int, done, total int64, ok bool) {
+	m := gitProgressLine.FindStringSubmatch(line)
+	if m == nil {
+		return "", 0, 0, 0, false
+	}
+	stage, ok = gitProgressStages[m[2]]
+	if !ok {
+		return "", 0, 0, 0, false
+	}
+	if m[1] != "" {
+		stage = "remote_" + stage
+	}
+	percent, _ = strconv.Atoi(m[3])
+	done, _ = strconv.ParseInt(m[4], 10, 64)
+	total, _ = strconv.ParseInt(m[5], 10, 64)
+	if percent > 100 || done > total {
+		return "", 0, 0, 0, false
+	}
+	return stage, percent, done, total, true
+}
+
+// gitProgress records Git's stderr progress for the live operation, if any.
+func (op *gitLiveOperation) gitProgress(line string) {
+	stage, percent, done, total, ok := parseGitProgress(line)
+	if !ok {
+		return
+	}
+	op.mu.Lock()
+	op.stage, op.percent, op.stageDone, op.stageTotal = stage, percent, done, total
+	op.mu.Unlock()
 }
 func gitLive(ctx context.Context) *gitLiveOperation {
 	op, _ := ctx.Value(gitOperationContextKey{}).(*gitLiveOperation)

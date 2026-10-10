@@ -10,6 +10,7 @@ import { S } from "./state.js";
 import type { AccountUsage, UsageWindow } from "./types.js";
 import { $, btnBusy, btnDone, fmtClock } from "./util.js";
 import { api } from "./api.js";
+import { keepCount, skelBar, skelShell } from "./skeleton.js";
 
 const dlg = () => $<HTMLDialogElement>("dlg-ausage");
 
@@ -114,15 +115,33 @@ function render(u: AccountUsage) {
 /* 打开时正在查的会话。查询期间用户可能切走，回来的数据就不该再往弹窗里塞。 */
 let forSession = "";
 
+/* 读取中的骨架：形状对上 winRow（标签 + 百分比、轨道、重置时间），条数沿用上一次显示的
+ * 窗口数（首次按常见的 5 小时 + 周额度两条）。刷新时弹窗高度原样不动。 */
+function skeletonRows(count: number) {
+  const wrap = skelShell(i18nText("查询中…"), "au-body-skeleton");
+  for (let i = 0; i < count; i++) {
+    const row = document.createElement("div");
+    row.className = "au-row";
+    row.setAttribute("aria-hidden", "true");
+    const head = document.createElement("div");
+    head.className = "au-row-head";
+    head.append(skelBar(28 + i * 9, "text au-row-label"), skelBar("2.6em", "text au-row-pct"));
+    const track = document.createElement("div");
+    track.className = "au-track";
+    const sub = document.createElement("div");
+    sub.className = "au-row-sub";
+    sub.append(skelBar(36 + i * 7, "text"));
+    row.append(head, track, sub);
+    wrap.append(row);
+  }
+  return wrap;
+}
+
 async function load() {
   const sid = forSession;
   const body = $("au-body");
-  body.replaceChildren();
-  const loading = document.createElement("div");
-  loading.className = "au-msg";
-  setText(loading, "查询中…");
-  body.appendChild(loading);
-  $("au-fetched").textContent = "";
+  body.replaceChildren(skeletonRows(keepCount(body, ".au-row", 2)));
+  $("au-fetched").replaceChildren(skelBar("8em", "inline text"));
 
   try {
     const u = await api<AccountUsage>(`/sessions/${sid}/account/usage`);
@@ -131,6 +150,7 @@ async function load() {
   } catch (e) {
     if (forSession !== sid) return;
     body.replaceChildren();
+    $("au-fetched").textContent = "";
     const err = document.createElement("div");
     err.className = "au-msg err";
     err.textContent = (e as Error).message;

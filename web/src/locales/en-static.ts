@@ -769,5 +769,6 @@ export default {
   "赛博朋克": "Cyberpunk",
   "石墨极简": "Graphite",
   "青野绿意": "Verdant",
-  "工程蓝图": "Blueprint"
+  "工程蓝图": "Blueprint",
+  "升级步骤": "Upgrade steps"
 } satisfies Record<string, string>;

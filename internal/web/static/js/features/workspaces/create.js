@@ -3,11 +3,55 @@ import { S, emit } from "../../state.js";
 import { refreshAll } from "../../data.js";
 import { setText, setTextRender, t } from "../../i18n.js";
 import { setSelectValue } from "../../select.js";
-import { $, btnBusy, btnDone } from "../../util.js";
+import { $, btnBusy, btnDone, fmtBytes } from "../../util.js";
 import { actionButton } from "../../icons.js";
 import { openSetupSettings } from "../../onboarding.js";
 import { CreationFlow } from "./creation-flow.js";
+import { ProgressBar, RateMeter } from "../../progress.js";
+import { progressView } from "../../git-operations.js";
 import { renderCreationSummary, resourceKey, validResources } from "./config-summary.js";
+/** 导入进度：上传时按字节画进度条与速率，上传完等服务端校验解压时转为不确定进度；
+ * Git 导入复用 Git 操作的进度块（不带取消钮，导入结果仍以服务端收据为准）。 */
+function importMeter() {
+    const host = $("new-import-meter");
+    let upload;
+    let git;
+    const show = (box) => { if (box.parentElement !== host)
+        host.replaceChildren(box); host.classList.remove("hidden"); };
+    return {
+        update(p) {
+            if (p.kind === "git") {
+                if (!git)
+                    git = progressView(undefined, false);
+                show(git.box);
+                if (p.op)
+                    git.update(p.op);
+                else
+                    setText(git.label, "准备 Git 操作…");
+                return;
+            }
+            if (!upload) {
+                const box = document.createElement("div");
+                box.className = "new-upload-progress";
+                const label = document.createElement("p");
+                label.setAttribute("role", "status");
+                upload = { box, label, bar: new ProgressBar(() => t("上传进度")), rate: new RateMeter() };
+                box.append(label, upload.bar.el);
+            }
+            const u = upload;
+            show(u.box);
+            if (p.kind === "processing") {
+                u.bar.set(null);
+                setText(u.label, "上传完成，正在校验并解压项目…");
+                return;
+            }
+            const speed = u.rate.sample(p.loaded);
+            u.bar.set(p.total ? p.loaded / p.total : null);
+            setTextRender(u.label, () => t("上传项目 {p0} / {p1}", { p0: fmtBytes(p.loaded), p1: fmtBytes(p.total) }) + (speed > 0 ? " · " + fmtBytes(Math.round(speed)) + "/s" : "") + (p.total ? " · " + Math.floor(p.loaded / p.total * 100) + "%" : ""));
+        },
+        hide() { host.classList.add("hidden"); host.replaceChildren(); upload = undefined; git = undefined; },
+    };
+}
 /** A single wizard owns receipt recovery, account checks and import requests. */
 export function initWorkspaceCreation() {
     const lifetime = new AbortController(), owner = S.token, flow = new CreationFlow();
@@ -258,8 +302,16 @@ export function initWorkspaceCreation() {
                 render();
                 throw new Error(t("配置已变化，空间已保留。请核对上方的实际配置，再次点击继续。"));
             }
-            if (view.state !== "complete" && spec.source !== "empty")
-                await flow.import(spec.source, directory.value.trim(), [...(files.files || [])], uploadMode.value, importConnection.value, repository.value.trim(), signal);
+            if (view.state !== "complete" && spec.source !== "empty") {
+                const meter = importMeter();
+                try {
+                    await flow.import(spec.source, directory.value.trim(), [...(files.files || [])], uploadMode.value, importConnection.value, repository.value.trim(), signal, p => { if (current() && dialog.open)
+                        meter.update(p); });
+                }
+                finally {
+                    meter.hide();
+                }
+            }
             const session = await flow.finish(signal);
             if (!current())
                 return;

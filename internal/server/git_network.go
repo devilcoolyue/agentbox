@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"agentbox/internal/dockerx"
 	"agentbox/internal/gitaccess"
 	"agentbox/internal/gitx"
 	"agentbox/internal/store"
@@ -131,6 +132,9 @@ func (s *Server) runGitNetwork(ctx context.Context, sess store.Session, dir stri
 	}
 	options := []string{"-c", "protocol.allow=never", "-c", "protocol.http.allow=always", "-c", "protocol.git.allow=always", "-c", "credential.helper=", "-c", "http.extraHeader=", "-c", "http.proxy=", "-c", "http.followRedirects=false", "-c", "fetch.recurseSubmodules=false", "-c", "push.recurseSubmodules=no"}
 	gitPhase(ctx, "transferring")
+	if op := gitLive(ctx); op != nil {
+		ctx = dockerx.WithStderrLines(ctx, op.gitProgress)
+	}
 	return s.git.RunNetwork(ctx, sess.ID, filepath.ToSlash(rel), append(options, args...)...)
 }
 
@@ -239,7 +243,7 @@ func (s *Server) handleGitFetch(w http.ResponseWriter, r *http.Request, sess sto
 		return
 	}
 	defer closeFn()
-	_, err = s.runGitNetwork(ctx, sess, dir, "fetch", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head", "--", transport, "+refs/heads/*:refs/remotes/"+b.Remote+"/*")
+	_, err = s.runGitNetwork(ctx, sess, dir, "fetch", "--progress", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head", "--", transport, "+refs/heads/*:refs/remotes/"+b.Remote+"/*")
 	if err != nil {
 		if ctx.Err() != nil {
 			result = "cancelled_unknown"
@@ -374,7 +378,7 @@ func (s *Server) gitPush(w http.ResponseWriter, r *http.Request, sess store.Sess
 		return
 	}
 	defer closeFn()
-	_, err = s.runGitNetwork(ctx, sess, dir, "-c", "push.followTags=false", "-c", "push.gpgSign=false", "push", "--porcelain", "--no-verify", "--no-follow-tags", "--", transport, head+":"+ref)
+	_, err = s.runGitNetwork(ctx, sess, dir, "-c", "push.followTags=false", "-c", "push.gpgSign=false", "push", "--porcelain", "--progress", "--no-verify", "--no-follow-tags", "--", transport, head+":"+ref)
 	if err != nil {
 		result = "failed_unknown"
 		writeErr(w, 502, "推送未确认成功：远程可能拒绝了权限、保护分支或并发更新；请重新预览核实远程状态，已有本地提交保留")
@@ -450,7 +454,7 @@ func (s *Server) handleGitPull(w http.ResponseWriter, r *http.Request, sess stor
 	}
 	defer closeFn()
 	tracking := "refs/remotes/" + b.Remote + "/" + strings.TrimPrefix(upstreamRef, "refs/heads/")
-	if _, err = s.runGitNetwork(ctx, sess, dir, "fetch", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head", "--", transport, "+"+upstreamRef+":"+tracking); err != nil {
+	if _, err = s.runGitNetwork(ctx, sess, dir, "fetch", "--progress", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head", "--", transport, "+"+upstreamRef+":"+tracking); err != nil {
 		writeErr(w, 502, "获取上游分支失败，工作文件未合并更新")
 		return
 	}
@@ -549,7 +553,7 @@ func (s *Server) handleGitClone(w http.ResponseWriter, r *http.Request, sess sto
 	defer closeFn()
 	temp := ".abox-clone-" + store.NewID() + store.NewID()
 	defer root.RemoveAll(temp)
-	_, err = s.runGitNetwork(ctx, sess, s.workspaceDir(sess), "clone", "--no-checkout", "--no-tags", "--no-recurse-submodules", "--", transport, "/workspace/"+temp)
+	_, err = s.runGitNetwork(ctx, sess, s.workspaceDir(sess), "clone", "--progress", "--no-checkout", "--no-tags", "--no-recurse-submodules", "--", transport, "/workspace/"+temp)
 	if err != nil {
 		writeErr(w, 502, "克隆失败：请检查连接权限、Token、网络或仓库地址，目标文件夹未发布")
 		return

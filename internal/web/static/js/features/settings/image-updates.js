@@ -6,8 +6,46 @@ import { setSelectValue } from "../../select.js";
 import { Poller } from "../../shared/poller.js";
 import { settingsState } from "./state.js";
 import { dirtyGroups, rebaseline } from "./savebar.js";
+import { ProgressBar } from "../../progress.js";
 const poller = new Poller();
 let pending = false;
+/* 任务进度条：只在这次看到任务在跑之后显示，结束后停在终态（完成转绿、失败转红） */
+let meter = null;
+let watched = false;
+/** 构建阶段按 Docker 构建日志里最后一个「Step n/m」估算；其余阶段给固定区间 */
+function imageFraction(phase, log) {
+    if (phase === "checking")
+        return null;
+    if (phase === "building") {
+        const steps = [...log.matchAll(/Step (\d+)\/(\d+)/g)].at(-1);
+        if (!steps)
+            return 0.08;
+        const [n, m] = [Number(steps[1]), Number(steps[2])];
+        return 0.08 + 0.72 * Math.min(1, (n - 0.5) / Math.max(1, m));
+    }
+    if (phase === "validating")
+        return 0.85;
+    return 1;
+}
+function renderMeter(st) {
+    const box = $("image-update-meter");
+    if (st.running)
+        watched = true;
+    box.classList.toggle("hidden", !watched);
+    if (!watched)
+        return;
+    if (!meter) {
+        meter = new ProgressBar(() => i18nText("Agent 镜像更新进度"));
+        box.append(meter.el);
+    }
+    const failed = !st.running && st.phase === "failed";
+    const value = st.running ? imageFraction(st.phase, st.log || "") : 1;
+    meter.set(value, st.running).tone(failed ? "error" : !st.running ? "ok" : "");
+    const steps = { checking: () => i18nText("检查版本"), building: () => i18nText("构建镜像"), validating: () => i18nText("验证 CLI 行为"), done: () => i18nText("任务完成"), failed: () => i18nText("任务失败") };
+    const build = st.phase === "building" ? [...(st.log || "").matchAll(/Step (\d+)\/(\d+)/g)].at(-1) : undefined;
+    setTextRender($("image-update-step"), () => (steps[st.phase]?.() || st.phase) + (build ? ` · Step ${build[1]}/${build[2]}` : ""));
+    $("image-update-pct").textContent = value === null || failed ? "" : Math.floor(value * 100) + "%";
+}
 // 是否有没保存的更新设置，以统一保存条的比较结果为准
 const isDirty = () => dirtyGroups().some((g) => g.id === "image-updates");
 let latest = null;
@@ -55,6 +93,7 @@ function render(v) {
         return i18nText("候选镜像的 {p0} 项行为检查通过（合成上游）。这不代表真实账号或模型可用。", { p0: String(report.checks.length) });
     });
     setTextRender($("image-update-log"), () => st.log || i18nText("暂无日志"));
+    renderMeter(st);
     buttons();
 }
 async function refresh(signal) {
@@ -79,7 +118,7 @@ export function startImageUpdates() {
         }
     });
 }
-export function stopImageUpdates() { poller.stop(); }
+export function stopImageUpdates() { poller.stop(); watched = false; $("image-update-meter").classList.add("hidden"); }
 export function initImageUpdates(signal) {
     latest = null;
     pending = false;
@@ -101,6 +140,7 @@ export function initImageUpdates(signal) {
                     return;
                 const v = await api("/image-updates/" + action, { method: "POST", signal });
                 if (!signal.aborted) {
+                    watched = true;
                     render(v);
                     toast(i18nText("任务已启动，可在此查看进度"));
                 }

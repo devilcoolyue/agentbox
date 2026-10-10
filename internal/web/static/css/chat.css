@@ -568,6 +568,8 @@ details.think.streaming .think-body::after {
   padding: 34px 18px;
 }
 .tp-empty .spin { margin-right: 8px; }
+.tp-skeleton { display: flex; flex-direction: column; gap: 3px; }
+.tp-skeleton .tp-item:hover { background: none; }
 .tp-hint {
   flex: none;
   color: var(--muted); font-size: 11.5px; line-height: 1.6;

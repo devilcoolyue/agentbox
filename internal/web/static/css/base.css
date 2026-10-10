@@ -495,19 +495,70 @@ input[type="checkbox"]:disabled, input[type="radio"]:disabled { cursor: default;
  * 整块晚 150ms 才淡入：读得快时根本不出现，不会先闪一下骨架再换成内容。 */
 .skeleton {
   display: block; height: 0.9em; max-width: 100%; border-radius: calc(4px * var(--radius-scale));
-  background: linear-gradient(90deg, var(--panel-2) 0, color-mix(in srgb, var(--panel-2) 40%, var(--panel)) 50%, var(--panel-2) 100%) 0 0 / 200% 100%;
+  /* 取文字色的半透明而不是面板色：放在抬起的底色上（余额卡、表头、磁贴）也看得出来 */
+  --skel: color-mix(in srgb, var(--text) 10%, transparent);
+  --skel-hi: color-mix(in srgb, var(--text) 4%, transparent);
+  background: linear-gradient(90deg, var(--skel) 0, var(--skel-hi) 50%, var(--skel) 100%) 0 0 / 200% 100%;
   animation: skeleton-sweep 1.4s ease-in-out infinite;
 }
 @keyframes skeleton-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .skeleton-list, tbody:has(> .skeleton-row) { animation: skeleton-late var(--dur) var(--ease-out) 150ms both; }
 @keyframes skeleton-late { from { opacity: 0; } }
 .skeleton-row { pointer-events: none; }
+/* skeleton.ts 拼出来的通用骨架：每条一根标题条加几根说明条。条目自身再挂真实行的类名
+ * （.git-connection-row、.au-row…），内边距与分隔线就和读完后的行一致，高度不跳。 */
+.skel-item { display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.skel-item > .skeleton:first-child { height: 1.05em; }
+.skel-item > .skeleton + .skeleton { height: 0.8em; }
+.skel-pad > .skel-item { padding: 10px 0; }
+.skel-pad > .skel-item + .skel-item { border-top: 1px solid var(--line-soft); }
+.skeleton.inline { display: inline-block; vertical-align: middle; }
+/* 占满一行行高的条：放在文字的位置上，行高与读完后的文字一致（lh 不支持时退回 0.9em） */
+.skeleton.text { box-sizing: border-box; height: 1lh; padding-block: calc((1lh - 0.9em) / 2); background-clip: content-box; }
+/* 按钮位置的占位块：与小按钮同高，行高就和读完后带按钮的行一样 */
+.skeleton.btn-like, .skel-item > .skeleton.btn-like { height: 32px; border-radius: calc(6px * var(--radius-scale)); }
+.skel-item > .skeleton.btn-like { margin-top: 4px; }
+@media (max-width: 760px) { .skeleton.btn-like, .skel-item > .skeleton.btn-like { height: 34px; } }
+/* 正文/代码骨架：一行一根条，行距对上正文行高 */
+.skel-lines { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+/* 已有内边距的容器里（diff、技能文档）不再加一层；代码行更密 */
+.skel-lines.skel-code { padding: 6px 0; gap: 9px; }
+.skel-lines.skel-doc { padding: 4px 0; }
+
+/* ---- 进度条（progress.ts）：知道总量时画实心填充，不知道时一小段来回滑。
+ * 填充用 translate 走位而不是改宽度：只动 transform，不引起重排，右端圆角也不被压扁。 ---- */
+.progress {
+  position: relative; height: 6px; overflow: hidden;
+  border-radius: var(--radius-pill); background: var(--panel-2);
+}
+.progress-fill {
+  position: absolute; inset: 0; border-radius: inherit; background: var(--accent);
+  transform: translateX(calc((var(--progress, 0) - 1) * 100%));
+  transition: transform var(--dur-slow) var(--ease-out), background-color var(--dur) var(--ease-out);
+}
+/* 进行中：填充上走一层斜纹，阶段卡在同一个百分比时也看得出还在动 */
+.progress.active .progress-fill {
+  background-image: linear-gradient(-45deg, transparent 0 30%, color-mix(in srgb, var(--panel-solid) 22%, transparent) 30% 50%, transparent 50% 80%, color-mix(in srgb, var(--panel-solid) 22%, transparent) 80%);
+  background-size: 22px 22px;
+  animation: progress-stripes 0.9s linear infinite;
+}
+@keyframes progress-stripes { to { background-position: 22px 0; } }
+.progress.indeterminate .progress-fill {
+  inset: 0 auto 0 0; width: 38%; transform: none; background-image: none;
+  animation: progress-slide 1.4s var(--ease-move) infinite;
+}
+@keyframes progress-slide { from { translate: -105% 0; } to { translate: 270% 0; } }
+.progress.ok .progress-fill { background-color: var(--green); }
+.progress.error .progress-fill { background-color: var(--red); }
 
 @media (prefers-reduced-motion: reduce) {
   /* 令牌归零：所有取令牌的过渡与动画一并静止，不必逐个组件再写一遍 */
   :root { --dur-fast: 0s; --dur: 0s; --dur-slow: 0s; --enter-y: 0px; }
   .enter { animation: none; }
   .skeleton, .skeleton-list, tbody:has(> .skeleton-row) { animation: none; }
+  /* 不确定进度不再来回滑：整条铺成半透明，仍能看出「在进行、但不知道到哪」 */
+  .progress .progress-fill { animation: none; }
+  .progress.indeterminate .progress-fill { width: 100%; opacity: 0.45; translate: none; }
 }
 
 /* 展开收起：内容高度从 0 平滑过渡到 auto。要 interpolate-size 与 ::details-content，

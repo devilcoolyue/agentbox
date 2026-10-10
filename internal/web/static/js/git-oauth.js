@@ -1,4 +1,5 @@
 import { htmlText as trHTML, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelRows } from "./skeleton.js";
 import { createGitSurface } from "./git-surface.js";
 import { api } from "./api.js";
 import { S } from "./state.js";
@@ -63,8 +64,9 @@ export function openGitOAuthApps() {
     if (S.role !== "admin")
         return;
     const token = S.token, d = modal(() => i18nText("Git OAuth 应用"), `<p class="field-hint"><span data-i18n="在 GitHub OAuth Apps 或公司 GitLab Applications 注册应用，回调地址填写当前 Agentbox 域名加 /api/git/oauth/callback。Client Secret 加密保存，不下发给浏览器。">${trHTML("在 GitHub OAuth Apps 或公司 GitLab Applications 注册应用，回调地址填写当前 Agentbox 域名加 /api/git/oauth/callback。Client Secret 加密保存，不下发给浏览器。")}</span></p>
- <button class="btn btn-sm btn-primary" data-add data-icon="plus" data-tip="${trHTML("添加 OAuth 应用")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;添加 OAuth 应用&quot;}"><span class="action-label" data-i18n="添加">${trHTML("添加")}</span></button><p data-error role="alert" class="login-error"></p><div data-list><span data-i18n="读取中…">${trHTML("读取中…")}</span></div>`);
+ <button class="btn btn-sm btn-primary" data-add data-icon="plus" data-tip="${trHTML("添加 OAuth 应用")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;添加 OAuth 应用&quot;}"><span class="action-label" data-i18n="添加">${trHTML("添加")}</span></button><p data-error role="alert" class="login-error"></p><div data-list></div>`);
     d.id = "dlg-git-oauth-apps";
+    d.querySelector("[data-list]").append(skelRows(2, i18nText("读取中…"), { rowClass: "git-connection-row", lines: 2, actions: true }));
     const load = async () => {
         const apps = await api("/git/oauth/apps");
         if (!d.open || token !== S.token)
@@ -90,7 +92,7 @@ export function openGitOAuthApps() {
         }
     };
     d.querySelector("[data-add]").addEventListener("click", () => editApp(null, load));
-    void load().catch(e => { d.querySelector("[data-error]").textContent = e.message; });
+    void load().catch(e => { d.querySelector("[data-error]").textContent = e.message; d.querySelector(".skeleton-list")?.remove(); });
 }
 function editApp(app, done) {
     const token = S.token, d = modal(() => app ? i18nText("编辑 OAuth 应用") : i18nText("添加 OAuth 应用"), `<form>

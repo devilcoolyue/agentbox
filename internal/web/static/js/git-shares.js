@@ -1,4 +1,5 @@
 import { htmlText as trHTML, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelRows } from "./skeleton.js";
 import { createGitSurface } from "./git-surface.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
@@ -10,9 +11,10 @@ export function openGitShares(c, saved) {
     const token = S.token, d = createGitSurface(() => c.label + i18nText(" · 使用授权"), `
  <p class="field-hint"><span data-i18n="仅对明确选中的用户开放连接。只读用户不能推送或创建 PR/MR；连接本身设为只读时，所有用户都只读。私钥和 Token 不向用户提供，个人 OAuth 不共享。">${trHTML("仅对明确选中的用户开放连接。只读用户不能推送或创建 PR/MR；连接本身设为只读时，所有用户都只读。私钥和 Token 不向用户提供，个人 OAuth 不共享。")}</span></p>
  <p class="field-hint"><span data-i18n="撤权阻止后续请求，已经发到上游的操作可能继续完成。用户使用各自隧道，不会借用管理员内网。">${trHTML("撤权阻止后续请求，已经发到上游的操作可能继续完成。用户使用各自隧道，不会借用管理员内网。")}</span></p>
- <div data-users><span data-i18n="读取用户中…">${trHTML("读取用户中…")}</span></div><p data-error role="alert" class="login-error"></p><div class="dlg-actions"><button class="btn btn-primary" data-save disabled data-icon="save" data-tip="${trHTML("保存 Git 连接的用户使用授权")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;保存 Git 连接的用户使用授权&quot;}"><span class="action-label" data-i18n="保存">${trHTML("保存")}</span></button></div>`);
+ <div data-users></div><p data-error role="alert" class="login-error"></p><div class="dlg-actions"><button class="btn btn-primary" data-save disabled data-icon="save" data-tip="${trHTML("保存 Git 连接的用户使用授权")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;保存 Git 连接的用户使用授权&quot;}"><span class="action-label" data-i18n="保存">${trHTML("保存")}</span></button></div>`);
     active = d;
     d.id = "dlg-git-shares";
+    d.querySelector("[data-users]").append(skelRows(3, i18nText("读取用户中…"), { rowClass: "git-connection-row", lines: 0, title: [18, 20] }));
     setTextRender(d.querySelector("h2"), () => c.label + i18nText(" · 使用授权"));
     const error = d.querySelector("[data-error]"), save = d.querySelector("[data-save]"), close = d.querySelector("[data-close]");
     let revision = 0, busy = false;
@@ -80,6 +82,6 @@ export function openGitShares(c, saved) {
         if (!picks.size)
             setText(list, "暂无其他用户。");
         save.disabled = false;
-    }).catch(e => { error.textContent = e.message; });
+    }).catch(e => { error.textContent = e.message; d.querySelector(".skeleton-list")?.remove(); });
 }
 bus.addEventListener("signed-out", () => active?.close());

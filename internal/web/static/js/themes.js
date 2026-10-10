@@ -1,4 +1,5 @@
 import { i18n, setTextRender, t as i18nText } from "./i18n.js";
+import { skelBar } from "./skeleton.js";
 /* themes：界面主题管理（用户弹层「风格 → 管理主题…」打开的弹窗）。
  *
  * 主题是一份 JSON 清单：选一个内置风格做底子，再改写白名单里的令牌（颜色、投影、
@@ -57,6 +58,9 @@ async function load() {
         // 读不到不代表主题没了：保留旧列表与缓存里的选择，只在弹窗里说明
         publish(false);
         status(i18nText("读取主题失败：{p0}", { p0: err.message }), "error");
+        for (const id of ["themes-site", "themes-user"])
+            if ($(id).querySelector(".skeleton-row"))
+                $(id).replaceChildren(); // 别让骨架装作还在读
     }
 }
 /* ---- 渲染 ---- */
@@ -103,10 +107,25 @@ function choose(key) {
 }
 function customRows(scope, views, canDelete) {
     const list = $(scope === "site" ? "themes-site" : "themes-user");
+    if (!data) {
+        // 还没读到：铺一行与主题行同形的骨架（色块、名称、说明、按钮），列表高度不跳
+        const li = document.createElement("li");
+        li.className = "themes-row skeleton-row";
+        li.setAttribute("aria-hidden", "true");
+        const text = document.createElement("span");
+        text.className = "themes-row-text";
+        text.append(skelBar(scope === "site" ? 30 : 38, "text themes-row-name"), skelBar(55, "text themes-row-meta"));
+        const chip = skelBar("26px", "themes-swatch");
+        li.append(chip, text, skelBar("4.5em", "btn-like"));
+        list.replaceChildren(li);
+        list.setAttribute("aria-busy", "true");
+        return;
+    }
+    list.removeAttribute("aria-busy");
     if (!views.length) {
         const empty = document.createElement("li");
         empty.className = "themes-empty";
-        setTextRender(empty, () => !data ? i18nText("正在读取…") : scope === "site" ? i18nText("还没有全站主题。") : i18nText("还没有个人主题。导入一个主题文件，或先导出内置风格当模板。"));
+        setTextRender(empty, () => scope === "site" ? i18nText("还没有全站主题。") : i18nText("还没有个人主题。导入一个主题文件，或先导出内置风格当模板。"));
         list.replaceChildren(empty);
         return;
     }

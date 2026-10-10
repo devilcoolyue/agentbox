@@ -1,4 +1,5 @@
 import { htmlText as trHTML, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelRows } from "./skeleton.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { askConfirm, fmtTime } from "./util.js";
@@ -58,8 +59,10 @@ export function openGitTerminal(repo, remote, readOnly) {
             await fn();
         }
         catch (e) {
-            if (d.open && token === S.token)
+            if (d.open && token === S.token) {
                 error.textContent = e.message;
+                list.querySelector(".skeleton-list")?.remove();
+            }
         }
         finally {
             busy = false;
@@ -80,6 +83,7 @@ export function openGitTerminal(repo, remote, readOnly) {
     d.addEventListener("cancel", e => { if (busy)
         e.preventDefault(); });
     d.addEventListener("close", () => { dialogs.delete(d); d.remove(); });
+    list.append(skelRows(1, i18nText("读取中…"), { rowClass: "git-connection-row", lines: 3 }));
     document.body.append(d);
     dialogs.add(d);
     decorateIcons(d);

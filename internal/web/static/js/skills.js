@@ -14,6 +14,7 @@ import { $, spinEl, toast, askConfirm, fmtBytes, fmtSize, fmtTime, btnBusy, btnD
 import { api, skillFileURL } from "./api.js";
 import { formatText, splitFrontMatter, frontMatterChips } from "./chat-render.js";
 import { setTip } from "./tip.js";
+import { keepCount, skelLines, skelRows } from "./skeleton.js";
 /* sel 是右侧显示什么：path 为空表示技能本身（SKILL.md 概览 + 操作按钮），
  * 否则是技能目录里的某个文件。open 装展开的节点键：技能名，或「技能名/子目录」。
  * cache 按技能存整棵树，刷新时清空、展开状态留着。 */
@@ -52,17 +53,15 @@ function detailMsg(msg) {
     p.textContent = msg;
     $("skills-detail").replaceChildren(p);
 }
-function loadingRow(text) {
-    const d = document.createElement("div");
-    d.className = "loading-block";
-    d.append(spinEl(), document.createTextNode(text));
-    return d;
-}
+/* 骨架：左侧技能树是「名字 + 一行描述」，右侧文档是一段正文，市场是插件卡片 */
+const listSkeleton = (count) => skelRows(count, i18nText("读取技能中…"), { rowClass: "skill-row", className: "skills-skeleton" });
+const docSkeleton = (label) => skelLines(12, label, "skel-doc");
+const marketSkeleton = () => skelRows(6, i18nText("拉取官方目录中…"), { rowClass: "market-row", lines: 2, title: [22, 25] });
 export async function loadSkills() {
     const sess = S.current;
     if (!sess)
         return;
-    $("skills-list").replaceChildren(loadingRow(i18nText("读取技能中…")));
+    $("skills-list").replaceChildren(listSkeleton(keepCount($("skills-list"), ".skill-row:not(.is-dir):not(.is-file)", 4, 10)));
     $("skills-detail").replaceChildren();
     $("skills-count").textContent = "";
     let data;
@@ -315,7 +314,7 @@ async function selectSkill(name) {
     SK.open.add(name);
     const gen = ++paneGen;
     renderList();
-    $("skills-detail").replaceChildren(loadingRow(i18nText("读取 SKILL.md…")));
+    $("skills-detail").replaceChildren(docSkeleton(i18nText("读取 SKILL.md…")));
     const det = await ensureDetail(name);
     renderList();
     if (gen !== paneGen)
@@ -333,7 +332,7 @@ async function openFile(skill, path) {
     SK.sel = { skill, path };
     const gen = ++paneGen;
     renderList();
-    $("skills-detail").replaceChildren(loadingRow(i18nText("读取 ") + path + "…"));
+    $("skills-detail").replaceChildren(docSkeleton(i18nText("读取 ") + path + "…"));
     try {
         const f = await api(`/sessions/${sess.id}/skills/${encodeURIComponent(skill)}/file` +
             `?scope=${SK.scope}&path=${encodeURIComponent(path)}`);
@@ -666,7 +665,7 @@ async function loadMarket(force) {
         renderMarket();
         return;
     }
-    $("market-list").replaceChildren(loadingRow(i18nText("拉取官方目录中…")));
+    $("market-list").replaceChildren(marketSkeleton());
     try {
         const data = await api("/marketplace" + (force ? "?refresh=1" : ""));
         MK.plugins = data.plugins || [];

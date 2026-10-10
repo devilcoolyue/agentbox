@@ -1,4 +1,5 @@
 import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelTableRows } from "./skeleton.js";
 import { settingsState } from "./features/settings/state.js";
 import { actionButton, buttonLabel } from "./icons.js";
 import { S, emit } from "./state.js";
@@ -224,14 +225,21 @@ export async function openPricingSection(force = false) {
         return;
     const ticket = ++generation;
     setBusy(true);
+    // 第一次读取时表格是空的：铺几行骨架，读完原地换成价格行
+    const rows = $("price-rows");
+    if (!view && !rows.children.length)
+        rows.replaceChildren(...skelTableRows(rows.closest("table"), 5));
     try {
         const next = await api("/pricing");
         if (ticket === generation)
             accept(next);
     }
     catch (e) {
-        if (ticket === generation)
+        if (ticket === generation) {
             toast(i18nText("读取价目表失败：") + e.message, true);
+            if (!view)
+                rows.replaceChildren();
+        }
     }
     finally {
         if (ticket === generation)

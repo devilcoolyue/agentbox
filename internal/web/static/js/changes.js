@@ -8,7 +8,8 @@ import { setSelectValue } from "./select.js";
 import { S, bus } from "./state.js";
 import "./git-profile.js";
 import { openGitRemote, openGitClone } from "./git-connections.js";
-import { $, spinEl, toast, btnBusy, btnDone, fmtTime } from "./util.js";
+import { $, toast, btnBusy, btnDone, fmtTime } from "./util.js";
+import { keepCount, skelBar, skelLines, skelShell } from "./skeleton.js";
 import { api } from "./api.js";
 import { setTip } from "./tip.js";
 /* repo 是相对 workspace 的仓库路径（""=workspace 本身）。工作区根通常不是仓库，
@@ -27,12 +28,20 @@ export function resetChangesRepo() {
     CH.selected = "";
     CH.view = "diff";
 }
-function loadingRow(text) {
-    const d = document.createElement("div");
-    d.className = "loading-block";
-    d.append(spinEl(), document.createTextNode(text));
-    return d;
+/* 变更列表骨架：类型标签 + 路径，与 change-row 同形；条数沿用上一次的列表 */
+function listSkeleton(count) {
+    const wrap = skelShell(i18nText("读取变更中…"));
+    for (let i = 0; i < count; i++) {
+        const row = document.createElement("div");
+        row.className = "change-row skeleton-row";
+        row.setAttribute("aria-hidden", "true");
+        row.append(skelBar("50px", "text change-badge-sk"), skelBar(35 + (i * 23) % 45, "text change-path"));
+        wrap.append(row);
+    }
+    return wrap;
 }
+/* diff / 文件内容骨架：一行一根条，像一段代码 */
+const textSkeleton = (label) => skelLines(14, label, "skel-code");
 function listMsg(msg) {
     const p = document.createElement("p");
     p.className = "files-empty";
@@ -57,7 +66,7 @@ export async function loadChanges() {
     $("btn-changes-remote").disabled = $("btn-changes-branches").disabled = true;
     $("changes-remote-state").classList.add("hidden");
     $("changes-branch").textContent = "";
-    $("changes-list").replaceChildren(loadingRow(i18nText("读取变更中…")));
+    $("changes-list").replaceChildren(listSkeleton(keepCount($("changes-list"), ".change-row", 5, 12)));
     $("changes-diff").replaceChildren();
     $("changes-view-bar").classList.add("hidden");
     let data;
@@ -254,7 +263,7 @@ async function renderView() {
         return;
     }
     const full = CH.view === "full";
-    $("changes-diff").replaceChildren(loadingRow(full ? i18nText("读取文件内容…") : i18nText("读取 diff…")));
+    $("changes-diff").replaceChildren(textSkeleton(full ? i18nText("读取文件内容…") : i18nText("读取 diff…")));
     const stale = () => CH.selected !== f.path || (CH.view === "full") !== full;
     try {
         const text = await fetchText(full ? "file" : "diff", f.path);

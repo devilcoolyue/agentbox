@@ -12,6 +12,7 @@ import { $, btnBusy, btnDone, toast, askConfirm, fmtLatency } from "./util.js";
 import { api } from "./api.js";
 import { refreshAll } from "./data.js";
 import { setTip } from "./tip.js";
+import { skelTableRows } from "./skeleton.js";
 /* 代理池缓存：列表页与账号弹窗的下拉共用一份，避免每次开弹窗都打一次接口。 */
 let cache = [];
 let bridge = null;
@@ -40,22 +41,19 @@ export async function refreshProxyCount() {
 }
 /* ---------------- 列表 ---------------- */
 export async function openProxiesSection() {
-    // 转圈块是居中的一整块，旧表格留在下面会把它顶成「加载中 + 一屏数据」的怪样子，
-    // 先收起来（监控页也是这个套路）。
-    $("proxy-table-wrap").classList.add("hidden");
+    // 表格照常显示，行先换成骨架：条数沿用上一份列表（没有就三行），读完原地换成数据，
+    // 页面不会先塌成一个转圈再撑开。
+    const tb = $("proxy-tbody");
     $("proxy-empty").classList.add("hidden");
-    $("proxy-loading").classList.remove("hidden");
+    $("proxy-table-wrap").classList.remove("hidden");
+    tb.replaceChildren(...skelTableRows(tb.closest("table"), Math.min(8, cache.length || 3)));
     try {
         await loadProxies();
     }
     catch (e) {
         toast(i18nText("读取代理列表失败：") + e.message, true);
-        if (cache.length)
-            renderProxies(); // 有上一份就还原回去，别让刷新失败清空视野
+        renderProxies(); // 有上一份就还原回去，没有就回到空状态，别让骨架一直挂着
         return;
-    }
-    finally {
-        $("proxy-loading").classList.add("hidden");
     }
     renderProxies();
 }

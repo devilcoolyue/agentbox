@@ -1,14 +1,47 @@
 import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
 import { api } from "./api.js";
 import { S, emit } from "./state.js";
-import { $, askConfirm, fmtDateTime, fmtTime } from "./util.js";
+import { $, askConfirm, fmtBytes, fmtDateTime, fmtTime } from "./util.js";
 import { hideTip } from "./tip.js";
 import { buttonLabel } from "./icons.js";
 import { initUpdateComponents } from "./features/settings/update-components.js";
 import { markdownPreview } from "./markdown-preview.js";
+import { ProgressBar, RateMeter } from "./progress.js";
 const interval = 4 * 60 * 60 * 1000;
 const releasesURL = "https://github.com/devilcoolyue/agentbox/releases";
 const versionLabel = (version) => /^\d/.test(version) ? "v" + version : version;
+/* 升级任务的步骤（update.py 的 phase）与各步在整条进度里的权重：下载与备份最耗时。
+ * 权重只是估计，用来让进度条大致匀速；准确的只有下载那一段（按字节）。 */
+const UPGRADE_STEPS = ["downloading", "verifying", "staging", "checking", "stopping", "backup", "switching", "restarting", "health"];
+const STEP_WEIGHT = { downloading: 40, verifying: 6, staging: 6, checking: 4, stopping: 4, backup: 20, switching: 3, restarting: 10, health: 7 };
+const stepNames = {
+    downloading: () => i18nText("下载"), verifying: () => i18nText("校验"), staging: () => i18nText("安装"),
+    checking: () => i18nText("兼容检查"), stopping: () => i18nText("停止服务"), backup: () => i18nText("备份数据"),
+    switching: () => i18nText("切换版本"), restarting: () => i18nText("启动"), health: () => i18nText("验证"),
+};
+/* 任务状态文案按 phase 本地翻译；认不出的 phase 用服务端给的原文 */
+const phaseMessages = {
+    queued: () => i18nText("升级任务已提交"), downloading: () => i18nText("正在下载发布包"),
+    verifying: () => i18nText("正在校验发布包"), staging: () => i18nText("正在安装新版本"),
+    checking: () => i18nText("正在检查配置和数据库兼容性"), stopping: () => i18nText("正在停止服务"),
+    backup: () => i18nText("正在备份并验证数据"), switching: () => i18nText("正在切换版本"),
+    restarting: () => i18nText("正在启动新版本"), health: () => i18nText("正在验证服务状态"),
+    succeeded: () => i18nText("升级完成"), failed: () => i18nText("升级失败，请查看升级任务日志"),
+};
+/** 整条进度（0～1）；还说不出进度（刚提交、旧版脚本不报下载字节）时为 null */
+function upgradeFraction(job) {
+    if (job.phase === "succeeded")
+        return 1;
+    const phase = job.phase === "failed" ? job.failed_phase || "" : job.phase;
+    const index = UPGRADE_STEPS.indexOf(phase);
+    if (index < 0)
+        return null;
+    if (phase === "downloading" && !job.total)
+        return job.phase === "failed" ? 0 : null;
+    const before = UPGRADE_STEPS.slice(0, index).reduce((sum, step) => sum + STEP_WEIGHT[step], 0);
+    const within = phase === "downloading" ? Math.min(1, (job.downloaded || 0) / job.total) : 0;
+    return (before + STEP_WEIGHT[phase] * within) / 100;
+}
 /** App-owned state: logout aborts requests, listeners and scheduled checks. */
 export function initUpdates() {
     const badge = $("version-badge");
@@ -34,6 +67,49 @@ export function initUpdates() {
     let pollingUntil = 0;
     let renderedNotes;
     const upgrading = () => !!upgrade?.job && !["succeeded", "failed"].includes(upgrade.job.phase);
+    const meter = new ProgressBar(() => i18nText("升级进度"));
+    const downloadRate = new RateMeter();
+    let rateJob = "";
+    $("upgrade-meter").replaceChildren(meter.el);
+    const stepItems = UPGRADE_STEPS.map(step => {
+        const li = document.createElement("li");
+        setTextRender(li, stepNames[step]);
+        return li;
+    });
+    $("upgrade-steps").replaceChildren(...stepItems);
+    /* 进度条、百分比、下载字节与步骤条。服务重启期间读不到状态，停在最后一次读到的位置。 */
+    function renderMeter(job, verified) {
+        for (const id of ["upgrade-meter", "upgrade-steps"])
+            $(id).classList.toggle("hidden", !job);
+        if (!job) {
+            $("upgrade-pct").textContent = "";
+            $("upgrade-detail").classList.add("hidden");
+            return;
+        }
+        const value = upgradeFraction(job), failed = job.phase === "failed", running = !failed && job.phase !== "succeeded";
+        // 失败时停在出错的那一步并转红；旧版脚本没记下是哪一步，就整条标红
+        meter.set(value ?? (failed ? 1 : null), running).tone(failed ? "error" : verified ? "ok" : "");
+        $("upgrade-pct").textContent = value === null || failed ? "" : Math.floor(value * 100) + "%";
+        if (rateJob !== job.id) {
+            rateJob = job.id;
+            downloadRate.reset();
+        }
+        const downloading = job.phase === "downloading" && !!job.total;
+        const speed = downloading ? downloadRate.sample(job.downloaded || 0, job.updated_at) : 0;
+        setTextRender($("upgrade-detail"), () => downloading
+            ? i18nText("已下载 {p0} / {p1}", { p0: fmtBytes(job.downloaded || 0), p1: fmtBytes(job.total) }) + (speed > 0 ? " · " + fmtBytes(Math.round(speed)) + "/s" : "")
+            : "");
+        $("upgrade-detail").classList.toggle("hidden", !downloading);
+        const phase = failed ? job.failed_phase || "" : job.phase;
+        const current = job.phase === "succeeded" ? UPGRADE_STEPS.length : UPGRADE_STEPS.indexOf(phase);
+        stepItems.forEach((li, i) => {
+            li.className = i < current ? "done" : i === current ? (failed ? "failed" : "current") : "";
+            if (i === current)
+                li.setAttribute("aria-current", "step");
+            else
+                li.removeAttribute("aria-current");
+        });
+    }
     function renderUpgrade() {
         const job = upgrade?.job;
         const busy = submitting || awaitingSubmission || upgrading();
@@ -47,7 +123,8 @@ export function initUpdates() {
         setTextRender($("upgrade-message"), () => submitting ? i18nText("正在提交升级任务…") : awaitingSubmission ? i18nText("正在确认升级任务是否已提交…")
             : verified ? i18nText("升级完成，当前运行 {p0}。刷新页面加载新版界面。", { p0: String(job.version) })
                 : job?.phase === "succeeded" ? i18nText("任务已结束，但当前运行版本与目标不一致，请检查服务器。")
-                    : job ? `${job.version} · ${job.message}` : "");
+                    : job ? `${job.version} · ${phaseMessages[job.phase]?.() || job.message}` : "");
+        renderMeter(job, verified);
         const detail = upgradeError || submissionError || job?.error || "";
         $("upgrade-error").textContent = detail;
         $("upgrade-error").classList.toggle("hidden", !detail);

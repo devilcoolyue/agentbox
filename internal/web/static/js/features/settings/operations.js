@@ -5,6 +5,7 @@ import { api } from "../../api.js";
 import { agentIcon, agentName } from "../../brand.js";
 import { setTip } from "../../tip.js";
 import { Poller } from "../../shared/poller.js";
+import { skelBar, skelShell, skelTableRows } from "../../skeleton.js";
 /* ---------------- 关于 ---------------- */
 let systemRead;
 export function stopSystem() { systemRead?.abort(); systemRead = undefined; }
@@ -14,25 +15,27 @@ export async function loadSystem(lifetime) {
     systemRead = controller;
     const current = () => !lifetime.aborted && systemRead === controller && !controller.signal.aborted;
     const kv = $("about-kv");
-    kv.replaceChildren();
-    kv.classList.add("hidden");
-    $("about-loading").classList.remove("hidden");
+    // 头一次进来铺骨架（与读完后同样 11 行），再进来时旧数据留着，读完原地换掉
+    if (!kv.children.length)
+        kv.replaceChildren(...aboutSkeleton());
+    kv.setAttribute("aria-busy", "true");
     let sys;
     try {
         sys = await api("/system", { signal: AbortSignal.any([lifetime, controller.signal]) });
     }
     catch (e) {
-        if (current())
+        if (current()) {
             toast(i18nText("读取系统信息失败：") + e.message, true);
+            kv.removeAttribute("aria-busy");
+            if (kv.querySelector(".skeleton"))
+                kv.replaceChildren(); // 失败时别留着骨架装作在读
+        }
         return;
-    }
-    finally {
-        if (current())
-            $("about-loading").classList.add("hidden"); // 失败时也别留着转圈
     }
     if (!current())
         return;
-    kv.classList.remove("hidden");
+    kv.removeAttribute("aria-busy");
+    kv.replaceChildren();
     const add = (k, v) => {
         const dt = document.createElement("dt");
         dt.textContent = k;
@@ -52,13 +55,25 @@ export async function loadSystem(lifetime) {
     add(i18nText("配置文件"), sys.config_path);
     add(i18nText("运行时长"), fmtUptime(Date.now() - sys.started_at) + i18nText("（自 ") + fmtDateTime(sys.started_at) + "）");
 }
+function aboutSkeleton() {
+    const cells = [];
+    for (let i = 0; i < 11; i++) {
+        const dt = document.createElement("dt"), dd = document.createElement("dd");
+        dt.setAttribute("aria-hidden", "true");
+        dd.setAttribute("aria-hidden", "true");
+        dt.append(skelBar(4 + (i * 3) % 4 + "em", "text"));
+        dd.append(skelBar(20 + (i * 17) % 45, "text"));
+        cells.push(dt, dd);
+    }
+    return cells;
+}
 /* ---------------- 运维监控 ---------------- */
 const monitor = new Poller();
 export function startMonitor() {
     stopMonitor();
-    $("mon-tiles").replaceChildren();
-    $("mon-tbody").replaceChildren();
-    $("mon-loading").classList.remove("hidden");
+    // 首帧要采样一个窗口，等得比较久：先铺磁贴与表格的骨架，形状与读完后一致
+    $("mon-tiles").replaceChildren(monitorTilesSkeleton());
+    $("mon-tbody").replaceChildren(...skelTableRows($("mon-tbody").closest("table"), 3));
     let first = true;
     monitor.start(5000, async (signal) => {
         if (S.view !== "settings" || S.sec !== "monitor") {
@@ -84,9 +99,26 @@ async function loadMonitor(surfaceErr, signal) {
     }
     if (signal.aborted || S.view !== "settings" || S.sec !== "monitor")
         return; // 请求在途中切走了页，丢弃这帧
-    $("mon-loading").classList.add("hidden");
     renderMonitorTiles(m);
     renderMonitorTable(m);
+}
+/* 磁贴骨架：标签、大号数值、进度条、副标题四层，与 monTile 同高 */
+function monitorTilesSkeleton() {
+    const wrap = skelShell(i18nText("采样资源占用中…"), "mon-tiles-skeleton");
+    for (let i = 0; i < 7; i++) {
+        const el = document.createElement("div");
+        el.className = "mon-tile";
+        el.setAttribute("aria-hidden", "true");
+        el.append(skelBar(40 + (i * 11) % 25, "text mt-label"), skelBar(50 + (i * 7) % 30, "text mt-value"));
+        if (i < 5) {
+            const bar = document.createElement("div");
+            bar.className = "mt-bar";
+            el.append(bar);
+        }
+        el.append(skelBar(55 + (i * 13) % 35, "text mt-sub"));
+        wrap.append(el);
+    }
+    return wrap;
 }
 function monTile(label, value, sub, pct) {
     const el = document.createElement("div");

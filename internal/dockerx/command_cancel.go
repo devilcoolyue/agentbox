@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -56,7 +57,16 @@ func (m *Manager) ExecCancelableCommand(ctx context.Context, containerID string,
 	var out, errOut bytes.Buffer
 	stdout := &commandWriter{buf: &out, limit: commandOutputLimit}
 	stderr := &commandWriter{buf: &errOut, limit: 8 << 10}
-	_, readErr := stdcopy.StdCopy(stdout, stderr, stream.Reader)
+	var errWriter io.Writer = stderr
+	var progress *progressWriter
+	if fn := stderrLines(ctx); fn != nil {
+		progress = &progressWriter{next: stderr, fn: fn}
+		errWriter = progress
+	}
+	_, readErr := stdcopy.StdCopy(stdout, errWriter, stream.Reader)
+	if progress != nil {
+		progress.flush()
+	}
 	inspectCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	code, exitErr := m.ExitCode(inspectCtx, id.ID)

@@ -245,13 +245,18 @@ class Upgrades(unittest.TestCase):
                       for n in (name + '.tar.gz', 'SHA256SUMS')]
             if fault == 'asset':
                 assets[0]['browser_download_url'] = 'https://github.com/other/repo/evil'
-            def download(url, dest, limit):
+            seen = []
+            def download(url, dest, limit, progress=None):
                 if '/releases/tags/' in url:
                     dest.write_text(json.dumps({'tag_name': 'v1.1.0', 'assets': assets}))
                 elif url.endswith('SHA256SUMS'):
                     dest.write_text(('wrong' if fault == 'checksum' else digest) + '  ' + name + '.tar.gz')
                 else:
+                    # The console reads download progress from the job state.
+                    state = m.read_job(app)
+                    seen.append((state['phase'], state.get('downloaded'), state.get('total')))
                     dest.write_bytes(archive_data)
+                    progress(len(archive_data))
                 return digest
             phases = []
             def activate(app, version, config, backup_dir, unit_dir, progress):
@@ -271,6 +276,8 @@ class Upgrades(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         m.perform(app, config, 100, current, job['id'])
                     self.assertEqual(m.read_job(app)['phase'], 'failed')
+                    expected = {'asset': 'downloading', 'checksum': 'verifying', 'binary': 'verifying'}.get(fault, fault)
+                    self.assertEqual(m.read_job(app)['failed_phase'], expected)
                 else:
                     m.perform(app, config, 100, current, job['id'])
                     self.assertEqual(m.read_job(app)['phase'], 'succeeded')
@@ -285,12 +292,31 @@ class Upgrades(unittest.TestCase):
                     self.assertEqual((app / 'current').resolve(), app / 'releases/v1.1.0')
                 if not fault:
                     self.assertEqual(phases, ['checking', 'stopping', 'backup', 'switching', 'restarting', 'health'])
+                if fault != 'asset':
+                    self.assertEqual(seen, [('downloading', 0, len(archive_data))])
+                    final = m.read_job(app)
+                    self.assertEqual((final['downloaded'], final['total']), (len(archive_data), len(archive_data)))
 
     def test_verified_upgrade_and_failures(self):
         for current in ('v1.0.0', 'dev', 'v2.0.0-dev.1'):
             for fault in (None, 'asset', 'checksum', 'binary', 'checking', 'backup', 'health'):
                 with self.subTest(current=current, fault=fault):
                     self.run_fixture(fault, current)
+
+    def test_download_progress_is_throttled_and_final(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp)
+            job = {'id': 'b' * 32, 'version': 'v1.1.0', 'from_version': 'v1.0.0', 'phase': 'downloading',
+                   'message': m.PHASES['downloading'], 'error': '', 'updated_at': 0}
+            meter = m.DownloadProgress(app, job, 300, interval=3600)
+            self.assertEqual((m.read_job(app)['downloaded'], m.read_job(app)['total']), (0, 300))
+            meter(100); meter(200)
+            self.assertEqual(m.read_job(app)['downloaded'], 0, 'progress written more often than the interval')
+            meter.publish(300)
+            self.assertEqual(m.read_job(app)['downloaded'], 300)
+            fast = m.DownloadProgress(app, job, 300, interval=0)
+            fast(150)
+            self.assertEqual(m.read_job(app)['downloaded'], 150)
 
     def test_staged_retry_never_overwrites_changed_release(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,4 +1,5 @@
 import { htmlText as trHTML, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelRows } from "./skeleton.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { askConfirm, toast } from "./util.js";
@@ -85,8 +86,10 @@ export function openGitBranches(repo, refreshed) {
             await fn();
         }
         catch (e) {
-            if (d.open && token === S.token)
+            if (d.open && token === S.token) {
                 error.textContent = e.message;
+                list.querySelector(".skeleton-list")?.remove();
+            }
         }
         finally {
             busy = false;
@@ -105,6 +108,7 @@ export function openGitBranches(repo, refreshed) {
     d.addEventListener("cancel", e => { if (busy)
         e.preventDefault(); });
     d.addEventListener("close", () => { active = null; d.remove(); });
+    list.append(skelRows(4, i18nText("读取分支中…"), { rowClass: "git-connection-row", lines: 1, actions: true }));
     document.body.append(d);
     decorateIcons(d);
     enhanceSelects(d);

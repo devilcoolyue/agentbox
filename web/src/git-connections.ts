@@ -1,4 +1,5 @@
 import { htmlText as trHTML, setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelRows } from "./skeleton.js";
 import { openGitManagement } from "./git-management.js";
 import { createGitSurface } from "./git-surface.js";
 import { openGitTerminal } from "./git-terminal.js";
@@ -27,7 +28,10 @@ function dialog(title: string | (() => string), markup: string) {
   document.body.append(d); dialogs.add(d); decorateIcons(d); enhanceSelects(d); d.showModal();
   return d;
 }
-function errorText(d: HTMLElement, error: unknown) { d.querySelector<HTMLElement>("[data-error]")!.textContent = (error as Error).message; }
+function errorText(d: HTMLElement, error: unknown) {
+  d.querySelector<HTMLElement>("[data-error]")!.textContent = (error as Error).message;
+  for (const skeleton of d.querySelectorAll(".skeleton-list")) skeleton.remove(); // 读失败就别再装作在读
+}
 function option(value: string, label: string) { return Object.assign(document.createElement("option"), {value, textContent: label}); }
 function action(label: string, icon: string, run: () => Promise<void>, tip = label) {
   const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-sm"; actionButton(b, label, icon, tip);
@@ -45,7 +49,8 @@ function renderGitConnections(host: HTMLElement) {
   d.innerHTML = `<div class="sec-intro"><div><h2><span data-i18n="仓库连接">${trHTML("仓库连接")}</span></h2><p><span data-i18n="连接可在你的多个工作空间复用。添加后，到空间「变更 → 远程」绑定仓库。">${trHTML("连接可在你的多个工作空间复用。添加后，到空间「变更 → 远程」绑定仓库。")}</span></p></div></div>
     <div class="git-connection-tools"><button class="btn btn-primary btn-sm" data-add data-icon="plus"><span class="action-label" data-i18n="添加连接">${trHTML("添加连接")}</span></button><button class="btn btn-sm" data-oauth data-icon="login"><span class="action-label" data-i18n="网页授权">${trHTML("网页授权")}</span></button><button class="btn btn-sm" data-oauth-apps data-icon="key"><span class="action-label" data-i18n="OAuth 应用">${trHTML("OAuth 应用")}</span></button><button class="btn btn-sm" data-refresh data-icon="refresh"><span class="action-label" data-i18n="刷新">${trHTML("刷新")}</span></button><button class="btn btn-sm" data-operations data-icon="history"><span class="action-label" data-i18n="操作记录">${trHTML("操作记录")}</span></button></div>
     <p class="git-note"><span data-i18n="默认连接用于新空间和未绑定仓库的默认选择；已有绑定保持不变。保存连接后可先「测试」仓库读取权限。">${trHTML("默认连接用于新空间和未绑定仓库的默认选择；已有绑定保持不变。保存连接后可先「测试」仓库读取权限。")}</span></p>
-    <p data-error role="alert" class="login-error"></p><div data-list aria-live="polite"><span data-i18n="读取中…">${trHTML("读取中…")}</span></div>`;
+    <p data-error role="alert" class="login-error"></p><div data-list aria-live="polite"></div>`;
+  d.querySelector("[data-list]")!.append(skelRows(3, i18nText("读取中…"), { rowClass: "git-connection-row", lines: 2, actions: true }));
   host.append(d);
   decorateIcons(d);
   let generation = 0;

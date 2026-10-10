@@ -1,4 +1,5 @@
 import { htmlText as trHTML, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelRows } from "./skeleton.js";
 import { api } from "./api.js";
 import { S,bus } from "./state.js";
 import { enhanceSelects,setSelectValue } from "./select.js";
@@ -53,7 +54,7 @@ export function openGitReviews(repo:string,remote:string,connection:GitConnectio
  async function run(fn:()=>Promise<void>){
   if(busy||token!==S.token)return;busy=true;error.textContent="";
   const controls=[...d.querySelectorAll<HTMLInputElement|HTMLButtonElement|HTMLSelectElement|HTMLTextAreaElement>("input,button,select,textarea")];for(const el of controls)el.disabled=true;
-  try{await fn();}catch(e){if(d.open&&token===S.token)error.textContent=(e as Error).message;}
+  try{await fn();}catch(e){if(d.open&&token===S.token){error.textContent=(e as Error).message;list.querySelector(".skeleton-list")?.remove();}}
   finally{busy=false;for(const el of controls)el.disabled=false;sync();}
  }
  const payload=()=>({repo,remote,api_connection_id:apiSelect.value,title:field("title").value.trim(),body:field("body").value,source:field("source").value,target:field("target").value.trim(),draft:field("draft").checked,expected_head:page?.head||""});
@@ -71,6 +72,7 @@ export function openGitReviews(repo:string,remote:string,connection:GitConnectio
   toast(result.existing?i18nText("已存在相同 PR/MR"):i18nText("PR/MR 已创建"));await load();
  }));
  button("refresh").addEventListener("click",()=>void run(()=>load()));button("next").addEventListener("click",()=>void run(()=>load((page?.page||1)+1)));button("close").addEventListener("click",()=>d.close());
+ list.append(skelRows(3,i18nText("读取中…"),{lines:0,title:[40,40]}));
  d.addEventListener("cancel",e=>{if(busy)e.preventDefault();});d.addEventListener("close",()=>{active=null;d.remove();});document.body.append(d);decorateIcons(d);enhanceSelects(d);d.showModal();void run(()=>load());
 }
 bus.addEventListener("signed-out",()=>active?.close());

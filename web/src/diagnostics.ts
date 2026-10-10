@@ -1,4 +1,5 @@
 import {api, wsURL} from "./api.js";
+import { skelBar } from "./skeleton.js";
 import {S, bus} from "./state.js";
 import {t, setText, setTextRender} from "./i18n.js";
 import {actionButton} from "./icons.js";
@@ -111,10 +112,19 @@ export function openDiagnostics(sessionID?:string, onComplete?:(report:Diagnosti
     }
     setTextRender(reference,()=>report?.operation_id?t("操作编号：{id}",{id:report.operation_id}):"");
   };
+  const checksSkeleton=(count:number)=>Array.from({length:count},(_,i)=>{
+    const li=document.createElement("li");li.className="skeleton-row";li.setAttribute("aria-hidden","true");
+    const heading=document.createElement("div");heading.className="diagnostic-heading";
+    heading.append(skelBar(25+(i*13)%30,"text"),skelBar("4em","text"));
+    li.append(heading,skelBar(50+(i*17)%40,"text"),skelBar(35+(i*11)%40,"text note"));
+    return li;
+  });
   const check=async()=>{
     request?.abort();const controller=request=new AbortController();const epoch=++generation;
     const timeout=setTimeout(()=>controller.abort(),18000);
-    run.disabled=download.disabled=true;error.textContent="";report=undefined;client=undefined;list.replaceChildren();reference.textContent="";
+    run.disabled=download.disabled=true;error.textContent="";report=undefined;client=undefined;reference.textContent="";
+    // 检查期间铺与上次同样多的骨架项，重新检查时弹窗不先缩下去
+    list.replaceChildren(...checksSkeleton(Math.min(12,list.querySelectorAll("li").length||8)));
     setText(status,"正在检查环境…");
     try {
       const result=await api<DiagnosticReport>(path,{method:"POST",signal:controller.signal});
@@ -129,6 +139,7 @@ export function openDiagnostics(sessionID?:string, onComplete?:(report:Diagnosti
     } catch (reason) {
       if(dialog.open && epoch===generation) {
         setText(status,"检查未完成");
+        if(!report)list.replaceChildren(); // 一项结果都没拿到：收起骨架
         error.textContent=controller.signal.aborted?t("检查已取消或超时，请重试。"):String((reason as Error).message);
       }
     } finally {clearTimeout(timeout);if(dialog.open && epoch===generation)run.disabled=false;}

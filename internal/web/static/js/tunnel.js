@@ -1,4 +1,5 @@
 import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
+import { skelBar } from "./skeleton.js";
 /* tunnel：内网反向隧道 —— 侧栏状态入口 + 状态/接入指引页。
  * 状态随 data-updated 节流刷新（≥15s 一次），进入本页时立即刷新一次。
  * 普通用户在功能未启用时看不到入口；管理员始终可见（含「前往设置」引导）。 */
@@ -139,12 +140,15 @@ function platformLabel(name) {
     return name;
 }
 async function loadClients() {
+    const box = $("tun-dl");
+    // 第一次读取时先放几颗按钮大小的骨架，下载区不从空白突然撑开
+    if (!box.children.length)
+        box.replaceChildren(...Array.from({ length: 5 }, (_, i) => skelBar(7 + (i % 3) + "em", "btn-like")));
     let list = [];
     try {
         list = await api("/tunnel/clients");
     }
     catch (_) { }
-    const box = $("tun-dl");
     box.replaceChildren();
     $("tun-dl-empty").classList.toggle("hidden", !!list.length);
     for (const c of list) {

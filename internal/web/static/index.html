@@ -727,9 +727,6 @@
                 </div>
               </div>
               <div id="proxy-bridge-state" class="px-bridge"></div>
-              <div id="proxy-loading" class="loading-block hidden">
-                <span class="spin"></span><span data-i18n-text="[&quot;读取代理列表…&quot;]">读取代理列表…</span>
-              </div>
               <p id="proxy-empty" class="acct-empty hidden" data-i18n-text="[&quot;代理池为空。点击右上角「添加代理」或「导入」添加第一个出口。&quot;]">代理池为空。点击右上角「添加代理」或「导入」添加第一个出口。</p>
               <div id="proxy-table-wrap" class="card mon-card hidden">
                 <div class="mon-table-wrap">
@@ -797,6 +794,7 @@
                 <p id="image-update-dirty" class="note"></p>
                 <p id="image-update-validation" class="note" role="status" aria-live="polite"></p>
                 <p id="image-update-status" class="note" role="status" aria-live="polite" data-i18n-text="[&quot;尚未检查镜像内 CLI 版本&quot;]">尚未检查镜像内 CLI 版本</p>
+                <div id="image-update-meter" class="image-update-meter hidden"><div class="image-update-meter-head"><span id="image-update-step"></span><span id="image-update-pct" class="mono"></span></div></div>
                 <p id="image-update-versions" class="note"></p>
                 <p id="image-update-active" class="note image-update-ref"></p>
                 <p class="note" data-i18n="上方版本属于最近任务的起点与目标，不是所有空间的当前版本。更新会验证 CLI 版本、浏览器组件与合成上游行为；真实账号和模型仍需单独验收。">上方版本属于最近任务的起点与目标，不是所有空间的当前版本。更新会验证 CLI 版本、浏览器组件与合成上游行为；真实账号和模型仍需单独验收。</p>
@@ -1139,9 +1137,6 @@
                 </div>
                 <label class="mon-auto" data-i18n-text="[&quot; 自动刷新&quot;]"><input type="checkbox" id="mon-auto" checked> 自动刷新</label>
               </div>
-              <div id="mon-loading" class="loading-block hidden">
-                <span class="spin"></span><span data-i18n-text="[&quot;采样资源占用中…&quot;]">采样资源占用中…</span>
-              </div>
               <div id="mon-tiles" class="mon-tiles"></div>
               <div class="card mon-card">
                 <div class="mon-card-head">
@@ -1191,7 +1186,11 @@
                     <p class="update-meta" data-update-time></p>
                     <p id="upgrade-support" class="update-meta"></p>
                     <div id="upgrade-progress" class="upgrade-progress hidden" role="status" aria-live="polite">
-                      <p id="upgrade-message"></p><p id="upgrade-error" class="update-error hidden"></p>
+                      <div class="upgrade-meter-head"><p id="upgrade-message"></p><span id="upgrade-pct" class="mono"></span></div>
+                      <div id="upgrade-meter" class="upgrade-meter"></div>
+                      <p id="upgrade-detail" class="update-meta hidden"></p>
+                      <ol id="upgrade-steps" class="upgrade-steps" aria-label="升级步骤" data-i18n-attrs="{&quot;aria-label&quot;:&quot;升级步骤&quot;}"></ol>
+                      <p id="upgrade-error" class="update-error hidden"></p>
                       <p id="upgrade-log" class="update-meta"></p>
                       <div class="update-actions"><button type="button" id="upgrade-refresh" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新升级状态&quot;]">刷新升级状态</button><button type="button" id="upgrade-reload" class="btn btn-sm hidden" data-icon="refresh" data-i18n-text="[&quot;刷新页面&quot;]">刷新页面</button></div>
                     </div>
@@ -1213,9 +1212,6 @@
                 </table>
               </section>
               <div class="card">
-                <div id="about-loading" class="loading-block hidden">
-                  <span class="spin"></span><span data-i18n-text="[&quot;读取系统信息中…&quot;]">读取系统信息中…</span>
-                </div>
                 <dl id="about-kv" class="kv"></dl>
               </div>
             </section>
@@ -1492,6 +1488,7 @@
       <button id="new-resume" type="button" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;继续此创建&quot;]">继续此创建</button>
     </div>
     <p id="new-progress" class="field-hint" role="status"></p>
+    <div id="new-import-meter" class="new-import-meter hidden"></div>
     <div id="new-flow-actions" class="new-setup-actions hidden">
       <button id="new-query" type="button" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;查询状态&quot;]">查询状态</button>
       <button id="new-inspect" type="button" class="btn btn-sm" data-icon="folder" data-i18n-text="[&quot;查看已有文件&quot;]">查看已有文件</button>

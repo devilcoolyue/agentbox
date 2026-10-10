@@ -34,6 +34,7 @@ import { accessLabel, editAccountAccess } from "../../account-access.js";
 import { moreButton } from "../../menu.js";
 import { modelCountLabel, openAccountModels } from "../../account-models.js";
 import { refreshModelDisplay, renderModelDisplay } from "../../model-display.js";
+import { skelBar, skelShell } from "../../skeleton.js";
 
 /* 静态标识装饰：添加账号弹窗的类型选择卡、模型管理卡片标题 */
 decorateAgentOpts($("acct-form"));
@@ -625,14 +626,31 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>(".mdl-add")) {
 /* ---------------- 用户管理 / 登录密码 ---------------- */
 
 async function loadUsers() {
+  const box = $("user-list");
+  // 第一次进来列表是空的：先铺骨架；改完额度回来重读时旧列表留着，读完直接换
+  if (!box.querySelector(".user-row")) box.replaceChildren(usersSkeleton());
   let users: User[];
   try { users = await api<User[]>("/users"); } catch (e) { if(!scope.current())return;
+    box.querySelector(".skeleton-list")?.remove();
     toast(i18nText("读取用户列表失败：") + (e as Error).message, true);
     return;
   }
-  const box = $("user-list");
   box.replaceChildren();
   for (const u of users) box.appendChild(userRow(u));
+}
+
+function usersSkeleton() {
+  const wrap = skelShell(i18nText("读取用户中…"));
+  for (let i = 0; i < 3; i++) {
+    const row = document.createElement("div");
+    row.className = "user-row";
+    row.setAttribute("aria-hidden", "true");
+    const acts = skelBar("13em", "btn-like");
+    acts.style.marginLeft = "auto";
+    row.append(skelBar(4 + i * 1.5 + "em", "text u-name"), skelBar("4em", "text u-meta"), skelBar(7 + i + "em", "text u-meta"), acts);
+    wrap.append(row);
+  }
+  return wrap;
 }
 
 function userRow(u: User) {

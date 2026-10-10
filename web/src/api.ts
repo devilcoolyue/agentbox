@@ -29,6 +29,45 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
   return data;
 }
 
+/* 带上传进度的 POST：fetch 拿不到上传进度，改用 XHR。鉴权、401 广播、错误契约与 api() 一致，
+ * 响应体包回 Response 交给同一个 responseError，错误码、操作编号的解析不用再写一遍。 */
+export function apiUpload<T = unknown>(path: string, body: FormData,
+  opts: { signal?: AbortSignal; onProgress?: (loaded: number, total: number) => void } = {}): Promise<T> {
+  const token = S.token;
+  return new Promise<T>((resolve, reject) => {
+    const { signal } = opts;
+    if (signal?.aborted) { reject(signal.reason); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api" + path);
+    xhr.setRequestHeader("Authorization", "Bearer " + token);
+    xhr.upload.addEventListener("progress", (e) => { if (e.lengthComputable) opts.onProgress?.(e.loaded, e.total); });
+    const abort = () => xhr.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    const done = () => signal?.removeEventListener("abort", abort);
+    xhr.addEventListener("abort", () => { done(); reject(signal?.reason ?? new DOMException("Aborted", "AbortError")); });
+    xhr.addEventListener("error", () => { done(); reject(new TypeError(i18nText("网络错误"))); });
+    xhr.addEventListener("load", async () => {
+      done();
+      try {
+        if (token !== S.token) throw new Error(i18nText("登录状态已变化"));
+        const headers = new Headers();
+        for (const name of ["Content-Type", "X-Agentbox-Operation-ID"]) {
+          const value = xhr.getResponseHeader(name);
+          if (value) headers.set(name, value);
+        }
+        const res = new Response(xhr.status === 204 ? null : xhr.responseText, { status: xhr.status, statusText: xhr.statusText, headers });
+        if (!res.ok) {
+          const error = await responseError(res, i18nText);
+          if (res.status === 401) emit("unauthorized", error.message);
+          throw error;
+        }
+        resolve(await res.json() as T);
+      } catch (e) { reject(e); }
+    });
+    xhr.send(body);
+  });
+}
+
 export function wsURL(path: string) {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${location.host}/api${path}?token=${encodeURIComponent(S.token)}`;

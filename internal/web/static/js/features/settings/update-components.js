@@ -2,6 +2,7 @@ import { api } from "../../api.js";
 import { S, bus } from "../../state.js";
 import { $, fmtDateTime } from "../../util.js";
 import { setText, setTextRender, t } from "../../i18n.js";
+import { skelBar } from "../../skeleton.js";
 /** Observe only while the about page is visible; update actions remain owned
  * by the existing server/image/native desktop updaters. */
 export function initUpdateComponents() {
@@ -10,13 +11,16 @@ export function initUpdateComponents() {
     let request, visible = false, queued = false;
     const current = () => !lifetime.signal.aborted && S.token === owner && S.role === "admin";
     const shown = () => S.view === "settings" && S.sec === "about";
-    const clear = () => { for (const id of ["component-server-version", "component-image-version", "component-desktop-version", "component-image-state", "component-desktop-state"])
+    const cells = ["component-server-version", "component-image-version", "component-desktop-version", "component-image-state", "component-desktop-state"];
+    const clear = () => { for (const id of cells)
         $(id).textContent = ""; };
+    // 读取期间各格先放骨架条：表格行高不先塌下去再撑开
+    const placeholder = () => { cells.forEach((id, i) => $(id).replaceChildren(skelBar(40 + (i * 17) % 45, "text"))); };
     const load = async () => {
         request?.abort();
         const controller = request = new AbortController();
         refresh.disabled = true;
-        clear();
+        placeholder();
         setText($("component-read-status"), "正在读取本地版本信息…");
         try {
             const v = await api("/updates/components", { signal: AbortSignal.any([lifetime.signal, controller.signal, AbortSignal.timeout(8000)]) });
@@ -33,6 +37,8 @@ export function initUpdateComponents() {
             setTextRender($("component-read-status"), () => t("读取于 {time}；这是本地版本观察，远端更新请使用各自的检查入口。", { time: fmtDateTime(v.observed_at) }));
         }
         catch (error) {
+            if (current() && shown() && request === controller)
+                clear();
             if (current() && shown() && request === controller)
                 setTextRender($("component-read-status"), () => t("读取版本信息失败：") + error.message);
         }

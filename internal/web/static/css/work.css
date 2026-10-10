@@ -412,6 +412,9 @@
 .home-setup li { padding: 10px 0 12px 8px; border-bottom: 1px solid var(--line); }
 .home-setup li > div { display: inline-block; vertical-align: middle; width: calc(100% - 190px); padding-right: 16px; }
 .home-setup li > .btn { vertical-align: middle; max-width: 186px; }
+/* 读取中的骨架步骤：说明两根条，右侧占住按钮的位置 */
+.home-setup li > div > .skeleton + .skeleton { margin-top: 6px; }
+.home-setup li > .skeleton.btn-like { display: inline-block; vertical-align: middle; }
 .home-setup strong { color: var(--text); font-size: 14px; }
 .home-setup p { margin: 6px 0; overflow-wrap: anywhere; }
 .setup-account-names { font-size: 12px; color: var(--text); }
@@ -422,6 +425,7 @@
 @media (max-width: 600px) {
   .home-setup li > div { display: block; width: 100%; padding: 0; }
   .home-setup li > .btn { margin-top: 8px; max-width: 100%; }
+  .home-setup li > .skeleton.btn-like { display: block; margin-top: 8px; }
   .home-intro .mascot-empty { width: 88px; }
 }
 
@@ -430,6 +434,10 @@
 #new-import-fields, #new-upload-fields, #new-git-fields { display:flex; flex-direction:column; gap:10px; }
 #new-flow-actions { flex-wrap:wrap; }
 #new-progress { overflow-wrap:anywhere; }
+/* 创建空间时的导入进度：上传按字节，Git 导入沿用 Git 操作的进度块 */
+.new-import-meter .git-operation-progress { margin-top: 0; padding-top: 0; border-top: 0; }
+.new-upload-progress { display: flex; flex-direction: column; gap: 8px; }
+.new-upload-progress > p { margin: 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 #new-project-file { max-width:100%; }
 .creation-config { border-top:1px solid var(--line); padding-top:14px; font-size:13px; }
 .creation-config dl { display:grid; grid-template-columns:minmax(100px,1fr) 2fr; gap:8px 16px; margin:12px 0; }

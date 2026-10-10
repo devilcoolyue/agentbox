@@ -80,6 +80,18 @@ dialog textarea { resize: vertical; }
 .dlg-git-connections pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; font-size: 12px; }
 .git-connection-tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .git-connection-row { padding: 14px 0; border-bottom: 1px solid var(--line); }
+/* Git 操作进度：标题行（操作 · 阶段 + 百分比）、进度条、字节与速率 + 取消钮。
+ * 挂在弹窗正文下方，正文滚动时它不动；「操作记录」里的活动操作也用这一块。 */
+.git-operation-progress {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px;
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
+}
+[data-active] > .git-operation-progress:first-child { margin-top: 0; }
+.git-operation-progress > p { margin: 0; font-size: 13px; color: var(--text); overflow-wrap: anywhere; white-space: normal; }
+.git-op-pct { font-size: 12px; color: var(--muted); }
+.git-operation-progress > .progress { grid-column: 1 / -1; }
+.git-op-meta { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.git-operation-progress > button { justify-self: end; }
 
 /* 并排两列（主机+端口、用户名+密码）：窄屏落回单列 */
 .dlg-row { display: flex; gap: 12px; }
@@ -410,6 +422,7 @@ dialog label.am-default { font-size: 12px; white-space: nowrap; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .q-empty { color: var(--muted); font-size: 12.5px; padding: 6px 2px; }
+.q-ledger-skeleton { display: flex; flex-direction: column; }
 
 /* 窄屏：流水行的时间/类型/金额/余额四项都是定宽，加起来约 283px，而 320px 手机上
    弹窗里能用的宽度只有 264px 左右——四项自己就撑破了，备注再怎么省略也没用。
@@ -501,7 +514,7 @@ dialog label.am-default { font-size: 12px; white-space: nowrap; }
   padding: 1px 6px;
 }
 
-.au-body { display: flex; flex-direction: column; gap: 14px; }
+.au-body, .au-body-skeleton { display: flex; flex-direction: column; gap: 14px; }
 
 .au-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .au-row-label { font-size: 13px; color: var(--text); }

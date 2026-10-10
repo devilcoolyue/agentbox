@@ -539,7 +539,9 @@ export interface UpdateInfo {
 export interface UpgradeInfo {
   supported: boolean; reason: string; current_version: string;
   job: { id: string; version: string; from_version: string; phase: string;
-    message: string; error: string; started_at: number; updated_at: number } | null;
+    message: string; error: string; started_at: number; updated_at: number;
+    /** 下载发布包时已收到的字节数与包大小；旧版升级脚本不报 */
+    downloaded?: number; total?: number; failed_phase?: string } | null;
 }
 
 /** GET /api/system（关于页）。 */
@@ -1044,6 +1046,8 @@ export interface GitOperation {
 export interface GitLiveOperation {
  request_id:string; id:number; operation:string; session_id:string; started_at:string;
  elapsed_ms:number; phase:string; received_bytes:number; sent_bytes:number; cancel_requested:boolean;
+ /** Git --progress 里最近一次的阶段（白名单键）与 Git 自己的计数；旧服务端没有这几项 */
+ stage?:string; stage_percent?:number; stage_done?:number; stage_total?:number;
 }
 export interface GitOperationPage {rows:GitOperation[]; active:GitLiveOperation[]; next_before:number;}
 

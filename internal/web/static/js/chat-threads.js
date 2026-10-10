@@ -7,10 +7,11 @@ import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js"
  * 本端与广播都汇入 bus 的 thread-changed 事件，由 chat.ts 重载对话流。 */
 "use strict";
 import { S, emit } from "./state.js";
-import { $, fmtTime, toast, withSpin, askConfirm, askPrompt } from "./util.js";
+import { $, fmtTime, toast, askConfirm, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { svgIcon, USER_ATTACH_RE } from "./chat-render.js";
 import { setTip } from "./tip.js";
+import { keepCount, skelBar, skelShell } from "./skeleton.js";
 /* 预览文案：附件占位符只留类别名，不展示容器内路径 */
 function previewText(s) {
     return String(s || "").replace(USER_ATTACH_RE, "[$1]") || i18nText("（无文字消息）");
@@ -75,10 +76,7 @@ async function refreshList() {
     if (!sess)
         return;
     const list = $("tp-list");
-    const load = document.createElement("div");
-    load.className = "tp-empty";
-    load.append(withSpin(() => i18nText("加载中…")));
-    list.replaceChildren(load);
+    list.replaceChildren(threadsSkeleton(keepCount(list, ".tp-item", 5)));
     $("tp-count").textContent = "";
     try {
         const { threads, active } = await api(`/sessions/${sess.id}/chat/threads`);
@@ -121,6 +119,23 @@ function renderList() {
     list.replaceChildren(...shown.map((t) => threadItem(t, t.id === activeID)));
 }
 $("tp-search").addEventListener("input", renderList);
+/* 历史对话骨架：图标位、标题、时间一行一条，与 threadItem 同高 */
+function threadsSkeleton(count) {
+    const wrap = skelShell(i18nText("加载中…"), "tp-skeleton");
+    for (let i = 0; i < count; i++) {
+        const row = document.createElement("div");
+        row.className = "tp-item";
+        row.setAttribute("aria-hidden", "true");
+        const open = document.createElement("div");
+        open.className = "tp-open";
+        const glyph = skelBar("15px", "text");
+        glyph.style.gridRow = "1 / 3";
+        open.append(glyph, skelBar(45 + (i * 23) % 40, "text tp-title"), skelBar(30 + (i * 11) % 20, "text tp-meta"));
+        row.append(open);
+        wrap.append(row);
+    }
+    return wrap;
+}
 function threadItem(t, on) {
     const row = document.createElement("div");
     row.className = "tp-item" + (on ? " on" : "");

@@ -1,4 +1,5 @@
 import { api } from "./api.js";
+import { skelBar } from "./skeleton.js";
 import { S, bus, emit } from "./state.js";
 import { setText, setTextRender, t } from "./i18n.js";
 import { actionButton } from "./icons.js";
@@ -120,6 +121,17 @@ export function initOnboarding() {
         refresh.disabled = true;
         newButton.disabled = true;
         setText(status, "正在读取准备状态…");
+        // 第一次读取时步骤列表是空的：先铺四条与步骤同形的骨架（标题、说明、右侧按钮）
+        if (!steps.children.length)
+            steps.replaceChildren(...Array.from({ length: 4 }, (_, i) => {
+                const item = document.createElement("li");
+                item.className = "skeleton-row";
+                item.setAttribute("aria-hidden", "true");
+                const body = document.createElement("div");
+                body.append(skelBar(18 + i * 6, "text"), skelBar(45 + (i * 17) % 35, "text note"));
+                item.append(body, skelBar("7em", "btn-like"));
+                return item;
+            }));
         try {
             const view = await api("/onboarding", { signal: controller.signal });
             if (!current() || controller.signal.aborted)
