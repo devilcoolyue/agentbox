@@ -78,11 +78,19 @@ export async function motionSmoke(page, fixture) {
   await dialog.waitFor({state: 'visible'});
   assert.ok((await dialog.evaluate(el => el.getAnimations().map(a => a.transitionProperty))).includes('opacity'), 'dialog entered without motion');
   await settle(page);
-  const closing = await dialog.evaluate(el => { el.close(); return {open: el.open, display: getComputedStyle(el).display, events: getComputedStyle(el).pointerEvents}; });
+  const closing = await dialog.evaluate(el => {
+    // offset* ignore the exit transform, so any change here is a relayout rather than the scale-down.
+    const layout = () => [el.offsetHeight, ...[...el.children].map(c => c.offsetWidth)].join();
+    const before = layout();
+    el.close();
+    return {open: el.open, display: getComputedStyle(el).display, events: getComputedStyle(el).pointerEvents, before, after: layout()};
+  });
   assert.equal(await confirmed, false);
   assert.equal(closing.open, false);
-  if (overlay) assert.deepEqual([closing.display !== 'none', closing.events], [true, 'none'], 'dialog exit should stay visible but inert');
-  else assert.equal(closing.display, 'none');
+  if (overlay) {
+    assert.deepEqual([closing.display !== 'none', closing.events], [true, 'none'], 'dialog exit should stay visible but inert');
+    assert.equal(closing.after, closing.before, 'dialog content reflowed during the exit transition');
+  } else assert.equal(closing.display, 'none');
   await page.waitForFunction(() => getComputedStyle(document.querySelector('#dlg-ask')).display === 'none');
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'btn-wb-more', 'focus did not return after the dialog closed');
 

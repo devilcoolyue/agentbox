@@ -41,7 +41,8 @@
 
 /* Native modal: the header/footer stay visible while the fields scroll. */
 #mcp-editor { width:min(640px, calc(100vw - 32px)); max-width:none; max-height:min(820px, calc(100dvh - 48px)); padding:0; overflow:hidden; border-radius:calc(14px * var(--radius-scale)); box-shadow:var(--shadow-lg); }
-#mcp-editor[open] { display:flex; flex-direction:column; }
+#mcp-editor { flex-direction:column; } /* not tied to [open]: display stays flex through the exit transition */
+#mcp-editor[open] { display:flex; }
 #mcp-form { display:flex; flex-direction:column; min-height:0; max-height:inherit; gap:0; }
 .mcp-dialog-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:22px 24px 18px; border-bottom:1px solid var(--line); background:var(--dlg-head-bg); flex:none; }
 .mcp-dialog-title { display:flex; align-items:flex-start; gap:12px; min-width:0; }

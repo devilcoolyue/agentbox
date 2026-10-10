@@ -22,7 +22,11 @@ dialog::backdrop { background: var(--backdrop); }
 
 /* 内容超高时只滚动正文：弹窗（或其中的 form）分成 .dlg-head / .dlg-body / .dlg-actions，
  * .dlg-body 以外的兄弟节点（标题、说明、底部按钮、状态行）都固定不动，由 .dlg-body 自己出滚动条。 */
-dialog[open]:has(> .dlg-body, > form > .dlg-body) { display: flex; flex-direction: column; overflow: hidden; }
+dialog:has(> .dlg-body, > form > .dlg-body) { flex-direction: column; overflow: hidden; }
+/* display 只能挂在 [open] 上：作者样式的 display 会盖过 UA 的 dialog:not([open]) { display: none }。
+ * 方向与裁剪不能跟着 [open] 走：退场过渡里 display 由 allow-discrete 撑着 flex，[open] 一摘，
+ * 方向就回到默认的 row，表头、正文、底栏横排挤成几列，弹窗看着先缩一下才淡出。 */
+dialog[open]:has(> .dlg-body, > form > .dlg-body) { display: flex; }
 dialog > form:has(> .dlg-body) { flex: 1 1 auto; min-height: 0; }
 :is(dialog, dialog > form):has(> .dlg-body) > :not(.dlg-body) { flex: none; }
 .dlg-body {
@@ -214,7 +218,8 @@ dialog label.check input { margin: 0; flex: none; }
   max-width: 92vw; max-height: 86vh;
   overflow: hidden;
 }
-.dlg-img[open] { display: flex; flex-direction: column; }
+.dlg-img { flex-direction: column; } /* 方向不挂 [open]，原因见上方 .dlg-body 规则 */
+.dlg-img[open] { display: flex; }
 .dlg-img { --dlg-from: scale(.94); } /* 灯箱是从缩略图「放大」出来的，不做上移 */
 .dlg-img::backdrop { background: var(--backdrop-strong); }
 .dlg-img img {
@@ -612,7 +617,8 @@ dialog label.am-default { font-size: 12px; white-space: nowrap; }
   box-shadow: var(--shadow-lg);
   --dlg-from: translateX(24px);
 }
-.dlg-theme-editor[open] { display: flex; flex-direction: column; }
+.dlg-theme-editor { flex-direction: column; } /* 方向不挂 [open]：退场时 display 仍是 flex */
+.dlg-theme-editor[open] { display: flex; }
 :root[data-skin] dialog.dlg-theme-editor::backdrop { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .dlg-theme-editor .dlg-head { flex: none; margin: 0; padding: 18px 20px 12px; }
 .te-body { display: flex; flex: 1; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 20px; }
