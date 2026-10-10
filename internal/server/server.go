@@ -390,6 +390,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/sessions/{id}/mcp/{name}/copy", s.auth(s.withSession(s.handleMCPCopy)))
 	mux.Handle("GET /api/mcp", s.auth(http.HandlerFunc(s.handleMCPUser)))
 	mux.Handle("GET /api/themes", s.auth(http.HandlerFunc(s.handleThemes)))
+	mux.Handle("POST /api/themes/validate", s.auth(http.HandlerFunc(s.handleThemeValidate)))
 	mux.Handle("PUT /api/themes/site/{id}", s.admin(http.HandlerFunc(s.handleSiteThemePut)))
 	mux.Handle("DELETE /api/themes/site/{id}", s.admin(http.HandlerFunc(s.handleSiteThemeDelete)))
 	mux.Handle("PUT /api/themes/user/{id}", s.auth(http.HandlerFunc(s.handleUserThemePut)))

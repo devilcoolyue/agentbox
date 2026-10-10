@@ -1741,6 +1741,7 @@
       <div class="themes-section-head">
         <h3 id="themes-user-title" data-i18n-text="[&quot;我的主题&quot;]">我的主题</h3>
         <span id="themes-user-count" class="themes-count mono"></span>
+        <button type="button" id="themes-new" class="btn btn-sm" data-icon="plus" data-i18n-text="[&quot;新建&quot;]">新建</button>
         <button type="button" id="themes-import-user" class="btn btn-sm" data-icon="upload" data-i18n-text="[&quot;导入&quot;]">导入</button>
       </div>
       <p class="themes-section-hint" data-i18n-text="[&quot;只有你自己能看到和使用。&quot;]">只有你自己能看到和使用。</p>
@@ -1764,6 +1765,77 @@
     </section>
   </div>
   <input id="themes-file" type="file" accept=".json,application/json" hidden>
+</dialog>
+
+<!-- 主题编辑器（theme-editor.ts）：右侧面板 / 窄屏底部抽屉，背板透明，改动实时预览在整页上 -->
+<dialog id="dlg-theme-editor" class="dlg-theme-editor" aria-labelledby="te-title">
+  <div class="dlg-head">
+    <h2 id="te-title" data-i18n-text="[&quot;编辑主题&quot;]">编辑主题</h2>
+    <button type="button" id="te-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
+  </div>
+  <div class="te-body">
+    <!-- 样张：页面上平时看不到的按钮、状态色、代码与终端，跟着草稿一起变 -->
+    <div class="te-specimen" inert>
+      <div class="te-spec-row">
+        <button type="button" class="btn btn-primary btn-sm" data-icon="send" data-i18n-text="[&quot;主按钮&quot;]">主按钮</button>
+        <button type="button" class="btn btn-sm" data-icon="edit" data-i18n-text="[&quot;按钮&quot;]">按钮</button>
+        <button type="button" class="btn btn-danger btn-sm" data-icon="trash" data-i18n-text="[&quot;删除&quot;]">删除</button>
+      </div>
+      <div class="te-spec-row">
+        <span class="te-spec-field" data-i18n-text="[&quot;输入框&quot;]">输入框</span>
+        <span class="te-chip ok" data-i18n-text="[&quot;运行中&quot;]">运行中</span>
+        <span class="te-chip warn" data-i18n-text="[&quot;休眠&quot;]">休眠</span>
+        <span class="te-chip err" data-i18n-text="[&quot;失败&quot;]">失败</span>
+      </div>
+      <p class="te-spec-text"><span data-i18n-text="[&quot;正文文字&quot;]">正文文字</span> · <span class="te-spec-muted" data-i18n-text="[&quot;次要文字&quot;]">次要文字</span> · <span class="te-spec-amber" data-i18n-text="[&quot;强调文字&quot;]">强调文字</span></p>
+      <pre class="te-spec-code"><span class="kw">function</span> <span class="fn">greet</span>(name) {
+  <span class="kw">return</span> "hi, " + name;
+}</pre>
+      <div class="te-spec-term">$ claude <span class="sel">--resume</span><span class="cursor"></span></div>
+    </div>
+    <div class="te-fields">
+      <label><span data-i18n-text="[&quot;名称&quot;]">名称</span><input id="te-name" type="text" maxlength="40" autocomplete="off"></label>
+      <div class="dlg-row">
+        <label><span>ID</span><input id="te-id" type="text" class="mono" maxlength="40" spellcheck="false" autocomplete="off"></label>
+        <label><span data-i18n-text="[&quot;底子风格&quot;]">底子风格</span><select id="te-base">
+            <option value="amber" data-i18n-text="[&quot;琥珀&quot;]">琥珀</option>
+            <option value="glass" data-i18n-text="[&quot;液态玻璃&quot;]">液态玻璃</option>
+            <option value="cyberpunk" data-i18n-text="[&quot;赛博朋克&quot;]">赛博朋克</option>
+            <option value="graphite" data-i18n-text="[&quot;石墨极简&quot;]">石墨极简</option>
+            <option value="verdant" data-i18n-text="[&quot;青野绿意&quot;]">青野绿意</option>
+            <option value="blueprint" data-i18n-text="[&quot;工程蓝图&quot;]">工程蓝图</option>
+          </select></label>
+      </div>
+      <label id="te-scope-field" class="hidden"><span data-i18n-text="[&quot;保存到&quot;]">保存到</span><select id="te-scope">
+            <option value="user" data-i18n-text="[&quot;我的主题&quot;]">我的主题</option>
+            <option value="site" data-i18n-text="[&quot;全站主题&quot;]">全站主题</option>
+          </select></label>
+    </div>
+    <div class="te-switches">
+      <div id="te-mode" class="scope-switch" role="tablist" aria-label="编辑哪套配色" data-i18n-attrs="{&quot;aria-label&quot;:&quot;编辑哪套配色&quot;}">
+        <button type="button" class="scope-btn" role="tab" data-mode="dark" data-icon="moon" data-i18n-text="[&quot;深色&quot;]">深色</button>
+        <button type="button" class="scope-btn" role="tab" data-mode="light" data-icon="sun" data-i18n-text="[&quot;浅色&quot;]">浅色</button>
+      </div>
+      <div id="te-tabs" class="scope-switch" role="tablist" aria-label="编辑方式" data-i18n-attrs="{&quot;aria-label&quot;:&quot;编辑方式&quot;}">
+        <button type="button" class="scope-btn" role="tab" data-tab="core" data-icon="sliders" data-i18n-text="[&quot;常用&quot;]">常用</button>
+        <button type="button" class="scope-btn" role="tab" data-tab="all" data-icon="list" data-i18n-text="[&quot;全部令牌&quot;]">全部令牌</button>
+        <button type="button" class="scope-btn" role="tab" data-tab="json" data-icon="code">JSON</button>
+      </div>
+    </div>
+    <div id="te-panel-core" class="te-panel"></div>
+    <div id="te-panel-all" class="te-panel" hidden></div>
+    <div id="te-panel-json" class="te-panel" hidden>
+      <p class="field-hint" data-i18n-text="[&quot;可以直接粘贴 AI 改好的完整 JSON，改动会立即预览。&quot;]">可以直接粘贴 AI 改好的完整 JSON，改动会立即预览。</p>
+      <textarea id="te-json" class="mono" rows="16" spellcheck="false" aria-label="主题 JSON" data-i18n-attrs="{&quot;aria-label&quot;:&quot;主题 JSON&quot;}"></textarea>
+    </div>
+  </div>
+  <p id="te-status" class="themes-status hidden" role="status" aria-live="polite"></p>
+  <textarea id="te-ai-fallback" class="te-ai-fallback mono hidden" rows="6" readonly aria-label="给 AI 的说明" data-i18n-attrs="{&quot;aria-label&quot;:&quot;给 AI 的说明&quot;}"></textarea>
+  <div class="te-actions">
+    <button type="button" id="te-ai" class="btn" data-icon="sparkles" data-i18n-text="[&quot;复制给 AI 的说明&quot;]">复制给 AI 的说明</button>
+    <button type="button" id="te-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+    <button type="button" id="te-save" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
+  </div>
 </dialog>
 
 <!-- 通用确认框（替代原生 confirm） -->

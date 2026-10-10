@@ -193,6 +193,7 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 
 | 方法与路径 | 权限 | 用途 |
 | --- | --- | --- |
+| `POST /api/themes/validate` | 登录用户 | 只校验、不保存：成功返回 `{manifest}`（规范化后的清单），失败与写接口相同；主题编辑器每次改动后调用 |
 | `GET /api/themes` | 登录用户 | 返回 `site`（全站主题）、`user`（本人主题）、`tokens`（可改写令牌及种类）、`bases`、`limits` 与 `can_manage_site`；每条主题为 `{scope, manifest, updated_at}` |
 | `PUT /api/themes/user/{id}` | 登录用户 | 新增或整份替换本人的主题，最多 20 个 |
 | `DELETE /api/themes/user/{id}` | 登录用户 | 删除本人的主题 |

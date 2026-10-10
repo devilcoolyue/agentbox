@@ -86,6 +86,20 @@ func TestThemeRoutesScopeAndPermissions(t *testing.T) {
 	if w.Code != 400 || json.Unmarshal(w.Body.Bytes(), &problem) != nil || problem.Theme.Code != "bad_value" || problem.Theme.Token != "--bg" || problem.Theme.Section != "dark" || problem.Error == "" {
 		t.Fatal(w.Code, w.Body.String())
 	}
+	// Validation without saving: same verdicts as PUT, nothing written.
+	if w := request("bob", "POST", "/api/themes/validate", `{"agentbox_theme":1,"id":"draft","name":"  Draft ","base":"amber","dark":{"--bg":"#000"}}`); w.Code != 200 || !strings.Contains(w.Body.String(), `"name":"Draft"`) {
+		t.Fatal("validate", w.Code, w.Body.String())
+	}
+	if w := request("bob", "POST", "/api/themes/validate", `{"agentbox_theme":1,"id":"draft","name":"D","base":"amber","dark":{"--bg":"url(x)"}}`); w.Code != 400 || !strings.Contains(w.Body.String(), `"code":"bad_value"`) {
+		t.Fatal("validate bad value", w.Code, w.Body.String())
+	}
+	if w := request("missing", "POST", "/api/themes/validate", `{}`); w.Code != 401 {
+		t.Fatal("validate requires login", w.Code)
+	}
+	decode(request("bob", "GET", "/api/themes", ""))
+	if len(list.User) != 0 {
+		t.Fatal("validate saved a theme", list.User)
+	}
 	if w := request("alice", "PUT", "/api/themes/user/big", `{"agentbox_theme":1,"id":"big","name":"`+strings.Repeat("a", 70<<10)+`"}`); w.Code != http.StatusRequestEntityTooLarge || !strings.Contains(w.Body.String(), `"code":"too_large"`) || !strings.Contains(w.Body.String(), "64 KiB") {
 		t.Fatal("oversized body", w.Code, w.Body.String())
 	}

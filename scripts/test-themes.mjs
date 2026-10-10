@@ -36,12 +36,20 @@ async function allowlist() {
 export async function themesSmoke(page) {
   const tokens = await allowlist();
   assert.ok(tokens.length > 50, 'token allowlist parsed');
-  const state = { site: [], user: [], admin: true, puts: 0 };
+  const state = { site: [], user: [], admin: true, puts: 0, validations: 0 };
   const view = (scope, manifest) => ({ scope, manifest, updated_at: Date.now() });
   await page.route('**/api/themes**', async route => {
     const request = route.request(), url = new URL(request.url()), method = request.method();
     if (url.pathname === '/api/themes') {
       await route.fulfill({ json: { format: 1, bases: SKINS, tokens, site: state.site, user: state.user, can_manage_site: state.admin, limits: { site: 50, user: 20, bytes: 65536 } } });
+      return;
+    }
+    if (url.pathname === '/api/themes/validate') {
+      assert.equal(method, 'POST');
+      state.validations++;
+      const manifest = JSON.parse(request.postData());
+      if (JSON.stringify(manifest).includes('url(')) await route.fulfill({ status: 400, json: { error: 'dark 里 --accent 的取值无效：不允许的函数 url()', theme_error: { code: 'bad_value', token: '--accent', section: 'dark' } } });
+      else await route.fulfill({ json: { manifest } });
       return;
     }
     const [, , , scope, id] = url.pathname.split('/');
@@ -78,7 +86,7 @@ export async function themesSmoke(page) {
     await page.locator(button).click();
     await (await chooser).setFiles({ name: 'theme.json', mimeType: 'application/json', buffer: Buffer.from(typeof manifest === 'string' ? manifest : JSON.stringify(manifest)) });
   };
-  const moduleURL = () => page.evaluate(() => new URL('themes.js', document.querySelector('script[type="module"]').src).href);
+  const moduleURL = () => page.evaluate(() => new URL('theme-tools.js', document.querySelector('script[type="module"]').src).href);
 
   try {
     await page.evaluate(() => { localStorage.removeItem('agentbox_skin'); localStorage.removeItem('agentbox_skin_custom'); });
@@ -254,7 +262,141 @@ export async function themesSmoke(page) {
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'hidden' });
     await page.locator(`.theme-options [data-theme-option="${savedMode}"]`).click();
-    console.log('Themes: built-in templates, personal/shared import-apply-export-delete, contrast and validation messages, first-paint restore and fallback passed');
+
+    // ---- Theme editor: live preview on the real page, nothing persisted until Save ----
+    const editor = page.locator('#dlg-theme-editor'), teStatus = page.locator('#te-status');
+    const tokenInput = name => page.locator(`#dlg-theme-editor .te-panel:not([hidden]) .te-token[data-token="${name}"] .te-value`);
+    const typeValue = (name, value) => tokenInput(name).evaluate((el, value) => { el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }, value);
+    const nextFrame = () => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const labels = await page.evaluate(async url => Object.keys((await import(new URL('theme-tokens.js', url).href)).TOKEN_LABEL), url);
+    assert.deepEqual([...labels].sort(), tokens.map(t => t.name).sort(), 'every server token has an editor label');
+    const storedBefore = await page.evaluate(() => [localStorage.getItem('agentbox_skin'), localStorage.getItem('agentbox_theme')]);
+    await openManager();
+    await page.locator('#themes-builtin .themes-row[data-key="verdant"] button[aria-label="基于它新建"]').click();
+    await editor.waitFor({ state: 'visible' });
+    assert.equal(await dialog.isHidden(), true, 'the manager steps aside for the editor');
+    assert.equal(await page.locator('#te-title').innerText(), '新建主题');
+    assert.equal(await page.locator('#te-name').inputValue(), '青野绿意（自定义）');
+    assert.equal(await page.locator('#te-id').inputValue(), 'my-verdant');
+    assert.equal(await page.locator('#te-id').evaluate(el => el.readOnly), false);
+    assert.equal(await page.locator('#te-base').inputValue(), 'verdant');
+    assert.equal(await page.locator('#te-scope-field').isVisible(), true, 'admins may save a new theme as shared');
+    assert.equal(await editor.evaluate(el => getComputedStyle(el, '::backdrop').backgroundColor), 'rgba(0, 0, 0, 0)', 'the page stays undimmed for preview');
+    await nextFrame();
+    assert.equal(await root('skin'), 'verdant');
+    assert.equal(await root('skinCustom'), 'preview:my-verdant');
+    const previewMode = await root('theme'), otherMode = previewMode === 'dark' ? 'light' : 'dark';
+    assert.equal(await page.locator(`#te-mode .scope-btn.active`).getAttribute('data-mode'), previewMode);
+    await typeValue('--bg', '#20123a');
+    await nextFrame();
+    assert.equal(await token('--bg'), '#20123a', 'edits preview live on the page');
+    assert.equal(await page.locator('#te-panel-core .te-token[data-token="--bg"]').evaluate(el => el.classList.contains('set')), true);
+    await typeValue('--term-bg', '#010203');
+    await nextFrame();
+    assert.equal(await page.locator('.te-spec-term').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(1, 2, 3)', 'the specimen shows tokens the page may not');
+    // The picker writes a hex value; a translucent original keeps its alpha.
+    await page.locator('#te-panel-core .te-token[data-token="--accent"] .te-color').evaluate(el => { el.value = '#ff0088'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    assert.equal(await tokenInput('--accent').inputValue(), '#ff0088');
+    await typeValue('--panel', 'rgba(10, 20, 30, .5)');
+    await page.locator('#te-panel-core .te-token[data-token="--panel"] .te-color').evaluate(el => { el.value = '#336699'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    assert.equal(await tokenInput('--panel').inputValue(), 'rgba(51, 102, 153, 0.5)');
+    await page.locator('#te-panel-core .te-token[data-token="--panel"] .te-reset').click();
+    assert.equal(await tokenInput('--panel').inputValue(), '', 'reset drops the override');
+    assert.ok(await tokenInput('--panel').getAttribute('placeholder'), 'the inherited value shows as placeholder');
+    // Light/dark in the editor previews the other set without touching the saved preference.
+    await page.locator(`#te-mode .scope-btn[data-mode="${otherMode}"]`).click();
+    await nextFrame();
+    assert.equal(await root('theme'), otherMode);
+    assert.notEqual(await token('--bg'), '#20123a', 'the other mode has its own --bg');
+    await page.locator(`#te-mode .scope-btn[data-mode="${previewMode}"]`).click();
+    await nextFrame();
+    assert.equal(await token('--bg'), '#20123a');
+    // Server validation runs on every change; errors block Save.
+    await typeValue('--accent', 'url(https://example.invalid/x)');
+    await page.waitForFunction(() => document.querySelector('#te-status').classList.contains('error'));
+    assert.equal((await teStatus.innerText()).trim(), 'dark 里 --accent 的取值无效：不允许的函数 url()');
+    assert.equal(await page.locator('#te-save').isDisabled(), true);
+    await typeValue('--accent', '#7c3aed');
+    await page.waitForFunction(() => !document.querySelector('#te-status').classList.contains('error'));
+    assert.equal(await page.locator('#te-save').isDisabled(), false);
+    // A new theme cannot silently take an existing ID.
+    await page.locator('#te-id').fill('murky');
+    assert.match(await teStatus.innerText(), /这个 ID 已被同范围的另一个主题使用/);
+    assert.equal(await page.locator('#te-save').isDisabled(), true);
+    await page.locator('#te-id').fill('violet-dusk');
+    // JSON tab: paste a whole manifest (what an AI returns) and it previews at once.
+    await page.locator('#te-tabs .scope-btn[data-tab="json"]').click();
+    const draft = JSON.parse(await page.locator('#te-json').inputValue());
+    assert.equal(draft.id, 'violet-dusk');
+    assert.equal(draft[previewMode]['--bg'], '#20123a');
+    await page.locator('#te-json').fill('{ not json');
+    await page.waitForFunction(() => /JSON 格式有误/.test(document.querySelector('#te-status').textContent));
+    assert.equal(await page.locator('#te-save').isDisabled(), true);
+    const pasted = { ...draft, name: '暮光紫', [previewMode]: { ...draft[previewMode], '--text': '#f5f0ff' } };
+    await page.locator('#te-json').fill(JSON.stringify(pasted, null, 2));
+    await page.waitForFunction(() => document.querySelector('#te-name').value === '暮光紫');
+    await nextFrame();
+    assert.equal(await token('--text'), '#f5f0ff');
+    await page.locator('#te-tabs .scope-btn[data-tab="all"]').click();
+    assert.equal(await page.locator('#te-panel-all .te-group').count(), 6);
+    assert.equal(await tokenInput('--text').inputValue(), '#f5f0ff', 'other tabs read the pasted draft');
+    // Instructions for an AI carry the rules, every token's meaning and the current draft.
+    await page.evaluate(() => { window.__copied = []; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.__copied.push(text); } } }); });
+    await page.locator('#te-ai').click();
+    await page.waitForFunction(() => window.__copied.length === 1);
+    const prompt = await page.evaluate(() => window.__copied[0]);
+    for (const part of ['只输出修改后的完整 JSON', '规则：', '可用令牌：', '- --bg：页面背景', '- --radius-scale：圆角倍数，0 为直角', '"name": "暮光紫"', '我的要求：']) assert.ok(prompt.includes(part), `prompt lacks ${part}`);
+    assert.match(await teStatus.innerText(), /^已复制/);
+    await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('denied'); } } }));
+    await page.locator('#te-ai').click();
+    await page.locator('#te-ai-fallback').waitFor({ state: 'visible' });
+    assert.ok((await page.locator('#te-ai-fallback').inputValue()).includes('可用令牌：'), 'blocked clipboard shows the text to copy by hand');
+    await assertActionIcons(page, '#dlg-theme-editor');
+    assert.deepEqual(await page.evaluate(`(${cornerLeaks})('#dlg-theme-editor')`), []);
+    assert.deepEqual(await page.evaluate(() => [localStorage.getItem('agentbox_skin'), localStorage.getItem('agentbox_theme')]), storedBefore, 'preview never persists');
+    assert.ok(state.validations > 3, 'drafts are validated by the server');
+    // Cancel asks before throwing edits away, then restores the page exactly.
+    await page.locator('#te-cancel').click();
+    await page.locator('#dlg-ask').waitFor({ state: 'visible' });
+    await page.locator('#ask-cancel').click();
+    assert.equal(await editor.isVisible(), true, 'keeping edits leaves the editor open');
+    await page.keyboard.press('Escape');
+    await page.locator('#dlg-ask').waitFor({ state: 'visible' });
+    await page.locator('#ask-ok').click();
+    await editor.waitFor({ state: 'hidden' });
+    await dialog.waitFor({ state: 'visible' });
+    assert.equal(await root('skin'), 'amber');
+    assert.equal(await root('skinCustom'), undefined);
+    assert.equal(await page.evaluate(() => document.documentElement.style.length), 0, 'cancel removes every preview token');
+
+    // Save: a new personal theme is stored, applied and persisted.
+    const putsBeforeSave = state.puts;
+    await page.locator('#themes-new').click();
+    await editor.waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#te-id').inputValue(), 'my-amber', 'New starts from the style in use');
+    await page.locator('#te-name').fill('晨雾');
+    await typeValue('--bg', '#e9eef5');
+    await page.waitForFunction(() => !document.querySelector('#te-save').disabled);
+    await page.locator('#te-save').click();
+    await editor.waitFor({ state: 'hidden' });
+    await page.locator('#themes-user .themes-row[data-key="user:my-amber"].active').waitFor();
+    assert.equal(state.puts, putsBeforeSave + 1);
+    assert.deepEqual(state.user.find(v => v.manifest.id === 'my-amber').manifest[previewMode], { '--bg': '#e9eef5' }, 'only changed tokens are saved');
+    assert.match(await statusText(), /已保存并启用「晨雾」/);
+    assert.equal(await page.evaluate(() => localStorage.getItem('agentbox_skin')), 'user:my-amber');
+    // Editing keeps the ID; an untouched editor closes on Escape without asking.
+    await page.locator('#themes-user .themes-row[data-key="user:my-amber"] button[aria-label="编辑"]').click();
+    await editor.waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#te-title').innerText(), '编辑主题');
+    assert.equal(await page.locator('#te-id').evaluate(el => el.readOnly), true);
+    assert.equal(await page.locator('#te-scope-field').isVisible(), false);
+    await page.keyboard.press('Escape');
+    await editor.waitFor({ state: 'hidden' });
+    assert.equal(await page.locator('#dlg-ask').isVisible(), false);
+    assert.equal(await root('skinCustom'), 'user:my-amber', 'closing the editor restores the theme in use');
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden' });
+    console.log('Themes: built-in templates, personal/shared import-apply-export-delete, contrast and validation messages, first-paint restore and fallback, editor live preview/validation/JSON/AI instructions/save/cancel passed');
   } finally {
     await page.unroute('**/api/themes**');
     await page.evaluate(() => { localStorage.removeItem('agentbox_skin'); localStorage.removeItem('agentbox_skin_custom'); }).catch(() => {});

@@ -98,6 +98,9 @@ function cachedCustom(key) {
  * 读失败或已退出登录时继续用缓存，不把用户的选择冲掉。 */
 let customs = [];
 let customsAuthoritative = false;
+/* 主题编辑器的预览：盖在当前选择之上，只写页面不写存储，也不改用户的选择与明暗偏好；
+ * mode 让编辑器单独切深浅色检查两套令牌。结束预览（null）就回到原来的样子。 */
+let preview = null;
 const root = document.documentElement;
 /** 当前选择：内置风格名或自定义主题的 key */
 let selection = storedSkin();
@@ -142,12 +145,18 @@ function writeTokens(custom, theme) {
 function apply(mode, choice, persist = true) {
     if (!MODES.includes(mode))
         mode = "system";
-    const { skin, custom } = resolve(choice);
+    let { skin, custom } = resolve(choice);
     // 选的是自定义主题却解析不到（已删除或换了账号）：落回琥珀
     if (!custom && !isSkin(choice))
         choice = "amber";
     selection = choice;
-    const theme = effectiveFor(mode);
+    let theme = effectiveFor(mode);
+    if (preview) {
+        custom = preview.theme;
+        skin = custom.base;
+        theme = preview.mode ?? theme;
+        persist = false;
+    }
     root.dataset.themeMode = mode;
     root.dataset.theme = theme;
     root.dataset.skin = skin;
@@ -206,6 +215,13 @@ export function skinChoices() {
     const group = (scope) => scope === "site" ? () => i18nText("全站主题") : () => i18nText("我的主题");
     return builtin.concat(customs.map(t => ({ value: t.key, label: () => t.name, swatch: customSwatch(t), group: group(t.key.split(":")[0]) })));
 }
+/** 主题编辑器预览草稿（null 结束预览）；取值同样过 safeValue，草稿里的坏值只是不生效 */
+export function setThemePreview(next) {
+    preview = next && isSkin(next.theme.base) ? next : null;
+    apply(currentMode(), selection, false);
+}
+/** 当前实际生效的明暗（预览时是预览的明暗） */
+export const effectiveTheme = () => (root.dataset.theme === "light" ? "light" : "dark");
 /** themes.ts 读到（或清空）自定义主题时调用；会按新内容重铺当前主题并通知风格菜单重建 */
 export function setCustomThemes(list, authoritative) {
     customs = list.filter(t => isCustomKey(t.key) && isSkin(t.base));

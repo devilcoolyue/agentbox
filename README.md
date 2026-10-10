@@ -199,7 +199,7 @@ Keep subscription, API key, and relay accounts in one pool with access scopes. P
 <details>
 <summary><strong>Themes, styles and mobile access</strong></summary>
 
-Choose light, dark, or system themes, and pick an interface style from the user menu: Amber (default), Liquid Glass, Cyberpunk, Graphite, Verdant, or Blueprint. Style and light/dark are independent and saved in the current browser. You can also import custom themes: JSON files that start from a built-in style and override its color, corner and font tokens. Shared themes imported by an administrator are available to every user; personal themes are for yourself. See [Interface themes](docs/themes.md). Phone layouts include drawer navigation and a touch terminal shortcut bar, with scrolling and long-press paste.
+Choose light, dark, or system themes, and pick an interface style from the user menu: Amber (default), Liquid Glass, Cyberpunk, Graphite, Verdant, or Blueprint. Style and light/dark are independent and saved in the current browser. You can also make custom themes that start from a built-in style and override its color, corner and font tokens: edit them with a live preview, or copy instructions to an AI and paste its JSON back. Shared themes published by an administrator are available to every user; personal themes are for yourself. See [Interface themes](docs/themes.md). Phone layouts include drawer navigation and a touch terminal shortcut bar, with scrolling and long-press paste.
 
 [![Agentbox in the light theme](docs/images/chat-light.png)](docs/images/chat-light.png)
 

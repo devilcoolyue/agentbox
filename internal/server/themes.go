@@ -76,25 +76,41 @@ func (s *Server) handleUserThemeDelete(w http.ResponseWriter, r *http.Request) {
 	s.deleteTheme(w, r, reqUser(r).Name)
 }
 
+// readTheme 读请求体并按清单规则校验；失败时已写好响应。
+func readTheme(w http.ResponseWriter, r *http.Request) (theme.Manifest, bool) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, theme.MaxBytes+1))
+	if err != nil || len(raw) > theme.MaxBytes {
+		themeError(w, http.StatusRequestEntityTooLarge, theme.TooLarge())
+		return theme.Manifest{}, false
+	}
+	m, err := theme.Parse(raw)
+	var ve *theme.ValidationError
+	if errors.As(err, &ve) {
+		themeError(w, http.StatusBadRequest, ve)
+		return m, false
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "主题文件无效")
+		return m, false
+	}
+	return m, true
+}
+
+// handleThemeValidate 只校验、不保存：主题编辑器每次改动后用它拿到与保存时完全相同的判断。
+func (s *Server) handleThemeValidate(w http.ResponseWriter, r *http.Request) {
+	if m, ok := readTheme(w, r); ok {
+		writeJSON(w, http.StatusOK, map[string]any{"manifest": m})
+	}
+}
+
 func (s *Server) putTheme(w http.ResponseWriter, r *http.Request, scope, owner string) {
 	id := r.PathValue("id")
 	if !theme.ValidID(id) {
 		writeErr(w, http.StatusBadRequest, "主题 ID 无效")
 		return
 	}
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, theme.MaxBytes+1))
-	if err != nil || len(raw) > theme.MaxBytes {
-		themeError(w, http.StatusRequestEntityTooLarge, theme.TooLarge())
-		return
-	}
-	m, err := theme.Parse(raw)
-	var ve *theme.ValidationError
-	if errors.As(err, &ve) {
-		themeError(w, http.StatusBadRequest, ve)
-		return
-	}
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, "主题文件无效")
+	m, ok := readTheme(w, r)
+	if !ok {
 		return
 	}
 	if m.ID != id {
