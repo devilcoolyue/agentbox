@@ -1123,3 +1123,40 @@ export interface WorkspaceCreation {
  container_resources:CreationResources;
 }
 export interface WorkspaceCreationIndex {version:1;actor_key:string;creations:WorkspaceCreation[];}
+
+/* ---------------- 界面主题（server/themes.go、internal/theme） ---------------- */
+
+/** theme.Manifest：导入 / 导出文件的形状，也是服务端保存的清单。 */
+export interface ThemeManifest {
+  agentbox_theme: number;
+  id: string;
+  name: string;
+  /** 底子的内置风格（data-skin），提供形状与专属特效 */
+  base: string;
+  author?: string;
+  description?: string;
+  /** 两种明暗都生效的令牌；dark / light 里的同名令牌覆盖它 */
+  common?: Record<string, string>;
+  dark?: Record<string, string>;
+  light?: Record<string, string>;
+}
+/** server.themeView */
+export interface ThemeView {
+  scope: "site" | "user";
+  manifest: ThemeManifest;
+  updated_at: number;
+}
+/** theme.Token：可改写令牌的白名单 */
+export interface ThemeToken { name: string; kind: string; }
+/** GET /api/themes */
+export interface ThemesResponse {
+  format: number;
+  bases: string[];
+  tokens: ThemeToken[];
+  site: ThemeView[];
+  user: ThemeView[];
+  can_manage_site: boolean;
+  limits: { site: number; user: number; bytes: number };
+}
+/** 写接口失败时的 theme_error（theme.ValidationError） */
+export interface ThemeProblem { code: string; token?: string; section?: string; }

@@ -187,6 +187,20 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 
 `/api/updates/components` 使用 `Cache-Control: no-store`，返回 `version:1`、`observed_at`、`server`、`image`、`desktop`。`server.candidate_compatibility=preflight_required` 表示本接口不证明候选兼容；`image.state=labels_only/unavailable/changed`，版本是当前配置镜像的标签，不能冒充运行中容器或协议验收结果；`desktop.installed_version_state=browser_unknown` 表示网页无法读取本机安装版本。观察范围和更新生效方式见[三类更新](update-components.md)。
 
+## 界面主题
+
+清单格式、令牌白名单与取值规则见[界面主题](themes.md)。写接口的请求体就是主题文件本身（JSON，最大 64 KiB），路径里的 `{id}` 必须与文件里的 `id` 一致。
+
+| 方法与路径 | 权限 | 用途 |
+| --- | --- | --- |
+| `GET /api/themes` | 登录用户 | 返回 `site`（全站主题）、`user`（本人主题）、`tokens`（可改写令牌及种类）、`bases`、`limits` 与 `can_manage_site`；每条主题为 `{scope, manifest, updated_at}` |
+| `PUT /api/themes/user/{id}` | 登录用户 | 新增或整份替换本人的主题，最多 20 个 |
+| `DELETE /api/themes/user/{id}` | 登录用户 | 删除本人的主题 |
+| `PUT /api/themes/site/{id}` | 管理员 | 新增或整份替换全站主题，最多 50 个 |
+| `DELETE /api/themes/site/{id}` | 管理员 | 删除全站主题 |
+
+校验失败返回 400，`error` 是简体中文说明，`theme_error` 给出稳定的 `code`（`bad_json`、`bad_type`、`unknown_field`、`format`、`id`、`name`、`base`、`author`、`description`、`unknown_token`、`bad_value`），以及相关的 `token`、`section`（`common` / `dark` / `light`）。超过 64 KiB 返回 413（`too_large`），数量达到上限返回 409（`limit`）。
+
 ## 草稿能力
 
 v0.1.11 起 `/api/me` 增补 `draft_protocol:1` 与 `draft_scope`，仅用于未发送草稿隔离；它不声明 WS 接收确认能力。历史接口可显式携带 `?draft_context=1` 获取稳定的 `active_thread`（空对话会登记不含正文的元数据），附件校验接口为 `POST /api/sessions/{id}/attachments/validate`。权限、上限与恢复边界见[聊天草稿](chat-recovery.md)。

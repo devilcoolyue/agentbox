@@ -417,9 +417,9 @@ func TestBackupSnapshotDoesNotMigrateSource(t *testing.T) {
 	}
 }
 
-func TestMCPSystemBackupRestore(t *testing.T) {
+func TestMCPAndThemeSystemBackupRestore(t *testing.T) {
 	cfg, data := fixture(t)
-	paths := []string{"users/alice/mcp.json", "users/alice/sessions/s1/mcp.json"}
+	paths := []string{"users/alice/mcp.json", "users/alice/sessions/s1/mcp.json", "themes.json", "users/alice/themes.json"}
 	for _, rel := range paths {
 		if err := os.WriteFile(filepath.Join(data, rel), []byte(`{"version":1,"entries":{},"revision":4}`), 0600); err != nil {
 			t.Fatal(err)
@@ -436,7 +436,7 @@ func TestMCPSystemBackupRestore(t *testing.T) {
 	for _, rel := range paths {
 		raw, err := os.ReadFile(filepath.Join(target, "data", rel))
 		if err != nil || !strings.Contains(string(raw), `"revision":4`) {
-			t.Fatalf("MCP state missing: %s %v", rel, err)
+			t.Fatalf("MCP or theme state missing: %s %v", rel, err)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(target, "data/users/alice/sessions/s1/home/.claude/.credentials.json")); !os.IsNotExist(err) {

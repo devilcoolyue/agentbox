@@ -7,18 +7,37 @@
 <meta name="theme-color" content="#12151c">
 <!-- 主题：在样式表之前落 data-theme-mode（system|light|dark）、实际生效的
      data-theme（dark|light）与界面风格 data-skin，避免刷新时闪一帧错误配色。
+     选中自定义主题（agentbox_skin = site:<id> / user:<id>）时，按 agentbox_skin_custom
+     里缓存的那份把底子风格写进 data-skin、把令牌写成内联变量，取值规则与 js/theme.js 相同。
      默认跟随系统 + 琥珀风格；切换与持久化见 js/theme.js，地址栏颜色由它按 --bg 校正。 -->
 <script>
   try {
+    var root = document.documentElement;
     var mode = localStorage.getItem("agentbox_theme") || "system";
     if (mode !== "light" && mode !== "dark") mode = "system";
     var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
     var theme = mode === "system" ? (dark ? "dark" : "light") : mode;
-    var skin = localStorage.getItem("agentbox_skin");
-    if (["glass", "cyberpunk", "graphite", "verdant", "blueprint"].indexOf(skin) < 0) skin = "amber";
-    document.documentElement.dataset.themeMode = mode;
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.dataset.skin = skin;
+    var skins = ["amber", "glass", "cyberpunk", "graphite", "verdant", "blueprint"];
+    var skin = localStorage.getItem("agentbox_skin"), vars = null;
+    if (/^(site|user):[a-z0-9][a-z0-9-]{0,39}$/.test(skin)) {
+      var custom = JSON.parse(localStorage.getItem("agentbox_skin_custom") || "null");
+      skin = "amber";
+      if (custom && custom.key === localStorage.getItem("agentbox_skin") && skins.indexOf(custom.base) >= 0) {
+        vars = Object.create(null);
+        for (var part of [custom.common, custom[theme]]) for (var k in part || {}) vars[k] = part[k];
+        skin = custom.base;
+        root.dataset.skinCustom = custom.key;
+      }
+    }
+    if (skins.indexOf(skin) < 0) skin = "amber";
+    root.dataset.themeMode = mode;
+    root.dataset.theme = theme;
+    root.dataset.skin = skin;
+    for (var name in vars || {}) {
+      var value = vars[name];
+      if (/^--[a-z0-9-]+$/.test(name) && typeof value === "string" && value.length <= 1200 &&
+          !/[;{}<>\\@!*`]/.test(value) && !/(url|image|image-set|element|cross-fade|src)\s*\(/i.test(value)) root.style.setProperty(name, value);
+    }
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.content = theme === "light" ? "#f5f2ea" : "#12151c";
   } catch (e) {}
@@ -1707,6 +1726,44 @@
     <button type="button" id="file-name-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
     <button type="button" id="file-name-ok" class="btn btn-primary" data-icon="check" data-i18n-text="[&quot;确定&quot;]">确定</button>
   </div>
+</dialog>
+
+<!-- 界面主题（themes.ts）：内置风格做底子 + 改写白名单令牌；服务端校验后存为全站 / 个人主题 -->
+<dialog id="dlg-themes" class="dlg-themes" aria-labelledby="themes-title">
+  <div class="dlg-head">
+    <h2 id="themes-title" data-i18n-text="[&quot;界面主题&quot;]">界面主题</h2>
+    <button type="button" id="themes-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
+  </div>
+  <p class="field-hint" data-i18n-text="[&quot;主题文件是一份 JSON：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。它不能运行脚本，也不能加载外部图片或字体。&quot;]">主题文件是一份 JSON：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。它不能运行脚本，也不能加载外部图片或字体。</p>
+  <p id="themes-status" class="themes-status hidden" role="status" aria-live="polite"></p>
+  <div class="themes-body">
+    <section class="themes-section" aria-labelledby="themes-user-title">
+      <div class="themes-section-head">
+        <h3 id="themes-user-title" data-i18n-text="[&quot;我的主题&quot;]">我的主题</h3>
+        <span id="themes-user-count" class="themes-count mono"></span>
+        <button type="button" id="themes-import-user" class="btn btn-sm" data-icon="upload" data-i18n-text="[&quot;导入&quot;]">导入</button>
+      </div>
+      <p class="themes-section-hint" data-i18n-text="[&quot;只有你自己能看到和使用。&quot;]">只有你自己能看到和使用。</p>
+      <ul id="themes-user" class="themes-list"></ul>
+    </section>
+    <section class="themes-section" aria-labelledby="themes-site-title">
+      <div class="themes-section-head">
+        <h3 id="themes-site-title" data-i18n-text="[&quot;全站主题&quot;]">全站主题</h3>
+        <span id="themes-site-count" class="themes-count mono"></span>
+        <button type="button" id="themes-import-site" class="btn btn-sm hidden" data-icon="upload" data-i18n-text="[&quot;导入&quot;]">导入</button>
+      </div>
+      <p class="themes-section-hint" data-i18n-text="[&quot;由管理员导入，所有用户都能选用。&quot;]">由管理员导入，所有用户都能选用。</p>
+      <ul id="themes-site" class="themes-list"></ul>
+    </section>
+    <section class="themes-section" aria-labelledby="themes-builtin-title">
+      <div class="themes-section-head">
+        <h3 id="themes-builtin-title" data-i18n-text="[&quot;内置风格&quot;]">内置风格</h3>
+      </div>
+      <p class="themes-section-hint" data-i18n-text="[&quot;导出为模板，改好 id、name 和令牌取值后再导入。&quot;]">导出为模板，改好 id、name 和令牌取值后再导入。</p>
+      <ul id="themes-builtin" class="themes-list"></ul>
+    </section>
+  </div>
+  <input id="themes-file" type="file" accept=".json,application/json" hidden>
 </dialog>
 
 <!-- 通用确认框（替代原生 confirm） -->

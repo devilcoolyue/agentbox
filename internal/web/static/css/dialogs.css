@@ -532,3 +532,37 @@ dialog label.am-default { font-size: 12px; white-space: nowrap; }
 .diagnostic-reference, .diagnostics-dialog p { overflow-wrap: anywhere; }
 .diagnostics-dialog .dlg-actions { position: sticky; bottom: -26px; padding: 12px 0; background: var(--panel-solid); flex-wrap: wrap; }
 @media (max-width: 600px) { .diagnostics-dialog { padding: 18px; } .diagnostics-dialog .dlg-actions { bottom: -18px; } }
+
+/* 界面主题（themes.ts）：三组列表——我的主题、全站主题、内置风格。每行左边色卡，
+ * 中间名称与「基于哪个风格 · 作者 · 说明」，右边「使用」与导出/删除图标按钮。 */
+.dlg-themes { width: min(620px, 94vw); }
+.dlg-themes .dlg-head { margin-bottom: 8px; }
+.dlg-themes > .field-hint { margin: 0 0 12px; }
+.themes-status { margin: 0 0 12px; padding: 8px 10px; font-size: 12.5px; line-height: 1.6; border-radius: calc(6px * var(--radius-scale)); overflow-wrap: anywhere; }
+.themes-status.ok { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
+.themes-status.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.themes-status.error { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
+.themes-body { display: flex; flex-direction: column; gap: 18px; }
+.themes-section-head { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.themes-section-head h3 { margin: 0; font-size: 13.5px; }
+.themes-section-head .btn { margin-left: auto; }
+.themes-count { font-size: 11.5px; color: var(--muted); }
+.themes-section-hint { margin: 2px 0 8px; font-size: 12px; color: var(--muted); }
+/* 按圆角裁剪：选中行的底色是直角块，不裁剪就会在首尾两行的圆角处溢出边框 */
+.themes-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale)); overflow: hidden; }
+.themes-row { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 10px; }
+.themes-row + .themes-row { border-top: 1px solid var(--line-soft); }
+.themes-row.active { background: color-mix(in srgb, var(--amber) 8%, transparent); }
+.themes-swatch { width: 26px; height: 26px; border-radius: calc(6px * var(--radius-scale)); }
+.themes-row-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.themes-row-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.themes-row-meta { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.themes-row-actions { display: flex; flex: none; align-items: center; gap: 6px; }
+.themes-use:disabled { opacity: 1; color: var(--amber); }
+.themes-empty { padding: 14px 12px; font-size: 12.5px; color: var(--muted); }
+/* 窄屏仍是一行：名称与说明省略，按钮挨紧，不让每行因换行变成两倍高 */
+@media (max-width: 480px) {
+  .themes-row { gap: 10px; padding: 8px; }
+  .themes-row-actions { gap: 2px; }
+  .themes-swatch { width: 22px; height: 22px; }
+}

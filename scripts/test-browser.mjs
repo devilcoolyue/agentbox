@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import {loginProblemsSmoke, problemsSmoke} from './test-problems-browser.mjs';
 import { responsiveSmoke } from './test-responsive.mjs';
 import { skinsSmoke } from './test-skins.mjs';
+import { themesSmoke } from './test-themes.mjs';
 import { switchAccountSmoke } from './test-switch-account.mjs';
 import { accountModelsSmoke } from './test-account-models.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
@@ -725,6 +726,7 @@ export async function smoke(page) {
   await at('#/','#empty'); // Deleted or inaccessible workspace.
   await responsiveSmoke(page, base);
   await skinsSmoke(page, base);
+  await themesSmoke(page);
   await pricingSmoke(page);
   const checksBeforeUser=updateChecks, readsBeforeUser=updateReads, upgradesBeforeUser=upgradeReads;
   me.role = 'user';

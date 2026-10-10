@@ -199,7 +199,7 @@ Keep subscription, API key, and relay accounts in one pool with access scopes. P
 <details>
 <summary><strong>Themes, styles and mobile access</strong></summary>
 
-Choose light, dark, or system themes, and pick an interface style from the user menu: Amber (default), Liquid Glass, Cyberpunk, Graphite, Verdant, or Blueprint. Style and light/dark are independent and saved in the current browser. Phone layouts include drawer navigation and a touch terminal shortcut bar, with scrolling and long-press paste.
+Choose light, dark, or system themes, and pick an interface style from the user menu: Amber (default), Liquid Glass, Cyberpunk, Graphite, Verdant, or Blueprint. Style and light/dark are independent and saved in the current browser. You can also import custom themes: JSON files that start from a built-in style and override its color, corner and font tokens. Shared themes imported by an administrator are available to every user; personal themes are for yourself. See [Interface themes](docs/themes.md). Phone layouts include drawer navigation and a touch terminal shortcut bar, with scrolling and long-press paste.
 
 [![Agentbox in the light theme](docs/images/chat-light.png)](docs/images/chat-light.png)
 
@@ -245,6 +245,7 @@ English and Chinese READMEs cover the same overview and setup. Detailed guides a
 | Install, upgrade, back up, or recover | [Deployment](deploy/README.md) · [Releases](docs/releases.md) · [CLI compatibility](docs/compatibility.md) |
 | Configure or integrate the server | [Configuration](docs/configuration.md) · [API reference](docs/api.md) |
 | Choose an interface language | [Languages and preferences](docs/i18n.md) |
+| Import or create interface themes | [Interface themes](docs/themes.md) |
 | Resolve an error | [Troubleshooting](docs/troubleshooting.md) |
 | Contribute code | [Development guide](docs/development.md) · [Contributing](CONTRIBUTING.md) |
 

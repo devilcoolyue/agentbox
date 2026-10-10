@@ -555,6 +555,13 @@
   transition: opacity var(--dur-fast) var(--ease-out), translate var(--dur-fast) var(--ease-out), display var(--dur-fast) allow-discrete;
 }
 .pref-picker.below .pref-menu { top: calc(100% + 4px); bottom: auto; --pref-from: -4px; }
+/* 加上全站 / 个人主题后可能很长：限高滚动，菜单项不被压扁 */
+.pref-menu { max-height: min(60vh, 440px); overflow-y: auto; overscroll-behavior: contain; }
+.pref-menu > * { flex: none; }
+.pref-menu-group { padding: 8px 8px 2px; font-size: 11px; color: var(--muted); letter-spacing: .02em; }
+.pref-menu-sep { height: 1px; margin: 3px 4px; background: var(--line); }
+.pref-menu-action svg { flex: none; color: var(--muted); }
+.pref-menu-action:is(:hover, :focus-visible) svg { color: var(--text); }
 /* 收起时多留一个过渡时长再 display:none（普通元素的离散过渡各浏览器都有，不像顶层弹层要 overlay） */
 .pref-menu[hidden] { display: none; opacity: 0; translate: 0 var(--pref-from); pointer-events: none; transition-timing-function: var(--ease-in); }
 @starting-style { .pref-menu:not([hidden]) { opacity: 0; translate: 0 var(--pref-from); } }

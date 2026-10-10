@@ -33,6 +33,7 @@ import (
 	"agentbox/internal/mcpconfig"
 	"agentbox/internal/pricecatalog"
 	"agentbox/internal/store"
+	"agentbox/internal/theme"
 	"agentbox/internal/usage"
 	"agentbox/internal/web"
 	"agentbox/internal/workspace"
@@ -79,6 +80,8 @@ type Server struct {
 
 	mcpOnce       sync.Once
 	mcp           *mcpconfig.Service
+	themesOnce    sync.Once
+	themes        *theme.Service
 	mcpCheckMu    sync.Mutex
 	mcpChecks     map[string]bool
 	gitOperations gitOperationRegistry
@@ -386,6 +389,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/sessions/{id}/mcp/import", s.auth(s.withSession(s.handleMCPSessionImport)))
 	mux.Handle("POST /api/sessions/{id}/mcp/{name}/copy", s.auth(s.withSession(s.handleMCPCopy)))
 	mux.Handle("GET /api/mcp", s.auth(http.HandlerFunc(s.handleMCPUser)))
+	mux.Handle("GET /api/themes", s.auth(http.HandlerFunc(s.handleThemes)))
+	mux.Handle("PUT /api/themes/site/{id}", s.admin(http.HandlerFunc(s.handleSiteThemePut)))
+	mux.Handle("DELETE /api/themes/site/{id}", s.admin(http.HandlerFunc(s.handleSiteThemeDelete)))
+	mux.Handle("PUT /api/themes/user/{id}", s.auth(http.HandlerFunc(s.handleUserThemePut)))
+	mux.Handle("DELETE /api/themes/user/{id}", s.auth(http.HandlerFunc(s.handleUserThemeDelete)))
 	mux.Handle("PUT /api/mcp/{name}", s.auth(http.HandlerFunc(s.handleMCPUser)))
 	mux.Handle("DELETE /api/mcp/{name}", s.auth(http.HandlerFunc(s.handleMCPUser)))
 	mux.Handle("GET /api/sessions/{id}/mcp", s.auth(s.withSession(s.handleMCPSession)))

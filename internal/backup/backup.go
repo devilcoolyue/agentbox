@@ -184,7 +184,7 @@ func Create(ctx context.Context, opts Options) (_ *Manifest, err error) {
 	}
 	// client-instance-id is intentionally installation-local, not backed up.
 	// A restored service must require desktop clients to confirm a new baseline.
-	for _, name := range []string{"creds", "home-template", "git-secrets"} {
+	for _, name := range []string{"creds", "home-template", "git-secrets", "themes.json"} {
 		if err = add(data, name, "data/"+name, true); err != nil {
 			return nil, err
 		}
@@ -239,6 +239,10 @@ func Create(ctx context.Context, opts Options) (_ *Manifest, err error) {
 			// data, not workspace content; include them in system backups too.
 			base := path.Join("users", user.Name())
 			if err = add(data, path.Join(base, "mcp.json"), "data/"+path.Join(base, "mcp.json"), true); err != nil {
+				return nil, err
+			}
+			// Personal interface themes are small preference files outside the mounts.
+			if err = add(data, path.Join(base, "themes.json"), "data/"+path.Join(base, "themes.json"), true); err != nil {
 				return nil, err
 			}
 			root, e := safefs.Open(data)

@@ -735,5 +735,13 @@ export default {
   "批量设置强度": "Set effort for selected",
   "筛选模型": "Filter models",
   "全选": "Select all",
-  "手动添加模型 ID": "Add a model ID manually"
+  "手动添加模型 ID": "Add a model ID manually",
+  "界面主题": "Interface themes",
+  "主题文件是一份 JSON：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。它不能运行脚本，也不能加载外部图片或字体。": "A theme file is JSON: it starts from a built-in style and overrides its color, shadow, corner and font tokens. It cannot run scripts or load external images or fonts.",
+  "我的主题": "My themes",
+  "只有你自己能看到和使用。": "Only you can see and use these.",
+  "全站主题": "Shared themes",
+  "由管理员导入，所有用户都能选用。": "Imported by an administrator and available to every user.",
+  "内置风格": "Built-in styles",
+  "导出为模板，改好 id、name 和令牌取值后再导入。": "Export one as a template, edit its id, name and token values, then import it."
 } satisfies Record<string, string>;

@@ -7,7 +7,10 @@ import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
  * - 触屏没有悬停：点右侧开关，点选项或点别处收起。
  * - 键盘：Enter/Space/↑↓ 展开并聚焦，菜单内 ↑↓/Home/End 移动，Esc 只收起菜单
  *   （不连带关闭用户弹层），Tab 回到触发按钮继续。
- * 上方放不下（窗口很矮）时改从下方弹出。同一时刻只开一个菜单。 */
+ * 上方放不下（窗口很矮）时改从下方弹出。同一时刻只开一个菜单。
+ * 选项可以是函数（风格菜单里的自定义主题随登录用户变化），refresh() 重建菜单；
+ * 带 group 的选项在组变化处插一行组名；action 是菜单末尾的一条操作（「管理主题…」），
+ * 不是可选值，不参与选中态。 */
 "use strict";
 import { svgIcon } from "./icons.js";
 const hoverMQ = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -45,26 +48,58 @@ export function mountPrefPicker(root, cfg) {
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-labelledby", title.id);
     menu.hidden = true;
-    for (const option of cfg.options) {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.className = "pref-menu-item";
-        item.setAttribute("role", "menuitemradio");
-        item.tabIndex = -1;
-        item.dataset.value = option.value;
-        if (option.swatch)
-            item.append(swatchFor(option.swatch));
-        const label = document.createElement("span");
-        label.className = "pref-menu-label";
-        setTextRender(label, option.label);
-        const check = svgIcon("check", 14);
-        check.classList.add("pref-menu-check");
-        item.append(label, check);
-        menu.append(item);
+    const optionList = () => typeof cfg.options === "function" ? cfg.options() : cfg.options;
+    function renderMenu() {
+        const nodes = [];
+        let group;
+        for (const option of optionList()) {
+            const name = option.group?.();
+            if (name !== undefined && name !== group) {
+                const heading = document.createElement("div");
+                heading.className = "pref-menu-group";
+                heading.setAttribute("role", "presentation");
+                setTextRender(heading, option.group);
+                nodes.push(heading);
+            }
+            group = name;
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "pref-menu-item";
+            item.setAttribute("role", "menuitemradio");
+            item.tabIndex = -1;
+            item.dataset.value = option.value;
+            if (option.swatch)
+                item.append(swatchFor(option.swatch));
+            const label = document.createElement("span");
+            label.className = "pref-menu-label";
+            setTextRender(label, option.label);
+            const check = svgIcon("check", 14);
+            check.classList.add("pref-menu-check");
+            item.append(label, check);
+            nodes.push(item);
+        }
+        if (cfg.action) {
+            const separator = document.createElement("div");
+            separator.className = "pref-menu-sep";
+            separator.setAttribute("role", "separator");
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "pref-menu-item pref-menu-action";
+            item.setAttribute("role", "menuitem");
+            item.tabIndex = -1;
+            item.dataset.action = "true";
+            const label = document.createElement("span");
+            label.className = "pref-menu-label";
+            setTextRender(label, cfg.action.label);
+            item.append(svgIcon(cfg.action.icon, 14), label);
+            nodes.push(separator, item);
+        }
+        menu.replaceChildren(...nodes);
     }
+    renderMenu();
     root.replaceChildren(title, trigger, menu);
     const items = () => [...menu.querySelectorAll(".pref-menu-item")];
-    const chosen = () => cfg.options.find(o => o.value === cfg.value());
+    const chosen = () => optionList().find(o => o.value === cfg.value());
     let closeTimer;
     let pointer = "";
     /** 由悬停展开：紧接着的那次点击是「点开」而不是「关上」 */
@@ -105,7 +140,8 @@ export function mountPrefPicker(root, cfg) {
             root.classList.add("below");
     }
     const close = () => setOpen(false);
-    const picker = { sync, close, isOpen: () => !menu.hidden };
+    const refresh = () => { renderMenu(); sync(); };
+    const picker = { sync, close, isOpen: () => !menu.hidden, refresh };
     function focusItem(which) {
         const list = items();
         const target = which === "last" ? list.at(-1) : which === "first" ? list[0] : list.find(i => i.classList.contains("active")) || list[0];
@@ -117,6 +153,10 @@ export function mountPrefPicker(root, cfg) {
             return;
         const fromKeyboard = e.detail === 0;
         close();
+        if (item.dataset.action) {
+            cfg.action?.run();
+            return;
+        }
         cfg.select(item.dataset.value);
         sync();
         // 键盘选完回到触发按钮；鼠标点中的那项已随菜单隐藏，别让焦点停在看不见的按钮上

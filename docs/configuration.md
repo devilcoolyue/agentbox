@@ -139,11 +139,13 @@ data/                               实际根目录由 data_dir 决定
   state.db-wal / state.db-shm       SQLite 运行期间的辅助文件
   creds/<id>/                      网页创建账号的凭证
   home-template/                   全体用户的 home 模板
+  themes.json                      管理员导入的全站界面主题（见 themes.md）
   marketplace/repo/                官方插件缓存（设置 cache_dir 后移到该目录下）
   abox-link/                       网页提供下载的客户端二进制
   backups/                         内置脚本生成的备份包
   users/<user>/
     home-template/                 用户模板
+    themes.json                    该用户的个人界面主题
     shared/                        用户跨空间共享目录
     sessions/<id>/
       workspace/                   容器 /workspace

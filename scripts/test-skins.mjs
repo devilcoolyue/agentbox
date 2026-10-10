@@ -37,9 +37,13 @@ export async function skinsSmoke(page, base) {
   assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
   await trigger.click();
   assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
-  const options = menu.locator('.pref-menu-item');
+  const options = menu.locator('.pref-menu-item[role="menuitemradio"]');
   assert.deepEqual((await options.allInnerTexts()).map(t => t.trim()), LABELS);
   assert.deepEqual(await options.evaluateAll(rows => rows.map(row => row.dataset.value)), SKINS);
+  // The theme manager is the last entry, after a separator, and is not a selectable value.
+  assert.deepEqual(await menu.evaluate(el => [...el.children].slice(-2).map(c => c.className + '|' + (c.getAttribute('role') || ''))),
+    ['pref-menu-sep|separator', 'pref-menu-item pref-menu-action|menuitem']);
+  assert.equal((await menu.locator('.pref-menu-action').innerText()).trim(), '管理主题…');
   assert.equal(await menu.locator('.pref-menu-item.active').getAttribute('data-value'), 'amber');
   assert.ok(await page.evaluate(() => {
     const m = document.querySelector('#pref-skin .pref-menu').getBoundingClientRect(), r = document.querySelector('#pref-skin .pref-trigger').getBoundingClientRect();

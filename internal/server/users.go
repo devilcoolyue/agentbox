@@ -414,5 +414,9 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// 个人主题是偏好不是工作成果，随用户删除；同名重建的用户不继承。
+	if err := s.themeService().RemoveUser(name); err != nil {
+		log.Printf("delete user %s: remove personal themes: %v", name, err)
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }

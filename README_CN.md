@@ -199,7 +199,7 @@ sudo ./agentbox -config config.json
 <details>
 <summary><strong>主题风格与手机访问</strong></summary>
 
-支持浅色、深色和跟随系统，并可在用户菜单切换界面风格：琥珀（默认）、液态玻璃、赛博朋克、石墨极简、青野绿意、工程蓝图。风格与明暗互不影响，都保存在当前浏览器；手机布局提供抽屉导航、触屏终端快捷键栏、滚动与长按粘贴。
+支持浅色、深色和跟随系统，并可在用户菜单切换界面风格：琥珀（默认）、液态玻璃、赛博朋克、石墨极简、青野绿意、工程蓝图。风格与明暗互不影响，都保存在当前浏览器。也可以导入自定义主题：以内置风格为底子、改写颜色、圆角和字体令牌的 JSON 文件；管理员导入的全站主题所有用户可选，个人主题只给自己用，见[界面主题](docs/themes.md)。手机布局提供抽屉导航、触屏终端快捷键栏、滚动与长按粘贴。
 
 [![浅色主题下的 Agentbox](docs/images/chat-light.png)](docs/images/chat-light.png)
 
@@ -245,6 +245,7 @@ sudo ./agentbox -config config.json
 | 安装、升级、备份与恢复 | [部署手册](deploy/README.md) · [版本发布](docs/releases.md) · [CLI 兼容性](docs/compatibility.md) |
 | 配置服务端或接入脚本 | [配置参考](docs/configuration.md) · [API 文档](docs/api.md) |
 | 选择界面语言 | [语言与偏好](docs/i18n.md) |
+| 导入或制作界面主题 | [界面主题](docs/themes.md) |
 | 排查错误 | [常见问题](docs/troubleshooting.md) |
 | 参与开发 | [开发指南](docs/development.md) · [贡献说明](CONTRIBUTING.md) |
 

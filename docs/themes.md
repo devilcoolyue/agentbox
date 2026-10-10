@@ -1,0 +1,109 @@
+# 界面主题
+
+[返回文档目录](README.md)
+
+除了六种内置风格（琥珀、液态玻璃、赛博朋克、石墨极简、青野绿意、工程蓝图），网页控制台可以导入自定义主题。主题是一份 JSON 文件：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。底子风格的形状与专属效果（玻璃的高光、赛博朋克的错位描边等）保留，主题只换取值。
+
+主题文件**不能**运行脚本、写任意 CSS、加载外部图片或网络字体。服务端只接受白名单里的令牌，并按种类严格校验每个取值。
+
+## 在哪里管理
+
+侧栏头像菜单 →「风格」→ 列表底部的「管理主题…」。弹窗分三组：
+
+| 分组 | 谁能导入 / 删除 | 谁能使用 |
+| --- | --- | --- |
+| 我的主题 | 本人（每人最多 20 个） | 只有本人 |
+| 全站主题 | 管理员（最多 50 个） | 所有登录用户 |
+| 内置风格 | 不可修改，可「导出为模板」 | 所有人 |
+
+导入成功后会立即启用，新主题同时出现在「风格」菜单的「全站主题」或「我的主题」分组里。导入同一个 `id` 会先确认，然后整份替换。管理员更新全站主题后，其他用户下次读取主题列表时（刷新页面或打开管理弹窗）就会用上新内容。删除正在使用的主题后，相关用户会回到琥珀风格。
+
+选择哪个主题与明暗（跟随系统 / 浅色 / 深色）一样，只保存在当前浏览器。选中的主题会连同令牌缓存在 localStorage，页面刷新时首屏就能显示，不会先闪一下默认配色。删除用户时，该用户的个人主题一并删除，以后重建同名用户不会继承旧主题。
+
+导入后会检查正文、次要文字、按钮文字、强调色与背景之间的对比度（按 WCAG 计算），低于建议值时给出提醒。提醒不会阻止保存，可以继续修改后重新导入。
+
+## 从模板开始
+
+1. 打开「管理主题…」，在「内置风格」里找一个最接近的风格，点「导出为模板」。模板里写全了这个风格深色、浅色两套令牌的实际取值。
+2. 修改 `id`（小写字母、数字、短横线，最多 40 个字符）和 `name`（最多 40 个字符），再按需修改令牌取值。用不到的令牌可以删掉，删掉后沿用底子风格的值。
+3. 在「我的主题」或「全站主题」点「导入」，选择改好的文件。
+
+## 文件格式
+
+```json
+{
+  "agentbox_theme": 1,
+  "id": "harbor",
+  "name": "港湾",
+  "base": "blueprint",
+  "author": "运维组",
+  "description": "深海蓝底，适合长时间看终端",
+  "common": {
+    "--radius-scale": "0.6",
+    "--sans": "\"Inter\", \"PingFang SC\", sans-serif"
+  },
+  "dark": {
+    "--bg": "#0f1b2d",
+    "--panel": "#14243a",
+    "--accent": "#2f7dd1",
+    "--on-accent": "#ffffff",
+    "--amber": "#7cc0ff",
+    "--app-canvas": "linear-gradient(160deg, #0f1b2d 0%, #13263f 100%)"
+  },
+  "light": {
+    "--bg": "#f3f7fc",
+    "--accent": "#1f6fc4",
+    "--amber": "#1b5ea8"
+  }
+}
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `agentbox_theme` | 必填，当前只能是 `1`。遇到不认识的版本直接拒绝，不猜测新格式 |
+| `id` | 必填；同一分组内唯一，也是导出文件名 `<id>.agentbox-theme.json` 的来源 |
+| `name` | 必填；在菜单和弹窗中按纯文本显示 |
+| `base` | 必填；`amber`、`glass`、`cyberpunk`、`graphite`、`verdant`、`blueprint` 之一 |
+| `author`、`description` | 可选，分别最多 60 和 200 个字符 |
+| `common` | 两种明暗都生效的令牌 |
+| `dark`、`light` | 对应明暗下的令牌，同名时覆盖 `common` |
+
+生效顺序：底子风格 → `common` → 当前明暗对应的 `dark` 或 `light`。出现未知字段、未知令牌或无效取值时，整份文件拒绝导入，并提示是哪个分组的哪个令牌出了问题。单个文件最大 64 KiB。
+
+## 可改写的令牌
+
+| 种类 | 令牌 |
+| --- | --- |
+| 表面与文字 | `--bg` `--panel` `--panel-2` `--panel-solid` `--line` `--line-soft` `--text` `--text-hi` `--muted` `--field` `--page` |
+| 强调与语义色 | `--amber` `--amber-dim` `--accent` `--accent-hi` `--on-accent` `--green` `--green-line` `--red` `--red-hi` `--red-line` `--on-red` `--warn` `--warn-line` `--info` `--diff-add` |
+| 代码与终端 | `--code-bg` `--code-head` `--code-line` `--syntax-keyword` `--syntax-function` `--term-bg` `--term-fg` `--term-cursor` `--term-sel` |
+| 遮罩、投影与杂项 | `--scrim` `--backdrop` `--backdrop-strong` `--overlay-chip` `--busy-veil` `--checker-a` `--checker-b` `--scroll-thumb` `--scroll-thumb-hover` `--scroll-thumb-active` `--shadow-sm` `--shadow-md` `--shadow-lg` |
+| 风格效果 | `--app-canvas`（页面底层背景）、`--skin-detail`（赛博朋克 / 蓝图的点缀色）、`--glass-glint` `--glass-edge`（玻璃高光） |
+| 形状 | `--radius-scale`（0～3 的圆角倍数，0 为直角）、`--radius-pill`、`--radius-round` |
+| 字体 | `--sans`、`--mono` |
+
+各令牌的含义见 `internal/web/static/css/base.css` 开头的注释。动效时长（`--dur-*`）不开放，系统的「减少动态效果」设置需要能将其统一归零；Claude / OpenAI 品牌色和内置风格的色卡也不开放。
+
+`--panel-solid` 用于压在正文上方的弹窗、菜单和吸顶表头，必须保持不透明，否则底下的文字会透上来。只把 `--panel` 改成半透明时，记得同时设置不透明的 `--panel-solid`。
+
+## 取值规则
+
+| 种类 | 允许的写法 |
+| --- | --- |
+| 颜色 | `#rgb`、`#rgba`、`#rrggbb`、`#rrggbbaa`；`rgb()` `rgba()` `hsl()` `hsla()` `hwb()` `lab()` `lch()` `oklab()` `oklch()` `color()` `color-mix()`；关键字如 `transparent`；`var(--另一个可改写令牌)` |
+| 投影 `--shadow-*` | 与颜色相同的函数，加长度和 `inset`，多层用逗号分隔 |
+| 背景 `--app-canvas` | 颜色或 `none`，以及 `linear-gradient()` `radial-gradient()` `conic-gradient()` 和对应的 `repeating-*`，最多 1200 个字符 |
+| `--radius-scale` | 0 到 3 之间的数字 |
+| `--radius-pill`、`--radius-round` | `px` 或 `%` 长度，如 `999px`、`50%` |
+| 字体 | 逗号分隔的字体列表；含空格或中文的名称加双引号，如 `"PingFang SC", sans-serif`。只能使用访问者电脑上已安装的字体 |
+
+颜色、投影和背景只能使用字母、数字、空格和 `# % . , ( ) / + -`。因此引号、反斜杠转义、分号、花括号、注释和 `!important` 都无法写入。每个函数名都要在白名单内，`url()`、`image-set()`、`element()`、`expression()` 等一律拒绝；`var()` 只能引用上表中的令牌，且不能带回退值。
+
+## 存储与备份
+
+| 内容 | 位置 |
+| --- | --- |
+| 全站主题 | `<data_dir>/themes.json` |
+| 个人主题 | `<data_dir>/users/<用户>/themes.json` |
+
+两者都在容器挂载之外，工作空间里的 Agent 读不到。它们会进入系统备份和完整备份。服务端读取时会按导入规则重新校验每一条主题，手工改坏的条目会被跳过并写入日志，不会下发给浏览器。接口说明见 [API 文档](api.md#界面主题)。

@@ -10,7 +10,7 @@ import { hideTip, setTip } from "./tip.js";
 import { sessionState } from "./session-state.js";
 import { filterWorkspaces, workspaceFilterActive } from "./features/workspaces/filter.js";
 import { mountPrefPicker } from "./pref-picker.js";
-import { SKINS, SKIN_LABEL, currentSkin, setSkin } from "./theme.js";
+import { currentSkin, setSkin, skinChoices } from "./theme.js";
 import { ListMotion } from "./motion.js";
 /* ---- 侧栏：桌面收起偏好与移动抽屉各自独立 ---- */
 const narrowMQ = window.matchMedia("(max-width: 760px)");
@@ -51,11 +51,16 @@ const prefPickers = [
     }),
     mountPrefPicker($("pref-skin"), {
         title: () => i18nText("风格"),
-        options: SKINS.map(skin => ({ value: skin, label: SKIN_LABEL[skin], swatch: `var(--swatch-${skin})` })),
+        // 内置风格加上 themes.ts 读到的全站 / 个人主题
+        options: skinChoices,
         value: currentSkin,
         select: setSkin,
+        // 主题管理弹窗归 themes.ts（随登录挂载）；这里只广播，shell 不反向依赖功能模块
+        action: { label: () => i18nText("管理主题…"), icon: "sliders", run: () => { closeUserMenu(); emit("themes-open"); } },
     }),
 ];
+const skinPicker = prefPickers[1];
+window.addEventListener("agentbox-themes-change", () => skinPicker.refresh());
 // 其他标签页改了偏好、或系统语言变化时跟着换选中态
 for (const event of ["agentbox-language-change", "agentbox-theme-change"]) {
     window.addEventListener(event, () => { for (const picker of prefPickers)
