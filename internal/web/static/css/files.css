@@ -153,7 +153,7 @@
 /* 目录读取中：直接用 base.css 的 .loading-block */
 
 /* ---- 移动 / 删除文件 ---- */
-.dlg-file-move { width: min(560px, 94vw); padding-bottom: 22px; overflow: hidden; }
+.dlg-file-move { width: min(560px, 94vw); padding-bottom: 22px; }
 .file-op-source, .file-move-target {
   display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: baseline; gap: 10px;
   color: var(--muted); font-size: 12px;
@@ -360,7 +360,7 @@
   .file-row { padding-top: 10px; padding-bottom: 10px; } /* 触控行高 ≈40px */
   .file-row .factions { min-width: 0; gap: 2px; }
 
-  .dlg-file-move { width: 94vw; padding: 20px 18px; }
+  .dlg-file-move { --dlg-pad-x: 18px; width: 94vw; padding: 20px var(--dlg-pad-x); }
   .file-move-nav { align-items: stretch; flex-direction: column; gap: 10px; }
   .file-move-nav .scope-switch { align-self: flex-start; }
   .file-move-dirs { height: min(42dvh, 300px); }

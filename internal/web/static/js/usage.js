@@ -535,9 +535,9 @@ costDlg().addEventListener("close", () => { if (!costDlg().open)
 window.addEventListener("agentbox-language-change", () => {
     if (!activeCost || !costDlg().open)
         return;
-    const scrollTop = costDlg().scrollTop;
+    const body = $("cost-body"), scrollTop = body.scrollTop;
     renderCost(activeCost);
-    costDlg().scrollTop = scrollTop;
+    body.scrollTop = scrollTop;
 });
 function renderSummary(data) {
     const box = $("usage-summary");

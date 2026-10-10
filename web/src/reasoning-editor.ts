@@ -20,12 +20,12 @@ export function editReasoning(agent: string, title: string, current?: ReasoningC
   return new Promise(resolve => {
     const dlg = document.createElement("dialog");
     dlg.className = "reasoning-dialog";
-    dlg.innerHTML = `<form><h2></h2>
+    dlg.innerHTML = `<form><h2></h2><div class="dlg-body">
       <label><span data-i18n="支持范围">${trHTML("支持范围")}</span><select name="support"><option value="auto" data-i18n="自动识别 / 跟随上级配置">${trHTML("自动识别 / 跟随上级配置")}</option><option value="unknown" data-i18n="支持情况未知">${trHTML("支持情况未知")}</option><option value="supported" data-i18n="支持调整">${trHTML("支持调整")}</option><option value="unsupported" data-i18n="不支持调整">${trHTML("不支持调整")}</option></select></label>
       <label data-control><span data-i18n="调整方式">${trHTML("调整方式")}</span><select name="control"><option value="effort" data-i18n="推理强度（原生档位）">${trHTML("推理强度（原生档位）")}</option><option value="budget" data-i18n="思考预算（旧模式）">${trHTML("思考预算（旧模式）")}</option></select></label>
       <fieldset data-levels><legend><span data-i18n="允许的档位">${trHTML("允许的档位")}</span></legend><div></div></fieldset>
       <p class="field-hint"><span data-i18n="按当前接入服务的实际支持范围配置。跟随默认并不等于关闭推理；未知模型允许用户手动尝试。旧预算模式要求模型支持固定 thinking 预算。">${trHTML("按当前接入服务的实际支持范围配置。跟随默认并不等于关闭推理；未知模型允许用户手动尝试。旧预算模式要求模型支持固定 thinking 预算。")}</span></p>
-      <p role="alert"></p><div class="dlg-actions"><button type="button" class="btn" data-cancel data-icon="close"><span class="action-label" data-i18n="取消">${trHTML("取消")}</span></button><button type="submit" class="btn btn-primary" data-icon="save"><span class="action-label" data-i18n="保存">${trHTML("保存")}</span></button></div></form>`;
+      <p role="alert"></p></div><div class="dlg-actions"><button type="button" class="btn" data-cancel data-icon="close"><span class="action-label" data-i18n="取消">${trHTML("取消")}</span></button><button type="submit" class="btn btn-primary" data-icon="save"><span class="action-label" data-i18n="保存">${trHTML("保存")}</span></button></div></form>`;
     dlg.querySelector("h2")!.textContent = title;
     const form = dlg.querySelector("form")!;
     const support = form.elements.namedItem("support") as HTMLSelectElement;

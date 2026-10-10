@@ -112,7 +112,10 @@ export function openDiagnostics(sessionID, onComplete) {
     actionButton(close, () => t("关闭"), "close");
     download.disabled = true;
     actions.append(run, download, close);
-    dialog.append(title, note, status, list, error, reference, actions);
+    const body = document.createElement("div");
+    body.className = "dlg-body";
+    body.append(note, status, list, error, reference);
+    dialog.append(title, body, actions);
     let request;
     let report;
     let client;

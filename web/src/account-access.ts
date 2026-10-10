@@ -27,6 +27,7 @@ function openAccess(account: Account) {
   // Static markup only. Account labels and usernames are assigned as text/value.
   dialog.innerHTML = `<form>
     <h2></h2>
+    <div class="dlg-body">
     <label><span data-i18n="使用范围">${trHTML("使用范围")}</span><select name="mode">
       <option value="all" data-i18n="全体用户">${trHTML("全体用户")}</option>
       <option value="users" data-i18n="指定用户（管理员始终可用）">${trHTML("指定用户（管理员始终可用）")}</option>
@@ -35,6 +36,7 @@ function openAccess(account: Account) {
     <label data-users><span data-i18n="用户名">${trHTML("用户名")}</span><textarea name="users" rows="4" placeholder="${trHTML("每行一个用户名，也可用逗号分隔")}" data-i18n-attrs="{&quot;placeholder&quot;:&quot;每行一个用户名，也可用逗号分隔&quot;}"></textarea></label>
     <p class="muted"><span data-i18n="保存后阻止未授权用户发起新操作，并停止向其空间同步凭证。已发起的操作和容器进程可能继续运行，已交付的凭证无法收回；如需彻底撤销，请停止相关容器并在上游轮换凭证。">${trHTML("保存后阻止未授权用户发起新操作，并停止向其空间同步凭证。已发起的操作和容器进程可能继续运行，已交付的凭证无法收回；如需彻底撤销，请停止相关容器并在上游轮换凭证。")}</span></p>
     <p role="alert"></p>
+    </div>
     <div class="dlg-actions"><button type="button" class="btn" data-cancel data-icon="close"><span class="action-label" data-i18n="取消">${trHTML("取消")}</span></button><button type="submit" class="btn btn-primary" data-icon="save"><span class="action-label" data-i18n="保存">${trHTML("保存")}</span></button></div>
   </form>`;
   setTextRender(dialog.querySelector("h2")!, () => account.label + i18nText(" · 使用范围"));

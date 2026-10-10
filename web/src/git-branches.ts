@@ -10,11 +10,11 @@ let active:HTMLDialogElement|null=null;
 export function openGitBranches(repo:string,refreshed:()=>Promise<void>){
  if(active||!S.current)return;const session=S.current.id,token=S.token,d=document.createElement("dialog");active=d;
  d.id="dlg-git-branches";d.className="dlg-git-connections";
- d.innerHTML=`<div class="dlg-head"><h2><span data-i18n="分支管理">${trHTML("分支管理")}</span></h2><button class="dlg-x" data-close aria-label="${trHTML("关闭")}" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button></div>
+ d.innerHTML=`<div class="dlg-head"><h2><span data-i18n="分支管理">${trHTML("分支管理")}</span></h2><button class="dlg-x" data-close aria-label="${trHTML("关闭")}" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button></div><div class="dlg-body">
  <p data-current class="field-hint"></p><p data-error role="alert" class="login-error"></p>
  <form><div class="dlg-row"><label><span data-i18n="新分支名称">${trHTML("新分支名称")}</span><input name="name" type="text" required maxlength="240" placeholder="feature/my-task"></label><label><span data-i18n="创建起点">${trHTML("创建起点")}</span><select name="start"></select></label></div>
  <div class="dlg-actions"><button type="submit" class="btn btn-primary btn-sm" disabled data-icon="plus" data-tip="${trHTML("创建新分支并切换到该分支")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;创建新分支并切换到该分支&quot;}"><span class="action-label" data-i18n="创建">${trHTML("创建")}</span></button></div></form>
- <div data-list></div><div class="dlg-actions"><button class="btn btn-sm" data-refresh data-icon="refresh"><span class="action-label" data-i18n="刷新">${trHTML("刷新")}</span></button></div>`;
+ <div data-list></div></div><div class="dlg-actions"><button class="btn btn-sm" data-refresh data-icon="refresh"><span class="action-label" data-i18n="刷新">${trHTML("刷新")}</span></button></div>`;
  const form=d.querySelector("form")!,start=form.elements.namedItem("start") as HTMLSelectElement,error=d.querySelector<HTMLElement>("[data-error]")!,list=d.querySelector<HTMLElement>("[data-list]")!;
  let data:GitBranches|null=null,busy=false;
  const prefix=`/sessions/${session}/git`;

@@ -10,7 +10,7 @@ let active:HTMLDialogElement|null=null;
 export function openGitReviews(repo:string,remote:string,connection:GitConnection,connections:GitConnection[]){
  if(active||!S.current)return;const session=S.current.id,token=S.token,d=document.createElement("dialog");active=d;
  d.id="dlg-git-reviews";d.className="dlg-git-connections";
- d.innerHTML=`<div class="dlg-head"><h2>Pull Request / Merge Request</h2><button class="dlg-x" data-close aria-label="${trHTML("关闭")}" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button></div>
+ d.innerHTML=`<div class="dlg-head"><h2>Pull Request / Merge Request</h2><button class="dlg-x" data-close aria-label="${trHTML("关闭")}" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button></div><div class="dlg-body">
  <p data-project class="field-hint"></p><label data-api-label><span data-i18n="平台 API 连接">${trHTML("平台 API 连接")}</span><select data-api></select></label>
  <p class="field-hint"><span data-i18n="先推送当前分支。此处创建同一仓库内的 PR/MR，不自动推送、合并或删除分支。GitLab Token/OAuth 需要 api 权限；GitHub 需要仓库 Pull requests 写权限。">${trHTML("先推送当前分支。此处创建同一仓库内的 PR/MR，不自动推送、合并或删除分支。GitLab Token/OAuth 需要 api 权限；GitHub 需要仓库 Pull requests 写权限。")}</span></p>
  <div class="git-connection-tools"><button class="btn btn-sm" data-refresh data-icon="refresh"><span class="action-label" data-i18n="刷新">${trHTML("刷新")}</span></button><button class="btn btn-sm" data-next disabled data-icon="arrow-right"><span class="action-label" data-i18n="下一页">${trHTML("下一页")}</span></button></div>
@@ -19,7 +19,7 @@ export function openGitReviews(repo:string,remote:string,connection:GitConnectio
  <label><span data-i18n="标题">${trHTML("标题")}</span><input name="title" type="text" required maxlength="240"></label><label><span data-i18n="描述">${trHTML("描述")}</span><textarea name="body" rows="4" maxlength="32000"></textarea></label>
  <label class="check"><input name="draft" type="checkbox" checked><span data-i18n="创建为草稿">${trHTML("创建为草稿")}</span></label>
  <div class="dlg-actions"><button class="btn btn-primary" type="submit" disabled data-icon="eye" data-tip="${trHTML("预览将创建的 PR/MR，确认后才提交")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;预览将创建的 PR/MR，确认后才提交&quot;}"><span class="action-label" data-i18n="预览">${trHTML("预览")}</span></button></div></form>
- <div data-preview class="hidden"><p data-summary class="field-hint"></p><pre data-body></pre><div data-existing></div><button class="btn btn-primary" data-create data-icon="plus" data-tip="${trHTML("确认创建已预览的 PR/MR")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;确认创建已预览的 PR/MR&quot;}"><span class="action-label" data-i18n="创建">${trHTML("创建")}</span></button></div>`;
+ <div data-preview class="hidden"><p data-summary class="field-hint"></p><pre data-body></pre><div data-existing></div><button class="btn btn-primary" data-create data-icon="plus" data-tip="${trHTML("确认创建已预览的 PR/MR")}" data-i18n-attrs="{&quot;data-tip&quot;:&quot;确认创建已预览的 PR/MR&quot;}"><span class="action-label" data-i18n="创建">${trHTML("创建")}</span></button></div></div>`;
  const form=d.querySelector("form")!,field=(name:string)=>form.elements.namedItem(name) as HTMLInputElement;
  const apiSelect=d.querySelector<HTMLSelectElement>("[data-api]")!,error=d.querySelector<HTMLElement>("[data-error]")!,list=d.querySelector<HTMLElement>("[data-list]")!,previewBox=d.querySelector<HTMLElement>("[data-preview]")!;
  const button=(name:string)=>d.querySelector<HTMLButtonElement>(`[data-${name}]`)!;

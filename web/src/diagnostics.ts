@@ -85,7 +85,9 @@ export function openDiagnostics(sessionID?:string, onComplete?:(report:Diagnosti
   actionButton(download,()=>t("导出诊断"),"download");
   actionButton(close,()=>t("关闭"),"close");
   download.disabled=true;
-  actions.append(run,download,close);dialog.append(title,note,status,list,error,reference,actions);
+  actions.append(run,download,close);
+  const body=document.createElement("div");body.className="dlg-body";body.append(note,status,list,error,reference);
+  dialog.append(title,body,actions);
   let request:AbortController|undefined;
   let report:DiagnosticReport|undefined;
   let client:BrowserDiagnosticCheck|undefined;

@@ -1477,6 +1477,7 @@
       <button type="button" id="new-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
     <p id="new-desc" class="field-hint" data-i18n-text="[&quot;独立运行 Agent，拥有自己的文件、终端和对话。&quot;]">独立运行 Agent，拥有自己的文件、终端和对话。</p>
+    <div class="dlg-body">
     <div id="new-setup" class="new-setup" role="status">
       <p id="new-setup-message"></p>
       <div class="new-setup-actions">
@@ -1532,6 +1533,7 @@
     </fieldset>
     <section id="new-config-summary" class="creation-config hidden" aria-live="polite"></section>
     <p id="new-error" class="login-error hidden" role="alert"></p>
+    </div>
     <div class="dlg-actions">
       <button type="submit" id="new-ok" class="btn btn-primary" data-icon="plus" data-tip="创建独立的 Agent 工作空间" data-i18n-text="[&quot;创建&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;创建独立的 Agent 工作空间&quot;}">创建</button>
     </div>
@@ -1601,6 +1603,7 @@
     <h2 id="file-move-title" data-i18n-text="[&quot;移动文件&quot;]">移动文件</h2>
     <button type="button" id="file-move-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
+  <div class="dlg-body">
   <div class="file-op-source">
     <span data-i18n-text="[&quot;正在移动&quot;]">正在移动</span>
     <code id="file-move-source" class="mono"></code>
@@ -1618,6 +1621,7 @@
     <code id="file-move-target" class="mono"></code>
   </div>
   <p id="file-move-error" class="login-error hidden"></p>
+  </div>
   <div class="dlg-actions">
     <button type="button" id="file-move-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
     <button type="button" id="file-move-ok" class="btn btn-primary" data-icon="move" data-tip="移动到当前选中的目标目录" data-i18n-text="[&quot;移动&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;移动到当前选中的目标目录&quot;}">移动</button>
@@ -1630,9 +1634,11 @@
     <h2 id="file-delete-title" data-i18n-text="[&quot;删除文件&quot;]">删除文件</h2>
     <button type="button" id="file-delete-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
+  <div class="dlg-body">
   <p id="file-delete-text"></p>
   <p id="file-delete-warning" class="field-hint"></p>
   <p id="file-delete-error" class="login-error hidden"></p>
+  </div>
   <div class="dlg-actions">
     <button type="button" id="file-delete-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
     <button type="button" id="file-delete-ok" class="btn btn-danger" data-icon="trash" data-i18n-text="[&quot;删除&quot;]">删除</button>
@@ -1645,6 +1651,7 @@
     <h2 data-i18n-text="[&quot;提交到本地&quot;]">提交到本地</h2>
     <button type="button" id="git-commit-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
+  <div class="dlg-body">
   <p id="git-commit-target" class="field-hint"></p>
   <p id="git-commit-identity" class="field-hint"></p>
   <p class="field-hint" data-i18n-text="[&quot;提交当前仓库的全部未忽略改动，包含已暂存和未暂存文件。此操作不会推送到远程。&quot;]">提交当前仓库的全部未忽略改动，包含已暂存和未暂存文件。此操作不会推送到远程。</p>
@@ -1653,6 +1660,7 @@
     <textarea id="git-commit-msg" rows="3" placeholder="描述这次改动…" data-i18n-attrs="{&quot;placeholder&quot;:&quot;描述这次改动…&quot;}"></textarea>
   </div>
   <p id="git-commit-error" class="login-error hidden"></p>
+  </div>
   <div class="dlg-actions">
     <button type="button" id="git-commit-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
     <button type="button" id="git-commit-ok" class="btn btn-primary" data-icon="commit" data-tip="提交到本地仓库，不推送到远程" data-i18n-text="[&quot;提交&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;提交到本地仓库，不推送到远程&quot;}">提交</button>
@@ -1666,6 +1674,7 @@
     <button type="button" id="skill-install-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
 
+  <div class="dlg-body">
   <div class="skill-src-bar">
     <div class="scope-switch" role="tablist">
       <button type="button" id="skill-src-local" class="scope-btn active" data-icon="upload" data-i18n-text="[&quot;本地上传&quot;]">本地上传</button>
@@ -1695,6 +1704,7 @@
       <code>claude plugin install</code>。
     </p>
   </div>
+  </div>
 </dialog>
 
 <!-- Git 丢弃改动确认 -->
@@ -1703,8 +1713,10 @@
     <h2 id="git-discard-title" data-i18n-text="[&quot;丢弃改动&quot;]">丢弃改动</h2>
     <button type="button" id="git-discard-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
+  <div class="dlg-body">
   <p id="git-discard-text"></p>
   <p class="field-hint" data-i18n-text="[&quot;会把文件恢复到最近一次提交的状态，未提交的改动无法恢复。&quot;]">会把文件恢复到最近一次提交的状态，未提交的改动无法恢复。</p>
+  </div>
   <div class="dlg-actions">
     <button type="button" id="git-discard-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
     <button type="button" id="git-discard-ok" class="btn btn-danger" data-icon="undo" data-i18n-text="[&quot;丢弃&quot;]">丢弃</button>
@@ -1717,11 +1729,13 @@
     <h2 id="file-name-title" data-i18n-text="[&quot;新建文件夹&quot;]">新建文件夹</h2>
     <button type="button" id="file-name-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
+  <div class="dlg-body">
   <div class="file-name-field">
     <label id="file-name-label" for="file-name-input" data-i18n-text="[&quot;文件夹名称&quot;]">文件夹名称</label>
     <input id="file-name-input" type="text" class="mono" autocomplete="off" spellcheck="false">
   </div>
   <p id="file-name-error" class="login-error hidden"></p>
+  </div>
   <div class="dlg-actions">
     <button type="button" id="file-name-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
     <button type="button" id="file-name-ok" class="btn btn-primary" data-icon="check" data-i18n-text="[&quot;确定&quot;]">确定</button>
@@ -1736,7 +1750,7 @@
   </div>
   <p class="field-hint" data-i18n-text="[&quot;主题文件是一份 JSON：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。它不能运行脚本，也不能加载外部图片或字体。&quot;]">主题文件是一份 JSON：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。它不能运行脚本，也不能加载外部图片或字体。</p>
   <p id="themes-status" class="themes-status hidden" role="status" aria-live="polite"></p>
-  <div class="themes-body">
+  <div class="themes-body dlg-body">
     <section class="themes-section" aria-labelledby="themes-user-title">
       <div class="themes-section-head">
         <h3 id="themes-user-title" data-i18n-text="[&quot;我的主题&quot;]">我的主题</h3>
@@ -1844,8 +1858,10 @@
     <h2 id="ask-title" data-i18n-text="[&quot;确认&quot;]">确认</h2>
     <button type="button" id="ask-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
+  <div class="dlg-body">
   <p id="ask-text"></p>
   <p id="ask-hint" class="field-hint hidden"></p>
+  </div>
   <div class="dlg-actions">
     <button type="button" id="ask-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
     <button type="button" id="ask-ok" class="btn btn-primary" data-icon="check" data-i18n-text="[&quot;确定&quot;]">确定</button>
@@ -1858,12 +1874,14 @@
     <h2 id="ask-input-title" data-i18n-text="[&quot;输入&quot;]">输入</h2>
     <button type="button" id="ask-input-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
+  <div class="dlg-body">
   <div class="file-name-field">
     <label id="ask-input-label" for="ask-input-field"></label>
     <input id="ask-input-field" type="text" autocomplete="off" spellcheck="false">
   </div>
   <p id="ask-input-hint" class="field-hint hidden"></p>
   <p id="ask-input-error" class="login-error hidden"></p>
+  </div>
   <div class="dlg-actions">
     <button type="button" id="ask-input-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
     <button type="button" id="ask-input-ok" class="btn btn-primary" data-icon="check" data-i18n-text="[&quot;确定&quot;]">确定</button>
@@ -1877,7 +1895,7 @@
     <button type="button" id="q-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
 
-  <div id="q-body" class="q-body">
+  <div id="q-body" class="q-body dlg-body">
     <div class="q-balance">
       <div class="q-bal-main">
         <span class="q-bal-label" data-i18n-text="[&quot;余额&quot;]">余额</span>
@@ -1930,7 +1948,7 @@
     <span id="au-plan" class="au-plan mono hidden"></span>
   </div>
 
-  <div id="au-body" class="au-body"></div>
+  <div id="au-body" class="au-body dlg-body"></div>
 
   <div class="au-foot">
     <span id="au-fetched" class="au-fetched"></span>
@@ -1944,6 +1962,7 @@
     <h2 data-i18n-text="[&quot;费用明细&quot;]">费用明细</h2>
     <button type="button" id="cost-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
+  <div id="cost-body" class="dlg-body">
 
   <div id="cost-head" class="cost-head"></div>
 
@@ -1962,6 +1981,7 @@
   </div>
 
   <div id="cost-note" class="cost-note"></div>
+  </div>
 </dialog>
 
 <!-- 图片灯箱 -->
@@ -1979,6 +1999,7 @@
     <h2 id="auth-title" data-i18n-text="[&quot;账号登录&quot;]">账号登录</h2>
     <button type="button" id="auth-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
+  <div class="dlg-body">
   <form id="acct-form" class="hidden" novalidate>
     <fieldset id="acct-fields" class="acct-fields">
       <div class="acct-field-label" data-i18n-text="[&quot;账号类型&quot;]">账号类型</div>
@@ -2031,6 +2052,7 @@
     <div id="auth-models" class="auth-models hidden"></div>
     <button id="auth-clearkey" class="btn btn-ghost btn-sm hidden" data-icon="undo" data-tip="清除中转站配置并切回订阅凭证" data-i18n-text="[&quot;切回订阅&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;清除中转站配置并切回订阅凭证&quot;}">切回订阅</button>
   </div>
+  </div>
   <p id="auth-msg" class="auth-msg hidden" role="status" aria-live="polite"></p>
 </dialog>
 
@@ -2041,6 +2063,7 @@
       <h2 id="mp-title" data-i18n-text="[&quot;模型价格&quot;]">模型价格</h2>
       <button type="button" id="mp-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
+    <div class="dlg-body">
     <p id="mp-desc" class="field-hint"></p>
     <div class="mp-grid">
       <label class="field"><span data-i18n-text="[&quot;输入&quot;]">输入</span><input id="mp-input" type="text" inputmode="decimal" class="mono" placeholder="0" autocomplete="off"></label>
@@ -2054,6 +2077,7 @@
       <button type="button" id="mp-follow" class="btn btn-sm" data-icon="link" data-i18n-text="[&quot;跟随目录价格&quot;]">跟随目录价格</button>
     </div>
     <p id="mp-error" class="login-error hidden"></p>
+    </div>
     <div class="dlg-actions">
       <button type="button" id="mp-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
       <button type="submit" id="mp-ok" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
@@ -2069,6 +2093,7 @@
       </div>
       <button type="button" id="acct-models-close" class="dlg-x" autofocus aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
+    <div class="dlg-body">
     <div class="am-bar">
       <button type="button" id="acct-models-fetch" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;从上游读取&quot;]">从上游读取</button>
       <button type="button" id="acct-models-official" class="btn btn-sm btn-ghost" data-icon="list" data-i18n-text="[&quot;官方目录&quot;]">官方目录</button>
@@ -2083,6 +2108,7 @@
       <button type="button" id="acct-models-add" class="btn btn-sm" data-icon="plus" data-i18n-text="[&quot;添加&quot;]">添加</button>
     </div>
     <p id="acct-models-error" class="login-error hidden"></p>
+    </div>
     <div class="dlg-actions">
       <button type="button" id="acct-models-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
       <button type="submit" id="acct-models-ok" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
@@ -2098,8 +2124,10 @@
       <h2 data-i18n-text="[&quot;删除工作空间&quot;]">删除工作空间</h2>
       <button type="button" id="del-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
+    <div class="dlg-body">
     <p id="del-text"></p>
     <label class="check" data-i18n-text="[&quot; 同时清除文件、配置和对话记录（不可恢复）&quot;]"><input type="checkbox" id="del-purge"> 同时清除文件、配置和对话记录（不可恢复）</label>
+    </div>
     <div class="dlg-actions">
       <button type="button" id="del-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
       <button type="submit" id="del-ok" class="btn btn-danger" data-icon="trash" data-i18n-text="[&quot;删除&quot;]">删除</button>
@@ -2114,6 +2142,7 @@
       <h2 data-i18n-text="[&quot;切换账号&quot;]">切换账号</h2>
       <button type="button" id="switch-acct-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
+    <div class="dlg-body">
     <p id="switch-acct-current"></p>
     <label id="switch-acct-field" data-i18n-text="[&quot;切换到账号\n      &quot;]">切换到账号
       <select id="switch-acct-select"></select>
@@ -2121,6 +2150,7 @@
     <p id="switch-acct-empty" class="field-hint hidden"></p>
     <p class="field-hint" data-i18n-text="[&quot;切换前会先停止工作空间，终端、远程浏览器和正在运行的命令都会中断。文件、对话记录和续聊上下文都会保留，之后的对话和终端改用新账号。&quot;]">切换前会先停止工作空间，终端、远程浏览器和正在运行的命令都会中断。文件、对话记录和续聊上下文都会保留，之后的对话和终端改用新账号。</p>
     <p id="switch-acct-error" class="login-error hidden"></p>
+    </div>
     <div class="dlg-actions">
       <button type="button" id="switch-acct-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
       <button type="submit" id="switch-acct-ok" class="btn btn-primary" data-icon="switch" data-i18n-text="[&quot;切换账号&quot;]">切换账号</button>
@@ -2135,6 +2165,7 @@
       <h2 id="acct-edit-title" data-i18n-text="[&quot;编辑账号&quot;]">编辑账号</h2>
       <button type="button" id="acct-edit-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
+    <div class="dlg-body">
     <label data-i18n-text="[&quot;显示名称\n      &quot;]">显示名称
       <input id="acct-edit-label" type="text" maxlength="32">
     </label>
@@ -2146,6 +2177,7 @@
       <span class="field-hint" data-i18n-text="[&quot;该账号的全部官方请求都会经此代理出网，对新对话和新开终端立即生效。代理在「系统设置 → IP 代理」里维护。&quot;]">该账号的全部官方请求都会经此代理出网，对新对话和新开终端立即生效。代理在「系统设置 → IP 代理」里维护。</span>
     </label>
     <p id="acct-edit-error" class="login-error hidden"></p>
+    </div>
     <div class="dlg-actions">
       <button type="submit" id="acct-edit-ok" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
     </div>
@@ -2159,8 +2191,10 @@
       <h2 data-i18n-text="[&quot;删除账号&quot;]">删除账号</h2>
       <button type="button" id="acct-del-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
+    <div class="dlg-body">
     <p id="acct-del-text"></p>
     <p class="field-hint" data-i18n-text="[&quot;凭证目录会保留在服务器磁盘上，不会随配置一起删除。&quot;]">凭证目录会保留在服务器磁盘上，不会随配置一起删除。</p>
+    </div>
     <div class="dlg-actions">
       <button type="submit" id="acct-del-ok" class="btn btn-danger" data-icon="trash" data-i18n-text="[&quot;删除&quot;]">删除</button>
     </div>
@@ -2174,6 +2208,7 @@
       <h2 id="proxy-dlg-title" data-i18n-text="[&quot;添加代理&quot;]">添加代理</h2>
       <button type="button" id="proxy-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
+    <div class="dlg-body">
     <label data-i18n-text="[&quot;名称\n      &quot;]">名称
       <input id="proxy-name" type="text" maxlength="64" placeholder="留空则用主机名" data-i18n-attrs="{&quot;placeholder&quot;:&quot;留空则用主机名&quot;}">
     </label>
@@ -2207,6 +2242,7 @@
       </select>
     </label>
     <p id="proxy-msg" class="auth-msg hidden"></p>
+    </div>
     <div class="dlg-actions">
       <button type="button" id="proxy-test" class="btn btn-ghost" data-icon="activity" data-i18n-text="[&quot;测试连接&quot;]">测试连接</button>
       <button type="submit" id="proxy-ok" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
@@ -2221,12 +2257,14 @@
       <h2 data-i18n-text="[&quot;批量导入代理&quot;]">批量导入代理</h2>
       <button type="button" id="proxy-import-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
+    <div class="dlg-body">
     <label data-i18n-text="[&quot;每行一条，支持三种写法\n      &quot;]">每行一条，支持三种写法
       <textarea id="proxy-import-text" rows="8" class="mono" spellcheck="false"
         placeholder="socks5://user:pass@1.2.3.4:1080#香港节点&#10;1.2.3.4:1080:user:pass&#10;1.2.3.4:1080" data-i18n-attrs="{&quot;placeholder&quot;:&quot;socks5://user:pass@1.2.3.4:1080#香港节点\n1.2.3.4:1080:user:pass\n1.2.3.4:1080&quot;}"></textarea>
       <span class="field-hint" data-i18n-text="[&quot;不写协议默认按 SOCKS5 处理；`#` 后面是名称。与已有条目主机端口重复的行会被跳过。&quot;]">不写协议默认按 SOCKS5 处理；`#` 后面是名称。与已有条目主机端口重复的行会被跳过。</span>
     </label>
     <p id="proxy-import-msg" class="login-error hidden"></p>
+    </div>
     <div class="dlg-actions">
       <button type="submit" id="proxy-import-ok" class="btn btn-primary" data-icon="upload" data-i18n-text="[&quot;导入&quot;]">导入</button>
     </div>

@@ -19,7 +19,7 @@ const dialogs = new Set<HTMLDialogElement>();
 function dialog(title: string | (() => string), markup: string) {
   const d = document.createElement("dialog");
   d.className = "dlg-git-connections";
-  d.innerHTML = `<div class="dlg-head"><h2></h2><button type="button" class="dlg-x" aria-label="${trHTML("关闭")}" data-close data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button></div>` + markup;
+  d.innerHTML = `<div class="dlg-head"><h2></h2><button type="button" class="dlg-x" aria-label="${trHTML("关闭")}" data-close data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button></div><div class="dlg-body">${markup}</div>`;
   if (typeof title === "function") setTextRender(d.querySelector("h2")!, title);
   else d.querySelector("h2")!.textContent = title;
   d.querySelector("[data-close]")!.addEventListener("click", () => d.close());

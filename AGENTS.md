@@ -693,6 +693,9 @@ data/
 - SQLite 变更走 `internal/store/migrations.go` 的连续版本迁移与 migrations/*.sql，事务内更新 user_version；先拒绝高版本，再迁移，不能再靠忽略 duplicate column 错误补列。旧未版本化库由基线迁移检查列后补齐。
 - 前端不要用原生 `alert/confirm/prompt`：用 `util.js` 的 `askConfirm`/`askPrompt`
   （Promise 化的自定义对话框）或 `toast`。
+- 弹窗按 `.dlg-head` / `.dlg-body` / `.dlg-actions` 分段（可包在 `<form>` 里）：`dialogs.css` 据此把弹窗排成纵向 flex，
+  只有 `.dlg-body` 出滚动条，其余兄弟节点（标题、说明、底部按钮、状态行）固定。新弹窗——包括 TS 里拼出来的——照此分段；
+  缺 `.dlg-body` 的弹窗会退回整体滚动，标题随内容滚走。改左右内边距要设 `--dlg-pad-x`，正文靠它把滚动条拉到弹窗边缘。
 - 令牌只在 GET 请求接受 `?token=`（WS 升级与下载直链需要）；写操作一律走
   `Authorization` 头，别在新接口上放宽这一点。
 - API 增加路由时明确鉴权层级：公开、`s.auth`、`s.admin`、会话资源还必须套 `s.withSession` 做属主校验。

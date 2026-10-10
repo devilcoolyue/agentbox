@@ -21,7 +21,7 @@ export function createGitSurface(title: string | (() => string), markup: string)
   const scroll = host.scrollTop;
   const d = document.createElement(inline ? "section" : "dialog") as GitSurface;
   d.className = inline ? "git-surface" : "dlg-git-connections";
-  d.innerHTML = `<div class="dlg-head"><h2></h2><button type="button" class="btn btn-sm btn-ghost" data-close data-icon="${inline ? "arrow-left" : "close"}">${inline ? i18nText("返回") : i18nText("关闭")}</button></div>` + markup;
+  d.innerHTML = `<div class="dlg-head"><h2></h2><button type="button" class="btn btn-sm btn-ghost" data-close data-icon="${inline ? "arrow-left" : "close"}">${inline ? i18nText("返回") : i18nText("关闭")}</button></div>` + (inline ? markup : `<div class="dlg-body">${markup}</div>`);
   if (typeof title === "function") setTextRender(d.querySelector("h2")!, title);
   else d.querySelector("h2")!.textContent = title;
   buttonLabel(d.querySelector("[data-close]")!, () => inline ? i18nText("返回") : i18nText("关闭"), inline ? "arrow-left" : "close");

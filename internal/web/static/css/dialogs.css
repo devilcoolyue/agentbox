@@ -2,17 +2,39 @@
  * 文件预览弹窗（结构特殊、全屏化）在 files.css。 */
 
 dialog {
+  --dlg-pad-x: 28px; /* 改左右内边距时改这个变量：.dlg-body 靠它把滚动条拉到弹窗边缘 */
   background: var(--panel-solid);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: calc(10px * var(--radius-scale));
-  padding: 26px 28px;
+  padding: 26px var(--dlg-pad-x);
   width: min(420px, 92vw);
   max-height: 90vh;
   max-height: 90dvh;
-  overflow-y: auto;
+  overflow-y: auto; /* 兜底：没分出 .dlg-body 的弹窗仍整体滚动 */
 }
 dialog::backdrop { background: var(--backdrop); }
+
+/* 内容超高时只滚动正文：弹窗（或其中的 form）分成 .dlg-head / .dlg-body / .dlg-actions，
+ * .dlg-body 以外的兄弟节点（标题、说明、底部按钮、状态行）都固定不动，由 .dlg-body 自己出滚动条。 */
+dialog[open]:has(> .dlg-body, > form > .dlg-body) { display: flex; flex-direction: column; overflow: hidden; }
+dialog > form:has(> .dlg-body) { flex: 1 1 auto; min-height: 0; }
+:is(dialog, dialog > form):has(> .dlg-body) > :not(.dlg-body) { flex: none; }
+.dlg-body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  /* 左右拉到弹窗边缘，滚动条贴边；上下各让 4px，焦点环不被裁。负外边距与内边距相互抵消，版面不变 */
+  margin: -4px calc(-1 * var(--dlg-pad-x));
+  padding: 4px var(--dlg-pad-x);
+}
+/* 块级排版里标题的下边距原本会和正文第一个元素的上边距合并；正文自成格式化上下文后不再合并，去掉后者 */
+dialog > .dlg-body > :first-child { margin-top: 0; }
+/* 同理，正文最后一个元素的下边距原本和底部按钮 6px 的上边距取较大值：在正文末尾放一个带同样上边距的
+ * 空伪元素，让两者仍在正文里合并。只用于块级排版的正文，flex 正文里伪元素会多占一份间距 */
+dialog > .dlg-body:has(+ .dlg-actions)::after { content: ""; display: block; margin-top: 6px; }
+dialog > .dlg-body + .dlg-actions { margin-top: 0; }
+/* form 里的正文沿用 form 的纵向间距（各弹窗的 form 间距不尽相同） */
+dialog form > .dlg-body { display: flex; flex-direction: column; gap: inherit; }
 
 /* 进出场：打开时从下方一点、略小处淡入，背板同时淡入；关闭反向淡出。
  * 进场靠 @starting-style，各浏览器都有。退场要让关掉的弹窗在顶层多留一个过渡时长
@@ -530,8 +552,8 @@ dialog label.am-default { font-size: 12px; white-space: nowrap; }
 .diagnostic-heading [data-state="failed"] { color: var(--red); }
 .diagnostic-checks p { margin: 6px 0 0; font-size: 13px; }
 .diagnostic-reference, .diagnostics-dialog p { overflow-wrap: anywhere; }
-.diagnostics-dialog .dlg-actions { position: sticky; bottom: -26px; padding: 12px 0; background: var(--panel-solid); flex-wrap: wrap; }
-@media (max-width: 600px) { .diagnostics-dialog { padding: 18px; } .diagnostics-dialog .dlg-actions { bottom: -18px; } }
+.diagnostics-dialog .dlg-actions { flex-wrap: wrap; }
+@media (max-width: 600px) { .diagnostics-dialog { --dlg-pad-x: 18px; padding: 18px var(--dlg-pad-x); } }
 
 /* 界面主题（themes.ts）：三组列表——我的主题、全站主题、内置风格。每行左边色卡，
  * 中间名称与「基于哪个风格 · 作者 · 说明」，右边「使用」与导出/删除图标按钮。 */
