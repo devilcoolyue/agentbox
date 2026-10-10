@@ -196,16 +196,25 @@ export function startDownload(url) {
  * 替代原生 alert/confirm/prompt：原生弹窗阻塞 JS、样式与深色主题割裂，
  * 移动端（尤其 iOS 的 prompt）体验尤差。这里保持 Promise 化的调用形状，
  * 调用点仍然是一行 await。 */
-function dlgOnce(dialog, resolveWith) {
-    return new Promise((resolve) => {
-        const done = (value) => {
-            dialog.removeEventListener("close", onClose);
-            resolve(value);
-        };
-        const onClose = () => done(resolveWith(dialog.returnValue));
-        dialog.addEventListener("close", onClose, { once: true });
+/* 弹窗的 close 事件是在之后的任务里派发的（Chromium 排到下一帧）。上一次关闭的事件还没到就重新打开
+ * 同一个弹窗，新的监听会把上一次的回答当成这一次的，真正的回答反而没人接——所以先等它到。 */
+const closePending = new WeakMap();
+function dlgOnce(dialog, resolveWith, onShow) {
+    const show = () => new Promise((resolve) => {
+        let delivered;
+        const pending = new Promise(r => { delivered = r; });
+        closePending.set(dialog, pending);
+        dialog.addEventListener("close", () => {
+            if (closePending.get(dialog) === pending)
+                closePending.delete(dialog);
+            delivered();
+            resolve(resolveWith(dialog.returnValue));
+        }, { once: true });
         dialog.showModal();
+        onShow?.();
     });
+    const previous = dialog.open ? undefined : closePending.get(dialog);
+    return previous ? previous.then(show) : show();
 }
 /* 确认：true=确定，false=取消/关闭。 */
 export function askConfirm(text, opts = {}) {
@@ -238,10 +247,10 @@ export function askPrompt(opts = {}) {
     hint.classList.toggle("hidden", !opts.hint);
     askInputValidate = opts.validate || null;
     setAskInputError("");
-    const p = dlgOnce($("dlg-ask-input"), (v) => (v === "ok" ? field.value : null));
-    field.focus();
-    field.select();
-    return p;
+    return dlgOnce($("dlg-ask-input"), (v) => (v === "ok" ? field.value : null), () => {
+        field.focus();
+        field.select();
+    });
 }
 let askInputValidate = null;
 function setAskInputError(msg) {

@@ -206,16 +206,25 @@ export function startDownload(url: string) {
  * 移动端（尤其 iOS 的 prompt）体验尤差。这里保持 Promise 化的调用形状，
  * 调用点仍然是一行 await。 */
 
-function dlgOnce<T>(dialog: HTMLDialogElement, resolveWith: (returnValue: string) => T): Promise<T> {
-  return new Promise<T>((resolve) => {
-    const done = (value: T) => {
-      dialog.removeEventListener("close", onClose);
-      resolve(value);
-    };
-    const onClose = () => done(resolveWith(dialog.returnValue));
-    dialog.addEventListener("close", onClose, { once: true });
+/* 弹窗的 close 事件是在之后的任务里派发的（Chromium 排到下一帧）。上一次关闭的事件还没到就重新打开
+ * 同一个弹窗，新的监听会把上一次的回答当成这一次的，真正的回答反而没人接——所以先等它到。 */
+const closePending = new WeakMap<HTMLDialogElement, Promise<void>>();
+
+function dlgOnce<T>(dialog: HTMLDialogElement, resolveWith: (returnValue: string) => T, onShow?: () => void): Promise<T> {
+  const show = () => new Promise<T>((resolve) => {
+    let delivered!: () => void;
+    const pending = new Promise<void>(r => { delivered = r; });
+    closePending.set(dialog, pending);
+    dialog.addEventListener("close", () => {
+      if (closePending.get(dialog) === pending) closePending.delete(dialog);
+      delivered();
+      resolve(resolveWith(dialog.returnValue));
+    }, { once: true });
     dialog.showModal();
+    onShow?.();
   });
+  const previous = dialog.open ? undefined : closePending.get(dialog);
+  return previous ? previous.then(show) : show();
 }
 
 export interface ConfirmOpts {
@@ -271,10 +280,10 @@ export function askPrompt(opts: PromptOpts = {}) {
   hint.classList.toggle("hidden", !opts.hint);
   askInputValidate = opts.validate || null;
   setAskInputError("");
-  const p = dlgOnce($<HTMLDialogElement>("dlg-ask-input"), (v) => (v === "ok" ? field.value : null));
-  field.focus();
-  field.select();
-  return p;
+  return dlgOnce($<HTMLDialogElement>("dlg-ask-input"), (v) => (v === "ok" ? field.value : null), () => {
+    field.focus();
+    field.select();
+  });
 }
 
 let askInputValidate: ((v: string) => string) | null = null;

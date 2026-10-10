@@ -157,6 +157,27 @@ export async function smoke(page) {
   await page.locator('#sec-container').waitFor({state:'visible'});
   assert.equal(new URL(page.url()).hash,'#/settings/container','login preserves destination');
   assert.equal(await page.locator('#login-btn').isDisabled(),false);
+  // A dialog's close event arrives in a later task. Reopening the shared confirmation before the previous one
+  // lands (a busy renderer, CI) must not hand the old answer to the new question. The first close event is
+  // held back until the dialog opens again, or 300ms if askConfirm correctly waits for it.
+  await page.evaluate(()=>{window.__agentboxUtil??=import('/_v/{{BUILD}}/js/util.js').then(m=>window.__agentboxUtil=m);});
+  await page.waitForFunction(()=>!(window.__agentboxUtil instanceof Promise));
+  await page.evaluate(()=>{
+   const d=document.getElementById('dlg-ask');window.__askAnswers=[];
+   d.addEventListener('close',e=>{
+    e.stopImmediatePropagation();let sent=false;
+    const send=()=>{if(sent)return;sent=true;observer.disconnect();d.dispatchEvent(new Event('close'));};
+    const observer=new MutationObserver(()=>{if(d.open)send();});observer.observe(d,{attributes:true,attributeFilter:['open']});setTimeout(send,300);
+   },{capture:true,once:true});
+   window.__agentboxUtil.askConfirm('first').then(v=>window.__askAnswers.push(['first',v]));
+   d.close('');
+   window.__agentboxUtil.askConfirm('second').then(v=>window.__askAnswers.push(['second',v]));
+  });
+  await page.locator('#ask-text').filter({hasText:'second'}).waitFor();
+  await page.locator('#dlg-ask').waitFor({state:'visible'});
+  await page.locator('#ask-ok').click();
+  await page.waitForFunction(()=>window.__askAnswers.length===2);
+  assert.deepEqual(await page.evaluate(()=>window.__askAnswers),[['first',false],['second',true]],'a late close event answered the next confirmation');
   await diagnosticsSmoke(page,base);
   if (process.env.AGENTBOX_BROWSER_ONLY_DIAGNOSTICS === '1') { assert.deepEqual(errors,[]); return; }
   await switchAccountSmoke(page,base);
