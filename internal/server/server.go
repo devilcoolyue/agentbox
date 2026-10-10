@@ -32,8 +32,10 @@ import (
 	"agentbox/internal/imageupdate"
 	"agentbox/internal/mcpconfig"
 	"agentbox/internal/pricecatalog"
+	"agentbox/internal/storagepolicy"
 	"agentbox/internal/store"
 	"agentbox/internal/theme"
+	"agentbox/internal/toolstore"
 	"agentbox/internal/usage"
 	"agentbox/internal/web"
 	"agentbox/internal/workspace"
@@ -95,23 +97,27 @@ type Server struct {
 	priceCatalogOnce sync.Once
 	prices           *pricecatalog.Service
 
-	network      networkState
-	updates      updateState
-	storage      storageState
-	cliCatalog   cliCatalogCache // models the Agent image's CLIs list, per image ID
-	runtimeOnce  sync.Once
-	serving      atomic.Bool
-	life         *runtimeState
-	cfg          *config.Config
-	store        *store.Store
-	dock         *dockerx.Manager
-	git          *gitx.Runner
-	chat         *chatManager
-	attachmentMu sync.Mutex // receipt acceptance and attachment TTL deletion
-	tunnels      *tunnelHub
-	pairs        *pairStore    // outstanding abox-link pairing codes
-	previews     *previewStore // 短时只读的 HTML 预览通行证
-	mapAuth      mapSourceAuth // source-IP cache for tunnel port-map listeners
+	network          networkState
+	updates          updateState
+	storage          storageState
+	storageReserveMu sync.Mutex
+	storageReserved  int64
+	storageUsersMu   sync.Mutex
+	storageUsers     map[string]bool
+	cliCatalog       cliCatalogCache // models the Agent image's CLIs list, per image ID
+	runtimeOnce      sync.Once
+	serving          atomic.Bool
+	life             *runtimeState
+	cfg              *config.Config
+	store            *store.Store
+	dock             *dockerx.Manager
+	git              *gitx.Runner
+	chat             *chatManager
+	attachmentMu     sync.Mutex // receipt acceptance and attachment TTL deletion
+	tunnels          *tunnelHub
+	pairs            *pairStore    // outstanding abox-link pairing codes
+	previews         *previewStore // 短时只读的 HTML 预览通行证
+	mapAuth          mapSourceAuth // source-IP cache for tunnel port-map listeners
 
 	tunnelMu   sync.Mutex   // guards the SOCKS listener lifecycle below
 	tunnelLn   net.Listener // nil when the tunnel proxy is not running
@@ -147,6 +153,9 @@ func New(cfg *config.Config) (*Server, error) { return NewContext(context.Backgr
 
 func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := storagepolicy.CheckMount(ctx, cfg.GetStoragePolicy()); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
@@ -198,12 +207,38 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 			CheckOrigin:     sameHostOrigin,
 		},
 	}
+
+	dock.SetToolCacheIdentity(func(name string) (string, error) {
+		user, ok := st.GetUser(name)
+		if !ok || user.CreatedAt.IsZero() {
+			return "", errors.New("cache owner no longer exists")
+		}
+		instance, err := s.clientIdentity()
+		if err != nil {
+			return "", err
+		}
+		return toolstore.OwnerKey(instance, user.Name, user.CreatedAt.UTC().Format(time.RFC3339Nano)), nil
+	})
 	s.chat = newChatManager(s)
 	s.git = gitx.New(dock, s.prepareGitSession)
 	if err := s.seedUsers(); err != nil {
 		dock.Close()
 		st.Close()
 		return nil, err
+	}
+	for _, sess := range st.All() {
+		if err := dock.CheckStorageQuotaContainer(ctx, sess.ContainerID); err != nil {
+			dock.Close()
+			st.Close()
+			return nil, err
+		}
+	}
+	for _, user := range st.ListUsers() {
+		if err := s.ensureUserStorage(ctx, user); err != nil {
+			dock.Close()
+			st.Close()
+			return nil, err
+		}
 	}
 	s.reconcile(ctx)
 	if err := ctx.Err(); err != nil {
@@ -496,6 +531,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.spawn(s.credSyncLoop)
 	s.spawn(s.idleReaper)
 	s.spawn(s.storageLoop)
+	s.spawn(s.storageMaintenanceLoop)
 	s.spawn(s.pricingLoop)
 	s.spawn(s.imageUpdateLoop)
 	s.spawn(s.termUsageLoop)

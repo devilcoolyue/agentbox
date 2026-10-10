@@ -6,6 +6,8 @@ def step(key, category, argv, note, **options):
 
 
 STEPS = [
+    step('policy.storage-retention', 'offline', ['{python}','scripts/test-storage-retention.py'], 'Synthetic release retention: current/recent/pinned/process protection and symlink boundaries.'),
+    step('linux.storage-quota', 'linux', ['{python}','scripts/test-storage-quota-live.py'], 'Linux root only: disposable loop ext4 project quotas, UID1000 hard-limit/bypass/isolation tests; no production directories.', platform='linux'),
     step('go.build', 'offline', ['go', 'build', './...'], 'Build all Go programs.'),
     step('go.vet', 'offline', ['go', 'vet', './...'], 'Static Go checks.'),
     step('go.unit', 'offline', ['{python}', 'scripts/verify.py', '_go_nonserver'], 'Go packages except server; gated live tests disabled.'),
@@ -16,6 +18,7 @@ STEPS = [
     step('web.artifacts', 'offline', ['{python}', 'scripts/verify.py', '_web_artifacts'], 'Rebuild and compare complete JS inventory/bytes with the starting worktree.', requires=['node_modules/.bin/tsc']),
     *[step('web.'+name, 'offline', ['npm','run','test:'+name], 'Synthetic '+name+' contract/catalog checks.') for name in ['i18n','problems','diagnostics','drafts','outbox','contracts','chat-history','feature-lifetimes']],
     *[step('policy.'+name, 'offline', ['{python}','scripts/test-'+name+'.py'], 'Local synthetic policy regression; not real systemd or installation.') for name in ['browser-runtime','deployment','update','install','uninstall','image-policy','repair-claude-cumulative']],
+    step('policy.tool-storage', 'offline', ['{python}','scripts/test-tool-storage.py'], 'Shared-tool publisher integrity, atomic publication and archive/symlink boundaries.'),
     step('policy.shell', 'offline', ['{python}','scripts/verify.py','_shell'], 'Shell syntax checks.'),
     step('policy.verification-stability', 'offline', ['{python}','scripts/test-verification-stability.py'], 'Synthetic sample aggregation and uncached-test policy; not twenty real CI runs.'),
     step('runner', 'offline', ['{python}','scripts/test-verification.py'], 'Runner evidence, environment isolation and failure/cancellation regression.'),
@@ -29,6 +32,10 @@ STEPS = [
     step('docker.recovery-drill', 'docker', ['{python}','scripts/test-recovery-drill.py','--image','{recovery_image}'], 'Owned privileged/private-cgroup Linux systemd fixture; real Docker socket mount checks, synthetic scale/ledger/files, schema 9 upgrade, system/full backup and recovery timings. No host app data.'),
     step('docker.filesystem', 'docker', ['bash','scripts/test-filesystem-linux.sh'], 'Builds minimal test image; isolated Linux tests with no user mounts.'),
     step('docker.admin-recovery', 'docker', ['bash','scripts/test-admin-password-linux.sh'], 'Existing agentbox-client-test:local image; isolated UID 1000 recovery/PTY tests.'),
+    step('docker.tool-storage-runtime', 'docker', ['{python}','scripts/test-tool-storage-runtime.py','--image','{image}'], 'Opt-in official SDK/browser downloads, checksums, shared read-only Playwright install reuse, sandboxed browser and Go compile; private temp root, no provider.'),
+    step('docker.tool-storage', 'docker', ['{python}','scripts/test-tool-storage-live.py','--image','{image}'], 'Actual Linux private-volume mount/chown: read-only public tools, per-user cache reuse/isolation and stopped-container migration; no provider.'),
+    step('docker.storage-quota-profile', 'docker', ['go','test','-json','./internal/dockerx','-run','^TestStorageQuotaProfileLive$','-count=1'], 'Actual Docker/libseccomp production profile, native/compat/high-bit ioctl rejection and normal PTY operations; private tmpfs, no user mounts/provider.', env={'AGENTBOX_QUOTA_PROFILE_TEST_IMAGE':'{image}'}),
+    step('docker.cli-maintenance', 'docker', ['go','test','-json','./internal/dockerx','-run','^TestCLIImage(Maintenance|FixedBaseBuild)Live$','-count=1'], 'Real Docker flatten/load/config and three fixed-base builds; synthetic CLIs, local image with node/python3, no accounts/provider or global prune.', env={'AGENTBOX_CLI_MAINTENANCE_TEST_IMAGE':'{image}'}),
     step('docker.cli-candidate', 'docker', ['go','test','-json','./internal/dockerx','-run','^TestCLIImageProbeLive$','-count=1'], 'Production candidate gate: immutable local image, network=none, real CLI against synthetic upstream; no account/workspace mounts.', env={'AGENTBOX_CLI_PROBE_TEST_IMAGE':'{image}'}),
     step('docker.reasoning', 'docker', ['go','test','-json','./internal/agent','-run','TestReasoningCLI','-count=1'], 'Real CLI against synthetic upstream, network=none; no model charge.', env={'AGENTBOX_CLI_TEST_IMAGE':'{image}'}),
     step('docker.mcp', 'docker', ['{python}','scripts/test-mcp-live.py','--image','{image}'], 'Real Claude MCP with synthetic upstream, not a paid model.'),

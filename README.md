@@ -222,6 +222,10 @@ The desktop app has packages for Mac Apple Silicon, Mac Intel, and Windows x64. 
 
 An optional [remote browser image](docs/remote-browser.md) adds a full browser desktop inside a workspace, with persistent website login, clipboard support, and downloads. It is separate from CLI authorization and requires the browser-enabled image.
 
+Agent image updates build from a fixed base to prevent CLI layers accumulating across upgrades. Existing images migrate in the background at the same CLI versions, preserving browser/custom configuration and running workspaces. Insufficient disk space leaves the original image active; retired images are reclaimed after seven days only when references allow it. See [image maintenance](docs/agent-image-validation.md#固定底座与存量镜像维护).
+
+Optional [shared tools](docs/shared-tools.md) provide read-only Go SDKs and browser distributions, with writable Go/npm caches shared only within each user. Storage can live on a data disk; running workspaces keep their existing containers.
+
 ## Know the boundaries
 
 - **Use trusted accounts with trusted users.** Credentials are made available to the CLI inside containers and can be read by users with terminal access. Account scopes restrict admission; revoking access does not withdraw credentials already delivered or terminate existing processes. See [account permissions](docs/accounts-and-models.md#账号使用范围).
@@ -250,6 +254,8 @@ English and Chinese READMEs cover the same overview and setup. Detailed guides a
 | Contribute code | [Development guide](docs/development.md) · [Contributing](CONTRIBUTING.md) |
 
 ## Development roadmap
+
+The current development tree adds [local storage capacity management](docs/storage-capacity.md) (Chinese): mount checks, per-user project quotas, multiple-disk monitoring, rebuildable cache cleanup, and release retention. It is disabled by default and requires offline Linux preparation. S3 backups and cold workspace archiving remain in the [storage plan](docs/milestones/storage.md).
 
 The server and Web console changes from the first round (M1–M5) are included in v0.1.11, but external acceptance—real-user observations, performance thresholds, recovery targets, and desktop signing—is still pending; see the [first-round record](docs/milestones/backlog.md). The second round (M6–M11) starts on 2026-10-06: first turn the development build into a proper release (v0.1.11 shipped on 2026-10-08; see the [M6 record](docs/milestones/m6.md), Chinese), then add real-use acceptance and metrics collection, improve daily efficiency based on real feedback, reduce upstream update and installation cost, deliver a stable desktop release if certificates are available, and finally add more agents behind a capability gate. Scope, dependencies, and acceptance are in the [second-round plan](docs/roadmap-2.md) (Chinese).
 

@@ -43,16 +43,9 @@ func cliDockerfile(base imageupdate.Image, versions imageupdate.Versions) (strin
 	}
 	// Exec-form RUN leaves inherited SHELL, entrypoint, environment and browser
 	// layers intact. Only selected CLI packages and their version labels change.
-	packages := ""
-	if versions.Claude != base.Claude {
-		packages += " @anthropic-ai/claude-code@" + versions.Claude
-	}
-	if versions.Codex != base.Codex {
-		packages += " @openai/codex@" + versions.Codex
-	}
-	if packages == "" {
-		return "", fmt.Errorf("没有需要更新的 CLI")
-	}
+	// Install BOTH target versions: an unchanged Codex may be newer than the
+	// fixed base when only Claude is selected for this update.
+	packages := " @anthropic-ai/claude-code@" + versions.Claude + " @openai/codex@" + versions.Codex
 	run := func(command string) string {
 		raw, _ := json.Marshal([]string{"/bin/sh", "-c", command})
 		return "RUN " + string(raw) + "\n"
@@ -68,6 +61,17 @@ func cliDockerfile(base imageupdate.Image, versions imageupdate.Versions) (strin
 }
 
 func (m *Manager) BuildCLIImage(ctx context.Context, base imageupdate.Image, versions imageupdate.Versions, tag string, log func(string)) error {
+	info, raw, err := m.rawCLIImage(ctx, base.ID)
+	if err != nil {
+		return err
+	}
+	extra := int64(2 << 30)
+	if info.Size > extra/2 {
+		extra = info.Size * 2
+	}
+	if err = m.CheckCLIImageSpace(ctx, base.ID, extra); err != nil {
+		return err
+	}
 	dockerfile, err := cliDockerfile(base, versions)
 	if err != nil {
 		return err
@@ -88,7 +92,17 @@ func (m *Manager) BuildCLIImage(ctx context.Context, base imageupdate.Image, ver
 		return fmt.Errorf("构建镜像失败: %w", err)
 	}
 	defer res.Body.Close()
-	return readBuildOutput(res.Body, log)
+	if err = readBuildOutput(res.Body, log); err != nil {
+		return err
+	}
+	built, after, err := m.rawCLIImage(ctx, tag)
+	if err != nil {
+		return err
+	}
+	if built.Architecture != info.Architecture || built.Variant != info.Variant || !sameJSON(runtimeConfig(raw), runtimeConfig(after)) {
+		return fmt.Errorf("CLI 更新改变了运行环境配置（%s），未切换镜像", runtimeConfigDifferences(raw, after))
+	}
+	return nil
 }
 
 func readBuildOutput(r io.Reader, log func(string)) error {

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"agentbox/internal/archivex"
@@ -46,6 +47,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sess store
 		writeErr(w, http.StatusBadRequest, "upload too large or malformed: "+err.Error())
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 	file, hdr, err := r.FormFile("file")
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "missing 'file' field")
@@ -75,7 +77,13 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sess store
 	clear := r.FormValue("clear") == "1"
 	// Stage every upload outside container mounts. A malformed archive cannot
 	// leave a partially overwritten live tree even when clear is false.
-	stage, err := os.MkdirTemp(s.cfg.DataDir, ".stage-upload-*")
+	stageRoot := s.cfg.DataDir
+	if s.cfg.GetStoragePolicy().Mount != "" {
+		// Service-owned user parent is outside container mounts and inherits the
+		// user's project quota. Renaming from project zero would fail with EXDEV.
+		stageRoot = filepath.Join(s.cfg.DataDir, "users", sess.User)
+	}
+	stage, err := os.MkdirTemp(stageRoot, ".stage-upload-*")
 	if err != nil {
 		writeFileOpErr(w, err)
 		return
@@ -112,7 +120,11 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, sess store
 			}
 		}
 		if err == nil {
-			count, err = archivex.ExtractRoot(archive, hdr.Filename, staged, maxBytes*archivex.ExtractLimitMultiplier)
+			extractLimit := maxBytes * archivex.ExtractLimitMultiplier
+			if s.cfg.GetStoragePolicy().Mount != "" {
+				extractLimit = min(extractLimit, max(1<<20, hdr.Size*archivex.ExtractLimitMultiplier))
+			}
+			count, err = archivex.ExtractRoot(archive, hdr.Filename, staged, extractLimit)
 		}
 	}
 	if err != nil {
@@ -314,6 +326,8 @@ func moveFileEntry(sourceRoot, sourceRel, destinationRoot, destinationDirRel str
 
 func writeFileOpErr(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, syscall.EDQUOT), errors.Is(err, syscall.ENOSPC):
+		writeErr(w, http.StatusInsufficientStorage, "磁盘或用户存储限额不足，请清理空间或联系管理员")
 	case errors.Is(err, errInvalidScope):
 		writeErr(w, http.StatusBadRequest, "invalid scope")
 	case errors.Is(err, errFileOpInvalid):

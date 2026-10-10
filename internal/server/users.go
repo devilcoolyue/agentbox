@@ -98,6 +98,16 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			writeProblem(w, r, "authenticate", "authentication_required")
 			return
 		}
+		if err := s.ensureUserStorage(r.Context(), u); err != nil {
+			writeErr(w, http.StatusServiceUnavailable, "用户存储尚未就绪，请联系管理员")
+			return
+		}
+		release, admitted := s.reserveStorageWrite(r)
+		if !admitted {
+			writeErr(w, http.StatusInsufficientStorage, "磁盘可用空间不足，请稍后重试或联系管理员")
+			return
+		}
+		defer release()
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxUser, u)))
 	})
 }
@@ -340,7 +350,11 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "用户名已存在")
 		return
 	}
-	u := store.User{Name: req.Username, Role: store.RoleUser, PassHash: hashPassword(req.Password)}
+	u := store.User{Name: req.Username, Role: store.RoleUser, PassHash: hashPassword(req.Password), CreatedAt: time.Now()}
+	if err := s.ensureUserStorage(r.Context(), u); err != nil {
+		writeErr(w, http.StatusServiceUnavailable, "用户存储尚未就绪，请联系管理员")
+		return
+	}
 	if err := s.store.CreateUser(u); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return

@@ -148,7 +148,14 @@ function renderMonitorTiles(m: Monitor) {
     monTile(i18nText("主机内存"), fmtBytes(h.mem_used), i18nText("共 {p0} · {p1}% 已用", { p0: String(fmtBytes(h.mem_total)), p1: String(memPct.toFixed(0)) }), memPct),
   ];
   // 数据盘写满会连带拖垮 SQLite 与所有会话，水位单独给一格（读不到则不显示）。
-  if (h.disk_total) {
+  if (h.disks?.length) {
+ const names:Record<string,string>={system:i18nText("系统盘"),data:i18nText("用户数据"),tools:i18nText("工具与缓存")};
+ for(const disk of h.disks){
+ const label=disk.roles.map(role=>names[role]||role).join(" / ");
+ const pct=disk.total?disk.used/disk.total*100:0;
+ tiles.push(monTile(label,disk.error?i18nText("读取失败"):fmtBytes(disk.used),disk.error?"":i18nText("共 {p0} · 可用 {p1} · {p2}% 已用",{p0:String(fmtBytes(disk.total)),p1:String(fmtBytes(disk.available)),p2:String(pct.toFixed(0))}),disk.error?undefined:pct));
+ }
+ } else if (h.disk_total) {
     const hint = diskPct >= 90 ? i18nText("数据盘将满，尽快清理") : i18nText("数据目录所在磁盘");
     tiles.push(monTile(i18nText("磁盘水位"), fmtBytes(h.disk_used),
       i18nText("共 {p0} · {p1}% 已用 · {p2}", { p0: String(fmtBytes(h.disk_total)), p1: String(diskPct.toFixed(0)), p2: String(hint) }), diskPct));

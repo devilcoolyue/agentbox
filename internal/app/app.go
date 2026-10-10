@@ -9,9 +9,13 @@ import (
 
 	"agentbox/internal/config"
 	"agentbox/internal/server"
+	"agentbox/internal/storagepolicy"
 )
 
 func Run(ctx context.Context, cfg *config.Config) (err error) {
+	if err := storagepolicy.CheckMount(ctx, cfg.GetStoragePolicy()); err != nil {
+		return err
+	}
 	lock, err := lockDataDir(cfg.DataDir)
 	if err != nil {
 		return err

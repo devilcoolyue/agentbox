@@ -23,7 +23,7 @@ let meter: ProgressBar | null = null;
 let watched = false;
 /** 构建阶段按 Docker 构建日志里最后一个「Step n/m」估算；其余阶段给固定区间 */
 function imageFraction(phase: string, log: string): number | null {
- if (phase === "checking") return null;
+ if (phase === "checking" || phase === "migrating") return null;
  if (phase === "building") {
   const steps = [...log.matchAll(/Step (\d+)\/(\d+)/g)].at(-1);
   if (!steps) return 0.08;
@@ -42,7 +42,7 @@ function renderMeter(st: UpdateView["status"]) {
  const failed = !st.running && st.phase === "failed";
  const value = st.running ? imageFraction(st.phase, st.log || "") : 1;
  meter.set(value, st.running).tone(failed ? "error" : !st.running ? "ok" : "");
- const steps: Record<string, () => string> = { checking: () => i18nText("检查版本"), building: () => i18nText("构建镜像"), validating: () => i18nText("验证 CLI 行为"), done: () => i18nText("任务完成"), failed: () => i18nText("任务失败") };
+ const steps: Record<string, () => string> = { migrating: () => i18nText("正在整理旧镜像"), checking: () => i18nText("检查版本"), building: () => i18nText("构建镜像"), validating: () => i18nText("验证 CLI 行为"), done: () => i18nText("任务完成"), failed: () => i18nText("任务失败") };
  const build = st.phase === "building" ? [...(st.log || "").matchAll(/Step (\d+)\/(\d+)/g)].at(-1) : undefined;
  setTextRender($("image-update-step"), () => (steps[st.phase]?.() || st.phase) + (build ? ` · Step ${build[1]}/${build[2]}` : ""));
  $("image-update-pct").textContent = value === null || failed ? "" : Math.floor(value * 100) + "%";
@@ -77,7 +77,7 @@ function render(v: UpdateView) {
  }
  if (!isDirty()) fillImageUpdateSettings(v.settings);
  const st = v.status;
- const labels: Record<string, string> = { get checking() { return i18nText("正在检查"); }, get building() { return i18nText("正在构建并验证镜像"); }, get validating() { return i18nText("正在验证 CLI 行为"); }, get failed() { return i18nText("任务失败"); }, get done() { return i18nText("任务完成"); } };
+ const labels: Record<string, string> = { get migrating() { return i18nText("正在整理旧镜像"); }, get checking() { return i18nText("正在检查"); }, get building() { return i18nText("正在构建并验证镜像"); }, get validating() { return i18nText("正在验证 CLI 行为"); }, get failed() { return i18nText("任务失败"); }, get done() { return i18nText("任务完成"); } };
  setTextRender($("image-update-status"), () => (labels[st.phase] || i18nText("尚未检查镜像内 CLI 版本")) + (st.available ? i18nText(" · 有可用更新") : "") + (st.finished_at ? " · " + fmtTime(st.finished_at) : "") + (st.error ? "：" + st.error : ""));
  setTextRender($("image-update-versions"), () => st.current.claude ? i18nText("任务开始时：Claude {p0} / Codex {p1}", { p0: String(st.current.claude), p1: String(st.current.codex) }) + (st.target.claude ? i18nText(" → 目标 Claude {p0} / Codex {p1}", { p0: String(st.target.claude), p1: String(st.target.codex) }) : "") : i18nText("点击“立即检查”读取镜像版本和所选渠道的最新版本。"));
  setTextRender($("image-update-active"), () => i18nText("当前镜像：") + v.agent_image);

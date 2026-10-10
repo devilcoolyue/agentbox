@@ -36,8 +36,10 @@ const (
 )
 
 type Manager struct {
-	cli *client.Client
-	cfg *config.Config
+	cli           *client.Client
+	cfg           *config.Config
+	toolIdentity  func(string) (string, error)
+	toolPlatforms sync.Map
 }
 
 func New(cfg *config.Config) (*Manager, error) { return NewContext(context.Background(), cfg) }
@@ -233,6 +235,9 @@ func baseContainerEnv() []string {
 // 只比键不比值：镜像里 NODE_VERSION 那类值本来就会随镜像更新而变。
 func hasBakedEnv(containerEnv, imageEnv []string) bool {
 	known := map[string]bool{}
+	for _, key := range toolEnvKeys {
+		known[key] = true
+	}
 	for _, kv := range baseContainerEnv() {
 		known[envKey(kv)] = true
 	}
@@ -259,6 +264,17 @@ var ErrImageMissing = errors.New("configured agent image is missing")
 // EnsureRunning brings the session's container up, reusing an existing one
 // when possible, and returns its id.
 func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct config.Account, workspaceDir, homeDir, sharedDir string) (string, error) {
+	var plan toolMountPlan
+	planned := false
+	prepare := func() error {
+		if planned {
+			return nil
+		}
+		var err error
+		plan, err = m.toolPlan(ctx, sess.User)
+		planned = err == nil
+		return err
+	}
 	if sess.ContainerID != "" {
 		info, err := m.cli.ContainerInspect(ctx, sess.ContainerID)
 		if client.IsErrNotFound(err) {
@@ -288,11 +304,25 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 				if info.State != nil && info.State.Running {
 					return sess.ContainerID, nil // 运行中不打断，停一次后吃到新镜像
 				}
-				if imageFresh {
+				if err := prepare(); err != nil {
+					return "", err
+				}
+				quotaFresh := m.cfg.GetStoragePolicy().Mount == "" || (info.Config != nil && info.Config.Labels[quotaGuardLabel] == "2")
+				if imageFresh && plan.matches(info) && quotaFresh {
 					if err := m.cli.ContainerStart(ctx, sess.ContainerID, container.StartOptions{}); err == nil {
+						if err := m.initToolCache(ctx, sess.ContainerID, plan); err != nil {
+							cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+							stopErr := m.cli.ContainerStop(cleanup, sess.ContainerID, container.StopOptions{})
+							cancel()
+							return "", errors.Join(err, stopErr)
+						}
 						return sess.ContainerID, nil
 					}
 				}
+			}
+			// Validate the new mounts/tools before deleting a stopped old container.
+			if err := prepare(); err != nil {
+				return "", err
 			}
 			// Unstartable leftover, a pre-/shared container, or a stale image:
 			// replace it (workspace/home live on the host, so recreation loses
@@ -304,7 +334,10 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 		}
 	}
 
-	env := baseContainerEnv()
+	if err := prepare(); err != nil {
+		return "", err
+	}
+	env := append(baseContainerEnv(), plan.env...)
 	lim := m.cfg.GetContainer()
 	pids := lim.PidsLimit
 	initProc := true // run an init (tini) as PID 1 to reap orphaned zombies
@@ -320,7 +353,11 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 			"agentbox.account": acct.ID,
 		},
 	}
+	if plan.revision != "" {
+		cc.Labels[toolStorageLabel] = plan.revision
+	}
 	hc := &container.HostConfig{
+		Mounts: plan.mounts,
 		Binds: []string{
 			workspaceDir + ":" + WorkspaceMount,
 			homeDir + ":" + ContainerHome,
@@ -345,6 +382,11 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 		return "", fmt.Errorf("%w: %w", ErrImageMissing, err)
 	}
 
+	if m.cfg.GetStoragePolicy().Mount != "" {
+		if err := quotaContainerOptions(cc, hc); err != nil {
+			return "", err
+		}
+	}
 	name := "agentbox-" + sess.ID
 	resp, err := m.cli.ContainerCreate(ctx, cc, hc, nil, nil, name)
 	if err != nil {
@@ -359,6 +401,12 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 	}
 	if err := m.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return "", fmt.Errorf("start container: %w", err)
+	}
+	if err = m.initToolCache(ctx, resp.ID, plan); err != nil {
+		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		cleanupErr := m.cli.ContainerRemove(cleanup, resp.ID, container.RemoveOptions{Force: true})
+		return "", errors.Join(err, cleanupErr)
 	}
 	return resp.ID, nil
 }

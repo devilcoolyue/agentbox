@@ -55,3 +55,11 @@ func (c *Config) SwitchAgentImage(expected string, policy ImageUpdateConfig, nex
 		return nil
 	})
 }
+
+// WithImageReferences pins current/rollback references during bounded Docker
+// garbage collection. The callback must not call Config methods or mutate it.
+func (c *Config) WithImageReferences(fn func(current, previous string) error) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return fn(c.AgentImage, c.PreviousImage)
+}

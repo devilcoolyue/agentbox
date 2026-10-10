@@ -23,7 +23,7 @@ export async function imageUpdateSmoke(page) {
    }
   } else {
    reads++;
-   if (view.status.running) {
+   if (view.status.running && view.status.phase !== 'migrating') {
     if (fail) view.status={...view.status,running:false,phase:'failed',error:'行为验证失败，保留当前镜像',validation:{...passed,failure:'usage_contract_failed'}};
     else {view.agent_image='agentbox-agent:cli-test';view.previous_image='old-id';view.status={...view.status,running:false,phase:'done',available:false,validation:passed};}
    }
@@ -75,6 +75,16 @@ export async function imageUpdateSmoke(page) {
   await page.locator('#image-update-status').filter({hasText:'行为验证失败'}).waitFor();
   assert.equal(view.agent_image,'old-id');
   assert.match(await page.locator('#image-update-validation').innerText(),/未切换镜像/);
+  view.status={...view.status,running:true,phase:'migrating',action:'maintain',error:'',validation:undefined};
+  await page.locator('#image-update-status').filter({hasText:'正在整理旧镜像'}).waitFor();
+  assert.equal(await page.locator('#image-update-update').isDisabled(),true);
+  assert.equal(await page.locator('#image-update-meter [role="progressbar"]').getAttribute('aria-valuenow'),null,'migration pretended to know a percentage');
+  for(const [locale,label] of [['en','Preparing a fixed image base'],['zh-TW','正在整理舊鏡像'],['zh-CN','正在整理旧镜像']]) {
+   await page.evaluate(async locale=>(await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage(locale),locale);
+   assert.ok((await page.locator('#image-update-status').innerText()).includes(label));
+  }
+  view.status={...view.status,running:false,phase:'done'};
+  await page.waitForFunction(()=>!document.querySelector('#image-update-update').disabled);
   await mkdir('output/playwright',{recursive:true});
   await page.locator('#image-update-card').scrollIntoViewIfNeeded();
   await page.screenshot({path:'output/playwright/image-updates-desktop.png'});

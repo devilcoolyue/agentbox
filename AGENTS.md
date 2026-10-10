@@ -734,7 +734,7 @@ data/
   `internal/web/static/css/base.css` 的约定一致。
 - 会话镜像内禁用 CLI 自升级（`DISABLE_AUTOUPDATER=1`）；默认版本由 `images/agent/Dockerfile` 管理。网页「Agent 镜像更新」（旧名「客户端更新」）由 `internal/imageupdate` + `internal/dockerx/image_update.go` 执行，服务端生命周期内按系统时区每日调度；旧 `scripts/auto-update-image.sh` / systemd timer 仅供旧部署手动选择，网页管理时保持停用。
 - `GET /api/updates/components` 仅管理员，只观察当前构建/schema、配置镜像标签与服务端桌面能力，最多 3 秒 Docker inspect；不访问发行/npm 源或运行 CLI。labels_only 不证明协议兼容，更不代表运行中空间版本；网页不能读取本机桌面安装版本。前端离开页面/退出必须作废请求，三个升级动作仍归原更新器。
-- `image_updates` / `previous_agent_image` 必须进入 Config 的 mutate/persist；更新以当前镜像不可变 ID 为基础保留浏览器层，验证 CLI 版本及隔离合成行为、同步报告后通过 `SwitchAgentImage` 比较原镜像与策略再原子切换，不能覆盖构建期间的新设置。回退暂停自动更新。任务单飞、可取消、30 分钟超时，失败不切换、不自动 prune。状态落在 data_dir/image-update-state.json。
+- `image_updates` / `previous_agent_image` 必须进入 Config 的 mutate/persist；存量镜像先同版本压平（不启动/不挂载用户数据的临时容器），后续按 image-update-state.json 登记的不可变固定底座 ID 构建并保留浏览器环境，验证 CLI 版本及隔离合成行为、同步报告后通过 `SwitchAgentImage` 比较原镜像与策略再原子切换，不能覆盖构建期间的新设置。回退暂停自动更新。任务单飞、可取消、30 分钟超时，失败不切换、不全局 prune。状态落在 data_dir/image-update-state.json，含不可变 ID 关系、维护排程与回退暂停；不能清作缓存。每日维护可在关闭自动追新时同版本迁移，七天后仅定向回收登记的旧更新镜像，保护当前/回滚/底座及所有容器引用。完整流程和空间闸门见 docs/agent-image-validation.md。
 - `config.json`、`accounts/`、`data/` 含密钥和运行时状态，已在 `.gitignore`；不要提交。
 - 若改动影响用户可见行为、部署步骤、API 或配置字段，同步更新 `README.md` 与 `README_CN.md`，保持中英文内容一致（必要时也更新 `deploy/README.md`）。
 
@@ -974,3 +974,20 @@ data/
 - 草稿设置在 composer 工具栏，正常保存说明收进弹层；存储失败、禁用保存、附件问题及恢复通知仍显示。不可为了压缩布局隐藏阻止发送的问题。
 
 - 消息确认区默认单行，详情按需展开并限制列表高度；待确认/待核对优先于执行状态，错误文本不能被省略号隐藏。查询按钮只查不展开，不改变原 ID 重试/准入规则；切换空间/线程和发送新任务收起详情，轮询保留展开和键盘焦点。草稿、附件、语音入口统一 18px 图标与 34px 点击区。
+
+### 共享工具与用户缓存
+
+- `tool_storage` 为操作员配置，默认关闭；Root 必须是受信任的绝对目录。Config 的 Load/validate/mutate/persist 一起保留，备份恢复删除外部路径配置。
+- `internal/toolstore` 仅准备受服务拥有的挂载父目录；用户可写叶目录不能由宿主机路径遍历。缓存身份含实例与用户创建身份，同名重建不得继承。
+- `dockerx/tool_storage.go` 将公共库只读挂载、用户缓存单独可写挂载，按架构/发行版隔离浏览器；运行中容器不因工具设置变化重建，停止后比较挂载/环境修订。新增固定 env 键须进入 hasBakedEnv 白名单，账号 env 仍仅 exec 注入。
+- `tool_storage.py` 是容器内 UID 1000 的有界初始化脚本，以目录 FD 拒绝缓存父级链接；只添加缺失的公共浏览器链接，不改用户下载，不碰旧 home/cache。PLAYWRIGHT_SKIP_BROWSER_GC 防止跨空间安装器互删版本。
+- 公共工具只由 `scripts/tool-storage.py` 的操作员发布流程写入，不从任意用户缓存提权复制。Go 官方 SHA256、ELF/版本检查；浏览器官方 npm 下载器隔离运行，原子发布并保存树摘要；公共版本不可覆盖。
+- 回归入口 `policy.tool-storage` / `docker.tool-storage`；后者使用私有卷及 Docker socket 运行独立 Linux 测试，不挂用户数据、不全局清理、不调用 provider。具体配置、迁移保留和验收限制见 docs/shared-tools.md。
+
+### 本地容量治理
+
+- `storage_policy` 默认关闭，操作员配置并重启。配置须进 Load/validate/mutate/persist，恢复删外部挂载策略。`storage-config` / `storage-prepare` 只在离线持锁并检查容器挂载后运行；路径迁移保留实例身份，不能双实例同时写。
+- 项目配额按实例及用户创建身份区分 data/cache，不能按共享 UID 1000 限额；新用户和存量根均须准备。挂载 UUID/项目配额能力在创建 data_dir 前验证；root 服务必须去除 CAP_SYS_RESOURCE，防止服务端写入绕过。
+- ext4 属主可清继承标记，quota-managed 容器必须带 ioctl seccomp 限制，保留 Chromium 沙箱；不得仅凭 setquota 成功宣称硬限额。上传/导入暂存放在服务拥有的用户父目录，保持同项目重命名且计入配额。
+- 缓存回收在 workspace 启动锁内确认所有已知容器停止，限 Go 编译/npm 下载缓存，不碰私有模块/浏览器/profile/SDK；扫描不完整不得继续删除。发布保留持部署锁并保护 current、引用和回退版本。
+- 专题与验收见 docs/storage-capacity.md、docs/milestones/storage.md；Linux 实测入口 linux.storage-quota 使用独立临时 loop 文件系统，不能对生产目录运行。

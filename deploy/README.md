@@ -372,3 +372,11 @@ journald 是否跨重启持久化取决于宿主机配置，不能默认存在�
 辅助容器无 workspace/home/shared 挂载，使用 `NET_ADMIN` / `NET_RAW` 设置所属工作空间内的规则；不要给 Agent 容器增加特权，也不要把 Docker socket 挂入辅助容器。当前支持 rootful Linux Docker bridge，host、none 和共享其他容器网络的模式会被配置校验拒绝。
 
 真实验证脚本 `scripts/test-transparent-network.py` 使用独立命名卷、合成账号及目标，覆盖双用户隔离、域名与原生 TCP、账号出口共存、撤销／重连／重启与删除清理，不调用模型服务。按 Docker daemon 架构交叉编译 `cmd/agentbox`、`cmd/abox-link`、`internal/netaccess/testdata/fixture.go` 后，分别通过 `--server`、`--client`、`--fixture` 传入，辅助镜像通过 `--network-image` 指定。
+
+## 共享工具库
+
+服务器可通过随包附带的 `scripts/tool-storage.py` 发布 Go SDK 和 Playwright/Puppeteer 浏览器到数据盘。配置 `tool_storage` 后，下次启动空间使用公共只读程序及按用户隔离的可写缓存；旧 home 缓存保留待核验。操作步骤及备份恢复边界见[共享工具说明](../docs/shared-tools.md)。
+
+### 数据盘、项目配额与发布保留
+
+本地容量治理见[存储容量管理](../docs/storage-capacity.md)。启用需离线准备 ext4/XFS 项目配额、核对挂载 UUID、移除服务的 CAP_SYS_RESOURCE，并验收容器属性修改限制。独立发布包带 `retention.py` 和可选每日维护 timer，先预览再按已配置保留数启用；迁移仍须维护窗口，不自动操作宿主磁盘。

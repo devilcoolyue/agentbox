@@ -18,6 +18,12 @@ import (
 )
 
 type fakeBackend struct {
+	buildBase    string
+	buildTarget  Versions
+	flattenCalls int
+	flattenErr   error
+	removeOK     bool
+	removed      []string
 	images       map[string]Image
 	builds       int
 	buildErr     error
@@ -38,6 +44,8 @@ func (b *fakeBackend) InspectCLIImage(_ context.Context, ref string) (Image, err
 }
 func (b *fakeBackend) BuildCLIImage(ctx context.Context, base Image, v Versions, tag string, log func(string)) error {
 	b.builds++
+	b.buildBase = base.ID
+	b.buildTarget = v
 	if b.beforeBuild != nil {
 		b.beforeBuild()
 	}
@@ -89,6 +97,7 @@ func fixture(t *testing.T) (*Service, *fakeBackend, *int) {
 	original := Image{ID: "old-id", Claude: "2.1.280", Codex: "0.156.1", Browser: true}
 	b := &fakeBackend{images: map[string]Image{"browser": original, "old-id": original}}
 	s := New(cfg, b)
+	s.status.Images = map[string]ImageRecord{"old-id": {Base: "old-id"}}
 	requests := new(int)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		*requests++
@@ -335,4 +344,21 @@ func TestCandidateEvidencePrecedesImmutableActivation(t *testing.T) {
 	if active != "new-id" || s.Snapshot().Phase != "failed" {
 		t.Fatal("rollback bypassed validation")
 	}
+}
+
+func (b *fakeBackend) FlattenCLIImage(ctx context.Context, src Image, log func(string)) (Image, error) {
+	b.flattenCalls++
+	if b.flattenErr != nil {
+		return Image{}, b.flattenErr
+	}
+	src.ID = "flat-id"
+	b.images[src.ID] = src
+	return src, nil
+}
+func (b *fakeBackend) LegacyCLIImages(context.Context, string) ([]string, error) {
+	return []string{"old-id"}, nil
+}
+func (b *fakeBackend) RemoveCLIImage(_ context.Context, id string, _ map[string]bool) (bool, error) {
+	b.removed = append(b.removed, id)
+	return b.removeOK, nil
 }

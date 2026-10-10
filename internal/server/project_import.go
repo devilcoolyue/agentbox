@@ -160,7 +160,11 @@ func (s *Server) handleProjectUpload(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, "project.import", "invalid_request")
 		return
 	}
-	stage, err := os.MkdirTemp(s.cfg.DataDir, ".stage-project-*")
+	stageRoot := s.cfg.DataDir
+	if s.cfg.GetStoragePolicy().Mount != "" {
+		stageRoot = filepath.Join(s.cfg.DataDir, "users", sess.User)
+	}
+	stage, err := os.MkdirTemp(stageRoot, ".stage-project-*")
 	if err != nil {
 		writeCreationError(w, r, err)
 		return
@@ -209,7 +213,11 @@ func (s *Server) handleProjectUpload(w http.ResponseWriter, r *http.Request) {
 			}
 			file.Close()
 			if err == nil {
-				count, err = archivex.ExtractRoot(archive, hdr.Filename, staged, maxBytes*archivex.ExtractLimitMultiplier)
+				extractLimit := maxBytes * archivex.ExtractLimitMultiplier
+				if s.cfg.GetStoragePolicy().Mount != "" {
+					extractLimit = min(extractLimit, max(1<<20, hdr.Size*archivex.ExtractLimitMultiplier))
+				}
+				count, err = archivex.ExtractRoot(archive, hdr.Filename, staged, extractLimit)
 			}
 		} else {
 			parent := path.Dir(paths[i])

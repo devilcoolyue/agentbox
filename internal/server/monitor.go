@@ -92,13 +92,14 @@ type processStat struct {
 }
 
 type hostStat struct {
-	CPUCount   int     `json:"cpu_count"`
-	CPUPercent float64 `json:"cpu_percent"` // 全核合计占用 0-100
-	Load1      float64 `json:"load1"`
-	MemTotal   uint64  `json:"mem_total"`
-	MemUsed    uint64  `json:"mem_used"`
-	DiskTotal  uint64  `json:"disk_total"` // data_dir 所在文件系统容量
-	DiskUsed   uint64  `json:"disk_used"`  // 已用（含系统保留块，近似）
+	Disks      []storageDisk `json:"disks,omitempty"`
+	CPUCount   int           `json:"cpu_count"`
+	CPUPercent float64       `json:"cpu_percent"` // 全核合计占用 0-100
+	Load1      float64       `json:"load1"`
+	MemTotal   uint64        `json:"mem_total"`
+	MemUsed    uint64        `json:"mem_used"`
+	DiskTotal  uint64        `json:"disk_total"` // data_dir 所在文件系统容量
+	DiskUsed   uint64        `json:"disk_used"`  // 已用（含系统保留块，近似）
 }
 
 type monitorSummary struct {
@@ -173,6 +174,7 @@ func (s *Server) handleMonitor(w http.ResponseWriter, r *http.Request) {
 			Uptime:     time.Since(s.startedAt).Milliseconds(),
 		},
 		Host: hostStat{
+			Disks:     s.storageDisks(),
 			CPUCount:  runtime.NumCPU(),
 			Load1:     readLoad1(),
 			MemTotal:  memTotal,

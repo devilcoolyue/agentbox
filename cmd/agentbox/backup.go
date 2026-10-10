@@ -28,6 +28,10 @@ func maintenance(args []string) error {
 	defer stop()
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	switch args[0] {
+	case "storage-prepare":
+		return prepareStorage(ctx, args[1:], checkBackupContainers)
+	case "storage-config":
+		return configureStorage(ctx, args[1:], checkBackupContainers)
 	case "admin-reset-password":
 		return resetAdminPassword(ctx, args[1:], os.Stdout, os.Stderr, readAdminPassword)
 	case "git-key-rotate":

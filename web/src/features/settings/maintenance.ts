@@ -1,6 +1,7 @@
 import {openDiagnostics} from "../../diagnostics.js";
 import {$,toast,fmtTime,fmtBytes,askConfirm} from "../../util.js";
 import {t,setTextRender} from "../../i18n.js";
+import type {StorageDisk} from "../../types.js";
 import type {SettingsRequests} from "./requests.js";
 
 /** Administration actions share the settings login lifetime, including modal
@@ -17,9 +18,22 @@ export function initSettingsMaintenance(signal:AbortSignal,scope:SettingsRequest
  },{signal});
  $("btn-storage").addEventListener("click",async()=>{
   try{
-   const report=await scope.request<{data:{bytes:number;partial:boolean;scanned_at:number;users:Record<string,number>};disk_available:number}>('/storage');
+   const report=await scope.request<{data:{bytes:number;partial:boolean;scanned_at:number;users:Record<string,number>;categories?:Record<string,number>};disk_available:number;disks?:StorageDisk[];storage_policy?:{user_bytes?:number;cache_bytes?:number;users?:Record<string,number>;cache_users?:Record<string,number>;release_keep?:number;cache_max_age_days?:number}}>('/storage');
    if(!report)return;
-   setTextRender($("storage-report"),()=>report.data.scanned_at?t("数据文件 {p0} · 磁盘可用 {p1} · {p2}{p3}\n",{p0:String(fmtBytes(report.data.bytes)),p1:String(fmtBytes(report.disk_available)),p2:String(fmtTime(report.data.scanned_at)),p3:report.data.partial?t("（统计未完整）"):""})+Object.entries(report.data.users||{}).map(([name,bytes])=>`${name}: ${fmtBytes(bytes)}`).join(' · '):t("统计中，请稍后刷新"));
+   setTextRender($("storage-report"),()=>{
+    if(!report.data.scanned_at)return t("统计中，请稍后刷新");
+    const labels:Record<string,string>={users:t("用户数据"),backups:t("备份"),other:t("其他数据"),tools_public:t("公共工具"),tools_private:t("用户缓存"),releases:t("发布版本")};
+    const policy=report.storage_policy;
+    const lines=[t("数据文件 {p0} · 磁盘可用 {p1} · {p2}{p3}\n",{p0:String(fmtBytes(report.data.bytes)),p1:String(fmtBytes(report.disk_available)),p2:String(fmtTime(report.data.scanned_at)),p3:report.data.partial?t("（统计未完整）"):""})];
+    lines.push(Object.entries(report.data.categories||{}).map(([kind,bytes])=>`${labels[kind]||kind}: ${fmtBytes(bytes)}`).join(' · '));
+    for(const [name,bytes] of Object.entries(report.data.users||{})){
+      const limit=policy?.users?.[name]||policy?.user_bytes||0;
+      lines.push(`${name}: ${fmtBytes(bytes)}`+(limit?` / ${t("数据限额")} ${fmtBytes(limit)} · ${t("缓存限额")} ${fmtBytes(policy?.cache_users?.[name]||policy?.cache_bytes||0)}`:''));
+    }
+    if(policy?.release_keep)lines.push(t("保留最近 {p0} 个发布版本",{p0:String(policy.release_keep)}));
+    if(policy?.cache_max_age_days)lines.push(t("可重建缓存保留 {p0} 天，仅在空间停止时回收",{p0:String(policy.cache_max_age_days)}));
+    return lines.join('\n');
+   });
   }catch(error){if(scope.current())toast((error as Error).message,true);}
  },{signal});
  $("btn-clear-cache").addEventListener("click",async()=>{

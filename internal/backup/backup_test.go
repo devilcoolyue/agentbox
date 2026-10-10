@@ -476,3 +476,43 @@ func TestBackupRestoreCreatesNewDesktopIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestRestoreDisablesExternalToolStorage(t *testing.T) {
+	cfg, _ := fixture(t)
+	raw, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var values map[string]any
+	if err = json.Unmarshal(raw, &values); err != nil {
+		t.Fatal(err)
+	}
+	values["storage_policy"] = map[string]any{"mount": "/original-disk", "user_bytes": 1 << 30}
+	values["tool_storage"] = map[string]string{"root": filepath.Join(t.TempDir(), "original-tools"), "go_version": "go1.26.9"}
+	raw, _ = json.Marshal(values)
+	if err = os.WriteFile(cfg, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(t.TempDir(), "tools.tar.gz")
+	if _, err = Create(t.Context(), Options{Config: cfg, Output: archive}); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "restored")
+	if _, err = Restore(t.Context(), archive, target); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = os.ReadFile(filepath.Join(target, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored map[string]any
+	if err = json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := restored["storage_policy"]; exists {
+		t.Fatal("restored external disk/quota policy")
+	}
+	if _, exists := restored["tool_storage"]; exists {
+		t.Fatal("restored instance retained another instance's cache path")
+	}
+}

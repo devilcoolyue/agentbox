@@ -43,6 +43,11 @@ func (s *Server) handleImageUpdateAction(w http.ResponseWriter, r *http.Request)
 }
 func (s *Server) imageUpdateLoop() {
 	for {
+		if !s.imageUpdater().Snapshot().Running {
+			if err := s.startImageUpdate("maintain", true); err != nil {
+				log.Printf("image maintenance: %v", err)
+			}
+		}
 		policy, _, _ := s.cfg.ImageUpdateState()
 		if policy.Enabled && !s.imageUpdater().Snapshot().Running {
 			if err := s.startImageUpdate("update", true); err != nil {

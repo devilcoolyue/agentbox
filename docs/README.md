@@ -23,6 +23,8 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 | 规划后续迭代 | [第二轮计划 M6～M11](roadmap-2.md) · [M6 进展](milestones/m6.md) · [第一轮计划 M1～M5（已封存）](roadmap.md) · [M1 实施与验收](milestones/m1.md) · [M2 进展](milestones/m2.md) · [M3 进展](milestones/m3.md) · [M4 进展](milestones/m4.md) · [候选镜像验证](agent-image-validation.md) · [M5 进展](milestones/m5.md) |
 | 遇到错误 | [常见问题](troubleshooting.md) → [错误码与操作关联](errors.md) → [分层环境诊断](diagnostics.md) → [部署日志](../deploy/README.md#日志与健康检查) |
 
+当前实现见[本地存储容量管理](storage-capacity.md)。存储扩容与云端计划见 [存储容量专项 S1～S4](milestones/storage.md)：先完成本地容量治理，再推进 S3 备份和空间归档；记录明确区分已实现、人工运维和后续待办。
+
 ## 文档地图
 
 ```text
@@ -48,3 +50,5 @@ AGENTS.md                        代码维护约定与实现细节
 ```
 
 文档描述当前仓库实现。内置模型列表、价格快照和镜像里的 CLI 版本可能随源码或上游变化，部署时以自己的配置与实际账号能力为准。
+
+- [共享工具与用户缓存](shared-tools.md)：Go SDK、Playwright/Puppeteer 公共只读工具库，用户缓存隔离和数据盘启用步骤。

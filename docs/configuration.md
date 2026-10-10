@@ -163,3 +163,11 @@ data/                               实际根目录由 data_dir 决定
 `resources` 支持 `max_running`、`max_running_per_user` 和 `min_free_bytes`，均为非负整数，0 禁用。可从管理员设置 API/界面原子保存并立即影响新启动。限制与磁盘统计口径见[运行维护](architecture/deployment-layout.md#容量与回收)。
 
 Git 连接与 OAuth 应用可在网页选择 `network.route=tunnel` 及 `network.ca_pem`；路由固定为连接属主的 abox-link 隧道，断开时不直连，客户端需放行目标域名/端口。公司 CA 仅附加到该连接 TLS 信任池。SSH 连接需配置可信的服务器主机公钥并核对 SHA256 指纹，私钥不下发容器。详见 [Git API](api.md#企业网络与-ssh)。
+
+## 共享工具存储
+
+可选 `tool_storage.root` 指定数据盘上的共享工具和用户缓存根，`tool_storage.go_version` 指定已发布的 Go SDK。默认关闭，操作员配置后重启服务端，已有空间下次启动生效。见[共享工具与用户缓存](shared-tools.md)。
+
+## 存储容量策略
+
+操作员配置 `storage_policy`，默认关闭，修改后重启。用户数据/缓存项目配额、全实例分配预算、挂载 UUID 校验及维护参数见[本地存储容量管理](storage-capacity.md)。迁移与调整通过离线 `storage-config` / `storage-prepare`，网页设置写回保留这些字段。

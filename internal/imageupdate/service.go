@@ -1,4 +1,4 @@
-// Package imageupdate updates CLI packages on top of the configured image.
+// Package imageupdate migrates legacy images and updates CLI packages from fixed bases.
 // It does not restart containers or depend on a checkout, shell, or systemd.
 package imageupdate
 
@@ -37,23 +37,30 @@ type Backend interface {
 	InspectCLIImage(context.Context, string) (Image, error)
 	BuildCLIImage(context.Context, Image, Versions, string, func(string)) error
 	ValidateCLIImage(context.Context, string) (agentprobe.Report, error)
+	FlattenCLIImage(context.Context, Image, func(string)) (Image, error)
+	LegacyCLIImages(context.Context, string) ([]string, error)
+	RemoveCLIImage(context.Context, string, map[string]bool) (bool, error)
 }
 type Status struct {
-	Running       bool               `json:"running"`
-	Action        string             `json:"action"`
-	Phase         string             `json:"phase"`
-	StartedAt     int64              `json:"started_at"`
-	FinishedAt    int64              `json:"finished_at"`
-	CheckedAt     int64              `json:"checked_at"`
-	BaseImage     string             `json:"base_image"`
-	Current       Image              `json:"current"`
-	Target        Versions           `json:"target"`
-	Available     bool               `json:"available"`
-	ResultImage   string             `json:"result_image"`
-	Error         string             `json:"error"`
-	Log           string             `json:"log"`
-	LastScheduled string             `json:"last_scheduled"`
-	Validation    *agentprobe.Report `json:"validation,omitempty"`
+	Images            map[string]ImageRecord `json:"images,omitempty"`
+	LastMaintenance   string                 `json:"last_maintenance,omitempty"`
+	MaintenanceFailed string                 `json:"maintenance_failed,omitempty"`
+	MaintenancePaused string                 `json:"maintenance_paused,omitempty"`
+	Running           bool                   `json:"running"`
+	Action            string                 `json:"action"`
+	Phase             string                 `json:"phase"`
+	StartedAt         int64                  `json:"started_at"`
+	FinishedAt        int64                  `json:"finished_at"`
+	CheckedAt         int64                  `json:"checked_at"`
+	BaseImage         string                 `json:"base_image"`
+	Current           Image                  `json:"current"`
+	Target            Versions               `json:"target"`
+	Available         bool                   `json:"available"`
+	ResultImage       string                 `json:"result_image"`
+	Error             string                 `json:"error"`
+	Log               string                 `json:"log"`
+	LastScheduled     string                 `json:"last_scheduled"`
+	Validation        *agentprobe.Report     `json:"validation,omitempty"`
 }
 type Service struct {
 	mu       sync.Mutex
@@ -63,12 +70,19 @@ type Service struct {
 	status   Status
 	client   *http.Client
 	registry string
+	loadErr  error
 }
 
 func New(cfg *config.Config, backend Backend) *Service {
 	s := &Service{cfg: cfg, backend: backend, path: filepath.Join(cfg.DataDir, "image-update-state.json"), client: &http.Client{Timeout: 30 * time.Second}, registry: "https://registry.npmjs.org/"}
 	if raw, err := os.ReadFile(s.path); err == nil {
-		_ = json.Unmarshal(raw, &s.status)
+		s.loadErr = json.Unmarshal(raw, &s.status)
+	} else if !os.IsNotExist(err) {
+		s.loadErr = err
+	}
+	if s.loadErr != nil {
+		s.status.Phase = "failed"
+		s.status.Error = "镜像维护状态读取失败，未修改镜像"
 	}
 	if s.status.Running {
 		s.status.Running = false
@@ -81,6 +95,10 @@ func (s *Service) Snapshot() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	status := s.status
+	status.Images = make(map[string]ImageRecord, len(s.status.Images))
+	for id, v := range s.status.Images {
+		status.Images[id] = v
+	}
 	if status.Validation != nil {
 		report := *status.Validation
 		report.Checks = append([]agentprobe.Check(nil), report.Checks...)
@@ -139,8 +157,11 @@ func Due(now time.Time, clock, last string) bool {
 // Prepare reserves the single job slot before the caller starts its lifecycle-
 // tracked goroutine. The returned function must be called even on shutdown.
 func (s *Service) Prepare(action string, scheduled bool) (func(context.Context), error) {
-	if action != "check" && action != "update" && action != "rollback" {
+	if action != "check" && action != "update" && action != "rollback" && action != "maintain" {
 		return nil, fmt.Errorf("未知更新操作")
+	}
+	if s.loadErr != nil {
+		return nil, fmt.Errorf("镜像维护状态读取失败: %w", s.loadErr)
 	}
 	policy, base, previous := s.cfg.ImageUpdateState()
 	now := time.Now().In(s.cfg.GetLocation())
@@ -149,14 +170,24 @@ func (s *Service) Prepare(action string, scheduled bool) (func(context.Context),
 	if s.status.Running {
 		return nil, fmt.Errorf("已有客户端更新任务正在执行")
 	}
-	if scheduled && (!policy.Enabled || !Due(now, policy.Time, s.status.LastScheduled)) {
+	if scheduled && action == "maintain" && s.status.LastMaintenance == now.Format("2006-01-02") {
+		return nil, nil
+	}
+	if scheduled && action != "maintain" && (!policy.Enabled || !Due(now, policy.Time, s.status.LastScheduled)) {
+		return nil, nil
+	}
+	if scheduled && action == "update" && s.status.MaintenanceFailed == base {
 		return nil, nil
 	}
 	last := s.status.LastScheduled
-	if scheduled {
+	if scheduled && action != "maintain" {
 		last = now.Format("2006-01-02")
 	}
-	s.status = Status{Running: true, Action: action, Phase: "checking", StartedAt: now.UnixMilli(), BaseImage: base, LastScheduled: last}
+	images, maintenance, paused, failed := s.status.Images, s.status.LastMaintenance, s.status.MaintenancePaused, s.status.MaintenanceFailed
+	if action == "maintain" {
+		maintenance = now.Format("2006-01-02")
+	}
+	s.status = Status{MaintenanceFailed: failed, Images: images, LastMaintenance: maintenance, MaintenancePaused: paused, Running: true, Action: action, Phase: "checking", StartedAt: now.UnixMilli(), BaseImage: base, LastScheduled: last}
 	if err := s.persistLocked(); err != nil {
 		s.status.Running = false
 		s.status.Phase = "failed"
@@ -171,6 +202,15 @@ func (s *Service) Prepare(action string, scheduled bool) (func(context.Context),
 		defer s.mu.Unlock()
 		s.status.Running = false
 		s.status.FinishedAt = time.Now().UnixMilli()
+		if action == "maintain" {
+			s.status.MaintenanceFailed = ""
+			if err != nil {
+				s.status.MaintenanceFailed = base
+			}
+		}
+		if action == "update" && err == nil {
+			s.status.MaintenanceFailed = ""
+		}
 		if err != nil {
 			s.status.Phase = "failed"
 			s.status.Error = err.Error()
@@ -253,6 +293,13 @@ func (s *Service) run(ctx context.Context, action string, policy config.ImageUpd
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		s.mu.Lock()
+		s.status.MaintenancePaused = old.ID
+		err = s.persistLocked()
+		s.mu.Unlock()
+		if err != nil {
+			return err
+		}
 		if err := s.cfg.SwitchAgentImage(base, policy, old.ID, img.ID, true); err != nil {
 			return err
 		}
@@ -264,6 +311,18 @@ func (s *Service) run(ctx context.Context, action string, policy config.ImageUpd
 	}
 	if !ValidVersion(img.Claude) || !ValidVersion(img.Codex) {
 		return errors.New("当前镜像缺少有效的 Claude/Codex 版本标签，请先使用带版本标签的 Agent 镜像")
+	}
+	if action == "maintain" {
+		return s.maintain(ctx, img, policy, base)
+	}
+	if action == "update" {
+		s.mu.Lock()
+		s.status.MaintenancePaused = ""
+		record, known := s.status.Images[img.ID]
+		s.mu.Unlock()
+		if !known || record.Base == "" {
+			return s.maintain(ctx, img, policy, base)
+		}
 	}
 	claude, err := s.version(ctx, "@anthropic-ai/claude-code", policy.Channel)
 	if err != nil {
@@ -299,12 +358,19 @@ func (s *Service) run(ctx context.Context, action string, policy config.ImageUpd
 		return nil
 	}
 	// Unique tags keep both old and unsuccessful candidate images available to
-	// operators. FROM uses the immutable image ID, retaining browser/custom fixes.
+	// operators. FROM uses the recorded immutable base, never the previous update.
 	tag := fmt.Sprintf("agentbox-agent:cli-%d", time.Now().UnixNano())
 	s.mu.Lock()
 	s.status.Phase = "building"
 	s.mu.Unlock()
-	if err := s.backend.BuildCLIImage(ctx, img, target, tag, s.log); err != nil {
+	s.mu.Lock()
+	baseID := s.status.Images[img.ID].Base
+	s.mu.Unlock()
+	fixed, err := s.backend.InspectCLIImage(ctx, baseID)
+	if err != nil {
+		return fmt.Errorf("固定底座不可用，拒绝叠加更新: %w", err)
+	}
+	if err := s.backend.BuildCLIImage(ctx, fixed, target, tag, s.log); err != nil {
 		return err
 	}
 	built, err := s.backend.InspectCLIImage(ctx, tag)
@@ -318,6 +384,16 @@ func (s *Service) run(ctx context.Context, action string, policy config.ImageUpd
 		return err
 	}
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.status.Images[built.ID] = ImageRecord{Base: fixed.ID, RetiredAt: time.Now().UnixMilli()}
+	oldRecord := s.status.Images[img.ID]
+	oldRecord.RetiredAt = time.Now().UnixMilli()
+	s.status.Images[img.ID] = oldRecord
+	err = s.persistLocked()
+	s.mu.Unlock()
+	if err != nil {
 		return err
 	}
 	if err := s.cfg.SwitchAgentImage(base, policy, built.ID, img.ID, false); err != nil {

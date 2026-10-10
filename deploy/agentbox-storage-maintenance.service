@@ -1,0 +1,10 @@
+[Unit]
+Description=Agentbox retired release maintenance
+After=agentbox.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/agentbox/current/deploy/retention.py --app /opt/agentbox --config /etc/agentbox/config.json --apply
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=300

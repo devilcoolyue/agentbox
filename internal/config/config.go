@@ -328,6 +328,8 @@ type Config struct {
 	DataDir        string                   `json:"data_dir"`
 	CacheDir       string                   `json:"cache_dir,omitempty"`
 	Resources      ResourceLimits           `json:"resources"`
+	ToolStorage    ToolStorage              `json:"tool_storage,omitempty"`
+	StoragePolicy  StoragePolicy            `json:"storage_policy,omitempty"`
 	AgentImage     string                   `json:"agent_image"`
 	ImageUpdates   ImageUpdateConfig        `json:"image_updates"`
 	PreviousImage  string                   `json:"previous_agent_image,omitempty"`
@@ -460,6 +462,12 @@ func (c *Config) Check() error {
 
 // validateLocked requires at least a read lock (or an unshared Load snapshot).
 func (c *Config) validateLocked() error {
+	if err := c.StoragePolicy.validate(c.DataDir, c.ToolStorage.Root); err != nil {
+		return err
+	}
+	if err := c.ToolStorage.validate(c.DataDir); err != nil {
+		return err
+	}
 	if err := c.ImageUpdates.normalized().validate(); err != nil {
 		return err
 	}
@@ -661,6 +669,8 @@ type persistConfig struct {
 	DataDir        string                   `json:"data_dir,omitempty"`
 	CacheDir       string                   `json:"cache_dir,omitempty"`
 	Resources      ResourceLimits           `json:"resources"`
+	ToolStorage    ToolStorage              `json:"tool_storage,omitempty"`
+	StoragePolicy  StoragePolicy            `json:"storage_policy,omitempty"`
 	AgentImage     string                   `json:"agent_image"`
 	ImageUpdates   ImageUpdateConfig        `json:"image_updates"`
 	PreviousImage  string                   `json:"previous_agent_image,omitempty"`
@@ -693,6 +703,8 @@ func (c *Config) saveLocked() error {
 		DataDir:        c.rawDataDir,
 		CacheDir:       c.rawCacheDir,
 		Resources:      c.Resources,
+		ToolStorage:    c.ToolStorage,
+		StoragePolicy:  c.StoragePolicy.Clone(),
 		AgentImage:     c.AgentImage,
 		ImageUpdates:   c.ImageUpdates,
 		PreviousImage:  c.PreviousImage,
@@ -1019,6 +1031,8 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		DataDir:        c.DataDir,
 		CacheDir:       c.CacheDir,
 		Resources:      c.Resources,
+		ToolStorage:    c.ToolStorage,
+		StoragePolicy:  c.StoragePolicy.Clone(),
 		rawCacheDir:    c.rawCacheDir,
 		AgentImage:     c.AgentImage,
 		ImageUpdates:   c.ImageUpdates,
@@ -1056,6 +1070,10 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		return fmt.Errorf("写入配置文件失败: %w", err)
 	}
 	c.Listen = work.Listen
+	c.DataDir = work.DataDir
+	c.rawDataDir = work.rawDataDir
+	c.CacheDir = work.CacheDir
+	c.rawCacheDir = work.rawCacheDir
 	c.AuthToken = work.AuthToken
 	c.AgentImage = work.AgentImage
 	c.ImageUpdates = work.ImageUpdates
@@ -1067,6 +1085,8 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.TimeZone = work.TimeZone
 	c.Container = work.Container
 	c.Resources = work.Resources
+	c.ToolStorage = work.ToolStorage
+	c.StoragePolicy = work.StoragePolicy.Clone()
 	c.Tunnel = work.Tunnel
 	c.ProxyBridge = work.ProxyBridge
 	c.Accounts = work.Accounts

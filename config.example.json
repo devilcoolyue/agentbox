@@ -3,6 +3,8 @@
   "auth_token": "CHANGE_ME_TO_A_LONG_RANDOM_TOKEN",
   "data_dir": "data",
   "cache_dir": "",
+  "tool_storage": {"root": "", "go_version": ""},
+  "storage_policy": {},
   "resources": {
     "max_running": 0,
     "max_running_per_user": 0,

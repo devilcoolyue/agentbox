@@ -164,6 +164,10 @@ func rewriteConfig(root *safefs.Root, m *Manifest) error {
 	}
 	cfg["data_dir"] = json.RawMessage(`"data"`)
 	cfg["cache_dir"] = json.RawMessage(`"cache"`)
+	// Shared tools/caches are external and rebuildable; a restored instance must
+	// never mount another instance's writable caches or retain its host paths.
+	delete(cfg, "tool_storage")
+	delete(cfg, "storage_policy")
 	var accounts []map[string]json.RawMessage
 	if raw := cfg["accounts"]; len(raw) > 0 {
 		if err = json.Unmarshal(raw, &accounts); err != nil {

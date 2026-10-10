@@ -575,7 +575,10 @@ export interface ProcessStat {
   uptime_ms: number;
 }
 
+export interface StorageDisk { roles:string[];total:number;used:number;available:number;error?:boolean; }
+
 export interface HostStat {
+ disks?:StorageDisk[];
   cpu_count: number;
   /** 全核合计占用 0-100 */
   cpu_percent: number;

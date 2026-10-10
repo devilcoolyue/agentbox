@@ -101,11 +101,11 @@ with tempfile.TemporaryDirectory(prefix='agentbox-release-', dir=out.parent) as 
             copy_tracked_tree('images', folder / 'images', required=(
                 'images/agent/bashrc', 'images/agent/vimrc'))
             (folder / 'scripts').mkdir()
-            for script in ['build-image.sh', 'build-browser-image.sh', 'backup.sh']:
+            for script in ['build-image.sh', 'build-browser-image.sh', 'backup.sh', 'tool-storage.py']:
                 shutil.copy2(ROOT / 'scripts' / script, folder / 'scripts' / script)
             (folder / 'deploy').mkdir()
             shutil.copy2(ROOT / 'deploy/downloads/README.md', folder / 'deploy/README.md')
-            for deploy_file in ['release.py', 'bootstrap.py', 'update.py']:
+            for deploy_file in ['release.py', 'bootstrap.py', 'update.py', 'retention.py', 'agentbox-storage-maintenance.service', 'agentbox-storage-maintenance.timer']:
                 shutil.copy2(ROOT / 'deploy' / deploy_file, folder / 'deploy' / deploy_file)
         metadata = {'program': program, 'version': a.version, 'revision': revision,
                     'built_at': built, 'os': system, 'arch': arch,

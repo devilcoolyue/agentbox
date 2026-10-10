@@ -126,7 +126,7 @@ export async function smoke(page) {
    body=settings;
   } else if(path==='/api/monitor') {
    monitorCalls++;
-   body={now:Date.now(),window_ms:0,process:{rss:0,heap_alloc:0,goroutines:1,uptime_ms:100},host:{cpu_count:1,load1:0,mem_total:0,mem_used:0},summary:{total:0,running:0,cpu_percent:0,mem_usage:0},containers:[]};
+   body={now:Date.now(),window_ms:0,process:{rss:0,heap_alloc:0,goroutines:1,uptime_ms:100},host:{cpu_count:1,load1:0,mem_total:0,mem_used:0,disks:[{roles:['system'],total:30*2**30,used:19*2**30,available:11*2**30},{roles:['data','tools'],total:49*2**30,used:35*2**30,available:14*2**30}]},summary:{total:0,running:0,cpu_percent:0,mem_usage:0},containers:[]};
   } else if(path==='/api/usage/events') body={rows:usageRows,total:{rows:usageRows.length,turns:usageRows.length,input_tokens:0,output_tokens:0,cache_read_tokens:0,cache_write_tokens:0,cost_micro_usd:0},facets:{users:[],agents:[],models:[]},scope:'all',timezone:'UTC',order:'desc',limit:20,offset:0,sync:{last_scan_at:Date.now(),last_success_at:Date.now(),scanning:false,errors:0}};
   await route.fulfill({json:body});
  });
@@ -452,7 +452,9 @@ export async function smoke(page) {
   assert.equal(accountCreates,3,'closing untouched form created an account');
   await page.setViewportSize({width:1280,height:900});
   await page.locator('#set-nav [data-sec="monitor"]').click();
-  await page.waitForTimeout(100);assert.equal(monitorCalls,1);
+  await page.waitForFunction(()=>document.querySelector("#mon-tiles")?.textContent.includes("用户数据 / 工具与缓存"));
+  assert.equal(monitorCalls,1);
+  assert.match(await page.locator("#mon-tiles").innerText(),/系统盘/);
   usageRows = [
     {input_tokens:10,cache_read_tokens:80,cache_write_tokens:10,provider:'firstParty',effort:'xhigh',effort_control:'effort'},
     {input_tokens:100,cache_read_tokens:0,cache_write_tokens:0,kind:'title'},
