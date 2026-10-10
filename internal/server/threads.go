@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -342,10 +343,84 @@ func truncRunes(s string, n int) string {
 
 // --- HTTP handlers ---
 
-// handleHistory returns the active thread's transcript plus its metadata for
-// the thread bar. Older threads are listed/loaded via the threads endpoints.
+// historyLimits bounds one page of GET history. Pages end at a user message so
+// each holds whole turns; only a turn larger than the hard limit is split, and
+// the page starting inside it carries a turn_context line instead.
+type historyLimits struct {
+	Entries, Bytes             int // stop at the next user message once reached
+	MaxEntries, MaxBytes       int // split a single turn beyond this
+	ReloadEntries, ReloadBytes int // a from= refresh larger than this returns the newest page
+}
+
+// Counted in rendered entries: Claude's tool results are neither sent nor
+// counted, they made up a third of a tool-heavy transcript.
+var historyPage = historyLimits{
+	Entries: 800, Bytes: 4 << 20,
+	MaxEntries: 3000, MaxBytes: 16 << 20,
+	ReloadEntries: 12000, ReloadBytes: 64 << 20,
+}
+
+// historySent reports whether the web client renders anything from an entry.
+// Claude tool results ("user" events) only feed the CLI; they are often whole
+// file contents, so history leaves them on disk.
+func historySent(e histEntry) bool {
+	if e.meta.Kind != "event" {
+		return true
+	}
+	var ev struct {
+		Type string `json:"type"`
+	}
+	return json.Unmarshal(e.meta.Event, &ev) != nil || ev.Type != "user"
+}
+
+// historyStart picks the first index of the page ending before end.
+func historyStart(entries []histEntry, end int, limits historyLimits) int {
+	count, size, start := 0, 0, end
+	for start > 0 {
+		e := entries[start-1]
+		if historySent(e) {
+			count++
+			size += len(e.raw)
+		}
+		start--
+		if count >= limits.MaxEntries || size >= limits.MaxBytes {
+			break
+		}
+		if e.meta.Kind == "user" && (count >= limits.Entries || size >= limits.Bytes) {
+			break
+		}
+	}
+	return start
+}
+
+func historyWithin(entries []histEntry, count, size int) bool {
+	n, total := 0, 0
+	for _, e := range entries {
+		if historySent(e) {
+			n++
+			total += len(e.raw)
+		}
+		if n > count || total > size {
+			return false
+		}
+	}
+	return true
+}
+
+// historyIndex parses a page cursor. Cursors index the valid JSONL lines of a
+// thread file, which is only ever appended to.
+func historyIndex(value string, lo, hi int) (int, bool) {
+	n, err := strconv.Atoi(value)
+	return n, err == nil && n >= lo && n <= hi
+}
+
+// handleHistory returns the active thread's newest page plus its metadata for
+// the thread bar. ?thread=&before= returns the page ending at that cursor of
+// the named thread; ?thread=&from= re-reads the active thread from a cursor so
+// a reconnect keeps pages the client already loaded. Responses carry start
+// (cursor of the first returned entry) and has_more.
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	const maxHistory = 2000
+	q := r.URL.Query()
 	room := s.chat.room(sess.ID)
 	room.fileMu.Lock()
 	defer room.fileMu.Unlock()
@@ -353,10 +428,18 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	older := q.Has("before")
 	tid := s.activeThread(sess)
+	if older {
+		tid = q.Get("thread")
+		if !threadIDRe.MatchString(tid) {
+			writeProblem(w, r, "chat.history", "invalid_request")
+			return
+		}
+	}
 	// New composers request a stable identity even for a not-yet-sent thread.
 	// The legacy response/empty-thread behavior stays available to old clients.
-	if r.URL.Query().Get("draft_context") == "1" {
+	if !older && q.Get("draft_context") == "1" {
 		var err error
 		tid, err = s.ensureActiveThread(sess)
 		if err != nil {
@@ -374,43 +457,63 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		}
 	}
 	if tid == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "thread": nil})
+		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "thread": nil, "start": 0, "has_more": false})
 		return
 	}
 	raw, err := os.ReadFile(s.threadPath(sess, tid))
 	if err != nil {
+		if os.IsNotExist(err) && older {
+			writeProblem(w, r, "chat.history", "invalid_request")
+			return
+		}
 		if os.IsNotExist(err) { // 新开的空对话还没落盘
-			writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "thread": nil, "active_thread": tid})
+			writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "thread": nil, "active_thread": tid, "start": 0, "has_more": false})
 			return
 		}
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	entries := parseEntries(raw)
+	end, start := len(entries), -1
+	if older {
+		var ok bool
+		if end, ok = historyIndex(q.Get("before"), 1, len(entries)); !ok {
+			writeProblem(w, r, "chat.history", "invalid_request")
+			return
+		}
+	} else if q.Get("thread") == tid && q.Has("from") {
+		// A stale or oversized refresh quietly falls back to the newest page;
+		// the client compares start with what it asked for.
+		if from, ok := historyIndex(q.Get("from"), 0, len(entries)); ok &&
+			historyWithin(entries[from:], historyPage.ReloadEntries, historyPage.ReloadBytes) {
+			start = from
+		}
+	}
+	if start < 0 {
+		start = historyStart(entries, end, historyPage)
+	}
 	var contextLine json.RawMessage
-	if len(entries) > maxHistory {
-		start := len(entries) - maxHistory
-		// A long turn can outlive the history window. Preserve its request
-		// snapshot without returning the potentially large original prompt.
-		if entries[start].meta.Kind != "user" {
-			for i := start - 1; i >= 0; i-- {
-				if entries[i].meta.Kind == "user" {
-					var user logEntry
-					if json.Unmarshal(entries[i].raw, &user) == nil && user.Turn != nil {
-						contextLine, _ = json.Marshal(logEntry{TS: user.TS, Kind: "turn_context", Turn: user.Turn})
-					}
-					break
+	// A page can begin inside a long turn. Preserve its request snapshot
+	// without returning the potentially large original prompt.
+	if start > 0 && start < end && entries[start].meta.Kind != "user" {
+		for i := start - 1; i >= 0; i-- {
+			if entries[i].meta.Kind == "user" {
+				var user logEntry
+				if json.Unmarshal(entries[i].raw, &user) == nil && user.Turn != nil {
+					contextLine, _ = json.Marshal(logEntry{TS: user.TS, Kind: "turn_context", Turn: user.Turn})
 				}
+				break
 			}
 		}
-		entries = entries[start:]
 	}
-	lines := make([]json.RawMessage, 0, len(entries)+1)
+	lines := make([]json.RawMessage, 0, end-start+1)
 	if contextLine != nil {
 		lines = append(lines, contextLine)
 	}
-	for _, e := range entries {
-		lines = append(lines, e.raw)
+	for _, e := range entries[start:end] {
+		if historySent(e) {
+			lines = append(lines, e.raw)
+		}
 	}
 	var turnIDs []string
 	for _, line := range lines {
@@ -426,8 +529,14 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	meta, _ := s.scanThread(sess, tid)
-	writeJSON(w, http.StatusOK, map[string]any{"entries": lines, "thread": meta, "costs": costs, "active_thread": tid})
+	out := map[string]any{"entries": lines, "costs": costs, "start": start, "has_more": start > 0}
+	if older {
+		out["thread_id"] = tid
+	} else {
+		meta, _ := s.scanThread(sess, tid)
+		out["thread"], out["active_thread"] = meta, tid
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleThreadList(w http.ResponseWriter, r *http.Request, sess store.Session) {

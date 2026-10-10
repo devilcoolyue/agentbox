@@ -847,11 +847,18 @@ export interface HistoryEntry extends APIProblem {
 }
 
 /** GET /api/sessions/{id}/history */
+/** GET /api/sessions/{id}/history: the newest page of the active thread, or
+ * with ?thread=&before= the page ending at that cursor (thread_id set, no
+ * thread/active_thread). Pages hold whole turns unless one turn is too large. */
 export interface History {
   active_thread?:string;
   entries: HistoryEntry[];
-  thread: Thread | null;
+  thread?: Thread | null;
+  thread_id?: string;
   costs?: Record<string, ChatTurnCost>;
+  /** cursor of the first returned entry; older servers omit it */
+  start?: number;
+  has_more?: boolean;
 }
 
 /** GET /api/sessions/{id}/chat/threads */

@@ -19,6 +19,7 @@ import { imageUpdateSmoke } from './test-image-updates.mjs';
 import {updateComponentsSmoke} from './test-update-components.mjs';
 import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
+import { chatPagesSmoke } from './test-chat-pages.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
 import { motionSmoke } from './test-motion.mjs';
@@ -632,6 +633,7 @@ export async function smoke(page) {
   await featureLifetimeSmoke(page);
   await thinkingStreamSmoke(page);
   await chatFooterSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg))});
+  await chatPagesSmoke(page,{session:'fixture-space',closeChat:()=>chatSocket.close()});
   await page.locator('.tab[data-tab="files"]').click();
   await at('#/sessions/fixture-space/files','#tab-files');
   await page.reload();

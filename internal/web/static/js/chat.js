@@ -7,8 +7,8 @@ import { S, bus, emit } from "./state.js";
 import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
-import { chip, renderUserMsg, renderEntry, svgIcon } from "./chat-render.js";
-import { answerFooter, observeAnswer } from "./chat-footer.js";
+import { chip, renderUserMsg, svgIcon } from "./chat-render.js";
+import { observeAnswer } from "./chat-footer.js";
 import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
 import { BUDGETS, EFFORT_LABELS, allowedLevels, defaultReasoning, canKeepEffort } from "./reasoning.js";
@@ -22,6 +22,8 @@ import { formatProblem } from "./problems.js";
 import { ChatSender } from "./features/chat/sender.js";
 import { createChatStream } from "./features/chat/stream.js";
 import { ChatHistory } from "./features/chat/history.js";
+import { createOlderHistory } from "./features/chat/older.js";
+import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { ChatConnection } from "./features/chat/connection.js";
 import { initComposerDrafts } from "./features/chat/drafts.js";
 import { initChatOutbox } from "./features/chat/outbox.js";
@@ -82,8 +84,10 @@ export function connectChat() {
         connection.connect(wsURL(`/sessions/${S.current.id}/chat`));
 }
 /* 切换/删除会话时收尾：作废重连定时器、关连接、复位状态 */
+const sessionAgent = () => S.current ? S.current.agent : "claude";
+const live = new TurnWriter(() => $("chat-log"), sessionAgent);
 const stream = createChatStream({ append: appendChat, working: setWorkingLabel, state: () => S.chatState,
-    footer: () => turnFooter, log: () => $("chat-log"), nearBottom });
+    footer: () => live.footer, log: () => $("chat-log"), nearBottom });
 let chatEpoch = 0;
 export function chatTeardown() {
     drafts?.leave();
@@ -101,7 +105,7 @@ export function chatTeardown() {
     setChatConn("connected");
     cancelHistoryLoad();
     stream.reset();
-    resetAnswerContext();
+    live.reset();
     setChatStatus("idle");
 }
 /* 贴底判定：用户已在底部附近（正在跟读）才把视口拉到最底，
@@ -134,20 +138,20 @@ function handleChatMsg(msg) {
             stream.flush(); // 上一回合的回放立刻放完，不让新消息插到它前面
             noteThreadTitle(msg.text);
             appendChat(renderUserMsg(msg.text));
-            answerContext.turn = msg.turn;
+            live.context.turn = msg.turn;
             break;
         case "agent_event":
-            observeAnswer(answerContext, msg.event, msg.ts);
+            observeAnswer(live.context, msg.event, msg.ts);
             stream.event(msg.event);
-            turnFooter?.update();
+            live.footer?.update();
             break;
         case "agent_raw":
             stream.append(chip(msg.text)); // 回放中则排队，保持时间线顺序
             break;
         case "turn_cost":
-            if (msg.cost && msg.cost.turn_id === answerContext.turn?.id) {
-                answerContext.cost = msg.cost;
-                turnFooter?.update();
+            if (msg.cost && msg.cost.turn_id === live.context.turn?.id) {
+                live.context.cost = msg.cost;
+                live.footer?.update();
             }
             break;
         case "thread":
@@ -162,8 +166,8 @@ function handleChatMsg(msg) {
             break;
         case "status":
             outbox?.socketStatus(msg.state || "idle");
-            if (!answerContext.ts && msg.ts)
-                answerContext.ts = msg.ts;
+            if (!live.context.ts && msg.ts)
+                live.context.ts = msg.ts;
             setChatStatus(msg.state, msg.error ? formatProblem(msg, i18nText) : undefined);
             if (msg.state === "error" && msg.retry_text && !outbox?.enabled) {
                 const input = $("chat-input");
@@ -857,16 +861,33 @@ for (const c of document.querySelectorAll(".hero-pill")) {
         autoGrow();
     });
 }
-/* ---------------- 历史对话（当前线程） ---------------- */
-const history = new ChatHistory((path, signal) => api(path, { signal }), () => S.current?.id);
+/* ---------------- 历史对话（当前线程） ----------------
+ * 首屏只拿最新一页（服务端按整回合切页，见 threads.go 的 historyPage），
+ * 更早的内容由 older 在用户上滑时逐页插到顶部。 */
+const readHistory = (path, signal) => api(path, { signal });
+const history = new ChatHistory(readHistory, () => S.current?.id);
+const older = createOlderHistory({
+    log: () => $("chat-log"),
+    session: () => S.current?.id,
+    read: readHistory,
+    render: value => {
+        const box = document.createElement("div");
+        const writer = new TurnWriter(() => box, sessionAgent);
+        replayHistory(writer, value.entries, value.costs, node => writer.place(node));
+        return box;
+    },
+    changed: updateScrollBottomButton,
+});
 function cancelHistoryLoad() {
     history.cancel();
+    older.cancel();
     S.histLoading = false;
     S.histError = "";
 }
 /* opts.silent：重连后的对齐式补拉——不显示加载态（页面已有内容，闪一下
  * 加载中反而像出了故障），拉到后整体替换对话流以补上断线期间错过的事件，
- * 并保持用户原本的阅读位置（除非本来就贴着底）。 */
+ * 并保持用户原本的阅读位置（除非本来就贴着底）。正在回看时连同已加载的
+ * 较早几页一起重拉（from=已显示内容的起点），贴底时只要最新一页。 */
 export async function loadHistory(opts = {}) {
     const sess = S.current;
     if (!sess)
@@ -875,38 +896,39 @@ export async function loadHistory(opts = {}) {
     const log = $("chat-log");
     const wasAtBottom = silent ? nearBottom(log) : true;
     const prevScroll = log.scrollTop;
+    const keep = wasAtBottom ? null : older.cursor();
+    older.pause();
     if (!silent) {
         S.histLoading = true;
         S.histError = "";
         updateHero(); // 中央显示加载态，加载完一次性呈现，避免先闪新会话引导页
     }
-    let draftThread = "";
-    const result = await history.load(sess.id, `/sessions/${sess.id}/history` + (S.draftProtocol === 1 ? "?draft_context=1" : ""), async ({ active_thread, thread }) => {
+    const query = new URLSearchParams();
+    if (S.draftProtocol === 1)
+        query.set("draft_context", "1");
+    if (keep) {
+        query.set("thread", keep.thread);
+        query.set("from", String(keep.start));
+    }
+    const qs = query.toString(); // 不用 .size：Safari 16 没有
+    let draftThread = "", kept = false;
+    const result = await history.load(sess.id, `/sessions/${sess.id}/history` + (qs ? "?" + qs : ""), async ({ active_thread, thread }) => {
         if (S.draftProtocol === 1 && !active_thread)
             throw new Error(i18nText("无法确认对话草稿的归属，请重新加载历史。"));
         draftThread = active_thread || thread?.id || "legacy-empty-" + (legacyDraftVersions.get(sess.id) || 0);
         await drafts?.enter(sess.id, draftThread);
-    }, ({ entries, thread, costs }) => {
+    }, ({ entries, thread, costs, start, has_more, active_thread }) => {
         composerThread = draftThread;
         outbox?.enter(sess.id, draftThread);
-        setThreadBar(thread);
+        setThreadBar(thread ?? null);
         stream.reset();
         log.replaceChildren(); // 重连与首次加载都以服务端记录为准
-        resetAnswerContext();
-        for (const raw of entries) {
-            if (raw.kind === "event")
-                observeAnswer(answerContext, raw.event, raw.ts);
-            for (const n of renderEntry(raw))
-                appendChat(n);
-            if (raw.kind === "user" || raw.kind === "turn_context") {
-                answerContext.turn = raw.turn;
-                answerContext.cost = raw.turn ? costs?.[raw.turn.id] : undefined;
-            }
-            answerContext.historical = true;
-            if (raw.kind === "status" && !answerContext.ts)
-                answerContext.ts = raw.ts;
-            turnFooter?.update();
-        }
+        live.reset();
+        replayHistory(live, entries, costs, appendChat);
+        const id = active_thread || thread?.id;
+        // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效
+        kept = !!keep && keep.thread === id && keep.start === start;
+        older.reset(id && typeof start === "number" ? { thread: id, start, more: !!has_more && start > 0 } : null);
     });
     if (result.state === "stale" || !result.current())
         return;
@@ -919,7 +941,7 @@ export async function loadHistory(opts = {}) {
         updateHero();
     }
     if (result.state === "loaded") {
-        log.scrollTop = wasAtBottom ? log.scrollHeight : prevScroll;
+        log.scrollTop = wasAtBottom || (keep && !kept) ? log.scrollHeight : prevScroll;
         updateScrollBottomButton();
     }
 }
@@ -935,59 +957,19 @@ export async function reloadThread() {
     outbox?.leave();
     composerThread = "";
     history.cancel(); // 立刻作废在途加载，clear 之后它们不得再往里追加
+    older.cancel();
     stream.reset(); // 回放动画与积压一并丢弃，历史里有完整内容
-    resetAnswerContext();
+    live.reset();
     $("chat-log").replaceChildren();
     setThreadBar(null);
     await loadHistory();
-}
-/* Agent 回合分组：两条用户消息之间的 agent 输出（文字/工具行/思考…）
- * 归入同一个 .turn 容器，左侧挂品牌头像（OpenWebUI 式对话流）。
- * 用户消息与分割线打断分组；切会话清空 log 后 isConnected 失效自动重开。 */
-let agentTurn = null; // 当前回合的内容列（.turn-body）
-let answerContext = {};
-let turnFooter = null;
-function resetAnswerContext() {
-    agentTurn = null;
-    turnFooter = null;
-    answerContext = {};
-}
-function turnBody() {
-    if (agentTurn && agentTurn.isConnected)
-        return agentTurn;
-    const turn = document.createElement("div");
-    turn.className = "turn";
-    const av = document.createElement("span");
-    av.className = "turn-avatar";
-    av.appendChild(agentIcon(S.current ? S.current.agent : "claude", 24));
-    const body = document.createElement("div");
-    body.className = "turn-body";
-    turnFooter = answerFooter(body, answerContext);
-    body.appendChild(turnFooter.el);
-    turn.append(av, body);
-    $("chat-log").appendChild(turn);
-    agentTurn = body;
-    return body;
 }
 export function appendChat(node) {
     if (!node)
         return;
     const log = $("chat-log");
     const stick = nearBottom(log);
-    const breaks = node.classList.contains("user") || node.classList.contains("chat-divider");
-    if (breaks) {
-        resetAnswerContext();
-        log.appendChild(node);
-    }
-    else {
-        const body = turnBody();
-        if (node.classList.contains("result") && body.querySelector(".msg.agent")) {
-            turnFooter.setReceipt(node);
-        }
-        else
-            body.insertBefore(node, turnFooter.el);
-        turnFooter.update();
-    }
+    live.place(node);
     ensureWorking(); // 新内容后把执行指示重新压回末尾（仅运行中生效）
     updateHero();
     if (stick)

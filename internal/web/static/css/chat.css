@@ -42,6 +42,17 @@
 /* 滚动 flex 容器的子项禁止收缩，否则内容超高时消息会被垂直压扁 */
 .chat-log > * { flex-shrink: 0; }
 
+/* 对话流顶部：还有更早的内容时挂这一条，滚到附近自动加载上一页（older.ts） */
+.chat-older {
+  align-self: center;
+  display: flex; align-items: center; gap: 8px;
+  min-height: 34px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.chat-older > [hidden] { display: none; }
+.chat-older.error { color: var(--text); }
+
 /* 新消息淡入（历史加载在隐藏态完成，呈现时整体淡入一次） */
 .msg, .turn { animation: msg-in 0.2s ease-out; }
 @keyframes msg-in {

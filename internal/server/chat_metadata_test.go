@@ -107,7 +107,7 @@ func TestHistoryWindowRetainsTurnMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = f.WriteString(strings.Repeat("{\"kind\":\"event\",\"ts\":\"2026-09-26T00:00:00Z\",\"event\":{\"type\":\"turn.started\"}}\n", 2005))
+	_, err = f.WriteString(strings.Repeat("{\"kind\":\"event\",\"ts\":\"2026-09-26T00:00:00Z\",\"event\":{\"type\":\"turn.started\"}}\n", historyPage.MaxEntries+5))
 	f.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -116,12 +116,14 @@ func TestHistoryWindowRetainsTurnMetadata(t *testing.T) {
 	s.handleHistory(w, httptest.NewRequest(http.MethodGet, "/history", nil), sess)
 	var history struct {
 		Entries []logEntry `json:"entries"`
+		Start   int        `json:"start"`
+		HasMore bool       `json:"has_more"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &history); err != nil {
 		t.Fatal(err)
 	}
-	if len(history.Entries) != 2001 {
-		t.Fatalf("entries = %d", len(history.Entries))
+	if len(history.Entries) != historyPage.MaxEntries+1 || history.Start != 6 || !history.HasMore {
+		t.Fatalf("entries = %d start = %d more = %v", len(history.Entries), history.Start, history.HasMore)
 	}
 	head := history.Entries[0]
 	if head.Kind != "turn_context" || head.Text != "" || head.Turn == nil || head.Turn.ID != "long-turn" {
