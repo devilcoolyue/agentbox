@@ -6,7 +6,14 @@ import tw from '../internal/web/static/js/locales/zh-TW-dynamic.js';
 
 const id='1234567890abcdef1234567890abcdef';
 const row=(id,state,code)=>({id,state,code,message:'synthetic-private-path /operator/config',hint:'synthetic-private-credential'});
-const language=(page,locale)=>page.evaluate(async locale=>{(await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage(locale);},locale);
+// Awaiting import() inside evaluate intermittently fails in Chromium with "Promise was collected" (Playwright
+// reports it as a destroyed context): nothing holds the pending promise. Keep it on the page, wait for the module,
+// then switch languages synchronously.
+const language=async(page,locale)=>{
+  await page.evaluate(()=>{window.__agentboxI18n??=import('/_v/{{BUILD}}/js/i18n.js').then(m=>window.__agentboxI18n=m.i18n);});
+  await page.waitForFunction(()=>!(window.__agentboxI18n instanceof Promise));
+  await page.evaluate(locale=>window.__agentboxI18n.setLanguage(locale),locale);
+};
 
 export async function diagnosticsSmoke(page,base){
   let scope='instance',failure=false,hang=false,requests=0,sockets=0;

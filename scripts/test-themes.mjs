@@ -207,11 +207,12 @@ export async function themesSmoke(page) {
     await page.evaluate(async url => (await import(new URL('i18n.js', url).href)).i18n.setLanguage('zh-CN'), url);
     assert.equal(state.puts, puts + 2);
     assert.equal(await root('skinCustom'), 'user:murky', 'a rejected import keeps the current theme');
-    // Malformed files never reach the server.
+    // Malformed files never reach the server. The page reads the file asynchronously and the previous
+    // message is also an error, so wait for the new text instead of reading whatever is still shown.
     await importFile('#themes-import-user', '{not json');
-    assert.equal(await statusText(), '主题文件不是有效的 JSON 对象');
+    await page.waitForFunction(() => document.querySelector('#themes-status').textContent === '主题文件不是有效的 JSON 对象');
     await importFile('#themes-import-user', { agentbox_theme: 1, id: '../x', name: 'X', base: 'amber' });
-    assert.match(await statusText(), /^主题 ID 只能包含/);
+    await page.waitForFunction(() => document.querySelector('#themes-status').textContent.startsWith('主题 ID 只能包含'));
     assert.equal(state.puts, puts + 2);
 
     // Re-importing an existing ID asks before replacing it.
