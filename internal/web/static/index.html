@@ -1473,10 +1473,12 @@
 <dialog id="dlg-new" aria-labelledby="new-title" aria-describedby="new-desc">
   <form id="new-form" method="dialog">
     <div class="dlg-head">
-      <h2 id="new-title" data-i18n-text="[&quot;创建 Agent 工作空间&quot;]">创建 Agent 工作空间</h2>
+      <div class="dlg-title-block">
+        <h2 id="new-title" data-i18n-text="[&quot;创建 Agent 工作空间&quot;]">创建 Agent 工作空间</h2>
+        <p id="new-desc" class="field-hint dlg-desc" data-i18n-text="[&quot;独立运行 Agent，拥有自己的文件、终端和对话。&quot;]">独立运行 Agent，拥有自己的文件、终端和对话。</p>
+      </div>
       <button type="button" id="new-cancel" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
-    <p id="new-desc" class="field-hint" data-i18n-text="[&quot;独立运行 Agent，拥有自己的文件、终端和对话。&quot;]">独立运行 Agent，拥有自己的文件、终端和对话。</p>
     <div class="dlg-body">
     <div id="new-setup" class="new-setup" role="status">
       <p id="new-setup-message"></p>
@@ -1745,10 +1747,12 @@
 <!-- 界面主题（themes.ts）：内置风格做底子 + 改写白名单令牌；服务端校验后存为全站 / 个人主题 -->
 <dialog id="dlg-themes" class="dlg-themes" aria-labelledby="themes-title">
   <div class="dlg-head">
-    <h2 id="themes-title" data-i18n-text="[&quot;界面主题&quot;]">界面主题</h2>
+    <div class="dlg-title-block">
+      <h2 id="themes-title" data-i18n-text="[&quot;界面主题&quot;]">界面主题</h2>
+      <p class="field-hint dlg-desc" data-i18n-text="[&quot;主题文件是一份 JSON：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。它不能运行脚本，也不能加载外部图片或字体。&quot;]">主题文件是一份 JSON：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。它不能运行脚本，也不能加载外部图片或字体。</p>
+    </div>
     <button type="button" id="themes-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
   </div>
-  <p class="field-hint" data-i18n-text="[&quot;主题文件是一份 JSON：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。它不能运行脚本，也不能加载外部图片或字体。&quot;]">主题文件是一份 JSON：选一个内置风格做底子，再改写其中的颜色、投影、圆角和字体令牌。它不能运行脚本，也不能加载外部图片或字体。</p>
   <p id="themes-status" class="themes-status hidden" role="status" aria-live="polite"></p>
   <div class="themes-body dlg-body">
     <section class="themes-section" aria-labelledby="themes-user-title">

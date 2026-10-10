@@ -2,12 +2,17 @@
  * 文件预览弹窗（结构特殊、全屏化）在 files.css。 */
 
 dialog {
-  --dlg-pad-x: 28px; /* 改左右内边距时改这个变量：.dlg-body 靠它把滚动条拉到弹窗边缘 */
+  /* 改内边距时改这两个变量：表头靠它们铺满弹窗顶边，.dlg-body 靠左右值把滚动条拉到弹窗边缘 */
+  --dlg-pad-y: 26px;
+  --dlg-pad-x: 28px;
+  /* 表头色带：「抬起」填充色压淡一些叠在面板上，各风格与自定义主题自动跟随；
+   * 不用满色，关闭钮悬停用的就是满色 --panel-2，得留出差别 */
+  --dlg-head-bg: color-mix(in srgb, var(--panel-2) 60%, transparent);
   background: var(--panel-solid);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: calc(10px * var(--radius-scale));
-  padding: 26px var(--dlg-pad-x);
+  padding: var(--dlg-pad-y) var(--dlg-pad-x);
   width: min(420px, 92vw);
   max-height: 90vh;
   max-height: 90dvh;
@@ -136,8 +141,18 @@ dialog textarea { resize: vertical; }
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
   margin: 0 0 16px;
 }
-dialog form .dlg-head { margin: 0; } /* form 自带 gap，避免双份间距 */
+/* 弹窗里的表头是一条贴边色带，和正文区分开（Git 管理页里的页内表头不受影响） */
+:is(dialog, dialog > form) > .dlg-head {
+  margin: calc(-1 * var(--dlg-pad-y)) calc(-1 * var(--dlg-pad-x)) 18px;
+  padding: 18px var(--dlg-pad-x) 16px;
+  background: var(--dlg-head-bg);
+  border-bottom: 1px solid var(--line);
+}
+dialog > form > .dlg-head { margin-bottom: 4px; } /* 再加上 form 自带的 gap */
 .dlg-head h2 { margin: 0; }
+/* 标题下带一行说明时，两者一起留在色带里 */
+.dlg-title-block { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dlg-desc { margin: 0; }
 .dlg-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 /* 弹窗里的「?」：说明框在图标下方居中，免得撑出弹窗 */
 .dlg-help .help-tip { left: 50%; transform: translateX(-50%); width: min(320px, 80vw); font-weight: 400; }
@@ -553,13 +568,11 @@ dialog label.am-default { font-size: 12px; white-space: nowrap; }
 .diagnostic-checks p { margin: 6px 0 0; font-size: 13px; }
 .diagnostic-reference, .diagnostics-dialog p { overflow-wrap: anywhere; }
 .diagnostics-dialog .dlg-actions { flex-wrap: wrap; }
-@media (max-width: 600px) { .diagnostics-dialog { --dlg-pad-x: 18px; padding: 18px var(--dlg-pad-x); } }
+@media (max-width: 600px) { .diagnostics-dialog { --dlg-pad-y: 18px; --dlg-pad-x: 18px; } }
 
 /* 界面主题（themes.ts）：三组列表——我的主题、全站主题、内置风格。每行左边色卡，
  * 中间名称与「基于哪个风格 · 作者 · 说明」，右边「使用」与导出/删除图标按钮。 */
 .dlg-themes { width: min(620px, 94vw); }
-.dlg-themes .dlg-head { margin-bottom: 8px; }
-.dlg-themes > .field-hint { margin: 0 0 12px; }
 .themes-status { margin: 0 0 12px; padding: 8px 10px; font-size: 12.5px; line-height: 1.6; border-radius: calc(6px * var(--radius-scale)); overflow-wrap: anywhere; }
 .themes-status.ok { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
 .themes-status.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
@@ -602,7 +615,7 @@ dialog label.am-default { font-size: 12px; white-space: nowrap; }
 .dlg-theme-editor[open] { display: flex; flex-direction: column; }
 :root[data-skin] dialog.dlg-theme-editor::backdrop { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .dlg-theme-editor .dlg-head { flex: none; margin: 0; padding: 18px 20px 12px; }
-.te-body { display: flex; flex: 1; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 14px; }
+.te-body { display: flex; flex: 1; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 20px; }
 .dlg-theme-editor > .themes-status { flex: none; margin: 0 20px 10px; }
 .te-ai-fallback { flex: none; margin: 0 20px 10px; width: auto; font-size: 11.5px; resize: none; }
 .te-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--line); }
@@ -658,7 +671,7 @@ dialog input.te-value { grid-area: value; min-width: 0; padding: 5px 8px; font-s
     --dlg-from: translateY(24px);
   }
   .dlg-theme-editor .dlg-head { padding: 14px 16px 10px; }
-  .te-body { padding: 0 16px 12px; }
+  .te-body { padding: 12px 16px; }
   .te-actions { padding: 10px 16px 14px; }
   .te-token { grid-template-areas: "color label reset" ". value value"; grid-template-columns: 28px minmax(0, 1fr) auto; row-gap: 4px; }
   .te-scale { grid-template-areas: "label reset" "value value"; grid-template-columns: minmax(0, 1fr) 40px; }

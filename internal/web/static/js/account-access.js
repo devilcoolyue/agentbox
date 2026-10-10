@@ -23,7 +23,7 @@ function openAccess(account) {
     const dialog = document.createElement("dialog");
     // Static markup only. Account labels and usernames are assigned as text/value.
     dialog.innerHTML = `<form>
-    <h2></h2>
+    <div class="dlg-head"><h2></h2></div>
     <div class="dlg-body">
     <label><span data-i18n="使用范围">${trHTML("使用范围")}</span><select name="mode">
       <option value="all" data-i18n="全体用户">${trHTML("全体用户")}</option>

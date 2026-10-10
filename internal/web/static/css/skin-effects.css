@@ -31,6 +31,9 @@
 :root[data-skin="glass"] :is(dialog:not(.dlg-img), .kebab-menu, .select-panel, .side-user-menu, .action-popover, .section-menu, .version-menu, .date-range-popover, .workspace-guide, .pick-menu) {
   background-image: linear-gradient(180deg, var(--glass-glint) 0, transparent 96px);
 }
+/* 弹窗表头色带：玻璃的 --panel-2 本身是半透明叠色，按通用规则压淡后几乎看不出来，这里用满色；
+ * 关闭钮悬停时同色再叠一层，仍然比色带深 */
+:root[data-skin="glass"] dialog { --dlg-head-bg: var(--panel-2); }
 :root[data-skin="glass"] dialog::backdrop {
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);

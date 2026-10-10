@@ -115,7 +115,10 @@ export function openDiagnostics(sessionID, onComplete) {
     const body = document.createElement("div");
     body.className = "dlg-body";
     body.append(note, status, list, error, reference);
-    dialog.append(title, body, actions);
+    const head = document.createElement("div");
+    head.className = "dlg-head";
+    head.append(title);
+    dialog.append(head, body, actions);
     let request;
     let report;
     let client;

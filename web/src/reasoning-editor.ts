@@ -20,7 +20,7 @@ export function editReasoning(agent: string, title: string, current?: ReasoningC
   return new Promise(resolve => {
     const dlg = document.createElement("dialog");
     dlg.className = "reasoning-dialog";
-    dlg.innerHTML = `<form><h2></h2><div class="dlg-body">
+    dlg.innerHTML = `<form><div class="dlg-head"><h2></h2></div><div class="dlg-body">
       <label><span data-i18n="支持范围">${trHTML("支持范围")}</span><select name="support"><option value="auto" data-i18n="自动识别 / 跟随上级配置">${trHTML("自动识别 / 跟随上级配置")}</option><option value="unknown" data-i18n="支持情况未知">${trHTML("支持情况未知")}</option><option value="supported" data-i18n="支持调整">${trHTML("支持调整")}</option><option value="unsupported" data-i18n="不支持调整">${trHTML("不支持调整")}</option></select></label>
       <label data-control><span data-i18n="调整方式">${trHTML("调整方式")}</span><select name="control"><option value="effort" data-i18n="推理强度（原生档位）">${trHTML("推理强度（原生档位）")}</option><option value="budget" data-i18n="思考预算（旧模式）">${trHTML("思考预算（旧模式）")}</option></select></label>
       <fieldset data-levels><legend><span data-i18n="允许的档位">${trHTML("允许的档位")}</span></legend><div></div></fieldset>

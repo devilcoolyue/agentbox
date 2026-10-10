@@ -87,7 +87,8 @@ export function openDiagnostics(sessionID?:string, onComplete?:(report:Diagnosti
   download.disabled=true;
   actions.append(run,download,close);
   const body=document.createElement("div");body.className="dlg-body";body.append(note,status,list,error,reference);
-  dialog.append(title,body,actions);
+  const head=document.createElement("div");head.className="dlg-head";head.append(title);
+  dialog.append(head,body,actions);
   let request:AbortController|undefined;
   let report:DiagnosticReport|undefined;
   let client:BrowserDiagnosticCheck|undefined;

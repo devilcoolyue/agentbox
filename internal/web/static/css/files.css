@@ -207,7 +207,7 @@
   gap: 12px; flex-wrap: wrap;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  background: var(--dlg-head-bg);
 }
 .fv-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1; }
 .fv-name {
@@ -360,7 +360,7 @@
   .file-row { padding-top: 10px; padding-bottom: 10px; } /* 触控行高 ≈40px */
   .file-row .factions { min-width: 0; gap: 2px; }
 
-  .dlg-file-move { --dlg-pad-x: 18px; width: 94vw; padding: 20px var(--dlg-pad-x); }
+  .dlg-file-move { --dlg-pad-y: 20px; --dlg-pad-x: 18px; width: 94vw; padding: var(--dlg-pad-y) var(--dlg-pad-x); }
   .file-move-nav { align-items: stretch; flex-direction: column; gap: 10px; }
   .file-move-nav .scope-switch { align-self: flex-start; }
   .file-move-dirs { height: min(42dvh, 300px); }

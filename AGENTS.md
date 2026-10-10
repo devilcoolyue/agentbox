@@ -695,7 +695,9 @@ data/
   （Promise 化的自定义对话框）或 `toast`。
 - 弹窗按 `.dlg-head` / `.dlg-body` / `.dlg-actions` 分段（可包在 `<form>` 里）：`dialogs.css` 据此把弹窗排成纵向 flex，
   只有 `.dlg-body` 出滚动条，其余兄弟节点（标题、说明、底部按钮、状态行）固定。新弹窗——包括 TS 里拼出来的——照此分段；
-  缺 `.dlg-body` 的弹窗会退回整体滚动，标题随内容滚走。改左右内边距要设 `--dlg-pad-x`，正文靠它把滚动条拉到弹窗边缘。
+  缺 `.dlg-body` 的弹窗会退回整体滚动，标题随内容滚走。改内边距要设 `--dlg-pad-y` / `--dlg-pad-x`：表头靠它们铺满顶边成一条
+  色带（`--dlg-head-bg`，取 `--panel-2` 压淡，玻璃风格用满色；MCP、文件预览表头同用），正文靠左右值把滚动条拉到弹窗边缘。
+  标题下的一行说明放进表头的 `.dlg-title-block`，和标题一起留在色带里。
 - 令牌只在 GET 请求接受 `?token=`（WS 升级与下载直链需要）；写操作一律走
   `Authorization` 头，别在新接口上放宽这一点。
 - API 增加路由时明确鉴权层级：公开、`s.auth`、`s.admin`、会话资源还必须套 `s.withSession` 做属主校验。
