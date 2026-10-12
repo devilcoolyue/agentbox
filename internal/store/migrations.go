@@ -9,7 +9,7 @@ import (
 
 // SchemaVersion changes only with a committed, ordered migration. Versions
 // predating this framework use user_version=0, including partially upgraded DBs.
-const SchemaVersion = 12
+const SchemaVersion = 16
 
 //go:embed migrations/001_baseline.sql
 var baselineSQL string
@@ -34,6 +34,18 @@ var workspaceCreationsSQL string
 
 //go:embed migrations/012_chat_requests.sql
 var chatRequestsSQL string
+
+//go:embed migrations/013_collaborations.sql
+var collaborationsSQL string
+
+//go:embed migrations/014_collaboration_threads.sql
+var collaborationThreadsSQL string
+
+//go:embed migrations/015_collaboration_decisions.sql
+var collaborationDecisionsSQL string
+
+//go:embed migrations/016_collaboration_workflows.sql
+var collaborationWorkflowsSQL string
 
 type migration struct {
 	version int
@@ -78,6 +90,10 @@ func migrations() []migration {
 		{10, func(tx *sql.Tx) error { _, err := tx.Exec(clientProjectsSQL); return err }},
 		{11, func(tx *sql.Tx) error { _, err := tx.Exec(workspaceCreationsSQL); return err }},
 		{12, func(tx *sql.Tx) error { _, err := tx.Exec(chatRequestsSQL); return err }},
+		{13, func(tx *sql.Tx) error { _, err := tx.Exec(collaborationsSQL); return err }},
+		{14, func(tx *sql.Tx) error { _, err := tx.Exec(collaborationThreadsSQL); return err }},
+		{15, func(tx *sql.Tx) error { _, err := tx.Exec(collaborationDecisionsSQL); return err }},
+		{16, func(tx *sql.Tx) error { _, err := tx.Exec(collaborationWorkflowsSQL); return err }},
 	}
 }
 func migrate(db *sql.DB) error { return runMigrations(db, migrations()) }

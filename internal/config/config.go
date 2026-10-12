@@ -323,39 +323,43 @@ func checkRates(who string, r TokenRates) error {
 }
 
 type Config struct {
-	Listen         string                   `json:"listen"`
-	AuthToken      string                   `json:"auth_token"`
-	DataDir        string                   `json:"data_dir"`
-	CacheDir       string                   `json:"cache_dir,omitempty"`
-	Resources      ResourceLimits           `json:"resources"`
-	ToolStorage    ToolStorage              `json:"tool_storage,omitempty"`
-	StoragePolicy  StoragePolicy            `json:"storage_policy,omitempty"`
-	AgentImage     string                   `json:"agent_image"`
-	ImageUpdates   ImageUpdateConfig        `json:"image_updates"`
-	PreviousImage  string                   `json:"previous_agent_image,omitempty"`
-	PermissionMode string                   `json:"permission_mode"`
-	MaxUploadMB    int64                    `json:"max_upload_mb"`
-	DesktopSync    bool                     `json:"desktop_sync_enabled"`
-	IdleTimeoutMin int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
-	TimeZone       string                   `json:"timezone"`         // IANA 时区；用于界面时间与用量筛选
-	Container      ContainerLimits          `json:"container"`
-	Tunnel         TunnelConfig             `json:"tunnel"`
-	ProxyBridge    ProxyBridgeConfig        `json:"proxy_bridge"`
-	Accounts       []Account                `json:"accounts"`
-	Proxies        []Proxy                  `json:"proxies,omitempty"`
-	GitOAuthApps   []GitOAuthApp            `json:"git_oauth_apps,omitempty"`
-	Models         map[string][]ModelOption `json:"models,omitempty"`
-	DefaultModels  map[string]string        `json:"default_models"`
-	TerminalTips   TerminalTips             `json:"terminal_tips"`
-	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
-	PricingCatalog PricingCatalogConfig     `json:"pricing_catalog"`
-	PricingManaged map[string]PriceOrigin   `json:"pricing_managed,omitempty"`
-	PricingHistory []PricingRevision        `json:"pricing_history,omitempty"`
+	Listen                string                   `json:"listen"`
+	AuthToken             string                   `json:"auth_token"`
+	DataDir               string                   `json:"data_dir"`
+	CacheDir              string                   `json:"cache_dir,omitempty"`
+	Resources             ResourceLimits           `json:"resources"`
+	ToolStorage           ToolStorage              `json:"tool_storage,omitempty"`
+	StoragePolicy         StoragePolicy            `json:"storage_policy,omitempty"`
+	AgentImage            string                   `json:"agent_image"`
+	ImageUpdates          ImageUpdateConfig        `json:"image_updates"`
+	PreviousImage         string                   `json:"previous_agent_image,omitempty"`
+	PermissionMode        string                   `json:"permission_mode"`
+	MaxUploadMB           int64                    `json:"max_upload_mb"`
+	ChatHistoryTimeoutSec int64                    `json:"chat_history_timeout_sec"`
+	DesktopSync           bool                     `json:"desktop_sync_enabled"`
+	CollaborationEnabled  bool                     `json:"collaboration_enabled"`
+	Decision              DecisionConfig           `json:"decision"`
+	IdleTimeoutMin        int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
+	TimeZone              string                   `json:"timezone"`         // IANA 时区；用于界面时间与用量筛选
+	Container             ContainerLimits          `json:"container"`
+	Tunnel                TunnelConfig             `json:"tunnel"`
+	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
+	Accounts              []Account                `json:"accounts"`
+	Proxies               []Proxy                  `json:"proxies,omitempty"`
+	GitOAuthApps          []GitOAuthApp            `json:"git_oauth_apps,omitempty"`
+	Models                map[string][]ModelOption `json:"models,omitempty"`
+	DefaultModels         map[string]string        `json:"default_models"`
+	TerminalTips          TerminalTips             `json:"terminal_tips"`
+	Pricing               map[string]ModelPrice    `json:"pricing,omitempty"`
+	PricingCatalog        PricingCatalogConfig     `json:"pricing_catalog"`
+	PricingManaged        map[string]PriceOrigin   `json:"pricing_managed,omitempty"`
+	PricingHistory        []PricingRevision        `json:"pricing_history,omitempty"`
 
-	mu          sync.RWMutex
-	path        string
-	rawCacheDir string
-	rawDataDir  string // data_dir 原文，写回时保留
+	decisionChanged chan struct{}
+	mu              sync.RWMutex
+	path            string
+	rawCacheDir     string
+	rawDataDir      string // data_dir 原文，写回时保留
 }
 
 func Load(path string) (*Config, error) {
@@ -364,13 +368,14 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg := &Config{
-		Tunnel:         TunnelConfig{Transparent: true},
-		Listen:         "127.0.0.1:8080",
-		AgentImage:     "agentbox-agent:latest",
-		PermissionMode: "bypassPermissions",
-		MaxUploadMB:    512,
-		IdleTimeoutMin: 30, // 缺省 30 分钟空闲即停机；config 里显式写 0 可关闭
-		TimeZone:       DefaultTimeZone,
+		Tunnel:                TunnelConfig{Transparent: true},
+		Listen:                "127.0.0.1:8080",
+		AgentImage:            "agentbox-agent:latest",
+		PermissionMode:        "bypassPermissions",
+		MaxUploadMB:           512,
+		ChatHistoryTimeoutSec: 120,
+		IdleTimeoutMin:        30, // 缺省 30 分钟空闲即停机；config 里显式写 0 可关闭
+		TimeZone:              DefaultTimeZone,
 		Container: ContainerLimits{
 			MemoryMB:  2048,
 			CPUs:      2,
@@ -406,6 +411,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.initDefaultModels()
+	cfg.Decision = cfg.Decision.normalized()
 
 	// 未配置 terminal_tips（老配置文件里没这一块）时，补上原来的单条提示，
 	// 避免终端页顶栏空掉。已显式配置的（哪怕 interval 为 0）尊重原样。
@@ -462,6 +468,9 @@ func (c *Config) Check() error {
 
 // validateLocked requires at least a read lock (or an unshared Load snapshot).
 func (c *Config) validateLocked() error {
+	if err := c.Decision.normalized().validate(); err != nil {
+		return err
+	}
 	if err := c.StoragePolicy.validate(c.DataDir, c.ToolStorage.Root); err != nil {
 		return err
 	}
@@ -488,6 +497,9 @@ func (c *Config) validateLocked() error {
 	}
 	if c.AgentImage == "" {
 		return fmt.Errorf("agent_image must not be empty")
+	}
+	if c.ChatHistoryTimeoutSec < 1 || c.ChatHistoryTimeoutSec > 3600 {
+		return fmt.Errorf("chat_history_timeout_sec must be between 1 and 3600")
 	}
 	if c.MaxUploadMB < 1 {
 		return fmt.Errorf("max_upload_mb must be >= 1")
@@ -664,68 +676,74 @@ type persistAccount struct {
 }
 
 type persistConfig struct {
-	Listen         string                   `json:"listen"`
-	AuthToken      string                   `json:"auth_token"`
-	DataDir        string                   `json:"data_dir,omitempty"`
-	CacheDir       string                   `json:"cache_dir,omitempty"`
-	Resources      ResourceLimits           `json:"resources"`
-	ToolStorage    ToolStorage              `json:"tool_storage,omitempty"`
-	StoragePolicy  StoragePolicy            `json:"storage_policy,omitempty"`
-	AgentImage     string                   `json:"agent_image"`
-	ImageUpdates   ImageUpdateConfig        `json:"image_updates"`
-	PreviousImage  string                   `json:"previous_agent_image,omitempty"`
-	PermissionMode string                   `json:"permission_mode"`
-	MaxUploadMB    int64                    `json:"max_upload_mb"`
-	DesktopSync    bool                     `json:"desktop_sync_enabled"`
-	IdleTimeoutMin int64                    `json:"idle_timeout_min"`
-	TimeZone       string                   `json:"timezone"`
-	Container      ContainerLimits          `json:"container"`
-	Tunnel         TunnelConfig             `json:"tunnel"`
-	ProxyBridge    ProxyBridgeConfig        `json:"proxy_bridge"`
-	Accounts       []persistAccount         `json:"accounts"`
-	Proxies        []Proxy                  `json:"proxies,omitempty"`
-	GitOAuthApps   []GitOAuthApp            `json:"git_oauth_apps,omitempty"`
-	Models         map[string][]ModelOption `json:"models,omitempty"`
-	DefaultModels  map[string]string        `json:"default_models"`
-	TerminalTips   TerminalTips             `json:"terminal_tips"`
-	Pricing        map[string]ModelPrice    `json:"pricing,omitempty"`
-	PricingCatalog PricingCatalogConfig     `json:"pricing_catalog"`
-	PricingManaged map[string]PriceOrigin   `json:"pricing_managed,omitempty"`
-	PricingHistory []PricingRevision        `json:"pricing_history,omitempty"`
+	Listen                string                   `json:"listen"`
+	AuthToken             string                   `json:"auth_token"`
+	DataDir               string                   `json:"data_dir,omitempty"`
+	CacheDir              string                   `json:"cache_dir,omitempty"`
+	Resources             ResourceLimits           `json:"resources"`
+	ToolStorage           ToolStorage              `json:"tool_storage,omitempty"`
+	StoragePolicy         StoragePolicy            `json:"storage_policy,omitempty"`
+	AgentImage            string                   `json:"agent_image"`
+	ImageUpdates          ImageUpdateConfig        `json:"image_updates"`
+	PreviousImage         string                   `json:"previous_agent_image,omitempty"`
+	PermissionMode        string                   `json:"permission_mode"`
+	MaxUploadMB           int64                    `json:"max_upload_mb"`
+	ChatHistoryTimeoutSec int64                    `json:"chat_history_timeout_sec"`
+	DesktopSync           bool                     `json:"desktop_sync_enabled"`
+	CollaborationEnabled  bool                     `json:"collaboration_enabled"`
+	Decision              DecisionConfig           `json:"decision"`
+	IdleTimeoutMin        int64                    `json:"idle_timeout_min"`
+	TimeZone              string                   `json:"timezone"`
+	Container             ContainerLimits          `json:"container"`
+	Tunnel                TunnelConfig             `json:"tunnel"`
+	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
+	Accounts              []persistAccount         `json:"accounts"`
+	Proxies               []Proxy                  `json:"proxies,omitempty"`
+	GitOAuthApps          []GitOAuthApp            `json:"git_oauth_apps,omitempty"`
+	Models                map[string][]ModelOption `json:"models,omitempty"`
+	DefaultModels         map[string]string        `json:"default_models"`
+	TerminalTips          TerminalTips             `json:"terminal_tips"`
+	Pricing               map[string]ModelPrice    `json:"pricing,omitempty"`
+	PricingCatalog        PricingCatalogConfig     `json:"pricing_catalog"`
+	PricingManaged        map[string]PriceOrigin   `json:"pricing_managed,omitempty"`
+	PricingHistory        []PricingRevision        `json:"pricing_history,omitempty"`
 }
 
 // saveLocked writes the config file atomically; callers must hold the write
 // lock. 0600 because the file carries the auth token and account env secrets.
 func (c *Config) saveLocked() error {
 	out := persistConfig{
-		Listen:         c.Listen,
-		AuthToken:      c.AuthToken,
-		DataDir:        c.rawDataDir,
-		CacheDir:       c.rawCacheDir,
-		Resources:      c.Resources,
-		ToolStorage:    c.ToolStorage,
-		StoragePolicy:  c.StoragePolicy.Clone(),
-		AgentImage:     c.AgentImage,
-		ImageUpdates:   c.ImageUpdates,
-		PreviousImage:  c.PreviousImage,
-		PermissionMode: c.PermissionMode,
-		MaxUploadMB:    c.MaxUploadMB,
-		DesktopSync:    c.DesktopSync,
-		IdleTimeoutMin: c.IdleTimeoutMin,
-		TimeZone:       c.TimeZone,
-		Container:      c.Container,
-		Tunnel:         c.Tunnel,
-		ProxyBridge:    c.ProxyBridge,
-		Accounts:       make([]persistAccount, 0, len(c.Accounts)),
-		Proxies:        c.Proxies,
-		GitOAuthApps:   cloneGitOAuthApps(c.GitOAuthApps),
-		Models:         c.Models,
-		DefaultModels:  c.DefaultModels,
-		TerminalTips:   c.TerminalTips,
-		Pricing:        c.Pricing,
-		PricingCatalog: c.PricingCatalog,
-		PricingManaged: c.PricingManaged,
-		PricingHistory: c.PricingHistory,
+		Listen:                c.Listen,
+		AuthToken:             c.AuthToken,
+		DataDir:               c.rawDataDir,
+		CacheDir:              c.rawCacheDir,
+		Resources:             c.Resources,
+		ToolStorage:           c.ToolStorage,
+		StoragePolicy:         c.StoragePolicy.Clone(),
+		AgentImage:            c.AgentImage,
+		ImageUpdates:          c.ImageUpdates,
+		PreviousImage:         c.PreviousImage,
+		PermissionMode:        c.PermissionMode,
+		MaxUploadMB:           c.MaxUploadMB,
+		ChatHistoryTimeoutSec: c.ChatHistoryTimeoutSec,
+		DesktopSync:           c.DesktopSync,
+		CollaborationEnabled:  c.CollaborationEnabled,
+		Decision:              c.Decision.normalized(),
+		IdleTimeoutMin:        c.IdleTimeoutMin,
+		TimeZone:              c.TimeZone,
+		Container:             c.Container,
+		Tunnel:                c.Tunnel,
+		ProxyBridge:           c.ProxyBridge,
+		Accounts:              make([]persistAccount, 0, len(c.Accounts)),
+		Proxies:               c.Proxies,
+		GitOAuthApps:          cloneGitOAuthApps(c.GitOAuthApps),
+		Models:                c.Models,
+		DefaultModels:         c.DefaultModels,
+		TerminalTips:          c.TerminalTips,
+		Pricing:               c.Pricing,
+		PricingCatalog:        c.PricingCatalog,
+		PricingManaged:        c.PricingManaged,
+		PricingHistory:        c.PricingHistory,
 	}
 	for _, a := range c.Accounts {
 		dir := a.rawCredDir
@@ -794,6 +812,16 @@ func (c *Config) GetPermissionMode() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.PermissionMode
+}
+
+// GetChatHistoryTimeoutSec is the web history request deadline, in seconds.
+func (c *Config) GetChatHistoryTimeoutSec() int64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.ChatHistoryTimeoutSec == 0 {
+		return 120
+	}
+	return c.ChatHistoryTimeoutSec
 }
 
 func (c *Config) GetMaxUploadMB() int64 {
@@ -1026,31 +1054,34 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	work := &Config{
-		Listen:         c.Listen,
-		AuthToken:      c.AuthToken,
-		DataDir:        c.DataDir,
-		CacheDir:       c.CacheDir,
-		Resources:      c.Resources,
-		ToolStorage:    c.ToolStorage,
-		StoragePolicy:  c.StoragePolicy.Clone(),
-		rawCacheDir:    c.rawCacheDir,
-		AgentImage:     c.AgentImage,
-		ImageUpdates:   c.ImageUpdates,
-		PreviousImage:  c.PreviousImage,
-		PermissionMode: c.PermissionMode,
-		MaxUploadMB:    c.MaxUploadMB,
-		DesktopSync:    c.DesktopSync,
-		IdleTimeoutMin: c.IdleTimeoutMin,
-		TimeZone:       c.TimeZone,
-		Container:      c.Container,
-		Tunnel:         c.Tunnel,
-		ProxyBridge:    c.ProxyBridge,
-		Accounts:       append([]Account(nil), c.Accounts...),
-		Proxies:        append([]Proxy(nil), c.Proxies...),
-		GitOAuthApps:   cloneGitOAuthApps(c.GitOAuthApps),
-		Models:         c.Models,
-		DefaultModels:  c.DefaultModels,
-		TerminalTips:   c.TerminalTips,
+		Listen:                c.Listen,
+		AuthToken:             c.AuthToken,
+		DataDir:               c.DataDir,
+		CacheDir:              c.CacheDir,
+		Resources:             c.Resources,
+		ToolStorage:           c.ToolStorage,
+		StoragePolicy:         c.StoragePolicy.Clone(),
+		rawCacheDir:           c.rawCacheDir,
+		AgentImage:            c.AgentImage,
+		ImageUpdates:          c.ImageUpdates,
+		PreviousImage:         c.PreviousImage,
+		PermissionMode:        c.PermissionMode,
+		MaxUploadMB:           c.MaxUploadMB,
+		ChatHistoryTimeoutSec: c.ChatHistoryTimeoutSec,
+		DesktopSync:           c.DesktopSync,
+		CollaborationEnabled:  c.CollaborationEnabled,
+		Decision:              c.Decision.normalized(),
+		IdleTimeoutMin:        c.IdleTimeoutMin,
+		TimeZone:              c.TimeZone,
+		Container:             c.Container,
+		Tunnel:                c.Tunnel,
+		ProxyBridge:           c.ProxyBridge,
+		Accounts:              append([]Account(nil), c.Accounts...),
+		Proxies:               append([]Proxy(nil), c.Proxies...),
+		GitOAuthApps:          cloneGitOAuthApps(c.GitOAuthApps),
+		Models:                c.Models,
+		DefaultModels:         c.DefaultModels,
+		TerminalTips:          c.TerminalTips,
 		// 这份工作副本会被整体写回 config.json：**漏抄一个字段就等于从文件里
 		// 删掉它**。加字段时必须同时加到这里。
 		Pricing:        c.Pricing,
@@ -1080,7 +1111,16 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.PreviousImage = work.PreviousImage
 	c.PermissionMode = work.PermissionMode
 	c.MaxUploadMB = work.MaxUploadMB
+	c.ChatHistoryTimeoutSec = work.ChatHistoryTimeoutSec
 	c.DesktopSync = work.DesktopSync
+	c.CollaborationEnabled = work.CollaborationEnabled
+	if c.Decision.normalized().Revision != work.Decision.Revision {
+		if c.decisionChanged != nil {
+			close(c.decisionChanged)
+		}
+		c.decisionChanged = make(chan struct{})
+	}
+	c.Decision = work.Decision.Clone()
 	c.IdleTimeoutMin = work.IdleTimeoutMin
 	c.TimeZone = work.TimeZone
 	c.Container = work.Container
@@ -1104,23 +1144,25 @@ func (c *Config) mutate(fn func(*Config) error) error {
 
 // SettingsPatch carries a partial settings update; nil fields stay unchanged.
 type SettingsPatch struct {
+	Decision           *DecisionPatch     `json:"decision"`
 	ImageUpdates       *ImageUpdateConfig `json:"image_updates"`
 	ExpectedAgentImage *string            `json:"expected_agent_image"`
 
-	Resources      *ResourceLimits          `json:"resources"`
-	Listen         *string                  `json:"listen"`
-	AgentImage     *string                  `json:"agent_image"`
-	PermissionMode *string                  `json:"permission_mode"`
-	MaxUploadMB    *int64                   `json:"max_upload_mb"`
-	DesktopSync    *bool                    `json:"desktop_sync_enabled"`
-	IdleTimeoutMin *int64                   `json:"idle_timeout_min"`
-	TimeZone       *string                  `json:"timezone"`
-	Container      *ContainerLimits         `json:"container"`
-	Models         map[string][]ModelOption `json:"models"`
-	DefaultModels  map[string]string        `json:"default_models"`
-	Tunnel         *TunnelConfig            `json:"tunnel"`
-	ProxyBridge    *ProxyBridgeConfig       `json:"proxy_bridge"`
-	TerminalTips   *TerminalTips            `json:"terminal_tips"`
+	Resources             *ResourceLimits          `json:"resources"`
+	Listen                *string                  `json:"listen"`
+	AgentImage            *string                  `json:"agent_image"`
+	PermissionMode        *string                  `json:"permission_mode"`
+	MaxUploadMB           *int64                   `json:"max_upload_mb"`
+	ChatHistoryTimeoutSec *int64                   `json:"chat_history_timeout_sec"`
+	DesktopSync           *bool                    `json:"desktop_sync_enabled"`
+	IdleTimeoutMin        *int64                   `json:"idle_timeout_min"`
+	TimeZone              *string                  `json:"timezone"`
+	Container             *ContainerLimits         `json:"container"`
+	Models                map[string][]ModelOption `json:"models"`
+	DefaultModels         map[string]string        `json:"default_models"`
+	Tunnel                *TunnelConfig            `json:"tunnel"`
+	ProxyBridge           *ProxyBridgeConfig       `json:"proxy_bridge"`
+	TerminalTips          *TerminalTips            `json:"terminal_tips"`
 	// Pricing 整表替换（不是逐键合并）：价目表是一张要整体校对的表，
 	// 前端改完把完整的表发回来，删行才有办法表达。
 	Pricing map[string]ModelPrice `json:"pricing"`
@@ -1128,6 +1170,11 @@ type SettingsPatch struct {
 
 func (c *Config) ApplySettings(p SettingsPatch) error {
 	return c.mutate(func(w *Config) error {
+		if p.Decision != nil {
+			if err := w.applyDecisionPatch(*p.Decision); err != nil {
+				return err
+			}
+		}
 		if p.ExpectedAgentImage != nil && *p.ExpectedAgentImage != w.AgentImage {
 			return fmt.Errorf("镜像已变化，请刷新设置后重试")
 		}
@@ -1145,6 +1192,9 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.PermissionMode != nil {
 			w.PermissionMode = *p.PermissionMode
+		}
+		if p.ChatHistoryTimeoutSec != nil {
+			w.ChatHistoryTimeoutSec = *p.ChatHistoryTimeoutSec
 		}
 		if p.MaxUploadMB != nil {
 			w.MaxUploadMB = *p.MaxUploadMB

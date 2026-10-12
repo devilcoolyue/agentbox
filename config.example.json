@@ -19,6 +19,7 @@
   },
   "permission_mode": "bypassPermissions",
   "max_upload_mb": 512,
+  "chat_history_timeout_sec": 120,
   "desktop_sync_enabled": false,
   "timezone": "Asia/Shanghai",
   "container": {

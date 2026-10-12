@@ -2,6 +2,51 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+export async function chatHistorySettingsSmoke(page) {
+ const base=new URL(page.url()).origin;
+ await page.goto(base+'/#/settings/security');
+ const timeout=page.locator('#set-history-timeout'),upload=page.locator('#set-upload');
+ await page.waitForFunction(()=>document.querySelector('#set-history-timeout')?.value==='120');
+ assert.equal(await upload.inputValue(),'10','existing upload setting must be preserved');
+ await timeout.fill('3');await upload.fill('64');
+ const request=page.waitForRequest(r=>new URL(r.url()).pathname==='/api/settings'&&r.method()==='PUT');
+ await page.locator('#set-save').click();
+ const patch=(await request).postDataJSON();
+ assert.equal(patch.chat_history_timeout_sec,3);assert.equal(patch.max_upload_mb,64);
+ await page.waitForFunction(()=>document.querySelector('#set-savebar').hidden);
+ const runtime=()=>page.evaluate(async()=> (await import('/_v/{{BUILD}}/js/state.js')).S.chatHistoryTimeoutSec);
+ assert.equal(await runtime(),3,'saved setting applies without a reload');
+ await page.reload();
+ await page.waitForFunction(()=>document.querySelector('#set-history-timeout')?.value==='3');
+ assert.equal(await upload.inputValue(),'64');assert.equal(await runtime(),3);
+ for(const [language,label] of [['zh-CN','历史加载超时（秒）'],['zh-TW','歷史載入逾時（秒）'],['en','History loading timeout (seconds)']]){
+  await page.evaluate(async language=>(await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage(language),language);
+  await page.getByText(label,{exact:true}).waitFor({state:'visible'});
+ }
+ await page.setViewportSize({width:390,height:844});
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'settings overflow on narrow screens');
+ await timeout.scrollIntoViewIfNeeded();
+ await mkdir(resolve('output/playwright'),{recursive:true});
+ await page.screenshot({path:resolve('output/playwright/chat-history-settings-mobile.png')});
+ await page.setViewportSize({width:1280,height:900});
+ await page.evaluate(async()=>(await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage('zh-CN'));
+
+ // Use the actual saved deadline in the UI, not a separately configured timer.
+ let release;
+ const held=new Promise(resolve=>{release=resolve;});
+ const match='**/api/sessions/fixture-space/history*';
+ const handler=async route=>{await held;await route.abort().catch(()=>{});};
+ await page.route(match,handler);
+ try{
+  await page.goto(base+'/#/sessions/fixture-space/chat');
+  await page.getByText('历史对话加载超时',{exact:true}).waitFor({state:'visible',timeout:8000});
+  assert.equal(await runtime(),3,'login must obtain the saved timeout through /me');
+ }finally{
+  release();await page.unroute(match,handler);
+ }
+ console.log('History settings: default fallback, upload preservation, save/reload, three languages, narrow layout and actual configured deadline passed');
+}
+
 // Shared synthetic browser suite: the newest history page renders first, older
 // pages load on scrolling up without moving the reading position, a turn the
 // server split across pages renders as one turn, failures offer a retry, and a

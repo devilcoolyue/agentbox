@@ -158,6 +158,53 @@ func TestHistoryPagesCoverThreadOnTurnBoundaries(t *testing.T) {
 	}
 }
 
+func TestHistoryPagesBeyond2000Entries(t *testing.T) {
+	// Use production page limits and traverse the complete transcript. The old
+	// tail-only implementation silently made these earliest turns unreachable.
+	s, sess := newTestServer(t)
+	s.chat = newChatManager(s)
+	if err := s.store.Put(sess); err != nil {
+		t.Fatal(err)
+	}
+	sizes := make([]int, 1100)
+	for i := range sizes {
+		sizes[i] = 1
+	}
+	tid := writeTurns(t, s, sess, sizes...)
+	code, page := getHistory(t, s, sess, "")
+	var all []string
+	pages := 0
+	for {
+		if code != http.StatusOK || len(page.Entries) == 0 || page.Entries[0].Kind != "user" {
+			t.Fatalf("invalid page: code=%d start=%d entries=%d", code, page.Start, len(page.Entries))
+		}
+		keys := make([]string, len(page.Entries))
+		for i, entry := range page.Entries {
+			keys[i] = historyKey(entry)
+		}
+		all = append(keys, all...)
+		pages++
+		if !page.HasMore {
+			if page.Start != 0 {
+				t.Fatalf("history stopped before the beginning: %d", page.Start)
+			}
+			break
+		}
+		before := page.Start
+		code, page = getHistory(t, s, sess, fmt.Sprintf("?thread=%s&before=%d", tid, before))
+		if page.Start >= before {
+			t.Fatalf("cursor did not advance: %d -> %d", before, page.Start)
+		}
+	}
+	want := make([]string, 0, 2200)
+	for i := range sizes {
+		want = append(want, fmt.Sprintf("user:turn-%d", i), fmt.Sprintf("turn-%d answer 0", i))
+	}
+	if pages < 2 || !reflect.DeepEqual(all, want) {
+		t.Fatalf("history lost, reordered or repeated entries: pages=%d got=%d want=%d", pages, len(all), len(want))
+	}
+}
+
 func TestHistorySplitsOnlyOversizedTurns(t *testing.T) {
 	smallHistoryPages(t)
 	s, sess := newTestServer(t)

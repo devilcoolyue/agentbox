@@ -53,6 +53,27 @@ func (m *Manager) ValidateCLIImage(parent context.Context, imageID string) (agen
 	return report, nil
 }
 
+// ValidateCollaborationImage separately gates role-independent final handoff
+// and strict continuation. It never marks the ordinary CLI gate as passed.
+func (m *Manager) ValidateCollaborationImage(parent context.Context, imageID string) (agentprobe.Report, error) {
+	ctx, cancel := context.WithTimeout(parent, 4*time.Minute)
+	defer cancel()
+	r := agentprobe.Report{Version: 1, ImageID: imageID, CheckedAt: time.Now().UnixMilli()}
+	output, code, failure := m.runOfflineNode(ctx, imageID, "agentbox.collaboration-probe", agentprobe.Script, string(agentprobe.CollaborationInput()), 4<<20)
+	if failure != "" {
+		r.Failure = failure
+		return r, errors.New("collaboration probe sandbox failed")
+	}
+	r = agentprobe.ValidateCollaboration(ctx, imageID, output)
+	if code != 0 && r.Failure == "" {
+		r.Failure = "probe_exit_failed"
+	}
+	if !r.CollaborationPassed(imageID) {
+		return r, fmt.Errorf("collaboration CLI contract failed (%s)", r.Failure)
+	}
+	return r, nil
+}
+
 // ReadCLICatalog asks the image's CLIs, signed out and offline in the same
 // sandbox as the candidate gate, which models they offer (modelcatalog.Script).
 func (m *Manager) ReadCLICatalog(parent context.Context, imageID string) ([]byte, error) {

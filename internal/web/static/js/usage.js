@@ -25,6 +25,8 @@ import { fmtUSD } from "./quota.js";
 import { agentIcon, agentName } from "./brand.js";
 import { setTip } from "./tip.js";
 import { ListMotion } from "./motion.js";
+const usageAgentName = (agent) => agent === "decision" ? i18nText("决策插件") : agentName(agent);
+const usageAgentIcon = (agent, size) => agent === "decision" ? svgIcon("sliders", size) : agentIcon(agent, size);
 let pageSize = 20;
 /* 当前视图状态。offset 单独放：改筛选要归零，翻页只动它。 */
 let offset = 0;
@@ -175,7 +177,7 @@ function renderFilterChip(f) {
         if (f.user)
             parts.push(f.user);
         if (f.agent)
-            parts.push(agentName(f.agent));
+            parts.push(usageAgentName(f.agent));
         if (f.model)
             parts.push(f.model);
         if (f.kind)
@@ -211,17 +213,37 @@ function effortText(r) {
     const label = EFFORT_LABELS[r.effort] || r.effort;
     return r.effort_control === "budget" && BUDGETS[r.effort] ? `${label} (${BUDGETS[r.effort]})` : label;
 }
-const KIND_LABEL = { get chat() { return i18nText("对话"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); } };
+const KIND_LABEL = { get chat() { return i18nText("对话"); }, get collaboration() { return i18nText("多 Agent 协作"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); }, get decision() { return i18nText("决策调用"); } };
 const KIND_HINT = {
+    get collaboration() { return i18nText("协作任务中一个步骤在一个模型上的消耗，已计入任务费用，不另加收任务总额。"); },
+    get decision() { return i18nText("自动选模时产生的决策插件调用，计入对应协作任务预算。"); },
     get terminal() { return i18nText("用户在「终端」页签里手敲 CLI 花的量，事后从 CLI 自己的记录里补记；只记账不扣额度"); },
     get title() { return i18nText("服务端自动为新对话生成标题的那趟消耗，不是用户发起的"); },
 };
+const COLLABORATION_ROLE = { coordinator: "主 Agent", executor: "执行 Agent" };
+const COLLABORATION_STEP = {
+    plan: "规划", execute: "执行", clarify: "答疑", review: "评审",
+    repair: "返工", verify: "平台验证", handoff_repair: "交接格式修复",
+};
+const collaborationRole = (r) => {
+    const role = r.collaboration?.role || "";
+    return COLLABORATION_ROLE[role] ? i18nText(COLLABORATION_ROLE[role]) : role;
+};
+const collaborationStep = (r) => {
+    const kind = r.collaboration?.step_kind || "";
+    return COLLABORATION_STEP[kind] ? i18nText(COLLABORATION_STEP[kind]) : kind;
+};
+const collaborationDetail = (r) => [collaborationRole(r), collaborationStep(r)].filter(Boolean).join(" · ");
+const workspaceName = (r) => r.collaboration
+    ? r.source_session_name || r.collaboration.source_session_id
+    : r.session_name || r.session_id;
 const BILLING = {
     // 与对话页每轮下方的说法一致：写用户看得懂的来源，不写「价目表」「CLI」
     provider: { get text() { return i18nText("客户端上报"); }, get title() { return i18nText("Claude Code 等客户端自己上报的估算成本，不代表订阅账号的实际扣款"); } },
     table: { get text() { return i18nText("按单价估算"); }, get title() { return i18nText("客户端没有上报金额，按系统设置里的模型单价折算"); } },
     none: { get text() { return i18nText("未定价"); }, get title() { return i18nText("客户端没有上报金额，这个模型也没有设置单价；这一行只记用量、不扣额度"); } },
 };
+const billingFor = (r) => r.kind === "decision" ? { get text() { return i18nText("决策计费"); }, get title() { return i18nText("按决策调用的用量及计费依据入账，不使用聊天模型价目表。"); } } : BILLING[r.billing] || { text: r.billing, title: "" };
 /* 大数字加千分位；token 列四个桶都可能上十万，不分位读不出量级。 */
 const num = (n) => n.toLocaleString("en-US");
 /* 耗时：秒以下给毫秒，其余给一位小数的秒。0 表示没量到，显示破折号而不是「0s」
@@ -320,9 +342,9 @@ function renderRows(data) {
         const { td: sess, v: sessv } = cellEl(() => i18nText("工作空间"), "u-cell-sess");
         const name = document.createElement("div");
         name.className = "u-sess";
-        name.textContent = r.session_name || r.session_id;
+        name.textContent = workspaceName(r);
         name.title = name.textContent;
-        if (!r.session_name)
+        if (!(r.collaboration ? r.source_session_name : r.session_name))
             setTip(name, () => i18nText("工作空间已删除"));
         const acct = document.createElement("div");
         acct.className = "u-sub";
@@ -333,9 +355,9 @@ function renderRows(data) {
         const mline = document.createElement("div");
         mline.className = "u-model";
         const modelName = document.createElement("span");
-        setTextRender(modelName, () => r.model || agentName(r.agent) + i18nText("（默认模型）"));
-        setAttrRender(modelName, "title", () => r.model || agentName(r.agent) + i18nText("（默认模型）"));
-        mline.append(agentIcon(r.agent, 15), modelName);
+        setTextRender(modelName, () => r.model || usageAgentName(r.agent) + i18nText("（默认模型）"));
+        setAttrRender(modelName, "title", () => r.model || usageAgentName(r.agent) + i18nText("（默认模型）"));
+        mline.append(usageAgentIcon(r.agent, 15), modelName);
         modelv.appendChild(mline);
         if (r.provider || r.effort) {
             const p = document.createElement("div");
@@ -358,13 +380,19 @@ function renderRows(data) {
         const { td: kind, v: kindv } = cellEl(() => i18nText("类型"));
         const chip = document.createElement("span");
         // 终端和起标题各有各的颜色：这一列的用处就是一眼看出「这笔钱是谁按下去的」。
-        chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : r.kind === "chat" ? " chat" : "");
+        chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : r.kind === "chat" || r.kind === "collaboration" ? " chat" : "");
         setTextRender(chip, () => KIND_LABEL[r.kind] || r.kind);
         if (KIND_HINT[r.kind])
             setTip(chip, () => KIND_HINT[r.kind]);
         kindv.appendChild(chip);
+        if (r.collaboration?.role || r.collaboration?.step_kind) {
+            const detail = document.createElement("div");
+            detail.className = "u-sub";
+            setTextRender(detail, () => collaborationDetail(r));
+            kindv.appendChild(detail);
+        }
         tr.appendChild(kind);
-        const b = BILLING[r.billing] || { text: r.billing, title: "" };
+        const b = billingFor(r);
         const bchip = document.createElement("span");
         bchip.className = "u-chip bill-" + r.billing;
         setTextRender(bchip, () => b.text);
@@ -461,17 +489,30 @@ function renderCost(r) {
     head.replaceChildren();
     const top = document.createElement("div");
     top.className = "cost-model";
-    top.append(agentIcon(r.agent, 14), document.createTextNode(r.model || agentName(r.agent) + i18nText("（默认模型）")));
-    const b = BILLING[r.billing] || { text: r.billing, title: "" };
+    top.append(usageAgentIcon(r.agent, 14), document.createTextNode(r.model || usageAgentName(r.agent) + i18nText("（默认模型）")));
+    const b = billingFor(r);
     const chip = document.createElement("span");
     chip.className = "u-chip bill-" + r.billing;
     chip.textContent = b.text;
     top.appendChild(chip);
     const sub = document.createElement("div");
     sub.className = "cost-sub";
-    sub.textContent = [r.session_name || r.session_id, KIND_LABEL[r.kind] || r.kind, fmtUsageTime(r.ts)]
+    sub.textContent = [workspaceName(r), KIND_LABEL[r.kind] || r.kind, collaborationDetail(r), fmtUsageTime(r.ts)]
+        .filter(Boolean)
         .join(" · ");
     head.append(top, sub);
+    if (r.collaboration) {
+        const task = document.createElement("div");
+        task.className = "cost-sub";
+        task.textContent = i18nText("协作任务 ID：{p0}", { p0: r.collaboration.run_id });
+        head.appendChild(task);
+        if (r.collaboration.step_id) {
+            const step = document.createElement("div");
+            step.className = "cost-sub";
+            step.textContent = i18nText("协作步骤 ID：{p0}", { p0: r.collaboration.step_id });
+            head.appendChild(step);
+        }
+    }
     const body = $("cost-rows");
     body.replaceChildren();
     // 单价的单位是「美元 / 百万 token」，要的结果是微美元，两个 1e6 正好约掉：
@@ -498,6 +539,12 @@ function renderCost(r) {
     const note = $("cost-note");
     note.replaceChildren();
     const lines = [];
+    if (r.kind === "decision") {
+        const p = document.createElement("p");
+        setText(p, "此项是已确认的决策调用费用，计入协作任务预算。费用未确认的调用保留在任务的预算占用中，不作为零费用入账。");
+        note.append(p);
+        return;
+    }
     if (!rate) {
         lines.push(r.billing === "provider"
             ? i18nText("这一行的钱由 provider 在回合收尾时自报，只给总额不给分项；这条记录也没有可用的参考单价，无法拆分。")
@@ -660,7 +707,7 @@ async function load() {
         asc = data.order === "asc";
         syncSort();
         fillSelect("uf-user", data.facets.users);
-        fillSelect("uf-agent", data.facets.agents, agentName);
+        fillSelect("uf-agent", data.facets.agents, usageAgentName);
         fillSelect("uf-model", data.facets.models);
         renderSummary(data);
         renderRows(data);
@@ -720,17 +767,19 @@ async function exportCSV() {
         }
         const head = [i18nText("时间（{p0}）", { p0: String(usageTimeZone) }), i18nText("用户"), i18nText("工作空间"), i18nText("工作空间ID"), i18nText("账号"), "Agent", i18nText("模型"), i18nText("思考强度"), i18nText("类型"), i18nText("计费"),
             i18nText("输入"), i18nText("输出"), i18nText("缓存读取"), i18nText("缓存写入"), i18nText("缓存命中率"), i18nText("合计Token"), i18nText("费用USD"),
-            i18nText("首字ms"), i18nText("总耗时ms"), i18nText("模型耗时ms"), i18nText("回合ID")];
+            i18nText("首字ms"), i18nText("总耗时ms"), i18nText("模型耗时ms"), i18nText("回合ID"),
+            i18nText("协作任务ID"), i18nText("协作步骤ID"), i18nText("协作角色"), i18nText("步骤类型"), i18nText("源工作空间ID")];
         const lines = [head.join(",")];
         for (const r of data.rows) {
             lines.push([
                 fmtUsageTime(r.ts, true),
-                r.user, r.session_name || "", r.session_id, r.account_label || "",
-                r.agent, r.model || "", effortText(r), KIND_LABEL[r.kind] || r.kind, (BILLING[r.billing] || { text: r.billing }).text,
+                r.user, workspaceName(r), r.session_id, r.account_label || "",
+                r.agent, r.model || "", effortText(r), KIND_LABEL[r.kind] || r.kind, billingFor(r).text,
                 r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_tokens, cacheHitText(r), r.total_tokens,
                 // 导出给人算账，这里才把微美元换成美元；六位小数才装得下一次便宜回合。
                 (r.cost_micro_usd / 1e6).toFixed(6),
                 r.ttft_ms, r.wall_ms, r.duration_ms, r.turn_id,
+                r.collaboration?.run_id || "", r.collaboration?.step_id || "", collaborationRole(r), collaborationStep(r), r.collaboration?.source_session_id || "",
             ].map(csvCell).join(","));
         }
         // BOM：没有它 Excel 会把 UTF-8 中文认成乱码。

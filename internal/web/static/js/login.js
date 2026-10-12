@@ -70,6 +70,7 @@ export async function tryEnter() {
     S.models = me.models || null;
     S.termTips = me.terminal_tips || null;
     S.timeZone = me.timezone || "Asia/Shanghai";
+    S.chatHistoryTimeoutSec = me.chat_history_timeout_sec ?? 120;
     S.quota = me.quota || null;
     // Features initialized by this event need the authenticated role and timezone.
     emit("signed-in");

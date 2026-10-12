@@ -307,7 +307,7 @@ func (m *Manager) EnsureRunning(ctx context.Context, sess store.Session, acct co
 				if err := prepare(); err != nil {
 					return "", err
 				}
-				quotaFresh := m.cfg.GetStoragePolicy().Mount == "" || (info.Config != nil && info.Config.Labels[quotaGuardLabel] == "2")
+				quotaFresh := m.cfg.GetStoragePolicy().Mount == "" || (info.Config != nil && info.Config.Labels[quotaGuardLabel] == quotaGuardVersion)
 				if imageFresh && plan.matches(info) && quotaFresh {
 					if err := m.cli.ContainerStart(ctx, sess.ContainerID, container.StartOptions{}); err == nil {
 						if err := m.initToolCache(ctx, sess.ContainerID, plan); err != nil {

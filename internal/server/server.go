@@ -26,6 +26,7 @@ import (
 
 	"agentbox/internal/config"
 	"agentbox/internal/credentials"
+	"agentbox/internal/decision"
 	"agentbox/internal/dockerx"
 	"agentbox/internal/gitaccess"
 	"agentbox/internal/gitx"
@@ -63,6 +64,9 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
+	decisionService    decision.Service
+	decisionProvider   func(config.DecisionJev) decision.Provider
+	collaborationJobs  collaborationJobs
 	clientIdentityOnce sync.Once
 	clientInstanceID   string
 	clientIdentityErr  error
@@ -97,27 +101,28 @@ type Server struct {
 	priceCatalogOnce sync.Once
 	prices           *pricecatalog.Service
 
-	network          networkState
-	updates          updateState
-	storage          storageState
-	storageReserveMu sync.Mutex
-	storageReserved  int64
-	storageUsersMu   sync.Mutex
-	storageUsers     map[string]bool
-	cliCatalog       cliCatalogCache // models the Agent image's CLIs list, per image ID
-	runtimeOnce      sync.Once
-	serving          atomic.Bool
-	life             *runtimeState
-	cfg              *config.Config
-	store            *store.Store
-	dock             *dockerx.Manager
-	git              *gitx.Runner
-	chat             *chatManager
-	attachmentMu     sync.Mutex // receipt acceptance and attachment TTL deletion
-	tunnels          *tunnelHub
-	pairs            *pairStore    // outstanding abox-link pairing codes
-	previews         *previewStore // 短时只读的 HTML 预览通行证
-	mapAuth          mapSourceAuth // source-IP cache for tunnel port-map listeners
+	network              networkState
+	updates              updateState
+	storage              storageState
+	storageReserveMu     sync.Mutex
+	storageReserved      int64
+	storageUsersMu       sync.Mutex
+	storageUsers         map[string]bool
+	cliCatalog           cliCatalogCache // models the Agent image's CLIs list, per image ID
+	runtimeOnce          sync.Once
+	serving              atomic.Bool
+	life                 *runtimeState
+	cfg                  *config.Config
+	store                *store.Store
+	dock                 *dockerx.Manager
+	git                  *gitx.Runner
+	chat                 *chatManager
+	collaborationApplyMu sync.RWMutex
+	attachmentMu         sync.Mutex // receipt acceptance and attachment TTL deletion
+	tunnels              *tunnelHub
+	pairs                *pairStore    // outstanding abox-link pairing codes
+	previews             *previewStore // 短时只读的 HTML 预览通行证
+	mapAuth              mapSourceAuth // source-IP cache for tunnel port-map listeners
 
 	tunnelMu   sync.Mutex   // guards the SOCKS listener lifecycle below
 	tunnelLn   net.Listener // nil when the tunnel proxy is not running
@@ -185,6 +190,10 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 		st.Close()
 		return nil, err
 	}
+	if err := st.RecoverCollaborations(); err != nil {
+		st.Close()
+		return nil, err
+	}
 	dock, err := dockerx.NewContext(ctx, cfg)
 	if err != nil {
 		st.Close()
@@ -225,6 +234,13 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 		dock.Close()
 		st.Close()
 		return nil, err
+	}
+	for _, user := range st.ListUsers() {
+		if err := st.BindCollaborationScope(user, s.collaborationScope(user)); err != nil {
+			dock.Close()
+			st.Close()
+			return nil, err
+		}
 	}
 	for _, sess := range st.All() {
 		if err := dock.CheckStorageQuotaContainer(ctx, sess.ContainerID); err != nil {
@@ -319,6 +335,30 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("DELETE /api/sessions/{id}/client-terminals/{terminal}", s.auth(s.withSession(s.handleClientTerminalDelete)))
 	mux.Handle("GET /api/sessions/{id}/client-terminals/{terminal}/stream", s.auth(s.withSession(s.handleClientTerminalWS)))
 	mux.Handle("GET /api/me", s.auth(http.HandlerFunc(s.handleMe)))
+	mux.Handle("GET /api/collaboration/runs", s.auth(http.HandlerFunc(s.handleCollaborationList)))
+	mux.Handle("GET /api/collaboration/options", s.auth(http.HandlerFunc(s.handleCollaborationOptions)))
+	mux.Handle("GET /api/sessions/{id}/collaboration/repositories", s.auth(s.withSession(s.handleCollaborationRepositories)))
+	mux.Handle("GET /api/sessions/{id}/collaboration/context", s.auth(s.withSession(s.handleCollaborationContext)))
+	mux.Handle("GET /api/sessions/{id}/collaboration/decision-default", s.auth(s.withSession(s.handleCollaborationDecisionDefault)))
+	mux.Handle("PUT /api/sessions/{id}/collaboration/decision-default", s.auth(s.withSession(s.handleCollaborationDecisionDefault)))
+	mux.Handle("PUT /api/collaboration/runs/{run}/application/{action}", s.auth(http.HandlerFunc(s.handleCollaborationApply)))
+	mux.Handle("POST /api/collaboration/runs/{run}/application/recover", s.auth(http.HandlerFunc(s.handleCollaborationApplyRecover)))
+	mux.Handle("GET /api/collaboration/runs/{run}/application", s.auth(http.HandlerFunc(s.handleCollaborationApplyGet)))
+	mux.Handle("POST /api/collaboration/preflight", s.auth(http.HandlerFunc(s.handleCollaborationPreflight)))
+	mux.Handle("PUT /api/collaboration/requests/{request}/abandon", s.auth(http.HandlerFunc(s.handleCollaborationAbandon)))
+	mux.Handle("PUT /api/collaboration/runs/{run}/actions/{action}/abandon", s.auth(http.HandlerFunc(s.handleCollaborationAbandon)))
+	mux.Handle("PUT /api/collaboration/runs/{request}", s.auth(http.HandlerFunc(s.handleCollaborationCreate)))
+	mux.Handle("GET /api/collaboration/runs/{run}", s.auth(http.HandlerFunc(s.handleCollaborationGet)))
+	mux.Handle("POST /api/collaboration/runs/{run}/decision/reconcile", s.auth(http.HandlerFunc(s.handleDecisionReconcile)))
+	mux.Handle("DELETE /api/collaboration/runs/{run}", s.auth(http.HandlerFunc(s.handleCollaborationDelete)))
+	mux.Handle("GET /api/collaboration/runs/{run}/diff", s.auth(http.HandlerFunc(s.handleCollaborationDiff)))
+	mux.Handle("GET /api/collaboration/runs/{run}/download", s.auth(http.HandlerFunc(s.handleCollaborationDownload)))
+	mux.Handle("GET /api/collaboration/runs/{run}/steps/{step}/history", s.auth(http.HandlerFunc(s.handleCollaborationHistory)))
+	mux.Handle("POST /api/collaboration/runs/{run}/inspection", s.auth(http.HandlerFunc(s.handleCollaborationInspection)))
+	mux.Handle("GET /api/collaboration/runs/{run}/stream", s.auth(http.HandlerFunc(s.handleCollaborationStream)))
+	mux.Handle("GET /api/collaboration/runs/{run}/events", s.auth(http.HandlerFunc(s.handleCollaborationEvents)))
+	mux.Handle("PUT /api/collaboration/runs/{run}/actions/{action}", s.auth(http.HandlerFunc(s.handleCollaborationAction)))
+	mux.Handle("GET /api/collaboration/runs/{run}/actions/{action}", s.auth(http.HandlerFunc(s.handleCollaborationActionGet)))
 	mux.Handle("GET /api/onboarding", s.auth(http.HandlerFunc(s.handleOnboarding)))
 	mux.Handle("GET /api/session-creations", s.auth(http.HandlerFunc(s.handleCreationList)))
 	mux.Handle("PUT /api/session-creations/{request}", s.auth(http.HandlerFunc(s.handleCreateSession)))
@@ -538,6 +578,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.spawn(s.termWatchLoop)
 	s.spawn(s.tokenJanitor)
 	s.spawn(s.networkLoop)
+	s.spawn(s.collaborationWaitLoop)
 	if err := s.applyTunnel(); err != nil {
 		log.Printf("tunnel disabled: %v", err)
 	}
@@ -653,6 +694,29 @@ func (s *Server) withSession(fn func(http.ResponseWriter, *http.Request, store.S
 			writeProblem(w, r, "session.access", "session_not_found")
 			return
 		}
+		managed, err := s.store.IsCollaborationSession(sess.ID)
+		if err != nil {
+			writeProblem(w, r, "session.access", "internal_error")
+			return
+		}
+		if managed {
+			writeProblem(w, r, "session.access", "session_not_found")
+			return
+		}
+		if r.Header.Get("Upgrade") != "websocket" {
+			if !s.collaborationApplyMu.TryRLock() {
+				writeErr(w, 409, "项目结果正在应用，请稍后重试。")
+				return
+			}
+			defer s.collaborationApplyMu.RUnlock()
+		}
+		if r.Method != "GET" && r.Method != "HEAD" || r.Header.Get("Upgrade") == "websocket" {
+			blocked, err := s.store.CollaborationApplicationBlocked(sess.ID)
+			if err != nil || blocked {
+				writeErr(w, 409, "项目结果应用尚未确认，请先核对应用状态。")
+				return
+			}
+		}
 		fn(w, r, sess)
 	})
 }
@@ -682,11 +746,19 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"draft_protocol": 1,
 		"chat_protocol":  1,
 		"chat_scope":     s.chatRequestScope(u),
-		"user":           u.Name,
-		"role":           u.Role,
-		"models":         s.cfg.GetModels(),
-		"terminal_tips":  s.cfg.GetTerminalTips(),
-		"timezone":       s.cfg.GetTimeZone(),
+		"collaboration_protocol": func() int {
+			if s.cfg.GetCollaborationEnabled() {
+				return 1
+			}
+			return 0
+		}(),
+		"collaboration_scope":      s.collaborationScope(u),
+		"user":                     u.Name,
+		"role":                     u.Role,
+		"models":                   s.cfg.GetModels(),
+		"terminal_tips":            s.cfg.GetTerminalTips(),
+		"timezone":                 s.cfg.GetTimeZone(),
+		"chat_history_timeout_sec": s.cfg.GetChatHistoryTimeoutSec(),
 		// 自己的额度：metered 为 false 就是不限额，前端不必显示余额。
 		"quota": viewQuota(u.Name, q, metered),
 	})

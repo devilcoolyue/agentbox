@@ -1,0 +1,133 @@
+/* A collaboration occupies one working surface. Navigation stays in place;
+ * each selected pane owns its scroll position. The trace owns its own viewport. */
+.collaboration-workspace{--collaboration-accent:var(--accent,var(--amber));min-width:0;min-height:0;color:var(--text);background:var(--panel-solid)}
+.collaboration-workspace [hidden]{display:none!important}
+.collaboration-detail.collaboration-workspace{inset:0;width:100%;border:0;box-shadow:none;overflow:hidden;animation:collaboration-workspace-in var(--dur) var(--ease-out)}
+.collaboration-workspace .collaboration-detail-head{min-height:46px;flex:0 0 auto;padding:7px 18px;gap:12px;border-bottom:0}
+.collaboration-detail-head>strong{font-size:13px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.collaboration-workspace-status{min-width:0;margin-right:auto;color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.collaboration-workspace-status[data-state=completed]{color:var(--green)}
+.collaboration-workspace-status:is([data-state=failed],[data-state=uncertain]){color:var(--red)}
+.collaboration-workspace .collaboration-detail-head>.btn{padding:5px 10px;font-size:11px;min-height:28px;box-shadow:none;background:transparent;border-color:var(--line)}
+.collaboration-workspace-tabs{display:flex;align-items:stretch;gap:4px;flex:0 0 auto;min-height:40px;min-width:0;padding:0 14px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.collaboration-workspace-tabs::-webkit-scrollbar{display:none}
+.collaboration-workspace .collaboration-workspace-tabs button.btn{position:relative;display:flex;align-items:center;gap:7px;border:0;border-bottom:2px solid transparent;border-radius:0;margin:0;padding:8px 12px;min-height:39px;font-size:12px;font-weight:500;line-height:1.4;white-space:nowrap;color:var(--muted);background:transparent;box-shadow:none;transform:none;transition:opacity var(--dur-fast) var(--ease-out)}
+.collaboration-workspace .collaboration-workspace-tabs button.btn:hover{background:var(--panel-2);color:var(--text)}
+.collaboration-workspace .collaboration-workspace-tabs button[aria-selected=true]{color:var(--collaboration-accent);border-bottom-color:var(--collaboration-accent)}
+.collaboration-workspace-tabs button[data-ready=true]:after{content:"";width:5px;height:5px;flex-shrink:0;border-radius:50%;background:var(--green)}
+.collaboration-workspace .collaboration-workspace-tabs button:focus-visible{outline:2px solid var(--collaboration-accent);outline-offset:-4px}
+.collaboration-workspace-body{display:flex;flex:1;min-width:0;min-height:0;overflow:hidden;padding:0}
+.collaboration-workspace-pane{flex:1;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:18px 22px}
+.collaboration-workspace-pane[data-pane=overview]{display:flex;flex-direction:column;overflow:hidden;padding:0}
+.collaboration-workspace-empty{margin:0;padding:clamp(24px,8vh,80px) 12px;text-align:center;font-size:13px;color:var(--muted);line-height:1.6}
+.collaboration-workspace-pane .collaboration-final-result{margin:0 auto;padding:0;border:0;max-width:960px;font-size:13px}
+.collaboration-workspace-pane .collaboration-final-result>h3{display:none}
+.collaboration-workspace-pane .collaboration-final-summary{margin-top:0;font-size:15px;line-height:1.7;color:var(--text-hi,var(--text))}
+.collaboration-workspace-pane :is(.collaboration-final-result,.collaboration-exchange,.collaboration-evidence) pre{max-height:none;overflow:visible}
+.collaboration-workspace-pane .collaboration-run-output{margin:0;min-width:0}
+.collaboration-workspace-pane .collaboration-run-output>summary{display:none}
+.collaboration-workspace-pane .collaboration-run-output>label{margin:0 0 8px}
+.collaboration-workspace-pane .collaboration-run-output [data-output-body]{padding:0;border:0;background:transparent;max-height:none;overflow:visible;font:12px/1.85 var(--font-mono,monospace)}
+.collaboration-workspace-pane .collaboration-run-output [data-output-status]{margin:6px 0 18px;font-size:11px}
+.collaboration-workspace-pane .collaboration-evidence{margin:0 0 20px}
+.collaboration-workspace-file-actions{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.collaboration-workspace-pane .collaboration-exchange-details{margin:16px 0 0;border-top:1px solid var(--line)}
+.collaboration-workspace-pane .collaboration-exchange-details>summary{padding:12px 0}
+.collaboration-workspace-pane .collaboration-exchange article{padding:14px 0}
+.collaboration-workspace-pane .collaboration-exchange pre{font-size:12px}
+.collaboration-workspace-pane .collaboration-activity{margin:0;padding:0;border:0}
+.collaboration-workspace-pane .collaboration-history article{margin-top:14px;padding-bottom:14px}
+.collaboration-workspace-pane .collaboration-section-head{padding-bottom:12px;border-bottom:1px solid var(--line)}
+
+/* The optional standalone task manager uses the same four-pane layout. */
+.collaboration-dialog .collaboration-center.collaboration-workspace{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.collaboration-dialog .collaboration-center.collaboration-workspace>*{max-width:none;width:auto;margin-left:0;margin-right:0;flex-shrink:0}
+.collaboration-dialog .collaboration-center.collaboration-workspace>.collaboration-workspace-body{flex:1;min-height:0}
+.collaboration-dialog .collaboration-workspace>.collaboration-task-head{padding:12px 18px;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px;align-items:center}
+.collaboration-dialog[data-mode=run] .collaboration-task-head h2{grid-column:1;grid-row:1;font-size:14px;line-height:1.5;-webkit-line-clamp:1;margin:0;letter-spacing:-.015em}
+.collaboration-dialog[data-mode=run] .collaboration-task-head .collaboration-badge{grid-column:2;grid-row:1;font-size:10px;white-space:nowrap}
+.collaboration-dialog .collaboration-workspace .collaboration-metrics{grid-column:1/-1;font-size:10px;margin:4px 0 0}
+.collaboration-dialog .collaboration-workspace .collaboration-viewbar{display:flex;gap:8px;align-items:center;margin:0;padding:0 10px 0 0;border-bottom:1px solid var(--line)}
+.collaboration-dialog .collaboration-workspace .collaboration-viewbar>.collaboration-workspace-tabs{flex:1;border-bottom:0;padding-left:10px}
+.collaboration-workspace .collaboration-workspace-settings{font-size:11px;padding:5px 8px;background:transparent;box-shadow:none;border-color:transparent;flex-shrink:0}
+.collaboration-workspace .collaboration-workspace-settings[aria-pressed=true]{color:var(--collaboration-accent);background:var(--panel-2)}
+.collaboration-dialog .collaboration-workspace>.collaboration-feedback{margin:0;padding:8px 18px;border-bottom:1px solid var(--line-soft);font-size:11px;max-height:90px;overflow:auto}
+.collaboration-dialog .collaboration-workspace>.collaboration-feedback p{margin:0}
+.collaboration-dialog .collaboration-workspace>.collaboration-recovery{margin:0;border-bottom:1px solid var(--line);padding:10px 18px}
+.collaboration-dialog .collaboration-workspace>.collaboration-commandbar{padding:8px 18px;margin:0;gap:8px;border-bottom:1px solid var(--line-soft);align-items:center;max-height:120px;overflow:auto}
+.collaboration-dialog .collaboration-workspace .collaboration-commandbar .btn{min-height:28px;padding:5px 9px;font-size:10px;box-shadow:none}
+.collaboration-dialog .collaboration-workspace .collaboration-commandbar .collaboration-actions{gap:6px}
+.collaboration-dialog .collaboration-workspace .collaboration-commandbar summary{font-size:11px;padding:5px 0}
+.collaboration-dialog .collaboration-workspace-pane[data-pane=progress]{padding:20px 24px}
+.collaboration-dialog .collaboration-workspace-pane[data-pane=progress]>*{max-width:900px;margin-left:auto;margin-right:auto}
+.collaboration-dialog .collaboration-workspace-pane[data-pane=progress]>.collaboration-field{margin-bottom:14px}
+.collaboration-dialog .collaboration-workspace-pane[data-pane=progress]>button[type=submit]{display:block;width:100%;min-height:42px;margin-top:20px}
+.collaboration-dialog[data-mode=run] .dlg-actions{display:none}
+.collaboration-dialog[data-mode=new] .collaboration-task-head{display:block;padding:20px 24px 0}
+.collaboration-dialog[data-mode=new] .collaboration-task-head h2{font-size:22px;margin:0 0 6px}
+.collaboration-dialog[data-mode=new] .collaboration-project{margin-top:0}
+.collaboration-dialog[data-mode=new] .collaboration-workspace-pane[data-pane=progress]{padding-top:18px}
+@keyframes collaboration-workspace-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(max-width:950px){.collaboration-dialog .collaboration-nav{padding:8px 14px;gap:8px}.collaboration-dialog .collaboration-nav>button{font-size:11px;min-height:30px}}
+@media(max-width:760px){
+ .collaboration-workspace .collaboration-detail-head{padding:7px 12px;gap:8px;min-height:42px}
+ .collaboration-workspace-status{font-size:10px}
+ .collaboration-workspace-tabs{padding:0 5px;gap:0}
+ .collaboration-workspace .collaboration-workspace-tabs button.btn{font-size:11px;padding:8px 10px;min-height:38px}
+ .collaboration-workspace-pane{padding:16px}
+ .collaboration-workspace-pane[data-pane=overview]{padding:0}
+ .collaboration-dialog form>.dlg-body{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+ .collaboration-dialog .collaboration-center.collaboration-workspace{min-height:0;overflow:hidden}
+ .collaboration-dialog .dlg-head{padding:10px 14px}
+ .collaboration-dialog .collaboration-workspace>.collaboration-task-head{padding:10px 14px;column-gap:10px}
+ .collaboration-dialog[data-mode=run] .collaboration-task-head h2{font-size:12px}
+ .collaboration-dialog[data-mode=run] .collaboration-task-head .collaboration-badge{font-size:9px;max-width:130px;white-space:normal}
+ .collaboration-dialog .collaboration-workspace .collaboration-viewbar{gap:2px;padding-right:5px}
+ .collaboration-dialog .collaboration-workspace .collaboration-viewbar>.collaboration-workspace-tabs{padding-left:4px}
+ .collaboration-dialog .collaboration-workspace .collaboration-workspace-settings{padding:5px;font-size:10px}
+ .collaboration-dialog .collaboration-workspace>.collaboration-commandbar{padding:7px 12px}
+ .collaboration-dialog .collaboration-workspace-pane[data-pane=progress]{padding:16px}
+}
+@media(prefers-reduced-motion:reduce){.collaboration-detail.collaboration-workspace{animation:none}.collaboration-workspace .collaboration-workspace-tabs button.btn{transition:none}}
+
+/* The conversation stays readable before opening the process workspace:
+ * request on the right, team response on the left, no enclosing rails/cards. */
+.collaboration-thread .collaboration-reply-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-height:24px;margin:0 0 9px}
+.collaboration-reply-head>strong{font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--text-hi,var(--text))}
+.collaboration-reply-brands{display:inline-flex;align-items:center;gap:4px;flex-shrink:0}
+.collaboration-reply-brands .agent-ico{display:block}
+.collaboration-thread .collaboration-reply-status{font-size:11px;color:var(--muted);line-height:1.5;margin-left:auto;max-width:65%;overflow-wrap:anywhere}
+.collaboration-reply-status[data-state=completed]{color:var(--green)}
+.collaboration-reply-status:is([data-state=failed],[data-state=uncertain]){color:var(--red)}
+.collaboration-thread .collaboration-reply-team{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 20px;margin:0 0 18px;color:var(--muted);font-size:11px;line-height:1.6}
+.collaboration-reply-team>span{display:inline-flex;gap:7px;min-width:0;max-width:100%;align-items:baseline}
+.collaboration-reply-team>span>span:last-child{overflow-wrap:anywhere}
+.collaboration-reply-role{white-space:nowrap;font-weight:500;color:var(--text)}
+.collaboration-thread .collaboration-reply-content{font-size:14px;line-height:1.8;margin:0 0 16px}
+.collaboration-thread .collaboration-reply-content:empty{display:none}
+.collaboration-thread .collaboration-routing{margin:0 0 16px;padding:0;border:0;font-size:11px}
+.collaboration-thread .collaboration-final-result{border:0;border-radius:0;padding:0;margin:0 0 18px;background:transparent;font-size:14px}
+.collaboration-thread .collaboration-final-result>h3{font-size:14px;margin:0 0 10px;color:var(--text-hi,var(--text));font-weight:600}
+.collaboration-thread .collaboration-final-summary{font-size:14px;line-height:1.8}
+.collaboration-thread .collaboration-final-result h4{font-size:12px;font-weight:600;color:var(--text)}
+.collaboration-thread .collaboration-final-result :is(p,ul){line-height:1.8}
+.collaboration-thread .collaboration-final-result small{line-height:1.7}
+.collaboration-thread .collaboration-final-result .collaboration-final-review{margin-top:18px;padding-top:14px}
+.collaboration-thread .collaboration-final-result .collaboration-final-note{font-size:10px;color:var(--muted)}
+.collaboration-thread .collaboration-reply-footer{display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px;padding-top:10px;border-top:1px solid var(--line-soft)}
+.collaboration-reply-footer>.collaboration-actions{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin:0;flex:1}
+.collaboration-reply-footer>small{margin-left:auto;white-space:nowrap;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.collaboration-thread .collaboration-reply-footer .btn{min-height:30px;box-shadow:none;border:0;background:transparent;font-size:11px;padding:6px 8px;color:var(--muted);transform:none}
+.collaboration-thread .collaboration-reply-footer .btn:first-child{color:var(--accent);background:var(--panel-2)}
+.collaboration-thread .collaboration-reply-footer .btn:hover{color:var(--text);background:var(--panel-2);transform:none;box-shadow:none}
+.collaboration-thread .collaboration-reply-footer .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:760px){
+ .collaboration-thread{gap:22px}
+ .collaboration-thread .collaboration-request{max-width:94%}
+ .collaboration-thread .msg.user{padding:10px 13px;font-size:13px}
+ .collaboration-thread .collaboration-reply-team{display:grid;gap:4px;margin-bottom:16px}
+ .collaboration-thread .collaboration-reply-status{font-size:10px}
+ .collaboration-thread .collaboration-reply-content,.collaboration-thread .collaboration-final-result,.collaboration-thread .collaboration-final-summary{font-size:13px}
+ .collaboration-thread .collaboration-reply-footer{gap:8px}
+ .collaboration-reply-footer>small{flex-basis:100%;margin-left:0}
+}

@@ -59,3 +59,15 @@ func TestChatExecutorExecDoesNotSilentlyDropOptions(t *testing.T) {
 		t.Fatal("unsupported options launched an exec")
 	}
 }
+
+func TestCollaborationExecutorDoesNotFallback(t *testing.T) {
+	backend := &refusingBackend{}
+	adapter, _ := agent.Lookup("codex")
+	e := Executor{Backend: backend, Environment: func() ([]string, error) { return nil, nil }, Interrupted: func() bool { return false }, Log: func(string, ...any) {}}
+	if err := e.Run(t.Context(), adapter, Turn{RequireAppServer: true, StrictResume: true}); err == nil {
+		t.Fatal("accepted unavailable transport")
+	}
+	if backend.calls != 1 {
+		t.Fatal("attempted exec fallback", backend.calls)
+	}
+}

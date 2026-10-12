@@ -22,7 +22,7 @@ export class TurnWriter {
         this.context = {};
     }
     place(node) {
-        if (node.classList.contains("user") || node.classList.contains("chat-divider")) {
+        if (node.classList.contains("collaboration-thread") || node.classList.contains("user") || node.classList.contains("chat-divider")) {
             this.reset();
             this.log().appendChild(node);
             return;

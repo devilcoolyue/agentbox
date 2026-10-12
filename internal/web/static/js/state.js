@@ -38,6 +38,7 @@ export const S = {
     termWSGen: 0,
     termTips: null,
     timeZone: "Asia/Shanghai",
+    chatHistoryTimeoutSec: 120,
     term: null,
     fit: null,
     filePath: "",

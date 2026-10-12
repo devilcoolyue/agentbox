@@ -1,4 +1,5 @@
 import { SettingsRequests } from "./requests.js";
+import {fillDecisionSettings,decisionSettingsGroup,initDecisionSettings,refreshDecisionSettings} from "./decision.js";
 import { initSettingsMaintenance } from "./maintenance.js";
 import { setAttrRender, setText, setTextRender, t as i18nText } from "../../i18n.js";
 import { initImageUpdates, fillImageUpdateSettings, startImageUpdates, stopImageUpdates } from "./image-updates.js";
@@ -43,7 +44,7 @@ for (const h of document.querySelectorAll<HTMLElement>("h3[data-agent]")) {
   h.prepend(agentIcon(h.dataset.agent!, 15));
 }
 
-export const SET_SECS = ["accounts", "proxies", "container", "models", "interface", "security", "monitor", "about"];
+export const SET_SECS = ["accounts", "proxies", "container", "models", "decision", "interface", "security", "monitor", "about"];
 /** 模型管理里的标签页；价格（原「价目表」分区）是其中之一。 */
 export const MODEL_TABS = ["accounts", "pricing", "system"];
 
@@ -78,6 +79,7 @@ async function openSettingsView() {
     const restore = holdDirty();
     fillSettingsForms();
     restore();
+    refreshDecisionSettings();
   } catch (e) { if(!scope.current())return;
     if(scope.current())toast(i18nText("读取设置失败：") + (e as Error).message, true);
   }
@@ -448,6 +450,7 @@ function renderAuthModels(models: string[] | null) {
 function fillSettingsForms() {
   const st = settingsState.value;
   if (!st) return;
+  fillDecisionSettings(st.decision);
   fillImageUpdateSettings(st.image_updates);
   $<HTMLInputElement>("set-image").value = st.agent_image;
   $<HTMLInputElement>("set-mem").value = String(st.container.memory_mb);
@@ -470,6 +473,8 @@ function fillSettingsForms() {
   setSelectValue(tz, st.timezone);
   setSelectValue($<HTMLSelectElement>("set-perm"), st.permission_mode);
   $<HTMLInputElement>("set-upload").value = String(st.max_upload_mb);
+  $<HTMLInputElement>("set-history-timeout").value = String(st.chat_history_timeout_sec ?? 120);
+  S.chatHistoryTimeoutSec = st.chat_history_timeout_sec ?? 120;
   $<HTMLInputElement>("set-listen").value = st.listen;
   setTextRender($("security-note"), () => st.restart_required
     ? i18nText("监听地址已修改，重启 agentbox 服务后生效")
@@ -506,6 +511,7 @@ async function putSettings(
     const restore = keepDirty ? holdDirty() : null;
     fillSettingsForms();
     restore?.();
+    refreshDecisionSettings();
     if (settingsState.value.models) { S.models = settingsState.value.models; emit("models-updated"); } // 对话框的模型菜单同步更新
     if (settingsState.value.terminal_tips) { // 终端顶栏轮播实时刷新
       S.termTips = settingsState.value.terminal_tips;
@@ -737,6 +743,7 @@ const valid = (...ids: string[]) => ids.every((id) => $<HTMLInputElement>(id).re
 
 function initSaveBar(signal: AbortSignal) {
   defineGroups([
+    decisionSettingsGroup(),
     { id: "container", get label() { return i18nText("Agent 镜像与资源限制"); }, fields: ["set-image", "set-mem", "set-cpus", "set-pids", "set-net"],
       patch: () => ({
         agent_image: inputVal("set-image").trim(),
@@ -774,10 +781,11 @@ function initSaveBar(signal: AbortSignal) {
           animation: $<HTMLSelectElement>("set-tips-anim").value,
         },
       }) },
-    { id: "security", get label() { return i18nText("权限模式与上传监听"); }, fields: ["set-perm", "set-upload", "set-listen"],
+    { id: "security", get label() { return i18nText("权限模式与上传监听"); }, fields: ["set-perm", "set-upload", "set-history-timeout", "set-listen"],
       patch: () => ({
         permission_mode: $<HTMLSelectElement>("set-perm").value,
         max_upload_mb: Number(inputVal("set-upload")),
+        chat_history_timeout_sec: Number(inputVal("set-history-timeout")),
         listen: inputVal("set-listen").trim(),
       }),
       done: (st) => { if (st.restart_required) toast(i18nText("监听地址改动需重启 agentbox 服务后生效")); } },
@@ -807,6 +815,7 @@ function initSaveBar(signal: AbortSignal) {
 }
 
 function initSettings() {
+ initDecisionSettings(lifetime.signal);
  initSettingsMaintenance(lifetime.signal,scope);
  initImageUpdates(lifetime.signal);
  initSaveBar(lifetime.signal);

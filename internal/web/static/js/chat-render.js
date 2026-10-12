@@ -1,3 +1,4 @@
+import { collaborationAnchor } from "./features/collaboration/thread-view.js";
 import { formatProblem } from "./problems.js";
 import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* chat-render：对话流的纯渲染管线 —— 用户消息、agent 事件（Claude stream-json /
@@ -546,6 +547,8 @@ function appendInlineFmt(parent, text) {
 export function renderEntry(raw) {
     if (!raw || typeof raw !== "object")
         return [];
+    if (raw.kind === "collaboration" && raw.run_id && /^[a-f0-9]{32}$/.test(raw.run_id))
+        return [collaborationAnchor(raw.run_id, raw.text || "")];
     if (raw.kind === "user")
         return [renderUserMsg(raw.text)];
     if (raw.kind === "event")

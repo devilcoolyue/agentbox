@@ -33,8 +33,8 @@ type Entry struct {
 }
 
 // Runtime is the adapter to workspace, authorization, history and live clients.
-// It grants no scheduling rights. Only HTTP admission of a fresh receipt (or the
-// existing legacy room gate) may call Run while holding room ownership.
+// It grants no scheduling rights. HTTP receipt admission, the legacy room gate,
+// or a durable collaboration step claim must precede Run.
 type Runtime interface {
 	Hold() func()
 	Session() (store.Session, bool)
@@ -67,7 +67,14 @@ type Service struct {
 	Runtime Runtime
 	Usage   *usage.Service
 }
-type Input struct{ SessionID, Text, Model, Effort, Control string }
+type Input struct {
+	SessionID, Text, Model, Effort, Control string
+	Context                                 string
+	StrictResume, RequireAppServer          bool
+	// Collaboration cannot advance with an unobserved usage result. Ordinary
+	// chat retains its existing warning and compatibility behavior.
+	RequireUsage bool
+}
 type Failure struct {
 	Code  string
 	Cause error
@@ -218,6 +225,9 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	defer func() {
 		if s.Usage.Flush(&tally, time.Since(turnStart)) == 0 {
 			log.Printf("usage: 会话 %s 回合结束但未记到用量（agent=%s），该回合消耗不会进报表", in.SessionID, sess.Agent)
+			if in.RequireUsage && receipt != nil {
+				receipt.UsageFailed()
+			}
 		}
 		r.PublishCost(tid, turnID)
 		if receipt != nil && tally.SettlementError() != nil {
@@ -274,7 +284,12 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	executor.OnLine = onLine
 
 	if err := executor.Run(ctx, adapter, Turn{SessionID: sess.ID, ContainerID: sess.ContainerID,
-		Text: text, ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options}); err != nil {
+		Text: func() string {
+			if in.Context == "" {
+				return text
+			}
+			return text + "\n\n" + in.Context
+		}(), ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options, StrictResume: in.StrictResume, RequireAppServer: in.RequireAppServer}); err != nil {
 		code := "chat_failed"
 		if errors.Is(err, ErrOptions) {
 			code = "chat_options_invalid"

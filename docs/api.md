@@ -52,7 +52,7 @@ POST   /api/sessions/{id}/files/rename 重命名文件或目录 {scope,path,name
 GET    /api/sessions/{id}/file      读单个文件 ?path=；dl=1 强制下载
 PUT    /api/sessions/{id}/file      保存文件内容（body 即内容，上限 16MB）
 GET    /api/sessions/{id}/preview   ?path=&scope= 签发短时只读预览链接
-POST   /api/sessions/{id}/images    图片 / 聊天附件上传（multipart file，上限 20MB），
+POST   /api/sessions/{id}/images    图片 / 聊天附件上传（multipart file，上限 max_upload_mb，默认 512MB；超限返回 413），
                                     图片存入 /shared/.images/，其他文件存入 /shared/.file/；
                                     48 小时后清理未被历史引用的附件
 （通用文件 / 上传 / 下载接口支持 ?scope=shared；图片上传固定落在用户共享目录）
@@ -119,6 +119,8 @@ GET    /api/usage/events            消耗明细流水（使用记录页）；�
                                     明细时间支持 RFC3339 或系统时区 YYYY-MM-DDTHH:mm
                                     返回 rows + 整个筛选范围的 total + 筛选可选值 facets + 异步补记状态 sync
 ```
+
+明细接口 `/api/usage/events` 的 `kind=collaboration` 筛选协作模型步骤，`kind=chat` 只筛普通对话，`kind=decision` 保留独立决策调用。`session=` 除直接记在该空间的行，也包含以该空间为源的协作步骤；列表、合计与筛选可选值使用同一条件。协作行返回 `collaboration: {run_id, step_id, role, step_kind, source_session_id}` 及可选 `source_session_name`；决策调用的协作归属不含步骤和角色。`session_id` / `thread_id` / `turn_id` 保留原账本标识，展示分类不会改写结算记录或重复扣费。
 
 ## 账号与出口代理
 

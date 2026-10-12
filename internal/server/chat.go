@@ -332,7 +332,17 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 		control = controls[0]
 	}
 	service := chat.Service{Runtime: chatRuntime{r}, Usage: r.srv.usageService()}
-	service.Run(parent, chat.Input{SessionID: r.sessID, Text: text, Model: model, Effort: effort, Control: control}, observer)
+	supplement := ""
+	if receipt != nil {
+		var err error
+		supplement, err = r.srv.store.ChatCollaborationContext(receipt.owner, r.sessID, receipt.receipt.RequestID)
+		if err != nil {
+			receipt.Fail(err, "chat_failed")
+			receipt.Finish()
+			return
+		}
+	}
+	service.Run(parent, chat.Input{SessionID: r.sessID, Text: text, Context: supplement, Model: model, Effort: effort, Control: control}, observer)
 }
 
 func (r *chatRoom) setStop(f func()) {

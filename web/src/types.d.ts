@@ -203,6 +203,8 @@ export interface UsageEventRow {
   ts: number;
   user: string;
   session_name?: string;
+  /** 协作发起空间名称；账本 session_id 仍指向实际执行的参与者空间。 */
+  source_session_name?: string;
   session_id: string;
   thread_id?: string;
   turn_id: string;
@@ -210,8 +212,16 @@ export interface UsageEventRow {
   account_id?: string;
   account_label?: string;
   model?: string;
-  /** "chat" 用户的对话 | "title" 服务端自动起标题 */
+  /** "chat" 对话 | "collaboration" 协作步骤 | "title" 起标题 | "terminal" 终端 | "decision" 决策插件调用 */
   kind: string;
+  /** 原账本的只读协作归因；决策调用没有角色和步骤。 */
+  collaboration?: {
+    run_id: string;
+    step_id?: string;
+    role?: string;
+    step_kind?: string;
+    source_session_id: string;
+  };
   /** provider 自报的服务方（claude 的 "firstParty"）；codex 不报 */
   provider?: string;
   /** "provider" provider 报价 | "table" 价目表折算 | "none" 未定价 */
@@ -335,6 +345,7 @@ export interface GitProfile {
 
 /** GET /api/me */
 export interface Me {
+  chat_history_timeout_sec?: number;
   draft_scope?:string;
   draft_protocol?:number;
   chat_protocol?:number;
@@ -439,13 +450,34 @@ export interface TunnelConfig {
 /** GET/PUT /api/settings（server.settingsView）。 */
 export interface ImageUpdateSettings { enabled: boolean; channel: "stable" | "latest"; time: string; update_codex: boolean }
 
+export interface DecisionSettings {
+  revision: number;
+  default_provider: "builtin" | "jev";
+  fallback_policy: "workspace_default";
+  plugins: {jev: {
+    gateway?: "typesafe" | "mindshub";
+    enabled: boolean; model: string; timeout_ms: number; max_request_bytes: number; max_concurrency: number;
+    access: {mode: "all" | "admin" | "users"; users?: string[]}; key_configured: boolean;
+  }};
+}
+export interface DecisionSettingsPatch {
+  expected_revision: number;
+  default_provider?: "builtin" | "jev";
+  plugins?: {jev?: Partial<Omit<DecisionSettings["plugins"]["jev"], "key_configured">> & {
+    api_key?: {action: "keep" | "set" | "clear"; value?: string};
+  }};
+}
+
 export interface Settings {
+  /** Absent on servers that do not support optional decision plugins. */
+  decision?: DecisionSettings;
   image_updates: ImageUpdateSettings;
  resources: ResourceLimits;
   listen: string;
   agent_image: string;
   permission_mode: string;
   max_upload_mb: number;
+  chat_history_timeout_sec?: number;
   /** 会话空闲自动停机的分钟数；0 = 关闭 */
   idle_timeout_min: number;
   /** 控制台显示与使用记录筛选使用的 IANA 时区 */
@@ -841,6 +873,7 @@ export interface ChatTurnCost {
 }
 
 export interface HistoryEntry extends APIProblem {
+ run_id?:string;
   turn?: ChatTurnMetadata;
   ts: string;
   /** "user" | "event" | "status" | "chat_session" | "title" | "divider"(旧) */

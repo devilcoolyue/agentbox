@@ -25,6 +25,7 @@ const (
 	// backfilled from the CLI's own transcript files and, unlike the other two,
 	// never move the user's balance (see UpsertTerminalUsage).
 	UsageKindChat     = "chat"
+	UsageKindDecision = "decision"
 	UsageKindTitle    = "title"
 	UsageKindTerminal = "terminal"
 
@@ -251,7 +252,7 @@ func (s *Store) Delete(id string) error {
 	if _, err := tx.Exec("UPDATE workspace_creations SET state='abandoned' WHERE session_id=?", id); err != nil {
 		return err
 	}
-	for _, query := range []string{"DELETE FROM client_terminals WHERE session_id=?", "DELETE FROM client_projects WHERE session_id=?", "DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
+	for _, query := range []string{"DELETE FROM collaboration_decision_defaults WHERE session_id=?", "DELETE FROM client_terminals WHERE session_id=?", "DELETE FROM client_projects WHERE session_id=?", "DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
 		if _, err := tx.Exec(query, id); err != nil {
 			return err
 		}
@@ -354,6 +355,12 @@ func (s *Store) DeleteUser(name string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if err := clearUserCollaborationsTx(tx, name); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM collaboration_decision_defaults WHERE session_id IN (SELECT id FROM sessions WHERE user=?)", name); err != nil {
+		return err
+	}
 	if _, err := tx.Exec("UPDATE chat_requests SET state='deleted',request_json='null',revision=revision+1,updated_at=? WHERE user=? AND state!='deleted'", usageTimestamp(time.Now()), name); err != nil {
 		return err
 	}
@@ -752,6 +759,12 @@ type UsageFilter struct {
 	Limit     int       // <= 0: no limit
 	Offset    int       // rows to skip; only meaningful with Limit
 	Asc       bool      // oldest first; the zero value keeps the newest-first default
+	// Collaboration classifies model steps without changing their stored chat kind.
+	// Empty keeps every row; only selects collaboration chat; exclude omits it.
+	Collaboration string
+	// IncludeCollaborationSessions also matches model steps launched from SessionID.
+	// The original participant session and accounting identity remain unchanged.
+	IncludeCollaborationSessions bool
 }
 
 // where renders the filter as a SQL predicate plus its arguments. Every usage
@@ -768,7 +781,20 @@ func (f UsageFilter) where() (string, []any) {
 		add(" AND user = ?", f.User)
 	}
 	if f.SessionID != "" {
-		add(" AND session_id = ?", f.SessionID)
+		if f.IncludeCollaborationSessions {
+			q += " AND (session_id = ? OR EXISTS (SELECT 1 FROM " + usageCollaborationStepTables +
+				" WHERE " + usageCollaborationStepMatch + " AND uc_run.source_session_id = ?))"
+			args = append(args, f.SessionID, f.SessionID)
+		} else {
+			add(" AND session_id = ?", f.SessionID)
+		}
+	}
+	if f.Collaboration == "only" || f.Collaboration == "exclude" {
+		q += " AND "
+		if f.Collaboration == "exclude" {
+			q += "NOT "
+		}
+		q += "EXISTS (SELECT 1 FROM " + usageCollaborationStepTables + " WHERE " + usageCollaborationStepMatch + ")"
 	}
 	if f.Kind != "" {
 		add(" AND kind = ?", f.Kind)

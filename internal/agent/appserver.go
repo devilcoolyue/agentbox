@@ -29,6 +29,9 @@ import (
 // 此时模型没跑任何东西，调用方可安全回退到传统 codex exec 路径重试。
 var ErrAppServerUnavailable = errors.New("codex app-server 不可用")
 
+// ErrResumeUnavailable must never trigger a new conversation or exec fallback.
+var ErrResumeUnavailable = errors.New("provider conversation could not be resumed")
+
 // handshakeTimeout 兜住 initialize→turn/start 阶段（含大 rollout 的
 // thread/resume）；超时按不可用处理，回退 exec。
 const handshakeTimeout = 120 * time.Second
@@ -51,6 +54,7 @@ type CodexTurn struct {
 	Effort                string // 可选的推理强度（minimal|low|medium|high|xhigh）
 	Cwd                   string // agent 的工作根目录（容器内路径）
 	RejectInheritedEffort bool   // unsupported model: refuse retained thread settings
+	StrictResume          bool   // collaboration: never replace a missing thread
 }
 
 type rpcError struct {
@@ -156,6 +160,9 @@ func RunCodexTurn(ctx context.Context, w io.Writer, r io.Reader, abort func(), i
 			params["model"] = t.Model
 		}
 		res, err := c.call(2, "thread/resume", params)
+		if err != nil && t.StrictResume {
+			return ErrResumeUnavailable
+		}
 		if err == nil {
 			threadRes = res
 		}
@@ -180,6 +187,9 @@ func RunCodexTurn(ctx context.Context, w io.Writer, r io.Reader, abort func(), i
 	}
 	if json.Unmarshal(threadRes, &tr); tr.Thread.ID == "" {
 		return fmt.Errorf("%w: 线程响应缺 id", ErrAppServerUnavailable)
+	}
+	if t.StrictResume && t.ThreadID != "" && tr.Thread.ID != t.ThreadID {
+		return ErrResumeUnavailable
 	}
 	if t.RejectInheritedEffort && tr.ReasoningEffort != "" {
 		return fmt.Errorf("模型 %s 不支持调整推理强度，但 CLI / 线程仍使用 %s；请清除 CLI 配置或新建对话后重试", t.Model, tr.ReasoningEffort)
@@ -318,6 +328,8 @@ func (c *appServerConn) emitJSON(v any) {
 type asItem struct {
 	Type     string `json:"type"`
 	Text     string `json:"text"`
+	Phase    string `json:"phase"`
+	ID       string `json:"id"`
 	Command  string `json:"command"`
 	ExitCode *int   `json:"exitCode"`
 	Status   string `json:"status"`
@@ -426,8 +438,15 @@ func (c *appServerConn) translateItem(completed bool, it asItem) {
 		}
 		c.closeBlock()
 		if it.Text != "" {
+			item := map[string]any{"type": "agent_message", "text": it.Text}
+			if it.Phase != "" {
+				item["phase"] = it.Phase
+			}
+			if it.ID != "" {
+				item["id"] = it.ID
+			}
 			c.emitJSON(map[string]any{"type": "item.completed",
-				"item": map[string]any{"type": "agent_message", "text": it.Text}})
+				"item": item})
 		}
 	case "reasoning":
 		if !completed {

@@ -6,7 +6,7 @@ import { joinTurn } from "./turns.js";
  * 对话流顶部挂一条加载条：滚到附近自动拉上一页插到上方，保持阅读位置不跳；
  * 失败时显示重试。切空间/线程、整体重载与退出都会作废在途请求。 */
 export function createOlderHistory(hooks) {
-    const loads = new ChatHistory(hooks.read, hooks.session);
+    const loads = new ChatHistory(hooks.read, hooks.session, hooks.timeout);
     let cursor = null;
     let busy = 0, seq = 0;
     let observer;

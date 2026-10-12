@@ -1,8 +1,12 @@
 package dockerx
 
 import (
+	"agentbox/internal/config"
 	"encoding/json"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -77,5 +81,36 @@ func TestQuotaGuardKeepsSandboxAndMasksIOCTL(t *testing.T) {
 			}
 		}
 
+	}
+}
+
+// Restart admission must accept the profile created by this binary while
+// rejecting missing, retired and unknown guards on running workspaces.
+func TestStorageQuotaRestartAdmission(t *testing.T) {
+	for _, tc := range []struct {
+		name, guard        string
+		running, wantError bool
+	}{
+		{"current", "2", true, false}, {"legacy", "1", true, true},
+		{"missing", "", true, true}, {"unknown", "3", true, true},
+		{"stopped-legacy", "1", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]any{"Config": map[string]any{"Labels": map[string]string{quotaGuardLabel: tc.guard}}, "State": map[string]any{"Running": tc.running}})
+			}))
+			defer server.Close()
+			cli, err := client.NewClientWithOpts(client.WithHost(server.URL), client.WithVersion("1.45"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cli.Close()
+			m := &Manager{cli: cli, cfg: &config.Config{StoragePolicy: config.StoragePolicy{Mount: "/quota"}}}
+			err = m.CheckStorageQuotaContainer(t.Context(), "workspace")
+			if (err != nil) != tc.wantError {
+				t.Fatalf("admission error = %v, want rejection %v", err, tc.wantError)
+			}
+		})
 	}
 }

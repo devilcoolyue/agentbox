@@ -17,6 +17,7 @@ import (
 	"strconv"
 
 	"agentbox/internal/safefs"
+	"agentbox/internal/store"
 )
 
 // Restore validates before creating any destination content. Target must not
@@ -133,6 +134,9 @@ func Restore(ctx context.Context, archive, target string) (*Manifest, error) {
 			return nil, err
 		}
 	}
+	if err = restoreCollaborations(ctx, filepath.Join(stage, "data/state.db"), m.Mode == "full"); err != nil {
+		return nil, err
+	}
 	report, _ := json.MarshalIndent(m, "", "  ")
 	if _, err = root.WriteFile("backup-manifest.json", report, safefs.WriteOptions{Mode: 0o600}); err != nil {
 		return nil, err
@@ -146,6 +150,37 @@ func Restore(ctx context.Context, archive, target string) (*Manifest, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// Restoring a backup must not upgrade its schema: the result may be intended
+// for a rollback to an older binary. Only the matching collaboration schema
+// can be detached safely with this binary's recovery rules. The private stage
+// supplies exclusive access until publication; maintenance preserves its
+// standalone DELETE journal and does not import legacy state.json files.
+func restoreCollaborations(ctx context.Context, file string, full bool) error {
+	db, err := openDB(file)
+	if err != nil {
+		return err
+	}
+	var version, tables int
+	err = db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version)
+	if err == nil {
+		err = db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='collaborations'").Scan(&tables)
+	}
+	if err = errors.Join(err, db.Close()); err != nil {
+		return err
+	}
+	if tables == 0 {
+		return nil
+	}
+	if version != store.SchemaVersion {
+		return fmt.Errorf("cannot detach collaborations from backup schema %d with binary schema %d; restore with the matching backup version of agentbox", version, store.SchemaVersion)
+	}
+	st, err := store.OpenForMaintenance(file)
+	if err != nil {
+		return err
+	}
+	return errors.Join(st.RestoreCollaborations(full), st.Close())
 }
 
 // Preserve unknown/future configuration fields. Only deployment paths change;

@@ -1,5 +1,10 @@
 // Authored interface text only; never translate user content.
 export default {
+  "设置团队": "Configure team",
+  "执行方式": "Execution mode",
+  "普通对话": "Regular chat",
+  "多 Agent 协作": "Multi-agent collaboration",
+
   "在此浏览器保存输入与待确认内容（7 天）": "Save drafts and unconfirmed messages in this browser (7 days)",
   "待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。": "After local text expires, its lookup ID is retained. Turning saving off or signing out does not cancel tasks already accepted by the server.",
   "清除本机副本并关闭保存": "Clear local copies and turn saving off",
@@ -62,6 +67,9 @@ export default {
   "上传与监听": "Uploads and listening",
   "上传代码包": "Upload code archive",
   "上传大小上限（MB）": "Upload size limit (MB)",
+  "历史加载超时（秒）": "History loading timeout (seconds)",
+  "适用于项目、文件及聊天附件（含图片和 PDF），默认 512 MB。": "Applies to projects, files and chat attachments, including images and PDFs. Default: 512 MB.",
+  "适用于打开空间和加载更早历史，默认 120 秒。其他已打开的页面刷新后生效。": "Applies when opening a workspace or loading older history. Default: 120 seconds. Refresh other open pages to use the new value.",
   "下一轮对话生效": "Applies to the next turn",
   "下一页": "Next page",
   "下次聊天或终端连接时应用 · 已运行的 Claude 需重启 · OAuth 在终端授权": "Applied on the next chat or terminal connection · Restart running Claude sessions · Authorize OAuth in the terminal",

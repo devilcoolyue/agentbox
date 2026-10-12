@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -242,6 +243,19 @@ func (r *Root) ReadAll(name string, maxBytes int64) ([]byte, error) {
 }
 
 func (r *Root) ReadDir(name string) ([]fs.DirEntry, error) {
+	return r.readDir(name, -1)
+}
+
+// ReadDirLimit bounds allocation before reading container-controlled entries.
+// Exceeding the limit is an error, not a partial successful directory listing.
+func (r *Root) ReadDirLimit(name string, limit int) ([]fs.DirEntry, error) {
+	if limit < 1 || limit > 1_000_000 {
+		return nil, ErrInvalid
+	}
+	return r.readDir(name, limit)
+}
+
+func (r *Root) readDir(name string, limit int) ([]fs.DirEntry, error) {
 	dir, err := r.Sub(name)
 	if err != nil {
 		return nil, err
@@ -252,9 +266,16 @@ func (r *Root) ReadDir(name string) ([]fs.DirEntry, error) {
 		return nil, err
 	}
 	defer f.Close()
-	entries, err := f.ReadDir(-1)
-	if err != nil {
+	n := -1
+	if limit > 0 {
+		n = limit + 1
+	}
+	entries, err := f.ReadDir(n)
+	if err != nil && err != io.EOF {
 		return nil, err
+	}
+	if limit > 0 && len(entries) > limit {
+		return nil, fmt.Errorf("%w: directory entry limit", ErrInvalid)
 	}
 	out := make([]fs.DirEntry, 0, len(entries))
 	for _, e := range entries {
@@ -403,6 +424,43 @@ func (r *Root) WriteAtomic(name string, src io.Reader, opts WriteOptions) (os.Fi
 
 func (r *Root) WriteFile(name string, data []byte, opts WriteOptions) (os.FileInfo, error) {
 	return r.WriteAtomic(name, bytes.NewReader(data), opts)
+}
+
+// AppendFile is for bounded service-owned journals, not container-mounted
+// editable files. The caller serializes appenders. The pinned parent, no-follow
+// open and inode checks reject links/FIFOs and keep path replacement confined.
+func (r *Root) AppendFile(name string, data []byte, maxSize int64) error {
+	if maxSize < 1 || int64(len(data)) > maxSize {
+		return ErrInvalid
+	}
+	p, leaf, err := r.parent(name)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	f, err := p.root.OpenFile(leaf, os.O_CREATE|os.O_WRONLY|os.O_APPEND|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !st.Mode().IsRegular() || st.Size() > maxSize-int64(len(data)) {
+		return ErrInvalid
+	}
+	if meta, ok := st.Sys().(*syscall.Stat_t); !ok || meta.Nlink != 1 {
+		return ErrInvalid
+	}
+	n, err := f.Write(data)
+	if err != nil {
+		return err
+	}
+	if n != len(data) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 // Chown uses an opened file/directory, not Root.Chown's path-based Unix syscall.

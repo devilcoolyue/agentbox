@@ -62,8 +62,12 @@ type usageRowView struct {
 	AccountLabel string `json:"account_label,omitempty"`
 	Model        string `json:"model,omitempty"`
 	Kind         string `json:"kind"`
-	Provider     string `json:"provider,omitempty"`
-	Billing      string `json:"billing"`
+	// Collaboration is a read-only attribution of an existing ledger row. Keep
+	// the original participant session/thread IDs for accounting and exports.
+	Collaboration     *store.UsageCollaboration `json:"collaboration,omitempty"`
+	SourceSessionName string                    `json:"source_session_name,omitempty"`
+	Provider          string                    `json:"provider,omitempty"`
+	Billing           string                    `json:"billing"`
 	// Effort / EffortControl: the reasoning effort the web turn was sent with,
 	// read from its chat receipt. Empty for terminal and title rows and for
 	// turns without an explicit effort.
@@ -185,11 +189,20 @@ func (s *Server) rateFor(e store.UsageEvent) *usageRateView {
 func (s *Server) usageFilterFrom(r *http.Request) (f store.UsageFilter, scopeUser string) {
 	q := r.URL.Query()
 	f = store.UsageFilter{
-		User:      q.Get("user"),
-		SessionID: q.Get("session"),
-		Kind:      q.Get("kind"),
-		Agent:     q.Get("agent"),
-		Model:     q.Get("model"),
+		User:                         q.Get("user"),
+		SessionID:                    q.Get("session"),
+		Kind:                         q.Get("kind"),
+		Agent:                        q.Get("agent"),
+		Model:                        q.Get("model"),
+		IncludeCollaborationSessions: true,
+	}
+	// The public category distinguishes collaboration model steps while their
+	// durable ledger kind remains chat for the original settlement path.
+	switch f.Kind {
+	case "collaboration":
+		f.Kind, f.Collaboration = "", "only"
+	case store.UsageKindChat:
+		f.Collaboration = "exclude"
 	}
 	if u := reqUser(r); u.Role != store.RoleAdmin {
 		scopeUser = u.Name
@@ -300,6 +313,23 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		log.Printf("usage: 读取回合思考强度失败: %v", err)
+	}
+	ids := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	if attributions, err := s.store.UsageCollaborations(ids); err == nil {
+		for i := range rows {
+			if attribution, ok := attributions[rows[i].ID]; ok {
+				rows[i].Collaboration = &attribution
+				rows[i].SourceSessionName = sessionName(attribution.SourceSessionID)
+				if rows[i].Kind == store.UsageKindChat {
+					rows[i].Kind = "collaboration"
+				}
+			}
+		}
+	} else {
+		log.Printf("usage: 读取协作用量归属失败: %v", err)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{

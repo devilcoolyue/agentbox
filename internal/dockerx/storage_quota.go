@@ -11,6 +11,7 @@ import (
 )
 
 const quotaGuardLabel = "agentbox.storage-quota"
+const quotaGuardVersion = "2"
 
 func (m *Manager) CheckStorageQuotaContainer(ctx context.Context, id string) error {
 	if id == "" || m.cfg.GetStoragePolicy().Mount == "" {
@@ -23,7 +24,7 @@ func (m *Manager) CheckStorageQuotaContainer(ctx context.Context, id string) err
 	if err != nil {
 		return err
 	}
-	if info.State != nil && info.State.Running && (info.Config == nil || info.Config.Labels[quotaGuardLabel] != "1") {
+	if info.State != nil && info.State.Running && (info.Config == nil || info.Config.Labels[quotaGuardLabel] != quotaGuardVersion) {
 		return fmt.Errorf("stop existing workspaces before enabling filesystem quotas")
 	}
 	return nil
@@ -94,6 +95,6 @@ func quotaContainerOptions(cc *container.Config, hc *container.HostConfig) error
 		}
 	}
 	hc.SecurityOpt = append(opts, "seccomp="+string(raw))
-	cc.Labels[quotaGuardLabel] = "2"
+	cc.Labels[quotaGuardLabel] = quotaGuardVersion
 	return nil
 }

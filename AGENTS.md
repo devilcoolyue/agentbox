@@ -395,6 +395,7 @@ data/
   是流式开始时的占位值、永远不更新，**算不了钱**——所以粒度只能停在回合。）
 - **合计与筛选可选值都按「筛选条件」算，不按「当前这一页」算。** 否则翻页时表头的
   总花费跟着变，没法用。三者共用 `UsageFilter.where()`，不会各算各的。
+- 协作模型步骤仍以 `kind=chat` 记账，明细接口只读投影为 `collaboration`，按 turn/run/user 与原参与者 generation/session 严格关联；`kind=chat` 的网页筛选排除这些步骤。原空间筛选含协作参与者消耗，列表/合计/facets 共用条件；详情与 CSV 保留账本 ID。不得为展示补写协作总额或改写原种类，以免重复扣款或破坏 Claude 去重。决策调用仍为独立 `decision` 类型。
 - **可见范围与筛选项是两回事。** `scopeUser` 是硬边界（普通用户只能是自己），`f.User`
   是用户自己选的筛选项。`FacetsUsage` 会为了「选了还能改回来」把每列自己的过滤放宽，
   放宽时必须重新按 `scopeUser` 收口——否则普通用户能从用户下拉里读到全部用户名。
@@ -820,7 +821,7 @@ data/
 
 - `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度，终端 UpsertTerminalUsage 绝不扣额度。
 - 新行 `PriceSnapshot` 包含来源、价格键、普通/长上下文档和阈值。终端 upsert 在同一事务读取首份快照，续写不能改用新价；旧行没有快照时不要伪造历史单价。Claude 0 费用按表补算时保存 table 来源。
-- 当前 SQLite schema=12（迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
+- 当前开发工作树 SQLite schema=16（协作上下文确认与评审证据，生产开发预览 `.15`；迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
 - `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。
 - 协议样本放在 agent/usage 的 testdata，全部为合成脱敏数据。Linux 测试脚本必须复制这些 testdata；禁止读取真实用户 rollout 当测试夹具。
 
@@ -991,3 +992,21 @@ data/
 - ext4 属主可清继承标记，quota-managed 容器必须带 ioctl seccomp 限制，保留 Chromium 沙箱；不得仅凭 setquota 成功宣称硬限额。上传/导入暂存放在服务拥有的用户父目录，保持同项目重命名且计入配额。
 - 缓存回收在 workspace 启动锁内确认所有已知容器停止，限 Go 编译/npm 下载缓存，不碰私有模块/浏览器/profile/SDK；扫描不完整不得继续删除。发布保留持部署锁并保护 current、引用和回退版本。
 - 专题与验收见 docs/storage-capacity.md、docs/milestones/storage.md；Linux 实测入口 linux.storage-quota 使用独立临时 loop 文件系统，不能对生产目录运行。
+
+### 可选决策插件
+
+- `internal/decision` 只给模型选择建议，不获得 CLI 执行权。新协作请求的 `decision.version=1` 与原具体 `roles` 分别保存自动策略和固定/回退绑定；普通 chat v1 不接插件。
+- 接收事务冻结候选、回退、配置 revision 和模板版本；各角色先独立走内置规则，只有未决角色可合并调用 Jev。整组 CAS 冻结后才允许原准备/步骤领取路径执行，不能用 configure 重新路由。
+- Jev 默认关闭，密钥仅服务端持久化，设置保存不探测；读取脱敏且修改须走 Config.mutate 和独立 expected_revision。配置变化取消本地等待，不能声称撤回远端请求。
+- `gateway=typesafe|mindshub` 使用编译固定端点；更换网关且已有密钥时必须明确 set/clear。Mindshub 请求别名 `jev`，响应仍固定校验 `jev-1.13.0`；使用真实 `User-Agent: agentbox/decision`。Mindshub 当前推广期零价与 TypeSafe 价目分开记录，零预留不能代表未知用量已核清。显式真实验收入口为 `scripts/test-decision-routing-live.py` / `scripts/test-decision-live.py`，凭证只经 stdin；后者仍使用合成编程 CLI，不能宣称真实编程质量或费用收益。
+- schema 15 独立保存决策用量与预留。调用前登记唯一 attempt，未知费用保留占用；迟到证据只补账，不换模型/重跑。CLI usage_incomplete 仍是原阻止条件。
+- 结算失败与插件失败分开：保存可恢复费用证据并阻止后续执行；`decision/reconcile` 仅用服务端证据扣款一次，成功后仍需显式恢复，不再调用 Jev。
+- 浏览器原意图/hash 核对不得改为核对已解析模型。验证入口 `browser.decision-plugins` / `webkit.decision-plugins`、Go `TestDecision*` 及原 Linux collaboration runtime/chat；真实 Jev 效果 DP-12 单独验收，不把合成协议测试称为中文质量/性能验证。
+
+### 协作执行策略与交接
+
+- 新任务可冻结 `workflow: {version:1, mode:direct|reviewed}`；无字段旧任务保留原语义。配置调整不能改策略，浏览器待确认副本/回执必须核对策略；`options.workflow_version` 是能力入口。
+- direct 只创建 executor，问题直接交用户；跳过独立规划/模型评审但保留平台验证、结算、快照与显式应用。协调者占位不能被选模/启动。验证失败或 remaining 非空不可交付，返工受原限额约束。
+- reviewed 的评审输入须冻结服务端生成的 baseline/current 快照证据；diff 未展示内容必须标记，不能把未知当通过。文件访问继续使用 safefs 固定目录，不能恢复 .git 或在宿主机执行项目 Git。
+- 增量交接边界绑定原生线程与参与者代际，正常历史/用量/进程/交接收尾后才确认；未知执行不推进。保留用户要求、答案、未决问题及 plan/code_map 硬约束；必要材料过大显式暂停，不静默删约束。恢复新实例清除线程确认边界。
+- 本地策略和合成协议验证不证明模型质量/省钱比例。实际比较按同任务/基线/验收标准记录全部尝试、返工、缓存读写和费用；账本美元、订阅额度与上游实际扣费分开说明。

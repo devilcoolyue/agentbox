@@ -34,6 +34,11 @@ func (s *Service) SwitchAccount(ctx context.Context, id, accountID string, relea
 	if !ok {
 		return store.Session{}, ErrSessionGone
 	}
+	if managed, err := s.store.IsCollaborationSession(id); err != nil {
+		return store.Session{}, err
+	} else if managed {
+		return store.Session{}, ErrManagedSession
+	}
 	if cur.AccountID == accountID {
 		return cur, nil
 	}

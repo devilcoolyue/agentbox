@@ -19,7 +19,8 @@
 | `data_dir` | `data` | SQLite、用户目录、模板、缓存等运行数据根目录 |
 | `agent_image` | `agentbox-agent:latest` | 用于创建工作空间的 Docker 镜像 |
 | `permission_mode` | `bypassPermissions` | 接受 `default`、`acceptEdits`、`plan`、`bypassPermissions`；供 Claude 无头命令使用 |
-| `max_upload_mb` | `512` | 项目上传大小上限，必须 ≥ 1；反向代理也需允许相应请求体 |
+| `max_upload_mb` | `512` | 项目、文件、技能包及聊天附件（含图片 / PDF）的上传大小上限，必须 ≥ 1；在系统设置中修改后即时生效，反向代理也需允许相应请求体及 multipart 开销 |
+| `chat_history_timeout_sec` | `120` | 网页打开空间、刷新历史及加载更早历史的超时秒数，范围 1–3600；系统设置 → 安全与访问可修改，其他已打开的页面刷新后生效，不改变登录或模型执行期限 |
 | `idle_timeout_min` | `30` | 空闲停机分钟数；显式设为 `0` 关闭，不能为负 |
 | `timezone` | `Asia/Shanghai` | 有效的 IANA 时区，控制页面时间和使用记录筛选 |
 

@@ -113,6 +113,31 @@ func TestRunCodexTurnHandshakeFail(t *testing.T) {
 	}
 }
 
+func TestRunCodexTurnStrictResumeNeverStartsReplacement(t *testing.T) {
+	for _, script := range []string{
+		turnScript,
+		`{"id":1,"result":{}}` + "\n" + `{"id":2,"result":{"thread":{"id":"different"}}}` + "\n",
+	} {
+		var sent strings.Builder
+		err := RunCodexTurn(t.Context(), &sent, strings.NewReader(script), func() {}, nil, CodexTurn{ThreadID: "original", StrictResume: true}, func([]byte) {})
+		if !errors.Is(err, ErrResumeUnavailable) || errors.Is(err, ErrAppServerUnavailable) {
+			t.Fatal(err)
+		}
+		if strings.Contains(sent.String(), `"thread/start"`) || strings.Contains(sent.String(), `"turn/start"`) {
+			t.Fatal("started replacement after failed resume")
+		}
+	}
+}
+
+func TestCodexTranslationPreservesFinalAnswerPhase(t *testing.T) {
+	var output []byte
+	c := &appServerConn{emit: func(raw []byte) { output = raw }}
+	c.translateItem(true, asItem{Type: "agentMessage", Text: "final", Phase: "final_answer", ID: "message-1"})
+	if !strings.Contains(string(output), `"phase":"final_answer"`) || !strings.Contains(string(output), `"id":"message-1"`) {
+		t.Fatal(string(output))
+	}
+}
+
 func TestRunCodexTurnInterrupted(t *testing.T) {
 	script := `{"id":1,"result":{}}
 {"id":3,"result":{"thread":{"id":"T1"}}}

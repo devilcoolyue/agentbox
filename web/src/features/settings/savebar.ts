@@ -7,11 +7,11 @@ import { setTextRender, t as i18nText } from "../../i18n.js";
  *
  * 现在各卡片的配置项登记成「组」：与上次载入的值比较，有改动时页面底部出现
  * 「放弃 / 保存」，一次 PUT 把所有改动合并提交。切换分区前若有未保存的改动先确认。 */
-import type { Settings } from "../../types.js";
+import type { Settings, DecisionSettingsPatch } from "../../types.js";
 import { $, askConfirm } from "../../util.js";
 import { setSelectValue } from "../../select.js";
 
-export type SettingsPatch = Partial<Settings> & { expected_agent_image?: string };
+export type SettingsPatch = Partial<Omit<Settings, "decision">> & { decision?: DecisionSettingsPatch; expected_agent_image?: string };
 
 export interface SaveGroup {
   id: string;

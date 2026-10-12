@@ -1,3 +1,4 @@
+import {collaborationAnchor} from "./features/collaboration/thread-view.js";
 import { formatProblem } from "./problems.js";
 import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* chat-render：对话流的纯渲染管线 —— 用户消息、agent 事件（Claude stream-json /
@@ -535,6 +536,7 @@ function appendInlineFmt(parent: Node, text: string) {
  * chat_session 等簿记类条目对用户不可见，落到兜底分支返回空。 */
 export function renderEntry(raw: HistoryEntry | null | undefined) {
   if (!raw || typeof raw !== "object") return [];
+  if (raw.kind === "collaboration" && raw.run_id && /^[a-f0-9]{32}$/.test(raw.run_id)) return [collaborationAnchor(raw.run_id,raw.text||"")];
   if (raw.kind === "user") return [renderUserMsg(raw.text)];
   if (raw.kind === "event") return renderEvent(raw.event);
   if (raw.kind === "divider") return [divider(raw.ts ? i18nText("新对话 · ") + fmtTime(raw.ts) : "")];

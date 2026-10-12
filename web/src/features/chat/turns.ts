@@ -24,7 +24,7 @@ export class TurnWriter {
   }
 
   place(node: HTMLElement) {
-    if (node.classList.contains("user") || node.classList.contains("chat-divider")) {
+    if (node.classList.contains("collaboration-thread") || node.classList.contains("user") || node.classList.contains("chat-divider")) {
       this.reset();
       this.log().appendChild(node);
       return;

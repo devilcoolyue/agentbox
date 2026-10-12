@@ -155,6 +155,9 @@ func (s *Store) AcceptChatRequest(u User, session, id string, in ChatRequestInpu
 	if err != nil {
 		return ChatRequest{}, false, err
 	}
+	if err = freezeChatCollaborationContext(tx, u, c); err != nil {
+		return ChatRequest{}, false, err
+	}
 	if err = tx.Commit(); err != nil {
 		return ChatRequest{}, false, err
 	}

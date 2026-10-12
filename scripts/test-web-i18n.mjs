@@ -27,6 +27,10 @@ export async function webI18nSmoke(browser) {
  const space={id:'locale-space',name:'保存',agent:'codex',account_id:'fixture',account_label:'取消',status:'running',default_model:'fixture'};
  let sockets=0, writes=0, usageReads=0, terminalSocket;
  const usageRows=Array.from({length:20},(_,i)=>({id:i+1,ts:Date.now(),user:'保存',session_id:space.id,session_name:space.name,thread_id:'thread',turn_id:'turn-'+i,agent:'claude',account_id:'fixture',model:'保存',kind:'chat',billing:'table',input_tokens:100,output_tokens:1000,cache_read_tokens:80,cache_write_tokens:10,total_tokens:1190,cost_micro_usd:2128,ttft_ms:100,wall_ms:1000,duration_ms:900,rate:{input:1,output:2,cache_read:0.1,cache_write:2,snapshot:true,per_request:true,key:'保存'}}));
+ const usageRun='a'.repeat(32),usageStep='b'.repeat(12);
+ Object.assign(usageRows[0],{kind:'collaboration',session_id:'managed-coordinator',session_name:'Hidden coordinator',source_session_name:space.name,collaboration:{run_id:usageRun,step_id:usageStep,role:'coordinator',step_kind:'plan',source_session_id:space.id}});
+ Object.assign(usageRows[1],{kind:'collaboration',session_id:'managed-executor',session_name:'Hidden executor',source_session_name:space.name,collaboration:{run_id:usageRun,step_id:'c'.repeat(12),role:'executor',step_kind:'execute',source_session_id:space.id}});
+ Object.assign(usageRows[2],{kind:'decision',agent:'decision',source_session_name:space.name,collaboration:{run_id:usageRun,source_session_id:space.id}});
  await page.routeWebSocket('**/api/sessions/*/term?*',ws=>{sockets++; terminalSocket=ws; ws.send(Buffer.from('保存 Cancel <code>\r\n'));});
  await page.routeWebSocket('**/api/sessions/*/chat?*',()=>{});
  await page.route('**/api/**',async route=>{
@@ -154,7 +158,24 @@ export async function webI18nSmoke(browser) {
   await page.evaluate(()=>{window.localeUsageRow=document.querySelector('#usage-rows tr');});
   const usageCount=usageReads;
   const pageNumber=await page.locator('#usage-page').textContent();
-  await language('zh-CN'); await language('en');
+  const usageLabels={
+   'zh-CN':{kind:'多 Agent 协作',lead:'主 Agent · 规划',executor:'执行 Agent · 执行',decision:'决策调用',chat:'对话',task:'协作任务 ID：',step:'协作步骤 ID：'},
+   'zh-TW':{kind:'多 Agent 協作',lead:'主 Agent · 規劃',executor:'執行 Agent · 執行',decision:'決策呼叫',chat:'對話',task:'協作任務 ID：',step:'協作步驟 ID：'},
+   en:{kind:'Multi-agent collaboration',lead:'Lead agent · Plan',executor:'Executor · Execute',decision:'Decision call',chat:'Chat',task:'Collaboration task ID: ',step:'Collaboration step ID: '},
+  };
+  const assertUsageLanguage=async preference=>{
+   const labels=usageLabels[preference],rows=page.locator('#usage-rows tr');
+   const kind=row=>rows.nth(row).locator('td').nth(3);
+   assert.equal(await kind(0).locator('.u-chip').innerText(),labels.kind);
+   assert.equal(await kind(0).locator('.u-sub').innerText(),labels.lead);
+   assert.equal(await kind(1).locator('.u-sub').innerText(),labels.executor);
+   assert.equal(await kind(2).locator('.u-chip').innerText(),labels.decision);
+   assert.equal(await kind(3).locator('.u-chip').innerText(),labels.chat,'ordinary chat keeps its own type');
+   assert.equal(await page.locator('#uf-kind option[value="collaboration"]').textContent(),labels.kind);
+   assert.equal(await rows.first().locator('.u-sess').innerText(),'保存','source workspace names stay verbatim');
+   assert.equal(usageReads,usageCount,'switching collaboration labels must not refetch');
+  };
+  for(const preference of ['zh-CN','zh-TW','en']){await language(preference);await assertUsageLanguage(preference);}
   assert.equal(usageReads,usageCount,'switching loaded usage must not refetch');
   assert.equal(await page.evaluate(()=>document.querySelector('#usage-rows tr')===window.localeUsageRow),true,'keep loaded row nodes');
   assert.equal(await page.locator('#usage-page').textContent(),pageNumber);
@@ -162,12 +183,26 @@ export async function webI18nSmoke(browser) {
   await page.locator('#usage-rows .u-why').first().click();
   const amounts=await page.locator('#cost-rows td.num').allTextContents();
   await page.locator('#cost-close').focus();
-  await language('zh-TW');
-  assert.deepEqual(await page.locator('#cost-rows td.num').allTextContents(),amounts,'cost snapshot and totals must remain identical');
-  assert.equal(await page.locator('#cost-close').evaluate(el=>el===document.activeElement),true);
-  assert.equal(await page.locator('#cost-rows tr').first().locator('td').first().textContent(),'輸入');
+  for(const preference of ['zh-TW','zh-CN','en']){
+   await language(preference);await assertUsageLanguage(preference);
+   const labels=usageLabels[preference],detail=await page.locator('#cost-head').innerText();
+   assert.ok(detail.includes(labels.kind)&&detail.includes(labels.lead),'open collaboration detail translates its type and role');
+   assert.ok(detail.includes(labels.task+usageRun),'open detail translates the task label and preserves its ID');
+   assert.ok(detail.includes(labels.step+usageStep),'open detail translates the step label and preserves its ID');
+   assert.deepEqual(await page.locator('#cost-rows td.num').allTextContents(),amounts,'cost snapshot and totals must remain identical');
+   assert.equal(await page.locator('#cost-close').evaluate(el=>el===document.activeElement),true);
+   if(preference==='zh-TW')assert.equal(await page.locator('#cost-rows tr').first().locator('td').first().textContent(),'輸入');
+  }
+  await page.locator('#cost-close').click();
+  await page.locator('#usage-rows tr').nth(2).locator('.u-why').click();
+  for(const preference of ['zh-CN','zh-TW','en']){
+   await language(preference);
+   const labels=usageLabels[preference],detail=await page.locator('#cost-head').innerText();
+   assert.ok(detail.includes(labels.decision)&&detail.includes(labels.task+usageRun),'decision detail retains its task association across languages');
+   assert.ok(!detail.includes(labels.step),'decision calls must not invent a step');
+  }
   assert.equal(usageReads,usageCount);
-  await page.locator('#cost-close').click(); await language('en');
+  await page.locator('#cost-close').click();
   await page.locator('#uf-date-range').click();
   const start=page.locator('[data-dr="since-day"]');
   await start.fill('2026/09/22');

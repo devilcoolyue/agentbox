@@ -1,6 +1,8 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -21,7 +23,6 @@ const (
 	imagesSubdir = ".images"
 	filesSubdir  = ".file"
 	imageTTL     = 48 * time.Hour
-	imageMaxMB   = 20
 )
 
 var attachExtRe = regexp.MustCompile(`^\.[a-z0-9]{1,10}$`)
@@ -34,17 +35,34 @@ var imageExts = map[string]bool{
 // handleImageUpload stores a pasted image or chat attachment and returns its
 // container path.
 func (s *Server) handleImageUpload(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	r.Body = http.MaxBytesReader(w, r.Body, imageMaxMB<<20)
-	if err := r.ParseMultipartForm(imageMaxMB << 20); err != nil {
-		writeErr(w, http.StatusBadRequest, "image too large (max 20MB) or malformed")
+	maxMB := s.cfg.GetMaxUploadMB()
+	maxBytes := maxMB << 20
+	// Allow multipart framing in addition to the file budget. Keep the memory
+	// threshold fixed even when an administrator permits much larger uploads.
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+(1<<20))
+	tooLarge := func() {
+		writeErr(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("attachment too large (max %dMB)", maxMB))
+	}
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		var limitErr *http.MaxBytesError
+		if errors.As(err, &limitErr) {
+			tooLarge()
+		} else {
+			writeErr(w, http.StatusBadRequest, "malformed attachment upload")
+		}
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 	file, hdr, err := r.FormFile("file")
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "missing 'file' field")
 		return
 	}
 	defer file.Close()
+	if hdr.Size > maxBytes {
+		tooLarge()
+		return
+	}
 
 	ext := strings.ToLower(filepath.Ext(hdr.Filename))
 	if !attachExtRe.MatchString(ext) {
@@ -71,7 +89,7 @@ func (s *Server) handleImageUpload(w http.ResponseWriter, r *http.Request, sess 
 	}
 	_ = root.Chown(subdir, dockerx.AgentUID, dockerx.AgentGID)
 	name := time.Now().Format("20060102-150405") + "-" + store.NewID()[:6] + ext
-	if _, err := root.WriteAtomic(filepath.Join(subdir, name), file, safefs.WriteOptions{Mode: 0o644, Chown: true, UID: dockerx.AgentUID, GID: dockerx.AgentGID, BestEffortChown: true, MaxBytes: imageMaxMB << 20}); err != nil {
+	if _, err := root.WriteAtomic(filepath.Join(subdir, name), file, safefs.WriteOptions{Mode: 0o644, Chown: true, UID: dockerx.AgentUID, GID: dockerx.AgentGID, BestEffortChown: true, MaxBytes: maxBytes, Limit: true}); err != nil {
 		writeFileOpErr(w, err)
 		return
 	}

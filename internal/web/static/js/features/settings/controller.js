@@ -1,4 +1,5 @@
 import { SettingsRequests } from "./requests.js";
+import { fillDecisionSettings, decisionSettingsGroup, initDecisionSettings, refreshDecisionSettings } from "./decision.js";
 import { initSettingsMaintenance } from "./maintenance.js";
 import { setAttrRender, setText, setTextRender, t as i18nText } from "../../i18n.js";
 import { initImageUpdates, fillImageUpdateSettings, startImageUpdates, stopImageUpdates } from "./image-updates.js";
@@ -33,7 +34,7 @@ for (const h of document.querySelectorAll("h3[data-agent]")) {
     h.classList.add("agent-h3", "agent-" + agentKey(h.dataset.agent));
     h.prepend(agentIcon(h.dataset.agent, 15));
 }
-export const SET_SECS = ["accounts", "proxies", "container", "models", "interface", "security", "monitor", "about"];
+export const SET_SECS = ["accounts", "proxies", "container", "models", "decision", "interface", "security", "monitor", "about"];
 /** 模型管理里的标签页；价格（原「价目表」分区）是其中之一。 */
 export const MODEL_TABS = ["accounts", "pricing", "system"];
 export function createSettingsController() {
@@ -80,6 +81,7 @@ export function createSettingsController() {
             const restore = holdDirty();
             fillSettingsForms();
             restore();
+            refreshDecisionSettings();
         }
         catch (e) {
             if (!scope.current())
@@ -447,6 +449,7 @@ export function createSettingsController() {
         const st = settingsState.value;
         if (!st)
             return;
+        fillDecisionSettings(st.decision);
         fillImageUpdateSettings(st.image_updates);
         $("set-image").value = st.agent_image;
         $("set-mem").value = String(st.container.memory_mb);
@@ -469,6 +472,8 @@ export function createSettingsController() {
         setSelectValue(tz, st.timezone);
         setSelectValue($("set-perm"), st.permission_mode);
         $("set-upload").value = String(st.max_upload_mb);
+        $("set-history-timeout").value = String(st.chat_history_timeout_sec ?? 120);
+        S.chatHistoryTimeoutSec = st.chat_history_timeout_sec ?? 120;
         $("set-listen").value = st.listen;
         setTextRender($("security-note"), () => st.restart_required
             ? i18nText("监听地址已修改，重启 agentbox 服务后生效")
@@ -508,6 +513,7 @@ export function createSettingsController() {
             const restore = keepDirty ? holdDirty() : null;
             fillSettingsForms();
             restore?.();
+            refreshDecisionSettings();
             if (settingsState.value.models) {
                 S.models = settingsState.value.models;
                 emit("models-updated");
@@ -741,6 +747,7 @@ export function createSettingsController() {
     const valid = (...ids) => ids.every((id) => $(id).reportValidity());
     function initSaveBar(signal) {
         defineGroups([
+            decisionSettingsGroup(),
             { id: "container", get label() { return i18nText("Agent 镜像与资源限制"); }, fields: ["set-image", "set-mem", "set-cpus", "set-pids", "set-net"],
                 patch: () => ({
                     agent_image: inputVal("set-image").trim(),
@@ -778,10 +785,11 @@ export function createSettingsController() {
                         animation: $("set-tips-anim").value,
                     },
                 }) },
-            { id: "security", get label() { return i18nText("权限模式与上传监听"); }, fields: ["set-perm", "set-upload", "set-listen"],
+            { id: "security", get label() { return i18nText("权限模式与上传监听"); }, fields: ["set-perm", "set-upload", "set-history-timeout", "set-listen"],
                 patch: () => ({
                     permission_mode: $("set-perm").value,
                     max_upload_mb: Number(inputVal("set-upload")),
+                    chat_history_timeout_sec: Number(inputVal("set-history-timeout")),
                     listen: inputVal("set-listen").trim(),
                 }),
                 done: (st) => { if (st.restart_required)
@@ -811,6 +819,7 @@ export function createSettingsController() {
         }, { signal });
     }
     function initSettings() {
+        initDecisionSettings(lifetime.signal);
         initSettingsMaintenance(lifetime.signal, scope);
         initImageUpdates(lifetime.signal);
         initSaveBar(lifetime.signal);

@@ -6,7 +6,7 @@ export class ChatHistory {
     timeout;
     generation = 0;
     pending;
-    constructor(read, session, timeout = 15_000) {
+    constructor(read, session, timeout = 120_000) {
         this.read = read;
         this.session = session;
         this.timeout = timeout;
@@ -24,7 +24,8 @@ export class ChatHistory {
         const generation = this.generation, controller = new AbortController();
         const current = () => generation === this.generation && this.session() === session;
         let timedOut = false;
-        const timer = setTimeout(() => { timedOut = true; controller.abort(); }, this.timeout);
+        const timeout = typeof this.timeout === "function" ? this.timeout() : this.timeout;
+        const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
         this.pending = { controller, timer };
         try {
             const value = await this.read(path, controller.signal);

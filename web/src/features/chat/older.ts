@@ -13,11 +13,12 @@ export function createOlderHistory(hooks: {
   log: () => HTMLElement;
   session: () => string | undefined;
   read: (path: string, signal: AbortSignal) => Promise<History>;
+  timeout?: () => number;
   /** 把一页渲染进游离容器（独立的回合分组，不碰实时对话流） */
   render: (value: History) => HTMLElement;
   changed: () => void;
 }) {
-  const loads = new ChatHistory(hooks.read, hooks.session);
+  const loads = new ChatHistory(hooks.read, hooks.session, hooks.timeout);
   let cursor: (PageCursor & { session: string; more: boolean }) | null = null;
   let busy = 0, seq = 0;
   let observer: IntersectionObserver | undefined;

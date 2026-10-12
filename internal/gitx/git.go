@@ -5,7 +5,9 @@ package gitx
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
+	"io"
 	"path"
 	"strings"
 	"sync"
@@ -86,6 +88,44 @@ func New(exec Executor, prepare Prepare) *Runner {
 
 func (r *Runner) Run(ctx context.Context, sessionID, repo string, args ...string) (string, error) {
 	return r.run(ctx, sessionID, repo, false, args...)
+}
+
+// Archive streams an immutable commit's tar bytes without host Git or shell
+// interpolation. The caller verifies every entry against ls-tree (including
+// blob hashes), so export-ignore/export-subst cannot silently alter the input.
+func (r *Runner) Archive(ctx context.Context, sessionID, repo, commit string, dst io.Writer, maxBytes int64) error {
+	if r == nil || r.prepare == nil {
+		return ErrUnavailable
+	}
+	if (len(commit) != 40 && len(commit) != 64) || maxBytes < 1 || maxBytes > 1<<40 {
+		return errors.New("invalid Git archive request")
+	}
+	if _, err := hex.DecodeString(commit); err != nil {
+		return errors.New("invalid Git commit")
+	}
+	exec, ok := r.exec.(interface {
+		ExecOutput(context.Context, string, []string, io.Writer, int64) error
+	})
+	if !ok {
+		return ErrUnavailable
+	}
+	cmd, err := command(repo, []string{"archive", "--format=tar", commit})
+	if err != nil {
+		return err
+	}
+	cmd[3] = "120s"
+	id, release, err := r.prepare(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if release == nil {
+		return ErrUnavailable
+	}
+	defer release()
+	if id == "" {
+		return ErrUnavailable
+	}
+	return exec.ExecOutput(ctx, id, cmd, dst, maxBytes)
 }
 
 // RunNetwork uses a longer in-container timeout for bounded network transfers.

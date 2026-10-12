@@ -8,7 +8,7 @@ const readline = require('node:readline');
 const assert = require('node:assert/strict');
 const root = fs.mkdtempSync('/tmp/agentbox-probe-');
 const cwd = root + '/workspace'; fs.mkdirSync(cwd);
-const marker = 'AGENTBOX_SYNTHETIC_OK';
+let marker = 'AGENTBOX_SYNTHETIC_OK';
 const records = [], checks = [];
 let mode = '', requests = [], held = false, mcpCalls = 0;
 const mcpFile = root + '/mcp-calls';
@@ -54,13 +54,25 @@ const waitUntil = async (predicate, ms=20000) => {
  const end=Date.now()+ms;
  while(!predicate()) {assert.ok(Date.now()<end,'deadline'); await new Promise(r=>setTimeout(r,20));}
 };
+function containsText(value, text) {
+ if(typeof value==='string') return value.includes(text);
+ if(value && typeof value==='object') return Object.values(value).some(v=>containsText(v,text));
+ return false;
+}
 const homes = {};
-let base;
+let base,collaborationHomeFiles;
 function environment(kind) {
  if(!homes[kind]) {
   const home=root+'/'+kind;fs.mkdirSync(home);fs.mkdirSync(home+'/.claude');fs.mkdirSync(home+'/.codex');
   fs.writeFileSync(home+'/.claude.json',JSON.stringify({hasCompletedOnboarding:true,bypassPermissionsModeAccepted:true,projects:{[cwd]:{hasTrustDialogAccepted:true,hasCompletedProjectOnboarding:true}},mcpServers:{probe:{type:'stdio',command:'node',args:[mcpPath]}}}));
   fs.writeFileSync(home+'/.codex/config.toml','model_provider="fixture"\nmodel="gpt-5.5"\n[model_providers.fixture]\nname="Synthetic"\nbase_url="'+base+'/v1"\nwire_api="responses"\nenv_key="OPENAI_API_KEY"\n');
+  if(collaborationHomeFiles){
+   assert.ok(collaborationHomeFiles[kind]);
+   for(const [name,content] of Object.entries(collaborationHomeFiles[kind])){
+    assert.ok(['.claude.json','.claude/settings.json','.codex/config.toml'].includes(name));
+    fs.writeFileSync(home+'/'+name,content.replaceAll('AGENTBOX_PROBE_BASE',base));
+   }
+  }
   homes[kind]=home;
  }
  return {PATH:'/usr/local/bin:/usr/bin:/bin',HOME:homes[kind],CODEX_HOME:homes[kind]+'/.codex',LANG:'C.UTF-8',TERM:'dumb',ANTHROPIC_API_KEY:'synthetic-only',ANTHROPIC_BASE_URL:base,OPENAI_API_KEY:'synthetic-only',CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:'1',DISABLE_AUTOUPDATER:'1',ENABLE_TOOL_SEARCH:'false'};
@@ -77,7 +89,7 @@ function launch(kind,args) {
  const timer=setTimeout(()=>child.kill('SIGKILL'),40000);
  return {child,lines,done,get closed(){return closed;},get code(){return code;},get signal(){return signal;},async stop(){child.stdin.end();if(!closed){await Promise.race([done,new Promise(r=>setTimeout(r,1000))]);}if(!closed)child.kill('SIGKILL');await done;clearTimeout(timer);}};
 }
-async function cli(name,kind,command,resume='') {
+async function cli(name,kind,command,resume='',historyMarker=marker) {
  mode=name;requests=[];held=false;
  const proc=launch(kind,command);
  try {
@@ -89,15 +101,15 @@ async function cli(name,kind,command,resume='') {
   const terminal=proc.lines.findLast(e=>e.type==='result'||e.type==='turn.completed');
   if(!name.endsWith('interrupt')) {
    assert.equal(proc.code,0,'CLI failed');assert.ok(terminal,'missing terminal');
-   assert.ok(JSON.stringify(proc.lines).includes(marker),'missing response');
+   assert.ok(containsText(proc.lines,marker),'missing response');
   } else assert.ok(proc.code===130||proc.signal==='SIGINT'||terminal?.is_error===true,'interruption lacked SIGINT/terminal evidence');
-  if(resume) assert.ok(requests.some(r=>JSON.stringify(r.messages||r.input).includes(marker)),'resume lost previous response');
-  records.push({name,agent:kind,exit_code:proc.code,signal:proc.signal,lines:proc.lines.filter(e=>['result','stream_event','assistant','turn.completed'].includes(e.type)),requests:requests.length});
+  if(resume) assert.ok(requests.some(r=>containsText(r.messages||r.input,historyMarker)),'resume lost previous response');
+  records.push({name,agent:kind,exit_code:proc.code,signal:proc.signal,lines:proc.lines.filter(e=>['result','stream_event','assistant','turn.completed'].includes(e.type)),requests:requests.length,resume});
   checks.push(name);
   return terminal?.session_id||'';
  } finally {await proc.stop();server.closeAllConnections();}
 }
-async function protocol(name,summary,resume='') {
+async function protocol(name,summary,resume='',historyMarker=marker) {
  mode=name;requests=[];held=false;
  const proc=launch('codex',['codex','app-server']);
  const send=(id,method,params)=>proc.child.stdin.write(JSON.stringify({id,method,params})+'\n');
@@ -113,13 +125,28 @@ async function protocol(name,summary,resume='') {
   await waitUntil(()=>proc.lines.some(m=>m.method==='turn/completed')||proc.closed);
   const completed=proc.lines.find(m=>m.method==='turn/completed');
   assert.equal(completed?.params?.turn?.status,name==='codex_interrupt'?'interrupted':'completed');
-  if(name==='codex_resume')assert.ok(requests.some(r=>JSON.stringify(r.input).includes(marker)),'resume lost previous response');
+  if(resume && !name.endsWith('interrupt'))assert.ok(requests.some(r=>containsText(r.input,historyMarker)),'resume lost previous response');
   records.push({name,agent:'codex',rpc:proc.lines,resume,requests:requests.length});checks.push(name);
   return thread.thread.id;
  } finally {await proc.stop();server.closeAllConnections();}
 }
 async function main(spec) {
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base='http://127.0.0.1:'+server.address().port;
+ if(spec.collaboration) {
+  collaborationHomeFiles=spec.home_files;assert.ok(collaborationHomeFiles);
+  marker=JSON.stringify(spec.handoffs.plan);
+  const previous=marker;
+  const session=await cli('claude_plan','claude',spec.claude);
+  assert.match(session,/^[a-f0-9-]{36}$/);
+  marker=JSON.stringify(spec.handoffs.result);
+  await cli('claude_result','claude',spec.claude_resume.map(arg=>arg.replaceAll('AGENTBOX_PROBE_RESUME',session)),session,previous);
+  marker=previous;
+  const thread=await protocol('codex_plan',spec.codex_summary);
+  marker=JSON.stringify(spec.handoffs.result);
+  await protocol('codex_result',spec.codex_summary,thread,previous);
+  console.log(JSON.stringify({version:1,checks,records}));
+  return;
+ }
  const session=await cli('claude_turn','claude',spec.claude);
  assert.match(session,/^[a-f0-9-]{36}$/,'Claude session missing');
  mcpCalls=fs.existsSync(mcpFile)?fs.readFileSync(mcpFile,'utf8').trim().split('\n').length:0;

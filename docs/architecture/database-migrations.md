@@ -17,6 +17,12 @@ SQLite 使用 `PRAGMA user_version` 记录 schema。迁移按 `internal/store/mi
 | 10 | client_projects/client_terminals：桌面逻辑目录映射、启动参数、修订号与稳定终端 ID；不改变空间账号/模型，不移动文件 |
 | 11 | workspace_creations/workspace_imports：按用户创建身份隔离的创建/导入收据，保留删除后的重放阻止记录；不修改既有空间、用户密码、用量或额度 |
 | 12 | chat_requests：按用户创建身份、空间和客户端请求 ID 保存冻结输入、稳定回合 ID、状态与修订；活动/待核对请求按空间唯一，删除后保留 ID 围栏 |
+| 13（开发中，未发布） | collaborations 与配置、参与者、步骤、交接、动作、事件、产物表；用于可配置主辅的协作任务。含当前动作 scope、待答问题、删除清理围栏、步骤起止时间与验证 helper 身份/命令证据；默认关闭的预览已接入，进度见[协作专项](../milestones/collaboration.md) |
+| 14（开发中，未发布） | collaboration_threads：将协作任务绑定到来源空间的具体对话和历史锚点，附带补充动作采用版本、普通聊天冻结协作材料与文件应用回执；旧任务保持未绑定。 |
+| 15（已实现，未发布） | collaboration_decisions/decision_attempts 保存新自动意图快照、主辅整组决定、唯一外发尝试、费用预留与可核对证据；collaboration_decision_defaults 保存空间插件偏好。旧请求和已冻结模型不重新选择。 |
+| 16（已发布生产开发预览 `.15`） | collaboration_participants 增加原生线程/代际的上下文确认游标，collaboration_review_evidence 冻结同一快照与配置版本的评审差异；新请求可冻结 direct/reviewed 策略，旧任务不改流程，历史用量不重算。 |
+
+当前工作树及生产 `.15` 使用 schema 16；升级前 `.14` 为 schema 15，兼容备份和旧版本已保留。只支持 15 或更低版本的旧二进制无法打开新库。协作仍在开发，不能将迁移成功当作功能或发布验收；回退须恢复升级前的兼容备份。协作元数据随数据库备份，full 恢复保留任务文件并解绑原实例运行环境与上下文确认游标，system 恢复标记产物缺失且不可继续；未来动作 scope 在新实例启动时审计更新，原创建/动作输入不改写。恢复工具不迁移备份数据库，也不将独立快照切回 WAL；没有协作表的旧库按原 schema 恢复，含协作表但 schema 与工具不匹配时，在发布恢复目录前拒绝，须使用与备份匹配的 agentbox 版本恢复。相关实现与剩余验收见[协作减重记录](../milestones/collaboration-lightweight-20261012.md)。
 
 v0.1.11 首次启动将 schema 10/11 升至 12。schema 12 的聊天存储层已接入 HTTP v1 与原执行器；浏览器现已接入冻结待确认副本、查询优先恢复和显式核对。服务初始化在连接 Docker 前，将残留 accepted/starting/running 聊天回执改为 uncertain；不从这些记录重放任务。状态转换使用修订号，旧执行者不能覆盖重启恢复后的记录。会话创建和默认 Git 绑定与收据完成仍在同一事务提交；文件发布与数据库之间不是一个事务，无法确认的导入保持 uncertain，须人工核对后继续。服务重启将残留 running 导入改为 uncertain，不自动重跑。
 

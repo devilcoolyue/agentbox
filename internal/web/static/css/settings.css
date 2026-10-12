@@ -629,3 +629,4 @@
 .learn-more .sec-hint { margin: 6px 0 0; }
 @media (prefers-reduced-motion: reduce) { .learn-more > summary::after { transition: none; } }
 .card > .learn-more { margin-top: -8px; }
+.decision-settings-fields{border:0;padding:0;margin:0;min-width:0}

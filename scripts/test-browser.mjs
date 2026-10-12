@@ -19,7 +19,7 @@ import { imageUpdateSmoke } from './test-image-updates.mjs';
 import {updateComponentsSmoke} from './test-update-components.mjs';
 import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
-import { chatPagesSmoke } from './test-chat-pages.mjs';
+import { chatHistorySettingsSmoke, chatPagesSmoke } from './test-chat-pages.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
 import { motionSmoke } from './test-motion.mjs';
@@ -57,6 +57,7 @@ export async function smoke(page) {
   resources:{max_running:2,max_running_per_user:1,min_free_bytes:0},models:{claude:[],codex:[{id:'fixture',label:'Fixture',reasoning:{support:'supported',control:'effort',levels:['low','high','xhigh']}},{id:'fixture-lite',label:'Fixture Lite',reasoning:{support:'supported',control:'effort',levels:['low','high']}},{id:'fixture-none',label:'No adjustment',reasoning:{support:'unsupported'}},{id:'fixture-custom',label:'Custom'}]}, default_models:{claude:'fixture',codex:'fixture'},
   terminal_tips:{tips:['fixture'],interval_sec:4,animation:'scroll'},tunnel:{enabled:false},proxy_bridge:{bind:'127.0.0.1:1081'},pricing:{} };
  const me = {user:'fixture',role:'admin',timezone:'UTC',models:{claude:[],codex:[]},quota:{metered:false}};
+ Object.defineProperty(me,'chat_history_timeout_sec',{enumerable:true,get:()=>settings.chat_history_timeout_sec});
  let sessions = [{id:'fixture-space',name:'Fixture workspace',agent:'codex',account_id:'fixture',account_label:'Fixture',status:'stopped',default_model:'fixture'}];
  const chatMessages = []; let chatSocket, historyEntries = [], historyCosts = {};
  let usageRows = [];
@@ -127,7 +128,10 @@ export async function smoke(page) {
   } else if(path==='/api/monitor') {
    monitorCalls++;
    body={now:Date.now(),window_ms:0,process:{rss:0,heap_alloc:0,goroutines:1,uptime_ms:100},host:{cpu_count:1,load1:0,mem_total:0,mem_used:0,disks:[{roles:['system'],total:30*2**30,used:19*2**30,available:11*2**30},{roles:['data','tools'],total:49*2**30,used:35*2**30,available:14*2**30}]},summary:{total:0,running:0,cpu_percent:0,mem_usage:0},containers:[]};
-  } else if(path==='/api/usage/events') body={rows:usageRows,total:{rows:usageRows.length,turns:usageRows.length,input_tokens:0,output_tokens:0,cache_read_tokens:0,cache_write_tokens:0,cost_micro_usd:0},facets:{users:[],agents:[],models:[]},scope:'all',timezone:'UTC',order:'desc',limit:20,offset:0,sync:{last_scan_at:Date.now(),last_success_at:Date.now(),scanning:false,errors:0}};
+  } else if(path==='/api/usage/events') {
+   const kind=u.searchParams.get('kind'),rows=usageRows.filter(row=>!kind||row.kind===kind);
+   body={rows,total:{rows:rows.length,turns:rows.length,input_tokens:0,output_tokens:0,cache_read_tokens:0,cache_write_tokens:0,cost_micro_usd:0},facets:{users:[],agents:[],models:[]},scope:'all',timezone:'UTC',order:'desc',limit:20,offset:0,sync:{last_scan_at:Date.now(),last_success_at:Date.now(),scanning:false,errors:0}};
+  }
   await route.fulfill({json:body});
  });
  try {
@@ -158,6 +162,99 @@ export async function smoke(page) {
   await page.locator('#sec-container').waitFor({state:'visible'});
   assert.equal(new URL(page.url()).hash,'#/settings/container','login preserves destination');
   assert.equal(await page.locator('#login-btn').isDisabled(),false);
+  async function usageSmoke() {
+  usageRows = [
+    {input_tokens:10,cache_read_tokens:80,cache_write_tokens:10,provider:'firstParty',effort:'xhigh',effort_control:'effort'},
+    {input_tokens:100,cache_read_tokens:0,cache_write_tokens:0,kind:'title'},
+    {input_tokens:0,cache_read_tokens:0,cache_write_tokens:0,effort:'medium',effort_control:'budget'},
+  ].map((tokens,i)=>({id:i+1,ts:Date.now(),user:'fixture',session_id:'fixture-space',session_name:'Fixture workspace',thread_id:'thread',turn_id:'turn-'+i,agent:'claude',account_id:'fixture',model:'fixture-model',kind:'chat',billing:'table',output_tokens:1000,total_tokens:1100,cost_micro_usd:1000,ttft_ms:100,wall_ms:1000,duration_ms:900,...tokens}));
+  await page.evaluate(async()=>{ const {emit}=await import('/_v/{{BUILD}}/js/state.js');emit('open-usage'); });
+  await page.locator('#view-usage').waitFor({state:'visible'});
+  await page.locator('#usage-sub').filter({hasText:'终端全量扫描'}).waitFor();
+  await page.locator('#usage-rows .u-hit').first().waitFor();
+  assert.deepEqual(await page.locator('#usage-rows .u-hit .u-v').allTextContents(),['80.0%','0.0%','—']);
+  // The reasoning effort a web turn was sent with sits under its model.
+  assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['Extra High','Medium (13000)']);
+  assert.match(await page.locator('#usage-rows tr').first().locator('.u-sub:has(.u-effort)').innerText(),/官方直连[\s\S]*Extra High/);
+  // Every type is a tag: title rows are not bare text.
+  const chipBorder=kind=>page.locator(`#usage-rows .u-chip.${kind}`).first().evaluate(el=>getComputedStyle(el).borderTopColor);
+  assert.equal(await chipBorder('title'),await chipBorder('chat'));
+  const downloaded=page.waitForEvent('download');
+  await page.locator('#uf-export').click();
+  const csv=await readFile(await (await downloaded).path(),'utf8');
+  const csvLines=csv.trim().split('\r\n'), hitColumn=csvLines[0].split(',').indexOf('缓存命中率');
+  assert.ok(hitColumn>=0);
+  assert.deepEqual(csvLines.slice(1).map(line=>line.split(',')[hitColumn]),['80.0%','0.0%','—']);
+  const effortColumn=csvLines[0].split(',').indexOf('思考强度');
+  assert.deepEqual(csvLines.slice(1).map(line=>line.split(',')[effortColumn]),['Extra High','','Medium (13000)']);
+  // Collaboration is attributed to its source workspace without changing ledger IDs.
+  const collaborationRun='a'.repeat(32),collaborationStep='b'.repeat(12);
+  usageRows.push(
+    {...usageRows[0],id:4,session_id:'managed-coordinator',session_name:'Hidden coordinator',kind:'collaboration',source_session_name:'Source project',collaboration:{run_id:collaborationRun,step_id:collaborationStep,role:'coordinator',step_kind:'plan',source_session_id:'source-project'}},
+    {...usageRows[0],id:5,session_id:'managed-executor',session_name:'Hidden executor',kind:'collaboration',collaboration:{run_id:collaborationRun,step_id:'c'.repeat(12),role:'executor',step_kind:'execute',source_session_id:'deleted-source'}},
+    {...usageRows[0],id:6,kind:'decision',agent:'decision',provider:'jev',effort:'',source_session_name:'Source project',collaboration:{run_id:collaborationRun,source_session_id:'source-project'}},
+  );
+  await page.locator('#uf-refresh').click();
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===6);
+  const coordinatorUsage=page.locator('#usage-rows tr').nth(3),executorUsage=page.locator('#usage-rows tr').nth(4),decisionUsage=page.locator('#usage-rows tr').nth(5);
+  assert.equal(await coordinatorUsage.locator('.u-sess').innerText(),'Source project');
+  assert.equal(await executorUsage.locator('.u-sess').innerText(),'deleted-source');
+  assert.match(await coordinatorUsage.innerText(),/多 Agent 协作[\s\S]*主 Agent · 规划/);
+  assert.match(await executorUsage.innerText(),/多 Agent 协作[\s\S]*执行 Agent · 执行/);
+  assert.match(await decisionUsage.innerText(),/决策调用/);
+  assert.equal(await decisionUsage.locator('.u-sess').innerText(),'Source project');
+  await coordinatorUsage.locator('.u-why').click();
+  assert.match(await page.locator('#cost-head').innerText(),new RegExp(`协作任务 ID：${collaborationRun}`));
+  assert.match(await page.locator('#cost-head').innerText(),new RegExp(`协作步骤 ID：${collaborationStep}`));
+  await page.locator('#cost-close').click();
+  const collaborationDownload=page.waitForEvent('download');
+  await page.locator('#uf-export').click();
+  const collaborationCSV=await readFile(await(await collaborationDownload).path(),'utf8');
+  const collaborationLines=collaborationCSV.trim().split('\r\n').map(line=>line.split(',')),columns=collaborationLines[0];
+  const exported=(row,label)=>row[columns.indexOf(label)];
+  assert.equal(exported(collaborationLines[4],'工作空间'),'Source project');
+  assert.equal(exported(collaborationLines[4],'工作空间ID'),'managed-coordinator');
+  assert.equal(exported(collaborationLines[4],'协作任务ID'),collaborationRun);
+  assert.equal(exported(collaborationLines[4],'协作步骤ID'),collaborationStep);
+  assert.equal(exported(collaborationLines[4],'协作角色'),'主 Agent');
+  assert.equal(exported(collaborationLines[4],'步骤类型'),'规划');
+  assert.equal(exported(collaborationLines[4],'源工作空间ID'),'source-project');
+  assert.equal(exported(collaborationLines[6],'类型'),'决策调用');
+  assert.equal(exported(collaborationLines[6],'协作任务ID'),collaborationRun);
+  assert.equal(exported(collaborationLines[6],'协作步骤ID'),'');
+  await page.locator('#uf-kind').selectOption('collaboration',{force:true});
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===2);
+  assert.deepEqual(await page.locator('#usage-rows .u-sess').allInnerTexts(),['Source project','deleted-source']);
+  await page.locator('#uf-kind').selectOption('',{force:true});
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===6);
+  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) {
+    await mkdir('output/playwright',{recursive:true});
+    await page.screenshot({path:'output/playwright/usage-cache-desktop.png',animations:'disabled'});
+  }
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.locator('#usage-rows .u-hit').first().getAttribute('data-l'),'缓存命中率');
+  if(await page.locator('#uf-toggle').getAttribute('aria-expanded')==='true') await page.locator('#uf-toggle').click();
+  await page.locator('#usage-rows .u-hit').first().scrollIntoViewIfNeeded();
+  assert.equal(await page.locator('#usage-rows .u-hit .u-v').first().innerText(),'80.0%');
+  assert.equal(await page.locator('#view-usage').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'usage page overflows on mobile');
+  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-cache-mobile.png',animations:'disabled'});
+  await page.setViewportSize({width:1280,height:900});
+  usageRows=[];
+  }
+  if (process.env.AGENTBOX_BROWSER_ONLY_USAGE === '1') {
+   await page.setViewportSize({width:1280,height:900});
+   await usageSmoke();
+   assert.deepEqual(errors,[]);
+   console.log('Usage browser: ordinary and collaboration rows, source workspaces, roles/steps, decision attribution, category filtering, cost details, CSV and narrow layout passed. Synthetic API only.');
+   return;
+  }
+  if (process.env.AGENTBOX_BROWSER_ONLY_CHAT_PAGES === '1') {
+   await chatHistorySettingsSmoke(page);
+   await page.goto(base + '/#/sessions/fixture-space/chat');
+   await page.locator('#chat-input').waitFor({state:'visible'});
+   await chatPagesSmoke(page,{session:'fixture-space',closeChat:()=>chatSocket.close()});
+   assert.deepEqual(errors,[]); return;
+  }
   // A dialog's close event arrives in a later task. Reopening the shared confirmation before the previous one
   // lands (a busy renderer, CI) must not hand the old answer to the new question. The first close event is
   // held back until the dialog opens again, or 300ms if askConfirm correctly waits for it.
@@ -455,43 +552,7 @@ export async function smoke(page) {
   await page.waitForFunction(()=>document.querySelector("#mon-tiles")?.textContent.includes("用户数据 / 工具与缓存"));
   assert.equal(monitorCalls,1);
   assert.match(await page.locator("#mon-tiles").innerText(),/系统盘/);
-  usageRows = [
-    {input_tokens:10,cache_read_tokens:80,cache_write_tokens:10,provider:'firstParty',effort:'xhigh',effort_control:'effort'},
-    {input_tokens:100,cache_read_tokens:0,cache_write_tokens:0,kind:'title'},
-    {input_tokens:0,cache_read_tokens:0,cache_write_tokens:0,effort:'medium',effort_control:'budget'},
-  ].map((tokens,i)=>({id:i+1,ts:Date.now(),user:'fixture',session_id:'fixture-space',session_name:'Fixture workspace',thread_id:'thread',turn_id:'turn-'+i,agent:'claude',account_id:'fixture',model:'fixture-model',kind:'chat',billing:'table',output_tokens:1000,total_tokens:1100,cost_micro_usd:1000,ttft_ms:100,wall_ms:1000,duration_ms:900,...tokens}));
-  await page.evaluate(async()=>{ const {emit}=await import('/_v/{{BUILD}}/js/state.js');emit('open-usage'); });
-  await page.locator('#view-usage').waitFor({state:'visible'});
-  await page.locator('#usage-sub').filter({hasText:'终端全量扫描'}).waitFor();
-  await page.locator('#usage-rows .u-hit').first().waitFor();
-  assert.deepEqual(await page.locator('#usage-rows .u-hit .u-v').allTextContents(),['80.0%','0.0%','—']);
-  // The reasoning effort a web turn was sent with sits under its model.
-  assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['Extra High','Medium (13000)']);
-  assert.match(await page.locator('#usage-rows tr').first().locator('.u-sub:has(.u-effort)').innerText(),/官方直连[\s\S]*Extra High/);
-  // Every type is a tag: title rows are not bare text.
-  const chipBorder=kind=>page.locator(`#usage-rows .u-chip.${kind}`).first().evaluate(el=>getComputedStyle(el).borderTopColor);
-  assert.equal(await chipBorder('title'),await chipBorder('chat'));
-  const downloaded=page.waitForEvent('download');
-  await page.locator('#uf-export').click();
-  const csv=await readFile(await (await downloaded).path(),'utf8');
-  const csvLines=csv.trim().split('\r\n'), hitColumn=csvLines[0].split(',').indexOf('缓存命中率');
-  assert.ok(hitColumn>=0);
-  assert.deepEqual(csvLines.slice(1).map(line=>line.split(',')[hitColumn]),['80.0%','0.0%','—']);
-  const effortColumn=csvLines[0].split(',').indexOf('思考强度');
-  assert.deepEqual(csvLines.slice(1).map(line=>line.split(',')[effortColumn]),['Extra High','','Medium (13000)']);
-  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) {
-    await mkdir('output/playwright',{recursive:true});
-    await page.screenshot({path:'output/playwright/usage-cache-desktop.png',animations:'disabled'});
-  }
-  await page.setViewportSize({width:390,height:844});
-  assert.equal(await page.locator('#usage-rows .u-hit').first().getAttribute('data-l'),'缓存命中率');
-  if(await page.locator('#uf-toggle').getAttribute('aria-expanded')==='true') await page.locator('#uf-toggle').click();
-  await page.locator('#usage-rows .u-hit').first().scrollIntoViewIfNeeded();
-  assert.equal(await page.locator('#usage-rows .u-hit .u-v').first().innerText(),'80.0%');
-  assert.equal(await page.locator('#view-usage').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'usage page overflows on mobile');
-  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-cache-mobile.png',animations:'disabled'});
-  await page.setViewportSize({width:1280,height:900});
-  usageRows=[];
+  await usageSmoke();
   await page.evaluate(async()=>{ const {emit}=await import('/_v/{{BUILD}}/js/state.js');emit('unauthorized'); });
   await page.locator('#login').waitFor({state:'visible'});
   await page.waitForTimeout(5200);assert.equal(monitorCalls,1,'monitor leaked after leaving view/login');

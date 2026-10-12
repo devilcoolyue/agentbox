@@ -30,6 +30,10 @@ type problemDefinition struct {
 }
 
 var problemCatalog = map[string]problemDefinition{
+	"collaboration_source_not_repository": {422, "当前项目目录不是 Git 仓库", "请选择包含 Git 项目的工作空间；项目在子目录时，请在协作设置中填写仓库相对路径。", "edit_request", false},
+	"collaboration_source_no_commit":      {422, "项目尚无 Git 提交", "请先在源工作空间创建一次 Git 提交，再开始协作。", "edit_request", false},
+	"collaboration_source_dirty":          {409, "项目有未提交的改动", "请先提交或处理源项目的改动，再开始协作；系统不会自动提交或丢弃文件。", "edit_request", false},
+
 	"chat_request_conflict":           {409, "消息编号与已接收内容或状态不一致", "请查询原消息状态，核对后使用新的消息编号。", "check_result", false},
 	"chat_request_gone":               {410, "该消息已放弃或删除", "请核对历史和工作区结果；不会重新执行这个消息编号。", "check_result", false},
 	"chat_request_not_found":          {404, "尚未查到该消息的接收记录", "请保留待确认内容并重试查询，不要换编号重复发送。", "check_result", false},

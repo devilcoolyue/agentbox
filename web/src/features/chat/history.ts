@@ -8,7 +8,7 @@ type Read = (path: string, signal: AbortSignal) => Promise<History>;
 export class ChatHistory {
   private generation = 0;
   private pending?: {controller: AbortController; timer: ReturnType<typeof setTimeout>};
-  constructor(private read: Read, private session: () => string | undefined, private timeout = 15_000) {}
+  constructor(private read: Read, private session: () => string | undefined, private timeout: number | (() => number) = 120_000) {}
 
   cancel() {
     ++this.generation;
@@ -24,7 +24,8 @@ export class ChatHistory {
     const generation = this.generation, controller = new AbortController();
     const current = () => generation === this.generation && this.session() === session;
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, this.timeout);
+    const timeout = typeof this.timeout === "function" ? this.timeout() : this.timeout;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
     this.pending = {controller, timer};
     try {
       const value = await this.read(path, controller.signal);

@@ -88,6 +88,8 @@ export interface AppState {
   histLoading: boolean;
   /** 历史加载失败：保留错误态，禁止误在未知线程上发送消息 */
   histError: string;
+  /** History request deadline from /me or saved settings, in seconds. */
+  chatHistoryTimeoutSec: number;
   /** 自己的额度 { metered, enforced, blocked, balance_micro_usd, ... }（/me 下发） */
   quota: Quota | null;
 }
@@ -113,6 +115,7 @@ export const S: AppState = {
   termWSGen: 0,
   termTips: null,
   timeZone: "Asia/Shanghai",
+  chatHistoryTimeoutSec: 120,
   term: null,
   fit: null,
   filePath: "",

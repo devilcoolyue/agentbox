@@ -1,4 +1,16 @@
 .chat-drafts { color:var(--muted); font-size:11px; }
+/* Collaboration keeps the same left/right conversation reading order as chat.
+ * Its persisted anchor groups a request with the team's answer, without a frame. */
+.collaboration-thread{display:flex;flex-direction:column;gap:25px;min-width:0;margin:10px 0 20px;padding:0;border:0;animation:collab-in var(--dur) var(--ease-out) both}
+.collaboration-request{display:flex;flex-direction:column;align-self:flex-end;max-width:88%;min-width:0;gap:7px}
+.collaboration-request-label{display:flex;align-items:center;justify-content:flex-end;gap:7px;color:var(--muted);font-size:11px;line-height:1.4}
+.collaboration-request-label strong{font-weight:500;color:var(--text)}
+.collaboration-request-label span:before{content:"·";margin-right:7px;opacity:.5}
+.collaboration-thread .msg.user{max-width:100%;margin:0;align-self:stretch;padding:12px 16px;background:color-mix(in srgb,var(--panel-2) 88%,var(--accent) 12%);border:0;box-shadow:none;font-size:14px;line-height:1.75;border-radius:calc(16px * var(--radius-scale)) calc(16px * var(--radius-scale)) calc(4px * var(--radius-scale)) calc(16px * var(--radius-scale))}
+.collaboration-thread-body{align-self:flex-start;width:100%;min-width:0;padding:0;border:0;border-radius:0;color:var(--text);font-size:14px;background:transparent}
+.collaboration-reply-loading-label{font-size:13px;font-weight:600}
+@keyframes collab-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.collaboration-thread{animation:none}}
 .chat-drafts summary { cursor:pointer; padding:0; list-style:none; }
 .chat-drafts summary::-webkit-details-marker { display:none; }
 .chat-drafts summary:hover { background:var(--panel-2); color:var(--text); }
@@ -917,3 +929,7 @@ details.think.streaming .think-body::after {
 .delivery-actions { display:flex; flex-wrap:wrap; gap:6px; padding:0 0 8px 16px; }
 .delivery-actions .btn { font-size:11px; padding:4px 8px; min-height:28px; }
 @media (prefers-reduced-motion:reduce) { .delivery-chevron, .delivery-item summary::before { transition:none; } }
+.chat-execution-mode{border:1px solid var(--line);background:var(--panel-solid);color:var(--text);border-radius:var(--radius-pill);height:34px;padding:0 28px 0 10px;font-size:12px;max-width:122px}
+.chat-collaboration-setup{border:0;background:transparent;color:var(--accent);font-size:12px;padding:6px 4px;cursor:pointer}
+.chat-collaboration-hint{font-size:11px;color:var(--muted);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:760px){.chat-execution-mode{max-width:112px}.chat-collaboration-hint{display:none}.chat-collaboration-setup{font-size:11px}}

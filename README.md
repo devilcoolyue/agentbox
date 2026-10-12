@@ -40,6 +40,8 @@ Set up your coding environment once on your server, then pick up your project fr
 
 You bring the server and your own Claude / Codex subscription, API key, or compatible relay account. Agentbox provides the workspace and management layer; model usage follows your provider's terms and pricing.
 
+The **development collaboration preview** adds a choice before sending: direct execution by one selected Agent, or planning/execution with an independent model review. New reviewed tasks use bounded snapshot diffs, a code map and incremental handoffs. Direct execution keeps platform verification and explicit result application, while skipping separate planning/review calls. Jev remains optional for automatic model selection. This development preview requires schema 16 and is not included in the stable release; no cost savings have been established by a controlled model comparison. [Preview and verification boundaries →](docs/milestones/collaboration-lightweight-20261012.md)
+
 ## See the workflow
 
 **Chat → terminal → Git review → previews.** The GIF introduces the core workspace; the 34-second MP4 also visits skills, MCP, usage, and private-network access.

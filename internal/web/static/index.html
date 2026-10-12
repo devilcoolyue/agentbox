@@ -70,6 +70,8 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/date-range.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/tunnel.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/dialogs.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/collaboration.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/collaboration-workspace.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/responsive.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/actions.css">
 <!-- 风格专属形态放最后：同等选择器下要压过各功能域的样式 -->
@@ -448,6 +450,9 @@
                 <div id="chat-attach" class="chat-attach hidden"></div>
                 <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）" data-i18n-attrs="{&quot;placeholder&quot;:&quot;随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）&quot;}"></textarea>
                 <div class="composer-bar">
+                  <select id="chat-execution-mode" class="chat-execution-mode" aria-label="执行方式" data-i18n-attrs='{"aria-label":"执行方式"}'><option value="chat" data-i18n="普通对话">普通对话</option><option value="collaboration" data-i18n="多 Agent 协作">多 Agent 协作</option></select>
+                  <button id="chat-collaboration-setup" type="button" class="chat-collaboration-setup hidden" data-i18n="设置团队">设置团队</button>
+                  <span id="chat-collaboration-hint" class="chat-collaboration-hint" hidden></span>
                   <button id="btn-attach" class="icon-btn" aria-label="添加附件" data-tip="添加附件（图片或文件，48 小时后过期）" data-i18n-attrs="{&quot;aria-label&quot;:&quot;添加附件&quot;,&quot;data-tip&quot;:&quot;添加附件（图片或文件，48 小时后过期）&quot;}">
                     <svg width="18" height="18" data-icon="paperclip" aria-hidden="true"></svg>
                   </button>
@@ -693,6 +698,7 @@
             <button data-sec="proxies" data-icon="network" data-i18n-text="[&quot;IP 代理 &quot;]">IP 代理 <span id="proxy-count" class="count">0</span></button>
             <button data-sec="container" data-icon="box" data-i18n-text="[&quot;容器与资源&quot;]">容器与资源</button>
             <button data-sec="models" data-icon="cpu" data-i18n-text="[&quot;模型管理&quot;]">模型管理</button>
+            <button data-sec="decision" data-icon="sliders" data-i18n="智能决策">智能决策</button>
             <button data-sec="interface" data-icon="sliders" data-i18n-text="[&quot;界面与提示&quot;]">界面与提示</button>
             <button data-sec="security" data-icon="shield" data-i18n-text="[&quot;安全与访问&quot;]">安全与访问</button>
             <button data-sec="monitor" data-icon="activity" data-i18n-text="[&quot;运维监控&quot;]">运维监控</button>
@@ -991,6 +997,44 @@
             </section>
 
             <!-- 界面与提示 -->
+            <section id="sec-decision" class="set-section hidden">
+              <div class="sec-intro"><div><h2 data-i18n="智能决策">智能决策</h2><p data-i18n="Jev 可为自动选模提供建议。关闭后仍可使用聊天和协作。">Jev 可为自动选模提供建议。关闭后仍可使用聊天和协作。</p></div></div>
+              <p id="decision-settings-unavailable" class="note" hidden data-i18n="当前服务端不支持决策插件。">当前服务端不支持决策插件。</p>
+              <fieldset id="decision-settings-fields" class="decision-settings-fields" disabled>
+                <input id="set-decision-revision" type="hidden" value="0">
+                <input id="set-decision-key-gateway" type="hidden" value="typesafe">
+                <input id="set-decision-key-configured" type="hidden" value="false">
+                <div class="card">
+                  <h3 data-i18n="Jev 辅助决策">Jev 辅助决策</h3>
+                  <label class="field"><span data-i18n="启用 Jev">启用 Jev</span><input id="set-decision-enabled" type="checkbox"></label>
+                  <label class="field"><span data-i18n="默认决策方式">默认决策方式</span><select id="set-decision-default"><option value="builtin" data-i18n="内置规则">内置规则</option><option value="jev" data-i18n="Jev 辅助判断">Jev 辅助判断</option></select></label>
+                  <p class="card-desc" data-i18n="只在任务选择自动模型且需要判断时调用。固定模型不产生决策调用费用。">只在任务选择自动模型且需要判断时调用。固定模型不产生决策调用费用。</p>
+                  <label class="field"><span data-i18n="接入服务">接入服务</span><select id="set-decision-gateway"><option value="typesafe" data-i18n="TypeSafe 官方">TypeSafe 官方</option><option value="mindshub">Mindshub</option></select><span id="set-decision-gateway-hint" class="hint" data-i18n="使用 TypeSafe 官方 API Key。">使用 TypeSafe 官方 API Key。</span></label>
+                  <p id="set-decision-mindshub-pricing" class="note" hidden data-i18n="Mindshub 目前提供免费 Jev 调用，受公平使用限制。">Mindshub 目前提供免费 Jev 调用，受公平使用限制。</p>
+                  <p id="set-decision-gateway-key-note" class="note" hidden data-i18n="切换接入服务时，请设置新密钥或清除已有密钥。">切换接入服务时，请设置新密钥或清除已有密钥。</p>
+                  <div class="field-row">
+                    <label class="field"><span data-i18n="API Key 操作">API Key 操作</span><select id="set-decision-key-action"><option value="keep" data-i18n="保留已有密钥">保留已有密钥</option><option value="set" data-i18n="设置新密钥">设置新密钥</option><option value="clear" data-i18n="清除密钥">清除密钥</option></select></label>
+                    <label class="field"><span>API Key</span><input id="set-decision-key" type="password" autocomplete="new-password" spellcheck="false" maxlength="4096"><span id="set-decision-key-state" class="hint" data-i18n="尚未配置 API Key">尚未配置 API Key</span></label>
+                  </div>
+                  <label class="field"><span data-i18n="决策模型">决策模型</span><input id="set-decision-model" type="text" class="mono" value="jev-1.13.0" readonly></label>
+                  <p class="note" data-i18n="保存设置不会调用 Jev。任务调用的费用会计入任务预算。">保存设置不会调用 Jev。任务调用的费用会计入任务预算。</p>
+                </div>
+                <div class="card">
+                  <h3 data-i18n="使用范围与限制">使用范围与限制</h3>
+                  <label class="field"><span data-i18n="允许使用的用户">允许使用的用户</span><select id="set-decision-access"><option value="admin" data-i18n="仅管理员">仅管理员</option><option value="all" data-i18n="所有用户">所有用户</option><option value="users" data-i18n="指定用户">指定用户</option></select></label>
+                  <label class="field"><span data-i18n="指定用户名（逗号分隔）">指定用户名（逗号分隔）</span><input id="set-decision-users" type="text" maxlength="4096" autocomplete="off"><span class="hint" data-i18n="选择指定用户时生效，管理员始终可用。">选择指定用户时生效，管理员始终可用。</span></label>
+                  <details class="learn-more"><summary data-i18n="高级设置">高级设置</summary>
+                    <div class="field-row">
+                      <label class="field"><span data-i18n="决策超时（毫秒）">决策超时（毫秒）</span><input id="set-decision-timeout" type="number" min="100" max="30000" step="1" required value="1500"></label>
+                      <label class="field"><span data-i18n="请求大小上限（字节）">请求大小上限（字节）</span><input id="set-decision-bytes" type="number" min="1024" max="65536" step="1" required value="32768"></label>
+                      <label class="field"><span data-i18n="决策并发上限">决策并发上限</span><input id="set-decision-concurrency" type="number" min="1" max="16" step="1" required value="2"></label>
+                    </div>
+                  </details>
+                  <p class="note" data-i18n="Jev 超时或不可用时使用已配置的模型回退；已接收的远端调用仍可能收费。">Jev 超时或不可用时使用已配置的模型回退；已接收的远端调用仍可能收费。</p>
+                </div>
+              </fieldset>
+            </section>
+
             <section id="sec-interface" class="set-section hidden">
               <div class="sec-intro">
                 <div>
@@ -1116,10 +1160,18 @@
                   <label class="field">
                     <span data-i18n-text="[&quot;上传大小上限（MB）&quot;]">上传大小上限（MB）</span>
                     <input id="set-upload" type="number" min="1" class="mono">
+                    <span class="hint" data-i18n="适用于项目、文件及聊天附件（含图片和 PDF），默认 512 MB。">适用于项目、文件及聊天附件（含图片和 PDF），默认 512 MB。</span>
                   </label>
                   <label class="field">
                     <span data-i18n-text="[&quot;监听地址 &quot;]">监听地址 <span class="tag restart" data-i18n-text="[&quot;需重启&quot;]">需重启</span></span>
                     <input id="set-listen" type="text" class="mono" placeholder="127.0.0.1:8180">
+                  </label>
+                </div>
+                <div class="field-row">
+                  <label class="field">
+                    <span data-i18n="历史加载超时（秒）">历史加载超时（秒）</span>
+                    <input id="set-history-timeout" type="number" min="1" max="3600" step="1" class="mono">
+                    <span class="hint" data-i18n="适用于打开空间和加载更早历史，默认 120 秒。其他已打开的页面刷新后生效。">适用于打开空间和加载更早历史，默认 120 秒。其他已打开的页面刷新后生效。</span>
                   </label>
                 </div>
                 <div class="card-foot">
@@ -1265,8 +1317,10 @@
                 <select id="uf-kind">
                   <option value="" data-i18n-text="[&quot;全部&quot;]">全部</option>
                   <option value="chat" data-i18n-text="[&quot;对话&quot;]">对话</option>
+                  <option value="collaboration" data-i18n="多 Agent 协作">多 Agent 协作</option>
                   <option value="terminal" data-i18n-text="[&quot;终端&quot;]">终端</option>
                   <option value="title" data-i18n-text="[&quot;起标题&quot;]">起标题</option>
+                  <option value="decision" data-i18n="决策调用">决策调用</option>
                 </select>
               </label>
               <div class="uf-item uf-date">

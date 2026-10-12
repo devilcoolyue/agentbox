@@ -72,7 +72,12 @@ func (s *Server) view(sess store.Session) sessionView {
 
 func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	out := []sessionView{}
-	for _, sess := range s.store.List(reqUser(r).Name) {
+	sessions, err := s.store.PublicSessions(reqUser(r).Name)
+	if err != nil {
+		writeProblem(w, r, "session.list", "internal_error")
+		return
+	}
+	for _, sess := range sessions {
 		out = append(out, s.view(sess))
 	}
 	writeJSON(w, http.StatusOK, out)

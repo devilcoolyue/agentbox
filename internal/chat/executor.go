@@ -26,6 +26,8 @@ type Backend interface {
 type Turn struct {
 	SessionID, ContainerID, Text, ChatID, Model, Effort, Permission string
 	Options                                                         agent.TurnOptions
+	StrictResume                                                    bool
+	RequireAppServer                                                bool
 }
 
 // Environment rechecks authorization immediately before EACH Docker exec.
@@ -49,7 +51,7 @@ func (e Executor) Run(ctx context.Context, adapter agent.Adapter, turn Turn) err
 		switch {
 		case err == nil:
 			return nil
-		case !fallback:
+		case !fallback || turn.RequireAppServer:
 			return err
 		default:
 			e.Log("codex app-server 不可用，回退 exec (%s): %v", turn.SessionID, err)
@@ -160,7 +162,7 @@ func (e Executor) appServerTurn(ctx context.Context, turn Turn) (fallback bool, 
 	err = agent.RunCodexTurn(ctx, stream, pr,
 		func() { _ = stream.CloseWrite() }, // 硬断兜底：app-server 随 stdin EOF 退出
 		ich,
-		agent.CodexTurn{Prompt: turn.Text, ThreadID: turn.ChatID, Model: turn.Model, Effort: turn.Effort, Cwd: dockerx.WorkspaceMount, RejectInheritedEffort: turn.Options.Unsupported},
+		agent.CodexTurn{Prompt: turn.Text, ThreadID: turn.ChatID, Model: turn.Model, Effort: turn.Effort, Cwd: dockerx.WorkspaceMount, RejectInheritedEffort: turn.Options.Unsupported, StrictResume: turn.StrictResume},
 		e.OnLine)
 	if err != nil {
 		if errors.Is(err, agent.ErrAppServerUnavailable) {

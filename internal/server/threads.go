@@ -230,6 +230,24 @@ func (s *Server) scanThread(sess store.Session, tid string) (threadMeta, bool) {
 			m.Resumable = e.meta.Text != ""
 		}
 	}
+	if s.store != nil {
+		if u, ok := s.store.GetUser(sess.User); ok {
+			if runs, e := s.store.CollaborationThreadRuns(u, sess.ID, tid); e == nil {
+				for _, run := range runs {
+					if run.Request == nil {
+						continue
+					}
+					m.Turns++
+					if firstMsg == "" {
+						firstMsg = run.Request.Text
+					}
+					if updated, e := time.Parse(time.RFC3339Nano, run.UpdatedAt); e == nil && updated.After(m.Updated) {
+						m.Updated = updated
+					}
+				}
+			}
+		}
+	}
 	// 优先用模型总结的标题，没有则回退到首条用户消息（截断）
 	if genTitle != "" {
 		m.Title = truncRunes(genTitle, 120)
@@ -510,11 +528,12 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 	if contextLine != nil {
 		lines = append(lines, contextLine)
 	}
-	for _, e := range entries[start:end] {
-		if historySent(e) {
-			lines = append(lines, e.raw)
-		}
+	projected, err := s.collaborationHistory(sess, tid, entries, start, end, !older)
+	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
 	}
+	lines = append(lines, projected...)
 	var turnIDs []string
 	for _, line := range lines {
 		var entry struct {
@@ -578,7 +597,7 @@ func (s *Server) handleThreadNew(w http.ResponseWriter, r *http.Request, sess st
 		}
 		if raw, err := os.ReadFile(s.threadPath(sess, tid)); err == nil {
 			entries := parseEntries(raw)
-			if len(entries) == 1 && entries[0].meta.Kind == "draft_context" {
+			if len(entries) == 1 && entries[0].meta.Kind == "draft_context" && !s.hasThreadCollaborations(sess, tid) {
 				writeJSON(w, http.StatusOK, map[string]any{"id": tid, "created": false})
 				return
 			}
@@ -699,6 +718,15 @@ func (s *Server) handleThreadDelete(w http.ResponseWriter, r *http.Request, sess
 		return
 	}
 	if u, ok := s.store.GetUser(sess.User); ok {
+		runs, err := s.store.CollaborationThreadRuns(u, sess.ID, tid)
+		if err != nil {
+			writeCollaborationError(w, r, err)
+			return
+		}
+		if len(runs) > 0 {
+			writeErr(w, http.StatusConflict, "此对话有关联协作任务，请先删除任务再删除对话。")
+			return
+		}
 		if err := s.store.DeleteChatThreadRequests(u, sess.ID, tid); err != nil {
 			writeChatRequestError(w, r, err)
 			return

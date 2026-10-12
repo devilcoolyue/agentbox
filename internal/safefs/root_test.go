@@ -23,6 +23,43 @@ func testRoot(t *testing.T) (*Root, string) {
 	return r, dir
 }
 
+func TestAppendJournalRejectsLinksSpecialFilesAndLimit(t *testing.T) {
+	r, dir := testRoot(t)
+	outside := filepath.Join(t.TempDir(), "untouched")
+	if err := os.WriteFile(outside, []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "symlink")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(outside, filepath.Join(dir, "hardlink")); err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Mkfifo(filepath.Join(dir, "fifo"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"symlink", "hardlink", "fifo"} {
+		if err := r.AppendFile(name, []byte("bad"), 100); err == nil {
+			t.Fatal("unsafe append", name)
+		}
+	}
+	if body, err := os.ReadFile(outside); err != nil || string(body) != "original" {
+		t.Fatal("append modified external inode", string(body), err)
+	}
+	if err := r.AppendFile("journal", []byte("first\n"), 10); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.AppendFile("journal", []byte("over limit"), 10); err == nil {
+		t.Fatal("journal exceeded bound")
+	}
+	if err := r.AppendFile("journal", []byte("end\n"), 10); err != nil {
+		t.Fatal(err)
+	}
+	if body, err := r.ReadAll("journal", 10); err != nil || string(body) != "first\nend\n" {
+		t.Fatal(string(body), err)
+	}
+}
+
 func TestPinnedDirectorySurvivesReplacement(t *testing.T) {
 	r, dir := testRoot(t)
 	if err := r.Mkdir("project", 0o755); err != nil {

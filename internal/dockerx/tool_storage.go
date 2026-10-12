@@ -37,6 +37,10 @@ type toolMountPlan struct {
 }
 
 func (m *Manager) toolPlan(ctx context.Context, user string) (toolMountPlan, error) {
+	return m.participantToolPlan(ctx, user, "", m.cfg.GetAgentImage())
+}
+
+func (m *Manager) participantToolPlan(ctx context.Context, user, participant, image string) (toolMountPlan, error) {
 	p := m.cfg.GetToolStorage()
 	if p.Root == "" {
 		return toolMountPlan{}, nil
@@ -48,11 +52,16 @@ func (m *Manager) toolPlan(ctx context.Context, user string) (toolMountPlan, err
 	if err != nil {
 		return toolMountPlan{}, err
 	}
-	paths, err := toolstore.Prepare(p.Root, key, AgentUID, AgentGID)
+	var paths toolstore.Paths
+	if participant == "" {
+		paths, err = toolstore.Prepare(p.Root, key, AgentUID, AgentGID)
+	} else {
+		paths, err = toolstore.PrepareParticipant(p.Root, key, participant, AgentUID, AgentGID)
+	}
 	if err != nil {
 		return toolMountPlan{}, err
 	}
-	img, err := m.cli.ImageInspect(ctx, m.cfg.GetAgentImage())
+	img, err := m.cli.ImageInspect(ctx, image)
 	if err != nil {
 		return toolMountPlan{}, err
 	}
@@ -133,4 +142,21 @@ func (m *Manager) initToolCache(ctx context.Context, cid string, plan toolMountP
 		return fmt.Errorf("prepare private tool cache: %w", err)
 	}
 	return nil
+}
+
+// Called only after participant containers have been removed and the task is
+// durably tombstoned. It never removes another role's or ordinary shared cache.
+func (m *Manager) RemoveCollaborationToolCache(user, participant string) error {
+	root := m.cfg.GetToolStorage().Root
+	if root == "" {
+		return nil
+	}
+	if m.toolIdentity == nil {
+		return fmt.Errorf("tool cache owner identity unavailable")
+	}
+	key, err := m.toolIdentity(user)
+	if err != nil {
+		return err
+	}
+	return toolstore.RemoveParticipant(root, key, participant)
 }

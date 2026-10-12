@@ -1,11 +1,26 @@
+import type {CollaborationConfiguration} from "../../contracts/collaboration-v1.js";
+import {cleanDecision,type DecisionIntent} from "../collaboration/decision.js";
+import {cleanWorkflow} from "../collaboration/strategy.js";
 export interface DraftAttachment {id:number;path:string;name:string;orig:string;kind:"img"|"file";valid?:boolean;}
-export interface Draft {text:string;attachments:DraftAttachment[];}
+export interface CollaborationDraft {mode:"collaboration";repository:string;include_context:boolean;configuration?:CollaborationConfiguration;decision?:DecisionIntent;reply?:{run:string;question:string;kind:"answer"|"supplement"};}
+export interface Draft {text:string;attachments:DraftAttachment[];collaboration?:CollaborationDraft;}
+export function cleanCollaboration(value:unknown):CollaborationDraft|undefined {
+ if(!value||typeof value!=="object")return;
+ const v=value as CollaborationDraft;
+ if(v.mode!=="collaboration"||typeof v.repository!=="string"||v.repository.length>1024||typeof v.include_context!=="boolean")return;
+ if(v.reply&&(!/^[a-f0-9]{32}$/.test(v.reply.run)||typeof v.reply.question!=="string"||!["answer","supplement"].includes(v.reply.kind)))return;
+ const c=v.configuration;
+ if(c?.workflow!==undefined&&!cleanWorkflow(c.workflow))return;
+ const decision=cleanDecision(v.decision);if(v.decision!==undefined&&!decision)return;
+ if(c&&(!c.roles||![c.roles.coordinator,c.roles.executor].every(b=>b&&["claude","codex"].includes(b.agent_type)&&typeof b.account_id==="string"&&typeof b.model==="string"&&typeof b.effort==="string"&&typeof b.effort_control==="string")||JSON.stringify(c).length>12000))return;
+ return {mode:"collaboration",repository:v.repository,include_context:v.include_context,...(v.reply?{reply:{...v.reply}}:{}),...(c?{configuration:structuredClone(c)}:{}),...(decision?{decision}:{})};
+}
 interface Record extends Draft {version:1;session:string;thread:string;writer:string;updated:number;}
 export interface DraftStorage {readonly length:number;key(index:number):string|null;getItem(key:string):string|null;setItem(key:string,value:string):void;removeItem(key:string):void;}
 export const DRAFT_TTL=7*24*60*60*1000;
 const MAX_RECORD=150_000,MAX_TOTAL=1_000_000,MAX_RECORDS=500;
 const empty=():Draft=>({text:"",attachments:[]});
-const clean=(draft:Draft):Draft=>({text:draft.text,attachments:draft.attachments.map(({id,path,name,orig,kind})=>({id,path,name,orig,kind}))});
+const clean=(draft:Draft):Draft=>({text:draft.text,...(cleanCollaboration(draft.collaboration)?{collaboration:cleanCollaboration(draft.collaboration)}:{}),attachments:draft.attachments.map(({id,path,name,orig,kind})=>({id,path,name,orig,kind}))});
 
 /** One record per page writer prevents one tab from overwriting another.
  * Per-tab hints contain only writer IDs and survive reload/duplicated tabs. */

@@ -28,6 +28,27 @@ func TestCLIImageProbeLive(t *testing.T) {
 	t.Logf("candidate %s: %+v", candidate.ID, report)
 }
 
+func TestCollaborationImageProbeLive(t *testing.T) {
+	ref := os.Getenv("AGENTBOX_COLLABORATION_PROBE_IMAGE")
+	if ref == "" {
+		t.Skip("requires a local Agent image; offline synthetic upstream only")
+	}
+	m, err := New(&config.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	img, err := m.InspectCLIImage(t.Context(), ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := m.ValidateCollaborationImage(t.Context(), img.ID)
+	if err != nil || !report.CollaborationPassed(img.ID) {
+		t.Fatalf("collaboration report: %+v; %v", report, err)
+	}
+	t.Logf("collaboration image %s: %+v", img.ID, report)
+}
+
 // Both CLIs must answer signed out with network=none; no provider is called.
 func TestCLICatalogLive(t *testing.T) {
 	ref := os.Getenv("AGENTBOX_CLI_PROBE_TEST_IMAGE")

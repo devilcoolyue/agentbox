@@ -18,6 +18,7 @@ import (
 var ErrCredentials = errors.New("account credentials could not be prepared")
 
 var ErrSessionGone = errors.New("session no longer exists")
+var ErrManagedSession = errors.New("collaboration participant requires task scheduler")
 
 type Store interface {
 	Get(string) (store.Session, bool)
@@ -26,6 +27,7 @@ type Store interface {
 	Update(string, func(*store.Session)) (store.Session, error)
 	Delete(string) error
 	All() []store.Session
+	IsCollaborationSession(string) (bool, error)
 }
 type Runtime interface {
 	Running(context.Context, string) (bool, error)
@@ -134,10 +136,24 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	}
 	defer lock.release()
 
+	if gate, ok := s.store.(interface{ CollaborationApplicationBlocked(string) (bool, error) }); ok {
+		blocked, err := gate.CollaborationApplicationBlocked(id)
+		if err != nil {
+			return store.Session{}, err
+		}
+		if blocked {
+			return store.Session{}, errors.New("project result application requires recovery")
+		}
+	}
 	// Re-read inside the lock: another caller may have finished the start.
 	cur, ok := s.store.Get(id)
 	if !ok {
 		return store.Session{}, ErrSessionGone
+	}
+	if managed, err := s.store.IsCollaborationSession(id); err != nil {
+		return store.Session{}, err
+	} else if managed {
+		return store.Session{}, ErrManagedSession
 	}
 	acct, err := s.account(cur)
 	if err != nil {

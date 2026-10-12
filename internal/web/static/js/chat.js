@@ -25,9 +25,11 @@ import { ChatHistory } from "./features/chat/history.js";
 import { createOlderHistory } from "./features/chat/older.js";
 import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { ChatConnection } from "./features/chat/connection.js";
+import { initCollaborationComposer } from "./features/collaboration/composer.js";
 import { initComposerDrafts } from "./features/chat/drafts.js";
 import { initChatOutbox } from "./features/chat/outbox.js";
 let drafts;
+let collaborationComposer;
 let outbox;
 let composerThread = "";
 const legacyDraftVersions = new Map();
@@ -92,6 +94,7 @@ let chatEpoch = 0;
 export function chatTeardown() {
     drafts?.leave();
     outbox?.leave();
+    collaborationComposer?.leave();
     composerThread = "";
     sender.cancel();
     ++chatEpoch;
@@ -253,7 +256,7 @@ export function autoGrow() {
 }
 const attachmentFingerprint = () => JSON.stringify([...chatImgs.map].map(([id, { valid, ...a }]) => [id, a]));
 const sender = new ChatSender({
-    allowed: () => !S.histLoading && !S.histError && !outbox?.blocked() && S.chatState === "idle" && chatImgs.uploading === 0,
+    allowed: () => !collaborationComposer?.active() && !S.histLoading && !S.histError && !outbox?.blocked() && S.chatState === "idle" && chatImgs.uploading === 0,
     read: () => {
         if (!S.current)
             return;
@@ -270,7 +273,7 @@ const sender = new ChatSender({
             text = text.split(`[Image #${n}]`).join(`[图片#${n} ${info.path}]`).split(`[File #${n}]`).join(`[附件#${n} ${info.path}]`);
         }
         const input = { scope: S.chatScope, thread_id: composerThread, text, ...pick, attachments: draft.attachments.map(a => a.path) };
-        return { owner: JSON.stringify([S.token, chatEpoch, S.current.id, composerThread]), content: JSON.stringify([raw, pick, attachmentFingerprint()]), input, draft };
+        return { owner: JSON.stringify([S.token, chatEpoch, S.current.id, composerThread]), content: JSON.stringify([raw, pick, attachmentFingerprint(), collaborationComposer?.active(), draft.collaboration]), input, draft };
     },
     durable: () => !!outbox?.enabled, connected: () => connection.ready,
     connect: () => { chatAttempt = 0; connectChat(); },
@@ -298,6 +301,10 @@ export async function sendChat() {
         appendChat(chip(i18nText("附件仍在上传中，请稍候…"), "err"));
         return;
     }
+    if (collaborationComposer?.active()) {
+        await collaborationComposer.send();
+        return;
+    }
     await sender.send();
 }
 function sendInterrupt() {
@@ -311,9 +318,9 @@ function sendInterrupt() {
 }
 /* ---------------- 附件（粘贴图片 / 上传文件） ---------------- */
 const chatImgs = { seq: 0, map: new Map(), uploading: 0 };
-const composerDraft = () => ({ text: $("chat-input").value, attachments: [...chatImgs.map].map(([id, a]) => ({ id, ...a })) });
-const draftFingerprint = (d) => JSON.stringify({ text: d.text, attachments: d.attachments.map(({ valid, ...a }) => a) });
-function applyComposerDraft(value) { resetChatImgs(); $("chat-input").value = value.text; for (const { id, ...a } of value.attachments) {
+const composerDraft = () => ({ text: $("chat-input").value, attachments: [...chatImgs.map].map(([id, a]) => ({ id, ...a })), ...(collaborationComposer?.draft() ? { collaboration: collaborationComposer.draft() } : {}) });
+const draftFingerprint = (d) => JSON.stringify({ text: d.text, collaboration: d.collaboration, attachments: d.attachments.map(({ valid, ...a }) => a) });
+function applyComposerDraft(value) { collaborationComposer?.apply(value.collaboration); resetChatImgs(); $("chat-input").value = value.text; for (const { id, ...a } of value.attachments) {
     chatImgs.map.set(id, a);
     chatImgs.seq = Math.max(chatImgs.seq, id);
 } renderAttach(); autoGrow(); }
@@ -405,7 +412,7 @@ function renderAttach() {
     }
     // 附件没传完不许发送（执行中按钮是「中断」，不能动）
     if (S.chatState !== "running")
-        $("chat-send").disabled = S.histLoading || !!S.histError || chatImgs.uploading > 0 || sender.busy || !!drafts?.blocked() || !!outbox?.blocked();
+        $("chat-send").disabled = S.histLoading || !!S.histError || chatImgs.uploading > 0 || sender.busy || !!collaborationComposer?.busy() || !!drafts?.blocked() || !!outbox?.blocked();
 }
 async function attachFile(file) {
     if (!S.current || S.histLoading || S.histError)
@@ -851,7 +858,7 @@ export function updateHero() {
     updateScrollBottomButton();
     $("chat-input").disabled = blocked;
     if (S.chatState !== "running") {
-        $("chat-send").disabled = blocked || chatImgs.uploading > 0 || sender.busy || !!drafts?.blocked() || !!outbox?.blocked();
+        $("chat-send").disabled = blocked || chatImgs.uploading > 0 || sender.busy || !!collaborationComposer?.busy() || !!drafts?.blocked() || !!outbox?.blocked();
     }
     emit("chat-view-updated");
 }
@@ -865,11 +872,13 @@ for (const c of document.querySelectorAll(".hero-pill")) {
  * 首屏只拿最新一页（服务端按整回合切页，见 threads.go 的 historyPage），
  * 更早的内容由 older 在用户上滑时逐页插到顶部。 */
 const readHistory = (path, signal) => api(path, { signal });
-const history = new ChatHistory(readHistory, () => S.current?.id);
+const historyTimeout = () => S.chatHistoryTimeoutSec * 1000;
+const history = new ChatHistory(readHistory, () => S.current?.id, historyTimeout);
 const older = createOlderHistory({
     log: () => $("chat-log"),
     session: () => S.current?.id,
     read: readHistory,
+    timeout: historyTimeout,
     render: value => {
         const box = document.createElement("div");
         const writer = new TurnWriter(() => box, sessionAgent);
@@ -919,12 +928,14 @@ export async function loadHistory(opts = {}) {
         await drafts?.enter(sess.id, draftThread);
     }, ({ entries, thread, costs, start, has_more, active_thread }) => {
         composerThread = draftThread;
+        collaborationComposer?.enter(sess.id, draftThread);
         outbox?.enter(sess.id, draftThread);
         setThreadBar(thread ?? null);
         stream.reset();
         log.replaceChildren(); // 重连与首次加载都以服务端记录为准
         live.reset();
         replayHistory(live, entries, costs, appendChat);
+        void collaborationComposer?.refresh();
         const id = active_thread || thread?.id;
         // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效
         kept = !!keep && keep.thread === id && keep.start === start;
@@ -955,6 +966,7 @@ export async function reloadThread() {
     sender.cancel();
     drafts?.leave();
     outbox?.leave();
+    collaborationComposer?.leave();
     composerThread = "";
     history.cancel(); // 立刻作废在途加载，clear 之后它们不得再往里追加
     older.cancel();
@@ -1021,6 +1033,7 @@ export function initChat() {
     disposeChat?.();
     legacyDraftVersions.clear();
     const lifetime = new AbortController();
+    collaborationComposer = initCollaborationComposer({ read: composerDraft, apply: applyComposerDraft, changed: updateHero, save: () => drafts?.save(), reload: () => loadHistory({ silent: true }), allowed: () => !S.histLoading && !S.histError && !outbox?.blocked() && S.chatState === "idle" && chatImgs.uploading === 0 });
     drafts = initComposerDrafts({
         read: composerDraft,
         apply: applyComposerDraft,
@@ -1118,7 +1131,7 @@ export function initChat() {
     bus.addEventListener("thread-changed", () => { reloadThread(); }, { signal: lifetime.signal });
     $("chat-loading-retry").addEventListener("click", reloadThread, { signal: lifetime.signal });
     disposeChat = () => { if (lifetime.signal.aborted)
-        return; lifetime.abort(); outbox?.dispose(); outbox = undefined; drafts?.dispose(); drafts = undefined; chatTeardown(); };
+        return; lifetime.abort(); outbox?.dispose(); outbox = undefined; drafts?.dispose(); drafts = undefined; collaborationComposer?.dispose(); collaborationComposer = undefined; chatTeardown(); };
     return disposeChat;
 }
 // Only redraw model controls; preserve the composer, chat stream and connections.

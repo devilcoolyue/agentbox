@@ -4,6 +4,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,23 +20,25 @@ import (
 // --- 设置读写 ---
 
 type settingsView struct {
-	ImageUpdates   config.ImageUpdateConfig        `json:"image_updates"`
-	Resources      config.ResourceLimits           `json:"resources"`
-	Listen         string                          `json:"listen"`
-	AgentImage     string                          `json:"agent_image"`
-	PermissionMode string                          `json:"permission_mode"`
-	MaxUploadMB    int64                           `json:"max_upload_mb"`
-	DesktopSync    bool                            `json:"desktop_sync_enabled"`
-	IdleTimeoutMin int64                           `json:"idle_timeout_min"`
-	TimeZone       string                          `json:"timezone"`
-	Container      config.ContainerLimits          `json:"container"`
-	Models         map[string][]config.ModelOption `json:"models"`
-	DefaultModels  map[string]string               `json:"default_models"`
-	TerminalTips   config.TerminalTips             `json:"terminal_tips"`
-	Tunnel         config.TunnelConfig             `json:"tunnel"`
-	TunnelActive   bool                            `json:"tunnel_active"`          // SOCKS 代理是否真的监听中
-	TunnelError    string                          `json:"tunnel_error,omitempty"` // 最近一次启停失败的原因
-	ProxyBridge    config.ProxyBridgeConfig        `json:"proxy_bridge"`
+	Decision              config.DecisionView             `json:"decision"`
+	ImageUpdates          config.ImageUpdateConfig        `json:"image_updates"`
+	Resources             config.ResourceLimits           `json:"resources"`
+	Listen                string                          `json:"listen"`
+	AgentImage            string                          `json:"agent_image"`
+	PermissionMode        string                          `json:"permission_mode"`
+	MaxUploadMB           int64                           `json:"max_upload_mb"`
+	ChatHistoryTimeoutSec int64                           `json:"chat_history_timeout_sec"`
+	DesktopSync           bool                            `json:"desktop_sync_enabled"`
+	IdleTimeoutMin        int64                           `json:"idle_timeout_min"`
+	TimeZone              string                          `json:"timezone"`
+	Container             config.ContainerLimits          `json:"container"`
+	Models                map[string][]config.ModelOption `json:"models"`
+	DefaultModels         map[string]string               `json:"default_models"`
+	TerminalTips          config.TerminalTips             `json:"terminal_tips"`
+	Tunnel                config.TunnelConfig             `json:"tunnel"`
+	TunnelActive          bool                            `json:"tunnel_active"`          // SOCKS 代理是否真的监听中
+	TunnelError           string                          `json:"tunnel_error,omitempty"` // 最近一次启停失败的原因
+	ProxyBridge           config.ProxyBridgeConfig        `json:"proxy_bridge"`
 	// Pricing 是「按 token 折算费用」的价目表，键是模型 id 或 agent 名。
 	// 只发给管理员——设置页本来就是 admin 才进得来。
 	Pricing         map[string]config.ModelPrice `json:"pricing"`
@@ -45,24 +48,26 @@ type settingsView struct {
 func (s *Server) settingsView() settingsView {
 	policy, _, _ := s.cfg.ImageUpdateState()
 	return settingsView{
-		ImageUpdates:    policy,
-		Resources:       s.cfg.GetResources(),
-		Listen:          s.cfg.GetListen(),
-		AgentImage:      s.cfg.GetAgentImage(),
-		PermissionMode:  s.cfg.GetPermissionMode(),
-		MaxUploadMB:     s.cfg.GetMaxUploadMB(),
-		DesktopSync:     s.cfg.GetDesktopSyncEnabled(),
-		IdleTimeoutMin:  s.cfg.GetIdleTimeoutMin(),
-		TimeZone:        s.cfg.GetTimeZone(),
-		Container:       s.cfg.GetContainer(),
-		Models:          s.cfg.GetModels(),
-		DefaultModels:   s.cfg.GetDefaultModels(),
-		TerminalTips:    s.cfg.GetTerminalTips(),
-		Tunnel:          s.cfg.GetTunnel(),
-		TunnelActive:    s.tunnels.proxyUp.Load(),
-		ProxyBridge:     s.cfg.GetProxyBridge(),
-		Pricing:         s.cfg.GetPricing(),
-		RestartRequired: s.cfg.GetListen() != s.bootListen,
+		Decision:              s.cfg.GetDecision().View(),
+		ImageUpdates:          policy,
+		Resources:             s.cfg.GetResources(),
+		Listen:                s.cfg.GetListen(),
+		AgentImage:            s.cfg.GetAgentImage(),
+		PermissionMode:        s.cfg.GetPermissionMode(),
+		MaxUploadMB:           s.cfg.GetMaxUploadMB(),
+		ChatHistoryTimeoutSec: s.cfg.GetChatHistoryTimeoutSec(),
+		DesktopSync:           s.cfg.GetDesktopSyncEnabled(),
+		IdleTimeoutMin:        s.cfg.GetIdleTimeoutMin(),
+		TimeZone:              s.cfg.GetTimeZone(),
+		Container:             s.cfg.GetContainer(),
+		Models:                s.cfg.GetModels(),
+		DefaultModels:         s.cfg.GetDefaultModels(),
+		TerminalTips:          s.cfg.GetTerminalTips(),
+		Tunnel:                s.cfg.GetTunnel(),
+		TunnelActive:          s.tunnels.proxyUp.Load(),
+		ProxyBridge:           s.cfg.GetProxyBridge(),
+		Pricing:               s.cfg.GetPricing(),
+		RestartRequired:       s.cfg.GetListen() != s.bootListen,
 	}
 }
 
@@ -84,7 +89,17 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if patch.Decision != nil && patch.Decision.Plugins != nil && patch.Decision.Plugins.Jev != nil {
+		if err := s.validateAccountAccess(patch.Decision.Plugins.Jev.Access); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if err := s.cfg.ApplySettings(patch); err != nil {
+		if errors.Is(err, config.ErrDecisionRevision) {
+			writeErr(w, http.StatusConflict, err.Error())
+			return
+		}
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}

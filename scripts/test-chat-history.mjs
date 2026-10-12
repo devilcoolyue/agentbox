@@ -5,6 +5,52 @@ import { ChatHistory } from '../internal/web/static/js/features/chat/history.js'
 function deferred() { let resolve, reject; const promise = new Promise((a,b) => {resolve=a;reject=b;}); return {promise,resolve,reject}; }
 const value = {entries:[], thread:null};
 
+test('saved timeout changes apply to subsequent requests, preserving an in-flight deadline', async t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  let timeout=30_000;
+  const requests=[];
+  const history=new ChatHistory((_path,signal)=>{
+    const pending=deferred(); requests.push({...pending,signal}); return pending.promise;
+  },()=> 'a',()=>timeout);
+  const first=history.load('a','/a',async()=>{},()=>{});
+  timeout=60_000;
+  t.mock.timers.tick(30_000);
+  assert.equal(requests[0].signal.aborted,true);
+  requests[0].resolve(value);
+  assert.equal((await first).state,'failed');
+  const second=history.load('a','/a',async()=>{},()=>{});
+  t.mock.timers.tick(30_000);
+  assert.equal(requests[1].signal.aborted,false);
+  requests[1].resolve(value);
+  assert.equal((await second).state,'loaded');
+});
+
+test('slow history remains loadable after 15 seconds and expires at 120 seconds', async t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  const requests=[];
+  const history=new ChatHistory((_path,signal)=>{
+    const pending=deferred(); requests.push({...pending,signal}); return pending.promise;
+  },()=> 'a');
+  let rendered=0;
+  const first=history.load('a','/a',async()=>{},()=>rendered++);
+  t.mock.timers.tick(119_999);
+  assert.equal(requests[0].signal.aborted,false);
+  requests[0].resolve(value);
+  assert.equal((await first).state,'loaded');
+  assert.equal(rendered,1);
+
+  const second=history.load('a','/a',async()=>{},()=>rendered++);
+  t.mock.timers.tick(119_999);
+  assert.equal(requests[1].signal.aborted,false);
+  t.mock.timers.tick(1);
+  assert.equal(requests[1].signal.aborted,true);
+  requests[1].resolve(value);
+  const result=await second;
+  assert.equal(result.state,'failed');
+  assert.equal(result.timedOut,true);
+  assert.equal(rendered,1,'late success must not overwrite history');
+});
+
 test('workspace changes and logout discard delayed responses and cancel transport', async () => {
   let current = 'a'; const requests=[]; const applied=[];
   const history = new ChatHistory((path,signal)=>{const reply=deferred(); requests.push({path,signal,...reply}); return reply.promise;},()=>current);
