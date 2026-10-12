@@ -77,7 +77,7 @@ Configuration lives in `/etc/agentbox`, data in `/var/lib/agentbox`. Each worksp
 
 ### Your first task
 
-The workspace uses a one-time, three-step tour with Skip and replay under More → Quick tour. It does not reserve workspace space. Workspace filters share one row, and draft settings live in the composer toolbar.
+The workspace uses a one-time, three-step tour with Skip and replay under More → Quick tour. It does not reserve workspace space. Workspace filters share one row. Local draft saving is managed in System settings → Appearance and tips, available to both administrators and regular users; the preference applies only to the current identity in this browser.
 
 v0.1.11 adds a role-based first-use guide: administrators check the environment, connect accounts and review defaults; users see their authorized accounts. Workspace creation refreshes access and disables submission when no account is available. See [M2 progress](docs/milestones/m2.md); this release supports empty, upload and Git project creation with persistent receipts. See [project import and recovery](docs/project-creation.md); creation receipts were introduced in schema 11, and this release also includes schema 12 chat receipts.
 
@@ -161,7 +161,7 @@ Inspect the file list and diffs, then commit the repository’s changes. Connect
 
 ### See where the usage goes
 
-Filter by time, user, agent, and model. Inspect token counts, recorded costs, pricing snapshots, and response latency; export records to CSV. Administrators can manage pricing and credit balances.
+Filter by time, user, agent, and model. Inspect token counts, recorded costs, pricing snapshots, reasoning effort, and response latency; export records to CSV. Claude Code and Codex CLI terminal records include effort when their transcripts report a consistent value for the turn; retained transcripts are rescanned to fill older records. Missing or conflicting values remain unspecified. Administrators can manage pricing and credit balances.
 
 [![Usage records with filters, costs, token counts, and latency](docs/images/usage.png)](docs/images/usage.png)
 

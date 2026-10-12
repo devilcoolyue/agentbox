@@ -1,0 +1,2 @@
+ALTER TABLE usage_events ADD COLUMN effort TEXT NOT NULL DEFAULT '';
+ALTER TABLE usage_events ADD COLUMN effort_control TEXT NOT NULL DEFAULT '';

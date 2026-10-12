@@ -102,16 +102,17 @@ try{
   const confirm=async()=>{await page.locator('#dlg-ask').waitFor({state:'visible'});await page.locator('#ask-ok').click();};
   const records=()=>page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('agentbox.chat-outbox.v1.')).map(k=>JSON.parse(localStorage.getItem(k))));
   const input=page.locator('#chat-input');
+  const setSaving=async enabled=>{await page.locator('#btn-settings').click();await page.locator('#chat-draft-enabled').setChecked(enabled);await go('space-a');};
   try{
    await page.goto(base);await page.locator('#login-user').fill('alice');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');
    // All visible tools have the same icon and hit target; no draft caption. Voice is
    // hidden without Web Speech (Playwright WebKit, Firefox); Chromium must keep it.
    const speech=await page.evaluate(()=>Boolean(window.SpeechRecognition||window.webkitSpeechRecognition));
    if(browserEngine()==='chromium')assert.ok(speech,'Chromium lost Web Speech; the voice tool would be hidden');
-   const tools=await page.locator('#btn-attach, #btn-voice, #chat-draft-options summary').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect(),s=node.querySelector('svg').getBoundingClientRect();return {width:r.width,height:r.height,iconWidth:s.width,iconHeight:s.height,text:node.textContent.trim()};}));
-   assert.equal(tools.length,3);assert.equal(tools[0].iconWidth,18);assert.equal(tools[0].text,'');
-   if(speech)assert.deepEqual(tools,[tools[0],tools[0],tools[0]]);
-   else{assert.deepEqual(tools[1],{width:0,height:0,iconWidth:0,iconHeight:0,text:''});assert.deepEqual(tools[2],tools[0]);}
+   const tools=await page.locator('#btn-attach, #btn-voice').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect(),s=node.querySelector('svg').getBoundingClientRect();return {width:r.width,height:r.height,iconWidth:s.width,iconHeight:s.height,text:node.textContent.trim()};}));
+   assert.equal(tools.length,2);assert.equal(await page.locator('#chat-draft-options').count(),0);assert.equal(tools[0].iconWidth,18);assert.equal(tools[0].text,'');
+   if(speech)assert.deepEqual(tools,[tools[0],tools[0]]);
+   else assert.deepEqual(tools[1],{width:0,height:0,iconWidth:0,iconHeight:0,text:''});
    if(locale==='zh-CN'){await mkdir('output/playwright',{recursive:true});await page.screenshot({path:'output/playwright/composer-idle-desktop.png'});}
    // Model edits during attachment validation require another explicit send.
    await page.locator('#attach-input').setInputFiles({name:'fixture.txt',mimeType:'text/plain',buffer:Buffer.from('synthetic attachment')});await page.waitForFunction(()=>!document.querySelector('#chat-send').disabled);
@@ -156,12 +157,12 @@ try{
    await page.locator('#attach-input').setInputFiles({name:'fixture.txt',mimeType:'text/plain',buffer:Buffer.from('synthetic recovery attachment')});await page.waitForFunction(()=>!document.querySelector('#chat-send').disabled);
    const beforeDenied=puts.length;await input.fill('Storage denied task [File #1]');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});assert.equal(puts.length,beforeDenied);assert.equal(await input.inputValue(),'Storage denied task [File #1]');
    const denied=await page.locator('.delivery-item[data-state="unconfirmed"]').getAttribute('data-request-id');
-   await page.locator('#chat-draft-options summary').click();await page.locator('#chat-draft-enabled').uncheck();await action(denied,'重试原消息');await state(denied,'running');assert.equal((await records()).length,0);
+   await setSaving(false);await action(denied,'重试原消息');await state(denied,'running');assert.equal((await records()).length,0);
    const beforeOffReload=puts.length;await page.reload();await ready();await state(denied,'running');assert.equal(puts.length,beforeOffReload);
    update('space-a',denied,'uncertain');await state(denied,'uncertain');await action(denied,'已检查结果，继续');await confirm();await state(denied,'reviewed');
    attachmentsValid=false;await action(denied,'复制回输入框');await page.locator('.attachment-invalid').waitFor();assert.equal(await page.locator('#chat-send').isDisabled(),true,'server-only recovery lost attachment validation');assert.equal(puts.length,beforeOffReload);
    await page.locator('#chat-attach button').click();await input.fill('');await action(denied,'关闭状态');attachmentsValid=true;
-   await page.locator('#chat-draft-options summary').click();await page.locator('#chat-draft-enabled').check();
+   await setSaving(true);
    // Late acknowledgement belongs to the old workspace and cannot clear new editing.
    // A local unconfirmed row precedes HTTP delivery. Wait for this fixture's
    // actual acceptance/held response, otherwise puts.at(-1) may be the prior ID.

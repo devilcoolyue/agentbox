@@ -68,9 +68,8 @@ type usageRowView struct {
 	SourceSessionName string                    `json:"source_session_name,omitempty"`
 	Provider          string                    `json:"provider,omitempty"`
 	Billing           string                    `json:"billing"`
-	// Effort / EffortControl: the reasoning effort the web turn was sent with,
-	// read from its chat receipt. Empty for terminal and title rows and for
-	// turns without an explicit effort.
+	// Effort / EffortControl comes from the web turn's chat receipt or the CLI
+	// terminal transcript. Missing or mixed terminal settings stay unknown.
 	Effort        string `json:"effort,omitempty"`
 	EffortControl string `json:"effort_control,omitempty"`
 
@@ -297,6 +296,9 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 			TTFTMs:           e.TTFTMs,
 			Rate:             s.rateFor(e),
 		})
+		if e.Kind == store.UsageKindTerminal {
+			rows[len(rows)-1].Effort, rows[len(rows)-1].EffortControl = e.Effort, e.EffortControl
+		}
 	}
 	turns := make([]string, 0, len(rows))
 	for _, r := range rows {

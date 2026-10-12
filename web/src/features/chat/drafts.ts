@@ -13,7 +13,11 @@ export function initComposerDrafts(hooks:{read:()=>Draft;apply:(draft:Draft)=>vo
  const invalid=()=>hooks.read().attachments.some(a=>!a.path||a.valid===false);
  const render=()=>{
   enabled.checked=storage.supported&&storage.enabled;enabled.disabled=!storage.supported;
-  $<HTMLButtonElement>("chat-draft-check").disabled=checking||!context||!hooks.read().attachments.length;
+  const check=$<HTMLButtonElement>("chat-draft-check");
+  check.disabled=checking||!context||!hooks.read().attachments.length;
+  check.classList.toggle("hidden",!invalid());
+  setTextRender($("chat-draft-settings-status"),()=>storage.error?t("草稿暂未保存到本机，请复制文本或检查浏览器存储空间。"):!storage.supported?t("此服务端暂不支持持久草稿隔离，内容仅保留在当前页面。"):"");
+  $("chat-draft-settings-status").classList.toggle("hidden",!(storage.error||!storage.supported));
   setTextRender($("chat-draft-status"),()=>storage.error?t("草稿暂未保存到本机，请复制文本或检查浏览器存储空间。"):!storage.supported?t("此服务端暂不支持持久草稿隔离，内容仅保留在当前页面。"):!storage.enabled?t("本机保存已关闭，内容仅保留在当前页面。"):checking?t("正在检查草稿附件…"):notice?t(notice):t("草稿保存在此浏览器 7 天；退出登录会清除。"));
   $("chat-draft-status").classList.toggle("hidden",!(storage.error||!storage.supported||!storage.enabled||checking||notice));
   hooks.changed();
@@ -46,7 +50,6 @@ export function initComposerDrafts(hooks:{read:()=>Draft;apply:(draft:Draft)=>vo
   }finally{if(validation===controller){validation=undefined;checking=false;render();}}
  };
  const leave=()=>{
-  $<HTMLDetailsElement>("chat-draft-options").open=false;
   save();++epoch;validation?.abort();validation=undefined;checking=false;context=undefined;notice="";
   applying=true;hooks.apply({text:"",attachments:[]});applying=false;render();
  };
@@ -54,8 +57,6 @@ export function initComposerDrafts(hooks:{read:()=>Draft;apply:(draft:Draft)=>vo
  $("chat-draft-clear").addEventListener("click",()=>{if(!owns())return;storage.clear();storage.setEnabled(false);notice="";render();window.dispatchEvent(new CustomEvent("chat-local-saving-changed",{detail:{enabled:false}}));},{signal:lifetime.signal});
  $("chat-draft-check").addEventListener("click",()=>void validate(),{signal:lifetime.signal});
  window.addEventListener("storage",event=>{if(event.key?.includes("chat-draft.v1.")&&owns())render();},{signal:lifetime.signal});
- document.addEventListener("pointerdown",event=>{const details=$<HTMLDetailsElement>("chat-draft-options");if(!details.contains(event.target as Node))details.open=false;},{signal:lifetime.signal});
- $("chat-draft-options").addEventListener("keydown",event=>{if(event.key==="Escape"){event.stopPropagation();$<HTMLDetailsElement>("chat-draft-options").open=false;$("chat-draft-options").querySelector("summary")!.focus();}},{signal:lifetime.signal});
  document.addEventListener("visibilitychange",()=>{if(document.hidden)save();},{signal:lifetime.signal});
  render();
  return {
@@ -73,7 +74,7 @@ export function initComposerDrafts(hooks:{read:()=>Draft;apply:(draft:Draft)=>vo
    if(S.token!==owner){if(S.preserveChatCopiesOnSignout)storage.forget();else storage.clear();}else save();
    active=false;lifetime.abort();validation?.abort();context=undefined;
    applying=true;hooks.apply({text:"",attachments:[]});applying=false;
-   $("chat-draft-status").textContent="";enabled.checked=false;
+   $("chat-draft-status").textContent="";$("chat-draft-settings-status").textContent="";enabled.checked=false;
   },
  };
 }

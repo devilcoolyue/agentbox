@@ -3,6 +3,7 @@ package usage
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"agentbox/internal/store"
@@ -33,6 +34,30 @@ func writeFixture(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestClaudeTerminalEffortUsesRecordedEffectiveValue(t *testing.T) {
+	fixture := strings.ReplaceAll(termFixture, `"type":"assistant",`, `"type":"assistant","effort":"xhigh","perTurnEffort":"low",`)
+	for name, raw := range map[string]string{
+		"recorded":       fixture,
+		"missing":        strings.ReplaceAll(fixture, `"effort":"xhigh",`, ""),
+		"unknown shape":  strings.ReplaceAll(fixture, `"effort":"xhigh"`, `"effort":{"future":true}`),
+		"mixed requests": strings.Replace(fixture, `"effort":"xhigh","perTurnEffort":"low","entrypoint":"cli","uuid":"a2"`, `"effort":"high","perTurnEffort":"low","entrypoint":"cli","uuid":"a2"`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rows, err := parseTerminalReader(strings.NewReader(raw))
+			if err != nil || len(rows) != 2 || rows[0].ev.OutputTokens != 150 {
+				t.Fatalf("effort changed usage: %+v, %v", rows, err)
+			}
+			want := ""
+			if name == "recorded" {
+				want = "xhigh"
+			}
+			if rows[0].ev.Effort != want || (want != "" && rows[0].ev.EffortControl != "effort") || (want == "" && rows[0].ev.EffortControl != "") {
+				t.Fatalf("effort = %+v, want %q", rows[0].ev, want)
+			}
+		})
+	}
 }
 
 // Fixtures are service-owned; production opens transcripts through safefs.
@@ -131,7 +156,8 @@ func TestScanTerminalUsage(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "abc.jsonl"), []byte(termFixture), 0o600); err != nil {
+	fixture := strings.ReplaceAll(termFixture, `"type":"assistant",`, `"type":"assistant","effort":"xhigh",`)
+	if err := os.WriteFile(filepath.Join(dir, "abc.jsonl"), []byte(fixture), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -145,6 +171,9 @@ func TestScanTerminalUsage(t *testing.T) {
 	for _, r := range rows {
 		if r.User != sess.User || r.SessionID != sess.ID || r.AccountID != sess.AccountID {
 			t.Errorf("归属错了：%+v", r)
+		}
+		if r.Effort != "xhigh" || r.EffortControl != "effort" {
+			t.Errorf("transcript effort not persisted: %+v", r)
 		}
 	}
 

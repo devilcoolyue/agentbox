@@ -1,5 +1,11 @@
 // Authored interface text only; never translate user content.
 export default {
+  "此浏览器的个人偏好；管理员还可调整全站界面与提示。": "Personal preferences for this browser. Administrators can also adjust site-wide display settings and tips.",
+  "仅影响当前账号在此浏览器的输入与待确认内容，修改后即时生效。": "Only affects the current account’s drafts and unconfirmed messages in this browser. Changes apply immediately.",
+  "账号池、服务端配置与此浏览器的个人偏好。需要重启的项会单独标出。": "Account pool, server configuration and personal preferences for this browser. Settings that require a restart are marked.",
+  "此浏览器的个人偏好，修改后即时生效。": "Personal preferences for this browser. Changes apply immediately.",
+  "普通用户只能访问自己的工作空间和本机偏好，无法查看服务端配置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。": "Users can only access their own workspaces and local preferences, not server configuration. Deleting a user also removes their workspaces and containers; files remain on the server disk.",
+
   "设置团队": "Configure team",
   "执行方式": "Execution mode",
   "普通对话": "Regular chat",

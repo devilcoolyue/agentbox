@@ -22,14 +22,14 @@ const browser=await launchBrowser();
 try{
  for(const locale of ['zh-CN','zh-TW','en']){
   const context=await browser.newContext({viewport:{width:1280,height:900}});const page=await context.newPage();page.setDefaultTimeout(12000);
-  const errors=[],sent=[],sockets=new Map(),allSockets=new Set();let identity='alice',holdUpload=false;const uploads=[],validPaths=new Set();let uploadCount=0;
+  const errors=[],sent=[],requests=[],sockets=new Map(),allSockets=new Set();let identity='alice',holdUpload=false;const uploads=[],validPaths=new Set();let uploadCount=0;
   const threads={'space-a':'thread-one','space-b':'thread-one'};
   const spaces=['a','b'].map(id=>({id:'space-'+id,name:'Space '+id.toUpperCase(),user:'alice',agent:'codex',account_id:'fixture',account_label:'Fixture',status:'stopped',default_model:'fixture'}));
   await context.addInitScript(locale=>{if(window===window.top&&/^https?:$/.test(location.protocol))localStorage.setItem('agentbox.language',locale);},locale);
   context.on('page',p=>p.on('pageerror',e=>errors.push(e.message)));page.on('pageerror',e=>errors.push(e.message));
   await context.routeWebSocket('**/api/sessions/*/chat?*',ws=>{const id=new URL(ws.url()).pathname.split('/')[3];sockets.set(id,ws);allSockets.add(ws);ws.onClose(()=>allSockets.delete(ws));ws.send(JSON.stringify({type:'status',state:'idle'}));ws.onMessage(raw=>sent.push(JSON.parse(String(raw))));});
   await context.route('**/api/**',async route=>{
-   const request=route.request(),url=new URL(request.url()),path=url.pathname,id=path.split('/')[3];let body={};
+   const request=route.request(),url=new URL(request.url()),path=url.pathname,id=path.split('/')[3];requests.push(path);let body={};
    if(path==='/api/login')body={token:identity+'-token'};
    else if(path==='/api/me')body={user:identity,role:'user',draft_scope:(identity==='alice'?'a':'b').repeat(64),draft_protocol:1,timezone:'UTC',models:{codex:[{id:'fixture',label:'Fixture'}]},quota:{metered:false}};
    else if(path==='/api/sessions')body=spaces;
@@ -50,8 +50,25 @@ try{
   const ready=async p=>{await p.locator('#chat-input').waitFor({state:'visible'});await p.waitForFunction(()=>!document.querySelector('#chat-input').disabled);};
   const go=async(id,p=page)=>{await p.evaluate(id=>location.hash=`#/sessions/${id}/chat`,id);await p.waitForFunction(name=>document.querySelector('#wb-name').textContent===name,id==='space-a'?'Space A':'Space B');await ready(p);};
   const input=page.locator('#chat-input');
+  const settings=async()=>{await page.evaluate(()=>location.hash='#/settings/interface');await page.locator('#set-local-saving').waitFor({state:'visible'});};
+  const setSaving=async enabled=>{await settings();await page.locator('#chat-draft-enabled').setChecked(enabled);await go('space-a');};
   try{
    await page.goto(base);await page.locator('#login-user').fill('alice');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');
+   assert.equal(await page.locator('#chat-draft-options, .composer #chat-draft-enabled').count(),0,'saving control remained in the composer');
+   await page.locator('#btn-settings').click();await page.locator('#set-local-saving').waitFor({state:'visible'});
+   assert.equal(new URL(page.url()).hash,'#/settings/interface');
+   assert.deepEqual(await page.locator('#set-nav button:not(.hidden)').evaluateAll(nodes=>nodes.map(n=>n.dataset.sec)),['interface']);
+   assert.equal(await page.locator('#set-timezone').isVisible(),false);
+   assert.equal(await page.locator('#chat-draft-enabled').isChecked(),true);
+   // Ordinary users normalize privileged routes to their local preferences, including reload.
+   await page.evaluate(()=>location.hash='#/settings/security');await page.waitForFunction(()=>location.hash==='#/settings/interface');
+   await page.reload();await page.locator('#set-local-saving').waitFor({state:'visible'});
+   await page.setViewportSize({width:390,height:844});await page.locator('#mobile-section-btn').click();
+   assert.equal(await page.locator('#mobile-section-menu [role=menuitemradio]').count(),1);
+   await page.locator('#mobile-section-menu [role=menuitemradio]').click();
+   assert.equal(await page.locator('#sec-interface').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'local preferences overflow on mobile');
+   if(locale==='en'){await mkdir('output/playwright',{recursive:true});await page.screenshot({path:'output/playwright/local-saving-settings-mobile.png',animations:'disabled'});}
+   await page.setViewportSize({width:1280,height:900});await go('space-a');
    await input.fill('A private draft');await go('space-b');assert.equal(await input.inputValue(),'');await input.fill('B private draft');await go('space-a');assert.equal(await input.inputValue(),'A private draft');
    await page.reload();await ready(page);assert.equal(await input.inputValue(),'A private draft');
    const peer=await context.newPage();peer.setDefaultTimeout(12000);await peer.goto(base+'/#/sessions/space-a/chat');await ready(peer);
@@ -84,9 +101,10 @@ try{
    assert.equal(await page.locator('#chat-draft-status').innerText(),failure);
    await page.evaluate(()=>window.denyDraft=false);await input.fill('Saved after retry');await page.reload();await ready(page);assert.equal(await input.inputValue(),'Saved after retry');
    // Turning saving off clears all persisted copies but keeps current editing.
-   await page.locator('#chat-draft-options summary').click();await page.locator('#chat-draft-enabled').uncheck();assert.equal(await input.inputValue(),'Saved after retry');
+   await settings();await page.locator('#chat-draft-clear').click();await go('space-a');assert.equal(await input.inputValue(),'Saved after retry');
+   await setSaving(true);await setSaving(false);assert.equal(await input.inputValue(),'Saved after retry');
    await page.reload();await ready(page);assert.equal(await input.inputValue(),'');
-   await page.locator('#chat-draft-options summary').click();await page.locator('#chat-draft-enabled').check();await input.fill('Expired draft');
+   await setSaving(true);await input.fill('Expired draft');
    await page.goto(base+'/storage-helper');
    await page.evaluate(()=>{for(const key of Object.keys(localStorage)){if(!key.startsWith('agentbox.chat-draft.v1.')||key.endsWith('.enabled'))continue;const value=JSON.parse(localStorage.getItem(key));value.updated=Date.now()-8*24*60*60*1000;localStorage.setItem(key,JSON.stringify(value));}});
    await page.goto(base+'/#/sessions/space-a/chat');await ready(page);assert.equal(await input.inputValue(),'');
@@ -98,6 +116,7 @@ try{
    assert.equal(await page.evaluate(()=>Object.entries(localStorage).some(([k,v])=>k.startsWith('agentbox.chat-draft.v1.')&&!k.endsWith('.enabled')&&v.includes('private draft'))),false);
    identity='bob';await page.locator('#login-user').fill('bob');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');assert.equal(await input.inputValue(),'');
    assert.equal(sent.length,0,'draft restoration invoked a model');assert.deepEqual(errors,[]);
+   assert.deepEqual(requests.filter(path=>/^\/api\/(settings|users|proxies|system|monitor|image-updates)(\/|$)/.test(path)),[],'ordinary-user settings requested privileged APIs');
    console.log(`Drafts ${locale}: scoped reload, multi-tab, threads, upload cancellation, reference validation, denied storage, opt-out, expiry and logout passed`);
   }catch(error){console.error(`Drafts ${locale} failed:`,error);throw error;
   }finally{

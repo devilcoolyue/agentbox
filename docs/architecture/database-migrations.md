@@ -21,8 +21,9 @@ SQLite 使用 `PRAGMA user_version` 记录 schema。迁移按 `internal/store/mi
 | 14（开发中，未发布） | collaboration_threads：将协作任务绑定到来源空间的具体对话和历史锚点，附带补充动作采用版本、普通聊天冻结协作材料与文件应用回执；旧任务保持未绑定。 |
 | 15（已实现，未发布） | collaboration_decisions/decision_attempts 保存新自动意图快照、主辅整组决定、唯一外发尝试、费用预留与可核对证据；collaboration_decision_defaults 保存空间插件偏好。旧请求和已冻结模型不重新选择。 |
 | 16（已发布生产开发预览 `.15`） | collaboration_participants 增加原生线程/代际的上下文确认游标，collaboration_review_evidence 冻结同一快照与配置版本的评审差异；新请求可冻结 direct/reviewed 策略，旧任务不改流程，历史用量不重算。 |
+| 17 | usage_events 增加 effort / effort_control，保存终端日志中实际记录的推理强度；旧行默认留空，扫描现存原始日志后原位补齐，不拆分旧行、不改历史价格或余额。 |
 
-当前工作树及生产 `.15` 使用 schema 16；升级前 `.14` 为 schema 15，兼容备份和旧版本已保留。只支持 15 或更低版本的旧二进制无法打开新库。协作仍在开发，不能将迁移成功当作功能或发布验收；回退须恢复升级前的兼容备份。协作元数据随数据库备份，full 恢复保留任务文件并解绑原实例运行环境与上下文确认游标，system 恢复标记产物缺失且不可继续；未来动作 scope 在新实例启动时审计更新，原创建/动作输入不改写。恢复工具不迁移备份数据库，也不将独立快照切回 WAL；没有协作表的旧库按原 schema 恢复，含协作表但 schema 与工具不匹配时，在发布恢复目录前拒绝，须使用与备份匹配的 agentbox 版本恢复。相关实现与剩余验收见[协作减重记录](../milestones/collaboration-lightweight-20261012.md)。
+当前工作树使用 schema 17，上一生产开发预览使用 schema 16。升级前应取得并验证 schema 16 的兼容备份；升级后只支持 16 或更低版本的旧二进制无法打开新库。协作仍在开发，不能将迁移成功当作功能或发布验收；回退须恢复升级前的兼容备份。协作元数据随数据库备份，full 恢复保留任务文件并解绑原实例运行环境与上下文确认游标，system 恢复标记产物缺失且不可继续；未来动作 scope 在新实例启动时审计更新，原创建/动作输入不改写。恢复工具不迁移备份数据库，也不将独立快照切回 WAL；没有协作表的旧库按原 schema 恢复，含协作表但 schema 与工具不匹配时，在发布恢复目录前拒绝，须使用与备份匹配的 agentbox 版本恢复。相关实现与剩余验收见[协作减重记录](../milestones/collaboration-lightweight-20261012.md)。
 
 v0.1.11 首次启动将 schema 10/11 升至 12。schema 12 的聊天存储层已接入 HTTP v1 与原执行器；浏览器现已接入冻结待确认副本、查询优先恢复和显式核对。服务初始化在连接 Docker 前，将残留 accepted/starting/running 聊天回执改为 uncertain；不从这些记录重放任务。状态转换使用修订号，旧执行者不能覆盖重启恢复后的记录。会话创建和默认 Git 绑定与收据完成仍在同一事务提交；文件发布与数据库之间不是一个事务，无法确认的导入保持 uncertain，须人工核对后继续。服务重启将残留 running 导入改为 uncertain，不自动重跑。
 

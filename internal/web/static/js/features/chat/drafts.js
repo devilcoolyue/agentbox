@@ -18,7 +18,11 @@ export function initComposerDrafts(hooks) {
     const render = () => {
         enabled.checked = storage.supported && storage.enabled;
         enabled.disabled = !storage.supported;
-        $("chat-draft-check").disabled = checking || !context || !hooks.read().attachments.length;
+        const check = $("chat-draft-check");
+        check.disabled = checking || !context || !hooks.read().attachments.length;
+        check.classList.toggle("hidden", !invalid());
+        setTextRender($("chat-draft-settings-status"), () => storage.error ? t("草稿暂未保存到本机，请复制文本或检查浏览器存储空间。") : !storage.supported ? t("此服务端暂不支持持久草稿隔离，内容仅保留在当前页面。") : "");
+        $("chat-draft-settings-status").classList.toggle("hidden", !(storage.error || !storage.supported));
         setTextRender($("chat-draft-status"), () => storage.error ? t("草稿暂未保存到本机，请复制文本或检查浏览器存储空间。") : !storage.supported ? t("此服务端暂不支持持久草稿隔离，内容仅保留在当前页面。") : !storage.enabled ? t("本机保存已关闭，内容仅保留在当前页面。") : checking ? t("正在检查草稿附件…") : notice ? t(notice) : t("草稿保存在此浏览器 7 天；退出登录会清除。"));
         $("chat-draft-status").classList.toggle("hidden", !(storage.error || !storage.supported || !storage.enabled || checking || notice));
         hooks.changed();
@@ -74,7 +78,6 @@ export function initComposerDrafts(hooks) {
         }
     };
     const leave = () => {
-        $("chat-draft-options").open = false;
         save();
         ++epoch;
         validation?.abort();
@@ -95,13 +98,6 @@ export function initComposerDrafts(hooks) {
     $("chat-draft-check").addEventListener("click", () => void validate(), { signal: lifetime.signal });
     window.addEventListener("storage", event => { if (event.key?.includes("chat-draft.v1.") && owns())
         render(); }, { signal: lifetime.signal });
-    document.addEventListener("pointerdown", event => { const details = $("chat-draft-options"); if (!details.contains(event.target))
-        details.open = false; }, { signal: lifetime.signal });
-    $("chat-draft-options").addEventListener("keydown", event => { if (event.key === "Escape") {
-        event.stopPropagation();
-        $("chat-draft-options").open = false;
-        $("chat-draft-options").querySelector("summary").focus();
-    } }, { signal: lifetime.signal });
     document.addEventListener("visibilitychange", () => { if (document.hidden)
         save(); }, { signal: lifetime.signal });
     render();
@@ -141,6 +137,7 @@ export function initComposerDrafts(hooks) {
             hooks.apply({ text: "", attachments: [] });
             applying = false;
             $("chat-draft-status").textContent = "";
+            $("chat-draft-settings-status").textContent = "";
             enabled.checked = false;
         },
     };

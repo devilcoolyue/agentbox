@@ -82,7 +82,7 @@ function syncNavigation() {
             sectionMenu.hidePopover();
         return;
     }
-    const buttons = [...nav.querySelectorAll("button")];
+    const buttons = [...nav.querySelectorAll("button:not(.hidden)")];
     const focused = sectionMenu.contains(document.activeElement) ? menuItems().indexOf(document.activeElement) : -1;
     sectionMenu.replaceChildren(...buttons.map((button, index) => {
         const item = document.createElement("button");
@@ -133,7 +133,7 @@ sectionMenu.addEventListener("click", event => {
         return;
     sectionMenu.hidePopover();
     sectionButton.focus({ preventScroll: true });
-    currentNav()?.querySelectorAll("button")[Number(item.dataset.index)]?.click();
+    currentNav()?.querySelectorAll("button:not(.hidden)")[Number(item.dataset.index)]?.click();
 });
 sectionMenu.addEventListener("keydown", event => {
     const items = menuItems();

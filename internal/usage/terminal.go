@@ -54,11 +54,12 @@ const termEntrypointCLI = "cli"
 
 // termTranscriptRec 是 transcript 里我们关心的那几个字段。
 type termTranscriptRec struct {
-	Type       string `json:"type"`
-	Entrypoint string `json:"entrypoint"`
-	UUID       string `json:"uuid"`
-	RequestID  string `json:"requestId"`
-	Timestamp  string `json:"timestamp"`
+	Type       string          `json:"type"`
+	Entrypoint string          `json:"entrypoint"`
+	UUID       string          `json:"uuid"`
+	RequestID  string          `json:"requestId"`
+	Timestamp  string          `json:"timestamp"`
+	Effort     json.RawMessage `json:"effort"`
 	Message    struct {
 		ID         string `json:"id"`
 		Model      string `json:"model"`
@@ -80,6 +81,34 @@ type termTurn struct {
 	model string
 	ts    time.Time
 	ev    store.UsageEvent
+}
+
+// transcriptEffort accepts only recorded CLI effort levels. Unknown shapes
+// must not discard the usage record or be replaced with today's CLI settings.
+func transcriptEffort(raw json.RawMessage) string {
+	var effort string
+	if json.Unmarshal(raw, &effort) != nil {
+		return ""
+	}
+	switch effort {
+	case "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra":
+		return effort
+	default:
+		return ""
+	}
+}
+
+// mergeEffort preserves the turn/model grouping and its stable dedup key. If
+// requests in one row disagree or omit effort, no single setting describes it.
+func (t *termTurn) mergeEffort(effort string, first bool) {
+	if first {
+		t.ev.Effort = effort
+		if effort != "" {
+			t.ev.EffortControl = "effort"
+		}
+	} else if t.ev.Effort != effort {
+		t.ev.Effort, t.ev.EffortControl = "", ""
+	}
 }
 
 // termScanner 扫描进度：路径 → 上次看到的大小与修改时间。文件没动过就整个跳过，
@@ -425,6 +454,7 @@ func parseTerminalReader(f io.Reader) ([]termTurn, error) {
 			r.ev = store.UsageEvent{
 				InputTokens: u.Input, OutputTokens: u.Output,
 				CacheReadTokens: u.CacheRead, CacheWriteTokens: u.CacheWrite,
+				Effort: transcriptEffort(rec.Effort),
 			}
 			r.k = k
 			// 时间相反，取最早那份：重复记录是同一次调用流式写了两遍，
@@ -446,6 +476,7 @@ func parseTerminalReader(f io.Reader) ([]termTurn, error) {
 			acc[r.k] = t
 			order = append(order, r.k)
 		}
+		t.mergeEffort(r.ev.Effort, !ok)
 		t.ev.InputTokens += r.ev.InputTokens
 		t.ev.OutputTokens += r.ev.OutputTokens
 		t.ev.CacheReadTokens += r.ev.CacheReadTokens

@@ -227,6 +227,23 @@ export async function smoke(page) {
   assert.deepEqual(await page.locator('#usage-rows .u-sess').allInnerTexts(),['Source project','deleted-source']);
   await page.locator('#uf-kind').selectOption('',{force:true});
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===6);
+  // Terminal effort comes from the transcript, and survives display and CSV export.
+  usageRows.push(
+    {...usageRows[0],id:7,kind:'terminal',agent:'codex',provider:'',effort:'high',effort_control:'effort'},
+    {...usageRows[0],id:8,kind:'terminal',agent:'claude',provider:'',effort:'max',effort_control:'effort'},
+  );
+  await page.locator('#uf-kind').selectOption('terminal',{force:true});
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===2);
+  assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['High','Max']);
+  const terminalDownload=page.waitForEvent('download');
+  await page.locator('#uf-export').click();
+  const terminalCSV=await readFile(await(await terminalDownload).path(),'utf8');
+  const terminalLines=terminalCSV.trim().split('\r\n').map(line=>line.split(','));
+  const terminalEffortColumn=terminalLines[0].indexOf('思考强度');
+  assert.ok(terminalEffortColumn>=0);
+  assert.deepEqual(terminalLines.slice(1).map(row=>row[terminalEffortColumn]),['High','Max']);
+  await page.locator('#uf-kind').selectOption('',{force:true});
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===8);
   if(process.env.AGENTBOX_USAGE_SCREENSHOTS) {
     await mkdir('output/playwright',{recursive:true});
     await page.screenshot({path:'output/playwright/usage-cache-desktop.png',animations:'disabled'});
@@ -819,7 +836,9 @@ export async function smoke(page) {
   await page.reload();
   await page.locator('#app').waitFor({state:'visible'});
   await page.goto(base + '/#/settings/security');
-  await at('#/','#empty');
+  await at('#/settings/interface','#set-local-saving');
+  assert.equal(await page.locator('#sec-security').isVisible(),false);
+  assert.deepEqual(await page.locator('#set-nav button:not(.hidden)').evaluateAll(nodes=>nodes.map(node=>node.dataset.sec)),['interface']);
   await page.goto(base + '/#/sessions/%E0%A4%A/files');
   await at('#/','#empty'); // Malformed URL must not break initialization.
   assert.equal(await page.locator('#version-badge').isVisible(),false);

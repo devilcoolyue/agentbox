@@ -64,14 +64,14 @@ export function createSettingsController() {
 /* ---------------- 视图入口与二级导航 ---------------- */
 
 async function openSettingsView() {
-  if (S.role !== "admin") return; // 普通用户无入口，这里再兜一道
+  if (!scope.current()) return;
   showView("settings");
   setSec(S.sec || "accounts");
+  if (role !== "admin") return; // Personal browser preferences require no admin API.
   renderSettingsAccounts();
   // 停在别的分区时也要把 IP 代理的条数拉出来：左侧计数是给管理员扫一眼用的，
   // 停在 0 上等人点开就是假信息。分区本身进来时自己会拉。
   if (S.sec !== "proxies") refreshProxyCount();
-  const scope=requests;if(!scope)return;
   try {
     const value=await scope.read<Settings>();if(!value)return;
     settingsState.value=value;
@@ -88,6 +88,7 @@ async function openSettingsView() {
 
 
 function setSec(name: string) {
+  if (role !== "admin") name = "interface";
   S.sec = name;
   emit("navigation-changed");
   for (const b of document.querySelectorAll<HTMLElement>("#set-nav button")) {
@@ -148,7 +149,7 @@ function acctStateSeg(a: Account): [string, string, string] {
 }
 
 function renderSettingsAccounts() {
-  if(!scope.current())return;
+  if(!scope.current()||role!=="admin")return;
   $("set-acct-count").textContent = String(S.accounts.length);
   const box = $("acct-list-box");
   box.replaceChildren();
@@ -815,21 +816,26 @@ function initSaveBar(signal: AbortSignal) {
 }
 
 function initSettings() {
- initDecisionSettings(lifetime.signal);
- initSettingsMaintenance(lifetime.signal,scope);
- initImageUpdates(lifetime.signal);
- initSaveBar(lifetime.signal);
- bus.addEventListener("view-changed", () => { if (S.view !== "settings") { stopMonitor();stopSystem(); stopImageUpdates(); } }, { signal: lifetime.signal });
+ for (const el of document.querySelectorAll<HTMLElement>("[data-settings-admin]")) el.classList.toggle("hidden", role !== "admin");
+ setTextRender($("set-description"), () => role === "admin" ? i18nText("账号池、服务端配置与此浏览器的个人偏好。需要重启的项会单独标出。") : i18nText("此浏览器的个人偏好，修改后即时生效。"));
+ $("set-savebar").hidden = true;
  $("set-nav").addEventListener("click", async (e) => {
   const btn = (e.target as Element).closest<HTMLElement>("button[data-sec]");
   if (!btn) return;
-  if (btn.dataset.sec !== S.sec && !await confirmDiscard(fillSettingsForms)) {
+  if (role === "admin" && btn.dataset.sec !== S.sec && !await confirmDiscard(fillSettingsForms)) {
     emit("navigation-changed"); // 让窄屏分区下拉回到当前分区
     return;
   }
   if(scope.current())setSec(btn.dataset.sec!);
 }, { signal: lifetime.signal });
 bus.addEventListener("open-settings", openSettingsView, { signal: lifetime.signal });
+// Keep privileged controls, requests and polling outside the ordinary user's lifetime.
+if (role !== "admin") return disposeSettings;
+initDecisionSettings(lifetime.signal);
+initSettingsMaintenance(lifetime.signal,scope);
+initImageUpdates(lifetime.signal);
+initSaveBar(lifetime.signal);
+bus.addEventListener("view-changed", () => { if (S.view !== "settings") { stopMonitor();stopSystem(); stopImageUpdates(); } }, { signal: lifetime.signal });
 bus.addEventListener("data-updated", () => {
   if (S.view === "settings") { renderSettingsAccounts(); refreshModelDisplay(); }
 }, { signal: lifetime.signal });
@@ -1035,14 +1041,16 @@ $("btn-pw-save").addEventListener("click", async () => {
     btnDone($("btn-pw-save"));
   }
 }, { signal: lifetime.signal });
- return () => {
+ return disposeSettings;
+}
+
+function disposeSettings() {
   if(lifetime.signal.aborted)return;
   scope.dispose();lifetime.abort();stopMonitor();stopSystem();stopImageUpdates();
   for(const button of busyButtons)baseDone(button);busyButtons.clear();
   for(const id of ['dlg-auth','dlg-acct-edit','dlg-acct-del'])$<HTMLDialogElement>(id).close();
   $<HTMLInputElement>('auth-apikey').value='';$<HTMLTextAreaElement>('acct-env').value='';
   resetAuthCode();authAcct=null;editAcct=null;delAcct=null;
- };
 }
 
  const dispose=initSettings();

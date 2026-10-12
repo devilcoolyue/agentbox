@@ -77,7 +77,7 @@ export async function tryEnter() {
     renderMyQuota();
     emit("tips-updated"); // 让 term.js 用下发的提示语初始化顶栏轮播
     emit("timezone-updated");
-    $("btn-settings").classList.toggle("hidden", me.role !== "admin");
+    $("btn-settings").classList.remove("hidden");
     $("login").classList.add("hidden");
     setPasswordVisible(false);
     $("login-pass").value = "";

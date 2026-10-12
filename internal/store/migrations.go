@@ -9,7 +9,7 @@ import (
 
 // SchemaVersion changes only with a committed, ordered migration. Versions
 // predating this framework use user_version=0, including partially upgraded DBs.
-const SchemaVersion = 16
+const SchemaVersion = 17
 
 //go:embed migrations/001_baseline.sql
 var baselineSQL string
@@ -46,6 +46,9 @@ var collaborationDecisionsSQL string
 
 //go:embed migrations/016_collaboration_workflows.sql
 var collaborationWorkflowsSQL string
+
+//go:embed migrations/017_usage_reasoning.sql
+var usageReasoningSQL string
 
 type migration struct {
 	version int
@@ -94,6 +97,7 @@ func migrations() []migration {
 		{14, func(tx *sql.Tx) error { _, err := tx.Exec(collaborationThreadsSQL); return err }},
 		{15, func(tx *sql.Tx) error { _, err := tx.Exec(collaborationDecisionsSQL); return err }},
 		{16, func(tx *sql.Tx) error { _, err := tx.Exec(collaborationWorkflowsSQL); return err }},
+		{17, func(tx *sql.Tx) error { _, err := tx.Exec(usageReasoningSQL); return err }},
 	}
 }
 func migrate(db *sql.DB) error { return runMigrations(db, migrations()) }

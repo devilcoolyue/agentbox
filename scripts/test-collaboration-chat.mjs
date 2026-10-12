@@ -5,6 +5,7 @@ import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 import {launchBrowser,browserEngine,cancelledFetchError} from './playwright-launch.mjs';
 import {verifyTraceGeometry} from './collaboration-trace-geometry.mjs';
+import {assertActionIcons} from './test-actions.mjs';
 const shell=await readFile('internal/web/static/index.html','utf8');const dialogs=[...shell.matchAll(/<dialog\b[\s\S]*?<\/dialog>/g)].map(m=>m[0]).join('');
 const tooltip=shell.match(/<div id="tip"[^>]*><\/div>/)?.[0]||'';assert.ok(tooltip,'shell tooltip is missing');
 const root=resolve('internal/web/static'),scope='a'.repeat(64),runID='b'.repeat(32),otherRunID='c'.repeat(32),q='d'.repeat(32);let created,otherRun,creates=0,lose=true,loseAction=true,actions=[],mutationRequests=0;
@@ -67,10 +68,11 @@ const server=createServer(async(req,res)=>{try{
  }catch(e){res.writeHead(500).end(JSON.stringify({error:String(e)}));}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await launchBrowser();
 try{const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.setDefaultTimeout(12000);page.on('pageerror',e=>{if(!cancelledFetchError(e))errors.push(e.message);console.error(e.stack)});await page.addInitScript(()=>{try{localStorage.setItem('agentbox.language','zh-CN')}catch{}});await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>!document.getElementById('chat-execution-mode').hidden);
+ await assertActionIcons(page,'#tab-chat');
  await page.locator('#chat-input').fill('Build the feature');await page.locator('#chat-execution-mode').selectOption('collaboration',{force:true});await page.locator('#chat-collaboration-setup').click();
  await page.getByRole('button',{name:'交换主辅',exact:true}).click();await page.getByRole('button',{name:'查看携带的上下文'}).click();await page.getByText('User: prior discussion',{exact:true}).waitFor();
  await page.evaluate(()=>window.attach());await page.locator('#send').click();await page.getByText('协作模式暂不支持附件，请先移除附件或使用普通对话',{exact:true}).waitFor();assert.equal(creates,0);assert.equal(await page.locator('#chat-input').inputValue(),'Build the feature');await page.evaluate(()=>window.detach());
- await page.locator('#send').click();await page.getByRole('button',{name:'查询待确认操作',exact:true}).waitFor();await page.waitForFunction(()=>!window.controller.busy());assert.equal(creates,1);assert.equal(created.request.roles.coordinator.agent_type,'codex');assert.equal(created.request.roles.executor.agent_type,'claude');assert.equal(created.request.context.text,'User: prior discussion');
+ await page.locator('#send').click();await page.getByRole('button',{name:'查询待确认操作',exact:true}).waitFor();await page.waitForFunction(()=>!window.controller.busy());assert.equal(creates,1);assert.equal(created.request.roles.coordinator.agent_type,'codex');assert.equal(created.request.roles.executor.agent_type,'claude');assert.equal(created.request.context.text,'User: prior discussion');await assertActionIcons(page,'#tab-chat');
  lose=false;await page.reload();await page.getByRole('button',{name:'查询待确认操作',exact:true}).click();await page.getByRole('button',{name:'确认计划并执行',exact:true}).waitFor();assert.equal(creates,1);assert.equal(await page.locator('dialog[open]').count(),0);
  await page.getByRole('button',{name:'确认计划并执行',exact:true}).click();await page.getByRole('button',{name:'查询待确认操作',exact:true}).waitFor();await page.waitForFunction(()=>!window.controller.busy());loseAction=false;await page.getByRole('button',{name:'查询待确认操作',exact:true}).click();await page.getByText('执行中',{exact:true}).waitFor();assert.equal(actions.length,1);
  for(const event of [
@@ -122,7 +124,7 @@ try{const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=
  await page.emulateMedia({reducedMotion:'reduce'});await page.waitForTimeout(350);
  assert.equal(await trace.evaluate(e=>e.getAnimations({subtree:true}).length),0,'reduced motion still moves or pulses');
  await page.setViewportSize({width:1280,height:900});await tab('output');
- await output.locator('[data-output-body]').filter({hasText:'Executor durable start'}).waitFor();assert(!((await output.locator('[data-output-body]').innerText()).includes('Private internal task prompt')));
+ await output.locator('[data-output-body]').filter({hasText:'Executor durable start'}).waitFor();await assertActionIcons(page,'#tab-chat');assert(!((await output.locator('[data-output-body]').innerText()).includes('Private internal task prompt')));
  await until(()=>streams.get(runID)?.size>0);
  sendStream(runID,executeStep,{type:'agent_event',event:{type:'stream_event',event:{type:'content_block_delta',index:0,delta:{type:'text_delta',text:'Streaming executor'}}}});
  await output.locator('[data-output-body]').filter({hasText:'Streaming executor'}).waitFor();
@@ -166,6 +168,7 @@ try{const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=
   await page.screenshot({path:`output/playwright/collaboration-dialogue-${browserEngine()}-${width}.png`});
  }
  await page.setViewportSize({width:1280,height:900});
+ await assertActionIcons(page,'#tab-chat');
  const writesBefore=mutationRequests;await page.reload();await page.locator('.collaboration-thread-body .collaboration-final-summary').filter({hasText:'Implemented requested feature'}).waitFor();assert.equal(mutationRequests,writesBefore,'refresh reran a completed task');
  await page.getByRole('button',{name:'查看过程',exact:true}).click();await tab('output');await output.locator('[data-output-body]').filter({hasText:'Review durable final output'}).waitFor();await tab('result');assert.equal(await page.locator('.collaboration-detail-body .collaboration-final-summary').filter({hasText:'Implemented requested feature'}).count(),1);await tab('overview');
  assert.equal(await trace.getAttribute('data-mode'),'complete');

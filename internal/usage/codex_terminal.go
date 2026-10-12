@@ -28,6 +28,7 @@ func parseCodexTerminal(f io.Reader) ([]termTurn, error) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 32<<20)
 	session, turn, model := "", "", ""
+	effort := ""
 	allowed := false
 	var previous codexTokens
 	havePrevious := false
@@ -57,8 +58,9 @@ func parseCodexTerminal(f io.Reader) ([]termTurn, error) {
 			session = meta.ID
 		case "turn_context":
 			var ctx struct {
-				ID    string `json:"turn_id"`
-				Model string `json:"model"`
+				ID     string          `json:"turn_id"`
+				Model  string          `json:"model"`
+				Effort json.RawMessage `json:"effort"`
 			}
 			if json.Unmarshal(rec.Payload, &ctx) != nil {
 				continue
@@ -67,6 +69,7 @@ func parseCodexTerminal(f io.Reader) ([]termTurn, error) {
 				turn = ctx.ID
 			}
 			model = ctx.Model
+			effort = transcriptEffort(ctx.Effort)
 		case "event_msg":
 			var msg struct {
 				Type   string `json:"type"`
@@ -81,9 +84,15 @@ func parseCodexTerminal(f io.Reader) ([]termTurn, error) {
 			}
 			switch msg.Type {
 			case "task_started", "turn_started":
+				// Some rollouts can persist the context before the start marker;
+				// keep it only when it explicitly belongs to this same turn.
+				if turn != msg.TurnID {
+					effort = ""
+				}
 				turn = msg.TurnID
 			case "task_complete", "turn_complete", "turn_aborted":
 				turn = ""
+				effort = ""
 			case "token_count":
 				if msg.Info == nil || msg.Info.Total == nil {
 					continue
@@ -113,6 +122,7 @@ func parseCodexTerminal(f io.Reader) ([]termTurn, error) {
 				}
 				key := session + "\x00" + turn + "\x00" + model
 				row := acc[key]
+				first := row == nil
 				if row == nil {
 					sum := sha256.Sum256([]byte(key))
 					id := "codex-terminal:" + hex.EncodeToString(sum[:])
@@ -121,6 +131,7 @@ func parseCodexTerminal(f io.Reader) ([]termTurn, error) {
 					acc[key] = row
 					order = append(order, key)
 				}
+				row.mergeEffort(effort, first)
 				uncached := delta.Input - delta.Cached
 				if uncached < 0 {
 					uncached = 0

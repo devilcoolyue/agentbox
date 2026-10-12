@@ -485,12 +485,27 @@ func TestVersionElevenChatMigrationPreservesData(t *testing.T) {
 	if _, err = old.Grant(u.Name, 12345, "fixture-grant", "", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if err = old.InsertUsage(UsageEvent{User: u.Name, SessionID: "space", TurnID: "old-turn", Kind: UsageKindChat, Agent: "codex", Model: "frozen-model", CostMicroUSD: 321}); err != nil {
+	// Seed the schema-11 columns directly: today's usage writer and reader
+	// include later metadata columns that did not exist in this fixture.
+	usedAt := time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
+	if _, err = db.Exec(`INSERT INTO usage_events(id,ts,user,session_id,turn_id,kind,agent,model,cost_micro_usd)
+		VALUES (1,?,'alice','space','old-turn','chat','codex','frozen-model',321)`, usageTimestamp(usedAt)); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = applyCreditTx(tx, u.Name, -321, "usage:1", ReasonSpend, "frozen-model", ""); err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	quota, _ := old.GetQuota(u.Name)
 	ledger := old.ListLedger(LedgerFilter{})
-	usage := old.ListUsage(UsageFilter{User: u.Name})
+	usage := []UsageEvent{{ID: 1, TS: usedAt, User: u.Name, SessionID: "space", TurnID: "old-turn", Kind: UsageKindChat, Agent: "codex", Model: "frozen-model", CostMicroUSD: 321}}
 	before, err := old.WorkspaceCreation(u, creation.RequestID)
 	if err != nil {
 		t.Fatal(err)

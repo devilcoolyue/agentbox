@@ -157,7 +157,7 @@ export async function smoke(page) {
   await page.locator('#tab-changes').waitFor({state:'visible'});
   await page.locator('#btn-changes-commit:not([disabled])').waitFor();
   assert.match(await page.locator('#changes-remote-state').innerText(),/领先 2 \/ 落后 1.*本地缓存/);
-  assert.equal(await page.locator('#btn-settings').isVisible(),false);
+  assert.equal(await page.locator('#btn-settings').isVisible(),true);
   await mkdir('output/playwright',{recursive:true});
   for (const width of [360,390,430,768,1280,1440]) {
    await page.setViewportSize({width,height:900});

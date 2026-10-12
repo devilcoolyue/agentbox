@@ -129,7 +129,7 @@ func TestRestorePreservesHistoricalSchemaAndJournal(t *testing.T) {
 }
 
 func TestRestoreRejectsIncompatibleCollaborationBeforePublication(t *testing.T) {
-	for _, version := range []int{13, 14, 15} {
+	for _, version := range []int{13, 14, 15, 16} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			archive, source := restoreCompatibilityFixture(t, version, true)
 			parent := t.TempDir()

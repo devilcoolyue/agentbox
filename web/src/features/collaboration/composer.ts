@@ -3,6 +3,7 @@ import {agentIcon,agentName} from "../../brand.js";
 import {formatText} from "../../chat-render.js";
 import {S} from "../../state.js";
 import {setText,t} from "../../i18n.js";
+import {actionButton} from "../../icons.js";
 import {enhanceSelects,setSelectValue} from "../../select.js";
 import {askConfirm} from "../../util.js";
 import {roleSelector,workflowSelector,type Choice} from "./roles.js";
@@ -18,7 +19,7 @@ import {automaticRequestDigest,matchesAutomaticReceipt,decisionReason,type Decis
 import {isDirect,activeRoles,completionLabel} from "./strategy.js";
 
 function el<K extends keyof HTMLElementTagNameMap>(tag:K,text?:string){const n=document.createElement(tag);if(text)setText(n,text);return n;}
-function button(text:string,action:()=>void){const b=el("button",text);b.type="button";b.className="btn btn-sm";b.onclick=action;return b;}
+function button(text:string,icon:string,action:()=>void){const b=el("button");b.type="button";b.className="btn btn-sm";actionButton(b,()=>t(text),icon);b.onclick=action;return b;}
 function field(text:string,input:HTMLElement){const l=el("label");l.className="collaboration-field";l.append(el("span",text),input);return l;}
 interface Hooks {read:()=>Draft;apply:(d:Draft)=>void;changed:()=>void;save:()=>void;reload:()=>Promise<void>;allowed:()=>boolean;}
 export function initCollaborationComposer(h:Hooks){
@@ -35,13 +36,13 @@ export function initCollaborationComposer(h:Hooks){
  const auto=el("input");auto.type="checkbox";
  const verify=el("input");verify.maxLength=8192;
  const contextPreview=el("pre");contextPreview.hidden=true;
- const contextToggle=button("查看携带的上下文",()=>void work(async()=>{const s=session,th=thread,e=epoch;const c=await client!.context(s,th,include.checked);if(!valid(s,th,e))return;contextPreview.textContent=(c.truncated?t("上下文较长，仅携带最近的可见消息。")+"\n\n":"")+(c.text||t("仅使用本次需求"));contextPreview.hidden=false;}));
+ const contextToggle=button("查看携带的上下文","eye",()=>void work(async()=>{const s=session,th=thread,e=epoch;const c=await client!.context(s,th,include.checked);if(!valid(s,th,e))return;contextPreview.textContent=(c.truncated?t("上下文较长，仅携带最近的可见消息。")+"\n\n":"")+(c.text||t("仅使用本次需求"));contextPreview.hidden=false;}));
  const budget=el("input"),maxSteps=el("input");budget.type=maxSteps.type="number";budget.value="0";budget.min="0";budget.step="0.01";maxSteps.value="20";maxSteps.min="1";maxSteps.max="100";
  const decisionControls=el("div");decisionControls.className="collaboration-decision-settings";decisionControls.hidden=true;
  const useJev=el("input");useJev.type="checkbox";useJev.dataset.useJev="";
  const decisionHint=el("small");decisionHint.className="collaboration-hint";
- const inheritProvider=button("沿用空间默认",()=>{providerChoice="inherit";saveSettings();});
- const saveDefault=button("设为此空间默认",()=>void work(async()=>{
+ const inheritProvider=button("沿用空间默认","undo",()=>{providerChoice="inherit";saveSettings();});
+ const saveDefault=button("设为此空间默认","save",()=>void work(async()=>{
   const s=session,th=thread,e=epoch,provider=effectiveProvider();if(!s)return;
   const result=await api<{version:number;scope:string;provider:DecisionProvider}>(`/sessions/${s}/collaboration/decision-default`,{method:"PUT",body:JSON.stringify({scope,provider}),signal:life.signal});
   if(!valid(s,th,e))return;if(result.version!==1||result.scope!==scope||result.provider!==provider)throw new Error(t("无法确认任务状态"));
@@ -50,7 +51,7 @@ export function initCollaborationComposer(h:Hooks){
  decisionControls.append(field("使用 Jev 辅助判断",useJev),decisionHint,inheritProvider,saveDefault);
  const advanced=el("details");advanced.append(el("summary","更多设置"),field("验证命令（可选）",verify),field("费用预算 USD（0 不限制）",budget),field("最多模型步骤",maxSteps));
  const strategy=workflowSelector(),autoField=field("规划后自动执行",auto);
- const swap=button("交换主辅",()=>{try{const a=main!.read(),b=worker!.read(),am=main!.mode(),bm=worker!.mode();main!.set(b);worker!.set(a);main!.setMode(bm);worker!.setMode(am);saveSettings();}catch(e){report(e);}});
+ const swap=button("交换主辅","switch",()=>{try{const a=main!.read(),b=worker!.read(),am=main!.mode(),bm=worker!.mode();main!.set(b);worker!.set(a);main!.setMode(bm);worker!.setMode(am);saveSettings();}catch(e){report(e);}});
  settings.append(strategy.box,roles,swap,decisionControls,field("仓库相对路径",repository),field("携带当前对话上下文",include),contextToggle,contextPreview,autoField,advanced);
  const targetLine=el("div");targetLine.className="collaboration-reply-target";
  host.append(targetLine,notice,recovery,settings);
@@ -67,18 +68,18 @@ export function initCollaborationComposer(h:Hooks){
  const detail=el("aside");detail.className="collaboration-detail collaboration-workspace";detail.hidden=true;detail.setAttribute("aria-label",t("协作过程"));
  const detailHead=el("div");detailHead.className="collaboration-detail-head";const detailTitle=el("strong","协作过程"),detailStatus=el("span");detailStatus.className="collaboration-workspace-status";
  function closeDetail(){const previous=detailRun;detail.hidden=true;detailRun="";live.close();workflow.close();evidence.clear();document.querySelector<HTMLButtonElement>(`[data-collaboration-run="${previous}"] [data-show-process]`)?.focus({preventScroll:true});}
- detailHead.append(detailTitle,detailStatus,button("关闭",closeDetail));
+ detailHead.append(detailTitle,detailStatus,button("关闭","close",closeDetail));
  const detailTabs=el("nav");detailTabs.className="collaboration-workspace-tabs";detailTabs.setAttribute("role","tablist");detailTabs.setAttribute("aria-label",t("协作过程"));
  const detailBody=el("div");detailBody.className="collaboration-detail-body collaboration-workspace-body";
  const detailPages=new Map<string,HTMLElement>(),detailButtons=new Map<string,HTMLButtonElement>();
  function setDetailTab(tab:string){detailTab=tab;if(tab!=="overview")workflow.close();for(const [key,page] of detailPages)page.hidden=key!==tab;for(const [key,b] of detailButtons){b.setAttribute("aria-selected",String(key===tab));b.tabIndex=key===tab?0:-1;}if(tab==="overview")workflow.resume();}
- for(const [key,label] of [["overview","过程"],["output","步骤输出"],["result","最终结果"],["records","文件与记录"]]){const page=el("section");page.className="collaboration-workspace-pane";page.dataset.pane=key;page.id=`collaboration-detail-${key}`;page.setAttribute("role","tabpanel");page.setAttribute("aria-labelledby",`${page.id}-tab`);const b=button(label,()=>setDetailTab(key));b.id=`${page.id}-tab`;b.dataset.tab=key;b.setAttribute("role","tab");b.setAttribute("aria-controls",page.id);detailPages.set(key,page);detailButtons.set(key,b);detailTabs.append(b);detailBody.append(page);}
+ for(const [key,label,icon] of [["overview","过程","activity"],["output","步骤输出","tool"],["result","最终结果","check"],["records","文件与记录","list"]]){const page=el("section");page.className="collaboration-workspace-pane";page.dataset.pane=key;page.id=`collaboration-detail-${key}`;page.setAttribute("role","tabpanel");page.setAttribute("aria-labelledby",`${page.id}-tab`);const b=button(label,icon,()=>setDetailTab(key));b.id=`${page.id}-tab`;b.dataset.tab=key;b.setAttribute("role","tab");b.setAttribute("aria-controls",page.id);detailPages.set(key,page);detailButtons.set(key,b);detailTabs.append(b);detailBody.append(page);}
  detailTabs.addEventListener("keydown",event=>{const keys=[...detailButtons.keys()],current=keys.indexOf(detailTab);let next=current;if(event.key==="ArrowRight")next=(current+1)%keys.length;else if(event.key==="ArrowLeft")next=(current+keys.length-1)%keys.length;else if(event.key==="Home")next=0;else if(event.key==="End")next=keys.length-1;else return;event.preventDefault();setDetailTab(keys[next]);detailButtons.get(keys[next])!.focus();},{signal:life.signal});
  const finalResult=el("div"),finalEmpty=el("p","最终结果将在任务完成后显示。");finalResult.hidden=true;finalEmpty.className="collaboration-workspace-empty";
  const workflow=createWorkflow(entry=>{if(entry.stepID){setDetailTab("output");live.select(entry.stepID);}}),live=createLiveOutput(owner,owns),evidence=createEvidence(owner,life.signal,()=>scope,owns);
  const exchange=el("div");exchange.className="collaboration-exchange";
  const exchangeDetails=el("details");exchangeDetails.className="collaboration-exchange-details";exchangeDetails.open=true;exchangeDetails.append(el("summary","交接记录"),exchange);
- const fileActions=el("div");fileActions.className="collaboration-workspace-file-actions";fileActions.append(button("查看文件变更",()=>void work(async()=>{if(detailRun)await evidence.showDiff(detailRun);})));
+ const fileActions=el("div");fileActions.className="collaboration-workspace-file-actions";fileActions.append(button("查看文件变更","diff",()=>void work(async()=>{if(detailRun)await evidence.showDiff(detailRun);})));
  detailPages.get("overview")!.append(workflow.box);detailPages.get("output")!.append(live.box);detailPages.get("result")!.append(finalResult,finalEmpty);detailPages.get("records")!.append(fileActions,evidence.box,exchangeDetails);detail.append(detailHead,detailTabs,detailBody);document.getElementById("tab-chat")!.append(detail);setDetailTab("overview");
  const report=(e:unknown)=>{if(owns()){notice.textContent=e instanceof Error?e.message:String(e);notice.hidden=false;}};
  const selection=()=>mode.value==="collaboration";
@@ -93,11 +94,11 @@ export function initCollaborationComposer(h:Hooks){
   inheritProvider.disabled=busy||providerChoice==="inherit";saveDefault.disabled=busy||!session;
   setText(decisionHint,!jevAvailable?"Jev 当前不可用，自动选模将使用内置规则或回退模型。":providerChoice==="inherit"?"沿用此空间的决策偏好；只有自动角色可能调用 Jev。":"本次任务的决策偏好；固定模型不会调用 Jev。");
   targetLine.replaceChildren();targetLine.hidden=!target&&!draft?.reply;
-  if(!target&&draft?.reply){targetLine.append(el("span","回复此任务"),button("返回草稿",leaveTarget));}
-  if(target){targetLine.append(el("span",target.kind==="answer"?"回复此任务":"补充给此任务"),button("返回草稿",leaveTarget));}
+  if(!target&&draft?.reply){targetLine.append(el("span","回复此任务"),button("返回草稿","arrow-left",leaveTarget));}
+  if(target){targetLine.append(el("span",target.kind==="answer"?"回复此任务":"补充给此任务"),button("返回草稿","arrow-left",leaveTarget));}
   notice.hidden=!notice.textContent;
   if(main&&worker)try{const b=worker.read(),a=strategy.direct()?b:main.read();setup.textContent=strategy.direct()?`${agentName(b.agent_type)} · ${t("直接执行")} · ${t("设置")}`:`${a.agent_type==="claude"?"Claude Code":"Codex"} → ${b.agent_type==="claude"?"Claude Code":"Codex"} · ${t("设置")}`;}catch{setText(setup,"设置团队");}
-  const pendingRows=pending();const pendingKey=JSON.stringify(pendingRows.map(p=>[p.id,p.kind]))+t("查询待确认操作");if(recovery.dataset.signature!==pendingKey){recovery.dataset.signature=pendingKey;recovery.replaceChildren();for(const p of pendingRows){recovery.append(el("span","有操作尚未确认，请先查询结果。"),button("查询待确认操作",()=>void work(()=>queryPending(p))),button(p.kind==="application"?"核对应用状态":"放弃未接收操作",()=>void work(async()=>{if(p.kind==="application"){const run=p.path.split("/")[3];await api(`/collaboration/runs/${run}/application/recover`,{method:"POST",body:JSON.stringify({scope,action_id:p.id,snapshot_id:(p.input as {snapshot_id?:string})?.snapshot_id}),signal:life.signal});store!.remove(p.id);render();return;}const path=p.kind==="create"?`/collaboration/requests/${p.id}/abandon`:p.path+"/abandon";await client!.put(path,{scope});store!.remove(p.id);render();})));}}
+  const pendingRows=pending();const pendingKey=JSON.stringify(pendingRows.map(p=>[p.id,p.kind]))+t("查询待确认操作");if(recovery.dataset.signature!==pendingKey){recovery.dataset.signature=pendingKey;recovery.replaceChildren();for(const p of pendingRows){recovery.append(el("span","有操作尚未确认，请先查询结果。"),button("查询待确认操作","refresh",()=>void work(()=>queryPending(p))),button(p.kind==="application"?"核对应用状态":"放弃未接收操作",p.kind==="application"?"refresh":"close",()=>void work(async()=>{if(p.kind==="application"){const run=p.path.split("/")[3];await api(`/collaboration/runs/${run}/application/recover`,{method:"POST",body:JSON.stringify({scope,action_id:p.id,snapshot_id:(p.input as {snapshot_id?:string})?.snapshot_id}),signal:life.signal});store!.remove(p.id);render();return;}const path=p.kind==="create"?`/collaboration/requests/${p.id}/abandon`:p.path+"/abandon";await client!.put(path,{scope});store!.remove(p.id);render();})));}}
   for(const b of document.querySelectorAll<HTMLButtonElement>(".collaboration-thread-body .collaboration-actions button"))b.disabled=busy;
   h.changed();
  };
@@ -169,22 +170,22 @@ export function initCollaborationComposer(h:Hooks){
   const messages=(logs.get(v.run.id)||[]).filter(e=>e.type==="message").map(e=>e.body as {id:string;type:string;body:unknown});
   const m=v.run.state==="waiting_user"?messages.find(m=>m.id===v.run.pending_question):[...messages].reverse().find(m=>v.run.state!=="awaiting_plan"||m.type==="plan");if(m)content.append(formatText(messageText(m.body)));
   content.hidden=v.run.state==="completed";
-  const add=(name:string,fn:()=>Promise<void>)=>actions.append(button(name,()=>void work(fn)));
-  if(v.decision?.attempt?.error_code==="decision_persistence_failed"&&v.decision.attempt.can_reconcile)add("核对决策费用",async()=>{await api(`/collaboration/runs/${v.run.id}/decision/reconcile`,{method:"POST",body:JSON.stringify({scope,expected_revision:v.run.revision}),signal:life.signal});if(owns())await poll();});
-  const process=button("查看过程",()=>showDetail(v));process.dataset.showProcess="";actions.append(process);if(v.run.state==="completed")actions.append(button("最终结果",()=>showDetail(v,"result")));
-  if(v.run.state==="awaiting_plan")add("确认计划并执行",()=>action(v,"confirm_plan",{plan_version:v.run.plan_version}));
-  if(v.run.state==="waiting_user")actions.append(button("答复",()=>reply(v,"answer")));
-  if(["preparing","planning","executing","reviewing","waiting_answer"].includes(v.run.state))add("本步结束后暂停",()=>action(v,"pause"));
-  if(["awaiting_plan","waiting_user","planning","executing","reviewing","paused"].includes(v.run.state))actions.append(button("补充要求",()=>reply(v,"supplement")));
+  const add=(name:string,icon:string,fn:()=>Promise<void>)=>actions.append(button(name,icon,()=>void work(fn)));
+  if(v.decision?.attempt?.error_code==="decision_persistence_failed"&&v.decision.attempt.can_reconcile)add("核对决策费用","wallet",async()=>{await api(`/collaboration/runs/${v.run.id}/decision/reconcile`,{method:"POST",body:JSON.stringify({scope,expected_revision:v.run.revision}),signal:life.signal});if(owns())await poll();});
+  const process=button("查看过程","activity",()=>showDetail(v));process.dataset.showProcess="";actions.append(process);if(v.run.state==="completed")actions.append(button("最终结果","check",()=>showDetail(v,"result")));
+  if(v.run.state==="awaiting_plan")add("确认计划并执行","play",()=>action(v,"confirm_plan",{plan_version:v.run.plan_version}));
+  if(v.run.state==="waiting_user")actions.append(button("答复","message",()=>reply(v,"answer")));
+  if(["preparing","planning","executing","reviewing","waiting_answer"].includes(v.run.state))add("本步结束后暂停","clock",()=>action(v,"pause"));
+  if(["awaiting_plan","waiting_user","planning","executing","reviewing","paused"].includes(v.run.state))actions.append(button("补充要求","plus",()=>reply(v,"supplement")));
   if(v.run.state==="paused"){
    const blocked=["execution_failed","verification_required","verification_failed","delivery_required","runtime_limit","repair_limit","budget_limit","usage_incomplete","context_limit","artifacts_missing","handoff_invalid","instance_restored","result_reviewed","decision_persistence_failed"];
-   if(v.decision?.attempt?.error_code!=="decision_persistence_failed"&&!blocked.includes(v.run.wait_reason||""))add("继续任务",()=>action(v,"resume"));
-   if(v.run.wait_reason==="execution_failed")add("重新准备任务",()=>action(v,"configure",v.configuration));
+   if(v.decision?.attempt?.error_code!=="decision_persistence_failed"&&!blocked.includes(v.run.wait_reason||""))add("继续任务","play",()=>action(v,"resume"));
+   if(v.run.wait_reason==="execution_failed")add("重新准备任务","refresh",()=>action(v,"configure",v.configuration));
   }
-  if(["paused","awaiting_plan","waiting_user"].includes(v.run.state))actions.append(button("调整团队",()=>{configuringRun=v.run.id;draft={mode:"collaboration",repository:v.run.request?.repository||".",include_context:true,configuration:v.configuration};applySettings();setSelectValue(mode,"collaboration");settings.open=true;render();const apply=button("应用主辅配置",()=>void work(()=>action(v,"configure",config())));apply.dataset.configure=v.run.id;settings.querySelector('[data-configure]')?.remove();settings.append(apply);}));
+  if(["paused","awaiting_plan","waiting_user"].includes(v.run.state))actions.append(button("调整团队","users",()=>{configuringRun=v.run.id;draft={mode:"collaboration",repository:v.run.request?.repository||".",include_context:true,configuration:v.configuration};applySettings();setSelectValue(mode,"collaboration");settings.open=true;render();const apply=button("应用主辅配置","check",()=>void work(()=>action(v,"configure",config())));apply.dataset.configure=v.run.id;settings.querySelector('[data-configure]')?.remove();settings.append(apply);}));
   if(v.run.state==="completed"){
-   add("查看文件变更",async()=>{showDetail(v,"records");await evidence.showDiff(v.run.id);});
-   add("应用到当前项目",async()=>{
+   add("查看文件变更","diff",async()=>{showDetail(v,"records");await evidence.showDiff(v.run.id);});
+   add("应用到当前项目","check",async()=>{
     const prior=await api<{application:{state:string;action_id:string;snapshot_id:string}|null}>(`/collaboration/runs/${v.run.id}/application`,{signal:life.signal});
     if(prior.application&&prior.application.state!=="failed"){
      if(prior.application.state==="completed"){notice.textContent=t("已应用到当前项目");return;}
@@ -200,10 +201,10 @@ export function initCollaborationComposer(h:Hooks){
     store!.save({id,session,thread,path,query:`/collaboration/runs/${v.run.id}/application?action=${id}`,input,created:Date.now(),kind:"application",text:""});render();
     await client!.put(path,input);store!.remove(id);notice.textContent=t("已应用到当前项目");
    });
-   add("下载协作结果",async()=>{const response=await fetch(`/api/collaboration/runs/${v.run.id}/download`,{headers:{Authorization:`Bearer ${owner}`},signal:life.signal});if(!response.ok)throw new Error(t("结果下载失败"));const blob=await response.blob();if(!owns())return;const url=URL.createObjectURL(blob),a=el("a");a.href=url;a.download=`collaboration-${v.run.id}.zip`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+   add("下载协作结果","download",async()=>{const response=await fetch(`/api/collaboration/runs/${v.run.id}/download`,{headers:{Authorization:`Bearer ${owner}`},signal:life.signal});if(!response.ok)throw new Error(t("结果下载失败"));const blob=await response.blob();if(!owns())return;const url=URL.createObjectURL(blob),a=el("a");a.href=url;a.download=`collaboration-${v.run.id}.zip`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   }
-  if(!terminal(v.run.state))add("取消任务",async()=>{if(await askConfirm(t("已产生的文件和费用不会回滚。"),{title:t("取消任务"),danger:true}))await action(v,"cancel");});
-  if(["uncertain","failed","paused"].includes(v.run.state))actions.append(button("更多操作",()=>window.dispatchEvent(new CustomEvent("collaboration-open",{detail:v.run.id}))));
+  if(!terminal(v.run.state))add("取消任务","close",async()=>{if(await askConfirm(t("已产生的文件和费用不会回滚。"),{title:t("取消任务"),danger:true}))await action(v,"cancel");});
+  if(["uncertain","failed","paused"].includes(v.run.state))actions.append(button("更多操作","more",()=>window.dispatchEvent(new CustomEvent("collaboration-open",{detail:v.run.id}))));
   const cost=el("small");cost.textContent=`${t("费用")} $${(v.cost.cost_micro_usd/1e6).toFixed(6)}${v.cost.partial?" · "+t("费用尚不完整"):""}`;
   const reason=el("p");if(v.run.state==="paused"){const reasons:Record<string,string>={execution_failed:"Agent 运行环境启动失败",verification_failed:"验证失败",usage_incomplete:"费用尚不完整",budget_limit:"费用预算已用完",runtime_limit:"累计执行时间已用完",server_restarted:"服务重启后待核对",user_paused:"用户已暂停"};setText(reason,reasons[v.run.wait_reason||""]||"请检查任务记录");}else reason.hidden=true;
   const footer=el("footer");footer.className="collaboration-reply-footer";footer.append(actions,cost);root.append(head,team,routing,reason);if(v.run.state==="completed")root.append(renderFinalResult(v,logs.get(v.run.id)||[]));root.append(content,footer);for(const b of actions.querySelectorAll("button"))b.disabled=busy;

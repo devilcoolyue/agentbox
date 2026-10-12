@@ -26,6 +26,10 @@
 
 终端记录通常会在文件变更后很快出现，另有每分钟扫描和查询页面时请求的异步补扫作为补充。页面请求不等待扫描完成，扫描状态只反映补记进度，不表示 CLI 已写完全部用量。长回合可能先显示部分消耗，再更新同一行；这不是实时请求账单。
 
+使用记录与 CSV 的思考强度来自当时的记录：网页对话读取聊天回执；Claude 终端读取 assistant transcript 的 `effort`，Codex 终端读取 `turn_context.payload.effort`。终端强度随用量保存，不使用当前账号或 CLI 配置倒推历史。同一回合、同一模型的调用若缺少强度或出现不同档位，该行不显示单一强度；起标题和缺少回执的旧网页记录也留空。
+
+升级后会重新扫描现存空间的终端日志，已有用量行可补齐强度，不增加重复记录、不扣余额，也不替换首次保存的价格。原始日志已删除、旧 CLI 没有记录强度或格式无法识别时，历史强度无法恢复，继续留空。
+
 费用在数据库和 API 中使用整数微美元：**1 USD = 1,000,000 micro USD**。导出、接口接入和充值时应确认单位。
 
 Claude 网页对话不使用 `result.modelUsage` / `total_cost_usd` 扣款：这些字段在续聊时可能累计整个 provider 会话。借鉴 [cc-switch 的消息去重](https://github.com/farion1231/cc-switch/blob/846de29c13ac4d65f164db8c15dd5fd58e29f972/src-tauri/src/services/session_usage.rs#L601)，同一消息 ID 优先保留有 `stop_reason` 的记录，同等完整度选输出 token 较大的记录。流式 `message_delta` 和 transcript 用于补齐输出，普通 `assistant` 事件可能仍是占位值。

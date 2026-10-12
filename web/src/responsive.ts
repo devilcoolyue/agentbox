@@ -74,7 +74,7 @@ function syncNavigation() {
   const nav = currentNav();
   wrapper.classList.toggle("hidden", !nav);
   if (!nav) { if (sectionMenu.matches(":popover-open")) sectionMenu.hidePopover(); return; }
-  const buttons = [...nav.querySelectorAll<HTMLButtonElement>("button")];
+  const buttons = [...nav.querySelectorAll<HTMLButtonElement>("button:not(.hidden)")];
   const focused = sectionMenu.contains(document.activeElement) ? menuItems().indexOf(document.activeElement as HTMLButtonElement) : -1;
   sectionMenu.replaceChildren(...buttons.map((button, index) => {
     const item = document.createElement("button");
@@ -119,7 +119,7 @@ sectionMenu.addEventListener("click", event => {
   if (!item || item.disabled) return;
   sectionMenu.hidePopover();
   sectionButton.focus({ preventScroll: true });
-  currentNav()?.querySelectorAll<HTMLButtonElement>("button")[Number(item.dataset.index)]?.click();
+  currentNav()?.querySelectorAll<HTMLButtonElement>("button:not(.hidden)")[Number(item.dataset.index)]?.click();
 });
 sectionMenu.addEventListener("keydown", event => {
   const items = menuItems();

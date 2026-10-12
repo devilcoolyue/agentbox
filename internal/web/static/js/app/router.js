@@ -44,10 +44,10 @@ export function initRouter() {
             else if (page === "git" && parts.length <= 2) {
                 emit("open-git", GIT_SECS.includes(id) ? id : "guide");
             }
-            else if (page === "settings" && parts.length <= 3 && S.role === "admin") {
+            else if (page === "settings" && parts.length <= 3) {
                 // The price list used to be its own section; it is now a tab of 模型管理.
                 const pricing = id === "pricing";
-                S.sec = pricing ? "models" : SET_SECS.includes(id) ? id : "accounts";
+                S.sec = S.role !== "admin" ? "interface" : pricing ? "models" : SET_SECS.includes(id) ? id : "accounts";
                 S.modelTab = pricing ? "pricing" : S.sec === "models" && MODEL_TABS.includes(tab) ? tab : "accounts";
                 emit("open-settings");
             }

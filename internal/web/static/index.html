@@ -447,6 +447,7 @@
                   <div id="chat-delivery-list" class="hidden"></div>
                 </section>
                 <p id="chat-draft-status" class="hidden" role="status"></p>
+                <button id="chat-draft-check" type="button" class="btn btn-sm btn-ghost hidden" data-icon="refresh" data-i18n="重新检查附件">重新检查附件</button>
                 <div id="chat-attach" class="chat-attach hidden"></div>
                 <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）" data-i18n-attrs="{&quot;placeholder&quot;:&quot;随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）&quot;}"></textarea>
                 <div class="composer-bar">
@@ -459,13 +460,6 @@
                   <button id="btn-voice" class="icon-btn" aria-label="语音输入" data-tip="语音输入：点击说话，再点一次停止并发送" data-i18n-attrs="{&quot;aria-label&quot;:&quot;语音输入&quot;,&quot;data-tip&quot;:&quot;语音输入：点击说话，再点一次停止并发送&quot;}">
                     <svg width="18" height="18" data-icon="mic" aria-hidden="true"></svg>
                   </button>
-                <details id="chat-draft-options" class="chat-drafts">
-                  <summary class="icon-btn" aria-label="草稿与本机保存" data-tip="草稿与本机保存" data-i18n-attrs='{"aria-label":"草稿与本机保存","data-tip":"草稿与本机保存"}'><svg width="18" height="18" data-icon="save" aria-hidden="true"></svg></summary><div class="chat-draft-panel"><p data-i18n="草稿保存在此浏览器 7 天；退出登录会清除。">草稿保存在此浏览器 7 天；退出登录会清除。</p>
-                  <label><input id="chat-draft-enabled" type="checkbox"><span data-i18n="在此浏览器保存输入与待确认内容（7 天）">在此浏览器保存输入与待确认内容（7 天）</span></label>
-                  <p data-i18n="按用户、空间和对话隔离；只保存文字和附件引用，不保存文件内容。关闭后清除本机副本，当前页面输入仍保留。">按用户、空间和对话隔离；只保存文字和附件引用，不保存文件内容。关闭后清除本机副本，当前页面输入仍保留。</p>
-                  <p data-i18n="待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。">待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。</p>
-                  <div><button id="chat-draft-clear" type="button" class="btn btn-sm" data-icon="trash" data-i18n="清除本机副本并关闭保存">清除本机副本并关闭保存</button><button id="chat-draft-check" type="button" class="btn btn-sm" data-icon="refresh" data-i18n="重新检查附件">重新检查附件</button></div>
-                </div></details>
                   <input id="attach-input" type="file" multiple class="hidden">
                   <div id="picker" class="picker">
                     <button id="btn-pick" class="pick-pill"></button>
@@ -689,20 +683,20 @@
       <div id="view-settings" class="view hidden">
         <header class="set-head">
           <h1 data-i18n-text="[&quot;系统设置&quot;]">系统设置</h1>
-          <p data-i18n-text="[&quot;账号池与服务端配置。多数改动保存后即时生效，需要重启的项会单独标出。&quot;]">账号池与服务端配置。多数改动保存后即时生效，需要重启的项会单独标出。</p>
+          <p id="set-description"></p>
         </header>
 
         <div class="set-body">
           <nav id="set-nav" class="set-nav">
-            <button class="active" data-sec="accounts" data-icon="users" data-i18n-text="[&quot;账号池 &quot;]">账号池 <span id="set-acct-count" class="count">0</span></button>
-            <button data-sec="proxies" data-icon="network" data-i18n-text="[&quot;IP 代理 &quot;]">IP 代理 <span id="proxy-count" class="count">0</span></button>
-            <button data-sec="container" data-icon="box" data-i18n-text="[&quot;容器与资源&quot;]">容器与资源</button>
-            <button data-sec="models" data-icon="cpu" data-i18n-text="[&quot;模型管理&quot;]">模型管理</button>
-            <button data-sec="decision" data-icon="sliders" data-i18n="智能决策">智能决策</button>
+            <button class="active" data-sec="accounts" data-settings-admin data-icon="users" data-i18n-text="[&quot;账号池 &quot;]">账号池 <span id="set-acct-count" class="count">0</span></button>
+            <button data-sec="proxies" data-settings-admin data-icon="network" data-i18n-text="[&quot;IP 代理 &quot;]">IP 代理 <span id="proxy-count" class="count">0</span></button>
+            <button data-sec="container" data-settings-admin data-icon="box" data-i18n-text="[&quot;容器与资源&quot;]">容器与资源</button>
+            <button data-sec="models" data-settings-admin data-icon="cpu" data-i18n-text="[&quot;模型管理&quot;]">模型管理</button>
+            <button data-sec="decision" data-settings-admin data-icon="sliders" data-i18n="智能决策">智能决策</button>
             <button data-sec="interface" data-icon="sliders" data-i18n-text="[&quot;界面与提示&quot;]">界面与提示</button>
-            <button data-sec="security" data-icon="shield" data-i18n-text="[&quot;安全与访问&quot;]">安全与访问</button>
-            <button data-sec="monitor" data-icon="activity" data-i18n-text="[&quot;运维监控&quot;]">运维监控</button>
-            <button data-sec="about" data-icon="info" data-i18n-text="[&quot;关于与更新&quot;]">关于与更新</button>
+            <button data-sec="security" data-settings-admin data-icon="shield" data-i18n-text="[&quot;安全与访问&quot;]">安全与访问</button>
+            <button data-sec="monitor" data-settings-admin data-icon="activity" data-i18n-text="[&quot;运维监控&quot;]">运维监控</button>
+            <button data-sec="about" data-settings-admin data-icon="info" data-i18n-text="[&quot;关于与更新&quot;]">关于与更新</button>
           </nav>
 
           <div id="set-content" class="set-content">
@@ -1039,10 +1033,20 @@
               <div class="sec-intro">
                 <div>
                   <h2 data-i18n-text="[&quot;界面与提示&quot;]">界面与提示</h2>
-                  <p data-i18n-text="[&quot;控制台界面的展示项。改动即时生效，对所有用户可见。&quot;]">控制台界面的展示项。改动即时生效，对所有用户可见。</p>
+                  <p data-i18n="此浏览器的个人偏好；管理员还可调整全站界面与提示。">此浏览器的个人偏好；管理员还可调整全站界面与提示。</p>
                 </div>
               </div>
-              <div class="card">
+              <div class="card" id="set-local-saving">
+                <h3 data-i18n="草稿与本机保存">草稿与本机保存</h3>
+                <p class="card-desc" data-i18n="仅影响当前账号在此浏览器的输入与待确认内容，修改后即时生效。">仅影响当前账号在此浏览器的输入与待确认内容，修改后即时生效。</p>
+                <label class="check"><input id="chat-draft-enabled" type="checkbox"><span data-i18n="在此浏览器保存输入与待确认内容（7 天）">在此浏览器保存输入与待确认内容（7 天）</span></label>
+                <p class="note" data-i18n="草稿保存在此浏览器 7 天；退出登录会清除。">草稿保存在此浏览器 7 天；退出登录会清除。</p>
+                <p class="note" data-i18n="按用户、空间和对话隔离；只保存文字和附件引用，不保存文件内容。关闭后清除本机副本，当前页面输入仍保留。">按用户、空间和对话隔离；只保存文字和附件引用，不保存文件内容。关闭后清除本机副本，当前页面输入仍保留。</p>
+                <p class="note" data-i18n="待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。">待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。</p>
+                <p id="chat-draft-settings-status" class="note hidden" role="status"></p>
+                <div class="card-foot"><button id="chat-draft-clear" type="button" class="btn btn-sm" data-icon="trash" data-i18n="清除本机副本并关闭保存">清除本机副本并关闭保存</button></div>
+              </div>
+              <div class="card" data-settings-admin>
                 <h3 data-i18n-text="[&quot;日期与时间&quot;]">日期与时间</h3>
                 <label class="field">
                   <span data-i18n-text="[&quot;界面时区 &quot;]">界面时区 <span class="tag live" data-i18n-text="[&quot;即时生效&quot;]">即时生效</span></span>
@@ -1060,7 +1064,7 @@
                   <span class="note" data-i18n-text="[&quot;控制台时间、使用记录筛选与 CSV 导出采用此时区&quot;]">控制台时间、使用记录筛选与 CSV 导出采用此时区</span>
                 </div>
               </div>
-              <div class="card">
+              <div class="card" data-settings-admin>
                 <h3 data-i18n-text="[&quot;终端提示语&quot;]">终端提示语</h3>
                 <p class="card-desc" data-i18n-text="[&quot;终端页左上角轮播显示的提示。每行一条，可配置多条；设置轮播频率与切换动画。留空则不显示提示。&quot;]">终端页左上角轮播显示的提示。每行一条，可配置多条；设置轮播频率与切换动画。留空则不显示提示。</p>
                 <label class="field">
@@ -1095,7 +1099,7 @@
               </div>
               <div class="card">
                 <h3 data-i18n-text="[&quot;用户管理&quot;]">用户管理</h3>
-                <p class="card-desc" data-i18n-text="[&quot;普通用户只能访问自己的工作空间，无法查看系统设置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。&quot;]">普通用户只能访问自己的工作空间，无法查看系统设置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。</p>
+                <p class="card-desc" data-i18n-text="[&quot;普通用户只能访问自己的工作空间和本机偏好，无法查看服务端配置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。&quot;]">普通用户只能访问自己的工作空间和本机偏好，无法查看服务端配置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。</p>
                 <div id="user-list" class="user-list"></div>
                 <div class="user-add">
                   <input id="user-new-name" type="text" class="mono" placeholder="用户名（小写字母数字开头，可含 - _）" autocapitalize="none" spellcheck="false" data-i18n-attrs="{&quot;placeholder&quot;:&quot;用户名（小写字母数字开头，可含 - _）&quot;}">

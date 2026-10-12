@@ -535,6 +535,11 @@ type UsageEvent struct {
 	// Model is the provider's model id. Empty means the turn ran on the
 	// provider-side default and the event did not name it (Codex).
 	Model string `json:"model,omitempty"`
+	// Effort records reasoning observed in the terminal transcript. Empty means
+	// unknown (including mixed settings within this turn/model), never the
+	// current account default. Web turns use their original chat receipt.
+	Effort        string `json:"effort,omitempty"`
+	EffortControl string `json:"effort_control,omitempty"`
 	// Kind separates what the spend was for: UsageKindChat is the user's own
 	// turn, UsageKindTitle the thread-title summary the server triggers on its
 	// own. Both can land on the same cheap model, so the model id alone cannot
@@ -620,12 +625,12 @@ func insertUsageTx(tx *sql.Tx, evs []UsageEvent) error {
 		res, err := tx.Exec(`INSERT INTO usage_events
 			(ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			usageTimestamp(e.TS), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, e.Kind,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
-			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot)
+			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot, e.Effort, e.EffortControl)
 		if err != nil {
 			return fmt.Errorf("insert usage %s/%s: %w", e.SessionID, e.TurnID, err)
 		}
@@ -718,8 +723,8 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 		if _, err := tx.Exec(`INSERT INTO usage_events
 			(ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			-- 冲突目标必须把部分索引的 WHERE 原样带上，否则 SQLite 认不出
 			-- 这条唯一约束，直接报 "does not match any PRIMARY KEY or UNIQUE"。
 			ON CONFLICT(req_id) WHERE req_id != '' DO UPDATE SET
@@ -727,11 +732,12 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 				input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
 				cache_read_tokens = excluded.cache_read_tokens,
 				cache_write_tokens = excluded.cache_write_tokens,
-				cost_micro_usd = excluded.cost_micro_usd, price_snapshot = excluded.price_snapshot`,
+				cost_micro_usd = excluded.cost_micro_usd, price_snapshot = excluded.price_snapshot,
+				effort = excluded.effort, effort_control = excluded.effort_control`,
 			usageTimestamp(e.TS), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, UsageKindTerminal,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
-			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot); err != nil {
+			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot, e.Effort, e.EffortControl); err != nil {
 			return fmt.Errorf("upsert terminal usage %s/%s: %w", e.SessionID, e.ReqID, err)
 		}
 	}
@@ -740,7 +746,7 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 
 const usageCols = `id, ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 	input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot`
+	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control`
 
 // Fixed-width UTC text preserves chronological ordering in SQLite's ts index.
 func usageTimestamp(t time.Time) string {
@@ -846,7 +852,7 @@ func (s *Store) ListUsage(f UsageFilter) []UsageEvent {
 			&e.Agent, &e.AccountID, &e.Model, &e.Kind,
 			&e.InputTokens, &e.OutputTokens, &e.CacheReadTokens, &e.CacheWriteTokens,
 			&e.CostMicroUSD, &e.DurationMS, &e.WallMS, &e.TTFTMs, &e.Provider,
-			&e.ReqID, &e.Raw, &snapshot); err != nil {
+			&e.ReqID, &e.Raw, &snapshot, &e.Effort, &e.EffortControl); err != nil {
 			continue
 		}
 		if snapshot != "" {

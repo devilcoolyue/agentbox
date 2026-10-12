@@ -401,7 +401,7 @@ func TestRateUsesSavedSnapshotAfterPriceEdit(t *testing.T) {
 	}
 }
 
-// 网页回合的思考强度取自它的聊天回执；终端、起标题和没有回执的回合留空。
+// 网页回合的思考强度取自聊天回执，终端取自已保存的 CLI transcript。
 func TestUsageEventsShowTheTurnsEffort(t *testing.T) {
 	s, _ := newTestServer(t)
 	if err := s.store.CreateUser(store.User{Name: "alice"}); err != nil {
@@ -423,6 +423,13 @@ func TestUsageEventsShowTheTurnsEffort(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.store.UpsertTerminalUsage(
+		store.UsageEvent{TS: now, User: "alice", SessionID: "space", TurnID: "terminal-codex", ReqID: "terminal-codex", Agent: "codex", Effort: "high", EffortControl: "effort", InputTokens: 1},
+		store.UsageEvent{TS: now, User: "alice", SessionID: "space", TurnID: "terminal-claude", ReqID: "terminal-claude", Agent: "claude", Effort: "xhigh", EffortControl: "effort", InputTokens: 1},
+		store.UsageEvent{TS: now, User: "alice", SessionID: "space", TurnID: "terminal-legacy", ReqID: "terminal-legacy", Agent: "codex", InputTokens: 1},
+	); err != nil {
+		t.Fatal(err)
+	}
 	got := getUsageEvents(t, s, "/api/usage/events", "alice", store.RoleUser)
 	efforts := map[string]string{}
 	for _, r := range got.Rows {
@@ -431,5 +438,7 @@ func TestUsageEventsShowTheTurnsEffort(t *testing.T) {
 	if efforts["chat/"+c.TurnID] != "xhigh/effort" || efforts["title/"+c.TurnID] != "/" || efforts["chat/legacy"] != "/" {
 		t.Fatal(efforts)
 	}
+	if efforts["terminal/terminal-codex"] != "high/effort" || efforts["terminal/terminal-claude"] != "xhigh/effort" || efforts["terminal/terminal-legacy"] != "/" {
+		t.Fatal(efforts)
+	}
 }
-

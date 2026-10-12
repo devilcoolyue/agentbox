@@ -1,4 +1,5 @@
 import {setText,t} from "../../i18n.js";
+import {actionButton,buttonLabel} from "../../icons.js";
 import {setSelectValue} from "../../select.js";
 import {modelBlocks,modelDelta,type OutputBlock} from "./output.js";
 
@@ -28,7 +29,7 @@ function trimBlocks(blocks:Map<string,OutputBlock>):boolean {
 export function createLiveOutput(owner:string,owns:()=>boolean){
  const box=document.createElement("details"),title=document.createElement("summary"),status=document.createElement("p"),selector=document.createElement("select"),label=document.createElement("label"),body=document.createElement("pre"),controls=document.createElement("div"),more=document.createElement("button"),follow=document.createElement("button");
  box.className="collaboration-evidence collaboration-run-output";box.hidden=true;box.open=true;setText(title,"步骤输出");status.dataset.outputStatus="";status.setAttribute("role","status");selector.dataset.outputStep="";body.dataset.outputBody="";more.dataset.outputMore="";
- const caption=document.createElement("span");setText(caption,"选择步骤");label.append(caption,selector);for(const b of [more,follow]){b.type="button";b.className="btn btn-sm"}setText(follow,"跟随最新步骤");controls.append(more,follow);box.append(title,label,status,body,controls);
+ const caption=document.createElement("span");setText(caption,"选择步骤");label.append(caption,selector);for(const b of [more,follow]){b.type="button";b.className="btn btn-sm"}actionButton(more,()=>t("加载更多记录"),"chevron");actionButton(follow,()=>t("跟随最新步骤"),"activity");controls.append(more,follow);box.append(title,label,status,body,controls);
  let view:OutputView|undefined,generation=0,selectionGeneration=0,selected="",following=true,eventsAfter=0,eventsMore=false,eventsLoading=false,historyLoading=false,historyError=false,eventsError=false,streamError=false,liveTruncated=false;
  let life:AbortController|undefined,historyAbort:AbortController|undefined,streamAbort:AbortController|undefined,streamStep="",reconnectAfter=0,optionSignature="";
  const steps=new Map<string,Step>(),stepOrder=new Map<string,number>(),transcripts=new Map<string,Transcript>(),liveBlocks=new Map<string,OutputBlock>();let draft:{kind:"text"|"thinking";text:string}|undefined;
@@ -57,7 +58,7 @@ export function createLiveOutput(owner:string,owns:()=>boolean){
   else setText(status,active()?"正在接收当前步骤输出。":"已保存的步骤输出。");
   if(cache?.truncated||liveTruncated||text.length>textLimit)status.textContent+=" "+t("部分内容过长，预览已省略。");
   more.hidden=!(historyError||eventsError||eventsMore||cache?.more);more.disabled=historyLoading||eventsLoading;
-  setText(more,historyError||eventsError?"重试":"加载更多记录");controls.hidden=more.hidden&&follow.hidden;
+  buttonLabel(more,()=>t(historyError||eventsError?"重试":"加载更多记录"),historyError||eventsError?"refresh":"chevron");controls.hidden=more.hidden&&follow.hidden;
  }
  function stopStream(){streamAbort?.abort();streamAbort=undefined;streamStep="";}
  function choose(id:string){

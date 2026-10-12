@@ -35,6 +35,11 @@ func TestCodexTerminalDeduplicatesAndGroupsModels(t *testing.T) {
 	if rows[2].ev.InputTokens != 10 || rows[2].ev.OutputTokens != 3 || rows[2].ev.TurnID == rows[0].ev.TurnID {
 		t.Fatal(rows[2])
 	}
+	for i, want := range []string{"high", "medium", ""} {
+		if rows[i].ev.Effort != want || (want != "" && rows[i].ev.EffortControl != "effort") {
+			t.Fatalf("row %d effort = %+v, want %q", i, rows[i].ev, want)
+		}
+	}
 	for _, origin := range []string{"codex_exec", "codex-app-server", "unknown"} {
 		raw := strings.ReplaceAll(codexFixture(t), "codex-tui", origin)
 		rows, err := parseCodexTerminal(strings.NewReader(raw))
@@ -80,10 +85,42 @@ func TestCodexTerminalScanUpdatesWithoutChargingAndKeepsSnapshot(t *testing.T) {
 		if r.Model == "gpt-fixture-a" && (r.Price.Standard.Input != 2 || r.CostMicroUSD != 225) {
 			t.Fatalf("growth repriced %+v", r)
 		}
+		if r.Model == "gpt-fixture-a" && (r.Effort != "high" || r.EffortControl != "effort") {
+			t.Fatalf("transcript effort not persisted: %+v", r)
+		}
 	}
 	q, _ := s.store.GetQuota(sess.User)
 	if q.BalanceMicroUSD != 1000 {
 		t.Fatal("terminal debited balance")
+	}
+}
+
+func TestCodexTerminalEffortStaysUnknownWhenMissingOrMixed(t *testing.T) {
+	fixture := codexFixture(t)
+	for name, raw := range map[string]string{
+		"missing":     strings.ReplaceAll(fixture, `, "effort": "high"`, ""),
+		"null":        strings.ReplaceAll(fixture, `"effort": "high"`, `"effort": null`),
+		"unsupported": strings.ReplaceAll(fixture, `"effort": "high"`, `"effort": {"future": true}`),
+		"mixed":       strings.Replace(fixture, `{"timestamp": "2026-09-23T10:00:05Z"`, `{"type":"turn_context","payload":{"turn_id":"turn-one","model":"gpt-fixture-a","effort":"low"}}`+"\n"+`{"timestamp": "2026-09-23T10:00:05Z"`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rows, err := parseCodexTerminal(strings.NewReader(raw))
+			if err != nil || len(rows) != 3 || rows[0].ev.InputTokens != 90 || rows[0].ev.OutputTokens != 15 {
+				t.Fatalf("effort changed usage: %+v, %v", rows, err)
+			}
+			if rows[0].ev.Effort != "" || rows[0].ev.EffortControl != "" {
+				t.Fatalf("invented a single effort: %+v", rows[0])
+			}
+		})
+	}
+}
+
+func TestCodexTerminalEffortContextBeforeStart(t *testing.T) {
+	lines := strings.Split(codexFixture(t), "\n")
+	lines[1], lines[2] = lines[2], lines[1]
+	rows, err := parseCodexTerminal(strings.NewReader(strings.Join(lines, "\n")))
+	if err != nil || len(rows) != 3 || rows[0].ev.Effort != "high" {
+		t.Fatalf("same-turn start erased recorded context: %+v, %v", rows, err)
 	}
 }
 func TestCodexCounterResetAndPartialTail(t *testing.T) {

@@ -1,4 +1,5 @@
 import { setText, t } from "../../i18n.js";
+import { actionButton, buttonLabel } from "../../icons.js";
 import { setSelectValue } from "../../select.js";
 import { modelBlocks, modelDelta } from "./output.js";
 const object = (v) => !!v && typeof v === "object" && !Array.isArray(v);
@@ -44,7 +45,8 @@ export function createLiveOutput(owner, owns) {
         b.type = "button";
         b.className = "btn btn-sm";
     }
-    setText(follow, "跟随最新步骤");
+    actionButton(more, () => t("加载更多记录"), "chevron");
+    actionButton(follow, () => t("跟随最新步骤"), "activity");
     controls.append(more, follow);
     box.append(title, label, status, body, controls);
     let view, generation = 0, selectionGeneration = 0, selected = "", following = true, eventsAfter = 0, eventsMore = false, eventsLoading = false, historyLoading = false, historyError = false, eventsError = false, streamError = false, liveTruncated = false;
@@ -101,7 +103,7 @@ export function createLiveOutput(owner, owns) {
             status.textContent += " " + t("部分内容过长，预览已省略。");
         more.hidden = !(historyError || eventsError || eventsMore || cache?.more);
         more.disabled = historyLoading || eventsLoading;
-        setText(more, historyError || eventsError ? "重试" : "加载更多记录");
+        buttonLabel(more, () => t(historyError || eventsError ? "重试" : "加载更多记录"), historyError || eventsError ? "refresh" : "chevron");
         controls.hidden = more.hidden && follow.hidden;
     }
     function stopStream() { streamAbort?.abort(); streamAbort = undefined; streamStep = ""; }
