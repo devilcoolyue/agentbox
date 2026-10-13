@@ -541,7 +541,13 @@ export async function smoke(page) {
   await acctRow.locator('.more-btn').click();
   assert.deepEqual((await page.locator('.menu-pop [role=menuitem]').allInnerTexts()).map(t=>t.trim()),['使用范围 · 全体用户','可用模型…','模型能力','删除账号']);
   await page.getByRole('menuitem',{name:'模型能力',exact:true}).click();
-  await page.locator('#ask-input-field').fill('fixture');await page.locator('#ask-input-ok').click();
+  // The model is chosen from the system list; only models outside it are typed.
+  const pickDialog=page.locator('dialog[open]').filter({has:page.locator('select[name="model"]')});
+  await pickDialog.getByRole('combobox').click();
+  assert.deepEqual(await page.getByRole('option').allInnerTexts(),['Fixture (fixture)','Fixture Lite (fixture-lite)','No adjustment (fixture-none)','Custom (fixture-custom)','其他模型 ID…']);
+  await page.getByRole('option',{name:'Fixture (fixture)',exact:true}).click();
+  assert.equal(await pickDialog.locator('input[name="custom"]').isVisible(),false);
+  await assertActionIcons(page);await pickDialog.getByRole('button',{name:'下一步',exact:true}).click();
   const overrideDialog=page.locator('dialog[open]').filter({has:page.locator('select[name="support"]')});
   await overrideDialog.locator('label').filter({hasText:'支持范围'}).getByRole('combobox').click();
   await overrideDialog.getByRole('option',{name:'不支持调整',exact:true}).click();
@@ -549,6 +555,21 @@ export async function smoke(page) {
   // Wait for the account write instead of a fixed delay; slower engines finish later.
   for(const until=Date.now()+5000;!accounts.find(a=>a.id==='codex-key-fixture').model_reasoning&&Date.now()<until;)await page.waitForTimeout(50);
   assert.equal(accounts.find(a=>a.id==='codex-key-fixture').model_reasoning.fixture.support,'unsupported');
+  // Overridden models come first with their capability; "other" reveals a validated ID field.
+  await acctRow.locator('.more-btn').click();
+  await page.getByRole('menuitem',{name:'模型能力',exact:true}).click();
+  await pickDialog.getByRole('combobox').filter({hasText:'Fixture (fixture) · 不支持调整'}).waitFor();
+  await pickDialog.getByRole('combobox').click();
+  assert.deepEqual(await page.locator('.select-panel:popover-open .select-group').allInnerTexts(),['已覆盖','系统模型列表','其他']);
+  await page.getByRole('option',{name:'其他模型 ID…',exact:true}).click();
+  const customModel=pickDialog.locator('input[name="custom"]');
+  await customModel.fill('bad/id');await customModel.press('Enter');
+  await pickDialog.locator('[role="alert"]').filter({hasText:'请输入有效的模型 ID'}).waitFor();
+  await customModel.fill('relay-only');await pickDialog.getByRole('button',{name:'下一步',exact:true}).click();
+  await overrideDialog.locator('h2').filter({hasText:'relay-only'}).waitFor();
+  await overrideDialog.getByRole('button',{name:'取消',exact:true}).click();
+  await overrideDialog.waitFor({state:'detached'});
+  assert.deepEqual(Object.keys(accounts.find(a=>a.id==='codex-key-fixture').model_reasoning),['fixture'],'cancelled override was saved');
 
   await page.setViewportSize({width:390,height:844});
   await page.locator('#btn-acct-add').click();

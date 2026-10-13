@@ -232,7 +232,7 @@ function acctRow(a: Account) {
     { label: i18nText("使用范围 · ") + accessLabel(a), icon: "users", run: () => editAccountAccess(a) },
     { label: i18nText("可用模型…"), icon: "cpu", run: () => openAccountModels(a), tip: i18nText("选择这个账号能用的模型和各自的思考强度") },
     // 账号有自己的模型列表时，思考强度在「可用模型」里按模型设置。
-    ...(a.models?.length ? [] : [{ label: i18nText("模型能力"), icon: "sliders", run: () => editAccountReasoning(a), tip: i18nText("为这个账号覆盖模型的推理强度能力") }]),
+    ...(a.models?.length ? [] : [{ label: i18nText("模型能力"), icon: "sliders", run: () => editAccountReasoning(a, settingsState.value?.models?.[a.type] || S.models?.[a.type] || []), tip: i18nText("为这个账号覆盖模型的推理强度能力") }]),
     { label: i18nText("删除账号"), icon: "trash", danger: true, sep: true, run: () => openAcctDel(a),
       disabled: a.sessions > 0, tip: a.sessions > 0 ? i18nText("有工作空间在用，请先删除对应工作空间") : undefined },
   ], () => i18nText("{p0} 的更多操作", { p0: String(a.label) }));
