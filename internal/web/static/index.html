@@ -992,45 +992,60 @@
               </div>
             </section>
 
-            <!-- 界面与提示 -->
+            <!-- 智能决策 -->
             <section id="sec-decision" class="set-section hidden">
               <div class="sec-intro"><div><h2 data-i18n="智能决策">智能决策</h2><p data-i18n="对话开启「委派」时，Jev 可在标签规则之后判断交给哪个跑腿模型，或建议主 Agent 自己做。关闭后仍按跑腿标签路由。">对话开启「委派」时，Jev 可在标签规则之后判断交给哪个跑腿模型，或建议主 Agent 自己做。关闭后仍按跑腿标签路由。</p></div></div>
-              <p id="decision-settings-unavailable" class="note" hidden data-i18n="当前服务端不支持决策插件。">当前服务端不支持决策插件。</p>
+              <p id="decision-settings-unavailable" class="dc-callout warn" hidden data-i18n="当前服务端不支持决策插件。">当前服务端不支持决策插件。</p>
               <fieldset id="decision-settings-fields" class="decision-settings-fields" disabled>
                 <input id="set-decision-revision" type="hidden" value="0">
                 <input id="set-decision-key-gateway" type="hidden" value="typesafe">
                 <input id="set-decision-key-configured" type="hidden" value="false">
                 <div class="card">
-                  <h3 data-i18n="Jev 辅助决策">Jev 辅助决策</h3>
-                  <label class="field"><span data-i18n="启用 Jev">启用 Jev</span><input id="set-decision-enabled" type="checkbox"></label>
-                  <label class="field"><span data-i18n="默认决策方式">默认决策方式</span><select id="set-decision-default"><option value="builtin" data-i18n="内置规则">内置规则</option><option value="jev" data-i18n="Jev 辅助判断">Jev 辅助判断</option></select></label>
-                  <p class="card-desc" data-i18n="只在任务选择自动模型且需要判断时调用。固定模型不产生决策调用费用。">只在任务选择自动模型且需要判断时调用。固定模型不产生决策调用费用。</p>
+                  <div class="dc-head">
+                    <div class="dc-head-text">
+                      <h3 data-i18n="Jev 辅助决策">Jev 辅助决策</h3>
+                      <p class="card-desc" data-i18n="只在任务选择自动模型且需要判断时调用。固定模型不产生决策调用费用。">只在任务选择自动模型且需要判断时调用。固定模型不产生决策调用费用。</p>
+                    </div>
+                    <label class="dc-switch"><span data-i18n="启用 Jev">启用 Jev</span><input id="set-decision-enabled" type="checkbox" class="mv-switch"></label>
+                  </div>
+                  <div class="field-row">
+                    <label class="field"><span data-i18n="默认决策方式">默认决策方式</span><select id="set-decision-default"><option value="builtin" data-i18n="内置规则">内置规则</option><option value="jev" data-i18n="Jev 辅助判断">Jev 辅助判断</option></select></label>
+                    <label class="field"><span data-i18n="决策模型">决策模型</span><input id="set-decision-model" type="text" class="mono" value="jev-1.13.0" readonly></label>
+                  </div>
+                  <div class="card-foot"><span class="note" data-i18n="保存设置不会调用 Jev。任务调用的费用会计入任务预算。">保存设置不会调用 Jev。任务调用的费用会计入任务预算。</span></div>
+                </div>
+                <div class="card">
+                  <div class="dc-head">
+                    <h3 data-i18n="服务与密钥">服务与密钥</h3>
+                    <span id="set-decision-key-state" class="dc-key-state" data-state="off" data-i18n="尚未配置 API Key">尚未配置 API Key</span>
+                  </div>
                   <label class="field"><span data-i18n="接入服务">接入服务</span><select id="set-decision-gateway"><option value="typesafe" data-i18n="TypeSafe 官方">TypeSafe 官方</option><option value="mindshub">Mindshub</option></select><span id="set-decision-gateway-hint" class="hint" data-i18n="使用 TypeSafe 官方 API Key。">使用 TypeSafe 官方 API Key。</span></label>
-                  <p id="set-decision-mindshub-pricing" class="note" hidden data-i18n="Mindshub 目前提供免费 Jev 调用，受公平使用限制。">Mindshub 目前提供免费 Jev 调用，受公平使用限制。</p>
-                  <p id="set-decision-gateway-key-note" class="note" hidden data-i18n="切换接入服务时，请设置新密钥或清除已有密钥。">切换接入服务时，请设置新密钥或清除已有密钥。</p>
+                  <p id="set-decision-mindshub-pricing" class="dc-callout" hidden data-i18n="Mindshub 目前提供免费 Jev 调用，受公平使用限制。">Mindshub 目前提供免费 Jev 调用，受公平使用限制。</p>
                   <div class="field-row">
                     <label class="field"><span data-i18n="API Key 操作">API Key 操作</span><select id="set-decision-key-action"><option value="keep" data-i18n="保留已有密钥">保留已有密钥</option><option value="set" data-i18n="设置新密钥">设置新密钥</option><option value="clear" data-i18n="清除密钥">清除密钥</option></select></label>
-                    <label class="field"><span>API Key</span><input id="set-decision-key" type="password" autocomplete="new-password" spellcheck="false" maxlength="4096"><span id="set-decision-key-state" class="hint" data-i18n="尚未配置 API Key">尚未配置 API Key</span></label>
+                    <label class="field"><span>API Key</span><input id="set-decision-key" type="password" autocomplete="new-password" spellcheck="false" maxlength="4096" placeholder="输入 API Key" data-i18n-attrs="{&quot;placeholder&quot;:&quot;输入 API Key&quot;}"></label>
                   </div>
-                  <label class="field"><span data-i18n="决策模型">决策模型</span><input id="set-decision-model" type="text" class="mono" value="jev-1.13.0" readonly></label>
-                  <p class="note" data-i18n="保存设置不会调用 Jev。任务调用的费用会计入任务预算。">保存设置不会调用 Jev。任务调用的费用会计入任务预算。</p>
+                  <p id="set-decision-gateway-key-note" class="dc-callout warn" hidden data-i18n="切换接入服务时，请设置新密钥或清除已有密钥。">切换接入服务时，请设置新密钥或清除已有密钥。</p>
                 </div>
                 <div class="card">
                   <h3 data-i18n="使用范围与限制">使用范围与限制</h3>
-                  <label class="field"><span data-i18n="允许使用的用户">允许使用的用户</span><select id="set-decision-access"><option value="admin" data-i18n="仅管理员">仅管理员</option><option value="all" data-i18n="所有用户">所有用户</option><option value="users" data-i18n="指定用户">指定用户</option></select></label>
-                  <label class="field"><span data-i18n="指定用户名（逗号分隔）">指定用户名（逗号分隔）</span><input id="set-decision-users" type="text" maxlength="4096" autocomplete="off"><span class="hint" data-i18n="选择指定用户时生效，管理员始终可用。">选择指定用户时生效，管理员始终可用。</span></label>
+                  <div class="field-row">
+                    <label class="field"><span data-i18n="允许使用的用户">允许使用的用户</span><select id="set-decision-access"><option value="admin" data-i18n="仅管理员">仅管理员</option><option value="all" data-i18n="所有用户">所有用户</option><option value="users" data-i18n="指定用户">指定用户</option></select></label>
+                    <label class="field"><span data-i18n="指定用户名（逗号分隔）">指定用户名（逗号分隔）</span><input id="set-decision-users" type="text" maxlength="4096" autocomplete="off"><span class="hint" data-i18n="选择指定用户时生效，管理员始终可用。">选择指定用户时生效，管理员始终可用。</span></label>
+                  </div>
                   <details class="learn-more"><summary data-i18n="高级设置">高级设置</summary>
                     <div class="field-row">
-                      <label class="field"><span data-i18n="决策超时（毫秒）">决策超时（毫秒）</span><input id="set-decision-timeout" type="number" min="100" max="30000" step="1" required value="1500"></label>
-                      <label class="field"><span data-i18n="请求大小上限（字节）">请求大小上限（字节）</span><input id="set-decision-bytes" type="number" min="1024" max="65536" step="1" required value="32768"></label>
-                      <label class="field"><span data-i18n="决策并发上限">决策并发上限</span><input id="set-decision-concurrency" type="number" min="1" max="16" step="1" required value="2"></label>
+                      <label class="field"><span data-i18n="决策超时（毫秒）">决策超时（毫秒）</span><input id="set-decision-timeout" type="number" min="100" max="30000" step="1" required value="1500" class="mono"></label>
+                      <label class="field"><span data-i18n="请求大小上限（字节）">请求大小上限（字节）</span><input id="set-decision-bytes" type="number" min="1024" max="65536" step="1" required value="32768" class="mono"></label>
+                      <label class="field"><span data-i18n="决策并发上限">决策并发上限</span><input id="set-decision-concurrency" type="number" min="1" max="16" step="1" required value="2" class="mono"></label>
                     </div>
                   </details>
-                  <p class="note" data-i18n="Jev 超时或不可用时使用已配置的模型回退；已接收的远端调用仍可能收费。">Jev 超时或不可用时使用已配置的模型回退；已接收的远端调用仍可能收费。</p>
+                  <div class="card-foot"><span class="note" data-i18n="Jev 超时或不可用时使用已配置的模型回退；已接收的远端调用仍可能收费。">Jev 超时或不可用时使用已配置的模型回退；已接收的远端调用仍可能收费。</span></div>
                 </div>
               </fieldset>
             </section>
 
+            <!-- 界面与提示 -->
             <section id="sec-interface" class="set-section hidden">
               <div class="sec-intro">
                 <div>

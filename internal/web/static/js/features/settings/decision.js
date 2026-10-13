@@ -9,6 +9,8 @@ export function refreshDecisionSettings() {
         : "使用 TypeSafe 官方 API Key。");
     document.getElementById("set-decision-mindshub-pricing").hidden = select("set-decision-gateway").value !== "mindshub";
     document.getElementById("set-decision-gateway-key-note").hidden = input("set-decision-key-configured").value !== "true" || input("set-decision-key-gateway").value === select("set-decision-gateway").value;
+    // 用户名只在「指定用户」时生效；其他模式置灰，值留着，切回来不用重填
+    input("set-decision-users").disabled = select("set-decision-access").value !== "users";
 }
 export function fillDecisionSettings(value) {
     const root = document.getElementById("decision-settings-fields");
@@ -20,16 +22,18 @@ export function fillDecisionSettings(value) {
     setSelectValue(select("set-decision-gateway"), value?.plugins.jev.gateway || "typesafe");
     input("set-decision-key-gateway").value = value?.plugins.jev.gateway || "typesafe";
     input("set-decision-key-configured").value = String(!!value?.plugins.jev.key_configured);
-    refreshDecisionSettings();
     setSelectValue(select("set-decision-key-action"), "keep");
     input("set-decision-key").value = "";
-    setText(document.getElementById("set-decision-key-state"), value?.plugins.jev.key_configured ? "API Key 已配置" : "尚未配置 API Key");
+    const keyState = document.getElementById("set-decision-key-state");
+    keyState.dataset.state = value?.plugins.jev.key_configured ? "on" : "off";
+    setText(keyState, value?.plugins.jev.key_configured ? "API Key 已配置" : "尚未配置 API Key");
     input("set-decision-model").value = value?.plugins.jev.model || "jev-1.13.0";
     input("set-decision-timeout").value = String(value?.plugins.jev.timeout_ms ?? 1500);
     input("set-decision-bytes").value = String(value?.plugins.jev.max_request_bytes ?? 32768);
     input("set-decision-concurrency").value = String(value?.plugins.jev.max_concurrency ?? 2);
     setSelectValue(select("set-decision-access"), value?.plugins.jev.access.mode || "admin");
     input("set-decision-users").value = (value?.plugins.jev.access.users || []).join(", ");
+    refreshDecisionSettings();
 }
 export function decisionSettingsGroup() {
     return { id: "decision", get label() { return t("智能决策"); }, fields: ids, patch: () => {
@@ -62,5 +66,6 @@ export function initDecisionSettings(signal) {
     action.addEventListener("change", () => { key.setCustomValidity(""); if (action.value !== "set")
         key.value = ""; }, { signal });
     input("set-decision-users").addEventListener("input", () => input("set-decision-users").setCustomValidity(""), { signal });
+    select("set-decision-access").addEventListener("change", () => { input("set-decision-users").setCustomValidity(""); refreshDecisionSettings(); }, { signal });
     signal.addEventListener("abort", () => { key.value = ""; setSelectValue(action, "keep"); }, { once: true });
 }

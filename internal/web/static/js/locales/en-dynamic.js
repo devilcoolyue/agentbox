@@ -37,6 +37,7 @@ export default {
     "当前服务端不支持决策插件。": "This server does not support decision plugins.",
     "所有用户": "All users",
     "指定用户名（逗号分隔）": "Usernames (comma-separated)",
+    "服务与密钥": "Service and API Key",
     "智能决策": "Decision support",
     "清除密钥": "Clear key",
     "设置新密钥": "Set new key",

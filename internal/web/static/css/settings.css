@@ -646,4 +646,31 @@
 .learn-more .sec-hint { margin: 6px 0 0; }
 @media (prefers-reduced-motion: reduce) { .learn-more > summary::after { transition: none; } }
 .card > .learn-more { margin-top: -8px; }
-.decision-settings-fields{border:0;padding:0;margin:0;min-width:0}
+/* 智能决策：fieldset 只用来整体禁用，排版与 .set-section 相同，卡片之间留同样的间距 */
+.decision-settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.dc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dc-head-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dc-head-text .card-desc { margin: 0; line-height: 1.55; }
+.dc-switch { display: inline-flex; align-items: center; gap: 10px; flex: none; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.dc-key-state {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  font-size: 11.5px; color: var(--muted); white-space: nowrap;
+  border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 1px 9px;
+}
+.dc-key-state::before { content: ""; width: 6px; height: 6px; border-radius: var(--radius-pill); background: currentColor; opacity: .7; }
+.dc-key-state[data-state="on"] { color: var(--green); border-color: var(--green-line); }
+.dc-callout {
+  margin: 0; padding: 8px 12px; font-size: 12px; line-height: 1.55; color: var(--muted);
+  border: 1px solid var(--line); border-left: 3px solid var(--amber-dim);
+  border-radius: calc(6px * var(--radius-scale)); background: var(--panel-2);
+}
+.dc-callout.warn { color: var(--warn); border-color: var(--warn-line); border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 6%, transparent); }
+.card > .dc-callout { margin-top: -6px; }
+/* 并排的字段按宽度自动换行：窄屏一行一个，免得下拉文字被截成「保留已…」 */
+#sec-decision .field-row .field { flex: 1 1 200px; }
+#sec-decision .learn-more > .field-row { margin-top: 12px; }
+#sec-decision .learn-more .field { flex-basis: 160px; }
+#sec-decision .field input:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 560px) {
+  .dc-head { flex-wrap: wrap; }
+}
