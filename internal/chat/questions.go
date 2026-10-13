@@ -22,6 +22,15 @@ type QuestionView struct {
 	ExpiresAt *time.Time           `json:"expires_at,omitempty"`
 }
 
+// SteerView is a follow-up message handed to a running turn, recorded where
+// the CLI took it ("applied") or at the turn's end if it never did ("dropped").
+// ID is the follow-up's request ID.
+type SteerView struct {
+	ID    string `json:"id"`
+	Text  string `json:"text"`
+	State string `json:"state"`
+}
+
 // ask offers q to the answer API and waits for the first answer, the
 // question's own time limit, or the CLI withdrawing it (an interrupt).
 func ask(ctx context.Context, q agent.Question, r Runtime, clock *turnClock, record func(QuestionView)) agent.Answer {

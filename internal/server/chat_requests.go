@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"agentbox/internal/agent"
 	"agentbox/internal/protocol"
 	"agentbox/internal/store"
 )
@@ -113,7 +112,28 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 		writeJSON(w, 200, protocol.Response(receipt, true))
 		return
 	}
-	if err := room.begin(); err != nil {
+	if input.Delivery == store.DeliverySteer {
+		receipt, steered, err := room.steerRequest(r.Context(), u, sess.ID, id, input)
+		if err != nil {
+			writeChatRequestError(w, r, err)
+			return
+		}
+		if steered {
+			room.broadcast(protocol.Event(receipt))
+			writeJSON(w, 202, protocol.Response(receipt, false))
+			return
+		}
+	}
+	err = room.begin()
+	if err == nil && input.Delivery != "" && s.queueWaiting(sess.ID) {
+		room.release() // earlier follow-ups run first
+		err = errChatBusy
+	}
+	if err != nil {
+		if input.Delivery != "" && (errors.Is(err, errChatBusy) || errors.Is(err, store.ErrChatPending)) {
+			s.queueChatRequest(w, r, room, sess, u, id, input)
+			return
+		}
 		writeChatRequestError(w, r, err)
 		return
 	}
@@ -124,46 +144,10 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 		}
 	}()
 	var receipt store.ChatRequest
-	err = s.workspaces().WithSession(r.Context(), sess.ID, func(current store.Session) error {
-		if current.User != u.Name {
-			return errSessionGone
-		}
-		if s.quotaBlock(current.User) != "" {
-			return chatRequestProblem("quota_exhausted")
-		}
-		acct, err := s.sessionAccount(current)
-		if err != nil {
-			return err
-		}
-		// Require a concrete model in this protocol, frozen by the client before
-		// any asynchronous attachment check; do not reinterpret an empty default.
-		if input.Model == "" || !acct.AllowsModel(input.Model) {
-			return chatRequestProblem("chat_options_invalid")
-		}
-		if _, err = agent.ResolveTurnOptions(current.Agent, input.Model, input.Effort, input.EffortControl, s.cfg.ConfiguredReasoning(acct, input.Model)); err != nil {
-			return chatRequestProblem("chat_options_invalid")
-		}
-		room.fileMu.Lock()
-		defer room.fileMu.Unlock()
-		if err = s.migrateThreads(current); err != nil {
-			return err
-		}
-		if s.activeThread(current) != input.ThreadID {
-			return chatRequestProblem("chat_thread_changed")
-		}
-		s.attachmentMu.Lock()
-		defer s.attachmentMu.Unlock()
-		valid, err := s.validateChatAttachments(current, input.Attachments)
-		if err != nil {
-			return err
-		}
-		for _, ok := range valid {
-			if !ok {
-				return chatRequestProblem("chat_attachments_invalid")
-			}
-		}
+	err = s.admitChat(r.Context(), room, sess.ID, u, input, func() error {
 		var fresh bool
-		receipt, fresh, err = s.store.AcceptChatRequest(u, current.ID, id, input)
+		var err error
+		receipt, fresh, err = s.store.AcceptChatRequest(u, sess.ID, id, input)
 		if err != nil {
 			return err
 		}
@@ -176,18 +160,8 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 		writeChatRequestError(w, r, err)
 		return
 	}
-	room.mu.Lock()
-	room.requestID = receipt.RequestID
-	room.mu.Unlock()
-	ctx := operationContext(s.workContext())
-	observer := &chatReceiptTurn{room: room, owner: u, receipt: receipt, outcome: store.ChatUncertain, code: "execution_incomplete"}
-	if !s.spawn(func() { room.runReceiptTurn(ctx, observer) }) {
-		_, err = s.store.AdvanceChatRequest(u, sess.ID, id, receipt.Revision, store.ChatFailed, "server_stopping")
-		if err != nil {
-			writeChatRequestError(w, r, err)
-		} else {
-			writeChatRequestError(w, r, chatRequestProblem("server_stopping"))
-		}
+	if err = room.startReceipt(u, receipt); err != nil {
+		writeChatRequestError(w, r, err)
 		return
 	}
 	scheduled = true
@@ -255,14 +229,17 @@ func (s *Server) handleChatRequestList(w http.ResponseWriter, r *http.Request, s
 		writeChatRequestError(w, r, err)
 		return
 	}
-	rows := []store.ChatRequest{}
+	var rows []store.ChatRequest
+	var err error
 	if r.URL.Query().Get("pending_only") != "1" {
-		var err error
 		rows, err = s.store.RecentChatRequests(reqUser(r), sess.ID, thread)
-		if err != nil {
-			writeChatRequestError(w, r, err)
-			return
-		}
+	} else {
+		// Polling pages still need the queue: every page can see and withdraw it.
+		rows, err = s.store.QueuedChatRequests(reqUser(r), sess.ID)
+	}
+	if err != nil {
+		writeChatRequestError(w, r, err)
+		return
 	}
 	writeJSON(w, 200, protocol.ChatRequestList{Version: protocol.ChatVersion, Scope: s.chatRequestScope(reqUser(r)), Requests: rows, Pending: pending})
 }
@@ -290,6 +267,23 @@ func (s *Server) handleChatRequestAction(w http.ResponseWriter, r *http.Request,
 		if err := s.store.AbandonUnknownChatRequest(u, sess.ID, id); err != nil {
 			writeChatRequestError(w, r, err)
 			return
+		}
+	} else if input.Action == "withdraw" {
+		// A queued follow-up is taken back before it runs; the page restores it.
+		c, err := s.store.ChatRequest(u, sess.ID, id)
+		if err != nil {
+			writeChatRequestError(w, r, err)
+			return
+		}
+		if !(c.State == store.ChatAbandoned && input.Revision == c.Revision-1) {
+			if c.State != store.ChatQueued || c.Revision != input.Revision {
+				writeChatRequestError(w, r, store.ErrChatConflict)
+				return
+			}
+			if _, err = s.store.AdvanceChatRequest(u, sess.ID, id, c.Revision, store.ChatAbandoned, "withdrawn"); err != nil {
+				writeChatRequestError(w, r, err)
+				return
+			}
 		}
 	} else if input.Action == "interrupt" {
 		c, err := s.store.ChatRequest(u, sess.ID, id)
@@ -330,6 +324,7 @@ func (s *Server) handleChatRequestAction(w http.ResponseWriter, r *http.Request,
 				writeChatRequestError(w, r, err)
 				return
 			}
+			room.kickQueue() // follow-ups queued behind the unreviewed turn may run now
 		}
 	} else {
 		writeChatRequestError(w, r, store.ErrChatInvalid)

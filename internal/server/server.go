@@ -557,6 +557,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	if err := s.applyProxyBridge(); err != nil {
 		log.Printf("account proxy bridge disabled: %v", err)
 	}
+	s.spawn(s.dispatchQueuedChats) // follow-ups queued before a restart run in order
 	log.Printf("agentbox listening on http://%s", ln.Addr())
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
@@ -707,7 +708,9 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		// Accepts chat request "suggestions"; older servers reject the field.
 		"prompt_suggestions": 1,
 		// Accepts chat request "questions" and answers at chat/questions/{id}.
-		"chat_questions":           1,
+		"chat_questions": 1,
+		// Accepts chat request "delivery" (queue / steer) while a turn runs.
+		"chat_followups":           1,
 		"user":                     u.Name,
 		"role":                     u.Role,
 		"models":                   s.cfg.GetModels(),

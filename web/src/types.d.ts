@@ -348,6 +348,8 @@ export interface Me {
   prompt_suggestions?:number;
   /** 1：对话请求可带 questions，回合中 Agent 可以提问，在 chat/questions/{id} 作答。 */
   chat_questions?:number;
+  /** 1：回合运行中可发跟进消息，请求带 delivery（queue 排队 / steer 引导）。 */
+  chat_followups?:number;
   user: string;
   /** "admin" | "user"：admin 才能进系统设置 */
   role: string;
@@ -481,6 +483,9 @@ export interface QuestionView {
   answers?: Record<string, string>;
   expires_at?: string;
 }
+
+/** 插进运行中回合的跟进消息：applied＝CLI 在这个位置接收了它；dropped＝回合结束前没接收。 */
+export interface SteerView { id: string; text: string; state: string; }
 
 export interface DelegationView {
   id: string;
@@ -983,10 +988,10 @@ export interface ChatTurnCost {
 export interface HistoryEntry extends APIProblem {
   turn?: ChatTurnMetadata;
   ts: string;
-  /** "user" | "event" | "status" | "question" | "chat_session" | "title" | "delegation" | "divider"(旧) */
+  /** "user" | "event" | "status" | "question" | "steer" | "chat_session" | "title" | "delegation" | "divider"(旧) */
   kind: string;
   text?: string;
-  /** delegation 条目里是 DelegationView，question 条目里是 QuestionView，其余是 Agent 事件 */
+  /** delegation 条目里是 DelegationView，question 是 QuestionView，steer 是 SteerView，其余是 Agent 事件 */
   event?: AgentEvent;
   state?: string;
   error?: string;
@@ -1116,7 +1121,23 @@ export interface AgentEvent {
   };
   /** Codex：turn.failed 的错误体 */
   error?: { message?: string; [key: string]: unknown };
+  /** Claude：后台任务的 system 事件（background_tasks_changed 带当前全部，
+   * task_started / task_updated / task_notification 带单个 task_id） */
+  tasks?: BackgroundTask[];
+  task_id?: string;
+  description?: string;
+  is_backgrounded?: boolean;
+  status?: string;
+  summary?: string;
+  patch?: { status?: string; [key: string]: unknown };
   [key: string]: unknown;
+}
+
+/** Claude：仍在后台运行的任务（Bash run_in_background 等） */
+export interface BackgroundTask {
+  task_id?: string;
+  description?: string;
+  task_type?: string;
 }
 
 /** liveNode 产出的流式临时节点：body 由打字机填充，el 是插入对话流的外层。 */

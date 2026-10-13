@@ -115,6 +115,26 @@ func ClaudeUserMessage(text string) []byte {
 	return append(raw, '\n')
 }
 
+// ClaudeSteer is a follow-up for the running turn: the CLI applies it after
+// the current tool step, or as one more turn if the model already finished.
+func ClaudeSteer(text string) []byte {
+	raw, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}, "priority": "next"})
+	return append(raw, '\n')
+}
+
+// IsClaudeReplay recognizes the CLI's echo of a user message it just took
+// from stdin (--replay-user-messages); tool results are not echoes.
+func IsClaudeReplay(line []byte) bool {
+	if !bytes.Contains(line, []byte(`"isReplay"`)) {
+		return false
+	}
+	var probe struct {
+		Type     string `json:"type"`
+		IsReplay bool   `json:"isReplay"`
+	}
+	return json.Unmarshal(line, &probe) == nil && probe.Type == "user" && probe.IsReplay
+}
+
 func ClaudeInterrupt(id string) []byte {
 	raw, _ := json.Marshal(map[string]any{"type": "control_request", "request_id": id, "request": map[string]string{"subtype": "interrupt"}})
 	return append(raw, '\n')

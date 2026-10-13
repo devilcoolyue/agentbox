@@ -16,7 +16,7 @@ import (
 	"agentbox/internal/store"
 )
 
-const questionHelp = "  --input-format <format>\n  --permission-prompt-tool <tool>\n"
+const questionHelp = "  --input-format <format>\n  --permission-prompt-tool <tool>\n  --replay-user-messages\n"
 
 const askInput = `{"questions":[{"question":"Deploy where?","header":"Env","options":[{"label":"staging","description":"pre-release"},{"label":"production"}],"multiSelect":false}]}`
 
@@ -295,6 +295,20 @@ func TestChatQuestionInterruptWithdrawsQuestion(t *testing.T) {
 	}
 	if w := f.request("POST", "questions/toolu_1", "alice", map[string]any{"skip": true}); w.Code != 409 {
 		t.Fatal("withdrawn question still answerable", w.Code)
+	}
+	// The stop reads as an interruption, not as the CLI's failed result.
+	var result, status []string
+	entries, _ := f.historyEntries(t)
+	for _, e := range entries {
+		if e.Kind == "event" && strings.Contains(string(e.Event), `"type":"result"`) {
+			result = append(result, e.State)
+		}
+		if e.Kind == "status" {
+			status = append(status, e.State)
+		}
+	}
+	if strings.Join(result, ",") != "interrupted" || strings.Join(status, ",") != "interrupted" {
+		t.Fatal("history", result, status)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -598,5 +599,105 @@ func TestTurnReasoningsReadTheReceipt(t *testing.T) {
 	}
 	if got, err = s.TurnReasonings(nil); err != nil || len(got) != 0 {
 		t.Fatal(got, err)
+	}
+}
+
+// Schema 19 rebuilds chat_requests: existing receipts keep their order and
+// fields, the one-active slot still holds, and queued rows stay outside it.
+func TestChatRequestQueueMigrationKeepsReceipts(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err = runMigrations(db, migrations()[:18]); err != nil {
+		t.Fatal(err)
+	}
+	now := usageTimestamp(time.Now())
+	for i, state := range []string{"completed", "uncertain", "abandoned"} {
+		if _, err = db.Exec(`INSERT INTO chat_requests(user,user_created_at,session_id,request_id,thread_id,turn_id,fingerprint,request_json,state,error_code,revision,created_at,updated_at) VALUES('alice','e','space',?,'t',?,'f','{}',?,'',?,?,?)`,
+			fmt.Sprintf("r%d", i), fmt.Sprintf("u%d", i), state, i+1, now, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = migrate(db); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.Query("SELECT request_id,state,revision,merged_into FROM chat_requests ORDER BY rowid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for rows.Next() {
+		var id, state, merged string
+		var revision int
+		if err = rows.Scan(&id, &state, &revision, &merged); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, fmt.Sprintf("%s:%s:%d:%s", id, state, revision, merged))
+	}
+	rows.Close()
+	if strings.Join(got, ",") != "r0:completed:1:,r1:uncertain:2:,r2:abandoned:3:" {
+		t.Fatal(got)
+	}
+	if _, err = db.Exec(`INSERT INTO chat_requests(user,user_created_at,session_id,request_id,thread_id,turn_id,fingerprint,request_json,state,created_at,updated_at) VALUES('alice','e','space','r9','t','u9','f','{}','running',?,?)`, now, now); err == nil {
+		t.Fatal("second active receipt allowed after rebuild")
+	}
+	if _, err = db.Exec(`INSERT INTO chat_requests(user,user_created_at,session_id,request_id,thread_id,turn_id,fingerprint,request_json,state,created_at,updated_at) VALUES('alice','e','space','r8','t','u8','f','{}','queued',?,?)`, now, now); err != nil {
+		t.Fatal("queued receipt rejected", err)
+	}
+}
+
+// Queued follow-ups run in order and never let an ordinary send overtake them;
+// a steered one is settled on delivery and names the turn it joined.
+func TestChatRequestQueueAndSteer(t *testing.T) {
+	s, u, sess, input := chatRequestFixture(t)
+	first, _, err := s.AcceptChatRequest(u, sess.ID, "first", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued := input
+	queued.Delivery = DeliveryQueue
+	a, fresh, err := s.QueueChatRequest(u, sess.ID, "a", queued)
+	if err != nil || !fresh || a.State != ChatQueued {
+		t.Fatal(a, fresh, err)
+	}
+	if _, fresh, err = s.QueueChatRequest(u, sess.ID, "a", queued); err != nil || fresh {
+		t.Fatal("replayed queue entry ran again", fresh, err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	b, _, err := s.QueueChatRequest(u, sess.ID, "b", queued)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steer := input
+	steer.Delivery = DeliverySteer
+	m, _, err := s.SteerChatRequest(u, sess.ID, "m", steer, first.RequestID)
+	if err != nil || m.State != ChatCompleted || m.MergedInto != first.RequestID || m.TurnID != "" {
+		t.Fatal("steer receipt", m, err)
+	}
+	if again, _ := s.ChatRequest(u, sess.ID, "m"); again.MergedInto != first.RequestID {
+		t.Fatal("merged_into not stored", again)
+	}
+	advanceChat(t, s, u, first, ChatStarting, ChatRunning, ChatCompleted)
+	if _, _, err = s.AcceptChatRequest(u, sess.ID, "jump", input); !errors.Is(err, ErrChatPending) {
+		t.Fatal("ordinary send overtook the queue", err)
+	}
+	next, owner, err := s.NextQueuedChatRequest(sess.ID)
+	if err != nil || next.RequestID != "a" || owner.Name != u.Name {
+		t.Fatal(next, err)
+	}
+	if list, err := s.QueuedChatRequests(u, sess.ID); err != nil || len(list) != 2 || list[0].RequestID != "a" || list[1].RequestID != "b" {
+		t.Fatal(list, err)
+	}
+	advanceChat(t, s, u, a, ChatAccepted)
+	if _, err = s.AdvanceChatRequest(u, sess.ID, "b", b.Revision, ChatAccepted, ""); err == nil {
+		t.Fatal("two queued requests became active together")
+	}
+	if _, err = s.AdvanceChatRequest(u, sess.ID, "b", b.Revision, ChatAbandoned, "withdrawn"); err != nil {
+		t.Fatal(err)
+	}
+	if ids, err := s.QueuedChatSessions(); err != nil || len(ids) != 0 {
+		t.Fatal("withdrawn request still queued", ids, err)
 	}
 }

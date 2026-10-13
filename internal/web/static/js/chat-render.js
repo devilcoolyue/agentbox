@@ -41,13 +41,19 @@ export function chip(text, extra) {
 /* 工具 chip；带 htmlPath 时在末尾挂一个「预览」按钮，产品改原型不用再切到文件页
  * 翻目录。真正的打开逻辑在 preview.ts 用事件委托接管（此处保持纯渲染，也避开
  * chat-render ↔ preview ↔ files 的环形依赖）。 */
-export function toolChip(name, summary, htmlPath = "") {
+export function toolChip(name, summary, htmlPath = "", background = false) {
     const c = document.createElement("div");
     c.className = "chip tool";
     const n = document.createElement("span");
     n.className = "name";
     n.append(svgIcon("tool", 12), document.createTextNode(name));
     c.appendChild(n);
+    if (background) { // run_in_background：命令在后台跑，结束时另有一行通知
+        const tag = document.createElement("span");
+        tag.className = "bg-tag";
+        setText(tag, "后台");
+        c.appendChild(tag);
+    }
     if (summary) {
         const s = document.createElement("span");
         s.className = "sum";
@@ -541,6 +547,66 @@ function appendInlineFmt(parent, text) {
     if (last < str.length)
         parent.appendChild(document.createTextNode(str.slice(last)));
 }
+/* 插进运行中回合的跟进消息（引导）：排在 CLI 实际接收它的位置。回合先结束、没被接收的
+ * 标「引导未生效」，可以复制回输入框再发。 */
+export function renderSteer(view) {
+    if (!view?.id)
+        return [];
+    const box = document.createElement("div");
+    box.className = "steer-msg";
+    box.dataset.state = view.state;
+    const tag = document.createElement("span");
+    tag.className = "steer-tag";
+    const label = document.createElement("span");
+    setText(label, view.state === "dropped" ? "引导未生效" : "引导");
+    tag.append(svgIcon("send", 12), label);
+    const body = renderUserMsg(view.text);
+    body.classList.replace("user", "steer-text");
+    box.append(tag, body);
+    if (view.state === "dropped") {
+        const note = document.createElement("p");
+        note.className = "steer-note";
+        setText(note, "这一轮在它生效前就结束了，Agent 没有收到。");
+        const copy = document.createElement("button");
+        copy.type = "button";
+        copy.className = "btn btn-sm btn-ghost steer-copy";
+        buttonLabel(copy, () => i18nText("复制回输入框"), "copy");
+        copy.addEventListener("click", () => document.dispatchEvent(new CustomEvent("chat-restore-text", { detail: view.text })));
+        box.append(note, copy);
+    }
+    return [box];
+}
+/* 用户点了停止：回合按中断收尾。CLI 因此报的失败 result 由服务端标为
+ * interrupted，不再显示成错误，只留这一行说明。 */
+export function interruptedChip() {
+    const c = document.createElement("div");
+    c.className = "chip stopped";
+    const text = document.createElement("span");
+    setText(text, "已中断 · 你停止了这一轮，已经执行的操作不会撤销");
+    c.append(svgIcon("stop", 12), text);
+    return c;
+}
+/* 后台任务的描述：task_started / background_tasks_changed 先到，结束通知只带 ID。
+ * 只认后台任务，前台子 Agent 的同类事件不出这一行。 */
+const backgroundTasks = new Map();
+function backgroundChip(ev) {
+    const id = String(ev.task_id || "");
+    if (!backgroundTasks.has(id))
+        return null;
+    const desc = backgroundTasks.get(id) || "";
+    const status = ev.status === "completed" || ev.status === "failed" ? ev.status : "stopped";
+    const c = document.createElement("div");
+    c.className = "chip bg-task";
+    c.dataset.status = status;
+    const text = document.createElement("span");
+    setTextRender(text, status === "completed" ? () => desc ? i18nText("后台任务完成：{p0}", { p0: desc }) : i18nText("后台任务完成")
+        : status === "failed" ? () => desc ? i18nText("后台任务失败：{p0}", { p0: desc }) : i18nText("后台任务失败")
+            : () => desc ? i18nText("后台任务已停止：{p0}", { p0: desc }) : i18nText("后台任务已停止"));
+    c.append(svgIcon(status === "completed" ? "check" : "stop", 12), text);
+    if (desc)
+        setTip(c, desc);
+    return c;
+}
 /* 一条落盘的 logEntry（线程 jsonl 行）→ 节点数组（历史加载入口）。
  * chat_session 等簿记类条目对用户不可见，落到兜底分支返回空。 */
 export function renderEntry(raw) {
@@ -549,11 +615,15 @@ export function renderEntry(raw) {
     if (raw.kind === "user")
         return [renderUserMsg(raw.text)];
     if (raw.kind === "event")
-        return renderEvent(raw.event);
+        return raw.state === "interrupted" ? [] : renderEvent(raw.event);
+    if (raw.kind === "steer")
+        return renderSteer(raw.event);
     if (raw.kind === "divider")
         return [divider(raw.ts ? i18nText("新对话 · ") + fmtTime(raw.ts) : "")];
     if (raw.kind === "status" && raw.state === "error")
         return [chip(formatProblem(raw, i18nText), "err")];
+    if (raw.kind === "status" && raw.state === "interrupted")
+        return [interruptedChip()];
     return [];
 }
 /* 工具入参里指向 HTML 的落盘路径 —— 有它才给 chip 挂「预览」。只认写文件类的
@@ -637,7 +707,21 @@ export function renderEvent(ev) {
     const out = [];
     // Claude Code 事件
     if (ev.type === "system") {
-        return out; // 所有 system 事件（init 及其它 subtype）均属系统信息，对用户无意义，一律不展示
+        // 其余 system 事件（init、status 等）属系统信息，对用户无意义，一律不展示；
+        // 只有后台任务结束要说一声，不然模型隔一会儿又开口，看不出为什么
+        if (ev.subtype === "task_started" && ev.is_backgrounded === true && ev.task_id)
+            backgroundTasks.set(ev.task_id, String(ev.description || ""));
+        if (ev.subtype === "background_tasks_changed" && Array.isArray(ev.tasks)) {
+            for (const task of ev.tasks)
+                if (task?.task_id)
+                    backgroundTasks.set(task.task_id, String(task.description || ""));
+        }
+        if (ev.subtype === "task_notification") {
+            const c = backgroundChip(ev);
+            if (c)
+                out.push(c);
+        }
+        return out;
     }
     if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
         for (const block of ev.message.content) {
@@ -654,7 +738,8 @@ export function renderEvent(ev) {
                     out.push(toolChip(i18nText("委派评价"), [String(input.verdict || ""), String(input.note || "")].filter(Boolean).join(" · ")));
                     continue;
                 }
-                out.push(toolChip(block.name, summarizeInput(block.input), htmlOutputPath(block.input)));
+                const input = block.input;
+                out.push(toolChip(block.name, summarizeInput(block.input), htmlOutputPath(block.input), input?.run_in_background === true));
             }
             else if (block.type === "thinking" && block.thinking)
                 out.push(thinkBlock(block.thinking));

@@ -470,6 +470,7 @@
                     <div id="pick-menu" class="pick-menu hidden"></div>
                     <div id="pick-fly" class="pick-fly hidden"></div>
                   </div>
+                  <button id="chat-follow" type="button" class="follow-btn hidden"></button>
                   <button id="chat-send" class="send-btn" aria-label="发送" data-tip="发送" data-i18n-attrs="{&quot;aria-label&quot;:&quot;发送&quot;,&quot;data-tip&quot;:&quot;发送&quot;}">
                     <svg class="ic-send" width="17" height="17" data-icon="send" aria-hidden="true"></svg>
                     <svg class="ic-stop" width="17" height="17" data-icon="stop" aria-hidden="true"></svg>
@@ -1070,6 +1071,18 @@
                 <p class="card-desc" data-i18n="仅影响此浏览器，从下一条消息开始生效。">仅影响此浏览器，从下一条消息开始生效。</p>
                 <label class="check"><input id="chat-suggest-enabled" type="checkbox"><span data-i18n="Claude 回合结束后，在空输入框里显示下一步提示，按 Tab 填入">Claude 回合结束后，在空输入框里显示下一步提示，按 Tab 填入</span></label>
                 <p class="note" data-i18n="生成提示会在每轮结束后多调用一次模型，费用计入你的额度，在使用记录里单独列为「下一步提示」。">生成提示会在每轮结束后多调用一次模型，费用计入你的额度，在使用记录里单独列为「下一步提示」。</p>
+              </div>
+              <div class="card" id="set-chat-followups">
+                <h3 data-i18n="任务运行中发送的消息">任务运行中发送的消息</h3>
+                <p class="card-desc" data-i18n="仅影响此浏览器。按 Ctrl+Enter（Mac 上 ⌘+Enter）对单条消息使用另一种方式。">仅影响此浏览器。按 Ctrl+Enter（Mac 上 ⌘+Enter）对单条消息使用另一种方式。</p>
+                <label class="field">
+                  <span data-i18n="默认方式">默认方式</span>
+                  <select id="chat-followup-mode">
+                    <option value="queue" data-i18n="排队：这一轮结束后作为新一轮执行">排队：这一轮结束后作为新一轮执行</option>
+                    <option value="steer" data-i18n="引导：插入正在执行的这一轮">引导：插入正在执行的这一轮</option>
+                  </select>
+                </label>
+                <p class="note" data-i18n="引导会在 Agent 当前这一步（比如正在跑的命令）结束后生效，只支持 Claude；来不及插入或是 Codex 时自动改为排队。排队的消息可以在状态栏里撤回。">引导会在 Agent 当前这一步（比如正在跑的命令）结束后生效，只支持 Claude；来不及插入或是 Codex 时自动改为排队。排队的消息可以在状态栏里撤回。</p>
               </div>
               <div class="card" data-settings-admin>
                 <h3 data-i18n-text="[&quot;日期与时间&quot;]">日期与时间</h3>

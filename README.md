@@ -46,6 +46,8 @@ You bring the server and your own Claude / Codex subscription, API key, or compa
 
 **Agent questions** also follow the CLI: when Claude needs a decision mid-task (its AskUserQuestion tool), the turn pauses and a card shows the questions with their options, single or multiple choice plus a free-text "Other". Submit and the same turn carries on with your answer; Skip, or no answer within 10 minutes, tells the agent to continue on its own judgment and state its assumptions. The first answer from any open page wins, interrupting withdraws the question, and the wait does not count toward the turn's time limit. Only Claude workspaces ask, and only from pages that can show the card; it needs a Claude Code that supports `--permission-prompt-tool stdio` with stream-json input.
 
+**Follow-ups while a task runs**: keep typing while the agent works. Queue (the default) runs the message as the next turn once this one ends; steer adds it to the running Claude turn, where it takes effect after the current step (a running command, say) and shows in the conversation where the agent actually received it. Ctrl/⌘+Enter uses the other way for one message, and the default is set per browser in System settings → Appearance and tips. Queued messages are kept on the server, run in order even after a page close or restart, wait for any "result uncertain" turn to be reviewed, and can be withdrawn back to the message box. Codex, and turns already finishing, always queue.
+
 ## See the workflow
 
 **Chat → terminal → Git review → previews.** The GIF introduces the core workspace; the 34-second MP4 also visits skills, MCP, usage, and private-network access.

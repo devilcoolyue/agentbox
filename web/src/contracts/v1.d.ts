@@ -10,6 +10,7 @@ export interface ChatRequestInput {
   delegation?: DelegationOptions;
   suggestions?: boolean;
   questions?: boolean;
+  delivery?: "queue" | "steer";
 }
 export interface DelegationOptions {
   version: 1;
@@ -26,11 +27,12 @@ export interface ChatRequestReceipt {
   thread_id: string;
   turn_id: string;
   request: ChatRequestInput | null;
-  state: "accepted" | "starting" | "running" | "completed" | "failed" | "interrupted" | "uncertain" | "reviewed" | "abandoned" | "deleted";
+  state: "queued" | "accepted" | "starting" | "running" | "completed" | "failed" | "interrupted" | "uncertain" | "reviewed" | "abandoned" | "deleted";
   error_code?: string;
   revision: number;
   created_at: string;
   updated_at: string;
+  merged_into?: string;
 }
 export interface ChatRequestResponse {
   version: 1;

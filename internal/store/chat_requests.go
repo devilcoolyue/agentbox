@@ -19,6 +19,8 @@ var (
 )
 
 const (
+	// ChatQueued waits for the session's running turn; it holds no active slot.
+	ChatQueued      = "queued"
 	ChatAccepted    = "accepted"
 	ChatStarting    = "starting"
 	ChatRunning     = "running"
@@ -53,7 +55,17 @@ type ChatRequestInput struct {
 	// Questions says the sending page can show the model's questions and
 	// answer them within the turn; omitted when false, like Suggestions.
 	Questions bool `json:"questions,omitempty"`
+	// Delivery is how a message sent while a turn runs should reach the agent:
+	// "queue" runs it as the next turn, "steer" hands it to the running turn
+	// when that turn takes more input (else it queues). Empty is an ordinary
+	// send, refused while busy, and keeps older fingerprints.
+	Delivery string `json:"delivery,omitempty"`
 }
+
+const (
+	DeliveryQueue = "queue"
+	DeliverySteer = "steer"
+)
 
 // DelegationOptions is frozen with the receipt: a retry or replay can never
 // widen the worker roster or switch Jev on after acceptance. Every worker is
@@ -89,27 +101,30 @@ func (d *DelegationOptions) valid() bool {
 }
 
 type ChatRequest struct {
-	RequestID   string            `json:"request_id"`
-	SessionID   string            `json:"session_id"`
-	ThreadID    string            `json:"thread_id"`
-	TurnID      string            `json:"turn_id"`
-	Request     *ChatRequestInput `json:"request"`
-	State       string            `json:"state"`
-	ErrorCode   string            `json:"error_code,omitempty"`
-	Revision    int64             `json:"revision"`
-	CreatedAt   string            `json:"created_at"`
-	UpdatedAt   string            `json:"updated_at"`
-	Fingerprint string            `json:"-"`
+	RequestID string            `json:"request_id"`
+	SessionID string            `json:"session_id"`
+	ThreadID  string            `json:"thread_id"`
+	TurnID    string            `json:"turn_id"`
+	Request   *ChatRequestInput `json:"request"`
+	State     string            `json:"state"`
+	ErrorCode string            `json:"error_code,omitempty"`
+	Revision  int64             `json:"revision"`
+	CreatedAt string            `json:"created_at"`
+	UpdatedAt string            `json:"updated_at"`
+	// MergedInto names the running request a steered message was handed to;
+	// such a request is completed on delivery and never runs a turn itself.
+	MergedInto  string `json:"merged_into,omitempty"`
+	Fingerprint string `json:"-"`
 }
 
-const chatRequestColumns = "request_id,session_id,thread_id,turn_id,request_json,state,error_code,revision,created_at,updated_at,fingerprint"
+const chatRequestColumns = "request_id,session_id,thread_id,turn_id,request_json,state,error_code,revision,created_at,updated_at,merged_into,fingerprint"
 const chatRequestKey = "user=? AND user_created_at=? AND session_id=? AND request_id=?"
 const chatRequestActive = "state IN ('accepted','starting','running','uncertain')"
 
 func scanChatRequest(row interface{ Scan(...any) error }) (ChatRequest, error) {
 	var c ChatRequest
 	var raw string
-	err := row.Scan(&c.RequestID, &c.SessionID, &c.ThreadID, &c.TurnID, &raw, &c.State, &c.ErrorCode, &c.Revision, &c.CreatedAt, &c.UpdatedAt, &c.Fingerprint)
+	err := row.Scan(&c.RequestID, &c.SessionID, &c.ThreadID, &c.TurnID, &raw, &c.State, &c.ErrorCode, &c.Revision, &c.CreatedAt, &c.UpdatedAt, &c.MergedInto, &c.Fingerprint)
 	if err == nil {
 		err = json.Unmarshal([]byte(raw), &c.Request)
 	}
@@ -137,7 +152,7 @@ func encodeChatRequest(in ChatRequestInput) ([]byte, string, error) {
 			return nil, "", ErrChatInvalid
 		}
 	}
-	if !utf8.ValidString(in.Text) || !in.Delegation.valid() {
+	if !utf8.ValidString(in.Text) || !in.Delegation.valid() || in.Delivery != "" && in.Delivery != DeliveryQueue && in.Delivery != DeliverySteer {
 		return nil, "", ErrChatInvalid
 	}
 	raw, err := json.Marshal(in)
@@ -150,6 +165,27 @@ func encodeChatRequest(in ChatRequestInput) ([]byte, string, error) {
 // server must additionally serialize with legacy turns/thread changes and
 // validate the active thread, scope, attachments, quota and account admission.
 func (s *Store) AcceptChatRequest(u User, session, id string, in ChatRequestInput) (ChatRequest, bool, error) {
+	return s.acceptChatRequest(u, session, id, in, ChatAccepted, "")
+}
+
+// QueueChatRequest accepts a follow-up behind the session's running or
+// unreviewed turn. Like AcceptChatRequest, only fresh=true may be dispatched,
+// and only by taking it from the queue in order.
+func (s *Store) QueueChatRequest(u User, session, id string, in ChatRequestInput) (ChatRequest, bool, error) {
+	return s.acceptChatRequest(u, session, id, in, ChatQueued, "")
+}
+
+// SteerChatRequest records a follow-up handed to the running request into.
+// It is completed on commit: the caller writes it to that turn right after,
+// under the lock that keeps the turn's input open.
+func (s *Store) SteerChatRequest(u User, session, id string, in ChatRequestInput, into string) (ChatRequest, bool, error) {
+	if !validChatKey(into) {
+		return ChatRequest{}, false, ErrChatInvalid
+	}
+	return s.acceptChatRequest(u, session, id, in, ChatCompleted, into)
+}
+
+func (s *Store) acceptChatRequest(u User, session, id string, in ChatRequestInput, state, into string) (ChatRequest, bool, error) {
 	if !validChatKey(session) || !validChatKey(id) {
 		return ChatRequest{}, false, ErrChatInvalid
 	}
@@ -181,20 +217,26 @@ func (s *Store) AcceptChatRequest(u User, session, id string, in ChatRequestInpu
 	if err = checkChatSession(tx, u, session); err != nil {
 		return ChatRequest{}, false, err
 	}
-	var n int
-	if err = tx.QueryRow("SELECT count(*) FROM chat_requests WHERE session_id=? AND "+chatRequestActive, session).Scan(&n); err != nil {
-		return ChatRequest{}, false, err
-	}
-	if n != 0 {
-		return ChatRequest{}, false, ErrChatPending
+	if state == ChatAccepted {
+		var n int
+		if err = tx.QueryRow("SELECT count(*) FROM chat_requests WHERE session_id=? AND ("+chatRequestActive+" OR state='queued')", session).Scan(&n); err != nil {
+			return ChatRequest{}, false, err
+		}
+		if n != 0 {
+			return ChatRequest{}, false, ErrChatPending // queued messages go first
+		}
 	}
 	now := usageTimestamp(time.Now())
-	c = ChatRequest{RequestID: id, SessionID: session, ThreadID: in.ThreadID, TurnID: NewID(), State: ChatAccepted, Revision: 1, CreatedAt: now, UpdatedAt: now, Fingerprint: fingerprint}
+	turn := NewID()
+	if into != "" {
+		turn = "" // runs inside the turn it was merged into
+	}
+	c = ChatRequest{RequestID: id, SessionID: session, ThreadID: in.ThreadID, TurnID: turn, State: state, Revision: 1, CreatedAt: now, UpdatedAt: now, MergedInto: into, Fingerprint: fingerprint}
 	// Decode our serialized snapshot so the receipt cannot alias a caller's slice.
 	if err = json.Unmarshal(raw, &c.Request); err != nil {
 		return ChatRequest{}, false, err
 	}
-	_, err = tx.Exec(`INSERT INTO chat_requests(user,user_created_at,session_id,request_id,thread_id,turn_id,fingerprint,request_json,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, u.Name, ownerEpoch(u), session, id, c.ThreadID, c.TurnID, fingerprint, string(raw), c.State, now, now)
+	_, err = tx.Exec(`INSERT INTO chat_requests(user,user_created_at,session_id,request_id,thread_id,turn_id,fingerprint,request_json,state,merged_into,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, u.Name, ownerEpoch(u), session, id, c.ThreadID, c.TurnID, fingerprint, string(raw), c.State, into, now, now)
 	if err != nil {
 		return ChatRequest{}, false, err
 	}
@@ -202,6 +244,65 @@ func (s *Store) AcceptChatRequest(u User, session, id string, in ChatRequestInpu
 		return ChatRequest{}, false, err
 	}
 	return c, true, nil
+}
+
+// NextQueuedChatRequest is the session's oldest queued request and its owner,
+// an internal dispatch read like PendingChatRequest; sql.ErrNoRows when none.
+func (s *Store) NextQueuedChatRequest(session string) (ChatRequest, User, error) {
+	var name, epoch string
+	row := s.db.QueryRow("SELECT user,user_created_at,"+chatRequestColumns+" FROM chat_requests WHERE session_id=? AND state='queued' ORDER BY created_at, rowid LIMIT 1", session)
+	var c ChatRequest
+	var raw string
+	err := row.Scan(&name, &epoch, &c.RequestID, &c.SessionID, &c.ThreadID, &c.TurnID, &raw, &c.State, &c.ErrorCode, &c.Revision, &c.CreatedAt, &c.UpdatedAt, &c.MergedInto, &c.Fingerprint)
+	if err != nil {
+		return c, User{}, err
+	}
+	if err = json.Unmarshal([]byte(raw), &c.Request); err != nil {
+		return c, User{}, err
+	}
+	u, ok := s.GetUser(name)
+	if !ok || ownerEpoch(u) != epoch {
+		return c, User{}, sql.ErrNoRows // a replaced user's leftovers never run
+	}
+	return c, u, nil
+}
+
+// QueuedChatSessions lists sessions with queued requests, for dispatch after
+// a restart.
+func (s *Store) QueuedChatSessions() ([]string, error) {
+	rows, err := s.db.Query("SELECT DISTINCT session_id FROM chat_requests WHERE state='queued'")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// QueuedChatRequests lists the session's queue in order, so every page can
+// show and withdraw it.
+func (s *Store) QueuedChatRequests(u User, session string) ([]ChatRequest, error) {
+	rows, err := s.db.Query("SELECT "+chatRequestColumns+" FROM chat_requests WHERE user=? AND user_created_at=? AND session_id=? AND state='queued' ORDER BY created_at, rowid LIMIT 50", u.Name, ownerEpoch(u), session)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []ChatRequest{}
+	for rows.Next() {
+		c, err := scanChatRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, c)
+	}
+	return result, rows.Err()
 }
 
 func checkChatSession(tx *sql.Tx, u User, session string) error {
@@ -319,6 +420,10 @@ func (s *Store) PendingChatRequest(session string) (ChatRequest, error) {
 
 func chatTransitionAllowed(from, to string) bool {
 	switch from {
+	case ChatQueued:
+		// Taken from the queue, withdrawn by the user, or refused at dispatch
+		// (thread changed, quota, account) without ever running.
+		return to == ChatAccepted || to == ChatAbandoned || to == ChatFailed
 	case ChatAccepted:
 		return to == ChatStarting || to == ChatFailed || to == ChatUncertain
 	case ChatStarting:

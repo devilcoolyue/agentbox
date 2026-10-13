@@ -23,6 +23,8 @@ const questionUnshownMessage = "The question could not be shown to the user (mal
 
 var errInputClosed = errors.New("agent input closed")
 
+type steerMessage struct{ id, text string }
+
 // controlInput serializes writes to the CLI's stdin: the prompt, answers
 // from other goroutines and interrupts. Nothing is written after close.
 type controlInput struct {
@@ -84,7 +86,50 @@ func (e Executor) interactiveTurn(ctx context.Context, turn Turn, cmd []string) 
 			})
 		}
 	})
-	finishInput := sync.OnceFunc(func() { e.SetStop(nil); in.close() })
+	// Follow-ups in flight, in the order the CLI will take them.
+	var steerMu sync.Mutex
+	var steers []steerMessage
+	if e.SetSteer != nil {
+		e.SetSteer(func(id, text string, commit func() error) (bool, error) {
+			in.mu.Lock()
+			defer in.mu.Unlock()
+			if in.closed {
+				return false, nil
+			}
+			if err := commit(); err != nil {
+				return false, err
+			}
+			steerMu.Lock()
+			steers = append(steers, steerMessage{id, text})
+			steerMu.Unlock()
+			// Committed: a failed write ends the turn, which reports it unapplied.
+			if _, err := in.stream.Write(agent.ClaudeSteer(text)); err != nil {
+				e.Log("chat steer write %s: %v", turn.SessionID, err)
+			}
+			return true, nil
+		})
+	}
+	// Whatever the CLI never echoed was not applied; say so before the turn's
+	// own outcome is recorded. Registered first so it runs after the input
+	// closes: no follow-up can be added once it has reported.
+	defer func() {
+		steerMu.Lock()
+		left := steers
+		steers = nil
+		steerMu.Unlock()
+		for _, m := range left {
+			if e.Steered != nil {
+				e.Steered(m.id, m.text, false)
+			}
+		}
+	}()
+	finishInput := sync.OnceFunc(func() {
+		e.SetStop(nil)
+		if e.SetSteer != nil {
+			e.SetSteer(nil)
+		}
+		in.close()
+	})
 	defer finishInput()
 
 	asks, cancelAsks := context.WithCancel(ctx)
@@ -104,12 +149,32 @@ func (e Executor) interactiveTurn(ctx context.Context, turn Turn, cmd []string) 
 	defer finishOutput()
 
 	pending := map[string]context.CancelFunc{}
+	promptEchoed := false
 	scanner := bufio.NewScanner(pr)
 	scanner.Buffer(make([]byte, 1<<20), 32<<20) // single events can be large
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
 		if c, ok := agent.ParseClaudeControl(line); ok {
 			e.control(asks, &wg, in, pending, c)
+			continue
+		}
+		if agent.IsClaudeReplay(line) {
+			// The first echo is the prompt itself; each later one is the oldest
+			// follow-up, taken at this point of the turn.
+			if !promptEchoed {
+				promptEchoed = true
+				continue
+			}
+			steerMu.Lock()
+			var next *steerMessage
+			if len(steers) > 0 {
+				next = &steers[0]
+				steers = steers[1:]
+			}
+			steerMu.Unlock()
+			if next != nil && e.Steered != nil {
+				e.Steered(next.id, next.text, true)
+			}
 			continue
 		}
 		e.OnLine(line)

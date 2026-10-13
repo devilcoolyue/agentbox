@@ -59,7 +59,18 @@ type Executor struct {
 	// Signal sends SIGINT to the turn's CLI when a protocol interrupt is
 	// not acted on in time; nil leaves only the protocol interrupt.
 	Signal func()
+	// SetSteer registers how follow-ups reach an interactive turn while its
+	// input is open, and removes it (nil) before the input closes.
+	SetSteer func(Steer)
+	// Steered reports a follow-up the CLI took (applied) or never took
+	// before the turn ended.
+	Steered func(id, text string, applied bool)
 }
+
+// Steer hands text to the running turn. commit persists the request while the
+// turn's input is held open; false means the turn takes no more input and the
+// caller should queue the message instead.
+type Steer func(id, text string, commit func() error) (bool, error)
 
 func (e Executor) Run(ctx context.Context, adapter agent.Adapter, turn Turn) error {
 	if err := ctx.Err(); err != nil {

@@ -80,6 +80,7 @@ type chatRoom struct {
 	help          string
 
 	questions map[string]*roomQuestion // under mu; see chat_questions.go
+	steer     chat.Steer               // under mu; set while the running turn takes follow-ups
 }
 
 func (r *chatRoom) broadcast(v any) {
@@ -143,7 +144,13 @@ func (r *chatRoom) begin() error {
 	return nil
 }
 
+// end releases the room and lets a queued follow-up start.
 func (r *chatRoom) end() {
+	r.release()
+	r.kickQueue()
+}
+
+func (r *chatRoom) release() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.running = false
@@ -364,6 +371,12 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 func (r *chatRoom) setStop(f func()) {
 	r.mu.Lock()
 	r.stop = f
+	r.mu.Unlock()
+}
+
+func (r *chatRoom) setSteer(f chat.Steer) {
+	r.mu.Lock()
+	r.steer = f
 	r.mu.Unlock()
 }
 

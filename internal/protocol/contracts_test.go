@@ -98,7 +98,7 @@ func TestWireSchemaV1(t *testing.T) {
 	if err := json.Unmarshal(raw, &examples); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{store.ChatAccepted, store.ChatStarting, store.ChatRunning, store.ChatCompleted, store.ChatFailed, store.ChatInterrupted, store.ChatUncertain, store.ChatReviewed, store.ChatAbandoned, store.ChatDeleted}
+	want := []string{store.ChatQueued, store.ChatAccepted, store.ChatStarting, store.ChatRunning, store.ChatCompleted, store.ChatFailed, store.ChatInterrupted, store.ChatUncertain, store.ChatReviewed, store.ChatAbandoned, store.ChatDeleted}
 	states := schema.Defs["ChatRequestReceipt"].Properties["state"]["enum"].([]any)
 	if examples.Version != ChatVersion || len(want) != len(states) || len(want) != len(examples.Receipts) {
 		t.Fatal("version or state coverage differs")

@@ -24,12 +24,14 @@ type TurnMetadata struct {
 type Entry struct {
 	*protocol.ProblemDetails
 	TS    time.Time       `json:"ts"`
-	Kind  string          `json:"kind"` // "user" | "event" | "status" | "question" | "delegation" | "chat_session" | "title" | "divider"(旧)
+	Kind  string          `json:"kind"` // "user" | "event" | "status" | "question" | "steer" | "delegation" | "chat_session" | "title" | "divider"(旧)
 	Text  string          `json:"text,omitempty"`
 	Event json.RawMessage `json:"event,omitempty"`
-	State string          `json:"state,omitempty"`
-	Error string          `json:"error,omitempty"`
-	Turn  *TurnMetadata   `json:"turn,omitempty"`
+	// status: running | idle | error | interrupted (the user stopped the turn).
+	// event: "interrupted" marks the CLI's failed result caused by that stop.
+	State string        `json:"state,omitempty"`
+	Error string        `json:"error,omitempty"`
+	Turn  *TurnMetadata `json:"turn,omitempty"`
 }
 
 // Runtime is the adapter to workspace, authorization, history and live clients.
@@ -287,6 +289,11 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if in.Fresh {
 		chatID = in.Resume
 	}
+	// The user's stop ends the CLI's turn with a failed result; history shows
+	// one interrupted status for it instead of that failure.
+	executor := r.Executor(sess)
+	userStopped := func() bool { return executor.Interrupted != nil && executor.Interrupted() }
+	terminal := ""
 	onLine := func(line []byte) {
 		if len(line) == 0 {
 			return
@@ -294,6 +301,9 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		if event, valid := adapter.Decode(line); valid {
 			if receipt != nil {
 				receipt.Terminal(event.Terminal)
+			}
+			if event.Terminal != "" {
+				terminal = event.Terminal
 			}
 			ev := event.Raw
 			// 掐表要在增量分支之前：最早的模型输出往往就是个增量事件，放到
@@ -317,7 +327,11 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 				r.Emit(map[string]any{"type": "agent_event", "event": ev, "ts": time.Now()})
 				return
 			}
-			record(Entry{Kind: "event", Event: ev}, "agent_event", "")
+			entry := Entry{Kind: "event", Event: ev}
+			if event.Terminal != "" && event.Terminal != "completed" && userStopped() {
+				entry.State = "interrupted"
+			}
+			record(entry, "agent_event", "")
 			if id := event.SessionID; id != "" && id != chatID {
 				chatID = id
 				if err := r.ProviderSession(sess, id); err != nil && receipt != nil {
@@ -333,7 +347,6 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if receipt != nil && !receipt.Advance(store.ChatRunning) {
 		return
 	}
-	executor := r.Executor(sess)
 	executor.OnLine = onLine
 	if extras.Interactive {
 		recordQuestion := func(v QuestionView) {
@@ -342,6 +355,15 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		}
 		executor.Ask = func(qctx context.Context, q agent.Question) agent.Answer {
 			return ask(qctx, q, r, clock, recordQuestion)
+		}
+		// A follow-up shows in history where the CLI took it, or as not applied.
+		executor.Steered = func(id, text string, applied bool) {
+			state := "applied"
+			if !applied {
+				state = "dropped"
+			}
+			raw, _ := json.Marshal(SteerView{ID: id, Text: text, State: state})
+			record(Entry{Kind: "steer", Event: raw}, "steer", "")
 		}
 	}
 
@@ -356,6 +378,14 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 			}
 			return out
 		}(), ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options, StrictResume: in.StrictResume, RequireAppServer: in.RequireAppServer, Extras: extras}); err != nil {
+		var exited *ExitError
+		if (errors.Is(err, ErrInterrupted) || errors.As(err, &exited)) && userStopped() {
+			if receipt != nil {
+				receipt.Fail(err, "operation_cancelled")
+			}
+			record(Entry{Kind: "status", State: "interrupted"}, "status", "")
+			return
+		}
 		code := "chat_failed"
 		if errors.Is(err, ErrOptions) {
 			code = "chat_options_invalid"
@@ -367,7 +397,11 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if receipt != nil {
 		receipt.Completed(ctx)
 	}
-	record(Entry{Kind: "status", State: "idle"}, "status", "")
+	state := "idle"
+	if terminal != "" && terminal != "completed" && userStopped() {
+		state = "interrupted"
+	}
+	record(Entry{Kind: "status", State: state}, "status", "")
 
 	// 首条消息的对话：异步用模型总结出一个标题，不阻塞对话流。
 	if firstTurn && tid != "" && (receipt == nil || receipt.Succeeded()) {

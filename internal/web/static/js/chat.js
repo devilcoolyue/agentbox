@@ -7,12 +7,13 @@ import { S, bus, emit } from "./state.js";
 import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
-import { chip, renderUserMsg, svgIcon } from "./chat-render.js";
+import { chip, renderUserMsg, renderSteer, interruptedChip, svgIcon } from "./chat-render.js";
 import { observeAnswer } from "./chat-footer.js";
 import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
 import { BUDGETS, EFFORT_LABELS, allowedLevels, defaultReasoning, canKeepEffort } from "./reasoning.js";
 import { setTip } from "./tip.js";
+import { setSelectValue } from "./select.js";
 /* ---------------- 对话通道 ----------------
  * 断线在移动端切网、挂后台时很常见，而一个回合可以跑上半小时，所以断开必须
  * 可见（状态条 + 手动重连），且重连成功后要把断线期间错过的事件补回来——
@@ -24,10 +25,12 @@ import { createChatStream } from "./features/chat/stream.js";
 import { ChatHistory } from "./features/chat/history.js";
 import { createOlderHistory } from "./features/chat/older.js";
 import { TurnWriter, replayHistory } from "./features/chat/turns.js";
+import { createBackground } from "./features/chat/background.js";
 import { ChatConnection } from "./features/chat/connection.js";
 import { initDelegationComposer } from "./features/delegation/composer.js";
 import { upsertDelegationCard, delegationLiveEntry, resetDelegationCards } from "./features/delegation/card.js";
 import { initQuestions, upsertQuestionCard, sealQuestions, update as refreshQuestions, resetQuestionCards, questionsWaiting } from "./features/chat/questions.js";
+import { followMode, followupDefault, setFollowupDefault } from "./features/chat/followup.js";
 import { initComposerDrafts } from "./features/chat/drafts.js";
 import { initChatOutbox } from "./features/chat/outbox.js";
 import { createSuggestion, suggestionOf, latestSuggestion, suggestionsEnabled, setSuggestionsEnabled } from "./features/chat/suggestion.js";
@@ -93,6 +96,7 @@ const sessionAgent = () => S.current ? S.current.agent : "claude";
 const live = new TurnWriter(() => $("chat-log"), sessionAgent);
 const stream = createChatStream({ append: appendChat, working: setWorkingLabel, state: () => S.chatState,
     footer: () => live.footer, log: () => $("chat-log"), nearBottom });
+const background = createBackground(() => renderBackground());
 const suggestion = createSuggestion({ input: () => $("chat-input"), button: () => $("chat-suggest"),
     changed: () => updateChatPlaceholder(), filled: () => autoGrow() });
 // 提问卡片等着作答时，执行指示与输入框占位都说明回合在等用户，而不是卡住了
@@ -170,7 +174,10 @@ function handleChatMsg(msg) {
             if (next)
                 suggestion.set(next);
             observeAnswer(live.context, msg.event, msg.ts);
-            stream.event(msg.event);
+            background.observe(msg.event);
+            // The failed result a stop produces; the interrupted status says it instead.
+            if (msg.state !== "interrupted")
+                stream.event(msg.event);
             live.footer?.update();
             break;
         }
@@ -183,6 +190,10 @@ function handleChatMsg(msg) {
                 if (card)
                     stream.append(card);
             } // 排在已到达的回复之后
+            break;
+        case "steer":
+            for (const n of renderSteer(msg.event))
+                stream.append(n);
             break;
         case "question": {
             const card = upsertQuestionCard(msg.event);
@@ -245,7 +256,7 @@ function handleChatMsg(msg) {
                 }, { once: true });
                 appendChat(retry);
             }
-            if (msg.state === "idle" || msg.state === "error")
+            if (msg.state === "idle" || msg.state === "error" || msg.state === "interrupted")
                 refreshAll();
             break;
         case "error":
@@ -259,10 +270,12 @@ function handleChatMsg(msg) {
  * + 阶段文案（详见 ensureWorking）。 */
 export function setChatStatus(state, error) {
     S.chatState = state === "running" ? "running" : "idle";
-    if (state === "error")
-        stream.flush(); // 出错立刻放完，错误提示紧随其后
-    if (S.chatState !== "running")
+    if (state === "error" || state === "interrupted")
+        stream.flush(); // 立刻放完，提示紧随其后
+    if (S.chatState !== "running") {
         stream.settle();
+        background.reset();
+    }
     const send = $("chat-send");
     if (state === "running") {
         // 思考指示接在末尾，若用户正跟读（贴底）就滚出来，免得藏在折叠线下方
@@ -284,16 +297,23 @@ export function setChatStatus(state, error) {
         send.disabled = chatImgs.uploading > 0;
         if (state === "error" && error)
             appendChat(chip(error, "err"));
+        if (state === "interrupted")
+            appendChat(interruptedChip());
     }
     refreshQuestions(); // 回合结束后没答的提问不再可答
+    renderFollow();
+    updateChatPlaceholder();
     updateHero();
 }
 /* 占位提示：窄屏一行放不下长文案，且键盘快捷键提示在手机上无意义 */
 function updateChatPlaceholder() {
     // 有下一步提示时它就是占位文字：空输入框里的灰字，Tab 填入
-    setAttrRender($("chat-input"), "placeholder", () => questionsWaiting() ? i18nText("Agent 在等你回答上面的问题") : suggestion.current() || (isMobile() || enterInsertsNewline()
-        ? i18nText("向 Agent 下达任务…")
-        : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）")));
+    setAttrRender($("chat-input"), "placeholder", () => questionsWaiting() ? i18nText("Agent 在等你回答上面的问题") : followupsOpen() ? (isMobile() || enterInsertsNewline()
+        ? i18nText("补充或调整当前任务…")
+        : followupDefault() === "steer" && sessionAgent() === "claude" ? i18nText("补充或调整当前任务…（Enter 引导，Ctrl+Enter 排队）") : sessionAgent() === "claude" ? i18nText("补充或调整当前任务…（Enter 排队，Ctrl+Enter 引导）") : i18nText("补充当前任务…（Enter 排队，这一轮结束后执行）"))
+        : suggestion.current() || (isMobile() || enterInsertsNewline()
+            ? i18nText("向 Agent 下达任务…")
+            : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）")));
 }
 /* 输入框随内容自动增高（1 行起步，封顶后内部滚动） */
 export function autoGrow() {
@@ -301,11 +321,12 @@ export function autoGrow() {
     t.style.height = "auto";
     t.style.height = Math.min(t.scrollHeight, 220) + "px";
     suggestion.render();
+    renderFollow();
     drafts?.save();
 }
 const attachmentFingerprint = () => JSON.stringify([...chatImgs.map].map(([id, { valid, ...a }]) => [id, a]));
 const sender = new ChatSender({
-    allowed: () => !S.histLoading && !S.histError && !outbox?.blocked() && S.chatState === "idle" && chatImgs.uploading === 0,
+    allowed: () => !S.histLoading && !S.histError && !outbox?.blocked(!!sendingFollow) && (S.chatState === "idle" || !!sendingFollow) && chatImgs.uploading === 0,
     read: () => {
         if (!S.current)
             return;
@@ -326,7 +347,9 @@ const sender = new ChatSender({
         const suggestions = S.promptSuggestions === 1 && sessionAgent() === "claude" && suggestionsEnabled();
         // This page shows the model's questions, so Claude may stop and ask within the turn.
         const questions = S.chatQuestions === 1 && sessionAgent() === "claude";
-        const input = { scope: S.chatScope, thread_id: composerThread, text, ...pick, attachments: draft.attachments.map(a => a.path), ...(delegation ? { delegation } : {}), ...(suggestions ? { suggestions } : {}), ...(questions ? { questions } : {}) };
+        // Sent while a turn runs: queue it after the turn or steer the running turn.
+        const delivery = sendingFollow || undefined;
+        const input = { scope: S.chatScope, thread_id: composerThread, text, ...pick, attachments: draft.attachments.map(a => a.path), ...(delegation ? { delegation } : {}), ...(suggestions ? { suggestions } : {}), ...(questions ? { questions } : {}), ...(delivery ? { delivery } : {}) };
         return { owner: JSON.stringify([S.token, chatEpoch, S.current.id, composerThread]), content: JSON.stringify([raw, pick, attachmentFingerprint(), delegation || null]), input, draft };
     },
     durable: () => !!outbox?.enabled, connected: () => connection.ready,
@@ -337,7 +360,7 @@ const sender = new ChatSender({
             await outbox.send(snapshot.input, snapshot.draft, current);
             return;
         }
-        if (!connection.ready || !current())
+        if (snapshot.input.delivery || !connection.ready || !current())
             return;
         const { text, model, effort, effort_control } = snapshot.input;
         if (!connection.send(JSON.stringify({ type: "user_message", text, model, effort, effort_control })))
@@ -356,6 +379,33 @@ export async function sendChat() {
         return;
     }
     await sender.send();
+}
+/* 跟进：任务运行中发出的消息排队或引导（features/chat/followup.ts）。 */
+let sendingFollow = "";
+const followupsOpen = () => S.chatState === "running" && S.chatFollowups === 1 && !!outbox?.enabled && !outbox.unsupported;
+async function sendFollow(mode) {
+    if (!followupsOpen() || sendingFollow)
+        return;
+    sendingFollow = mode;
+    try {
+        await sendChat();
+    }
+    finally {
+        sendingFollow = "";
+    }
+}
+/** 运行中输入框有字时，中断钮旁边出一个按默认方式发送的按钮。 */
+function renderFollow() {
+    const btn = $("chat-follow");
+    const show = followupsOpen() && !!$("chat-input").value.trim();
+    btn.classList.toggle("hidden", !show);
+    if (!show)
+        return;
+    const mode = followMode(sessionAgent()), steer = mode === "steer", claude = sessionAgent() === "claude";
+    btn.dataset.mode = mode;
+    buttonLabel(btn, () => steer ? i18nText("引导") : i18nText("排队"), steer ? "send" : "clock");
+    setTip(btn, () => steer ? i18nText("插入当前任务，当前步骤结束后生效")
+        : claude ? i18nText("这一轮结束后作为新一轮执行") : i18nText("这一轮结束后作为新一轮执行（Codex 不支持引导）"));
 }
 function sendInterrupt() {
     if (outbox?.unsupported)
@@ -987,6 +1037,14 @@ export async function loadHistory(opts = {}) {
         resetDelegationCards();
         resetQuestionCards();
         replayHistory(live, entries, costs, appendChat, true);
+        background.reset(); // 重连时仍在等后台任务的回合，从最新一页恢复
+        for (const e of entries) {
+            if (e.kind === "user" || e.kind === "status")
+                background.reset();
+            else if (e.kind === "event")
+                background.observe(e.event);
+        }
+        renderBackground();
         suggestion.set(latestSuggestion(entries));
         const id = active_thread || thread?.id;
         // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效
@@ -1060,11 +1118,29 @@ function ensureWorking() {
         const label = document.createElement("span");
         label.className = "work-label";
         setTextRender(label, () => agent === "codex" ? i18nText("推理中…") : i18nText("思考中…"));
-        body.append(label);
+        const bg = document.createElement("span");
+        bg.className = "work-bg";
+        bg.hidden = true;
+        body.append(label, bg);
         turn.append(av, body);
         workingEl = turn;
+        renderBackground();
     }
     $("chat-log").appendChild(workingEl); // 移到末尾（已在 DOM 中则只是重新排位）
+}
+/* 后台任务：模型答完只剩它们时阶段文案说明在等哪个，模型还在干活时旁边挂个计数 */
+function renderBackground() {
+    if (!workingEl)
+        return;
+    const label = background.label();
+    if (label)
+        setWorkingLabel(label);
+    const bg = workingEl.querySelector(".work-bg"), count = background.badge();
+    bg.hidden = !count;
+    if (count) {
+        setTextRender(bg, count);
+        setTip(bg, background.names().join("\n"));
+    }
 }
 function clearWorking() {
     if (workingEl)
@@ -1105,11 +1181,13 @@ export function initChat() {
             const current = composerDraft();
             if (current.text || current.attachments.length) {
                 toast(i18nText("输入框已有草稿，请先保存或清空后再复制。"), true);
-                return;
+                return false;
             }
             applyComposerDraft({ ...value, attachments: value.attachments.map(a => ({ ...a, valid: false })) });
             void drafts?.validate();
+            return true;
         },
+        followed: how => toast(how === "steered" ? i18nText("已插入当前任务，当前步骤结束后生效") : i18nText("已排队，这一轮结束后自动执行")),
     });
     window.matchMedia("(max-width: 760px)").addEventListener("change", updateChatPlaceholder, { signal: lifetime.signal });
     updateChatPlaceholder();
@@ -1142,7 +1220,11 @@ export function initChat() {
         }
         if (e.key === "Enter" && !e.shiftKey && !isImeEnter(e) && !enterInsertsNewline()) {
             e.preventDefault();
-            sendChat();
+            // Running: Enter sends a follow-up the preferred way, Ctrl/Cmd+Enter the other way.
+            if (followupsOpen())
+                void sendFollow(followMode(sessionAgent(), e.ctrlKey || e.metaKey));
+            else
+                sendChat();
         }
     }, { signal: lifetime.signal });
     $("chat-input").addEventListener("input", autoGrow, { signal: lifetime.signal });
@@ -1155,6 +1237,23 @@ export function initChat() {
             attachFile(f);
     }, { signal: lifetime.signal });
     $("chat-suggest").addEventListener("click", () => { suggestion.accept(); $("chat-input").focus(); }, { signal: lifetime.signal });
+    $("chat-follow").addEventListener("click", event => { if (event.detail <= 1)
+        void sendFollow(followMode(sessionAgent())); }, { signal: lifetime.signal });
+    const followSelect = $("chat-followup-mode");
+    setSelectValue(followSelect, followupDefault());
+    followSelect.addEventListener("change", () => { setFollowupDefault(followSelect.value === "steer" ? "steer" : "queue"); renderFollow(); updateChatPlaceholder(); }, { signal: lifetime.signal });
+    // 「引导未生效」气泡里的复制：只填空输入框，不覆盖已有草稿，也不自动发送
+    document.addEventListener("chat-restore-text", event => {
+        const text = event.detail, current = composerDraft();
+        if (typeof text !== "string" || !text)
+            return;
+        if (current.text || current.attachments.length) {
+            toast(i18nText("输入框已有草稿，请先保存或清空后再复制。"), true);
+            return;
+        }
+        applyComposerDraft({ text, attachments: [] });
+        $("chat-input").focus();
+    }, { signal: lifetime.signal });
     const suggestToggle = $("chat-suggest-enabled");
     suggestToggle.checked = suggestionsEnabled();
     suggestToggle.addEventListener("change", () => { setSuggestionsEnabled(suggestToggle.checked); suggestion.refresh(); }, { signal: lifetime.signal });

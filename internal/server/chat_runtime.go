@@ -80,7 +80,7 @@ func (a chatRuntime) Questions(ctx context.Context, sess store.Session) bool {
 		return false
 	}
 	help, err := a.room.cliHelp(ctx, sess)
-	return err == nil && strings.Contains(help, "--permission-prompt-tool") && strings.Contains(help, "--input-format")
+	return err == nil && strings.Contains(help, "--permission-prompt-tool") && strings.Contains(help, "--input-format") && strings.Contains(help, "--replay-user-messages")
 }
 func (a chatRuntime) Question(q agent.Question) (<-chan agent.Answer, func()) {
 	return a.room.offerQuestion(q)
@@ -147,7 +147,7 @@ func (a chatRuntime) ProviderSession(sess store.Session, id string) error {
 }
 func (a chatRuntime) Executor(sess store.Session) chat.Executor {
 	r := a.room
-	return chat.Executor{Backend: r.srv.dock, Environment: func() ([]string, error) { return r.srv.execEnv(sess) }, SetStop: r.setStop,
+	return chat.Executor{Backend: r.srv.dock, Environment: func() ([]string, error) { return r.srv.execEnv(sess) }, SetStop: r.setStop, SetSteer: r.setSteer,
 		Interrupted: func() bool { r.mu.Lock(); defer r.mu.Unlock(); return r.userInterrupted }, Log: log.Printf,
 		Signal: func() {
 			ctx, cancel := context.WithTimeout(r.srv.workContext(), 10*time.Second)

@@ -74,8 +74,10 @@ type ChatExtras struct {
 	// Codex has no such feature and ignores it.
 	PromptSuggestions bool
 	// Interactive keeps stdin open as stream-json for the whole turn so the
-	// host can answer the CLI's questions (AskUserQuestion) and interrupt it
-	// in protocol; the turn's text is then sent as a JSON user message.
+	// host can answer the CLI's questions (AskUserQuestion), steer it with
+	// follow-up messages and interrupt it in protocol; the turn's text is then
+	// sent as a JSON user message. The CLI echoes each user message when it
+	// takes it, which places a steer where it actually applied.
 	Interactive bool
 }
 
@@ -145,7 +147,7 @@ func ChatCommandWith(extras ChatExtras, agentType, permissionMode, resumeID, mod
 			"--permission-mode", permissionMode,
 		}
 		if extras.Interactive {
-			args = append(args, "--input-format", "stream-json", "--permission-prompt-tool", "stdio")
+			args = append(args, "--input-format", "stream-json", "--permission-prompt-tool", "stdio", "--replay-user-messages")
 		}
 		if model != "" {
 			args = append(args, "--model", model)

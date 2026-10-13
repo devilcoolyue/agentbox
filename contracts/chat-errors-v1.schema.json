@@ -50,6 +50,11 @@
         "questions": {
           "type": "boolean",
           "description": "The sending page can show the agent's questions and answer them during the turn; only sent when /me reports chat_questions."
+        },
+        "delivery": {
+          "type": "string",
+          "enum": ["queue", "steer"],
+          "description": "A follow-up sent while a turn runs: queue runs it as the next turn; steer hands it to the running turn when it takes more input, else queues it. Absent is an ordinary send, refused while busy; only sent when /me reports chat_followups."
         }
       },
       "required": [
@@ -138,6 +143,7 @@
         "state": {
           "type": "string",
           "enum": [
+            "queued",
             "accepted",
             "starting",
             "running",
@@ -163,6 +169,10 @@
         },
         "updated_at": {
           "type": "string"
+        },
+        "merged_into": {
+          "type": "string",
+          "description": "The running request a steered follow-up was handed to; it never runs a turn itself."
         }
       },
       "required": [

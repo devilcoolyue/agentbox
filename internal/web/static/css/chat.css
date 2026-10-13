@@ -287,6 +287,21 @@
 .chip-open:hover, .chip-open:focus-visible {
   background: color-mix(in srgb, var(--amber) 12%, transparent); outline: none;
 }
+/* 工具行上的「后台」：run_in_background 的命令，结束时另有一行通知 */
+.chip .bg-tag {
+  margin-right: 9px; padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--amber); font-family: var(--sans); font-size: 11px;
+}
+/* 用户停止的回合、后台任务结束：说明性的细行，不是错误 */
+.chip.stopped, .chip.bg-task {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--sans); font-size: 12.5px; white-space: normal;
+}
+.chip.stopped svg, .chip.bg-task svg { flex: none; }
+.chip.bg-task[data-status="completed"] svg { color: var(--green); }
+.chip.bg-task[data-status="failed"] { color: var(--warn); }
 /* 错误 / 警告是中文句子，用正文字体（等宽字体里没有中文字形） */
 .chip.err, .chip.warn {
   font-family: var(--sans); font-size: 12.5px;
@@ -588,6 +603,11 @@ details.think.streaming .think-body::after {
   animation: work-breathe 1.6s ease-in-out infinite;
 }
 @keyframes work-breathe { 50% { opacity: 0.45; } }
+/* 模型还在干活时，后台任务的计数挂在阶段文案下面 */
+.turn.working .turn-body { gap: 3px; }
+.work-bg { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+.work-bg[hidden] { display: none; }
+.work-bg::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
 
 /* Claude：星芒脉动（触手伸缩跳动） */
 .turn.working .agent-ico.agent-claude {
@@ -714,6 +734,31 @@ details.think.streaming .think-body::after {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--red) 45%, transparent); }
   100% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--red) 0%, transparent); }
 }
+
+/* 跟进：执行中输入框有字时出现在中断钮左边，按默认方式（排队 / 引导）发送 */
+.follow-btn {
+  height: 34px; flex: none; margin-left: 6px; padding: 0 12px 0 10px;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--accent); color: var(--on-accent);
+  border: none; border-radius: var(--radius-pill);
+  font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.follow-btn:hover { background: var(--accent-hi); }
+.follow-btn:active { transform: scale(0.96); }
+.follow-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 引导：插进运行中回合的跟进消息，排在 CLI 实际接收它的位置；虚线框区别于开新一轮的消息 */
+.steer-msg { align-self: flex-end; max-width: 78%; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin: 2px 0; }
+.steer-tag { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; }
+.steer-text {
+  padding: 7px 14px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word;
+  background: var(--panel-2); border: 1px dashed var(--line);
+  border-radius: calc(16px * var(--radius-scale)) calc(16px * var(--radius-scale)) calc(6px * var(--radius-scale)) calc(16px * var(--radius-scale));
+}
+.steer-msg[data-state="dropped"] .steer-tag { color: var(--warn); }
+.steer-msg[data-state="dropped"] .steer-text { opacity: .7; }
+.steer-note { margin: 0; color: var(--muted); font-size: 12px; text-align: right; }
 
 /* 发送：琥珀实心圆纸飞机，执行中变红色中断钮（两个 SVG 靠 .stop 切换） */
 .send-btn {
@@ -874,6 +919,7 @@ details.think.streaming .think-body::after {
 @media (max-width: 760px) {
   .chat-log { padding: 14px 12px 4px; gap: 12px; --fade-top: 20px; --fade-bottom: 10px; }
   .msg.user { max-width: 88%; }
+  .steer-msg { max-width: 88%; }
   .thread-bar { padding: 6px 8px 0; }
   .thread-cur { padding: 6px 10px; }
   .chat-network { min-height: 36px; padding-inline: 6px; gap: 5px; }
