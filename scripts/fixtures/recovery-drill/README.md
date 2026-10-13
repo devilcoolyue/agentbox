@@ -27,6 +27,8 @@ python3 scripts/test-recovery-drill.py --image agentbox-recovery-systemd:local \
 
 检查真实 systemd 升级、PID 变化的重启、待处理聊天转 uncertain、在线系统备份、在线完整备份锁拒绝、离线完整备份、旧版激活拒绝、拒绝覆盖恢复目录，以及系统/完整恢复各自启动健康。比对所有业务表的规范摘要、账本余额、凭证路径重定位与普通文件 SHA-256/mode/UID/GID。系统备份明确排除项目、聊天历史、共享目录内容；完整备份包含这些文件。备份后新增一条用量/账本及一个文件，断言恢复副本均没有这些新增数据。
 
+文件清单排除数据库辅助文件、进程锁、实例身份及 `image-update-state.json`。后者记录当前 Docker daemon 的镜像关系和维护状态，不在现有可迁移备份范围内；演练单独断言恢复目录没有该文件、源文件未被备份或恢复操作修改。完整恢复的其他文件仍逐项核对，失败报告记录缺失、多余和元数据/字节变化。
+
 统一报告在 `output/verification/<run>/`，详细证据在 `output/verification/recovery-drill-<run>/`：`report.json` 保存构建来源/容器清理，`scenario.json` 保存规模、逐步耗时、核对结果及 systemd 日志。失败证据保留，不覆盖旧目录；测试日志不是用户脱敏诊断。
 
 “恢复耗时”只合计校验备份、恢复至新目录、启动至健康，不含发现故障、决策或异机传输。`--backup-interval-seconds` 是排程假设；窗口估计以备份持续成功为条件，不是约定 RPO。2026-10-05 本机 Linux arm64/systemd 249 的 32 空间、611 文件、2,099,370 文件字节演练：系统恢复 1.326332 秒，完整恢复 2.963020 秒。生产规模/磁盘/网络与管理员 RTO/RPO 仍需独立验收。

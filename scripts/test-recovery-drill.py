@@ -94,7 +94,9 @@ def inside(args):
         result={}
         for path in sorted(root.rglob('*')):
             relative=path.relative_to(root).as_posix()
-            if relative in ('state.db','state.db-wal','state.db-shm','agentbox.lock','client-instance-id') or relative.startswith('backups/'):continue
+            # Image maintenance tracks this Docker daemon's immutable image IDs;
+            # portable backups do not include that host-local runtime state.
+            if relative in ('state.db','state.db-wal','state.db-shm','agentbox.lock','client-instance-id','image-update-state.json') or relative.startswith('backups/'):continue
             if path.is_symlink():result[relative]={'link':os.readlink(path)}
             elif path.is_file():
                 st=path.stat();result[relative]={'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':st.st_size,'mode':st.st_mode&0o777,'uid':st.st_uid,'gid':st.st_gid}
@@ -158,6 +160,9 @@ def inside(args):
         assert denied.returncode!=0 and not (base/'must-not-exist.tar.gz').exists()
         report['checks'].append('full_backup_rejects_live_service_lock')
         measured('stop_for_full_backup',lambda:run('systemctl','stop','agentbox.service'))
+        image_state=data/'image-update-state.json'
+        image_state_before=image_state.read_bytes() if image_state.exists() else None
+        report['excluded_runtime_files']=['image-update-state.json']
         measured('full_backup_offline',lambda:cli('backup','--config',config,'--full','--output',full_archive))
         # Record controlled post-snapshot changes to make the loss window
         # visible: restoring either archive must exclude these later writes.
@@ -184,7 +189,13 @@ def inside(args):
             denied_restore=subprocess.run(['/drill/agentbox','restore','--to',str(destination),str(archive)],capture_output=True)
             assert denied_restore.returncode!=0 and audit(destination/'data/state.db')==baseline
             restored=inventory(destination/'data')
-            if mode=='full':assert restored==files
+            if mode=='full':
+                differences={'missing':sorted(files.keys()-restored.keys()),
+                    'extra':sorted(restored.keys()-files.keys()),
+                    'changed':{name:{'source':files[name],'restored':restored[name]}
+                        for name in sorted(files.keys()&restored.keys()) if files[name]!=restored[name]}}
+                report['full_restore_file_differences']=differences
+                assert restored==files, differences
             else:
                 assert all('/workspace/' not in path and '/chats/' not in path and '/shared/' not in path for path in restored)
                 assert 'home-template/.bashrc' in restored and 'users/alice/home-template/.bashrc' in restored
@@ -192,6 +203,8 @@ def inside(args):
             credential=(destination/cfg['accounts'][0]['credentials_dir']).resolve()
             assert credential.is_relative_to(destination) and (credential/'auth.json').read_bytes()==(external/'auth.json').read_bytes()
             assert not (destination/'data/client-instance-id').exists()
+            assert not (destination/'data/image-update-state.json').exists()
+            assert (image_state.read_bytes() if image_state.exists() else None)==image_state_before
             report['backups'][mode]={'archive_bytes':archive.stat().st_size,'restored_files':len(restored),'project_files_included':mode=='full','database_matches':True}
             # Actually start the restored copy via systemd and exercise health.
             # Never run the source and restored copies concurrently.
