@@ -22,6 +22,11 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
+const (
+	fixtureImageRef = "agentbox-chat-fixture:synthetic"
+	fixtureImageID  = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+)
+
 func must(err error) {
 	if err != nil {
 		log.Fatal(err)
@@ -69,7 +74,8 @@ func seed(dir, listen string) {
 	}
 	write(filepath.Join(dir, "config.json"), map[string]any{
 		"listen": listen, "data_dir": dir, "auth_token": "synthetic-unused-admin-password", "idle_timeout_min": 0, "timezone": "UTC",
-		"tunnel": map[string]any{"enabled": false, "transparent": false}, "proxy_bridge": map[string]any{"bind": "127.0.0.1:0"},
+		"agent_image": fixtureImageRef,
+		"tunnel":      map[string]any{"enabled": false, "transparent": false}, "proxy_bridge": map[string]any{"bind": "127.0.0.1:0"},
 		"accounts": []any{map[string]any{"id": "fixture", "type": "codex", "label": "Synthetic only", "env": map[string]string{"OPENAI_BASE_URL": "http://127.0.0.1:1", "OPENAI_API_KEY": "synthetic-not-a-key"}}},
 		"models":   map[string]any{"codex": []any{map[string]string{"id": "gpt-5.5", "label": "Synthetic Codex"}}},
 		"pricing":  map[string]any{"codex": map[string]int{"input": 1}},
@@ -202,8 +208,12 @@ func (e *engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("OK"))
 	case strings.HasSuffix(path, "/version"):
 		output(w, map[string]string{"Version": "synthetic", "ApiVersion": "1.45"})
+	case r.Method == http.MethodGet && strings.HasSuffix(path, "/images/"+fixtureImageRef+"/json"):
+		// EnsureRunning inspects the image even when reusing a running container.
+		// Match its identity and base environment without accepting other images.
+		output(w, map[string]any{"Id": fixtureImageID, "Config": map[string]any{"Env": []string{}}})
 	case strings.Contains(path, "/containers/") && strings.HasSuffix(path, "/json"):
-		output(w, map[string]any{"Id": parts[len(parts)-2], "State": map[string]bool{"Running": true}, "Mounts": []any{map[string]string{"Destination": "/shared"}}})
+		output(w, map[string]any{"Id": parts[len(parts)-2], "Image": fixtureImageID, "Config": map[string]any{"Env": []string{}}, "State": map[string]bool{"Running": true}, "Mounts": []any{map[string]string{"Destination": "/shared"}}})
 	case strings.Contains(path, "/containers/") && strings.HasSuffix(path, "/exec"):
 		var body struct{ Cmd []string }
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
