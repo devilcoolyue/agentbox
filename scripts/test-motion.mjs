@@ -125,7 +125,11 @@ export async function motionSmoke(page, fixture) {
   });
   assert.equal(cards.before.length, 3);
   assert.ok(cards.before.every(t => typeof t === 'number'), 'home cards did not enter: ' + JSON.stringify(cards.before));
-  assert.deepEqual(cards.after, cards.before, 'repaint restarted the card entry');
+  assert.equal(cards.after.length, cards.before.length);
+  // Browser animation times can round-trip through seconds and differ by a few
+  // floating-point bits. One nanosecond still detects a real entry restart.
+  assert.ok(cards.after.every((t, i) => typeof t === 'number' && Math.abs(t - cards.before[i]) < 1e-6),
+   'repaint restarted the card entry: ' + JSON.stringify(cards));
   const gaps = cards.before.slice(1).map((t, i) => Math.round(t - cards.before[i]));
   assert.ok(gaps.every(g => g === 30), 'cards were not staggered: ' + gaps);
   await settle(page);
