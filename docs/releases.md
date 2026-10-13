@@ -8,7 +8,15 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.12](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.12)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.13](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.13)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.13：主管委派、主题编辑与长对话改进
+
+新增主管委派功能预览与可选 Jev 智能决策、自定义主题编辑器、共享工具与用户缓存，以及默认关闭的本地容量管理。聊天历史超时默认 120 秒且可配置，长对话向上分页加载，PDF / 图片等附件统一使用实例上传上限；对应 [issue #2](https://github.com/devilcoolyue/agentbox/issues/2)。草稿偏好移至设置，弹窗与长操作反馈同时改进。分项内容见 [CHANGELOG](../CHANGELOG.md)。
+
+从 v0.1.12 升级会执行 schema 12 → 18 迁移，即使不开启委派也会迁移。先保存并验证备份；旧二进制不能直接打开新库，回退须恢复兼容备份到新目录并保全升级后文件。开发预览 schema 13–17 的旧协作任务和参与者空间记录会被移除，替换为直接在当前工作区执行的主管委派；旧容器与目录需另行核对清理。委派的真实模型质量与费用收益仍需独立验证。
+
+本次发布两个 Linux 服务端包、五个平台 abox-link、`release.json` 与 `SHA256SUMS`，不发布新桌面包。共享工具、容量策略和桌面同步默认关闭，空间镜像独立更新。已启用项目配额的 systemd 附加配置暂不支持网页一键升级，按[存储文档](storage-capacity.md)维护。
 
 ### v0.1.12：账号模型、切换账号与界面风格
 
@@ -62,7 +70,7 @@ v0.1.0～v0.1.4 的七个平台包、`release.json` 和 `SHA256SUMS` 从旧仓�
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.12 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.13 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0
@@ -75,6 +83,8 @@ python3 scripts/scan-secrets.py --artifacts /tmp/agentbox-release --output /tmp/
 
 `v*` 标签触发 `.github/workflows/release.yml`，执行验证、构建、Linux 包冒烟及敏感信息扫描，上传供评审的工作流候选 artifact（可见性跟随仓库及 Actions 权限，不保证私密）。它不自动公开 GitHub Release，也不推送含 Claude Code 的镜像。维护者审阅检查结果、变更说明及许可证后，再手工创建 Release 并附上候选文件；预览版本标记为 prerelease。创建/推送标签与公开发布需要项目负责人的明确决定。
 
+发行说明按「新增功能」「优化改进」「Bug 修复」分块组织，另列「升级与兼容」「下载与升级」及实际验证结果；仅描述相对上一正式版的最终行为，关联 issue 写明编号，不能沿用已删除的开发方案或将未执行的检查写成通过。发布后回复相关 issue 时，感谢反馈并链接实际已发布的修复版本。
+
 正式发布先在主仓库创建 draft 并上传通过验证的完整附件，核对远端附件清单与 SHA-256 后发布；再把**同一目录中的原始文件**上传到旧仓库的同版本 draft，验证一致后发布兼容镜像。只构建一次，不能给两个仓库分别构建同版本。旧仓库仅同步安装入口和用户说明，不复制主项目源码；镜像说明链接到主仓库的正式 Release。两边都验证 `/releases/latest` 和下载地址，避免只更新说明却没有实际安装包。
 
 ## 从包安装（无需 Go/Node 编译服务端）
@@ -83,8 +93,8 @@ python3 scripts/scan-secrets.py --artifacts /tmp/agentbox-release --output /tmp/
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
-tar -xzf agentbox_v0.1.12_linux_arm64.tar.gz
-cd agentbox_v0.1.12_linux_arm64
+tar -xzf agentbox_v0.1.13_linux_arm64.tar.gz
+cd agentbox_v0.1.13_linux_arm64
 ./agentbox --version
 cp config.example.json config.json
 chmod 600 config.json

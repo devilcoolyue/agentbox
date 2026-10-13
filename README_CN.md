@@ -70,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 - **运行环境：** Linux x86_64 / arm64、systemd 与本机 Docker Engine。Ubuntu 22.04+ / Debian 12+ 会自动安装缺失依赖；其他发行版见[安装前提](deploy/README.md#一键安装)。
 - **打开登录：** 访问 `http://服务器IP:8180`，使用安装完成时显示的 `boxadmin` 和随机密码。直接远程访问需放行 TCP 8180；公网长期使用请配置 [HTTPS](deploy/README.md#https-与-websocket-反向代理)。
-- **服务端正式版：** [v0.1.12](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.12)。命令默认安装最新正式版；末尾加 `-s -- --version v0.1.12` 可固定版本，加 `-s -- --listen 127.0.0.1:8180` 可限制为仅本机监听。
+- **服务端正式版：** [v0.1.13](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.13)。命令默认安装最新正式版；末尾加 `-s -- --version v0.1.13` 可固定版本，加 `-s -- --listen 127.0.0.1:8180` 可限制为仅本机监听。
 - **已有部署：** 使用控制台更新入口或[升级指南](docs/releases.md#升级与回退)。安装器会保留已有部署，不覆盖安装。
 
 配置位于 `/etc/agentbox`，数据位于 `/var/lib/agentbox`。每个空间默认限制 2 GiB 内存、2 CPU，请按并发空间数准备资源。完整选项与失败恢复见[安装说明](deploy/README.md#一键安装)。
@@ -257,7 +257,7 @@ Agent 镜像更新使用固定底座，避免 CLI 每次升级叠加旧层。存
 
 ## 开发里程碑
 
-当前开发工作树新增[本地存储容量管理](docs/storage-capacity.md)：数据盘挂载校验、用户项目配额、多盘监控、可重建缓存回收与发布保留。默认关闭，Linux 需先完成离线准备；S3 备份与空间冷归档仍在[存储专项计划](docs/milestones/storage.md)中。
+v0.1.13 新增[本地存储容量管理](docs/storage-capacity.md)：数据盘挂载校验、用户项目配额、多盘监控、可重建缓存回收与发布保留。默认关闭，Linux 需先完成离线准备；S3 备份与空间冷归档仍在[存储专项计划](docs/milestones/storage.md)中。
 
 第一轮 M1～M5 的服务端与网页改动已纳入 v0.1.11 正式版，但真实用户观察、性能阈值、恢复目标、桌面签名等外部验收仍未落实；详情见[第一轮记录](docs/milestones/backlog.md)。第二轮 M6～M11 从 2026-10-06 起接续：先把开发版收口为正式发布（v0.1.11 已于 2026-10-08 发布，M6 进展见[记录](docs/milestones/m6.md)），再补真实使用验收与指标采集，之后按真实反馈改进日常效率、降低上游追新与安装成本，视证书到位情况交付桌面稳定版，最后有门槛地接入更多 Agent。范围、依赖和验收见[第二轮计划](docs/roadmap-2.md)。
 
