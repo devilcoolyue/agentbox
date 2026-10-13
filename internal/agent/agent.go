@@ -48,6 +48,74 @@ var codexEfforts = map[string]bool{
 // model and effort are optional per-turn overrides ("" keeps the account /
 // CLI default); effort is an abstract level (low|medium|high|xhigh).
 func ChatCommand(agentType, permissionMode, resumeID, model, effort string, control ...string) ([]string, error) {
+	c := ""
+	if len(control) > 0 {
+		c = control[0]
+	}
+	return ChatCommandWith(ChatExtras{}, agentType, permissionMode, resumeID, model, effort, c)
+}
+
+// ChatExtras are server-owned additions to one headless turn, never user input.
+// Only Claude Code supports the MCP, system prompt and tool flags; they let a
+// delegating main agent reach the platform's delegate tool. PidFile separates
+// a worker running beside the main agent so interrupts reach the right CLI.
+type ChatExtras struct {
+	PidFile            string
+	MCPConfig          string
+	AppendSystemPrompt string
+	// AllowedTools pre-approves the platform's own MCP tools, which other
+	// permission modes than bypassPermissions would otherwise refuse in -p.
+	AllowedTools    []string
+	DisallowedTools []string
+	Env             []string
+}
+
+var pidFileRe = regexp.MustCompile(`^/tmp/\.agentbox-[a-z0-9-]{1,64}\.pid$`)
+var extraEnvKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
+var toolNameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,63}$`)
+
+func (x ChatExtras) pidFile() (string, error) {
+	if x.PidFile == "" {
+		return PidFile, nil
+	}
+	if !pidFileRe.MatchString(x.PidFile) {
+		return "", fmt.Errorf("pid file %q invalid", x.PidFile)
+	}
+	return x.PidFile, nil
+}
+
+// shellQuote single-quotes a value for the sh prelude.
+func shellQuote(v string) string { return "'" + strings.ReplaceAll(v, "'", `'"'"'`) + "'" }
+
+func (x ChatExtras) prelude() (string, error) {
+	out := ""
+	for _, kv := range x.Env {
+		key, value, ok := strings.Cut(kv, "=")
+		if !ok || !extraEnvKeyRe.MatchString(key) || strings.ContainsAny(value, "\x00\n\r") {
+			return "", fmt.Errorf("extra environment %q invalid", key)
+		}
+		out += "export " + key + "=" + shellQuote(value) + "; "
+	}
+	return out, nil
+}
+
+// ChatCommandWith is ChatCommand plus server-owned per-turn extras.
+func ChatCommandWith(extras ChatExtras, agentType, permissionMode, resumeID, model, effort, controlMode string) ([]string, error) {
+	control := []string{}
+	if controlMode != "" {
+		control = append(control, controlMode)
+	}
+	pid, err := extras.pidFile()
+	if err != nil {
+		return nil, err
+	}
+	envPrelude, err := extras.prelude()
+	if err != nil {
+		return nil, err
+	}
+	if agentType != config.AgentClaude && (extras.MCPConfig != "" || extras.AppendSystemPrompt != "" || len(extras.AllowedTools) > 0 || len(extras.DisallowedTools) > 0) {
+		return nil, fmt.Errorf("%s does not support delegation flags", agentType)
+	}
 	if model != "" && !modelRe.MatchString(model) {
 		return nil, fmt.Errorf("模型名 %q 无效", model)
 	}
@@ -86,6 +154,28 @@ func ChatCommand(agentType, permissionMode, resumeID, model, effort string, cont
 		if resumeID != "" {
 			args = append(args, "--resume", resumeID)
 		}
+		// Variadic flags last-but-one: each is followed by another option, so
+		// commander cannot swallow a later argument as a list item.
+		for _, list := range []struct {
+			flag  string
+			tools []string
+		}{{"--allowedTools", extras.AllowedTools}, {"--disallowedTools", extras.DisallowedTools}} {
+			if len(list.tools) == 0 {
+				continue
+			}
+			for _, tool := range list.tools {
+				if !toolNameRe.MatchString(tool) {
+					return nil, fmt.Errorf("tool name %q invalid", tool)
+				}
+			}
+			args = append(args, list.flag, strings.Join(list.tools, ","))
+		}
+		if extras.MCPConfig != "" {
+			args = append(args, "--mcp-config", extras.MCPConfig)
+		}
+		if extras.AppendSystemPrompt != "" {
+			args = append(args, "--append-system-prompt", extras.AppendSystemPrompt)
+		}
 	case config.AgentCodex:
 		// The container itself is the sandbox, so codex runs with full access.
 		// Built-in models default to default_reasoning_summary=none, leaving
@@ -111,7 +201,7 @@ func ChatCommand(agentType, permissionMode, resumeID, model, effort string, cont
 	default:
 		return nil, fmt.Errorf("unknown agent type %q", agentType)
 	}
-	wrapped := append([]string{"/bin/sh", "-c", `echo $$ >` + PidFile + `; ` + prelude + `exec "$@"`, "agentbox"}, args...)
+	wrapped := append([]string{"/bin/sh", "-c", `echo $$ >` + pid + `; ` + envPrelude + prelude + `exec "$@"`, "agentbox"}, args...)
 	return wrapped, nil
 }
 
@@ -201,6 +291,14 @@ func TitleOutput(agentType, out string) (title string, usage []byte) {
 // InterruptCommand kills the current chat turn, if any.
 func InterruptCommand() []string {
 	return []string{"/bin/sh", "-c", "kill -INT $(cat " + PidFile + " 2>/dev/null) 2>/dev/null || true"}
+}
+
+// InterruptCommandFor targets a CLI started with ChatExtras.PidFile.
+func InterruptCommandFor(pidFile string) ([]string, error) {
+	if !pidFileRe.MatchString(pidFile) {
+		return nil, fmt.Errorf("pid file %q invalid", pidFile)
+	}
+	return []string{"/bin/sh", "-c", "kill -INT $(cat " + pidFile + " 2>/dev/null) 2>/dev/null || true"}, nil
 }
 
 // claudeSeedState pre-accepts first-run dialogs so both headless and

@@ -35,16 +35,9 @@ func (s *Server) priceEvent(ev store.UsageEvent) int64 {
 
 // quotaBlock 返回该用户此刻被拦的原因；空串表示放行。
 func (s *Server) quotaBlock(user string) string {
-	reserved, err := s.store.DecisionReservedMicroUSD(user)
-	if err != nil {
-		return "决策费用暂时无法核对，请稍后重试"
-	}
 	q, ok := s.store.GetQuota(user)
-	if !ok || !q.Enforced || q.BalanceMicroUSD > reserved {
+	if !ok || !q.Enforced || q.BalanceMicroUSD > 0 {
 		return ""
-	}
-	if reserved > 0 && q.BalanceMicroUSD > 0 {
-		return "可用额度不足（决策费用待核对占用 " + formatUSD(reserved) + "），请联系管理员充值后再继续"
 	}
 	return "额度已用完（余额 " + formatUSD(q.BalanceMicroUSD) + "），请联系管理员充值后再继续"
 }
@@ -63,14 +56,13 @@ func formatUSD(micro int64) string {
 type quotaView struct {
 	User string `json:"user"`
 	// Metered 为 false 表示该用户没有额度行，即不限额；此时其余金额字段无意义。
-	Metered                  bool  `json:"metered"`
-	Enforced                 bool  `json:"enforced"`
-	Blocked                  bool  `json:"blocked"`
-	BalanceMicroUSD          int64 `json:"balance_micro_usd"`
-	GrantedMicroUSD          int64 `json:"granted_micro_usd"`
-	SpentMicroUSD            int64 `json:"spent_micro_usd"`
-	DecisionReservedMicroUSD int64 `json:"decision_reserved_micro_usd"`
-	UpdatedAt                int64 `json:"updated_at,omitempty"`
+	Metered         bool  `json:"metered"`
+	Enforced        bool  `json:"enforced"`
+	Blocked         bool  `json:"blocked"`
+	BalanceMicroUSD int64 `json:"balance_micro_usd"`
+	GrantedMicroUSD int64 `json:"granted_micro_usd"`
+	SpentMicroUSD   int64 `json:"spent_micro_usd"`
+	UpdatedAt       int64 `json:"updated_at,omitempty"`
 }
 
 func viewQuota(user string, q store.Quota, metered bool) quotaView {
@@ -93,13 +85,7 @@ func (s *Server) userQuotaView(name string) (quotaView, bool) {
 		return quotaView{}, false
 	}
 	q, metered := s.store.GetQuota(name)
-	v := viewQuota(name, q, metered)
-	reserved, err := s.store.DecisionReservedMicroUSD(name)
-	v.DecisionReservedMicroUSD = reserved
-	if err != nil || metered && q.Enforced && q.BalanceMicroUSD <= reserved {
-		v.Blocked = true
-	}
-	return v, true
+	return viewQuota(name, q, metered), true
 }
 
 type ledgerView struct {

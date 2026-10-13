@@ -30,6 +30,7 @@ func TestWireSchemaV1(t *testing.T) {
 		"ChatRequestInput": store.ChatRequestInput{}, "ChatRequestReceipt": store.ChatRequest{},
 		"ChatRequestResponse": ChatRequestResponse{}, "ChatRequestList": ChatRequestList{},
 		"ChatRequestEvent": ChatRequestEvent{}, "APIProblem": APIProblem{},
+		"DelegationOptions": store.DelegationOptions{}, "DelegationWorker": store.DelegationWorker{},
 	}
 	for name, model := range models {
 		t.Run(name, func(t *testing.T) {

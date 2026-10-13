@@ -7,6 +7,16 @@ export interface ChatRequestInput {
   effort: string;
   effort_control: string;
   attachments?: Array<string>;
+  delegation?: DelegationOptions;
+}
+export interface DelegationOptions {
+  version: 1;
+  workers: Array<DelegationWorker>;
+  jev: boolean;
+}
+export interface DelegationWorker {
+  account_id: string;
+  model: string;
 }
 export interface ChatRequestReceipt {
   request_id: string;

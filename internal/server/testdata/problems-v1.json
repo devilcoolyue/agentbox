@@ -306,26 +306,10 @@
       "retryable": false
     },
     {
-      "code": "collaboration_source_not_repository",
-      "http_status": 422,
-      "error": "当前项目目录不是 Git 仓库",
-      "hint": "请选择包含 Git 项目的工作空间；项目在子目录时，请在协作设置中填写仓库相对路径。",
-      "action": "edit_request",
-      "retryable": false
-    },
-    {
-      "code": "collaboration_source_no_commit",
-      "http_status": 422,
-      "error": "项目尚无 Git 提交",
-      "hint": "请先在源工作空间创建一次 Git 提交，再开始协作。",
-      "action": "edit_request",
-      "retryable": false
-    },
-    {
-      "code": "collaboration_source_dirty",
-      "http_status": 409,
-      "error": "项目有未提交的改动",
-      "hint": "请先提交或处理源项目的改动，再开始协作；系统不会自动提交或丢弃文件。",
+      "code": "delegation_unavailable",
+      "http_status": 503,
+      "error": "委派工具暂时无法准备",
+      "hint": "请关闭「委派」后重新发送，或联系管理员检查账号出口网桥配置。",
       "action": "edit_request",
       "retryable": false
     }

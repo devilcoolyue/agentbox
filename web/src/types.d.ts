@@ -203,8 +203,6 @@ export interface UsageEventRow {
   ts: number;
   user: string;
   session_name?: string;
-  /** 协作发起空间名称；账本 session_id 仍指向实际执行的参与者空间。 */
-  source_session_name?: string;
   session_id: string;
   thread_id?: string;
   turn_id: string;
@@ -212,16 +210,10 @@ export interface UsageEventRow {
   account_id?: string;
   account_label?: string;
   model?: string;
-  /** "chat" 对话 | "collaboration" 协作步骤 | "title" 起标题 | "terminal" 终端 | "decision" 决策插件调用 */
+  /** "chat" 对话 | "delegation" 委派给跑腿模型 | "title" 起标题 | "terminal" 终端 | "decision" 决策插件调用 */
   kind: string;
-  /** 原账本的只读协作归因；决策调用没有角色和步骤。 */
-  collaboration?: {
-    run_id: string;
-    step_id?: string;
-    role?: string;
-    step_kind?: string;
-    source_session_id: string;
-  };
+  /** 跑腿模型或 Jev 路由的花费所属的委派。 */
+  delegation_id?: string;
   /** provider 自报的服务方（claude 的 "firstParty"）；codex 不报 */
   provider?: string;
   /** "provider" provider 报价 | "table" 价目表折算 | "none" 未定价 */
@@ -350,6 +342,8 @@ export interface Me {
   draft_protocol?:number;
   chat_protocol?:number;
   chat_scope?:string;
+  /** 1：服务端支持对话中的委派（主 Agent 把子任务交给跑腿模型）。 */
+  delegation_protocol?:number;
   user: string;
   /** "admin" | "user"：admin 才能进系统设置 */
   role: string;
@@ -417,6 +411,104 @@ export interface ModelOption {
   reasoning?: ReasoningCapability;
   /** 仅账号可用模型：不在对话下拉里显示，但仍属于账号、仍可使用。 */
   hidden?: boolean;
+  /** 仅账号可用模型：作为跑腿模型时的能力标签。 */
+  delegation?: ModelDelegation;
+}
+
+/** config.ModelDelegation：管理员对一个模型能接哪些子任务的标注。 */
+export interface ModelDelegation {
+  enabled: boolean;
+  /** "economy" | "standard" */
+  tier?: string;
+  can?: string[];
+  avoid?: string[];
+  notes?: string;
+}
+
+/** GET /api/sessions/{id}/delegation/options 的一个可选跑腿模型。 */
+export interface DelegationOption {
+  account_id: string;
+  account_label: string;
+  agent: string;
+  model: string;
+  model_label: string;
+  tags: ModelDelegation;
+  priced: boolean;
+  price_in?: number;
+  price_out?: number;
+}
+export interface DelegationOptions {
+  version: number;
+  available: boolean;
+  workers: DelegationOption[];
+  jev: boolean;
+  /** 「智能决策 → 默认决策方式」为 Jev 时，本空间第一次打开委派默认勾选 Jev。 */
+  jev_default?: boolean;
+  task_types: string[];
+  risks: string[];
+  max_calls: number;
+  max_workers: number;
+}
+export interface DelegationChanges {
+  known: boolean;
+  added: string[];
+  modified: string[];
+  deleted: string[];
+  total: number;
+  truncated?: boolean;
+}
+export interface DelegationRoute {
+  source: string;
+  reason: string;
+  confidence?: number;
+  jev_model?: string;
+  eligible?: string[];
+  rejected?: Record<string, string>;
+}
+/** 一次委派（服务端 delegationView）。 */
+export interface DelegationView {
+  id: string;
+  session_id: string;
+  thread_id: string;
+  turn_id: string;
+  seq: number;
+  /** routing | running | completed | failed | declined | cancelled | uncertain */
+  state: string;
+  task_type: string;
+  risks: string[];
+  access: string;
+  task: string;
+  route?: DelegationRoute;
+  agent?: string;
+  account_id?: string;
+  model?: string;
+  continue_of?: string;
+  report?: string;
+  changes?: DelegationChanges;
+  error_code?: string;
+  feedback?: string;
+  feedback_note?: string;
+  created_at: string;
+  started_at?: string;
+  finished_at?: string;
+  worker_label?: string;
+  account_label?: string;
+  cost_micro_usd: number;
+  duration_ms?: number;
+  route_text?: string;
+  confidence?: number;
+}
+export interface DelegationStat {
+  account_id: string;
+  model: string;
+  task_type: string;
+  total: number;
+  ok: number;
+  minor_fix: number;
+  redo: number;
+  abandoned: number;
+  failed: number;
+  cost_micro_usd: number;
 }
 
 /** config.TerminalTips：终端页顶栏轮播提示语。interval_sec <= 0 关闭轮播。 */
@@ -873,12 +965,12 @@ export interface ChatTurnCost {
 }
 
 export interface HistoryEntry extends APIProblem {
- run_id?:string;
   turn?: ChatTurnMetadata;
   ts: string;
-  /** "user" | "event" | "status" | "chat_session" | "title" | "divider"(旧) */
+  /** "user" | "event" | "status" | "chat_session" | "title" | "delegation" | "divider"(旧) */
   kind: string;
   text?: string;
+  /** delegation 条目里是 DelegationView，其余是 Agent 事件 */
   event?: AgentEvent;
   state?: string;
   error?: string;
@@ -1057,6 +1149,10 @@ export interface ChatMessage extends APIProblem {
   state?: string;
   /** status / error 的错误文案 */
   error?: string;
+  /** delegation：一次委派的最新状态 */
+  delegation?: DelegationView;
+  /** delegation_event：跑腿模型的一条完整记录 */
+  entry?: HistoryEntry;
 }
 
 export interface ResourceLimits { max_running: number; max_running_per_user: number; min_free_bytes: number; }

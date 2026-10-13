@@ -86,6 +86,7 @@ func cloneModelOptions(in []ModelOption) []ModelOption {
 	out := slices.Clone(in)
 	for i := range out {
 		out[i].Reasoning = CloneReasoning(out[i].Reasoning)
+		out[i].Delegation = cloneDelegation(out[i].Delegation)
 	}
 	return out
 }

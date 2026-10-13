@@ -6,22 +6,6 @@ def step(key, category, argv, note, **options):
 
 
 STEPS = [
-    step('policy.collaboration-cost-report', 'offline', ['{python}','scripts/test-collaboration-cost-report.py'], 'Read-only ledger comparison: exact participant joins, failure costs, unknown usage, external acceptance and immutable snapshots; no provider.'),
-    step('web.collaboration-trace', 'offline', ['node','--test','scripts/test-collaboration-trace.mjs'], 'Durable dispatch trace mapping: role routing, Jev fallback, retries, verification and delivery; no provider.'),
-    step('web.collaboration-outcome', 'offline', ['node','--test','scripts/test-collaboration-outcome.mjs'], 'Pure completed-outcome selector: snapshot/step/version association, repairs, event lag and model-vs-platform evidence; no provider.'),
-    step('browser.decision-plugins', 'browser', ['node','scripts/test-decision-plugins.mjs'], 'Synthetic API: optional Jev settings, per-role automatic models, frozen intent and query-only response-loss recovery; no provider.'),
-    step('webkit.decision-plugins', 'browser', ['node','scripts/test-decision-plugins.mjs'], 'Same decision-plugin browser contract in WebKit; synthetic API, no provider.', env={'AGENTBOX_BROWSER_ENGINE':'webkit'}),
-    step('docker.collaboration-browser-webkit', 'docker', ['{python}','scripts/test-collaboration-runtime.py','--image','{image}','--browser'], 'WebKit panel against the real isolated Linux collaboration backend; synthetic Docker/CLI, no provider.', env={'AGENTBOX_BROWSER_ENGINE':'webkit'}),
-    step('docker.collaboration-chat-browser', 'docker', ['{python}','scripts/test-collaboration-runtime.py','--image','{image}','--chat'], 'Integrated chat composer with real Linux HTTP, SQLite, scheduler, files, staged application, counts and ledger; synthetic Docker/CLI, no provider.'),
-    step('docker.collaboration-chat-browser-webkit', 'docker', ['{python}','scripts/test-collaboration-runtime.py','--image','{image}','--chat'], 'WebKit integrated chat with the real isolated Linux collaboration backend; synthetic Docker/CLI, no provider.', env={'AGENTBOX_BROWSER_ENGINE':'webkit'}),
-    step('webkit.collaboration-chat','browser',['node','scripts/test-collaboration-chat.mjs'],'WebKit inline collaboration mode/context/recovery/actions.',env={'AGENTBOX_BROWSER_ENGINE':'webkit'}),
-    step('docker.collaboration-browser', 'docker', ['{python}','scripts/test-collaboration-runtime.py','--image','{image}','--browser'], 'Browser panel against real Linux HTTP/SQLite/scheduler/usage/files, synthetic Docker/CLI; dedicated network without IP masquerading, loopback port, no provider or host socket.'),
-    step('docker.collaboration-runtime', 'docker', ['{python}','scripts/test-collaboration-runtime.py','--image','{image}'], 'Real server/SQLite workflow in isolated Linux UID fixture; synthetic Docker/CLI, four role pairs, usage and artifacts, no host socket or provider.'),
-    step('browser.collaboration-chat', 'browser', ['node','scripts/test-collaboration-chat.mjs'], 'Synthetic API: inline collaboration modes, team/context, lost-response recovery, thread actions, responsive inspector; no paid provider.'),
-    step('browser.collaboration', 'browser', ['node','scripts/test-collaboration.mjs'], 'Synthetic API: configurable roles/models, swap, lost-response refresh, actions, paginated history/current questions, three languages, narrow layout and lifetime; no Docker/provider.'),
-    step('docker.collaboration-import', 'docker', ['go','test','-json','./internal/dockerx','-run','^TestCollaborationProjectImportLive$','-count=1'], 'Real offline read-only Git source, bounded binary archive and blob-verified import; private temporary fixture, no accounts/provider.', env={'AGENTBOX_COLLABORATION_IMPORT_IMAGE':'{image}'}),
-    step('docker.collaboration-mounts', 'docker', ['go','test','-json','./internal/dockerx','-run','^TestCollaborationMountProfileLive$','-count=1'], 'Real UID1000 read-only coordinator/write executor mounts and stop confirmation; private temporary fixture visible to Docker, network none, no provider.', env={'AGENTBOX_COLLABORATION_MOUNT_IMAGE':'{image}'}),
-    step('docker.collaboration-cli', 'docker', ['go','test','-json','./internal/dockerx','-run','^TestCollaborationImageProbeLive$','-count=1'], 'Real Claude/Codex final handoff and strict resume against synthetic upstream, offline disposable container; no accounts/provider.', env={'AGENTBOX_COLLABORATION_PROBE_IMAGE':'{image}'}),
     step('policy.storage-retention', 'offline', ['{python}','scripts/test-storage-retention.py'], 'Synthetic release retention: current/recent/pinned/process protection and symlink boundaries.'),
     step('linux.storage-quota', 'linux', ['{python}','scripts/test-storage-quota-live.py'], 'Linux root only: disposable loop ext4 project quotas, UID1000 hard-limit/bypass/isolation tests; no production directories.', platform='linux'),
     step('go.build', 'offline', ['go', 'build', './...'], 'Build all Go programs.'),
@@ -38,9 +22,9 @@ STEPS = [
     step('policy.shell', 'offline', ['{python}','scripts/verify.py','_shell'], 'Shell syntax checks.'),
     step('policy.verification-stability', 'offline', ['{python}','scripts/test-verification-stability.py'], 'Synthetic sample aggregation and uncached-test policy; not twenty real CI runs.'),
     step('runner', 'offline', ['{python}','scripts/test-verification.py'], 'Runner evidence, environment isolation and failure/cancellation regression.'),
-    *[step('browser.'+name, 'browser', ['node','scripts/test-'+name+'.mjs'], 'Real browser with synthetic API; no Docker or provider.', requires=['node_modules/.bin/tsc']) for name in ['browser','onboarding','chat-drafts','chat-outbox','workspace-filter','git','preview','web-i18n','link-i18n']],
-    step('ui.usage', 'browser', ['node','scripts/test-browser.mjs'], 'Usage rows, collaboration/source attribution, filtering, CSV and narrow layout; synthetic API, no Docker/provider.', requires=['node_modules/.bin/tsc'], env={'AGENTBOX_BROWSER_ONLY_USAGE':'1'}),
-    *[step('webkit.'+name, 'browser', ['node','scripts/test-'+name+'.mjs'], 'Same synthetic-API scenario in Playwright WebKit; not real Safari, iOS or a device.', env={'AGENTBOX_BROWSER_ENGINE':'webkit'}, requires=['node_modules/.bin/tsc']) for name in ['browser','onboarding','chat-drafts','chat-outbox','collaboration']],
+    *[step('browser.'+name, 'browser', ['node','scripts/test-'+name+'.mjs'], 'Real browser with synthetic API; no Docker or provider.', requires=['node_modules/.bin/tsc']) for name in ['browser','onboarding','chat-drafts','chat-outbox','chat-delegation','workspace-filter','git','preview','web-i18n','link-i18n']],
+    step('ui.usage', 'browser', ['node','scripts/test-browser.mjs'], 'Usage rows, delegation attribution, filtering, CSV and narrow layout; synthetic API, no Docker/provider.', requires=['node_modules/.bin/tsc'], env={'AGENTBOX_BROWSER_ONLY_USAGE':'1'}),
+    *[step('webkit.'+name, 'browser', ['node','scripts/test-'+name+'.mjs'], 'Same synthetic-API scenario in Playwright WebKit; not real Safari, iOS or a device.', env={'AGENTBOX_BROWSER_ENGINE':'webkit'}, requires=['node_modules/.bin/tsc']) for name in ['browser','onboarding','chat-drafts','chat-outbox']],
     step('ui.image-update-gate', 'browser', ['node','scripts/test-browser.mjs'], 'Focused candidate-update UI, preceded by diagnostics/problem fixtures; synthetic API, three languages and narrow layout.', env={'AGENTBOX_BROWSER_ONLY_IMAGE_UPDATES':'1'}),
     step('ui.chat-history', 'browser', ['node','scripts/test-browser.mjs'], 'History settings/defaults/save/reload/deadline, three languages and narrow layout; pagination/scroll/split turns/retry/reconnect. Synthetic API, no Docker/provider.', env={'AGENTBOX_BROWSER_ONLY_CHAT_PAGES':'1'}, requires=['node_modules/.bin/tsc']),
     step('integration.chat', 'browser', ['node','scripts/test-chat-integration.mjs'], 'Real local agentbox binary/API/SQLite with synthetic Docker/CLI output; native non-root asserts attachment chown denial. Use docker.chat-reliability for the full Linux matrix.'),
@@ -93,8 +77,6 @@ PROFILES['release-full'] = PROFILES['quick'] + ['race.chat', 'backup', 'docker.c
 # These require device/OS/installer/credential or provider authorization and
 # deliberately have no automatic "all" profile. The original interfaces remain.
 EXTERNAL = {
-    'scripts/test-decision-live.py': 'explicit live Mindshub browser/API/SQLite/apply acceptance; --run-live and stdin key required; synthetic coding CLIs, dedicated Linux fixture with HTTPS egress',
-    'scripts/test-decision-live.mjs': 'browser child of test-decision-live.py; requires its owned Linux endpoint, live decision provider, synthetic coding CLIs and explicit report directory',
     'scripts/test-decision-routing-live.py': 'explicit live Mindshub Chinese routing evaluation; --run-live and stdin/getpass key required, no coding CLI or production access',
     'internal/decision/jev_live_test.go': 'external/manual: AGENTBOX_JEV_ROUTING_LIVE_TEST=1 invokes real decision service using stdin key and separate report; never inherited by default checks',
     'scripts/verification_stability.py': 'manual: repeated full PR profile on one Linux runner allocation, no paid models; preserves all samples, not part of default checks',
@@ -117,8 +99,6 @@ EXTERNAL = {
 
 BROWSER_HELPERS = ['feature-lifetimes-browser','actions','chat-footer','chat-pages','diagnostics-browser','image-updates','update-components','mcp','pricing','problems-browser','remote-browser','responsive','skins','themes','switch-account','account-models','term-touch','motion']
 COVERED = {f'scripts/test-{name}.mjs':'browser.browser' for name in BROWSER_HELPERS}
-COVERED['scripts/test-collaboration-e2e.mjs']='docker.collaboration-browser'
-COVERED['scripts/test-collaboration-chat-e2e.mjs']='docker.collaboration-chat-browser'
 COVERED['scripts/test-remote-browser-live.mjs']='docker.remote-browser'
 COVERED['desktop/scripts/test-legacy-browser.mjs']='desktop.compat'
 

@@ -43,8 +43,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
     args = parser.parse_args()
-    for source, target in [('chat-errors-v1.schema.json', 'v1.d.ts'),
-                           ('collaboration-v1.schema.json', 'collaboration-v1.d.ts')]:
+    for source, target in [('chat-errors-v1.schema.json', 'v1.d.ts')]:
         path = ROOT / 'web/src/contracts' / target
         content = generate(source)
         if args.check:

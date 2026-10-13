@@ -5,6 +5,7 @@ import { t as i18nText, setAttrRender, setText, setTextRender } from "./i18n.js"
  * 保存；同一账号的保存串行进行，保存期间再切换的结果记在 pending 里，渲染时叠加在账号数据上，
  * 不会被轮询刷新冲掉。价格来自全局价目表（按模型计价，与账号无关），点开可以直接设置。 */
 import { api } from "./api.js";
+import { delegationSummary, delegationTip, editDelegationTags } from "./delegation-tags.js";
 import { $, toast } from "./util.js";
 import { S, emit } from "./state.js";
 import { refreshAll } from "./data.js";
@@ -16,6 +17,9 @@ import { priceLookup } from "./pricing.js";
 import { openModelPrice, ratesText, usd } from "./model-price.js";
 /** 账号 ID → 模型 ID → 待保存的 hidden 值 */
 const pending = new Map();
+/** 账号 ID → 模型 ID → 待保存的跑腿标签 */
+const pendingTags = new Map();
+const tagsOf = (a, m) => pendingTags.get(a.id)?.get(m.id) ?? m.delegation;
 const saving = new Map();
 /** 账号卡片的展开状态（用户点过的才记）。没点过时默认收起；只有一个账号有模型列表时展开它。
  * 筛选时匹配的卡片一律展开。 */
@@ -102,8 +106,35 @@ function modelRow(a, m, card) {
         void save(a.id);
     });
     row.classList.toggle("off", !box.checked);
-    row.append(name, effort, priceButton(a, m), tag, box);
+    row.append(name, effort, priceButton(a, m), tagsButton(a, m), tag, box);
     return row;
+}
+/** 跑腿标签：只有管理员能改；改完与显示开关走同一条串行保存。 */
+function tagsButton(a, m) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn btn-sm btn-ghost mv-delegation";
+    if (S.role !== "admin") {
+        button.classList.add("hidden");
+        return button;
+    }
+    const tags = tagsOf(a, m);
+    button.classList.toggle("on", !!tags?.enabled);
+    button.dataset.key = "delegation\n" + a.id + "\n" + m.id;
+    actionButton(button, () => delegationSummary(tags), "users", () => delegationTip(tags, i18nText("设置 {model} 能否当跑腿、能接哪些子任务", { model: m.label })));
+    button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        const next = await editDelegationTags(i18nText("{model} · 跑腿标签", { model: m.label }), a.id, m.id, tagsOf(a, m));
+        if (!next)
+            return;
+        let changes = pendingTags.get(a.id);
+        if (!changes)
+            pendingTags.set(a.id, changes = new Map());
+        changes.set(m.id, next);
+        renderModelDisplay();
+        void save(a.id);
+    });
+    return button;
 }
 /** 价格要核对的模型数：按 agent 兜底价计费或没有价格。价目表没读到时不算。 */
 function priceIssues(a) {
@@ -254,13 +285,16 @@ async function save(id) {
     try {
         do {
             run.again = false;
-            const changes = pending.get(id), acct = S.accounts.find(a => a.id === id);
-            if (!changes?.size || !acct?.models?.length)
+            const changes = pending.get(id) || new Map(), tagChanges = pendingTags.get(id) || new Map();
+            const acct = S.accounts.find(a => a.id === id);
+            if ((!changes.size && !tagChanges.size) || !acct?.models?.length)
                 break;
-            const sent = new Map(changes);
+            const sent = new Map(changes), sentTags = new Map(tagChanges);
             const models = acct.models.map(m => {
-                const { hidden: _, ...rest } = m;
-                return (sent.has(m.id) ? sent.get(m.id) : m.hidden) ? { ...rest, hidden: true } : rest;
+                const { hidden: _, delegation: oldTags, ...rest } = m;
+                const tags = sentTags.has(m.id) ? sentTags.get(m.id) : oldTags;
+                const out = tags ? { ...rest, delegation: tags } : rest;
+                return (sent.has(m.id) ? sent.get(m.id) : m.hidden) ? { ...out, hidden: true } : out;
             });
             const updated = await api(`/accounts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ models }) });
             const i = S.accounts.findIndex(a => a.id === id);
@@ -270,12 +304,16 @@ async function save(id) {
             for (const [model, hidden] of sent)
                 if (changes.get(model) === hidden)
                     changes.delete(model);
+            for (const [model, tags] of sentTags)
+                if (tagChanges.get(model) === tags)
+                    tagChanges.delete(model);
         } while (run.again);
         emit("models-updated");
         void refreshAll().catch(() => { });
     }
     catch (error) {
         pending.delete(id);
+        pendingTags.delete(id);
         toast(i18nText("保存显示设置失败：") + error.message, true);
         await refreshAll().catch(() => { });
         if (S.sec === "models")

@@ -1,3 +1,4 @@
+import { upsertDelegationCard } from "../delegation/card.js";
 import { answerFooter, observeAnswer } from "../../chat-footer.js";
 import { renderEntry } from "../../chat-render.js";
 import { agentIcon } from "../../brand.js";
@@ -22,7 +23,7 @@ export class TurnWriter {
         this.context = {};
     }
     place(node) {
-        if (node.classList.contains("collaboration-thread") || node.classList.contains("user") || node.classList.contains("chat-divider")) {
+        if (node.classList.contains("user") || node.classList.contains("chat-divider")) {
             this.reset();
             this.log().appendChild(node);
             return;
@@ -59,6 +60,12 @@ export function replayHistory(writer, entries, costs, place) {
     for (const raw of entries) {
         if (raw.kind === "event")
             observeAnswer(writer.context, raw.event, raw.ts);
+        if (raw.kind === "delegation") {
+            // The same delegation is recorded at start and end; one card shows both.
+            const card = upsertDelegationCard(raw.event);
+            if (card)
+                place(card);
+        }
         for (const n of renderEntry(raw))
             place(n);
         if (raw.kind === "user" || raw.kind === "turn_context") {

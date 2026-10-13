@@ -28,6 +28,7 @@ type Turn struct {
 	Options                                                         agent.TurnOptions
 	StrictResume                                                    bool
 	RequireAppServer                                                bool
+	Extras                                                          agent.ChatExtras
 }
 
 // Environment rechecks authorization immediately before EACH Docker exec.
@@ -65,7 +66,7 @@ func (e Executor) Run(ctx context.Context, adapter agent.Adapter, turn Turn) err
 	if turn.Options.Unsupported {
 		return ErrOptions
 	}
-	cmd, err := adapter.Chat(turn.Permission, turn.ChatID, turn.Model, turn.Effort, turn.Options.Control)
+	cmd, err := adapter.ChatWith(turn.Extras, turn.Permission, turn.ChatID, turn.Model, turn.Effort, turn.Options.Control)
 	if err != nil {
 		return err
 	}

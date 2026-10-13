@@ -29,20 +29,6 @@ func OwnerKey(instance, user, created string) string {
 type Paths struct{ Public, Cache string }
 
 func Prepare(root, key string, uid, gid int) (Paths, error) {
-	return prepare(root, key, "", uid, gid)
-}
-
-// PrepareParticipant keeps writable caches inside the existing user's quota
-// root but outside ordinary sessions' writable cache mount. Its ancestors are
-// service-owned, so one role cannot replace another role's mount source.
-func PrepareParticipant(root, key, participant string, uid, gid int) (Paths, error) {
-	if !regexp.MustCompile(`^[a-f0-9]{32}$`).MatchString(participant) {
-		return Paths{}, fmt.Errorf("invalid cache participant")
-	}
-	return prepare(root, key, participant, uid, gid)
-}
-
-func prepare(root, key, participant string, uid, gid int) (Paths, error) {
 	if !keyRE.MatchString(key) {
 		return Paths{}, fmt.Errorf("invalid cache owner identity")
 	}
@@ -65,10 +51,6 @@ func prepare(root, key, participant string, uid, gid int) (Paths, error) {
 	// cannot swap its mount source or select a different user's directory.
 	ancestors := []string{"public", "private", "private/" + key}
 	leaf := "private/" + key + "/cache"
-	if participant != "" {
-		ancestors = append(ancestors, "private/"+key+"/participants", "private/"+key+"/participants/"+participant)
-		leaf = "private/" + key + "/participants/" + participant + "/cache"
-	}
 	for _, dir := range ancestors {
 		mode := os.FileMode(0700)
 		if dir == "public" {
@@ -138,20 +120,4 @@ func GoBin(root, arch, version string) (string, error) {
 		return "", fmt.Errorf("shared Go is not executable")
 	}
 	return PublicMount + "/" + rel + "/bin", nil
-}
-
-func RemoveParticipant(root, key, participant string) error {
-	if !keyRE.MatchString(key) || !regexp.MustCompile(`^[a-f0-9]{32}$`).MatchString(participant) {
-		return fmt.Errorf("invalid cache participant")
-	}
-	r, err := safefs.Open(root)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-	err = r.RemoveAll("private/" + key + "/participants/" + participant)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	return err
 }

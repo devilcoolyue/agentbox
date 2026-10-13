@@ -1,0 +1,152 @@
+/* 委派：输入框旁的开关与跑腿名单弹层、对话流里的委派卡片、跑腿过程与标签编辑弹窗。
+ * 压在正文上的层一律用不透明的 --panel-solid（玻璃风格的面板半透明，字会叠在一起）。 */
+
+/* ---- 输入框工具栏的委派按钮与弹层 ----
+ * 按钮与附件、语音同尺寸（.icon-btn）；开启时琥珀色底并在右上角标出跑腿个数。
+ * 宽屏弹层贴着按钮向上展开，窄屏改为贴住整个输入框，避免超出屏幕。 */
+.delegate-picker { position: relative; display: inline-flex; flex: none; }
+.delegate-picker[hidden], .chat-delegate[hidden] { display: none; }
+.chat-delegate { position: relative; transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
+.chat-delegate[aria-expanded="true"] { color: var(--text); background: var(--panel-2); }
+.chat-delegate.on, .chat-delegate.on:hover { color: var(--accent); background: color-mix(in srgb, var(--panel-solid) 84%, var(--accent) 16%); }
+.dg-count {
+  position: absolute; top: -1px; right: -2px;
+  min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  background: var(--accent); color: var(--on-accent);
+  box-shadow: 0 0 0 2px var(--panel);
+  font-size: 10px; font-weight: 700; line-height: 15px; text-align: center;
+  font-variant-numeric: tabular-nums; pointer-events: none;
+}
+.dg-count[hidden] { display: none; }
+
+.delegate-pop {
+  position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 40;
+  width: min(380px, calc(100vw - 32px)); max-height: min(60vh, 520px); overflow-y: auto;
+  padding: 6px 10px 10px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line); border-radius: calc(14px * var(--radius-scale));
+  box-shadow: var(--shadow-lg);
+}
+.dg-pop-top {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 -10px 8px; padding: 8px 14px 10px;
+  border-bottom: 1px solid var(--line-soft); cursor: pointer;
+}
+.dg-pop-title { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.dg-pop-head { font-weight: 600; font-size: 13.5px; color: var(--text-hi); }
+.dg-pop-state { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.delegate-pop:not(.off) .dg-pop-state { color: var(--accent); }
+.dg-switch { flex: none; }
+.dg-pop-intro, .dg-pop-foot { margin: 0 4px 8px; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.dg-pop-foot { margin: 8px 4px 2px; }
+.dg-pop-list { display: flex; flex-direction: column; gap: 2px; }
+.dg-pop-worker {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 7px 6px; border-radius: calc(10px * var(--radius-scale)); cursor: pointer;
+}
+.dg-pop-worker:hover { background: var(--panel-2); }
+.dg-pop-worker input { margin-top: 3px; flex: none; }
+.dg-pop-jev { margin-top: 6px; border-top: 1px solid var(--line-soft); padding-top: 10px; border-radius: 0; }
+.dg-pop-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dg-pop-name { font-size: 13px; color: var(--text); }
+.dg-pop-sub { font-size: 11.5px; color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .delegate-picker { position: static; }
+  .delegate-pop { left: 0; right: 0; width: auto; bottom: calc(100% + 8px); max-height: min(62vh, 520px); }
+}
+
+/* ---- 对话流里的委派卡片 ---- */
+.delegation-card {
+  margin: 8px 0; min-width: 0;
+  border: 1px solid var(--line); border-radius: calc(12px * var(--radius-scale));
+  background: var(--panel);
+}
+.delegation-card > summary.dg-summary {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 9px 12px; cursor: pointer; list-style: none;
+  font-size: 12.5px;
+}
+.delegation-card > summary::-webkit-details-marker { display: none; }
+.dg-badge {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  padding: 2px 8px; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--panel-2) 80%, var(--accent) 20%);
+  color: var(--accent); font-size: 11.5px; font-weight: 600;
+}
+.dg-worker { flex: none; font-weight: 600; color: var(--text); }
+.dg-task { flex: 1; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dg-state { flex: none; font-size: 11.5px; color: var(--muted); }
+.dg-meta { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.dg-meta:empty { display: none; }
+.delegation-card[data-state="running"] .dg-state,
+.delegation-card[data-state="routing"] .dg-state { color: var(--info); }
+.delegation-card[data-state="completed"] .dg-state { color: var(--green); }
+.delegation-card[data-state="failed"] .dg-state,
+.delegation-card[data-state="uncertain"] .dg-state { color: var(--red); }
+.delegation-card[data-state="declined"] .dg-state,
+.delegation-card[data-state="cancelled"] .dg-state { color: var(--warn); }
+.delegation-card[data-state="running"] .dg-badge { animation: dg-pulse 1.6s var(--ease-move) infinite; }
+@keyframes dg-pulse { 50% { opacity: .55; } }
+
+.dg-detail { display: flex; flex-direction: column; gap: 8px; padding: 2px 12px 12px; border-top: 1px solid var(--line-soft); }
+.dg-facts, .dg-route { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.dg-route + .dg-route { margin-top: 0; }
+.dg-section { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dg-section-title { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.dg-task-text {
+  margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--mono); font-size: 12px; line-height: 1.55;
+  background: var(--code-bg); border-radius: calc(8px * var(--radius-scale));
+}
+.dg-changes ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; max-height: 220px; overflow: auto; }
+.dg-changes, .dg-change { font-size: 12px; }
+.dg-change { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.dg-change .mono { overflow-wrap: anywhere; }
+.dg-change-kind { flex: none; font-size: 11px; padding: 0 6px; border-radius: var(--radius-pill); background: var(--panel-2); color: var(--muted); }
+.dg-change.added .dg-change-kind { color: var(--green); }
+.dg-change.deleted .dg-change-kind { color: var(--red); }
+.dg-report { font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.dg-report > :first-child { margin-top: 0; }
+.dg-report > :last-child { margin-bottom: 0; }
+.dg-live { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: calc(8px * var(--radius-scale)); background: var(--panel-2); max-height: 240px; overflow: auto; }
+.dg-feedback { margin: 0; font-size: 12px; color: var(--muted); }
+.dg-feedback.ok { color: var(--green); }
+.dg-feedback.redo, .dg-feedback.abandoned { color: var(--warn); }
+.dg-error { margin: 0; font-size: 12px; color: var(--red); overflow-wrap: anywhere; }
+.dg-log { align-self: flex-start; }
+
+@media (max-width: 760px) {
+  .delegation-card > summary.dg-summary { flex-wrap: wrap; row-gap: 4px; }
+  .dg-task { flex-basis: 100%; order: 5; }
+}
+
+/* ---- 跑腿过程弹窗 ---- */
+.dlg-delegation-log { width: min(860px, calc(100vw - 32px)); }
+.dg-log-body { display: flex; flex-direction: column; gap: 8px; }
+.dlg-delegation-log .dlg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dlg-delegation-log .dlg-title-block h3 { margin: 0; }
+.dlg-delegation-log .dlg-title-block p { margin: 4px 0 0; overflow-wrap: anywhere; }
+
+/* ---- 跑腿标签编辑 ---- */
+.dlg-delegation-tags { width: min(560px, calc(100vw - 32px)); }
+.dlg-delegation-tags .dlg-title-block h3 { margin: 0; }
+.dlg-delegation-tags .dlg-title-block p { margin: 4px 0 0; }
+.dgt-body { display: flex; flex-direction: column; gap: 10px; }
+.dgt-title { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+.dgt-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; }
+.dgt-check { font-size: 13px; }
+.dgt-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.dgt-field select, .dgt-field textarea { font-size: 13px; }
+.dgt-notes textarea { resize: vertical; min-height: 52px; }
+.dgt-stats table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dgt-stats th, .dgt-stats td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line-soft); font-variant-numeric: tabular-nums; }
+.dgt-stats th { color: var(--muted); font-weight: 500; }
+.dgt-error { margin: 0; color: var(--red); font-size: 12px; }
+.mv-delegation.on, .am-delegation.on { color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .delegation-card[data-state="running"] .dg-badge { animation: none; }
+  .chat-delegate { transition: none; }
+}

@@ -3,6 +3,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"agentbox/internal/buildinfo"
 	"agentbox/internal/config"
@@ -280,6 +282,18 @@ func (s *Server) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 	if n := s.accountSessionCounts()[acct.ID]; n > 0 {
 		writeErr(w, http.StatusConflict, "仍有 "+strconv.Itoa(n)+" 个工作空间在使用该账号，请先删除这些工作空间")
 		return
+	}
+	workers := s.store.DelegationWorkerIDs()
+	for _, sess := range s.store.All() {
+		if workers[sess.ID] && sess.AccountID == acct.ID {
+			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+			err := s.workspaces().Delete(ctx, sess.ID, true)
+			cancel()
+			if err != nil {
+				writeErr(w, http.StatusConflict, "无法清理该账号的跑腿工作区："+err.Error())
+				return
+			}
+		}
 	}
 	if err := s.cfg.RemoveAccount(acct.ID); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"agentbox/internal/collaboration"
 	"agentbox/internal/config"
 )
 
@@ -22,13 +21,13 @@ func testJevConfig() config.DecisionJev {
 	return config.DecisionJev{Enabled: true, Model: config.DecisionJevModel, TimeoutMS: 100, MaxRequestBytes: 32 << 10, MaxConcurrency: 2, APIKey: "secret-test-key"}
 }
 func testRequest() Request {
-	return Request{ID: "decision1", Purpose: "model_selection", TemplateVersion: TemplateVersion, State: "Fix the selected test", Roles: map[collaboration.Role][]Candidate{collaboration.Executor: {{Ref: "candidate_1", Description: "First configured model", Binding: collaboration.Binding{AccountID: "private-account", Model: "private-binding"}}, {Ref: "candidate_2", Description: "Second configured model"}}}}
+	return Request{ID: "decision1", TemplateVersion: TemplateVersion, State: "Fix the selected test", Questions: map[string][]Candidate{"worker": {{Ref: "candidate_1", Description: "First configured model"}, {Ref: "candidate_2", Description: "Second configured model"}}}}
 }
 func jsonResponse(code int, body string) *http.Response {
 	return &http.Response{StatusCode: code, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
 }
 
-const validResponse = `{"model":"jev-1.13.0","answers":{"executor":{"type":"choice","choice":"candidate_2","probabilities":{"candidate_1":0.05,"candidate_2":0.9,"abstain":0.05},"confidence":0.8}},"usage":{"input_tokens":1000,"output_tokens":30}}`
+const validResponse = `{"model":"jev-1.13.0","answers":{"worker":{"type":"choice","choice":"candidate_2","probabilities":{"candidate_1":0.05,"candidate_2":0.9,"abstain":0.05},"confidence":0.8}},"usage":{"input_tokens":1000,"output_tokens":30}}`
 
 func TestJevOfficialProtocolOpaqueRefsAndPrice(t *testing.T) {
 	var count atomic.Int32
@@ -38,11 +37,11 @@ func TestJevOfficialProtocolOpaqueRefsAndPrice(t *testing.T) {
 			t.Fatal("incorrect endpoint/auth")
 		}
 		raw, _ := io.ReadAll(r.Body)
-		if strings.Contains(string(raw), "private-account") || strings.Contains(string(raw), "private-binding") || strings.Contains(string(raw), "secret-test-key") {
-			t.Fatal("binding or credentials leaked into body")
+		if strings.Contains(string(raw), "secret-test-key") {
+			t.Fatal("credentials leaked into body")
 		}
 		var request jevRequest
-		if json.Unmarshal(raw, &request) != nil || request.Questions["executor"].Type != "choice" || len(request.Questions["executor"].Criteria) != 3 {
+		if json.Unmarshal(raw, &request) != nil || request.Questions["worker"].Type != "choice" || len(request.Questions["worker"].Criteria) != 3 {
 			t.Fatal("wrong official protocol", string(raw))
 		}
 		return jsonResponse(200, validResponse), nil
@@ -52,7 +51,7 @@ func TestJevOfficialProtocolOpaqueRefsAndPrice(t *testing.T) {
 		t.Fatal(bound, err)
 	}
 	e, err := j.Evaluate(context.Background(), testRequest())
-	if err != nil || e.Model != config.DecisionJevModel || !e.Dispatched || e.Suggestions[collaboration.Executor].CandidateRef != "candidate_2" || e.Usage.CostMicroUSD != 42 || e.Usage.CostStatus != "known" || count.Load() != 1 {
+	if err != nil || e.Model != config.DecisionJevModel || !e.Dispatched || e.Suggestions["worker"].CandidateRef != "candidate_2" || e.Usage.CostMicroUSD != 42 || e.Usage.CostStatus != "known" || count.Load() != 1 {
 		t.Fatalf("%+v %v count=%d", e, err, count.Load())
 	}
 }
@@ -174,10 +173,10 @@ func TestJevInvalidRequestIsNeverDispatched(t *testing.T) {
 	tests := map[string]func(*Jev, *Request){
 		"unpriced model": func(j *Jev, r *Request) { j.cfg.Model = "jev-latest" },
 		"oversized text": func(j *Jev, r *Request) { r.State = strings.Repeat("中", 20000) },
-		"duplicate refs": func(j *Jev, r *Request) { r.Roles[collaboration.Executor][1].Ref = "candidate_1" },
-		"bad role": func(j *Jev, r *Request) {
-			r.Roles["unknown"] = r.Roles[collaboration.Executor]
-			delete(r.Roles, collaboration.Executor)
+		"duplicate refs": func(j *Jev, r *Request) { r.Questions["worker"][1].Ref = "candidate_1" },
+		"bad question": func(j *Jev, r *Request) {
+			r.Questions["Bad Key"] = r.Questions["worker"]
+			delete(r.Questions, "worker")
 		},
 		"wrong template": func(j *Jev, r *Request) { r.TemplateVersion = "future" },
 		"disabled":       func(j *Jev, r *Request) { j.cfg.Enabled = false },
@@ -207,19 +206,19 @@ func TestJevInvalidAnswersPreserveKnownUsage(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			j := newJev(testJevConfig(), roundTripFunc(func(*http.Request) (*http.Response, error) { return jsonResponse(200, body), nil }))
 			e, err := j.Evaluate(context.Background(), testRequest())
-			if err != nil || e.Status != "abstain" || e.Suggestions[collaboration.Executor].Status != "abstain" || e.Usage.CostMicroUSD != 42 {
+			if err != nil || e.Status != "abstain" || e.Suggestions["worker"].Status != "abstain" || e.Usage.CostMicroUSD != 42 {
 				t.Fatal(e, err)
 			}
 		})
 	}
 }
-func TestJevPerRoleAdviceAndUsageContract(t *testing.T) {
-	body := strings.Replace(validResponse, `"answers":{`, `"answers":{"coordinator":{"type":"wrong"},`, 1)
+func TestJevPerQuestionAdviceAndUsageContract(t *testing.T) {
+	body := strings.Replace(validResponse, `"answers":{`, `"answers":{"second":{"type":"wrong"},`, 1)
 	req := testRequest()
-	req.Roles[collaboration.Coordinator] = req.Roles[collaboration.Executor]
+	req.Questions["second"] = req.Questions["worker"]
 	j := newJev(testJevConfig(), roundTripFunc(func(*http.Request) (*http.Response, error) { return jsonResponse(200, body), nil }))
 	e, err := j.Evaluate(context.Background(), req)
-	if err != nil || e.Suggestions[collaboration.Coordinator].Status != "abstain" || e.Suggestions[collaboration.Executor].Status != "suggest" {
+	if err != nil || e.Suggestions["second"].Status != "abstain" || e.Suggestions["worker"].Status != "suggest" {
 		t.Fatal(e, err)
 	}
 	for _, bad := range []string{strings.Replace(validResponse, "jev-1.13.0", "jev-unknown", 1), strings.Replace(validResponse, `"input_tokens":1000`, `"input_tokens":999999`, 1), strings.Replace(validResponse, `"input_tokens":1000`, `"input_tokens":-1`, 1)} {

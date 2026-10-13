@@ -50,6 +50,8 @@ export interface AppState {
   draftProtocol:number;
   chatScope:string;
   chatProtocol:number;
+  /** 1：服务端支持对话中的委派 */
+  delegationProtocol:number;
   preserveChatCopiesOnSignout:boolean;
   /** "admin" | "user"：admin 才能进系统设置 */
   role: string;
@@ -101,6 +103,7 @@ export const S: AppState = {
   draftProtocol:0,
   chatScope:"",
   chatProtocol:0,
+  delegationProtocol:0,
   preserveChatCopiesOnSignout:false,
   role: "",
   sessions: [],

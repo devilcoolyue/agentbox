@@ -219,3 +219,63 @@ func TestMCPHookRunsForRunningWorkspaceAndKeepsRepairAccess(t *testing.T) {
 		t.Fatal("control mutation resurrected deleted workspace")
 	}
 }
+
+type mountRuntime struct {
+	fakeRuntime
+	workspace, home string
+}
+
+func (f *mountRuntime) EnsureRunning(ctx context.Context, sess store.Session, acct config.Account, workspace, home, shared string) (string, error) {
+	f.workspace, f.home = workspace, home
+	return f.fakeRuntime.EnsureRunning(ctx, sess, acct, workspace, home, shared)
+}
+
+// A delegation worker mounts its owner's files with its own home, cannot be
+// rebound by itself, and leaves together with its owner.
+func TestWorkerWorkspaceMountsOwnerFilesAndLeavesWithOwner(t *testing.T) {
+	if uid := os.Geteuid(); uid != 0 && uid != 1000 {
+		t.Skip("requires chown to container UID; exercised in Linux container suite")
+	}
+	root := t.TempDir()
+	st, err := store.Open(filepath.Join(root, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	runtime := &mountRuntime{}
+	s := New(&config.Config{DataDir: root}, st, runtime, func(sess store.Session) (config.Account, error) {
+		return config.Account{ID: sess.AccountID, Type: sess.Agent}, nil
+	}, func(context.Context, config.Account, store.Session) error { return nil })
+	owner := store.Session{ID: "owner", User: "alice", Agent: config.AgentClaude, AccountID: "main", Status: store.StatusStopped}
+	if err = s.Create(owner); err != nil {
+		t.Fatal(err)
+	}
+	worker, err := s.CreateWorker(t.Context(), owner, store.Session{ID: "worker", User: "alice", Agent: config.AgentCodex, AccountID: "cx", Status: store.StatusStopped})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Start(t.Context(), worker.ID); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.workspace != s.WorkspaceDir(owner) || runtime.home != s.HomeDir(worker) {
+		t.Fatalf("worker mounts workspace=%s home=%s", runtime.workspace, runtime.home)
+	}
+	if _, err = s.SwitchAccount(t.Context(), worker.ID, "other", nil); !errors.Is(err, ErrManagedSession) {
+		t.Fatal("worker account switched directly", err)
+	}
+	if err = s.Delete(t.Context(), owner.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.Get(worker.ID); ok {
+		t.Fatal("worker survived its owner")
+	}
+	if _, err = os.Stat(s.SessionDir(worker)); !os.IsNotExist(err) {
+		t.Fatal("worker home kept", err)
+	}
+	if _, err = os.Stat(s.WorkspaceDir(owner)); err != nil {
+		t.Fatal("unpurged owner files removed", err)
+	}
+	if runtime.removes != 1 {
+		t.Fatal("worker container not removed", runtime.removes)
+	}
+}

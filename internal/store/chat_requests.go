@@ -43,6 +43,43 @@ type ChatRequestInput struct {
 	Effort        string   `json:"effort"`
 	EffortControl string   `json:"effort_control"`
 	Attachments   []string `json:"attachments,omitempty"`
+	// Delegation lets the main agent hand subtasks to the listed worker models
+	// during this turn. Absent keeps the turn an ordinary single-agent chat and
+	// the fingerprint of requests written before delegation existed.
+	Delegation *DelegationOptions `json:"delegation,omitempty"`
+}
+
+// DelegationOptions is frozen with the receipt: a retry or replay can never
+// widen the worker roster or switch Jev on after acceptance. Every worker is
+// rechecked against the current account access before each delegate call.
+type DelegationOptions struct {
+	Version int                `json:"version"`
+	Workers []DelegationWorker `json:"workers"`
+	Jev     bool               `json:"jev"`
+}
+type DelegationWorker struct {
+	AccountID string `json:"account_id"`
+	Model     string `json:"model"`
+}
+
+const DelegationVersion = 1
+const MaxDelegationWorkers = 8
+
+func (d *DelegationOptions) valid() bool {
+	if d == nil {
+		return true
+	}
+	if d.Version != DelegationVersion || len(d.Workers) < 1 || len(d.Workers) > MaxDelegationWorkers {
+		return false
+	}
+	seen := map[DelegationWorker]bool{}
+	for _, w := range d.Workers {
+		if w.AccountID == "" || w.Model == "" || len(w.AccountID) > 128 || len(w.Model) > 256 || !utf8.ValidString(w.AccountID) || !utf8.ValidString(w.Model) || seen[w] {
+			return false
+		}
+		seen[w] = true
+	}
+	return true
 }
 
 type ChatRequest struct {
@@ -94,7 +131,7 @@ func encodeChatRequest(in ChatRequestInput) ([]byte, string, error) {
 			return nil, "", ErrChatInvalid
 		}
 	}
-	if !utf8.ValidString(in.Text) {
+	if !utf8.ValidString(in.Text) || !in.Delegation.valid() {
 		return nil, "", ErrChatInvalid
 	}
 	raw, err := json.Marshal(in)
@@ -153,9 +190,6 @@ func (s *Store) AcceptChatRequest(u User, session, id string, in ChatRequestInpu
 	}
 	_, err = tx.Exec(`INSERT INTO chat_requests(user,user_created_at,session_id,request_id,thread_id,turn_id,fingerprint,request_json,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, u.Name, ownerEpoch(u), session, id, c.ThreadID, c.TurnID, fingerprint, string(raw), c.State, now, now)
 	if err != nil {
-		return ChatRequest{}, false, err
-	}
-	if err = freezeChatCollaborationContext(tx, u, c); err != nil {
 		return ChatRequest{}, false, err
 	}
 	if err = tx.Commit(); err != nil {

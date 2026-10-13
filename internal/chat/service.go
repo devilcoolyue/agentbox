@@ -34,7 +34,7 @@ type Entry struct {
 
 // Runtime is the adapter to workspace, authorization, history and live clients.
 // It grants no scheduling rights. HTTP receipt admission, the legacy room gate,
-// or a durable collaboration step claim must precede Run.
+// or a durable delegation record owned by a running main turn must precede Run.
 type Runtime interface {
 	Hold() func()
 	Session() (store.Session, bool)
@@ -71,9 +71,23 @@ type Input struct {
 	SessionID, Text, Model, Effort, Control string
 	Context                                 string
 	StrictResume, RequireAppServer          bool
-	// Collaboration cannot advance with an unobserved usage result. Ordinary
-	// chat retains its existing warning and compatibility behavior.
+	// RequireUsage reports an unobserved usage result to the observer instead
+	// of only logging it.
 	RequireUsage bool
+	// Timeout bounds the whole turn; zero keeps the ordinary 30 minutes.
+	Timeout time.Duration
+	// Extras are server-owned CLI additions (delegation tool, worker PID file).
+	Extras agent.ChatExtras
+	// Fresh ignores the session's provider conversation and uses Resume
+	// instead: empty starts a new conversation, otherwise it continues that
+	// one. A worker never continues the main agent's conversation.
+	Resume string
+	Fresh  bool
+	// Meter adjusts the usage rows' attribution before they are recorded.
+	Meter func(*store.UsageEvent)
+	// Preface is server-owned text sent to the CLI before the user's text for
+	// this turn only; history and titles keep the user's own text.
+	Preface string
 }
 type Failure struct {
 	Code  string
@@ -95,7 +109,11 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	release := r.Hold()
 	defer release()
 
-	ctx, cancel := context.WithTimeout(parent, 30*time.Minute)
+	timeout := in.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	record := func(e Entry, messageType, retryText string) error {
 		err := r.Record(e, messageType, retryText)
@@ -238,6 +256,9 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	// 两条路径共用的行处理：JSON 事件落盘并广播（增量只广播），
 	// 顺带提取 provider 会话 id 供续聊；非 JSON 行按原文透传。
 	chatID := sess.ChatSession
+	if in.Fresh {
+		chatID = in.Resume
+	}
 	onLine := func(line []byte) {
 		if len(line) == 0 {
 			return
@@ -254,11 +275,15 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 			}
 			// Claude message_delta carries final output counts; meter it before
 			// partial events take the broadcast-only return below.
-			tally.Observe(store.UsageEvent{
+			base := store.UsageEvent{
 				User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: turnID,
 				Agent: sess.Agent, AccountID: sess.AccountID, Model: model,
 				Kind: store.UsageKindChat, TTFTMs: ttftMS,
-			}, line)
+			}
+			if in.Meter != nil {
+				in.Meter(&base)
+			}
+			tally.Observe(base, line)
 			if event.Partial {
 				// 增量 delta 只广播不落盘：随后的完整事件会带全文再来一份
 				r.Emit(map[string]any{"type": "agent_event", "event": ev, "ts": time.Now()})
@@ -285,11 +310,15 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 
 	if err := executor.Run(ctx, adapter, Turn{SessionID: sess.ID, ContainerID: sess.ContainerID,
 		Text: func() string {
-			if in.Context == "" {
-				return text
+			out := text
+			if in.Preface != "" {
+				out = in.Preface + "\n\n" + out
 			}
-			return text + "\n\n" + in.Context
-		}(), ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options, StrictResume: in.StrictResume, RequireAppServer: in.RequireAppServer}); err != nil {
+			if in.Context != "" {
+				out += "\n\n" + in.Context
+			}
+			return out
+		}(), ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options, StrictResume: in.StrictResume, RequireAppServer: in.RequireAppServer, Extras: in.Extras}); err != nil {
 		code := "chat_failed"
 		if errors.Is(err, ErrOptions) {
 			code = "chat_options_invalid"

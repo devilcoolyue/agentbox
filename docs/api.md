@@ -105,6 +105,10 @@ POST   /api/sessions/{id}/chat/threads              开启新对话线程（旧�
 POST   /api/sessions/{id}/chat/threads/{tid}/activate  切换到指定线程并恢复其上下文
 PATCH  /api/sessions/{id}/chat/threads/{tid}        重命名线程 {title}
 DELETE /api/sessions/{id}/chat/threads/{tid}        删除线程（删当前线程自动切到最近一条）
+GET    /api/sessions/{id}/delegation/options       本人可用的跑腿模型（账号模型的跑腿标签）、Jev 是否可用与默认、受控词表与限额
+GET    /api/sessions/{id}/delegations/{did}         一次委派的当前状态（与对话里的 delegation 报文同形）
+GET    /api/sessions/{id}/delegations/{did}/log     跑腿完整过程；?after=<行号> 分页，返回 entries/next/has_more
+GET    /api/delegation/stats                        管理员：按 账号 × 模型 × 任务类型 的委派次数、评价分布与平均花费
 WS     /api/sessions/{id}/chat      对话通道（JSON 事件）
 WS     /api/sessions/{id}/term      终端通道（二进制 PTY；?mode=shell|agent）
 ```
@@ -120,7 +124,7 @@ GET    /api/usage/events            消耗明细流水（使用记录页）；�
                                     返回 rows + 整个筛选范围的 total + 筛选可选值 facets + 异步补记状态 sync
 ```
 
-明细接口 `/api/usage/events` 的 `kind=collaboration` 筛选协作模型步骤，`kind=chat` 只筛普通对话，`kind=decision` 保留独立决策调用。`session=` 除直接记在该空间的行，也包含以该空间为源的协作步骤；列表、合计与筛选可选值使用同一条件。协作行返回 `collaboration: {run_id, step_id, role, step_kind, source_session_id}` 及可选 `source_session_name`；决策调用的协作归属不含步骤和角色。`session_id` / `thread_id` / `turn_id` 保留原账本标识，展示分类不会改写结算记录或重复扣费。
+明细接口 `/api/usage/events` 的 `kind=delegation` 筛选跑腿模型的消耗，`kind=chat` 只筛普通对话（不含跑腿），`kind=decision` 保留独立决策调用（含委派时的 Jev 判断）。跑腿用量入账时就记在属主空间与主线程下，行上带 `delegation_id`；`kind=delegation` 只是对 `kind=chat` 且有委派 ID 的行的只读投影，不改写结算记录或重复扣费。
 
 ## 账号与出口代理
 
@@ -293,7 +297,7 @@ curl --fail-with-body -sS "$ABOX_URL/api/users/alice/credits" \
 {"type":"interrupt"}
 ```
 
-服务端发送 `status`、`user_message`、`agent_event`、`agent_raw`、`thread_title`、`turn_cost`、`error` 等消息。`turn_cost` 按 `turn_id` 返回已结算金额及来源，历史接口的 `costs` 提供对应回合费用，`entries[].turn` 保存模型和推理设置快照。`agent_event.event` 内含 provider 事件；实时增量只广播，完整事件保存到线程 JSONL。调用方应保留对未知事件的兼容，不把某个 CLI 版本的字段当成永远不变的协议。
+服务端发送 `status`、`user_message`、`agent_event`、`agent_raw`、`thread_title`、`turn_cost`、`error` 等消息；开启委派的回合另有 `delegation`（委派状态，开始/结束也写入历史 `kind:"delegation"`）、`delegation_event`（跑腿的完整事件，只广播）、`delegation_stream`（跑腿增量）和 `delegation_notice`（本条消息没有可用跑腿，按普通对话处理）。`turn_cost` 按 `turn_id` 返回已结算金额及来源，历史接口的 `costs` 提供对应回合费用，`entries[].turn` 保存模型和推理设置快照。`agent_event.event` 内含 provider 事件；实时增量只广播，完整事件保存到线程 JSONL。调用方应保留对未知事件的兼容，不把某个 CLI 版本的字段当成永远不变的协议。
 
 终端连接为 `/api/sessions/<id>/term?mode=shell&token=<token>`，也可选 `mode=agent`。**二进制帧**承载原始 PTY 输入 / 输出，文本帧仅用于调整尺寸：
 
@@ -487,5 +491,7 @@ v0.1.11 的 schema 12 已将独立 HTTP 接收/查询/动作 API 接入原执行
 | `GET /api/sessions/{id}/chat/requests/{request}` | 按 ID 查询状态；无需再次通过模型账号或额度准入 |
 | `GET /api/sessions/{id}/chat/requests` | 最新 50 条回执及独立 pending；thread 过滤最近列表，pending_only=1 仅返回 pending 和空 requests |
 | `POST /api/sessions/{id}/chat/requests/{request}` | 带 scope 的 interrupt / review / abandon；前两项须匹配 revision |
+
+`/me` 的 `delegation_protocol:1` 表示 PUT 输入可带 `delegation: {version:1, workers:[{account_id, model}], jev}`（最多 8 个跑腿）；它与正文一起冻结并参与同 ID 冲突判断，服务端每次委派前仍重新核对账号授权与跑腿标签。
 
 以上均为登录用户自己的空间；写操作只接受 Authorization 头。未知结果阻止旧 WS 和线程变更；review 不把旧结果改成成功。最终回执在既有用量事务和转录同步之后提交，没有新增扣款路径。

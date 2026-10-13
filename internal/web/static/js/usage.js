@@ -213,30 +213,14 @@ function effortText(r) {
     const label = EFFORT_LABELS[r.effort] || r.effort;
     return r.effort_control === "budget" && BUDGETS[r.effort] ? `${label} (${BUDGETS[r.effort]})` : label;
 }
-const KIND_LABEL = { get chat() { return i18nText("对话"); }, get collaboration() { return i18nText("多 Agent 协作"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); }, get decision() { return i18nText("决策调用"); } };
+const KIND_LABEL = { get chat() { return i18nText("对话"); }, get delegation() { return i18nText("委派跑腿"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); }, get decision() { return i18nText("决策调用"); } };
 const KIND_HINT = {
-    get collaboration() { return i18nText("协作任务中一个步骤在一个模型上的消耗，已计入任务费用，不另加收任务总额。"); },
-    get decision() { return i18nText("自动选模时产生的决策插件调用，计入对应协作任务预算。"); },
+    get delegation() { return i18nText("主 Agent 把子任务交给跑腿模型时，跑腿模型花的量；与主 Agent 的回合分开记账"); },
+    get decision() { return i18nText("委派时由 Jev 判断交给哪个跑腿的那次调用"); },
     get terminal() { return i18nText("用户在「终端」页签里手敲 CLI 花的量，事后从 CLI 自己的记录里补记；只记账不扣额度"); },
     get title() { return i18nText("服务端自动为新对话生成标题的那趟消耗，不是用户发起的"); },
 };
-const COLLABORATION_ROLE = { coordinator: "主 Agent", executor: "执行 Agent" };
-const COLLABORATION_STEP = {
-    plan: "规划", execute: "执行", clarify: "答疑", review: "评审",
-    repair: "返工", verify: "平台验证", handoff_repair: "交接格式修复",
-};
-const collaborationRole = (r) => {
-    const role = r.collaboration?.role || "";
-    return COLLABORATION_ROLE[role] ? i18nText(COLLABORATION_ROLE[role]) : role;
-};
-const collaborationStep = (r) => {
-    const kind = r.collaboration?.step_kind || "";
-    return COLLABORATION_STEP[kind] ? i18nText(COLLABORATION_STEP[kind]) : kind;
-};
-const collaborationDetail = (r) => [collaborationRole(r), collaborationStep(r)].filter(Boolean).join(" · ");
-const workspaceName = (r) => r.collaboration
-    ? r.source_session_name || r.collaboration.source_session_id
-    : r.session_name || r.session_id;
+const workspaceName = (r) => r.session_name || r.session_id;
 const BILLING = {
     // 与对话页每轮下方的说法一致：写用户看得懂的来源，不写「价目表」「CLI」
     provider: { get text() { return i18nText("客户端上报"); }, get title() { return i18nText("Claude Code 等客户端自己上报的估算成本，不代表订阅账号的实际扣款"); } },
@@ -344,7 +328,7 @@ function renderRows(data) {
         name.className = "u-sess";
         name.textContent = workspaceName(r);
         name.title = name.textContent;
-        if (!(r.collaboration ? r.source_session_name : r.session_name))
+        if (!r.session_name)
             setTip(name, () => i18nText("工作空间已删除"));
         const acct = document.createElement("div");
         acct.className = "u-sub";
@@ -380,17 +364,11 @@ function renderRows(data) {
         const { td: kind, v: kindv } = cellEl(() => i18nText("类型"));
         const chip = document.createElement("span");
         // 终端和起标题各有各的颜色：这一列的用处就是一眼看出「这笔钱是谁按下去的」。
-        chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : r.kind === "chat" || r.kind === "collaboration" ? " chat" : "");
+        chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : r.kind === "chat" || r.kind === "delegation" ? " chat" : "");
         setTextRender(chip, () => KIND_LABEL[r.kind] || r.kind);
         if (KIND_HINT[r.kind])
             setTip(chip, () => KIND_HINT[r.kind]);
         kindv.appendChild(chip);
-        if (r.collaboration?.role || r.collaboration?.step_kind) {
-            const detail = document.createElement("div");
-            detail.className = "u-sub";
-            setTextRender(detail, () => collaborationDetail(r));
-            kindv.appendChild(detail);
-        }
         tr.appendChild(kind);
         const b = billingFor(r);
         const bchip = document.createElement("span");
@@ -497,21 +475,15 @@ function renderCost(r) {
     top.appendChild(chip);
     const sub = document.createElement("div");
     sub.className = "cost-sub";
-    sub.textContent = [workspaceName(r), KIND_LABEL[r.kind] || r.kind, collaborationDetail(r), fmtUsageTime(r.ts)]
+    sub.textContent = [workspaceName(r), KIND_LABEL[r.kind] || r.kind, fmtUsageTime(r.ts)]
         .filter(Boolean)
         .join(" · ");
     head.append(top, sub);
-    if (r.collaboration) {
+    if (r.delegation_id) {
         const task = document.createElement("div");
         task.className = "cost-sub";
-        task.textContent = i18nText("协作任务 ID：{p0}", { p0: r.collaboration.run_id });
+        task.textContent = i18nText("委派 ID：{p0}", { p0: r.delegation_id });
         head.appendChild(task);
-        if (r.collaboration.step_id) {
-            const step = document.createElement("div");
-            step.className = "cost-sub";
-            step.textContent = i18nText("协作步骤 ID：{p0}", { p0: r.collaboration.step_id });
-            head.appendChild(step);
-        }
     }
     const body = $("cost-rows");
     body.replaceChildren();
@@ -541,7 +513,7 @@ function renderCost(r) {
     const lines = [];
     if (r.kind === "decision") {
         const p = document.createElement("p");
-        setText(p, "此项是已确认的决策调用费用，计入协作任务预算。费用未确认的调用保留在任务的预算占用中，不作为零费用入账。");
+        setText(p, "这是委派时 Jev 判断交给哪个跑腿的调用费用。费用未确认时按单次请求的上限入账，不作为零费用。");
         note.append(p);
         return;
     }
@@ -767,8 +739,7 @@ async function exportCSV() {
         }
         const head = [i18nText("时间（{p0}）", { p0: String(usageTimeZone) }), i18nText("用户"), i18nText("工作空间"), i18nText("工作空间ID"), i18nText("账号"), "Agent", i18nText("模型"), i18nText("思考强度"), i18nText("类型"), i18nText("计费"),
             i18nText("输入"), i18nText("输出"), i18nText("缓存读取"), i18nText("缓存写入"), i18nText("缓存命中率"), i18nText("合计Token"), i18nText("费用USD"),
-            i18nText("首字ms"), i18nText("总耗时ms"), i18nText("模型耗时ms"), i18nText("回合ID"),
-            i18nText("协作任务ID"), i18nText("协作步骤ID"), i18nText("协作角色"), i18nText("步骤类型"), i18nText("源工作空间ID")];
+            i18nText("首字ms"), i18nText("总耗时ms"), i18nText("模型耗时ms"), i18nText("回合ID"), i18nText("委派ID")];
         const lines = [head.join(",")];
         for (const r of data.rows) {
             lines.push([
@@ -778,8 +749,7 @@ async function exportCSV() {
                 r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_tokens, cacheHitText(r), r.total_tokens,
                 // 导出给人算账，这里才把微美元换成美元；六位小数才装得下一次便宜回合。
                 (r.cost_micro_usd / 1e6).toFixed(6),
-                r.ttft_ms, r.wall_ms, r.duration_ms, r.turn_id,
-                r.collaboration?.run_id || "", r.collaboration?.step_id || "", collaborationRole(r), collaborationStep(r), r.collaboration?.source_session_id || "",
+                r.ttft_ms, r.wall_ms, r.duration_ms, r.turn_id, r.delegation_id || "",
             ].map(csvCell).join(","));
         }
         // BOM：没有它 Excel 会把 UTF-8 中文认成乱码。

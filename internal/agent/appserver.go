@@ -54,7 +54,7 @@ type CodexTurn struct {
 	Effort                string // 可选的推理强度（minimal|low|medium|high|xhigh）
 	Cwd                   string // agent 的工作根目录（容器内路径）
 	RejectInheritedEffort bool   // unsupported model: refuse retained thread settings
-	StrictResume          bool   // collaboration: never replace a missing thread
+	StrictResume          bool   // never replace a missing thread with a new one
 }
 
 type rpcError struct {

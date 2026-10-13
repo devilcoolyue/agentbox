@@ -5,10 +5,7 @@ export default {
     "账号池、服务端配置与此浏览器的个人偏好。需要重启的项会单独标出。": "Account pool, server configuration and personal preferences for this browser. Settings that require a restart are marked.",
     "此浏览器的个人偏好，修改后即时生效。": "Personal preferences for this browser. Changes apply immediately.",
     "普通用户只能访问自己的工作空间和本机偏好，无法查看服务端配置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。": "Users can only access their own workspaces and local preferences, not server configuration. Deleting a user also removes their workspaces and containers; files remain on the server disk.",
-    "设置团队": "Configure team",
-    "执行方式": "Execution mode",
     "普通对话": "Regular chat",
-    "多 Agent 协作": "Multi-agent collaboration",
     "在此浏览器保存输入与待确认内容（7 天）": "Save drafts and unconfirmed messages in this browser (7 days)",
     "待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。": "After local text expires, its lookup ID is retained. Turning saving off or signing out does not cancel tasks already accepted by the server.",
     "清除本机副本并关闭保存": "Clear local copies and turn saving off",
@@ -782,5 +779,8 @@ export default {
     "石墨极简": "Graphite",
     "青野绿意": "Verdant",
     "工程蓝图": "Blueprint",
-    "升级步骤": "Upgrade steps"
+    "升级步骤": "Upgrade steps",
+    "委派给跑腿模型": "Delegate to worker models",
+    "委派跑腿": "Delegated work",
+    "对话开启「委派」时，Jev 可在标签规则之后判断交给哪个跑腿模型，或建议主 Agent 自己做。关闭后仍按跑腿标签路由。": "When “Delegate” is on in a chat, Jev can decide after the tag rules which worker model should take a subtask, or suggest the main agent do it. When off, routing still follows the worker tags."
 };

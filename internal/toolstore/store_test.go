@@ -3,7 +3,6 @@ package toolstore
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -41,39 +40,6 @@ func TestUserIdentityAndPinnedMountRoots(t *testing.T) {
 	}
 }
 
-func TestParticipantCachesAreDistinctAndStayInsideUserQuotaRoot(t *testing.T) {
-	root := t.TempDir()
-	owner := OwnerKey("instance", "alice", "created")
-	ordinary, err := Prepare(root, owner, os.Getuid(), os.Getgid())
-	if err != nil {
-		t.Fatal(err)
-	}
-	main, err := PrepareParticipant(root, owner, strings.Repeat("a", 32), os.Getuid(), os.Getgid())
-	if err != nil {
-		t.Fatal(err)
-	}
-	worker, err := PrepareParticipant(root, owner, strings.Repeat("b", 32), os.Getuid(), os.Getgid())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if main.Public != worker.Public || main.Cache == worker.Cache || strings.HasPrefix(main.Cache, ordinary.Cache+"/") {
-		t.Fatal("writable caches shared")
-	}
-	for _, p := range []Paths{main, worker} {
-		if !strings.HasPrefix(p.Cache, filepath.Join(root, "private", owner)+string(filepath.Separator)) {
-			t.Fatal("escaped quota root")
-		}
-	}
-	if err = os.RemoveAll(main.Cache); err != nil {
-		t.Fatal(err)
-	}
-	if err = os.Symlink(worker.Cache, main.Cache); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = PrepareParticipant(root, owner, strings.Repeat("a", 32), os.Getuid(), os.Getgid()); err == nil {
-		t.Fatal("followed other participant cache symlink")
-	}
-}
 func TestSDKPublicationAndArchitecture(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "public/go/linux-amd64/go1.26.9")

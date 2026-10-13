@@ -38,6 +38,10 @@
             "type": "string",
             "pattern": "^/shared/\\.(images|file)/[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"
           }
+        },
+        "delegation": {
+          "$ref": "#/$defs/DelegationOptions",
+          "description": "Lets the main agent hand subtasks to these worker models during this turn; absent keeps an ordinary chat."
         }
       },
       "required": [
@@ -47,6 +51,50 @@
         "model",
         "effort",
         "effort_control"
+      ],
+      "additionalProperties": false
+    },
+    "DelegationOptions": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "const": 1
+        },
+        "workers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/DelegationWorker"
+          }
+        },
+        "jev": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "version",
+        "workers",
+        "jev"
+      ],
+      "additionalProperties": false
+    },
+    "DelegationWorker": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "account_id",
+        "model"
       ],
       "additionalProperties": false
     },

@@ -18,7 +18,7 @@ import (
 var ErrCredentials = errors.New("account credentials could not be prepared")
 
 var ErrSessionGone = errors.New("session no longer exists")
-var ErrManagedSession = errors.New("collaboration participant requires task scheduler")
+var ErrManagedSession = errors.New("delegation worker workspace is managed by its owner")
 
 type Store interface {
 	Get(string) (store.Session, bool)
@@ -27,7 +27,9 @@ type Store interface {
 	Update(string, func(*store.Session)) (store.Session, error)
 	Delete(string) error
 	All() []store.Session
-	IsCollaborationSession(string) (bool, error)
+	DelegationOwner(string) (string, bool, error)
+	WorkerSessions(string) []store.Session
+	CreateWorkerSession(string, store.Session) (store.Session, error)
 }
 type Runtime interface {
 	Running(context.Context, string) (bool, error)
@@ -136,24 +138,22 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	}
 	defer lock.release()
 
-	if gate, ok := s.store.(interface{ CollaborationApplicationBlocked(string) (bool, error) }); ok {
-		blocked, err := gate.CollaborationApplicationBlocked(id)
-		if err != nil {
-			return store.Session{}, err
-		}
-		if blocked {
-			return store.Session{}, errors.New("project result application requires recovery")
-		}
-	}
 	// Re-read inside the lock: another caller may have finished the start.
 	cur, ok := s.store.Get(id)
 	if !ok {
 		return store.Session{}, ErrSessionGone
 	}
-	if managed, err := s.store.IsCollaborationSession(id); err != nil {
+	// A delegation worker runs its own account and home against the owner's
+	// files: /workspace is the owner's directory, everything else is its own.
+	workspaceDir := s.WorkspaceDir(cur)
+	if ownerID, worker, err := s.store.DelegationOwner(id); err != nil {
 		return store.Session{}, err
-	} else if managed {
-		return store.Session{}, ErrManagedSession
+	} else if worker {
+		owner, ok := s.store.Get(ownerID)
+		if !ok || owner.User != cur.User {
+			return store.Session{}, ErrSessionGone
+		}
+		workspaceDir = s.WorkspaceDir(owner)
 	}
 	acct, err := s.account(cur)
 	if err != nil {
@@ -214,7 +214,7 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	if err != nil {
 		return store.Session{}, err
 	}
-	cid, err := s.dock.EnsureRunning(ctx, cur, acct, s.WorkspaceDir(cur), s.HomeDir(cur), shared)
+	cid, err := s.dock.EnsureRunning(ctx, cur, acct, workspaceDir, s.HomeDir(cur), shared)
 	if err != nil {
 		return store.Session{}, err
 	}
@@ -245,6 +245,35 @@ func (s *Service) CreateWithGitConnection(sess store.Session, connection string)
 		return err
 	}
 	return s.store.PutWithGitDefault(sess, connection)
+}
+
+// CreateWorker returns the owner's hidden worker workspace for an account,
+// creating its home on first use. The owner lock keeps it from racing a purge.
+func (s *Service) CreateWorker(ctx context.Context, owner store.Session, worker store.Session) (store.Session, error) {
+	l := s.lock(owner.ID)
+	if err := l.acquire(ctx); err != nil {
+		return store.Session{}, err
+	}
+	defer l.release()
+	if _, ok := s.store.Get(owner.ID); !ok {
+		return store.Session{}, ErrSessionGone
+	}
+	root, err := safefs.Open(s.cfg.DataDir)
+	if err != nil {
+		return store.Session{}, err
+	}
+	defer root.Close()
+	rel, err := filepath.Rel(s.cfg.DataDir, s.HomeDir(worker))
+	if err != nil {
+		return store.Session{}, err
+	}
+	if err := root.MkdirAll(rel, 0755); err != nil {
+		return store.Session{}, err
+	}
+	if err := root.Chown(rel, dockerx.AgentUID, dockerx.AgentGID); err != nil {
+		return store.Session{}, err
+	}
+	return s.store.CreateWorkerSession(owner.ID, worker)
 }
 
 func (s *Service) prepareDirectories(sess store.Session) error {
@@ -297,6 +326,13 @@ func (s *Service) Delete(ctx context.Context, id string, purge bool) error {
 	if !ok {
 		return ErrSessionGone
 	}
+	// Hidden workers mount this workspace; they go first and always purge,
+	// since nothing but their own CLI state lives in their directories.
+	for _, worker := range s.store.WorkerSessions(id) {
+		if err := s.deleteWorker(ctx, worker); err != nil {
+			return err
+		}
+	}
 	if sess.ContainerID != "" {
 		if err := s.dock.Remove(ctx, sess.ContainerID); err != nil {
 			return err
@@ -322,6 +358,33 @@ func (s *Service) Delete(ctx context.Context, id string, purge bool) error {
 	}
 	return nil
 }
+func (s *Service) deleteWorker(ctx context.Context, worker store.Session) error {
+	l := s.lock(worker.ID)
+	if err := l.acquire(ctx); err != nil {
+		return err
+	}
+	defer l.release()
+	if worker.ContainerID != "" {
+		if err := s.dock.Remove(ctx, worker.ContainerID); err != nil {
+			return err
+		}
+	}
+	if err := s.store.Delete(worker.ID); err != nil {
+		return err
+	}
+	s.activity.Forget(worker.ID)
+	root, err := safefs.Open(s.cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	rel, err := filepath.Rel(s.cfg.DataDir, s.SessionDir(worker))
+	if err != nil {
+		return err
+	}
+	return root.RemoveAll(rel)
+}
+
 func (s *Service) Reap(ctx context.Context, d time.Duration) {
 	if d <= 0 {
 		return

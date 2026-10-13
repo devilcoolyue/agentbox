@@ -13,7 +13,8 @@ import {OutboxStore,receiptActive,draftFromRequest,type Outgoing} from "./outbox
 const labels:Record<Outgoing["state"],string>={unconfirmed:"等待接收确认",accepted:"消息已接收",starting:"正在准备任务",running:"任务正在执行",completed:"任务已完成",failed:"任务未开始",interrupted:"任务已中断",uncertain:"结果待核对",reviewed:"已核对未知结果",abandoned:"已放弃此消息",deleted:"消息已删除"};
 const identifier=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,"0")).join("");
 const key=(session:string,id:string)=>session+"/"+id;
-const envelope=(input:ChatRequestInput)=>JSON.stringify([input.scope,input.thread_id,input.text,input.model,input.effort,input.effort_control,input.attachments||[]]);
+const delegationEnvelope=(input:ChatRequestInput)=>input.delegation?[input.delegation.version,input.delegation.workers.map(w=>[w.account_id,w.model]),input.delegation.jev]:null;
+const envelope=(input:ChatRequestInput)=>JSON.stringify([input.scope,input.thread_id,input.text,input.model,input.effort,input.effort_control,input.attachments||[],delegationEnvelope(input)]);
 
 function receipt(value:unknown,session:string,id?:string):ChatRequestReceipt {
  try { return readChatReceipt(value,session,id); }

@@ -187,44 +187,36 @@ export async function smoke(page) {
   assert.deepEqual(csvLines.slice(1).map(line=>line.split(',')[hitColumn]),['80.0%','0.0%','—']);
   const effortColumn=csvLines[0].split(',').indexOf('思考强度');
   assert.deepEqual(csvLines.slice(1).map(line=>line.split(',')[effortColumn]),['Extra High','','Medium (13000)']);
-  // Collaboration is attributed to its source workspace without changing ledger IDs.
-  const collaborationRun='a'.repeat(32),collaborationStep='b'.repeat(12);
+  // Worker spend stays on the owner workspace and carries the delegate call's ID.
+  const delegationID='a'.repeat(32);
   usageRows.push(
-    {...usageRows[0],id:4,session_id:'managed-coordinator',session_name:'Hidden coordinator',kind:'collaboration',source_session_name:'Source project',collaboration:{run_id:collaborationRun,step_id:collaborationStep,role:'coordinator',step_kind:'plan',source_session_id:'source-project'}},
-    {...usageRows[0],id:5,session_id:'managed-executor',session_name:'Hidden executor',kind:'collaboration',collaboration:{run_id:collaborationRun,step_id:'c'.repeat(12),role:'executor',step_kind:'execute',source_session_id:'deleted-source'}},
-    {...usageRows[0],id:6,kind:'decision',agent:'decision',provider:'jev',effort:'',source_session_name:'Source project',collaboration:{run_id:collaborationRun,source_session_id:'source-project'}},
+    {...usageRows[0],id:4,session_id:'owner-space',session_name:'Owner project',kind:'delegation',model:'claude-sonnet-5-5',delegation_id:delegationID},
+    {...usageRows[0],id:5,session_id:'deleted-owner',session_name:'',kind:'delegation',model:'gpt-5.5-mini',delegation_id:'b'.repeat(32)},
+    {...usageRows[0],id:6,kind:'decision',agent:'decision',provider:'jev',effort:'',session_name:'Owner project',delegation_id:delegationID},
   );
   await page.locator('#uf-refresh').click();
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===6);
-  const coordinatorUsage=page.locator('#usage-rows tr').nth(3),executorUsage=page.locator('#usage-rows tr').nth(4),decisionUsage=page.locator('#usage-rows tr').nth(5);
-  assert.equal(await coordinatorUsage.locator('.u-sess').innerText(),'Source project');
-  assert.equal(await executorUsage.locator('.u-sess').innerText(),'deleted-source');
-  assert.match(await coordinatorUsage.innerText(),/多 Agent 协作[\s\S]*主 Agent · 规划/);
-  assert.match(await executorUsage.innerText(),/多 Agent 协作[\s\S]*执行 Agent · 执行/);
+  const workerUsage=page.locator('#usage-rows tr').nth(3),deletedUsage=page.locator('#usage-rows tr').nth(4),decisionUsage=page.locator('#usage-rows tr').nth(5);
+  assert.equal(await workerUsage.locator('.u-sess').innerText(),'Owner project');
+  assert.equal(await deletedUsage.locator('.u-sess').innerText(),'deleted-owner');
+  assert.match(await workerUsage.innerText(),/委派跑腿/);
   assert.match(await decisionUsage.innerText(),/决策调用/);
-  assert.equal(await decisionUsage.locator('.u-sess').innerText(),'Source project');
-  await coordinatorUsage.locator('.u-why').click();
-  assert.match(await page.locator('#cost-head').innerText(),new RegExp(`协作任务 ID：${collaborationRun}`));
-  assert.match(await page.locator('#cost-head').innerText(),new RegExp(`协作步骤 ID：${collaborationStep}`));
+  await workerUsage.locator('.u-why').click();
+  assert.match(await page.locator('#cost-head').innerText(),new RegExp(`委派 ID：${delegationID}`));
   await page.locator('#cost-close').click();
-  const collaborationDownload=page.waitForEvent('download');
+  const delegationDownload=page.waitForEvent('download');
   await page.locator('#uf-export').click();
-  const collaborationCSV=await readFile(await(await collaborationDownload).path(),'utf8');
-  const collaborationLines=collaborationCSV.trim().split('\r\n').map(line=>line.split(',')),columns=collaborationLines[0];
+  const delegationCSV=await readFile(await(await delegationDownload).path(),'utf8');
+  const delegationLines=delegationCSV.trim().split('\r\n').map(line=>line.split(',')),columns=delegationLines[0];
   const exported=(row,label)=>row[columns.indexOf(label)];
-  assert.equal(exported(collaborationLines[4],'工作空间'),'Source project');
-  assert.equal(exported(collaborationLines[4],'工作空间ID'),'managed-coordinator');
-  assert.equal(exported(collaborationLines[4],'协作任务ID'),collaborationRun);
-  assert.equal(exported(collaborationLines[4],'协作步骤ID'),collaborationStep);
-  assert.equal(exported(collaborationLines[4],'协作角色'),'主 Agent');
-  assert.equal(exported(collaborationLines[4],'步骤类型'),'规划');
-  assert.equal(exported(collaborationLines[4],'源工作空间ID'),'source-project');
-  assert.equal(exported(collaborationLines[6],'类型'),'决策调用');
-  assert.equal(exported(collaborationLines[6],'协作任务ID'),collaborationRun);
-  assert.equal(exported(collaborationLines[6],'协作步骤ID'),'');
-  await page.locator('#uf-kind').selectOption('collaboration',{force:true});
+  assert.equal(exported(delegationLines[4],'工作空间'),'Owner project');
+  assert.equal(exported(delegationLines[4],'类型'),'委派跑腿');
+  assert.equal(exported(delegationLines[4],'委派ID'),delegationID);
+  assert.equal(exported(delegationLines[6],'类型'),'决策调用');
+  assert.equal(exported(delegationLines[6],'委派ID'),delegationID);
+  await page.locator('#uf-kind').selectOption('delegation',{force:true});
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===2);
-  assert.deepEqual(await page.locator('#usage-rows .u-sess').allInnerTexts(),['Source project','deleted-source']);
+  assert.deepEqual(await page.locator('#usage-rows .u-sess').allInnerTexts(),['Owner project','deleted-owner']);
   await page.locator('#uf-kind').selectOption('',{force:true});
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===6);
   // Terminal effort comes from the transcript, and survives display and CSV export.
@@ -262,7 +254,7 @@ export async function smoke(page) {
    await page.setViewportSize({width:1280,height:900});
    await usageSmoke();
    assert.deepEqual(errors,[]);
-   console.log('Usage browser: ordinary and collaboration rows, source workspaces, roles/steps, decision attribution, category filtering, cost details, CSV and narrow layout passed. Synthetic API only.');
+   console.log('Usage browser: ordinary and delegation rows, owner workspaces, decision attribution, category filtering, cost details, CSV and narrow layout passed. Synthetic API only.');
    return;
   }
   if (process.env.AGENTBOX_BROWSER_ONLY_CHAT_PAGES === '1') {

@@ -21,11 +21,7 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 | 核对当前支持与待验收范围 | [能力/版本/验证清单](capabilities.md) |
 | 参与开源重构 | [重构设计与实施计划](architecture/opensource-refactor.md) |
 | 规划后续迭代 | [第二轮计划 M6～M11](roadmap-2.md) · [M6 进展](milestones/m6.md) · [第一轮计划 M1～M5（已封存）](roadmap.md) · [M1 实施与验收](milestones/m1.md) · [M2 进展](milestones/m2.md) · [M3 进展](milestones/m3.md) · [M4 进展](milestones/m4.md) · [候选镜像验证](agent-image-validation.md) · [M5 进展](milestones/m5.md) |
-| 跟踪多 Agent 协作 | [协作任务设计](architecture/agent-collaboration.md) → [协作专项 C1～C3](milestones/collaboration.md)→ [开发预览使用说明](collaboration-preview.md)（默认关闭的网页/API 已接入；恢复与故障验收实施中） |
-| 调整协作入口与对话体验 | [在空间对话中使用多 Agent 协作](architecture/collaboration-in-chat.md)（schema 14 开发版已接入发送模式、同线程进度、上下文衔接与结果应用；边界见文末） |
-| 简化多 Agent 协作流程 | [协作减重实施](milestones/collaboration-lightweight-20261012.md)（schema 16，生产开发预览 `.15`：直接执行、评审差异、代码地图与增量交接）→ [按需委派调研](architecture/collaboration-lightweight-research.md)（工具桥与动态委派仍待实施） |
-| 按任务难度自动选模型 | [自动选模与按需协作](architecture/collaboration-model-routing.md)（路由思想与后续分层、升级、效果评估；首次协作插件实现见下一项） |
-| 可选接入 Jev 决策插件 | [实现与接口](architecture/decision-plugins.md) → [专项验收](milestones/decision-plugins.md) → [Mindshub 真实服务验证](milestones/decision-mindshub-live.md) → [生产真实账号验收](milestones/decision-production-20261011.md)（已发布；真实 Jev 与 CC/Codex 全流程通过，低价模型采用收益待验证） |
+| 让强模型带经济模型干活 | [主管委派](architecture/delegation-supervisor.md)（schema 18：主 Agent 按能力标签把子任务交给跑腿模型，可选 Jev 辅助判断；替换并删除了旧多 Agent 协作）→ [Mindshub Jev 真实服务验证](milestones/decision-mindshub-live.md)（旧协作时期的接入记录） |
 | 遇到错误 | [常见问题](troubleshooting.md) → [错误码与操作关联](errors.md) → [分层环境诊断](diagnostics.md) → [部署日志](../deploy/README.md#日志与健康检查) |
 
 当前实现见[本地存储容量管理](storage-capacity.md)。存储扩容与云端计划见 [存储容量专项 S1～S4](milestones/storage.md)：先完成本地容量治理，再推进 S3 备份和空间归档；记录明确区分已实现、人工运维和后续待办。

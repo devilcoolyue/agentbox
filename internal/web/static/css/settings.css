@@ -281,23 +281,30 @@
 .mv-summary { margin-left: auto; display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 .mv-warn { color: var(--warn); }
 .mv-warn::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; }
-.mv-rows { display: flex; flex-direction: column; padding: 2px 18px 6px; border-top: 1px solid var(--line-soft); }
+/* 列定义在列表上，各行用 subgrid 共用：价格、跑腿按钮文字长短不一时也能对齐 */
+.mv-rows {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) max-content max-content max-content 36px;
+  column-gap: 14px;
+  padding: 2px 18px 6px; border-top: 1px solid var(--line-soft);
+}
 @media (prefers-reduced-motion: reduce) { .mv-chev { transition: none; } }
 .mv-row {
-  display: grid; align-items: center; gap: 4px 14px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 164px 56px 36px;
+  grid-column: 1 / -1;
+  display: grid; align-items: center; row-gap: 4px;
+  grid-template-columns: subgrid;
   padding: 9px 2px;
   border-bottom: 1px solid var(--line-soft);
   cursor: pointer;
 }
 .mv-row:last-child { border-bottom: none; }
 .mv-row:has(.mv-switch:disabled) { cursor: default; }
-/* 默认标签可能隐藏，各列显式定位，避免后面的列往前挤 */
+/* 默认标签、价格和跑腿按钮都可能隐藏，各列显式定位，避免后面的列往前挤 */
 .mv-row > .mv-name { grid-column: 1; }
 .mv-row > .mv-effort { grid-column: 2; }
 .mv-row > .mv-price { grid-column: 3; justify-self: start; }
-.mv-row > .mv-tag { grid-column: 4; justify-self: end; }
-.mv-row > .mv-switch { grid-column: 5; justify-self: end; }
+.mv-row > .mv-delegation { grid-column: 4; justify-self: start; }
+.mv-row > .mv-tag { grid-column: 5; justify-self: end; }
+.mv-row > .mv-switch { grid-column: 6; justify-self: end; }
 .mv-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
 .mv-label, .mv-id, .mv-effort { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mv-label { font-size: 13.5px; }
@@ -307,9 +314,12 @@
   font-size: 11px; color: var(--amber); white-space: nowrap;
   border: 1px solid var(--amber-dim); border-radius: var(--radius-pill); padding: 1px 8px;
 }
-.mv-row.off .mv-name, .mv-row.off .mv-effort, .mv-row.off .mv-price { opacity: 0.5; }
+.mv-row.off .mv-name, .mv-row.off .mv-effort, .mv-row.off .mv-price, .mv-row.off .mv-delegation { opacity: 0.5; }
+.mv-delegation { max-width: 100%; justify-content: flex-start; font-size: 12px; overflow: hidden; white-space: nowrap; color: var(--muted); }
+.mv-delegation .action-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* 价格列：实际计费的输入 / 输出单价；兜底价与未定价用警示色 */
-.mv-price { max-width: 100%; justify-content: flex-start; font-size: 12px; font-family: var(--mono); overflow: hidden; margin-left: -10px; }
+/* 宽屏不用负外边距对齐文字：内容定宽的列会因此少算 10px，按钮文字被截断 */
+.mv-price { max-width: 100%; justify-content: flex-start; font-size: 12px; font-family: var(--mono); overflow: hidden; }
 .mv-price .action-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mv-price.warn, .mv-price.warn:hover:not(:disabled) { color: var(--warn); }
 .mv-price[data-kind="unpriced"] { font-family: var(--sans); }
@@ -497,12 +507,16 @@
   .model-row .m-id { grid-column: 1; grid-row: 2; }
   .model-row .m-reasoning { grid-column: 1; grid-row: 3; justify-self: start; max-width: 100%; margin-left: -11px; }
   .model-row .m-remove { grid-column: 2; grid-row: 1 / 4; }
-  .mv-row { grid-template-columns: minmax(0, 1fr) auto 36px; }
-  .mv-row > .mv-name { grid-column: 1; grid-row: 1; }
-  .mv-row > .mv-effort { grid-column: 1; grid-row: 2; }
+  .mv-rows { display: flex; flex-direction: column; }
+  /* 价格与跑腿两个按钮并排放在第三行；用位移而不是负外边距对齐文字，内容定宽的列才不会少算 */
+  .mv-row { grid-template-columns: max-content minmax(0, 1fr) auto 36px; column-gap: 14px; }
+  .mv-row > .mv-name { grid-column: 1 / 3; grid-row: 1; }
+  .mv-row > .mv-effort { grid-column: 1 / 4; grid-row: 2; }
   .mv-row > .mv-price { grid-column: 1; grid-row: 3; }
-  .mv-row > .mv-tag { grid-column: 2; grid-row: 1; }
-  .mv-row > .mv-switch { grid-column: 3; grid-row: 1 / 4; }
+  .mv-row > .mv-delegation { grid-column: 2 / 4; grid-row: 3; }
+  .mv-row > .mv-tag { grid-column: 3; grid-row: 1; }
+  .mv-row > .mv-switch { grid-column: 4; grid-row: 1 / 4; }
+  .mv-price, .mv-delegation { translate: -10px 0; }
   .mdl-tabs { align-self: stretch; overflow-x: auto; }
   .mdl-toolbar input[type="search"] { max-width: none; }
   .mv-summary { margin-left: 0; flex-basis: 100%; padding-left: 20px; }

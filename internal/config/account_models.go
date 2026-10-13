@@ -44,6 +44,9 @@ func (a *Account) normalizeModels() error {
 		if err := ValidateReasoning(a.Type, m.Reasoning); err != nil {
 			return fmt.Errorf("模型 %s: %w", m.ID, err)
 		}
+		if err := m.Delegation.normalize(); err != nil {
+			return fmt.Errorf("模型 %s: %w", m.ID, err)
+		}
 	}
 	a.DefaultModel = strings.TrimSpace(a.DefaultModel)
 	if a.DefaultModel == "" {

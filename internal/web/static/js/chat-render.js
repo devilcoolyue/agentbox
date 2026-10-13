@@ -1,4 +1,3 @@
-import { collaborationAnchor } from "./features/collaboration/thread-view.js";
 import { formatProblem } from "./problems.js";
 import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* chat-render：对话流的纯渲染管线 —— 用户消息、agent 事件（Claude stream-json /
@@ -547,8 +546,6 @@ function appendInlineFmt(parent, text) {
 export function renderEntry(raw) {
     if (!raw || typeof raw !== "object")
         return [];
-    if (raw.kind === "collaboration" && raw.run_id && /^[a-f0-9]{32}$/.test(raw.run_id))
-        return [collaborationAnchor(raw.run_id, raw.text || "")];
     if (raw.kind === "user")
         return [renderUserMsg(raw.text)];
     if (raw.kind === "event")
@@ -647,6 +644,14 @@ export function renderEvent(ev) {
             if (block.type === "text" && block.text)
                 out.push(agentText(block.text));
             else if (block.type === "tool_use") {
+                // The delegation card shows the delegate call; its review gets a short line.
+                if (block.name === "mcp__agentbox__delegate")
+                    continue;
+                if (block.name === "mcp__agentbox__delegation_feedback") {
+                    const input = (block.input || {});
+                    out.push(toolChip(i18nText("委派评价"), [String(input.verdict || ""), String(input.note || "")].filter(Boolean).join(" · ")));
+                    continue;
+                }
                 out.push(toolChip(block.name, summarizeInput(block.input), htmlOutputPath(block.input)));
             }
             else if (block.type === "thinking" && block.thinking)

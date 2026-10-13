@@ -16,7 +16,6 @@ import { initRemoteBrowser } from "../remote-browser.js";
 import { initMCP } from "../mcp.js";
 import { initUpdates } from "../updates.js";
 import { initThemes } from "../themes.js";
-import { initCollaboration } from "../features/collaboration/panel.js";
 /** App-owned feature lifetime; each init can be safely repeated. */
 export function initApplication() {
     const lifetime = new AbortController();
@@ -38,12 +37,13 @@ export function initApplication() {
         S.draftProtocol = 0;
         S.chatScope = "";
         S.chatProtocol = 0;
+        S.delegationProtocol = 0;
         showView("work");
         renderSidebar();
     };
     const start = () => {
         disposers.splice(0).reverse().forEach(dispose => dispose());
-        disposers = [initWorkspaceFilter(renderSidebar), initOnboarding(), initWorkspaceCreation(), initChat(), initFirstTask(), initMCP(), initSettings(), initUpdates(), initPricing(), initRemoteBrowser(), initThemes(), initCollaboration()];
+        disposers = [initWorkspaceFilter(renderSidebar), initOnboarding(), initWorkspaceCreation(), initChat(), initFirstTask(), initMCP(), initSettings(), initUpdates(), initPricing(), initRemoteBrowser(), initThemes()];
     };
     bus.addEventListener("signed-in", start, { signal: lifetime.signal });
     bus.addEventListener("signed-out", stop, { signal: lifetime.signal });

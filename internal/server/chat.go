@@ -16,6 +16,7 @@ import (
 
 	"agentbox/internal/agent"
 	"agentbox/internal/chat"
+	"agentbox/internal/delegation"
 	"agentbox/internal/store"
 )
 
@@ -332,17 +333,22 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 		control = controls[0]
 	}
 	service := chat.Service{Runtime: chatRuntime{r}, Usage: r.srv.usageService()}
-	supplement := ""
-	if receipt != nil {
-		var err error
-		supplement, err = r.srv.store.ChatCollaborationContext(receipt.owner, r.sessID, receipt.receipt.RequestID)
+	in := chat.Input{SessionID: r.sessID, Text: text, Model: model, Effort: effort, Control: control}
+	if receipt != nil && receipt.receipt.Request != nil && receipt.receipt.Request.Delegation != nil {
+		// The grant lives exactly as long as this turn; closing it cancels any
+		// running worker before the room is released.
+		grant, err := r.srv.openDelegation(r, receipt.owner, receipt.receipt)
 		if err != nil {
-			receipt.Fail(err, "chat_failed")
+			receipt.Fail(err, classifyProblem(err, "delegation_unavailable"))
 			receipt.Finish()
 			return
 		}
+		if grant != nil {
+			defer grant.close()
+			in.Extras, in.Timeout, in.Preface = grant.extras, delegationTurnTimeout, delegation.TurnReminder()
+		}
 	}
-	service.Run(parent, chat.Input{SessionID: r.sessID, Text: text, Context: supplement, Model: model, Effort: effort, Control: control}, observer)
+	service.Run(parent, in, observer)
 }
 
 func (r *chatRoom) setStop(f func()) {
@@ -484,6 +490,11 @@ func (r *chatRoom) interruptRequest(ctx context.Context, id string, user bool) e
 	} // Lost acknowledgement must not send a second SIGINT.
 	if user {
 		r.userInterrupted = true
+	}
+	// A worker the main agent is waiting for stops first; the main agent then
+	// sees its delegate call end instead of hanging on it.
+	if r.srv != nil {
+		r.srv.interruptDelegation(r.sessID)
 	}
 	// Keep room ownership until the signal is sent. Otherwise a late interrupt
 	// could target a newer turn's PID after this turn releases the room.

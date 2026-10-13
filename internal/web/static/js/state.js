@@ -24,6 +24,7 @@ export const S = {
     draftProtocol: 0,
     chatScope: "",
     chatProtocol: 0,
+    delegationProtocol: 0,
     preserveChatCopiesOnSignout: false,
     role: "",
     sessions: [],

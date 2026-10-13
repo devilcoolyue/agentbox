@@ -6,13 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 )
 
 // These deliberately small old databases exercise the backup format's promise
 // to preserve an existing schema without bootstrapping any service tables.
-func restoreCompatibilityFixture(t *testing.T, version int, withCollaboration bool) (string, *sql.DB) {
+func restoreCompatibilityFixture(t *testing.T, version int) (string, *sql.DB) {
 	t.Helper()
 	base := t.TempDir()
 	if err := os.Mkdir(filepath.Join(base, "data"), 0700); err != nil {
@@ -34,11 +33,6 @@ func restoreCompatibilityFixture(t *testing.T, version int, withCollaboration bo
 		fmt.Sprintf("PRAGMA user_version=%d", version),
 	} {
 		if _, err = db.Exec(query); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if withCollaboration {
-		if _, err = db.Exec("CREATE TABLE collaborations(id TEXT PRIMARY KEY); INSERT INTO collaborations VALUES('original-task')"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -97,7 +91,7 @@ func assertStandaloneRestoredDB(t *testing.T, file string) {
 func TestRestorePreservesHistoricalSchemaAndJournal(t *testing.T) {
 	for _, version := range []int{0, 12} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
-			archive, source := restoreCompatibilityFixture(t, version, false)
+			archive, source := restoreCompatibilityFixture(t, version)
 			wantSchema := restoreSchema(t, source)
 			target := filepath.Join(t.TempDir(), "restored")
 			if _, err := Restore(t.Context(), archive, target); err != nil {
@@ -123,30 +117,6 @@ func TestRestorePreservesHistoricalSchemaAndJournal(t *testing.T) {
 			}
 			if err = source.QueryRow("PRAGMA journal_mode").Scan(&journal); err != nil || journal != "wal" {
 				t.Fatal("source journal changed", journal, err)
-			}
-		})
-	}
-}
-
-func TestRestoreRejectsIncompatibleCollaborationBeforePublication(t *testing.T) {
-	for _, version := range []int{13, 14, 15, 16} {
-		t.Run(fmt.Sprint(version), func(t *testing.T) {
-			archive, source := restoreCompatibilityFixture(t, version, true)
-			parent := t.TempDir()
-			target := filepath.Join(parent, "restored")
-			if _, err := Restore(t.Context(), archive, target); err == nil || !strings.Contains(err.Error(), "restore with the matching backup version") {
-				t.Fatal("incompatible collaboration backup was not rejected clearly", err)
-			}
-			if _, err := os.Stat(target); !os.IsNotExist(err) {
-				t.Fatal("published incompatible restore", err)
-			}
-			entries, err := os.ReadDir(parent)
-			if err != nil || len(entries) != 0 {
-				t.Fatal("failed restore retained staging files", entries, err)
-			}
-			var id string
-			if err = source.QueryRow("SELECT id FROM collaborations").Scan(&id); err != nil || id != "original-task" {
-				t.Fatal("source collaboration changed", id, err)
 			}
 		})
 	}

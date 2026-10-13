@@ -1,7 +1,8 @@
-import { t as i18nText, setText, setTextRender } from "./i18n.js";
+import { t as i18nText, setAttrRender, setText, setTextRender } from "./i18n.js";
 /* 账号可用模型：从账号的上游读取模型目录，管理员勾选全部或部分模型，并按模型
  * 设置思考强度。保存后使用这个账号的工作空间只能在这些模型里选择。 */
 import { api } from "./api.js";
+import { delegationSummary, delegationTip, editDelegationTags } from "./delegation-tags.js";
 import { $, askConfirm, btnBusy, btnDone, toast } from "./util.js";
 import { editReasoning } from "./reasoning-editor.js";
 import { BUDGETS, EFFORT_LABELS } from "./reasoning.js";
@@ -34,7 +35,17 @@ export function effortSummary(r) {
         return i18nText("强度：不支持调整");
     if (r.support === "unknown")
         return i18nText("强度：未知");
-    return i18nText("强度：") + (r.levels || []).map(l => r.control === "budget" ? `${EFFORT_LABELS[l] || l} (${BUDGETS[l]})` : EFFORT_LABELS[l] || l).join(" / ");
+    return i18nText("强度：") + effortLevels(r);
+}
+/** 表格单元格里的强度：列头已经写了「思考强度」，这里只列档位。 */
+function effortLevels(r) {
+    if (!r)
+        return i18nText("未设置");
+    if (r.support === "unsupported")
+        return i18nText("不支持调整");
+    if (r.support === "unknown")
+        return i18nText("未知");
+    return (r.levels || []).map(l => r.control === "budget" ? `${EFFORT_LABELS[l] || l} (${BUDGETS[l]})` : EFFORT_LABELS[l] || l).join(" / ");
 }
 function effortTip(row) {
     const from = row.source === "upstream" ? i18nText("由上游模型目录提供")
@@ -84,10 +95,27 @@ function renderStatus() {
     all.indeterminate = !all.checked && shown.some(r => r.checked);
     $("acct-models-bulk").disabled = busy || !bulkTargets().length;
 }
+/** 列头：窄屏隐藏，单元格改用 data-k 自带的「强度：」前缀。 */
+function headRow() {
+    const head = document.createElement("div");
+    head.className = "am-head";
+    head.setAttribute("aria-hidden", "true");
+    for (const [className, text] of [["am-h-model", "模型"], ["am-h-effort", "思考强度"], ["am-h-delegation", "跑腿"], ["am-h-default", "默认"]]) {
+        const cell = document.createElement("span");
+        cell.className = className;
+        setText(cell, text);
+        head.append(cell);
+    }
+    return head;
+}
 function renderRows() {
     const list = $("acct-models-list");
     const def = effectiveDefault();
-    list.replaceChildren(...rows.filter(visible).map(row => {
+    if (!rows.length) {
+        list.replaceChildren();
+        return;
+    }
+    list.replaceChildren(headRow(), ...rows.filter(visible).map(row => {
         const el = document.createElement("div");
         el.className = "am-row" + (row.checked ? "" : " off");
         el.dataset.id = row.id;
@@ -97,11 +125,10 @@ function renderRows() {
         box.addEventListener("change", () => { row.checked = box.checked; renderAll(); });
         const name = document.createElement("span");
         name.className = "am-name";
+        const title = document.createElement("span");
+        title.className = "am-title";
         const label = Object.assign(document.createElement("span"), { className: "am-label", textContent: row.label });
-        name.append(label);
-        if (row.label !== row.id)
-            name.append(Object.assign(document.createElement("span"), { className: "am-id mono", textContent: row.id }));
-        pick.append(box, name);
+        // 状态标签跟在名字后面，不单独占一列：多数行没有标签，单占一列会把后面几列挤歪。
         const tag = document.createElement("span");
         tag.className = "am-tag";
         const tagText = row.state === "new" ? i18nText("新") : row.state === "missing" ? i18nText("上游未列出") : row.state === "manual" ? i18nText("手动")
@@ -114,10 +141,16 @@ function renderRows() {
             setTip(tag, () => i18nText("来自官方模型目录，不代表这个账号的上游一定提供"));
         else if (row.hidden)
             setTip(tag, () => i18nText("已在「模型管理」里关闭显示，对话下拉里看不到它"));
+        title.append(label, tag);
+        name.append(title);
+        if (row.label !== row.id)
+            name.append(Object.assign(document.createElement("span"), { className: "am-id mono", textContent: row.id }));
+        pick.append(box, name);
         const effort = document.createElement("button");
         effort.type = "button";
         effort.className = "btn btn-sm btn-ghost am-effort" + (row.reasoning?.support === "supported" ? " on" : "");
-        actionButton(effort, () => effortSummary(row.reasoning), "sliders", () => effortTip(row));
+        actionButton(effort, () => effortLevels(row.reasoning), "sliders", () => effortTip(row));
+        setAttrRender(effort.querySelector(".action-label"), "data-k", () => i18nText("强度："));
         effort.disabled = busy;
         effort.addEventListener("click", async () => {
             if (!account)
@@ -129,6 +162,20 @@ function renderRows() {
             row.source = "";
             renderAll();
         });
+        const tags = document.createElement("button");
+        tags.type = "button";
+        tags.className = "btn btn-sm btn-ghost am-delegation" + (row.delegation?.enabled ? " on" : "");
+        actionButton(tags, () => delegationSummary(row.delegation), "users", () => delegationTip(row.delegation, i18nText("设置这个模型能否当跑腿、能接哪些子任务")));
+        tags.disabled = busy;
+        tags.addEventListener("click", async () => {
+            if (!account)
+                return;
+            const next = await editDelegationTags(i18nText("{model} · 跑腿标签", { model: row.label }), account.id, row.id, row.delegation);
+            if (next === null)
+                return;
+            row.delegation = next;
+            renderAll();
+        });
         const dflt = document.createElement("label");
         dflt.className = "check am-default";
         const radio = Object.assign(document.createElement("input"), { type: "radio", name: "am-default", checked: row.id === def, disabled: !row.checked || !!row.hidden || busy });
@@ -136,14 +183,17 @@ function renderRows() {
             defaultId = row.id;
             renderAll();
         } });
-        const caption = document.createTextNode("");
-        setTextRender(caption, () => " " + i18nText("默认"));
+        setAttrRender(radio, "aria-label", () => i18nText("{model} 设为默认模型", { model: row.label }));
+        // 宽屏由列头说明这一列，文字只在窄屏（没有列头）显示。
+        const caption = document.createElement("span");
+        caption.className = "am-default-text";
+        setText(caption, "默认");
         dflt.append(radio, caption);
         setTip(dflt, () => i18nText("新建工作空间和未选择模型时使用的模型"));
-        el.append(pick, tag, effort, dflt);
+        el.append(pick, effort, tags, dflt);
         return el;
     }));
-    if (rows.length && !list.childElementCount) {
+    if (list.childElementCount === 1) {
         const empty = document.createElement("p");
         empty.className = "field-hint am-empty";
         setText(empty, "没有匹配的模型");
@@ -287,7 +337,7 @@ async function save(event) {
     setBusy(true);
     try {
         const body = {
-            models: chosen.map(r => ({ id: r.id, label: r.label, ...(r.reasoning ? { reasoning: r.reasoning } : {}), ...(r.hidden ? { hidden: true } : {}) })),
+            models: chosen.map(r => ({ id: r.id, label: r.label, ...(r.reasoning ? { reasoning: r.reasoning } : {}), ...(r.hidden ? { hidden: true } : {}), ...(r.delegation ? { delegation: r.delegation } : {}) })),
             default_model: chosen.length ? effectiveDefault() : "",
         };
         // Account overrides were folded into the rows above; keep one source of truth.
@@ -351,7 +401,7 @@ export function openAccountModels(a, opts = {}) {
     busy = false;
     rows = (a.models || []).map(m => {
         const override = a.model_reasoning?.[m.id];
-        return { id: m.id, label: m.label || m.id, reasoning: override || m.reasoning, source: "", checked: true, state: "saved", hidden: !!m.hidden };
+        return { id: m.id, label: m.label || m.id, reasoning: override || m.reasoning, source: "", checked: true, state: "saved", hidden: !!m.hidden, delegation: m.delegation };
     });
     setTextRender($("acct-models-title"), () => i18nText("{name} · 可用模型", { name: a.label }));
     $("acct-models-filter").value = "";

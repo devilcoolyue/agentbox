@@ -30,9 +30,6 @@ type problemDefinition struct {
 }
 
 var problemCatalog = map[string]problemDefinition{
-	"collaboration_source_not_repository": {422, "当前项目目录不是 Git 仓库", "请选择包含 Git 项目的工作空间；项目在子目录时，请在协作设置中填写仓库相对路径。", "edit_request", false},
-	"collaboration_source_no_commit":      {422, "项目尚无 Git 提交", "请先在源工作空间创建一次 Git 提交，再开始协作。", "edit_request", false},
-	"collaboration_source_dirty":          {409, "项目有未提交的改动", "请先提交或处理源项目的改动，再开始协作；系统不会自动提交或丢弃文件。", "edit_request", false},
 
 	"chat_request_conflict":           {409, "消息编号与已接收内容或状态不一致", "请查询原消息状态，核对后使用新的消息编号。", "check_result", false},
 	"chat_request_gone":               {410, "该消息已放弃或删除", "请核对历史和工作区结果；不会重新执行这个消息编号。", "check_result", false},
@@ -41,6 +38,7 @@ var problemCatalog = map[string]problemDefinition{
 	"chat_scope_changed":              {409, "消息所属的实例或登录身份已变化", "请重新登录并核对原任务；不会自动重新发送。", "sign_in", false},
 	"chat_thread_changed":             {409, "当前对话与消息所属对话不一致", "请返回原对话并核对输入后再发送。", "check_result", false},
 	"chat_attachments_invalid":        {409, "消息附件已失效或无法验证", "请移除失效附件或重新上传，核对后再发送。", "edit_request", false},
+	"delegation_unavailable":          {503, "委派工具暂时无法准备", "请关闭「委派」后重新发送，或联系管理员检查账号出口网桥配置。", "edit_request", false},
 	"project_upload_limits":           {413, "项目上传超过限制", "请减少文件数量或体积；大小限制可由管理员调整。", "edit_request", false},
 	"creation_conflict":               {409, "创建信息与已接收记录不一致", "请继续原创建流程，或明确开始新的创建。", "review_creation", false},
 	"creation_gone":                   {410, "该创建已放弃或空间已删除", "请刷新空间列表；不会重新创建已删除空间。", "refresh_sessions", false},

@@ -173,6 +173,9 @@ type ModelOption struct {
 	// Hidden (account model lists only) keeps the model on the account but out
 	// of the chat picker. It stays usable: workspaces already on it keep it.
 	Hidden bool `json:"hidden,omitempty"`
+	// Delegation (account model lists only) offers the model as a worker that a
+	// main agent may hand subtasks to; see delegation.go.
+	Delegation *ModelDelegation `json:"delegation,omitempty"`
 }
 
 // TokenRates is one tier of per-million-token prices in USD. The four buckets
@@ -337,7 +340,6 @@ type Config struct {
 	MaxUploadMB           int64                    `json:"max_upload_mb"`
 	ChatHistoryTimeoutSec int64                    `json:"chat_history_timeout_sec"`
 	DesktopSync           bool                     `json:"desktop_sync_enabled"`
-	CollaborationEnabled  bool                     `json:"collaboration_enabled"`
 	Decision              DecisionConfig           `json:"decision"`
 	IdleTimeoutMin        int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
 	TimeZone              string                   `json:"timezone"`         // IANA 时区；用于界面时间与用量筛选
@@ -639,6 +641,9 @@ func (c *Config) validateLocked() error {
 			if o.Hidden {
 				return fmt.Errorf("models.%s.%s: hidden 只用于账号的可用模型", agent, o.ID)
 			}
+			if o.Delegation != nil {
+				return fmt.Errorf("models.%s.%s: delegation 只用于账号的可用模型", agent, o.ID)
+			}
 			if o.Label == "" || !modelIDRe.MatchString(o.ID) {
 				return fmt.Errorf("models.%s: entry %q/%q invalid", agent, o.Label, o.ID)
 			}
@@ -690,7 +695,6 @@ type persistConfig struct {
 	MaxUploadMB           int64                    `json:"max_upload_mb"`
 	ChatHistoryTimeoutSec int64                    `json:"chat_history_timeout_sec"`
 	DesktopSync           bool                     `json:"desktop_sync_enabled"`
-	CollaborationEnabled  bool                     `json:"collaboration_enabled"`
 	Decision              DecisionConfig           `json:"decision"`
 	IdleTimeoutMin        int64                    `json:"idle_timeout_min"`
 	TimeZone              string                   `json:"timezone"`
@@ -727,7 +731,6 @@ func (c *Config) saveLocked() error {
 		MaxUploadMB:           c.MaxUploadMB,
 		ChatHistoryTimeoutSec: c.ChatHistoryTimeoutSec,
 		DesktopSync:           c.DesktopSync,
-		CollaborationEnabled:  c.CollaborationEnabled,
 		Decision:              c.Decision.normalized(),
 		IdleTimeoutMin:        c.IdleTimeoutMin,
 		TimeZone:              c.TimeZone,
@@ -1069,7 +1072,6 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		MaxUploadMB:           c.MaxUploadMB,
 		ChatHistoryTimeoutSec: c.ChatHistoryTimeoutSec,
 		DesktopSync:           c.DesktopSync,
-		CollaborationEnabled:  c.CollaborationEnabled,
 		Decision:              c.Decision.normalized(),
 		IdleTimeoutMin:        c.IdleTimeoutMin,
 		TimeZone:              c.TimeZone,
@@ -1113,7 +1115,6 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.MaxUploadMB = work.MaxUploadMB
 	c.ChatHistoryTimeoutSec = work.ChatHistoryTimeoutSec
 	c.DesktopSync = work.DesktopSync
-	c.CollaborationEnabled = work.CollaborationEnabled
 	if c.Decision.normalized().Revision != work.Decision.Revision {
 		if c.decisionChanged != nil {
 			close(c.decisionChanged)

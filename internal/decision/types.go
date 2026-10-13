@@ -5,56 +5,30 @@ package decision
 import (
 	"context"
 	"errors"
-
-	"agentbox/internal/collaboration"
 )
 
-const Version = 1
-const TemplateVersion = "collaboration-model-choice-v1"
+// TemplateVersion names the only question wording an adapter may send. A new
+// wording needs a new version so recorded routes stay interpretable.
+const TemplateVersion = "delegation-worker-choice-v1"
 
-type Intent struct {
-	Version  int                               `json:"version"`
-	Provider string                            `json:"provider"`
-	Roles    map[collaboration.Role]RoleIntent `json:"roles"`
-}
-type RoleIntent struct {
-	Mode string `json:"mode"`
-}
+// SelfRef is the fixed option meaning "the main agent keeps this subtask".
+const SelfRef = "self"
+
+// Candidate descriptions are the provider's only business input about an
+// option; account IDs, model bindings and credentials never leave the server.
 type Candidate struct {
-	Ref         string                `json:"ref"`
-	Binding     collaboration.Binding `json:"binding"`
-	Description string                `json:"description"`
+	Ref         string `json:"ref"`
+	Description string `json:"description"`
 }
-type RoleSnapshot struct {
-	Mode       string                `json:"mode"`
-	Binding    collaboration.Binding `json:"binding"`
-	Candidates []Candidate           `json:"candidates,omitempty"`
-	Fallback   collaboration.Binding `json:"fallback"`
-}
-type Snapshot struct {
-	Version          int                                 `json:"version"`
-	TemplateVersion  string                              `json:"template_version,omitempty"`
-	CandidateVersion string                              `json:"candidate_version,omitempty"`
-	ConfigRevision   int64                               `json:"config_revision"`
-	Provider         string                              `json:"provider"`
-	Roles            map[collaboration.Role]RoleSnapshot `json:"roles"`
-}
-type Decision struct {
-	Binding collaboration.Binding `json:"binding"`
-	Source  string                `json:"source"`
-	Reason  string                `json:"reason"`
-}
-type Result struct {
-	Roles         collaboration.Roles             `json:"roles"`
-	Decisions     map[collaboration.Role]Decision `json:"decisions"`
-	ProviderModel string                          `json:"provider_model,omitempty"`
-}
+
+// Request carries one or more independent choice questions keyed by a short
+// name. Each question is answered on its own; one invalid answer does not
+// discard another.
 type Request struct {
-	ID              string                             `json:"id"`
-	Purpose         string                             `json:"purpose"`
-	TemplateVersion string                             `json:"template_version"`
-	State           string                             `json:"state"`
-	Roles           map[collaboration.Role][]Candidate `json:"roles"`
+	ID              string                 `json:"id"`
+	TemplateVersion string                 `json:"template_version"`
+	State           string                 `json:"state"`
+	Questions       map[string][]Candidate `json:"questions"`
 }
 type Suggestion struct {
 	Status       string  `json:"status"`
@@ -64,7 +38,7 @@ type Suggestion struct {
 }
 
 // Known describes token evidence, not whether a request was free. CostStatus is
-// known, unknown or not_dispatched. Unknown evidence must retain reservations.
+// known, unknown or not_dispatched.
 type Usage struct {
 	InputTokens  int64  `json:"input_tokens"`
 	OutputTokens int64  `json:"output_tokens"`
@@ -73,13 +47,13 @@ type Usage struct {
 	CostStatus   string `json:"cost_status"`
 }
 type Evaluation struct {
-	Provider       string                            `json:"provider"`
-	Model          string                            `json:"model,omitempty"`
-	Status         string                            `json:"status"`
-	ScoreSemantics string                            `json:"score_semantics,omitempty"`
-	Suggestions    map[collaboration.Role]Suggestion `json:"suggestions"`
-	Usage          Usage                             `json:"usage"`
-	Dispatched     bool                              `json:"dispatched"`
+	Provider       string                `json:"provider"`
+	Model          string                `json:"model,omitempty"`
+	Status         string                `json:"status"`
+	ScoreSemantics string                `json:"score_semantics,omitempty"`
+	Suggestions    map[string]Suggestion `json:"suggestions"`
+	Usage          Usage                 `json:"usage"`
+	Dispatched     bool                  `json:"dispatched"`
 }
 type Capabilities struct {
 	Choice bool `json:"choice"`
@@ -100,16 +74,3 @@ var (
 	ErrCircuitOpen   = errors.New("decision provider circuit open")
 	ErrGeneration    = errors.New("decision configuration changed")
 )
-
-func (i Intent) Validate() error {
-	if i.Version != Version || (i.Provider != "inherit" && i.Provider != "builtin" && i.Provider != "jev") || len(i.Roles) != 2 {
-		return ErrInvalid
-	}
-	for _, role := range []collaboration.Role{collaboration.Coordinator, collaboration.Executor} {
-		r, ok := i.Roles[role]
-		if !ok || (r.Mode != "fixed" && r.Mode != "auto") {
-			return ErrInvalid
-		}
-	}
-	return nil
-}

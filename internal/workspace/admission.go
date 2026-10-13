@@ -30,18 +30,6 @@ func (s *Service) admit(ctx context.Context, current store.Session) error {
 		return nil
 	}
 	total, owned := 0, 0
-	// An uncertain helper cleanup must still count against capacity. Legacy
-	// helpers have no user label, so conservatively charge every user's gate.
-	if runtime, ok := s.dock.(interface {
-		RunningCollaborationHelpers(context.Context) (int, error)
-	}); ok {
-		helpers, err := runtime.RunningCollaborationHelpers(ctx)
-		if err != nil {
-			return err
-		}
-		total += helpers
-		owned += helpers
-	}
 	for _, sess := range s.store.All() {
 		if sess.ContainerID == "" {
 			continue

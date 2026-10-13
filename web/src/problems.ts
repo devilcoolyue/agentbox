@@ -3,9 +3,7 @@ import type { APIProblem } from "./types.js";
 import type { Params } from "./i18n/core.js";
 
 export const problemMessages: Record<string, readonly [string, string]> = {
-  "collaboration_source_not_repository": ["当前项目目录不是 Git 仓库", "请选择包含 Git 项目的工作空间；项目在子目录时，请在协作设置中填写仓库相对路径。"],
-  "collaboration_source_no_commit": ["项目尚无 Git 提交", "请先在源工作空间创建一次 Git 提交，再开始协作。"],
-  "collaboration_source_dirty": ["项目有未提交的改动", "请先提交或处理源项目的改动，再开始协作；系统不会自动提交或丢弃文件。"],
+  "delegation_unavailable": ["委派工具暂时无法准备", "请关闭「委派」后重新发送，或联系管理员检查账号出口网桥配置。"],
 
   "chat_request_conflict": ["消息编号与已接收内容或状态不一致", "请查询原消息状态，核对后使用新的消息编号。"],
   "chat_request_gone": ["该消息已放弃或删除", "请核对历史和工作区结果；不会重新执行这个消息编号。"],

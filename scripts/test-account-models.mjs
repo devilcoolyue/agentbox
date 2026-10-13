@@ -63,6 +63,7 @@ export async function accountModelsSmoke(page, base) {
     },
     '**/api/sessions': route => route.fulfill({ json: [session] }),
     '**/api/sessions/fixture-space/models': route => route.fulfill({ json: sessionModels() }),
+    '**/api/delegation/stats': route => route.fulfill({ json: { stats: [{ account_id: 'relay', model: 'deepseek-v4', task_type: 'mechanical_edit', total: 4, ok: 3, minor_fix: 1, redo: 0, abandoned: 0, failed: 0, cost_micro_usd: 400000 }] } }),
   };
   for (const [pattern, handler] of Object.entries(routes)) await page.route(pattern, handler);
   const officialRoute = [/\/api\/accounts\/relay\/models\/discover\?source=official$/, route => { officialReads++; return route.fulfill({ json: official }); }];
@@ -82,9 +83,9 @@ export async function accountModelsSmoke(page, base) {
     await row('deepseek-embed').waitFor();
     assert.equal(discoveries, 1);
     assert.match(await page.locator('#acct-models-status').innerText(), /已选 3 \/ 3 个模型[\s\S]*读取 3 个模型[\s\S]*1 个模型 ID 含有 CLI 不支持的字符/);
-    assert.equal(await row('deepseek-v4').locator('.am-effort').innerText(), '强度：Low / High');
+    assert.equal(await row('deepseek-v4').locator('.am-effort').innerText(), 'Low / High');
     // Nothing reported for this model: its effort stays unset until chosen.
-    assert.equal(await row('deepseek-v4-flash').locator('.am-effort').innerText(), '强度：未设置');
+    assert.equal(await row('deepseek-v4-flash').locator('.am-effort').innerText(), '未设置');
 
     // Select all applies to the filtered rows only.
     await page.locator('#acct-models-all').uncheck();
@@ -101,7 +102,7 @@ export async function accountModelsSmoke(page, base) {
     await editor.locator('label').filter({ hasText: '支持范围' }).getByRole('combobox').click();
     await editor.getByRole('option', { name: '不支持调整', exact: true }).click();
     await editor.getByRole('button', { name: '保存', exact: true }).click();
-    await row('deepseek-v4-flash').locator('.am-effort').filter({ hasText: '强度：不支持调整' }).waitFor();
+    await row('deepseek-v4-flash').locator('.am-effort').filter({ hasText: '不支持调整' }).waitFor();
 
     // Manual IDs for providers that do not list everything; invalid IDs are refused.
     await page.locator('#acct-models-new').fill('bad/id');
@@ -123,9 +124,15 @@ export async function accountModelsSmoke(page, base) {
     await editor.locator('label').filter({ hasText: '支持范围' }).getByRole('combobox').click();
     await editor.getByRole('option', { name: '不支持调整', exact: true }).click();
     await editor.getByRole('button', { name: '保存', exact: true }).click();
-    await row('custom-model').locator('.am-effort').filter({ hasText: '强度：不支持调整' }).waitFor();
+    await row('custom-model').locator('.am-effort').filter({ hasText: '不支持调整' }).waitFor();
     await page.locator('#acct-models-filter').fill('');
-    assert.equal(await row('deepseek-v4').locator('.am-effort').innerText(), '强度：Low / High');
+    assert.equal(await row('deepseek-v4').locator('.am-effort').innerText(), 'Low / High');
+    // One column grid for the header and every row: tags, long effort lists and the worker
+    // button must not push later columns out of line.
+    const columns = await dialog.evaluate(el => ['.am-h-effort', '.am-effort', '.am-delegation', '.am-default input'].map(sel =>
+      [...el.querySelectorAll(sel)].map(node => { const r = node.getBoundingClientRect(); return sel === '.am-default input' ? Math.round(r.left + r.width / 2) : Math.round(r.left); })));
+    for (const lefts of columns.slice(1)) assert.equal(new Set(lefts).size, 1, 'account model columns out of line: ' + JSON.stringify(columns));
+    assert.equal(columns[0][0], columns[1][0], 'the effort header sits over the effort column');
     await shot('desktop');
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth), true, 'mobile model dialog overflows');
@@ -157,7 +164,7 @@ export async function accountModelsSmoke(page, base) {
     assert.match(await page.locator('#acct-models-status').innerText(), /Codex CLI 0\.162\.0 内置目录[\s\S]*官方目录不代表/);
     assert.equal(await row('gpt-6-sol').locator('.am-tag').innerText(), '官方目录');
     assert.equal(await row('gpt-6-sol').locator('input[type=checkbox]').isChecked(), false);
-    assert.equal(await row('gpt-6-sol').locator('.am-effort').innerText(), '强度：Low / Medium / High / Extra High / Max / Ultra');
+    assert.equal(await row('gpt-6-sol').locator('.am-effort').innerText(), 'Low / Medium / High / Extra High / Max / Ultra');
     assert.equal(await dialog.locator('.am-tag').filter({ hasText: '上游未列出' }).count(), 0);
     // A relay without a model list: reading upstream falls back to the catalog.
     upstreamFails = true;
@@ -226,6 +233,30 @@ export async function accountModelsSmoke(page, base) {
     assert.deepEqual(patches.at(-1).models.map(m => [m.id, !!m.hidden]), [['deepseek-v4', false], ['deepseek-v4-flash', true], ['custom-model', false]]);
     assert.equal('default_model' in patches.at(-1), false, 'a display change must not touch the default');
     assert.equal(await mvRow('deepseek-v4-flash').evaluate(el => el.classList.contains('off')), true);
+
+    // Worker tags: the editor needs at least one task type when enabled, shows
+    // this model's delegation history and saves through the same account PATCH.
+    const tagButton = mvRow('deepseek-v4').locator('.mv-delegation');
+    assert.equal((await tagButton.innerText()).trim(), '不当跑腿');
+    await tagButton.click();
+    const tagDialog = page.locator('dialog.dlg-delegation-tags');
+    await tagDialog.waitFor();
+    await tagDialog.locator('.dgt-stats td').filter({ hasText: '按规则批量修改' }).waitFor();
+    assert.match(await tagDialog.locator('.dgt-stats').innerText(), /按规则批量修改\s+4\s+3\s+1\s+0\s+0\s+0\s+\$0\.10/);
+    assert.equal(await tagDialog.locator('.dgt-checks input').first().isDisabled(), true, 'tags stay locked until the model may work');
+    await tagDialog.locator('.dgt-enable input').check();
+    await tagDialog.locator('button[type=submit]').click();
+    await tagDialog.locator('.dgt-error').filter({ hasText: '至少选择一种' }).waitFor();
+    assert.equal(patches.length, saved, 'an incomplete tag set was saved');
+    for (const value of ['mechanical_edit', 'write_tests', 'billing']) await tagDialog.locator(`.dgt-checks input[value="${value}"]`).check();
+    await tagDialog.locator('.dgt-notes textarea').fill('Bulk edits only');
+    await tagDialog.locator('button[type=submit]').click();
+    await tagDialog.waitFor({ state: 'hidden' });
+    await patched(++saved);
+    assert.deepEqual(patches.at(-1).models.find(m => m.id === 'deepseek-v4').delegation, { enabled: true, tier: 'economy', can: ['mechanical_edit', 'write_tests'], avoid: ['billing'], notes: 'Bulk edits only' });
+    assert.equal(patches.at(-1).models.find(m => m.id === 'deepseek-v4-flash').hidden, true, 'saving tags kept the visibility change');
+    await mvRow('deepseek-v4').locator('.mv-delegation.on').filter({ hasText: '跑腿 · 经济档' }).waitFor();
+    assert.match(await mvRow('deepseek-v4').locator('.mv-delegation').getAttribute('data-tip'), /可接：按规则批量修改、补测试 · 不接：计费/);
 
     // Prices: what billing uses for each model; the agent fallback stands out
     // and can be replaced from the row without changing visibility.

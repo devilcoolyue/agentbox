@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -252,8 +253,19 @@ func (s *Store) Delete(id string) error {
 	if _, err := tx.Exec("UPDATE workspace_creations SET state='abandoned' WHERE session_id=?", id); err != nil {
 		return err
 	}
-	for _, query := range []string{"DELETE FROM collaboration_decision_defaults WHERE session_id=?", "DELETE FROM client_terminals WHERE session_id=?", "DELETE FROM client_projects WHERE session_id=?", "DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
-		if _, err := tx.Exec(query, id); err != nil {
+	// Delegation metadata feeds the per-model statistics; only its task text,
+	// report and notes belong to the workspace and leave with it.
+	if _, err := tx.Exec("UPDATE delegations SET task='',report='',feedback_note='',changes_json='null' WHERE session_id=?", id); err != nil {
+		return err
+	}
+	// The server removes worker containers first; dropping their rows here as
+	// well keeps an owner deletion from ever resurfacing a worker as a space.
+	for _, query := range []string{"DELETE FROM sessions WHERE id IN (SELECT session_id FROM delegation_workers WHERE owner_session_id=?)", "DELETE FROM delegation_workers WHERE session_id=? OR owner_session_id=?", "DELETE FROM client_terminals WHERE session_id=?", "DELETE FROM client_projects WHERE session_id=?", "DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
+		args := []any{id}
+		if strings.Count(query, "?") == 2 {
+			args = append(args, id)
+		}
+		if _, err := tx.Exec(query, args...); err != nil {
 			return err
 		}
 	}
@@ -355,10 +367,10 @@ func (s *Store) DeleteUser(name string) error {
 		return err
 	}
 	defer tx.Rollback()
-	if err := clearUserCollaborationsTx(tx, name); err != nil {
+	if _, err := tx.Exec("DELETE FROM delegation_workers WHERE owner_session_id IN (SELECT id FROM sessions WHERE user=?)", name); err != nil {
 		return err
 	}
-	if _, err := tx.Exec("DELETE FROM collaboration_decision_defaults WHERE session_id IN (SELECT id FROM sessions WHERE user=?)", name); err != nil {
+	if _, err := tx.Exec("DELETE FROM delegations WHERE user=?", name); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("UPDATE chat_requests SET state='deleted',request_json='null',revision=revision+1,updated_at=? WHERE user=? AND state!='deleted'", usageTimestamp(time.Now()), name); err != nil {
@@ -572,6 +584,9 @@ type UsageEvent struct {
 	// Claude's modelUsage). Empty when the event does not say — Codex never
 	// does, so an empty value is not evidence of anything.
 	Provider string `json:"provider,omitempty"`
+	// DelegationID links a worker model's spend to the delegate call that a
+	// main agent turn made. Empty on every other row.
+	DelegationID string `json:"delegation_id,omitempty"`
 	// ReqID is the dedup key of a backfilled terminal row: the first API
 	// requestId of that terminal turn. Empty on chat/title rows, which are
 	// written once by the turn itself and need no key.
@@ -625,12 +640,12 @@ func insertUsageTx(tx *sql.Tx, evs []UsageEvent) error {
 		res, err := tx.Exec(`INSERT INTO usage_events
 			(ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control, delegation_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			usageTimestamp(e.TS), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, e.Kind,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
-			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot, e.Effort, e.EffortControl)
+			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot, e.Effort, e.EffortControl, e.DelegationID)
 		if err != nil {
 			return fmt.Errorf("insert usage %s/%s: %w", e.SessionID, e.TurnID, err)
 		}
@@ -746,7 +761,7 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 
 const usageCols = `id, ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 	input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control`
+	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control, delegation_id`
 
 // Fixed-width UTC text preserves chronological ordering in SQLite's ts index.
 func usageTimestamp(t time.Time) string {
@@ -765,12 +780,9 @@ type UsageFilter struct {
 	Limit     int       // <= 0: no limit
 	Offset    int       // rows to skip; only meaningful with Limit
 	Asc       bool      // oldest first; the zero value keeps the newest-first default
-	// Collaboration classifies model steps without changing their stored chat kind.
-	// Empty keeps every row; only selects collaboration chat; exclude omits it.
-	Collaboration string
-	// IncludeCollaborationSessions also matches model steps launched from SessionID.
-	// The original participant session and accounting identity remain unchanged.
-	IncludeCollaborationSessions bool
+	// Delegation classifies worker spend without changing its stored kind.
+	// Empty keeps every row; "only" selects delegate calls; "exclude" omits them.
+	Delegation string
 }
 
 // where renders the filter as a SQL predicate plus its arguments. Every usage
@@ -787,20 +799,13 @@ func (f UsageFilter) where() (string, []any) {
 		add(" AND user = ?", f.User)
 	}
 	if f.SessionID != "" {
-		if f.IncludeCollaborationSessions {
-			q += " AND (session_id = ? OR EXISTS (SELECT 1 FROM " + usageCollaborationStepTables +
-				" WHERE " + usageCollaborationStepMatch + " AND uc_run.source_session_id = ?))"
-			args = append(args, f.SessionID, f.SessionID)
-		} else {
-			add(" AND session_id = ?", f.SessionID)
-		}
+		add(" AND session_id = ?", f.SessionID)
 	}
-	if f.Collaboration == "only" || f.Collaboration == "exclude" {
-		q += " AND "
-		if f.Collaboration == "exclude" {
-			q += "NOT "
-		}
-		q += "EXISTS (SELECT 1 FROM " + usageCollaborationStepTables + " WHERE " + usageCollaborationStepMatch + ")"
+	switch f.Delegation {
+	case "only":
+		q += " AND delegation_id != ''"
+	case "exclude":
+		q += " AND delegation_id = ''"
 	}
 	if f.Kind != "" {
 		add(" AND kind = ?", f.Kind)
@@ -852,7 +857,7 @@ func (s *Store) ListUsage(f UsageFilter) []UsageEvent {
 			&e.Agent, &e.AccountID, &e.Model, &e.Kind,
 			&e.InputTokens, &e.OutputTokens, &e.CacheReadTokens, &e.CacheWriteTokens,
 			&e.CostMicroUSD, &e.DurationMS, &e.WallMS, &e.TTFTMs, &e.Provider,
-			&e.ReqID, &e.Raw, &snapshot, &e.Effort, &e.EffortControl); err != nil {
+			&e.ReqID, &e.Raw, &snapshot, &e.Effort, &e.EffortControl, &e.DelegationID); err != nil {
 			continue
 		}
 		if snapshot != "" {

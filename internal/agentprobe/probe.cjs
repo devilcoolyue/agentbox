@@ -60,19 +60,12 @@ function containsText(value, text) {
  return false;
 }
 const homes = {};
-let base,collaborationHomeFiles;
+let base;
 function environment(kind) {
  if(!homes[kind]) {
   const home=root+'/'+kind;fs.mkdirSync(home);fs.mkdirSync(home+'/.claude');fs.mkdirSync(home+'/.codex');
   fs.writeFileSync(home+'/.claude.json',JSON.stringify({hasCompletedOnboarding:true,bypassPermissionsModeAccepted:true,projects:{[cwd]:{hasTrustDialogAccepted:true,hasCompletedProjectOnboarding:true}},mcpServers:{probe:{type:'stdio',command:'node',args:[mcpPath]}}}));
   fs.writeFileSync(home+'/.codex/config.toml','model_provider="fixture"\nmodel="gpt-5.5"\n[model_providers.fixture]\nname="Synthetic"\nbase_url="'+base+'/v1"\nwire_api="responses"\nenv_key="OPENAI_API_KEY"\n');
-  if(collaborationHomeFiles){
-   assert.ok(collaborationHomeFiles[kind]);
-   for(const [name,content] of Object.entries(collaborationHomeFiles[kind])){
-    assert.ok(['.claude.json','.claude/settings.json','.codex/config.toml'].includes(name));
-    fs.writeFileSync(home+'/'+name,content.replaceAll('AGENTBOX_PROBE_BASE',base));
-   }
-  }
   homes[kind]=home;
  }
  return {PATH:'/usr/local/bin:/usr/bin:/bin',HOME:homes[kind],CODEX_HOME:homes[kind]+'/.codex',LANG:'C.UTF-8',TERM:'dumb',ANTHROPIC_API_KEY:'synthetic-only',ANTHROPIC_BASE_URL:base,OPENAI_API_KEY:'synthetic-only',CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:'1',DISABLE_AUTOUPDATER:'1',ENABLE_TOOL_SEARCH:'false'};
@@ -132,21 +125,6 @@ async function protocol(name,summary,resume='',historyMarker=marker) {
 }
 async function main(spec) {
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base='http://127.0.0.1:'+server.address().port;
- if(spec.collaboration) {
-  collaborationHomeFiles=spec.home_files;assert.ok(collaborationHomeFiles);
-  marker=JSON.stringify(spec.handoffs.plan);
-  const previous=marker;
-  const session=await cli('claude_plan','claude',spec.claude);
-  assert.match(session,/^[a-f0-9-]{36}$/);
-  marker=JSON.stringify(spec.handoffs.result);
-  await cli('claude_result','claude',spec.claude_resume.map(arg=>arg.replaceAll('AGENTBOX_PROBE_RESUME',session)),session,previous);
-  marker=previous;
-  const thread=await protocol('codex_plan',spec.codex_summary);
-  marker=JSON.stringify(spec.handoffs.result);
-  await protocol('codex_result',spec.codex_summary,thread,previous);
-  console.log(JSON.stringify({version:1,checks,records}));
-  return;
- }
  const session=await cli('claude_turn','claude',spec.claude);
  assert.match(session,/^[a-f0-9-]{36}$/,'Claude session missing');
  mcpCalls=fs.existsSync(mcpFile)?fs.readFileSync(mcpFile,'utf8').trim().split('\n').length:0;
