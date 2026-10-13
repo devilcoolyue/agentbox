@@ -489,6 +489,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/sessions/{id}/chat/requests/{request}", s.auth(s.withSession(s.handleChatRequestGet)))
 	mux.Handle("POST /api/sessions/{id}/chat/requests/{request}", s.auth(s.withSession(s.handleChatRequestAction)))
 	mux.Handle("GET /api/sessions/{id}/chat/requests", s.auth(s.withSession(s.handleChatRequestList)))
+	mux.Handle("POST /api/sessions/{id}/chat/questions/{question}", s.auth(s.withSession(s.handleChatQuestionAnswer)))
 	mux.Handle("GET /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadList)))
 	mux.Handle("POST /api/sessions/{id}/chat/threads", s.auth(s.withSession(s.handleThreadNew)))
 	mux.Handle("POST /api/sessions/{id}/chat/threads/{tid}/activate", s.auth(s.withSession(s.handleThreadActivate)))
@@ -704,7 +705,9 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"chat_scope":          s.chatRequestScope(u),
 		"delegation_protocol": store.DelegationVersion,
 		// Accepts chat request "suggestions"; older servers reject the field.
-		"prompt_suggestions":       1,
+		"prompt_suggestions": 1,
+		// Accepts chat request "questions" and answers at chat/questions/{id}.
+		"chat_questions":           1,
 		"user":                     u.Name,
 		"role":                     u.Role,
 		"models":                   s.cfg.GetModels(),

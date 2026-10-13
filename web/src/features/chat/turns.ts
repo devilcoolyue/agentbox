@@ -1,5 +1,6 @@
-import type { ChatTurnCost, DelegationView, HistoryEntry } from "../../types.js";
+import type { ChatTurnCost, DelegationView, HistoryEntry, QuestionView } from "../../types.js";
 import { upsertDelegationCard } from "../delegation/card.js";
+import { sealQuestions, upsertQuestionCard } from "./questions.js";
 import { answerFooter, observeAnswer } from "../../chat-footer.js";
 import type { AnswerContext } from "../../chat-footer.js";
 import { renderEntry } from "../../chat-render.js";
@@ -56,11 +57,20 @@ export class TurnWriter {
   }
 }
 
-/** 按历史记录重建对话流；place 决定节点落在哪（实时流还要处理贴底与执行指示）。 */
+/** 按历史记录重建对话流；place 决定节点落在哪（实时流还要处理贴底与执行指示）。
+ * latest 表示这是对话最新的一页：只有它最后一个回合里没结束的提问还可能在等回答。 */
 export function replayHistory(writer: TurnWriter, entries: HistoryEntry[],
-  costs: Record<string, ChatTurnCost> | undefined, place: (node: HTMLElement) => void) {
+  costs: Record<string, ChatTurnCost> | undefined, place: (node: HTMLElement) => void, latest = false) {
+  let open: string[] = [];
   for (const raw of entries) {
     if (raw.kind === "event") observeAnswer(writer.context, raw.event, raw.ts);
+    if (raw.kind === "question") {
+      const view = raw.event as unknown as QuestionView;
+      const card = upsertQuestionCard(view);
+      if (card) place(card);
+      if (view?.state === "pending") open.push(view.id);
+    }
+    if (raw.kind === "user" && open.length) { sealQuestions(open); open = []; }
     if (raw.kind === "delegation") {
       // The same delegation is recorded at start and end; one card shows both.
       const card = upsertDelegationCard(raw.event as unknown as DelegationView);
@@ -75,6 +85,7 @@ export function replayHistory(writer: TurnWriter, entries: HistoryEntry[],
     if (raw.kind === "status" && !writer.context.ts) writer.context.ts = raw.ts;
     writer.footer?.update();
   }
+  if (!latest && open.length) sealQuestions(open);
 }
 
 /** 服务端只在超长回合里切页：较早一页以回合中段结尾时，把这段并进下方已显示的

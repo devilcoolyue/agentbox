@@ -186,6 +186,14 @@
       "retryable": true
     },
     {
+      "code": "question_closed",
+      "http_status": 409,
+      "error": "这个问题已经结束",
+      "hint": "可能已在其他页面回答、超时后自动跳过，或者回合已经结束。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
       "code": "chat_options_invalid",
       "http_status": 400,
       "error": "对话模型或推理设置不可用",

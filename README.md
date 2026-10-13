@@ -44,6 +44,8 @@ You bring the server and your own Claude / Codex subscription, API key, or compa
 
 **Next-prompt suggestions** follow the Claude Code CLI: after each turn in a Claude workspace, the empty message box shows the predicted next prompt in grey. Press Tab (or tap Insert on a phone) to put it in the box, then send it yourself. Each suggestion is one extra model request, charged to the balance and listed separately in Usage history as "Next-prompt suggestions"; turn it off per browser in System settings → Appearance and tips. It needs a Claude Code in the Agent image that supports `--prompt-suggestions`; older images show no suggestions.
 
+**Agent questions** also follow the CLI: when Claude needs a decision mid-task (its AskUserQuestion tool), the turn pauses and a card shows the questions with their options, single or multiple choice plus a free-text "Other". Submit and the same turn carries on with your answer; Skip, or no answer within 10 minutes, tells the agent to continue on its own judgment and state its assumptions. The first answer from any open page wins, interrupting withdraws the question, and the wait does not count toward the turn's time limit. Only Claude workspaces ask, and only from pages that can show the card; it needs a Claude Code that supports `--permission-prompt-tool stdio` with stream-json input.
+
 ## See the workflow
 
 **Chat → terminal → Git review → previews.** The GIF introduces the core workspace; the 34-second MP4 also visits skills, MCP, usage, and private-network access.

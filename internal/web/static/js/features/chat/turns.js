@@ -1,4 +1,5 @@
 import { upsertDelegationCard } from "../delegation/card.js";
+import { sealQuestions, upsertQuestionCard } from "./questions.js";
 import { answerFooter, observeAnswer } from "../../chat-footer.js";
 import { renderEntry } from "../../chat-render.js";
 import { agentIcon } from "../../brand.js";
@@ -55,11 +56,25 @@ export class TurnWriter {
         return body;
     }
 }
-/** 按历史记录重建对话流；place 决定节点落在哪（实时流还要处理贴底与执行指示）。 */
-export function replayHistory(writer, entries, costs, place) {
+/** 按历史记录重建对话流；place 决定节点落在哪（实时流还要处理贴底与执行指示）。
+ * latest 表示这是对话最新的一页：只有它最后一个回合里没结束的提问还可能在等回答。 */
+export function replayHistory(writer, entries, costs, place, latest = false) {
+    let open = [];
     for (const raw of entries) {
         if (raw.kind === "event")
             observeAnswer(writer.context, raw.event, raw.ts);
+        if (raw.kind === "question") {
+            const view = raw.event;
+            const card = upsertQuestionCard(view);
+            if (card)
+                place(card);
+            if (view?.state === "pending")
+                open.push(view.id);
+        }
+        if (raw.kind === "user" && open.length) {
+            sealQuestions(open);
+            open = [];
+        }
         if (raw.kind === "delegation") {
             // The same delegation is recorded at start and end; one card shows both.
             const card = upsertDelegationCard(raw.event);
@@ -77,6 +92,8 @@ export function replayHistory(writer, entries, costs, place) {
             writer.context.ts = raw.ts;
         writer.footer?.update();
     }
+    if (!latest && open.length)
+        sealQuestions(open);
 }
 /** 服务端只在超长回合里切页：较早一页以回合中段结尾时，把这段并进下方已显示的
  * 同一回合，免得一个回合出现两个头像。两个 .turn 之间没有用户消息就是同一回合，

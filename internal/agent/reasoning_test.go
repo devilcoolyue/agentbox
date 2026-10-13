@@ -114,6 +114,15 @@ func TestChatRequestsReasoningSummaries(t *testing.T) {
 	if strings.Contains(strings.Join(claude, " "), "--prompt-suggestions") {
 		t.Fatalf("suggestions requested by default: %q", claude)
 	}
+	if cmd, err := ChatCommandWith(ChatExtras{Interactive: true}, "claude", "bypassPermissions", "", "", "", ""); err != nil || !strings.Contains(strings.Join(cmd, " "), "--input-format stream-json --permission-prompt-tool stdio") {
+		t.Fatalf("interactive claude: %v %q", err, cmd)
+	}
+	if _, err := ChatCommandWith(ChatExtras{Interactive: true}, "codex", "bypassPermissions", "", "", "", ""); err == nil {
+		t.Fatal("codex accepted the Claude control protocol")
+	}
+	if strings.Contains(strings.Join(claude, " "), "--input-format") {
+		t.Fatalf("interactive by default: %q", claude)
+	}
 	script := "{\"id\":1,\"result\":{}}\n{\"id\":3,\"result\":{\"thread\":{\"id\":\"T1\"}}}\n{\"id\":4,\"result\":{\"turn\":{\"id\":\"U1\"}}}\n{\"method\":\"turn/completed\",\"params\":{\"turn\":{\"id\":\"U1\",\"status\":\"completed\"}}}\n"
 	for _, unsupported := range []bool{false, true} {
 		var sent bytes.Buffer

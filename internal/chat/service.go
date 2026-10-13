@@ -24,7 +24,7 @@ type TurnMetadata struct {
 type Entry struct {
 	*protocol.ProblemDetails
 	TS    time.Time       `json:"ts"`
-	Kind  string          `json:"kind"` // "user" | "event" | "status" | "chat_session" | "title" | "divider"(旧)
+	Kind  string          `json:"kind"` // "user" | "event" | "status" | "question" | "delegation" | "chat_session" | "title" | "divider"(旧)
 	Text  string          `json:"text,omitempty"`
 	Event json.RawMessage `json:"event,omitempty"`
 	State string          `json:"state,omitempty"`
@@ -49,6 +49,12 @@ type Runtime interface {
 	// PromptSuggestions reports whether the started container's CLI can
 	// predict the next prompt; an older image would reject the flag.
 	PromptSuggestions(context.Context, store.Session) bool
+	// Questions reports whether the started container's CLI can keep a turn
+	// open for the user's answers.
+	Questions(context.Context, store.Session) bool
+	// Question offers q to the answer API until withdraw; only the first
+	// answer reaches the channel, and none after withdraw returns.
+	Question(agent.Question) (answers <-chan agent.Answer, withdraw func())
 	Executor(store.Session) Executor
 	Permission() string
 	PublishCost(string, string)
@@ -94,6 +100,10 @@ type Input struct {
 	// Suggestions asks for a predicted next prompt after the turn when the
 	// container's CLI supports it; that extra request is charged separately.
 	Suggestions bool
+	// Questions lets the model ask the user (AskUserQuestion) and wait for
+	// the answer within the turn. Only a page that can show the question
+	// sets it; otherwise nobody could answer and the turn would just wait.
+	Questions bool
 }
 type Failure struct {
 	Code  string
@@ -119,8 +129,10 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if timeout <= 0 {
 		timeout = 30 * time.Minute
 	}
-	ctx, cancel := context.WithTimeout(parent, timeout)
-	defer cancel()
+	// The limit pauses while a question waits for the user (see ask).
+	ctx, cancelTurn := context.WithCancelCause(parent)
+	clock := newTurnClock(timeout, func() { cancelTurn(context.DeadlineExceeded) })
+	defer func() { clock.stop(); cancelTurn(context.Canceled) }()
 	record := func(e Entry, messageType, retryText string) error {
 		err := r.Record(e, messageType, retryText)
 		if receipt != nil && err != nil {
@@ -130,6 +142,9 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	}
 
 	fail := func(err error, fallback string) {
+		if errors.Is(err, context.Canceled) && errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
+			err = context.DeadlineExceeded // the turn ran out of time, nobody cancelled it
+		}
 		p := r.Problem(ctx, "chat.turn", err, fallback)
 		if receipt != nil {
 			receipt.Fail(err, p.Code)
@@ -224,6 +239,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 
 	extras := in.Extras
 	extras.PromptSuggestions = in.Suggestions && r.PromptSuggestions(ctx, sess)
+	extras.Interactive = in.Questions && r.Questions(ctx, sess)
 
 	if receipt != nil {
 		if err := r.Attachments(sess, receipt.Input().Request.Attachments); err != nil {
@@ -319,6 +335,15 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	}
 	executor := r.Executor(sess)
 	executor.OnLine = onLine
+	if extras.Interactive {
+		recordQuestion := func(v QuestionView) {
+			raw, _ := json.Marshal(v)
+			record(Entry{Kind: "question", Event: raw}, "question", "")
+		}
+		executor.Ask = func(qctx context.Context, q agent.Question) agent.Answer {
+			return ask(qctx, q, r, clock, recordQuestion)
+		}
+	}
 
 	if err := executor.Run(ctx, adapter, Turn{SessionID: sess.ID, ContainerID: sess.ContainerID,
 		Text: func() string {

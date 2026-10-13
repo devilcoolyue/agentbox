@@ -407,5 +407,11 @@ func (r delegationRuntime) Executor(sess store.Session) chat.Executor {
 }
 func (r delegationRuntime) Permission() string                                    { return r.t.g.srv.cfg.GetPermissionMode() }
 func (r delegationRuntime) PromptSuggestions(context.Context, store.Session) bool { return false }
-func (r delegationRuntime) PublishCost(string, string)                            {}
-func (r delegationRuntime) Title(string, string)                                  {}
+
+// Workers never ask the user: nobody watches their turn.
+func (r delegationRuntime) Questions(context.Context, store.Session) bool { return false }
+func (r delegationRuntime) Question(agent.Question) (<-chan agent.Answer, func()) {
+	return nil, func() {}
+}
+func (r delegationRuntime) PublishCost(string, string) {}
+func (r delegationRuntime) Title(string, string)       {}

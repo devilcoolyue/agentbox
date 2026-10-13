@@ -53,6 +53,12 @@ type Executor struct {
 	Interrupted func() bool
 	OnLine      func([]byte)
 	Log         func(string, ...any)
+	// Ask waits for the user's answer to one question of an interactive
+	// turn; nil refuses every question.
+	Ask func(context.Context, agent.Question) agent.Answer
+	// Signal sends SIGINT to the turn's CLI when a protocol interrupt is
+	// not acted on in time; nil leaves only the protocol interrupt.
+	Signal func()
 }
 
 func (e Executor) Run(ctx context.Context, adapter agent.Adapter, turn Turn) error {
@@ -81,6 +87,9 @@ func (e Executor) Run(ctx context.Context, adapter agent.Adapter, turn Turn) err
 	cmd, err := adapter.ChatWith(turn.Extras, turn.Permission, turn.ChatID, turn.Model, turn.Effort, turn.Options.Control)
 	if err != nil {
 		return err
+	}
+	if turn.Extras.Interactive {
+		return e.interactiveTurn(ctx, turn, cmd)
 	}
 	return e.execTurn(ctx, turn, cmd)
 }

@@ -62,6 +62,7 @@ var problemCatalog = map[string]problemDefinition{
 	"agent_image_missing":             {500, "工作空间镜像不存在", "请联系管理员构建或安装配置中指定的 Agent 镜像。", "contact_admin", false},
 	"workspace_start_failed":          {500, "工作空间启动失败", "请将操作编号交给管理员检查环境，修复后再启动。", "contact_admin", false},
 	"chat_busy":                       {409, "上一条消息仍在处理中", "请等待当前回合完成，或先中断当前回合。", "wait", true},
+	"question_closed":                 {409, "这个问题已经结束", "可能已在其他页面回答、超时后自动跳过，或者回合已经结束。", "check_result", false},
 	"chat_options_invalid":            {400, "对话模型或推理设置不可用", "请调整模型和推理设置，必要时联系管理员检查 CLI 兼容性。", "edit_request", false},
 	"chat_failed":                     {500, "对话执行失败", "请先查看对话历史和工作区结果，再决定是否重新发送。", "check_result", false},
 	"mcp_configuration_failed":        {409, "MCP 配置尚未应用", "请在 MCP 设置中处理冲突或检测配置后重试。", "configure_mcp", false},

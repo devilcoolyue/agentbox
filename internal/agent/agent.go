@@ -73,6 +73,10 @@ type ChatExtras struct {
 	// request that is metered from the session's cost-state, not its stream.
 	// Codex has no such feature and ignores it.
 	PromptSuggestions bool
+	// Interactive keeps stdin open as stream-json for the whole turn so the
+	// host can answer the CLI's questions (AskUserQuestion) and interrupt it
+	// in protocol; the turn's text is then sent as a JSON user message.
+	Interactive bool
 }
 
 var pidFileRe = regexp.MustCompile(`^/tmp/\.agentbox-[a-z0-9-]{1,64}\.pid$`)
@@ -118,7 +122,7 @@ func ChatCommandWith(extras ChatExtras, agentType, permissionMode, resumeID, mod
 	if err != nil {
 		return nil, err
 	}
-	if agentType != config.AgentClaude && (extras.MCPConfig != "" || extras.AppendSystemPrompt != "" || len(extras.AllowedTools) > 0 || len(extras.DisallowedTools) > 0) {
+	if agentType != config.AgentClaude && (extras.MCPConfig != "" || extras.AppendSystemPrompt != "" || len(extras.AllowedTools) > 0 || len(extras.DisallowedTools) > 0 || extras.Interactive) {
 		return nil, fmt.Errorf("%s does not support delegation flags", agentType)
 	}
 	if model != "" && !modelRe.MatchString(model) {
@@ -139,6 +143,9 @@ func ChatCommandWith(extras ChatExtras, agentType, permissionMode, resumeID, mod
 			// 模型自行判断（Haiku 4.5 等不支持的模型不会发）。
 			"--thinking-display", "summarized",
 			"--permission-mode", permissionMode,
+		}
+		if extras.Interactive {
+			args = append(args, "--input-format", "stream-json", "--permission-prompt-tool", "stdio")
 		}
 		if model != "" {
 			args = append(args, "--model", model)

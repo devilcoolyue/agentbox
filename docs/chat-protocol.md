@@ -28,6 +28,12 @@ v0.1.11 已实现服务端协议和原执行器接入。浏览器现已接入冻
 
 可选 `"suggestions": true` 请求回合结束后的下一步提示，只在 `/api/me` 返回 `prompt_suggestions:1` 时发送（旧服务端拒绝未知字段），值为 false 时省略以保持旧指纹。服务端仅对 Claude 空间、且容器内 `claude --help` 含 `--prompt-suggestions` 时给 CLI 加该参数（探测结果按容器缓存）；Codex 或旧镜像照常执行、不报错。CLI 在 result 之后输出 `prompt_suggestion` 事件，落盘并广播，前端在空输入框里显示为占位文字，Tab 或「填入」只填入、不发送。生成提示是一次额外模型请求，不出现在输出流和 transcript 消息里，只能从进程退出时写入的累计 `cost-state` 减去 result 时的 `modelUsage` 得到；按 `prompt-suggestion:<turn_id>:<模型>` 去重，记为 `kind=suggestion` 并照常扣额度；缺少任一份累计值或差值为负时只记日志、不猜测。
 
+可选 `"questions": true` 表示发送页能显示 Agent 的提问并作答，只在 `/api/me` 返回 `chat_questions:1` 时发送，false 省略。服务端仅对 Claude 空间、且容器内 `claude --help` 含 `--permission-prompt-tool` 与 `--input-format` 时改用交互回合：CLI 加 `--input-format stream-json --permission-prompt-tool stdio`，正文作为一条 JSON 用户消息写入，stdin 保持打开到 `result` 事件后再关闭（下一步提示照常在关闭后输出）。不带该字段、旧镜像或 Codex 仍是一次性回合，模型拿不到 AskUserQuestion 工具，不会出现没人能答的提问。
+
+交互回合里 CLI 用控制协议（`control_request` / `control_response`）向服务端请示：AskUserQuestion 的 `can_use_tool` 交给用户；其他工具的权限请求一律拒绝（与 `-p` 原行为一致，bypass 模式下不会出现）；未实现的控制请求回 error，CLI 不会卡住。控制消息不落盘、不广播。每个提问在线程 JSONL 落两条 `kind:"question"`，`event` 为 `{id, state, questions?, answers?, expires_at?}`：先是 `pending`（带问题、选项与截止时间），再是 `answered` / `skipped` / `expired` / `cancelled`。`id` 是 `tool_use_id`。
+
+作答接口 `POST /api/sessions/{id}/chat/questions/{question}`（属主鉴权），正文 `{"answers":{"问题原文":"回答"}}` 或 `{"skip":true}`：每个问题都要有非空回答，可以是选项之外的自由文本，多选按 `, ` 连接。只认第一份回答，之后或问题已结束返回 409 `question_closed`。回答原样作为 `updatedInput.answers` 交回 CLI，同一回合继续；跳过与超时以拒绝工具调用的方式告诉模型按自己的判断继续并说明假设。提问等待 10 分钟（`chat.QuestionTimeout`）后自动按超时处理，等待期间回合的总时限暂停计时。用户中断走协议内 `interrupt`，CLI 撤回提问（`control_cancel_request`，记为 `cancelled`），以失败结果和退出码 1 收尾，回执记为已中断；10 秒内没有结束才退回 SIGINT。提问只存在于运行中的房间，服务重启时随回合丢失，回执按原规则记为结果不确定。
+
 提交前冻结所有字段，不在异步附件检查后重新读取模型或输入。模型必须是具体名称；空推理设置仍表示 CLI 继承，不声称已测得 provider 的有效档位。附件列表最多 64 项，只接受 `/shared/.images/` 或 `/shared/.file/` 中受限普通文件；接收和运行前均复核，不跟随链接。正文中的普通路径文字不自动解释为附件，避免阻止“请创建这个文件”之类任务。
 
 正文最多 1 MiB UTF-8；HTTP JSON 最多 4 MiB。拒绝未知字段、多段 JSON、无效线程和过长选项。线程必须仍为当前 active_thread。服务端先检查已存在的同 ID 回执；内容相同返回原结果，内容改变返回 409。新消息才重新检查额度、账号、模型/推理选项、线程和附件。模型执行前仍沿原路径再次验证配置/授权。

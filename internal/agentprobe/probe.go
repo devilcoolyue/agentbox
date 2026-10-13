@@ -22,7 +22,7 @@ var Script string
 
 const Version = 1
 
-var Required = []string{"claude_turn", "claude_resume", "claude_interrupt", "claude_mcp", "claude_usage", "codex_handshake", "codex_turn", "codex_resume", "codex_interrupt", "codex_exec", "codex_usage"}
+var Required = []string{"claude_turn", "claude_resume", "claude_interrupt", "claude_question", "claude_mcp", "claude_usage", "codex_handshake", "codex_turn", "codex_resume", "codex_interrupt", "codex_exec", "codex_usage"}
 
 type Check struct {
 	Name   string `json:"name"`
@@ -62,8 +62,9 @@ func (r Report) Passed(imageID string) bool {
 func Input() []byte {
 	claude, _ := agent.ChatCommand(config.AgentClaude, "bypassPermissions", "", "claude-sonnet-4-6", "")
 	resume, _ := agent.ChatCommand(config.AgentClaude, "bypassPermissions", "AGENTBOX_PROBE_RESUME", "claude-sonnet-4-6", "")
+	question, _ := agent.ChatCommandWith(agent.ChatExtras{Interactive: true}, config.AgentClaude, "bypassPermissions", "", "claude-sonnet-4-6", "", "")
 	codex, _ := agent.ChatCommand(config.AgentCodex, "bypassPermissions", "", "gpt-5.5", "")
-	raw, _ := json.Marshal(map[string]any{"claude": claude, "claude_resume": resume, "codex": codex, "codex_summary": agent.CodexReasoningSummary})
+	raw, _ := json.Marshal(map[string]any{"claude": claude, "claude_resume": resume, "claude_question": question, "codex": codex, "codex_summary": agent.CodexReasoningSummary})
 	return raw
 }
 
@@ -115,7 +116,7 @@ func Validate(ctx context.Context, imageID string, raw []byte) Report {
 			return fail("probe_incomplete")
 		}
 	}
-	want := map[string]string{"claude_turn": "claude", "claude_resume": "claude", "claude_interrupt": "claude", "codex_turn": "codex", "codex_resume": "codex", "codex_interrupt": "codex", "codex_exec": "codex"}
+	want := map[string]string{"claude_turn": "claude", "claude_resume": "claude", "claude_interrupt": "claude", "claude_question": "claude", "codex_turn": "codex", "codex_resume": "codex", "codex_interrupt": "codex", "codex_exec": "codex"}
 	if len(output.Records) != len(want) {
 		return fail("probe_incomplete")
 	}

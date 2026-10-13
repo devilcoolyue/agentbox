@@ -346,6 +346,8 @@ export interface Me {
   delegation_protocol?:number;
   /** 1：对话请求可带 suggestions，回合结束后预测下一句输入。 */
   prompt_suggestions?:number;
+  /** 1：对话请求可带 questions，回合中 Agent 可以提问，在 chat/questions/{id} 作答。 */
+  chat_questions?:number;
   user: string;
   /** "admin" | "user"：admin 才能进系统设置 */
   role: string;
@@ -468,6 +470,18 @@ export interface DelegationRoute {
   rejected?: Record<string, string>;
 }
 /** 一次委派（服务端 delegationView）。 */
+export interface QuestionOption { label: string; description?: string; }
+export interface QuestionItem { question: string; header?: string; options: QuestionOption[]; multi_select?: boolean; }
+/** Agent 回合中的提问（Claude Code 的 AskUserQuestion）。服务端先记 pending（带问题与
+ * 截止时间），结束时再记 answered / skipped / expired / cancelled（带回答，不重复问题）。 */
+export interface QuestionView {
+  id: string;
+  state: string;
+  questions?: QuestionItem[];
+  answers?: Record<string, string>;
+  expires_at?: string;
+}
+
 export interface DelegationView {
   id: string;
   session_id: string;
@@ -969,10 +983,10 @@ export interface ChatTurnCost {
 export interface HistoryEntry extends APIProblem {
   turn?: ChatTurnMetadata;
   ts: string;
-  /** "user" | "event" | "status" | "chat_session" | "title" | "delegation" | "divider"(旧) */
+  /** "user" | "event" | "status" | "question" | "chat_session" | "title" | "delegation" | "divider"(旧) */
   kind: string;
   text?: string;
-  /** delegation 条目里是 DelegationView，其余是 Agent 事件 */
+  /** delegation 条目里是 DelegationView，question 条目里是 QuestionView，其余是 Agent 事件 */
   event?: AgentEvent;
   state?: string;
   error?: string;

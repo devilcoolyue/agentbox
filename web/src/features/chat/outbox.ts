@@ -35,7 +35,7 @@ const settled=(state:Outgoing["state"])=>state!=="unconfirmed"&&!receiptActive(s
 const identifier=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,"0")).join("");
 const key=(session:string,id:string)=>session+"/"+id;
 const delegationEnvelope=(input:ChatRequestInput)=>input.delegation?[input.delegation.version,input.delegation.workers.map(w=>[w.account_id,w.model]),input.delegation.jev]:null;
-const envelope=(input:ChatRequestInput)=>JSON.stringify([input.scope,input.thread_id,input.text,input.model,input.effort,input.effort_control,input.attachments||[],delegationEnvelope(input),input.suggestions===true]);
+const envelope=(input:ChatRequestInput)=>JSON.stringify([input.scope,input.thread_id,input.text,input.model,input.effort,input.effort_control,input.attachments||[],delegationEnvelope(input),input.suggestions===true,input.questions===true]);
 
 function receipt(value:unknown,session:string,id?:string):ChatRequestReceipt {
  try { return readChatReceipt(value,session,id); }

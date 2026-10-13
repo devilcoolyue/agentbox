@@ -633,6 +633,7 @@ export function renderEvent(ev: AgentEvent | undefined) {
       else if (block.type === "tool_use") {
         // The delegation card shows the delegate call; its review gets a short line.
         if (block.name === "mcp__agentbox__delegate") continue;
+        if (block.name === "AskUserQuestion") continue; // 提问卡片（features/chat/questions.ts）展示问题与回答
         if (block.name === "mcp__agentbox__delegation_feedback") {
           const input = (block.input || {}) as Record<string, unknown>;
           out.push(toolChip(i18nText("委派评价"), [String(input.verdict || ""), String(input.note || "")].filter(Boolean).join(" · ")));

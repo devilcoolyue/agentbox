@@ -8,7 +8,7 @@ import { actionButton, buttonLabel } from "./icons.js";
 import { S, bus, emit } from "./state.js";
 import type { Pick } from "./state.js";
 import type {
-  ChatMessage, History, ModelOption, ReasoningCapability, SessionModels,
+  ChatMessage, History, ModelOption, QuestionView, ReasoningCapability, SessionModels,
 } from "./types.js";
 import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
@@ -35,6 +35,7 @@ import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { ChatConnection } from "./features/chat/connection.js";
 import {initDelegationComposer} from "./features/delegation/composer.js";
 import {upsertDelegationCard,delegationLiveEntry,resetDelegationCards} from "./features/delegation/card.js";
+import {initQuestions,upsertQuestionCard,sealQuestions,update as refreshQuestions,resetQuestionCards,questionsWaiting} from "./features/chat/questions.js";
 import {initComposerDrafts} from "./features/chat/drafts.js";
 import type {Draft,DraftAttachment} from "./features/chat/draft-store.js";
 import {initChatOutbox} from "./features/chat/outbox.js";
@@ -97,9 +98,18 @@ const stream = createChatStream({append:appendChat,working:setWorkingLabel,state
  footer:()=>live.footer,log:()=>$("chat-log"),nearBottom});
 const suggestion = createSuggestion({input:()=>$<HTMLTextAreaElement>("chat-input"),button:()=>$("chat-suggest"),
  changed:()=>updateChatPlaceholder(),filled:()=>autoGrow()});
+// 提问卡片等着作答时，执行指示与输入框占位都说明回合在等用户，而不是卡住了
+let awaitingAnswer = false;
+initQuestions({changed:()=>{
+  const waiting = questionsWaiting();
+  if (waiting) setWorkingLabel(() => i18nText("等你回答…"));
+  else if (awaitingAnswer) setWorkingLabel(() => i18nText("思考中…"));
+  if (waiting !== awaitingAnswer) { awaitingAnswer = waiting; updateChatPlaceholder(); }
+}});
 let chatEpoch = 0;
 export function chatTeardown() {
   suggestion.set("");
+  resetQuestionCards();
   drafts?.leave();
   outbox?.leave();delegationComposer?.leave();composerThread="";
   sender.cancel();
@@ -153,6 +163,7 @@ function handleChatMsg(msg: ChatMessage) {
       break;
     case "user_message":
       suggestion.set("");
+      sealQuestions(); // 新一轮开始，之前没答的提问不再可答
       stream.flush(); // 上一回合的回放立刻放完，不让新消息插到它前面
       noteThreadTitle(msg.text!);
       appendChat(renderUserMsg(msg.text));
@@ -172,6 +183,11 @@ function handleChatMsg(msg: ChatMessage) {
     case "delegation":
       if (msg.delegation) { const card = upsertDelegationCard(msg.delegation); if (card) stream.append(card); } // 排在已到达的回复之后
       break;
+    case "question": {
+      const card = upsertQuestionCard(msg.event as unknown as QuestionView);
+      if (card) stream.append(card); // 排在已到达的回复之后
+      break;
+    }
     case "delegation_event":
       if (msg.id) delegationLiveEntry(msg.id, msg.entry);
       break;
@@ -247,6 +263,7 @@ export function setChatStatus(state: string, error?: string) {
     send.disabled = chatImgs.uploading > 0;
     if (state === "error" && error) appendChat(chip(error, "err"));
   }
+  refreshQuestions(); // 回合结束后没答的提问不再可答
   updateHero();
 }
 
@@ -255,7 +272,7 @@ export function setChatStatus(state: string, error?: string) {
 /* 占位提示：窄屏一行放不下长文案，且键盘快捷键提示在手机上无意义 */
 function updateChatPlaceholder() {
   // 有下一步提示时它就是占位文字：空输入框里的灰字，Tab 填入
-  setAttrRender($<HTMLTextAreaElement>("chat-input"), "placeholder", () => suggestion.current() || (isMobile() || enterInsertsNewline()
+  setAttrRender($<HTMLTextAreaElement>("chat-input"), "placeholder", () => questionsWaiting() ? i18nText("Agent 在等你回答上面的问题") : suggestion.current() || (isMobile() || enterInsertsNewline()
     ? i18nText("向 Agent 下达任务…")
     : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）")));
 }
@@ -284,7 +301,9 @@ const sender = new ChatSender({
   const delegation=delegationComposer?.value();
   // Only Claude predicts a next prompt; the extra request is charged, so it follows the setting.
   const suggestions=S.promptSuggestions===1&&sessionAgent()==="claude"&&suggestionsEnabled();
-  const input={scope:S.chatScope,thread_id:composerThread,text,...pick,attachments:draft.attachments.map(a=>a.path),...(delegation?{delegation}:{}),...(suggestions?{suggestions}:{})};
+  // This page shows the model's questions, so Claude may stop and ask within the turn.
+  const questions=S.chatQuestions===1&&sessionAgent()==="claude";
+  const input={scope:S.chatScope,thread_id:composerThread,text,...pick,attachments:draft.attachments.map(a=>a.path),...(delegation?{delegation}:{}),...(suggestions?{suggestions}:{}),...(questions?{questions}:{})};
   return {owner:JSON.stringify([S.token,chatEpoch,S.current.id,composerThread]),content:JSON.stringify([raw,pick,attachmentFingerprint(),delegation||null]),input,draft};
  },
  durable:()=>!!outbox?.enabled,connected:()=>connection.ready,
@@ -894,7 +913,8 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
     log.replaceChildren(); // 重连与首次加载都以服务端记录为准
     live.reset();
     resetDelegationCards();
-    replayHistory(live, entries, costs, appendChat);
+    resetQuestionCards();
+    replayHistory(live, entries, costs, appendChat, true);
     suggestion.set(latestSuggestion(entries));
     const id = active_thread || thread?.id;
     // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效

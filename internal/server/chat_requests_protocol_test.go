@@ -41,6 +41,9 @@ type receiptFixture struct {
 	exitCode                 atomic.Int32
 	help                     string   // stdout of `claude --help`
 	commands                 sync.Map // exec ID -> joined argv
+	// cli plays an interactive (stream-json input) Claude turn: it reads the
+	// raw stdin and writes stdout lines; nil keeps the one-shot fixture.
+	cli func(in io.Reader, out io.Writer, cmd string)
 }
 
 func newReceiptFixture(t *testing.T, output string, corrupt bool, holdHandshake ...bool) *receiptFixture {
@@ -152,6 +155,13 @@ func newAgentReceiptFixture(t *testing.T, agentType, output string, corrupt bool
 				}
 				return
 			} // Safe pre-turn fallback.
+			if f.cli != nil && strings.Contains(cmd.(string), "--input-format stream-json") {
+				if f.invocations.Add(1) == 1 {
+					close(f.started)
+				}
+				f.cli(conn, stdcopy.NewStdWriter(conn, stdcopy.Stdout), cmd.(string))
+				return
+			}
 			prompt, err := io.ReadAll(conn)
 			if err != nil {
 				return

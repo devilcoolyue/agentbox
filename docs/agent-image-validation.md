@@ -19,6 +19,7 @@ v0.1.11 新增的候选镜像验证能力。镜像版本号检查和行为验证
 | --- | --- |
 | Claude 完成、续聊、中断 | 使用产品 headless argv 和 PID 包装；续聊使用实际 session ID，检查前轮回复进入下一请求；保持上游未结束后发送 SIGINT，要求退出信号/130 或失败终结证据 |
 | Claude MCP | 临时 stdio MCP 经 initialize/tools/list/tools/call，合成上游触发实际 echo 调用；检查工具调用记录 |
+| Claude 提问 | 使用网页提问回合的 argv（stream-json 输入 + `--permission-prompt-tool stdio`），合成上游调用 AskUserQuestion；要求 CLI 发出带 `tool_use_id` 的 `can_use_tool` 控制请求，代答后回答须进入同一回合的下一次上游请求，关闭输入后正常退出 |
 | Claude 用量 | 实际 assistant/stream_event 输入原消息 ID 去重解析器，核对输入/缓存/输出合成计数；不使用累计 result 报价代替单轮用量 |
 | Codex 握手、完成、续聊、中断 | 实际 initialize/thread/start/thread/resume/turn/start/turn/interrupt，`turn/start` 带与网页对话相同的推理摘要参数；续聊必须保留线程与前轮内容，中断须有 interrupted 终结；捕获的 RPC 经现有 Go app-server 驱动器回放检查 |
 | Codex exec | 使用产品 exec argv，要求成功退出、回复标记与终结事件 |

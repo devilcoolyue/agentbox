@@ -73,6 +73,19 @@ func (a chatRuntime) PromptSuggestions(ctx context.Context, sess store.Session) 
 	return err == nil && strings.Contains(help, "--prompt-suggestions")
 }
 
+// Questions needs the CLI's stdin kept open as stream-json and its permission
+// prompts routed to the host; AskUserQuestion is only offered then.
+func (a chatRuntime) Questions(ctx context.Context, sess store.Session) bool {
+	if sess.Agent != config.AgentClaude {
+		return false
+	}
+	help, err := a.room.cliHelp(ctx, sess)
+	return err == nil && strings.Contains(help, "--permission-prompt-tool") && strings.Contains(help, "--input-format")
+}
+func (a chatRuntime) Question(q agent.Question) (<-chan agent.Answer, func()) {
+	return a.room.offerQuestion(q)
+}
+
 // cliHelp caches the Claude CLI's --help per container: the image is fixed at
 // creation and the CLI never updates itself inside it (DISABLE_AUTOUPDATER).
 func (r *chatRoom) cliHelp(ctx context.Context, sess store.Session) (string, error) {
@@ -135,7 +148,14 @@ func (a chatRuntime) ProviderSession(sess store.Session, id string) error {
 func (a chatRuntime) Executor(sess store.Session) chat.Executor {
 	r := a.room
 	return chat.Executor{Backend: r.srv.dock, Environment: func() ([]string, error) { return r.srv.execEnv(sess) }, SetStop: r.setStop,
-		Interrupted: func() bool { r.mu.Lock(); defer r.mu.Unlock(); return r.userInterrupted }, Log: log.Printf}
+		Interrupted: func() bool { r.mu.Lock(); defer r.mu.Unlock(); return r.userInterrupted }, Log: log.Printf,
+		Signal: func() {
+			ctx, cancel := context.WithTimeout(r.srv.workContext(), 10*time.Second)
+			defer cancel()
+			if err := r.srv.dock.ExecFireAndForget(ctx, sess.ContainerID, agent.InterruptCommand()); err != nil {
+				log.Printf("interrupt fallback %s: %v", r.sessID, err)
+			}
+		}}
 }
 func (a chatRuntime) Permission() string              { return a.room.srv.cfg.GetPermissionMode() }
 func (a chatRuntime) PublishCost(thread, turn string) { a.room.publishTurnCost(thread, turn) }

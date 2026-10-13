@@ -96,8 +96,13 @@ func (t *chatReceiptTurn) Completed(ctx context.Context) {
 			t.outcome, t.code = store.ChatInterrupted, "operation_cancelled"
 		}
 	case "failed":
-		// The executor returned, so the provider-reported failure is final.
-		t.outcome, t.code = store.ChatFailed, chatTurnFailed
+		// The executor returned, so the provider-reported failure is final. A
+		// protocol interrupt ends the CLI's turn as a failed result too.
+		if t.Interrupted() {
+			t.outcome, t.code = store.ChatInterrupted, "operation_cancelled"
+		} else {
+			t.outcome, t.code = store.ChatFailed, chatTurnFailed
+		}
 	}
 }
 

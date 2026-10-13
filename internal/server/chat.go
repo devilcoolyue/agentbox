@@ -78,6 +78,8 @@ type chatRoom struct {
 	helpMu        sync.Mutex // see cliHelp
 	helpContainer string
 	help          string
+
+	questions map[string]*roomQuestion // under mu; see chat_questions.go
 }
 
 func (r *chatRoom) broadcast(v any) {
@@ -340,6 +342,7 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 	in := chat.Input{SessionID: r.sessID, Text: text, Model: model, Effort: effort, Control: control}
 	if receipt != nil && receipt.receipt.Request != nil {
 		in.Suggestions = receipt.receipt.Request.Suggestions
+		in.Questions = receipt.receipt.Request.Questions
 	}
 	if receipt != nil && receipt.receipt.Request != nil && receipt.receipt.Request.Delegation != nil {
 		// The grant lives exactly as long as this turn; closing it cancels any

@@ -9,6 +9,7 @@ export interface ChatRequestInput {
   attachments?: Array<string>;
   delegation?: DelegationOptions;
   suggestions?: boolean;
+  questions?: boolean;
 }
 export interface DelegationOptions {
   version: 1;

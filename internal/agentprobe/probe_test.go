@@ -24,6 +24,13 @@ func fixture() map[string]any {
 			map[string]any{"type": "result", "subtype": "success"},
 		}})
 	}
+	// The answered question costs the model a second request in the same turn.
+	assistant := func(id string) map[string]any {
+		return map[string]any{"type": "assistant", "message": map[string]any{"id": id, "model": "claude-sonnet-4-6", "stop_reason": "end_turn", "usage": map[string]int{"input_tokens": 10, "cache_read_input_tokens": 4, "output_tokens": 2}}}
+	}
+	records = append(records, map[string]any{"name": "claude_question", "agent": "claude", "requests": 2, "exit_code": 0, "lines": []any{
+		assistant("synthetic-ask"), assistant("synthetic-answer"), map[string]any{"type": "result", "subtype": "success"},
+	}})
 	for _, name := range []string{"codex_turn", "codex_resume", "codex_interrupt"} {
 		status := "completed"
 		if name == "codex_interrupt" {
@@ -41,27 +48,29 @@ func fixture() map[string]any {
 	return map[string]any{"version": 1, "checks": checks, "records": records}
 }
 func TestProbeRejectsChangedProtocolsAndUsage(t *testing.T) {
-	for _, kind := range []string{"ok", "handshake", "usage", "terminal", "missing", "duplicate", "foreign", "failure", "interrupt"} {
+	for _, kind := range []string{"ok", "handshake", "usage", "terminal", "missing", "duplicate", "foreign", "failure", "interrupt", "question"} {
 		t.Run(kind, func(t *testing.T) {
 			data := fixture()
 			records := data["records"].([]map[string]any)
 			switch kind {
 			case "handshake":
-				records[3]["rpc"] = []any{}
+				records[4]["rpc"] = []any{}
 			case "usage":
-				records[6]["lines"].([]any)[0].(map[string]any)["usage"] = map[string]int{"future_input_tokens": 10, "output_tokens": 2}
+				records[7]["lines"].([]any)[0].(map[string]any)["usage"] = map[string]int{"future_input_tokens": 10, "output_tokens": 2}
 			case "terminal":
 				records[0]["lines"].([]any)[1].(map[string]any)["subtype"] = "future_success"
 			case "missing":
 				data["checks"] = []string{"claude_turn"}
 			case "duplicate":
-				records[6] = records[0]
+				records[7] = records[0]
 			case "foreign":
 				records[0]["agent"] = "codex"
 			case "interrupt":
 				records[2]["exit_code"] = 0
 			case "failure":
 				data["failed"] = "claude_mcp"
+			case "question":
+				data["records"] = append(records[:3:3], records[4:]...)
 			}
 			raw, _ := json.Marshal(data)
 			report := Validate(t.Context(), "fixture-id", raw)

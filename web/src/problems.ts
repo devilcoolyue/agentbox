@@ -104,6 +104,10 @@ export const problemMessages: Record<string, readonly [string, string]> = {
     "上一条消息仍在处理中",
     "请等待当前回合完成，或先中断当前回合。"
   ],
+  "question_closed": [
+    "这个问题已经结束",
+    "可能已在其他页面回答、超时后自动跳过，或者回合已经结束。"
+  ],
   "chat_options_invalid": [
     "对话模型或推理设置不可用",
     "请调整模型和推理设置，必要时联系管理员检查 CLI 兼容性。"

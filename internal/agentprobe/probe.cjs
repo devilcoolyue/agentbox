@@ -25,14 +25,15 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, {'content-type':'text/event-stream','cache-control':'no-cache'});
   const event = (name, value) => res.write('event: '+name+'\ndata: '+JSON.stringify(value)+'\n\n');
   if(body.messages) {
-   const tool = (body.tools||[]).find(t => t.name.includes('mcp__probe__echo'));
+   const asking = mode === 'claude_question';
+   const tool = (body.tools||[]).find(t => asking ? t.name === 'AskUserQuestion' : t.name.includes('mcp__probe__echo'));
    const called = JSON.stringify(body.messages).includes('tool_result');
-   const useTool = mode === 'claude_turn' && !called;
+   const useTool = (mode === 'claude_turn' || asking) && !called;
    if(useTool && !tool) {res.end(); return;}
    const id = 'msg_probe_'+records.length+'_'+requests.length;
    event('message_start',{type:'message_start',message:{id,type:'message',role:'assistant',model:body.model,content:[],stop_reason:null,stop_sequence:null,usage:{input_tokens:10,output_tokens:0,cache_read_input_tokens:4,cache_creation_input_tokens:0}}});
    event('content_block_start',{type:'content_block_start',index:0,content_block:useTool?{type:'tool_use',id:'tool_probe',name:tool.name,input:{}}:{type:'text',text:''}});
-   event('content_block_delta',{type:'content_block_delta',index:0,delta:useTool?{type:'input_json_delta',partial_json:'{}'}:{type:'text_delta',text:marker}});
+   event('content_block_delta',{type:'content_block_delta',index:0,delta:useTool?{type:'input_json_delta',partial_json:asking?JSON.stringify(question):'{}'}:{type:'text_delta',text:marker}});
    event('content_block_stop',{type:'content_block_stop',index:0});
    event('message_delta',{type:'message_delta',delta:{stop_reason:useTool?'tool_use':'end_turn',stop_sequence:null},usage:{output_tokens:2}});
    event('message_stop',{type:'message_stop'});
@@ -59,6 +60,9 @@ function containsText(value, text) {
  if(value && typeof value==='object') return Object.values(value).some(v=>containsText(v,text));
  return false;
 }
+// The host answers the CLI's AskUserQuestion over the stream-json control
+// protocol; the answer must reach the model in the same turn.
+const question = {questions:[{question:'Synthetic probe question?',header:'Probe',options:[{label:'AGENTBOX_PROBE_ANSWER',description:'synthetic'},{label:'other',description:'synthetic'}],multiSelect:false}]};
 const homes = {};
 let base;
 function environment(kind) {
@@ -102,6 +106,27 @@ async function cli(name,kind,command,resume='',historyMarker=marker) {
   return terminal?.session_id||'';
  } finally {await proc.stop();server.closeAllConnections();}
 }
+async function ask(name,command) {
+ mode=name;requests=[];held=false;
+ const proc=launch('claude',command);
+ try {
+  proc.child.stdin.write(JSON.stringify({type:'user',message:{role:'user',content:'Ask the synthetic question, then return the marker.'}})+'\n');
+  await waitUntil(()=>proc.lines.some(e=>e.type==='control_request')||proc.closed);
+  const req=proc.lines.find(e=>e.type==='control_request');
+  assert.ok(req&&req.request.subtype==='can_use_tool'&&req.request.tool_name==='AskUserQuestion'&&req.request.tool_use_id,'question not asked over control protocol');
+  assert.equal(req.request.input.questions[0].question,question.questions[0].question,'question input changed');
+  const answers={[question.questions[0].question]:'AGENTBOX_PROBE_ANSWER'};
+  proc.child.stdin.write(JSON.stringify({type:'control_response',response:{subtype:'success',request_id:req.request_id,response:{behavior:'allow',updatedInput:{...req.request.input,answers}}}})+'\n');
+  await waitUntil(()=>proc.lines.some(e=>e.type==='result')||proc.closed);
+  proc.child.stdin.end();
+  await proc.done;
+  assert.equal(proc.code,0,'CLI failed');
+  assert.ok(requests.some(r=>JSON.stringify(r.messages).includes('AGENTBOX_PROBE_ANSWER')&&JSON.stringify(r.messages).includes('tool_result')),'answer did not reach the model');
+  assert.ok(containsText(proc.lines,marker),'missing response');
+  records.push({name,agent:'claude',exit_code:proc.code,signal:proc.signal,lines:proc.lines.filter(e=>['result','stream_event','assistant'].includes(e.type)),requests:requests.length,resume:''});
+  checks.push(name);
+ } finally {await proc.stop();server.closeAllConnections();}
+}
 async function protocol(name,summary,resume='',historyMarker=marker) {
  mode=name;requests=[];held=false;
  const proc=launch('codex',['codex','app-server']);
@@ -131,6 +156,7 @@ async function main(spec) {
  assert.ok(mcpCalls>0,'MCP not called');checks.push('claude_mcp');
  await cli('claude_resume','claude',spec.claude_resume.map(arg=>arg.replaceAll('AGENTBOX_PROBE_RESUME',session)),session);
  await cli('claude_interrupt','claude',spec.claude);
+ await ask('claude_question',spec.claude_question);
  const thread=await protocol('codex_turn',spec.codex_summary);checks.push('codex_handshake');
  await protocol('codex_resume',spec.codex_summary,thread);await protocol('codex_interrupt',spec.codex_summary,thread);
  await cli('codex_exec','codex',spec.codex);

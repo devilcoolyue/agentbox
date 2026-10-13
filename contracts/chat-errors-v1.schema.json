@@ -46,6 +46,10 @@
         "suggestions": {
           "type": "boolean",
           "description": "Asks for a predicted next prompt after the turn, an extra charged request; only sent when /me reports prompt_suggestions."
+        },
+        "questions": {
+          "type": "boolean",
+          "description": "The sending page can show the agent's questions and answer them during the turn; only sent when /me reports chat_questions."
         }
       },
       "required": [

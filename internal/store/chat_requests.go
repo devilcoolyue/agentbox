@@ -50,6 +50,9 @@ type ChatRequestInput struct {
 	// Suggestions asks for a predicted next prompt after the turn, an extra
 	// charged request; false is omitted so older fingerprints stay unchanged.
 	Suggestions bool `json:"suggestions,omitempty"`
+	// Questions says the sending page can show the model's questions and
+	// answer them within the turn; omitted when false, like Suggestions.
+	Questions bool `json:"questions,omitempty"`
 }
 
 // DelegationOptions is frozen with the receipt: a retry or replay can never
