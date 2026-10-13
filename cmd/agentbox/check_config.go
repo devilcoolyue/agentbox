@@ -53,11 +53,12 @@ func checkConfig(ctx context.Context, args []string, output io.Writer) error {
 		}
 	}
 	result := struct {
-		Valid       bool               `json:"valid"`
-		Schema      int                `json:"schema_version"`
-		Epoch       int                `json:"compatibility_epoch"`
-		Environment diagnostics.Report `json:"environment"`
-	}{loadErr == nil, store.SchemaVersion, 1, report}
+		Valid               bool               `json:"valid"`
+		Schema              int                `json:"schema_version"`
+		Epoch               int                `json:"compatibility_epoch"`
+		Environment         diagnostics.Report `json:"environment"`
+		StorageCapabilities map[string]int     `json:"storage_capabilities"`
+	}{loadErr == nil, store.SchemaVersion, 1, report, map[string]int{"storage_policy": 1, "tool_storage": 1}}
 	if err := json.NewEncoder(output).Encode(result); err != nil {
 		return err
 	}

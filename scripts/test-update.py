@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import sqlite3
 from pathlib import Path
 import subprocess
@@ -20,6 +21,31 @@ spec.loader.exec_module(m)
 
 
 class Upgrades(unittest.TestCase):
+    def test_storage_bridge_preserves_verified_original_and_rejects_other_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp).resolve()
+            package = app / 'releases/v0.1.13'; (package / 'deploy').mkdir(parents=True)
+            (package / 'agentbox').write_bytes(b'synthetic-reviewed-binary')
+            for name in m.BRIDGE_FILES: (package / name).write_text('original ' + name)
+            original = app / 'verified'; shutil.copytree(package, original)
+            config = app / 'config.json'; config.write_text('{"storage_policy":{"mount":"/data"}}')
+            with self.assertRaises(ValueError): m.storage_bridge(app, package, config)
+            with patch.object(m.release, 'LEGACY_STORAGE_BINARIES', {hashlib.sha256((package/'agentbox').read_bytes()).hexdigest()}):
+                m.storage_bridge(app, package, config)
+                self.assertTrue(m.same_package(original, package, app))
+                self.assertFalse(m.same_package(original, package))
+                receipt = m.bridge_records(app, package)
+                # A crash after the receipt but before either replacement is resumable.
+                (package / m.BRIDGE_FILES[0]).write_bytes((original / m.BRIDGE_FILES[0]).read_bytes())
+                self.assertTrue(m.same_package(original, package, app))
+                m.storage_bridge(app, package, config)
+                self.assertEqual(m.bridge_records(app, package), receipt)
+                (package / 'unexpected').write_text('changed')
+                self.assertFalse(m.same_package(original, package, app))
+                (package / m.BRIDGE_FILES[0]).write_text('tampered helper')
+                with self.assertRaises(ValueError): m.same_package(original, package, app)
+                with self.assertRaises(ValueError): m.storage_bridge(app, package, config)
+
     def test_activation_keeps_backup_before_switch_and_checks_schema_before_stop(self):
         with tempfile.TemporaryDirectory() as tmp:
             app = Path(tmp).resolve()
@@ -68,6 +94,7 @@ class Upgrades(unittest.TestCase):
             package.mkdir(parents=True)
             (app / 'current').symlink_to(package)
             config = app / 'config.json'
+            config.write_text('{}')
             (package / 'build.json').write_text(json.dumps({'program': 'agentbox', 'version': current,
                 'os': 'linux', 'arch': 'amd64', 'revision': revision}))
             unit_text = m.release.unit(app, config)
@@ -99,6 +126,40 @@ class Upgrades(unittest.TestCase):
                                   ('v2.0.0-dev.1', 'fixture'), ('v1.0.0', 'fixture+dirty')]:
             with self.subTest(current=current, revision=revision):
                 self.probe_fixture(current, revision)
+
+    def test_storage_dropin_requires_exact_file_and_effective_guards(self):
+        path = '/etc/systemd/system/agentbox.service.d/storage.conf'
+        unit = '[Unit]\nRequiresMountsFor=/data\nBindsTo=data.mount\nAfter=data.mount\n\n[Service]\nCapabilityBoundingSet=~CAP_SYS_RESOURCE\n'
+        props = {'DropInPaths': path, 'NeedDaemonReload': 'no', 'RequiresMountsFor': '/data /opt/agentbox',
+                 'BindsTo': 'data.mount', 'After': 'docker.service data.mount',
+                 'CapabilityBoundingSet': 'cap_chown cap_sys_admin'}
+        process = 'CapBnd:\t0000000000000001\nCapEff:\t0000000000000001\nCapPrm:\t0000000000000001\n'
+        with patch.object(m.release, 'read', return_value={'storage_policy': {'mount': '/data'}}), \
+             patch.object(m, 'command', return_value='data.mount'), \
+             patch.object(m.Path, 'lstat', return_value=os.stat_result((0o100644, 0, 0, 1, 0, 0, 0, 0, 0, 0))), \
+             patch.object(m.Path, 'read_text', autospec=True, side_effect=lambda p: unit if str(p) == path else process) as read:
+            m.storage_dropin(Path('/config'), props, 123)
+            for key, value in [('DropInPaths', ''), ('DropInPaths', path+' /etc/extra.conf'),
+                               ('NeedDaemonReload', 'yes'), ('RequiresMountsFor', '/other'),
+                               ('BindsTo', ''), ('After', ''), ('CapabilityBoundingSet', 'cap_sys_resource')]:
+                with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                    m.storage_dropin(Path('/config'), dict(props, **{key: value}), 123)
+            for invalid in [unit+'Environment=UNEXPECTED=1\n', unit.replace('/data', '/other'),
+                            unit.replace('~CAP_SYS_RESOURCE', '~CAP_SYS_ADMIN')]:
+                with patch.object(m.Path, 'read_text', return_value=invalid), self.assertRaises(ValueError):
+                    m.storage_dropin(Path('/config'), props, 123)
+            for field in ['CapBnd', 'CapEff', 'CapPrm']:
+                bad = process.replace(field+':\t0000000000000001', field+':\t0000000001000001')
+                read.side_effect = lambda p: unit if str(p)==path else bad
+                with self.assertRaises(ValueError):
+                    m.storage_dropin(Path('/config'), props, 123)
+            read.side_effect = lambda p: unit if str(p)==path else process
+            for mode, uid in [(0o100666, 0), (0o100644, 1000), (0o120777, 0)]:
+                with patch.object(m.Path, 'lstat', return_value=os.stat_result((mode,0,0,1,uid,0,0,0,0,0))), self.assertRaises(ValueError):
+                    m.storage_dropin(Path('/config'), props, 123)
+            with patch.object(m.release, 'read', return_value={}):
+                with self.assertRaises(ValueError): m.storage_dropin(Path('/config'), props, 123)
+                m.storage_dropin(Path('/config'), {'DropInPaths': ''}, 123)
 
     def test_development_can_switch_to_stable(self):
         for current, revision in [('dev', 'fixture'), ('v2.0.0-dev.1', 'fixture'),
@@ -270,7 +331,7 @@ class Upgrades(unittest.TestCase):
             with patch.object(m, 'probe'), patch.object(m, 'architecture', return_value='amd64'), \
                  patch.object(m, 'download', side_effect=download), \
                  patch.object(m.release, 'activate', side_effect=activate) as activation, \
-                 patch.object(m.release, 'run') as run, patch.object(m, 'command', side_effect=lambda *args: '123' if args[0] == 'systemctl' else 'wrong version' if fault == 'binary' else 'agentbox v1.1.0 (commit fixture, built fixture)'), \
+                 patch.object(m.release, 'run', return_value=json.dumps({'schema_version':18,'compatibility_epoch':1})) as run, patch.object(m, 'command', side_effect=lambda *args: '123' if args[0] == 'systemctl' else 'wrong version' if fault == 'binary' else 'agentbox v1.1.0 (commit fixture, built fixture)'), \
                  patch.object(m.Path, 'resolve', autospec=True, side_effect=lambda path: app / 'releases/v1.1.0/agentbox' if str(path) == '/proc/123/exe' else Path(os.path.realpath(path))):
                 if fault:
                     with self.assertRaises(ValueError):

@@ -144,6 +144,27 @@ def compatible(binary, config, data):
     info = json.loads(run(binary, 'check-config', '--config', config, capture=True))
     if info.get('compatibility_epoch') != 1 or schema(data) > info['schema_version']:
         raise ValueError('incompatible database; restore a compatible backup to a NEW directory first')
+    cfg = read(config)
+    required = []
+    if any((cfg.get('storage_policy') or {}).values()): required.append('storage_policy')
+    if any((cfg.get('tool_storage') or {}).values()): required.append('tool_storage')
+    capabilities = info.get('storage_capabilities', {})
+    if required and not all(type(capabilities.get(key)) is int and capabilities[key] >= 1 for key in required):
+        # v0.1.13 predates capability reporting, but contains both implementations.
+        # Pin the reviewed published executable bytes, never trust version/schema
+        # or self-reported build.json as proof that an older binary enforces quotas.
+        with binary.open('rb') as stream:
+            digest = file_digest(stream)
+        if digest not in LEGACY_STORAGE_BINARIES:
+            raise ValueError('target lacks required storage capabilities: ' + ', '.join(required))
+
+
+# Published v0.1.13 binaries at aec9e37094f4deec27eb8e150f8b25b05a7a04dc.
+# Package SHA256SUMS are checked separately by the online updater.
+LEGACY_STORAGE_BINARIES = frozenset({
+    '705059ee7028ba38fc8a4765fb5f082ce35b962fe8b3a3e76f8e37e4bbfa4414',  # linux/amd64
+    '62fb200c0ac878c28777d9f4d25a3d805fc626dd4debf26e8caf16bcf4c6a650',  # linux/arm64
+})
 
 
 CLIENT_NAMES = tuple('abox-link-' + system + '-' + arch + ('.exe' if system == 'windows' else '')

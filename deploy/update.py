@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -49,6 +50,44 @@ def architecture():
     return {'x86_64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}.get(platform.machine())
 
 
+def storage_dropin(config, props, pid):
+    """Accept only the quota guard we own, including its loaded systemd state."""
+    cfg = release.read(config)
+    mount = (cfg.get('storage_policy') or {}).get('mount', '')
+    paths = props.get('DropInPaths', '').split()
+    if not mount and not paths:
+        return
+    if (not isinstance(mount, str) or not re.fullmatch(r'/[A-Za-z0-9_./-]+', mount)
+            or mount == '/' or str(PurePosixPath(mount)) != mount or '..' in PurePosixPath(mount).parts):
+        raise ValueError('存储附加配置需要受支持的 storage_policy.mount，请使用手工升级。')
+    path = Path('/etc/systemd/system/agentbox.service.d/storage.conf')
+    if paths != [str(path)]:
+        raise ValueError('存在未识别的服务附加配置，请使用手工升级。')
+    # Do not trust a replaceable user-owned file, directory or symlink.
+    for item in (path, *path.parents):
+        st = item.lstat()
+        if (st.st_uid != 0 or st.st_mode & 0o022 or stat.S_ISLNK(st.st_mode)
+                or (item == path and not stat.S_ISREG(st.st_mode))):
+            raise ValueError('存储附加配置的属主或权限不安全，请使用手工升级。')
+    mount_unit = command('systemd-escape', '--path', '--suffix=mount', mount)
+    expected = ['[Unit]', 'RequiresMountsFor=' + mount, 'BindsTo=' + mount_unit,
+                'After=' + mount_unit, '[Service]', 'CapabilityBoundingSet=~CAP_SYS_RESOURCE']
+    if [line.strip() for line in path.read_text().splitlines() if line.strip()] != expected:
+        raise ValueError('存储附加配置内容不匹配，请使用手工升级。')
+    if (props.get('NeedDaemonReload') != 'no'
+            or mount not in props.get('RequiresMountsFor', '').split()
+            or mount_unit not in props.get('BindsTo', '').split()
+            or mount_unit not in props.get('After', '').split()
+            or 'CapabilityBoundingSet' not in props
+            or 'cap_sys_resource' in props['CapabilityBoundingSet'].split()):
+        raise ValueError('存储挂载或配额保护尚未实际生效，请使用手工升级。')
+    process = dict(line.split(':', 1) for line in Path(f'/proc/{pid}/status').read_text().splitlines() if ':' in line)
+    for field in ('CapBnd', 'CapEff', 'CapPrm'):
+        value = process.get(field, '').strip()
+        if not re.fullmatch(r'[0-9a-fA-F]+', value) or int(value, 16) & (1 << 24):
+            raise ValueError('运行中的服务仍可能绕过磁盘配额，请使用手工升级。')
+
+
 def probe(app, config, pid, current):
     if platform.system() != 'Linux' or os.geteuid() != 0 or not Path('/run/systemd/system').is_dir():
         raise ValueError('一键升级需要以 root 运行的 Linux/systemd 发布安装。')
@@ -69,10 +108,12 @@ def probe(app, config, pid, current):
         raise ValueError('服务单元经过自定义或使用旧布局，请使用手工升级。')
     props = dict(line.split('=', 1) for line in command(
         'systemctl', 'show', 'agentbox.service', '-p', 'MainPID', '-p', 'FragmentPath',
-        '-p', 'DropInPaths').splitlines() if '=' in line)
+        '-p', 'DropInPaths', '-p', 'NeedDaemonReload', '-p', 'RequiresMountsFor',
+        '-p', 'BindsTo', '-p', 'After', '-p', 'CapabilityBoundingSet').splitlines() if '=' in line)
     if (props.get('MainPID') != str(pid) or props.get('FragmentPath') != str(unit)
-            or props.get('DropInPaths') or Path(f'/proc/{pid}/exe').resolve() != package / 'agentbox'):
+            or Path(f'/proc/{pid}/exe').resolve() != package / 'agentbox'):
         raise ValueError('正在运行的服务与发布安装不一致，请使用手工升级。')
+    storage_dropin(config, props, pid)
 
 
 def state_path(app):
@@ -237,7 +278,78 @@ def unpack(archive, destination, name):
     return destination / name
 
 
-def same_package(left, right):
+BRIDGE_FILES = ('deploy/release.py', 'deploy/update.py')
+
+
+def bridge_records(app, package):
+    folder = app / '.update' / 'compatibility' / package.name
+    if not folder.exists():
+        return {}
+    receipt = release.read(folder / 'receipt.json')
+    if receipt.get('version') != 'v0.1.13' or package.name != 'v0.1.13':
+        raise ValueError('Unexpected compatibility patch receipt')
+    with (package / 'agentbox').open('rb') as stream:
+        if release.file_digest(stream) not in release.LEGACY_STORAGE_BINARIES:
+            raise ValueError('Compatibility patch executable mismatch')
+    records = receipt.get('files', {})
+    if set(records) != set(BRIDGE_FILES):
+        raise ValueError('Incomplete compatibility patch receipt')
+    for name, record in records.items():
+        original = folder / 'original' / name
+        patched = folder / 'patched' / name
+        installed = package / name
+        for path, digest in [(original, record['original']), (patched, record['patched'])]:
+            if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                raise ValueError('Compatibility patch backup differs: ' + name)
+        if (installed.is_symlink() or not installed.is_file()
+                or installed.stat().st_mode & 0o777 != record['mode']
+                or hashlib.sha256(installed.read_bytes()).hexdigest() not in (record['original'], record['patched'])):
+            raise ValueError('Installed compatibility helper differs: ' + name)
+    return records
+
+
+def storage_bridge(app, package, config):
+    """Keep v0.1.13's next upgrade usable without replacing its published assets.
+
+    Only the two local helpers are patched; preserve both byte sets and a receipt
+    outside the release so interrupted installation/retry can be verified.
+    """
+    if package.name != 'v0.1.13' or not (release.read(config).get('storage_policy') or {}).get('mount'):
+        return
+    with (package / 'agentbox').open('rb') as stream:
+        if release.file_digest(stream) not in release.LEGACY_STORAGE_BINARIES:
+            raise ValueError('Unrecognized v0.1.13 storage bridge target')
+    folder = app / '.update' / 'compatibility' / package.name
+    records = bridge_records(app, package)
+    if not records:
+        folder.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with tempfile.TemporaryDirectory(prefix='.bridge-', dir=folder.parent) as tmp:
+            stage = Path(tmp) / 'receipt'; stage.mkdir()
+            for name in BRIDGE_FILES:
+                target = package / name
+                original, patched = target.read_bytes(), Path(__file__).with_name(Path(name).name).read_bytes()
+                records[name] = {'original': hashlib.sha256(original).hexdigest(),
+                                 'patched': hashlib.sha256(patched).hexdigest(), 'mode': target.stat().st_mode & 0o777}
+                for kind, content in [('original', original), ('patched', patched)]:
+                    dest = stage / kind / name; dest.parent.mkdir(parents=True, exist_ok=True)
+                    with dest.open('xb') as out:
+                        out.write(content); out.flush(); os.fsync(out.fileno())
+            release.atomic_json(stage / 'receipt.json', {'version': package.name, 'files': records})
+            os.rename(stage, folder)
+    for name in BRIDGE_FILES:
+        target = package / name
+        content = (folder / 'patched' / name).read_bytes()
+        fd, tmp = tempfile.mkstemp(prefix='.compat-', dir=target.parent)
+        try:
+            with os.fdopen(fd, 'wb') as out:
+                out.write(content); os.fchmod(out.fileno(), records[name]['mode']); out.flush(); os.fsync(out.fileno())
+            os.replace(tmp, target)
+        finally:
+            if os.path.exists(tmp): os.unlink(tmp)
+    bridge_records(app, package)
+
+
+def same_package(left, right, app=None):
     # Retry after staging must not overwrite an immutable release or trust a
     # partially changed directory. Compare every path, type, mode and file hash.
     def inventory(root):
@@ -251,7 +363,11 @@ def same_package(left, right):
                     digest = release.file_digest(stream)
             result[str(path.relative_to(root))] = (path.is_dir(), path.stat().st_mode & 0o777, digest)
         return result
-    return inventory(left) == inventory(right)
+    source, installed = inventory(left), inventory(right)
+    if app is not None:
+        for name, record in bridge_records(app, right).items():
+            installed[name] = (False, record['mode'], record['original'])
+    return source == installed
 
 
 def perform(app, config, pid, current, job_id):
@@ -306,10 +422,14 @@ def perform(app, config, pid, current, job_id):
                 save(app, job, 'staging')
                 target = app / 'releases' / version
                 if target.exists():
-                    if not same_package(package, target):
+                    if not same_package(package, target, app):
                         raise ValueError('Installed version differs from verified package; inspect manually')
                 else:
                     release.stage(package, app)
+                # Compatibility is checked before patching or stopping anything.
+                cfg = release.read(config)
+                release.compatible(target / 'agentbox', config, release.resolve(config.parent, cfg.get('data_dir', 'data')))
+                storage_bridge(app, target, config)
             # Recheck the serving process after download, before any downtime.
             probe(app, config, pid, current)
             cfg = release.read(config)

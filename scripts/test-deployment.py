@@ -18,6 +18,26 @@ spec=importlib.util.spec_from_file_location('release',Path(__file__).resolve().p
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 
 class Deployment(unittest.TestCase):
+ def test_storage_capabilities_before_activation(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);binary=root/'agentbox';binary.write_bytes(b'old binary');cfg=root/'config.json'
+   info={'schema_version':18,'compatibility_epoch':1}
+   for policy in [{'storage_policy':{'mount':'/data'}},{'tool_storage':{'root':'/tools'}},
+                  {'storage_policy':{'release_keep':3}}]:
+    cfg.write_text(json.dumps(policy))
+    with patch.object(m,'run',return_value=json.dumps(info)), self.assertRaisesRegex(ValueError,'storage capabilities'):
+     m.compatible(binary,cfg,root)
+    with patch.object(m,'run',return_value=json.dumps(info|{'storage_capabilities':{'storage_policy':1,'tool_storage':1}})):
+     m.compatible(binary,cfg,root)
+    with patch.object(m,'run',return_value=json.dumps(info|{'storage_capabilities':{'storage_policy':True,'tool_storage':'1'}})), self.assertRaises(ValueError):
+     m.compatible(binary,cfg,root)
+   cfg.write_text(json.dumps({'storage_policy':{'mount':'/data'}}))
+   with patch.object(m,'LEGACY_STORAGE_BINARIES',{hashlib.sha256(binary.read_bytes()).hexdigest()}), patch.object(m,'run',return_value=json.dumps(info)):
+    m.compatible(binary,cfg,root)
+    binary.write_bytes(b'old binary tampered')
+    with self.assertRaises(ValueError):m.compatible(binary,cfg,root)
+   cfg.write_text('{}')
+   with patch.object(m,'run',return_value=json.dumps(info)):m.compatible(binary,cfg,root)
  def test_bundled_clients_install_and_upgrade(self):
   with tempfile.TemporaryDirectory() as tmp:
    root=Path(tmp);package=root/'package';source=package/'clients';source.mkdir(parents=True);data=root/'data';data.mkdir()

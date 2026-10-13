@@ -136,16 +136,20 @@ func TestConfigCheckRemainsOfflineAndDoesNotCreateState(t *testing.T) {
 		t.Fatal(err)
 	}
 	var result struct {
-		Valid       bool
-		Schema      int `json:"schema_version"`
-		Epoch       int `json:"compatibility_epoch"`
-		Environment diagnostics.Report
+		Valid               bool
+		Schema              int            `json:"schema_version"`
+		Epoch               int            `json:"compatibility_epoch"`
+		StorageCapabilities map[string]int `json:"storage_capabilities"`
+		Environment         diagnostics.Report
 	}
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
 	if !result.Valid || result.Schema != store.SchemaVersion || result.Epoch != 1 {
 		t.Fatal("deployment compatibility fields changed")
+	}
+	if result.StorageCapabilities["storage_policy"] != 1 || result.StorageCapabilities["tool_storage"] != 1 {
+		t.Fatal("missing storage compatibility declaration")
 	}
 	for _, c := range result.Environment.Checks {
 		if c.ID != "configuration" && c.State != diagnostics.NotChecked {
