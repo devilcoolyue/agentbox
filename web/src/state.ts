@@ -52,6 +52,7 @@ export interface AppState {
   chatProtocol:number;
   /** 1：服务端支持对话中的委派 */
   delegationProtocol:number;
+  promptSuggestions:number;
   preserveChatCopiesOnSignout:boolean;
   /** "admin" | "user"：admin 才能进系统设置 */
   role: string;
@@ -104,6 +105,7 @@ export const S: AppState = {
   chatScope:"",
   chatProtocol:0,
   delegationProtocol:0,
+  promptSuggestions:0,
   preserveChatCopiesOnSignout:false,
   role: "",
   sessions: [],

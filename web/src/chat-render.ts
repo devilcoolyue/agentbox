@@ -647,6 +647,7 @@ export function renderEvent(ev: AgentEvent | undefined) {
   if (ev.type === "user") {
     return out; // 工具结果回填，不展示（终端里能看到实际效果）
   }
+  if (ev.type === "prompt_suggestion") return out; // 输入框里的灰色提示，不进对话流
   if (ev.type === "rate_limit_event") {
     const c = rateLimitChip(ev.rate_limit_info);
     if (c) out.push(c);

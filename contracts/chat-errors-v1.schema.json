@@ -42,6 +42,10 @@
         "delegation": {
           "$ref": "#/$defs/DelegationOptions",
           "description": "Lets the main agent hand subtasks to these worker models during this turn; absent keeps an ordinary chat."
+        },
+        "suggestions": {
+          "type": "boolean",
+          "description": "Asks for a predicted next prompt after the turn, an extra charged request; only sent when /me reports prompt_suggestions."
         }
       },
       "required": [

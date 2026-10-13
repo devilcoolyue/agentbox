@@ -213,12 +213,13 @@ function effortText(r) {
     const label = EFFORT_LABELS[r.effort] || r.effort;
     return r.effort_control === "budget" && BUDGETS[r.effort] ? `${label} (${BUDGETS[r.effort]})` : label;
 }
-const KIND_LABEL = { get chat() { return i18nText("对话"); }, get delegation() { return i18nText("委派跑腿"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); }, get decision() { return i18nText("决策调用"); } };
+const KIND_LABEL = { get chat() { return i18nText("对话"); }, get delegation() { return i18nText("委派跑腿"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); }, get decision() { return i18nText("决策调用"); }, get suggestion() { return i18nText("下一步提示"); } };
 const KIND_HINT = {
     get delegation() { return i18nText("主 Agent 把子任务交给跑腿模型时，跑腿模型花的量；与主 Agent 的回合分开记账"); },
     get decision() { return i18nText("委派时由 Jev 判断交给哪个跑腿的那次调用"); },
     get terminal() { return i18nText("用户在「终端」页签里手敲 CLI 花的量，事后从 CLI 自己的记录里补记；只记账不扣额度"); },
     get title() { return i18nText("服务端自动为新对话生成标题的那趟消耗，不是用户发起的"); },
+    get suggestion() { return i18nText("对话回合结束后预测你下一句输入的那次调用；可在「系统设置 → 界面与提示」里关闭"); },
 };
 const workspaceName = (r) => r.session_name || r.session_id;
 const BILLING = {
@@ -364,7 +365,7 @@ function renderRows(data) {
         const { td: kind, v: kindv } = cellEl(() => i18nText("类型"));
         const chip = document.createElement("span");
         // 终端和起标题各有各的颜色：这一列的用处就是一眼看出「这笔钱是谁按下去的」。
-        chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : r.kind === "chat" || r.kind === "delegation" ? " chat" : "");
+        chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : r.kind === "chat" || r.kind === "delegation" || r.kind === "suggestion" ? " chat" : "");
         setTextRender(chip, () => KIND_LABEL[r.kind] || r.kind);
         if (KIND_HINT[r.kind])
             setTip(chip, () => KIND_HINT[r.kind]);

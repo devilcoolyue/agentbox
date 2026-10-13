@@ -58,14 +58,37 @@ func (a chatRuntime) Options(ctx context.Context, sess store.Session, model, eff
 		return options, fmt.Errorf("%w: %v", chat.ErrOptions, err)
 	}
 	if sess.Agent == config.AgentClaude && effort != "" && options.Control == "effort" {
-		probe, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		help, err := s.dock.ExecCapture(probe, sess.ContainerID, []string{"claude", "--help"}, nil, "")
+		help, err := a.room.cliHelp(ctx, sess)
 		if err != nil || !strings.Contains(help, "--effort") {
 			return options, chat.ErrOptions
 		}
 	}
 	return options, nil
+}
+func (a chatRuntime) PromptSuggestions(ctx context.Context, sess store.Session) bool {
+	if sess.Agent != config.AgentClaude {
+		return false
+	}
+	help, err := a.room.cliHelp(ctx, sess)
+	return err == nil && strings.Contains(help, "--prompt-suggestions")
+}
+
+// cliHelp caches the Claude CLI's --help per container: the image is fixed at
+// creation and the CLI never updates itself inside it (DISABLE_AUTOUPDATER).
+func (r *chatRoom) cliHelp(ctx context.Context, sess store.Session) (string, error) {
+	r.helpMu.Lock()
+	defer r.helpMu.Unlock()
+	if r.helpContainer == sess.ContainerID && r.help != "" {
+		return r.help, nil
+	}
+	probe, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	help, err := r.srv.dock.ExecCapture(probe, sess.ContainerID, []string{"claude", "--help"}, nil, "")
+	if err != nil {
+		return "", err
+	}
+	r.helpContainer, r.help = sess.ContainerID, help
+	return help, nil
 }
 func (a chatRuntime) Start(ctx context.Context, sess store.Session) (store.Session, error) {
 	s := a.room.srv

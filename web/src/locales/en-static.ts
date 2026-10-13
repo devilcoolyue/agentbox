@@ -784,5 +784,12 @@ export default {
   "升级步骤": "Upgrade steps",
   "委派给跑腿模型": "Delegate to worker models",
   "委派跑腿": "Delegated work",
-  "对话开启「委派」时，Jev 可在标签规则之后判断交给哪个跑腿模型，或建议主 Agent 自己做。关闭后仍按跑腿标签路由。": "When “Delegate” is on in a chat, Jev can decide after the tag rules which worker model should take a subtask, or suggest the main agent do it. When off, routing still follows the worker tags."
+  "对话开启「委派」时，Jev 可在标签规则之后判断交给哪个跑腿模型，或建议主 Agent 自己做。关闭后仍按跑腿标签路由。": "When “Delegate” is on in a chat, Jev can decide after the tag rules which worker model should take a subtask, or suggest the main agent do it. When off, routing still follows the worker tags.",
+  "填入": "Insert",
+  "填入下一步提示": "Insert the suggested next prompt",
+  "按 Tab 填入下一步提示": "Press Tab to insert the suggested next prompt",
+  "下一步提示": "Next-prompt suggestions",
+  "仅影响此浏览器，从下一条消息开始生效。": "Only affects this browser. Applies from your next message.",
+  "Claude 回合结束后，在空输入框里显示下一步提示，按 Tab 填入": "After a Claude turn, show a suggested next prompt in the empty message box; press Tab to insert it",
+  "生成提示会在每轮结束后多调用一次模型，费用计入你的额度，在使用记录里单独列为「下一步提示」。": "Each suggestion is one extra model request after the turn. It is charged to your balance and listed separately in Usage history as “Next-prompt suggestions”."
 } satisfies Record<string, string>;

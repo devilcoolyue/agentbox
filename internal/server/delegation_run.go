@@ -405,6 +405,7 @@ func (r delegationRuntime) Executor(sess store.Session) chat.Executor {
 		return t.g.srv.execEnv(sess)
 	}}
 }
-func (r delegationRuntime) Permission() string         { return r.t.g.srv.cfg.GetPermissionMode() }
-func (r delegationRuntime) PublishCost(string, string) {}
-func (r delegationRuntime) Title(string, string)       {}
+func (r delegationRuntime) Permission() string                                    { return r.t.g.srv.cfg.GetPermissionMode() }
+func (r delegationRuntime) PromptSuggestions(context.Context, store.Session) bool { return false }
+func (r delegationRuntime) PublishCost(string, string)                            {}
+func (r delegationRuntime) Title(string, string)                                  {}

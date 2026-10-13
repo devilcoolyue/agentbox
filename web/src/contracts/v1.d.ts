@@ -8,6 +8,7 @@ export interface ChatRequestInput {
   effort_control: string;
   attachments?: Array<string>;
   delegation?: DelegationOptions;
+  suggestions?: boolean;
 }
 export interface DelegationOptions {
   version: 1;

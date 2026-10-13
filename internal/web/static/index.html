@@ -439,8 +439,9 @@
                 <section id="chat-delivery" class="chat-delivery hidden" aria-label="消息确认与恢复" data-i18n-attrs='{"aria-label":"消息确认与恢复"}'>
                   <div class="delivery-header">
                     <button id="chat-delivery-toggle" type="button" class="delivery-toggle" aria-expanded="false" aria-controls="chat-delivery-list">
-                      <span class="delivery-dot" aria-hidden="true"></span><span id="chat-delivery-status" role="status"></span><span id="chat-delivery-count" class="hidden"></span><svg class="delivery-chevron" width="14" height="14" data-icon="chevron" aria-hidden="true"></svg>
+                      <span class="delivery-dot" aria-hidden="true"></span><span id="chat-delivery-status" role="status"></span><span id="chat-delivery-reason" class="delivery-reason hidden"></span><span id="chat-delivery-count" class="delivery-count hidden"></span><svg class="delivery-chevron" width="14" height="14" data-icon="chevron" aria-hidden="true"></svg>
                     </button>
+                    <span id="chat-delivery-quick" class="delivery-quick"></span>
                     <button id="chat-delivery-refresh" type="button" class="icon-btn" aria-label="查询结果" data-tip="查询结果" data-i18n-attrs='{"aria-label":"查询结果","data-tip":"查询结果"}'><svg width="16" height="16" data-icon="refresh" aria-hidden="true"></svg></button>
                   </div>
                   <div id="chat-delivery-list" class="hidden"></div>
@@ -462,6 +463,7 @@
                     </button>
                     <div id="chat-delegate-pop" class="delegate-pop hidden" role="dialog" aria-label="委派给跑腿模型" data-i18n-attrs='{"aria-label":"委派给跑腿模型"}'></div>
                   </div>
+                  <button id="chat-suggest" type="button" class="suggest-key hidden" aria-label="填入下一步提示" data-tip="按 Tab 填入下一步提示" data-i18n-attrs='{"aria-label":"填入下一步提示","data-tip":"按 Tab 填入下一步提示"}'><kbd>Tab</kbd><span data-i18n="填入">填入</span></button>
                   <input id="attach-input" type="file" multiple class="hidden">
                   <div id="picker" class="picker">
                     <button id="btn-pick" class="pick-pill"></button>
@@ -1063,6 +1065,12 @@
                 <p id="chat-draft-settings-status" class="note hidden" role="status"></p>
                 <div class="card-foot"><button id="chat-draft-clear" type="button" class="btn btn-sm" data-icon="trash" data-i18n="清除本机副本并关闭保存">清除本机副本并关闭保存</button></div>
               </div>
+              <div class="card" id="set-chat-suggestions">
+                <h3 data-i18n="下一步提示">下一步提示</h3>
+                <p class="card-desc" data-i18n="仅影响此浏览器，从下一条消息开始生效。">仅影响此浏览器，从下一条消息开始生效。</p>
+                <label class="check"><input id="chat-suggest-enabled" type="checkbox"><span data-i18n="Claude 回合结束后，在空输入框里显示下一步提示，按 Tab 填入">Claude 回合结束后，在空输入框里显示下一步提示，按 Tab 填入</span></label>
+                <p class="note" data-i18n="生成提示会在每轮结束后多调用一次模型，费用计入你的额度，在使用记录里单独列为「下一步提示」。">生成提示会在每轮结束后多调用一次模型，费用计入你的额度，在使用记录里单独列为「下一步提示」。</p>
+              </div>
               <div class="card" data-settings-admin>
                 <h3 data-i18n-text="[&quot;日期与时间&quot;]">日期与时间</h3>
                 <label class="field">
@@ -1341,6 +1349,7 @@
                   <option value="delegation" data-i18n="委派跑腿">委派跑腿</option>
                   <option value="terminal" data-i18n-text="[&quot;终端&quot;]">终端</option>
                   <option value="title" data-i18n-text="[&quot;起标题&quot;]">起标题</option>
+                  <option value="suggestion" data-i18n="下一步提示">下一步提示</option>
                   <option value="decision" data-i18n="决策调用">决策调用</option>
                 </select>
               </label>

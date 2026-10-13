@@ -58,16 +58,27 @@ func (s *Server) isStopping() bool {
 
 var errChatInterrupted = chat.ErrInterrupted
 
+// chatTurnFailed marks a turn that ran and then ended with an error the CLI
+// itself reported. It does not block the next message: the process is gone,
+// so only its partial file changes are left for the user to look at.
+const chatTurnFailed = "turn_failed"
+
 func (t *chatReceiptTurn) Fail(err error, code string) {
 	t.code = code
-	if t.receipt.State == store.ChatAccepted || t.receipt.State == store.ChatStarting {
+	var exited *chat.ExitError
+	switch {
+	case t.receipt.State == store.ChatAccepted || t.receipt.State == store.ChatStarting:
 		t.outcome = store.ChatFailed
-	} else {
+	case t.room.srv.isStopping():
+		// Shutdown is not the user confirming an interrupt nor a CLI error.
 		t.outcome = store.ChatUncertain
-		if errors.Is(err, errChatInterrupted) && t.Interrupted() && !t.room.srv.isStopping() {
-			t.outcome = store.ChatInterrupted
-			t.code = "operation_cancelled"
-		}
+	case (errors.Is(err, errChatInterrupted) || errors.As(err, &exited)) && t.Interrupted():
+		t.outcome, t.code = store.ChatInterrupted, "operation_cancelled"
+	case errors.As(err, &exited):
+		t.outcome, t.code = store.ChatFailed, chatTurnFailed
+	default:
+		// A lost stream or exit status: the CLI may still be running.
+		t.outcome = store.ChatUncertain
 	}
 }
 
@@ -85,7 +96,8 @@ func (t *chatReceiptTurn) Completed(ctx context.Context) {
 			t.outcome, t.code = store.ChatInterrupted, "operation_cancelled"
 		}
 	case "failed":
-		t.outcome, t.code = store.ChatUncertain, "chat_failed"
+		// The executor returned, so the provider-reported failure is final.
+		t.outcome, t.code = store.ChatFailed, chatTurnFailed
 	}
 }
 
@@ -102,10 +114,15 @@ func (t *chatReceiptTurn) Finish() {
 	if t.settlementFailed {
 		t.outcome, t.code = store.ChatUncertain, "usage_write_failed"
 	}
-	if t.outcome == store.ChatCompleted || t.outcome == store.ChatInterrupted {
+	if t.outcome == store.ChatCompleted || t.outcome == store.ChatInterrupted || t.code == chatTurnFailed {
 		if err := t.syncHistory(); err != nil {
+			log.Printf("chat receipt history sync failed request_id=%s: %v", t.receipt.RequestID, err)
 			t.outcome, t.code = store.ChatUncertain, "history_write_failed"
 		}
+	}
+	if t.outcome == store.ChatUncertain {
+		// The code alone is what the user sees; keep the reason findable.
+		log.Printf("chat receipt uncertain request_id=%s code=%s", t.receipt.RequestID, t.code)
 	}
 	c, err := t.room.srv.store.AdvanceChatRequest(t.owner, t.receipt.SessionID, t.receipt.RequestID, t.receipt.Revision, t.outcome, t.code)
 	if err != nil {

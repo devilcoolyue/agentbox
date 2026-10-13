@@ -566,14 +566,14 @@ input[type="checkbox"]:disabled, input[type="radio"]:disabled { cursor: default;
  * 焦点环会被切掉一截，所以只挂在纯文字/列表的折叠块上，带表单的（高级设置、剪贴板）不挂；
  * 窄屏的分区说明 .section-help 收起时仍显示正文（responsive.css），也不能挂。 */
 @supports (interpolate-size: allow-keywords) and selector(::details-content) {
-  :is(details.think, details.raw, .learn-more, .price-fold, .price-history, .home-setup, .update-notes, .delivery-item) {
+  :is(details.think, details.raw, .learn-more, .price-fold, .price-history, .home-setup, .update-notes) {
     interpolate-size: allow-keywords;
   }
-  :is(details.think, details.raw, .learn-more, .price-fold, .price-history, .home-setup, .update-notes, .delivery-item)::details-content {
+  :is(details.think, details.raw, .learn-more, .price-fold, .price-history, .home-setup, .update-notes)::details-content {
     block-size: 0; overflow-y: clip;
     transition: block-size var(--dur-slow) var(--ease-move), content-visibility var(--dur-slow) allow-discrete;
   }
-  :is(details.think, details.raw, .learn-more, .price-fold, .price-history, .home-setup, .update-notes, .delivery-item)[open]::details-content {
+  :is(details.think, details.raw, .learn-more, .price-fold, .price-history, .home-setup, .update-notes)[open]::details-content {
     block-size: auto;
   }
 }

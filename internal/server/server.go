@@ -698,11 +698,13 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{
-		"draft_scope":              scope,
-		"draft_protocol":           1,
-		"chat_protocol":            1,
-		"chat_scope":               s.chatRequestScope(u),
-		"delegation_protocol":      store.DelegationVersion,
+		"draft_scope":         scope,
+		"draft_protocol":      1,
+		"chat_protocol":       1,
+		"chat_scope":          s.chatRequestScope(u),
+		"delegation_protocol": store.DelegationVersion,
+		// Accepts chat request "suggestions"; older servers reject the field.
+		"prompt_suggestions":       1,
 		"user":                     u.Name,
 		"role":                     u.Role,
 		"models":                   s.cfg.GetModels(),

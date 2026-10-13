@@ -276,7 +276,8 @@ data/
 - `GET /api/sessions/{id}/chat` 是一个会话一个 room 的广播模型；同一房间同一时刻只跑一个回合。
 - 网页 outbox 冻结 text/model/effort/control/refs 后先写副本；默认保存失败不提交，明确关闭本机保存后仅保留页内副本。草稿和待确认区分离；重连、刷新、轮询只查询，显式重试也先查原 ID，不换 ID 自动重发。回执须核对空间、线程、输入和单调 revision；旧文字广播不是确认。`pending_only=1` 避免轮询下载历史正文；未知接收 ID 的正文 7 天后过期，但保留标识用于查询/放弃。退出清理副本与本功能确认框，迟到响应不得改变新空间的输入或提示。仅服务端回执恢复附件时也要重建附件元数据并重新校验；不得退化为正文中的裸路径。
 - 登录替换由发起页按 `local-identity.ts` 的不含令牌/正文的范围提示清上一身份副本；收到 storage/迟到 401 的旧页保留较新的 token，只忘掉自己的内存和会话指针，不能重复清持久区，否则冻结旧页恢复时会删除同一用户新登录后保存的内容。`preserveChatCopiesOnSignout` 只控制该次清理，不放宽 API 授权；旧 `/me` 响应还须核对浏览器当前 token 后才能初始化新编辑器。显式未知 chat 版本不得作为旧服务端静默降级。
-- schema 12 的 `store.ChatRequest` 已接入独立 HTTP v1（`chat_protocol`/`chat_scope`），浏览器通过 outbox-store.ts / outbox.ts 接入待确认发送与查询恢复。仅 `AcceptChatRequest` 成功返回 fresh=true 的调用者可安排工作，重放和 reviewed 不获得执行资格；状态推进须使用修订号。启动在 Docker 初始化前将未结束回执改为 uncertain，不能自动重跑；旧 WS、线程变更与删除必须遵守同一持久准入；回执在原用量 flush 和转录同步后完成，结算/历史失败保持 uncertain。`chatReceiptTurn` 只观察原执行器，不另启模型/计费路径；传统 exec 必须检查 Scanner 错误，provider 结束状态由 agent.Adapter 解码。用户中断和服务关闭不得混为一谈。存储连接 WAL + synchronous=FULL；空间/用户删除同事务清正文留 ID 围栏，线程删除先清对应回执正文。附件 TTL 扫描流式读取回执引用，错误时拒绝删除；与接收校验/提交共用 attachmentMu。
+- schema 12 的 `store.ChatRequest` 已接入独立 HTTP v1（`chat_protocol`/`chat_scope`），浏览器通过 outbox-store.ts / outbox.ts 接入待确认发送与查询恢复。仅 `AcceptChatRequest` 成功返回 fresh=true 的调用者可安排工作，重放和 reviewed 不获得执行资格；状态推进须使用修订号。启动在 Docker 初始化前将未结束回执改为 uncertain，不能自动重跑；旧 WS、线程变更与删除必须遵守同一持久准入；回执在原用量 flush 和转录同步后完成，结算/历史失败保持 uncertain。CLI 明确报错且进程已退出（provider 失败事件后执行器正常返回，或 `chat.ExitError` 非零退出码）记 failed/`turn_failed`，不阻止新回合；流损坏、拿不到退出状态、服务关闭仍为 uncertain，别把这几类并进 failed。`chatReceiptTurn` 只观察原执行器，不另启模型/计费路径；传统 exec 必须检查 Scanner 错误，provider 结束状态由 agent.Adapter 解码。用户中断和服务关闭不得混为一谈。存储连接 WAL + synchronous=FULL；空间/用户删除同事务清正文留 ID 围栏，线程删除先清对应回执正文。附件 TTL 扫描流式读取回执引用，错误时拒绝删除；与接收校验/提交共用 attachmentMu。
+- 下一步提示（`features/chat/suggestion.ts`）：回执输入可带 `suggestions`（`/me` 的 `prompt_suggestions:1` 才发，false 省略保旧指纹），仅 Claude 且容器 CLI `--help` 含 `--prompt-suggestions` 时加参数（`chatRoom.cliHelp` 按容器缓存，推理强度探测共用）。`prompt_suggestion` 事件落盘但不渲染，前端只作空输入框的占位文字，Tab/「填入」不自动发送；开关在「界面与提示」，按浏览器保存。该请求不在流和 transcript 消息里，`claudeMeter.addSuggestion` 用退出时最后一条 `cost-state` 减 result 的 `modelUsage` 计量，记 `kind=suggestion`、按 turn 去重扣费；不能改成从 `modelUsage` 直接扣，也不要并进 chat 行（每轮底部花费只算 chat）。
 - 消息落盘到当前线程 `chats/<threadID>.jsonl`；`chats/active` 指向当前线程。旧版 `chat.jsonl` 首次访问自动迁移。
 - 历史分页（`threads.go` 的 `historyPage`）：游标是线程 JSONL 有效行的序号，文件只追加所以稳定。按整回合切页（达到条数/字节预算后停在用户消息处），单回合超硬上限才在中间切，并补 `turn_context`。Claude 的工具结果（`type:"user"` 事件）前端不渲染，既不发送也不计入预算——这类行常是整份文件内容，曾占满旧版 2000 条窗口导致长对话上滑到半截回合就停。前端 `features/chat/older.ts` 在对话流顶部挂加载条，IntersectionObserver 触发 `?thread=&before=`，按距底部距离还原滚动位置（不依赖 overflow-anchor）；切页落在回合中间时 `turns.ts` 的 `joinTurn` 把两段并成一个回合。重连补拉在回看时带 `from=` 重读已加载范围，贴底时只取最新一页；切空间/线程、整体重载与退出都要作废在途的上一页请求。
 - Claude 走 `claude -p --output-format stream-json`；Codex 优先走 `codex app-server`（真流式增量），握手失败回退 `codex exec --json`。
@@ -976,7 +977,7 @@ data/
 - 关闭/切换/退出取消定位 RAF，销毁 ResizeObserver 和监听；支持 Escape、焦点返回、visualViewport 与 reduced-motion。三语、首次/刷新/后续空间、窄屏和无自动模型调用由 browser.onboarding 回归。
 - 草稿设置在「系统设置 → 界面与提示」；存储失败、禁用保存、附件问题及恢复通知仍在输入区显示。不可为了压缩布局隐藏阻止发送的问题。
 
-- 消息确认区默认单行，详情按需展开并限制列表高度；待确认/待核对优先于执行状态，错误文本不能被省略号隐藏。查询按钮只查不展开，不改变原 ID 重试/准入规则；切换空间/线程和发送新任务收起详情，轮询保留展开和键盘焦点。附件、语音入口统一 18px 图标与 34px 点击区。
+- 消息确认区默认单行（标题 + 原因 + 需要时的「重试 / 已查看，继续」），只有已完成任务时整行隐藏；详情是平铺行（状态与原因、单行原文可点开、模型设置、行尾操作），列表限高滚动。待确认/结果不确定优先于执行状态，错误文本不能被省略号隐藏（原因可截断，展开后完整显示）。不确定原因按回执 `error_code` 映射（`outbox.ts` 的 `unknownReasons`），新增 uncertain 代码要同步补文案。新消息被接收后同对话已结束的行自动移除。查询按钮只查不展开，不改变原 ID 重试/准入规则；切换空间/线程和发送新任务收起详情，轮询保留展开和键盘焦点。附件、语音入口统一 18px 图标与 34px 点击区。
 
 ### 共享工具与用户缓存
 

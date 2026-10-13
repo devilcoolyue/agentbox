@@ -47,6 +47,9 @@ type ChatRequestInput struct {
 	// during this turn. Absent keeps the turn an ordinary single-agent chat and
 	// the fingerprint of requests written before delegation existed.
 	Delegation *DelegationOptions `json:"delegation,omitempty"`
+	// Suggestions asks for a predicted next prompt after the turn, an extra
+	// charged request; false is omitted so older fingerprints stay unchanged.
+	Suggestions bool `json:"suggestions,omitempty"`
 }
 
 // DelegationOptions is frozen with the receipt: a retry or replay can never
@@ -318,7 +321,9 @@ func chatTransitionAllowed(from, to string) bool {
 	case ChatStarting:
 		return to == ChatRunning || to == ChatFailed || to == ChatUncertain
 	case ChatRunning:
-		return to == ChatCompleted || to == ChatInterrupted || to == ChatUncertain
+		// failed after running = the CLI exited with an error; it may have
+		// changed files, but nothing from the turn is still executing.
+		return to == ChatCompleted || to == ChatFailed || to == ChatInterrupted || to == ChatUncertain
 	case ChatUncertain:
 		return to == ChatReviewed
 	}

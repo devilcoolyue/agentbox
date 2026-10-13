@@ -75,7 +75,7 @@ try {
  const receipt = async id => (await api('/sessions/space-a/chat/requests/' + id)).body.receipt;
  const state = (id, value, p = page) => p.locator(`.delivery-item[data-request-id="${id}"][data-state="${value}"]`).waitFor({state:'attached'});
  const records = () => page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('agentbox.chat-outbox.v1.')).map(k => JSON.parse(localStorage.getItem(k))));
- const action = async (id, label, p = page) => { if (await p.locator('#chat-delivery-toggle').getAttribute('aria-expanded') !== 'true') await p.locator('#chat-delivery-toggle').click(); const row = p.locator(`.delivery-item[data-request-id="${id}"]`); if (!await row.evaluate(el => el.open)) await row.locator('summary').click(); await row.getByRole('button', { name: label, exact: true }).click(); };
+ const action = async (id, label, p = page) => { if (await p.locator('#chat-delivery-toggle').getAttribute('aria-expanded') !== 'true') await p.locator('#chat-delivery-toggle').click(); await p.locator(`.delivery-item[data-request-id="${id}"]`).getByRole('button', { name: label, exact: true }).click(); };
  const confirm = async () => { await page.locator('#dlg-ask').waitFor({ state: 'visible' }); await page.locator('#ask-ok').click(); };
  const turns = async () => (await h.ctl('state')).turns || [];
  const started = prompt => until(async () => (await turns()).find(t => t.prompt === prompt), 'runner did not start: ' + prompt);
@@ -116,7 +116,7 @@ try {
  putFault = 'offline-before'; await send('offline before transmission');
  const offline = await until(async () => (await records()).find(r => r.draft?.text === 'offline before transmission'), 'offline copy missing');
  putFault = ''; await context.setOffline(false); await page.locator('#chat-delivery-refresh').click(); await state(offline.id, 'unconfirmed'); assert.equal((await turns()).length, 1);
- await action(offline.id, '重试原消息'); await started('offline before transmission'); await finish('offline before transmission'); await state(offline.id, 'completed'); await accounting(offline.id);
+ await action(offline.id, '重试'); await started('offline before transmission'); await finish('offline before transmission'); await state(offline.id, 'completed'); await accounting(offline.id);
  passed('offline before transmission, explicit retry keeps the original ID');
  const crash = await send('crash after runner start'); await started(crash.input.text); await state(crash.id, 'running');
  await input.fill('draft during server restart'); const beforeCrash = (await turns()).length;
@@ -136,7 +136,7 @@ try {
  assert.equal(rejectedLegacy.code, 'chat_pending');
  assert.equal((await api('/sessions/space-a/chat/threads/thread-two/activate', {})).status, 409);
  assert.equal((await api('/sessions/space-a/chat/requests/' + crash.id, crash.input, 'PUT')).status, 200);
- await action(crash.id, '已检查结果，继续'); await confirm(); await state(crash.id, 'reviewed'); assert.equal((await turns()).length, beforeCrash);
+ await action(crash.id, '已查看，继续'); await confirm(); await state(crash.id, 'reviewed'); assert.equal((await turns()).length, beforeCrash);
  const after = await send('explicit new task after review'); await finish(after.input.text); await state(after.id, 'completed'); await accounting(after.id);
  passed('SIGKILL real server, same-volume restart, stable scope, uncertain receipt, no rerun/charge; review and explicit new task');
  // Disconnect after acceptance: the server completes and settles while the browser is offline.
@@ -151,10 +151,10 @@ try {
  const shutdown = await send('graceful shutdown with active turn'); await started(shutdown.input.text); await state(shutdown.id, 'running');
  const beforeShutdown = (await turns()).length; await h.stop(); await h.start(); await page.reload(); await ready(); await state(shutdown.id, 'uncertain');
  assert.equal((await turns()).length, beforeShutdown); await accounting(shutdown.id, 0);
- await action(shutdown.id, '已检查结果，继续'); await confirm(); await state(shutdown.id, 'reviewed');
+ await action(shutdown.id, '已查看，继续'); await confirm(); await state(shutdown.id, 'reviewed');
  passed('SIGTERM active turn stays uncertain rather than successful or user-interrupted');
  const interrupted = await send('user interrupt'); await started(interrupted.input.text); await state(interrupted.id, 'running');
- const signals = (await h.ctl('state')).interruptions; await action(interrupted.id, '中断'); await state(interrupted.id, 'interrupted');
+ const signals = (await h.ctl('state')).interruptions; await action(interrupted.id, '中断任务'); await state(interrupted.id, 'interrupted');
  assert.equal((await h.ctl('state')).interruptions, signals + 1); await accounting(interrupted.id, 0);
  await input.fill(''); await action(interrupted.id, '复制回输入框'); assert.equal(await input.inputValue(), interrupted.input.text);
  passed('explicit interruption, exactly one signal, interrupted receipt and recoverable input');
@@ -163,7 +163,7 @@ try {
  const settlement = await send('settlement transaction failure'); await finish(settlement.input.text); await state(settlement.id, 'uncertain');
  assert.equal((await receipt(settlement.id)).error_code, 'usage_write_failed'); await accounting(settlement.id, 0);
  await h.ctl('settlement-fault', { Enabled: false }); const beforeReview = (await turns()).length;
- await action(settlement.id, '已检查结果，继续'); await confirm(); await state(settlement.id, 'reviewed');
+ await action(settlement.id, '已查看，继续'); await confirm(); await state(settlement.id, 'reviewed');
  assert.equal((await turns()).length, beforeReview); await accounting(settlement.id, 0);
  passed('SQLite settlement failure rolls back usage/debit and stays uncertain; review never retries or charges');
  // An unreceived message remains in its original thread; switching cannot change its envelope.
@@ -172,12 +172,12 @@ try {
  await page.locator('#btn-threads').click(); await page.locator('#tp-list .tp-open').filter({ hasText: 'thread-two' }).click();
  await page.waitForFunction(() => document.querySelector('#thread-title').textContent === 'thread-two');
  await ready(); await state(transfer.id, 'unconfirmed');
- assert.equal(await page.locator(`.delivery-item[data-request-id="${transfer.id}"]`).getByRole('button', { name: '重试原消息', exact: true, includeHidden: true }).isDisabled(), true);
- putFault = ''; await action(transfer.id, '放弃未接收消息'); await confirm(); await state(transfer.id, 'abandoned');
+ assert.equal(await page.locator(`.delivery-item[data-request-id="${transfer.id}"]`).getByRole('button', { name: '重试', exact: true, includeHidden: true }).isDisabled(), true);
+ putFault = ''; await action(transfer.id, '放弃发送'); await confirm(); await state(transfer.id, 'abandoned');
  await input.fill(''); await action(transfer.id, '复制回输入框'); await confirm(); await page.waitForFunction(text => document.querySelector('#chat-input').value === text, transfer.input.text);
  assert.equal((await turns()).length, beforeThread);
  assert.equal((await api('/sessions/space-a/chat/requests/' + transfer.id, transfer.input, 'PUT')).status, 410);
- await action(transfer.id, '关闭状态'); await input.fill('');
+ await action(transfer.id, '从列表移除'); await input.fill('');
  passed('thread switch, explicit cross-thread copy, abandon tombstone permanently fences original ID');
  // Hold the real response until the user has moved to another workspace.
  putFault = 'hold'; dropAck = true; blockReads = true;

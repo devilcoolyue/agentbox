@@ -46,6 +46,9 @@ type Runtime interface {
 	Emit(any)
 	Problem(context.Context, string, error, string) protocol.APIProblem
 	ProviderSession(store.Session, string) error
+	// PromptSuggestions reports whether the started container's CLI can
+	// predict the next prompt; an older image would reject the flag.
+	PromptSuggestions(context.Context, store.Session) bool
 	Executor(store.Session) Executor
 	Permission() string
 	PublishCost(string, string)
@@ -88,6 +91,9 @@ type Input struct {
 	// Preface is server-owned text sent to the CLI before the user's text for
 	// this turn only; history and titles keep the user's own text.
 	Preface string
+	// Suggestions asks for a predicted next prompt after the turn when the
+	// container's CLI supports it; that extra request is charged separately.
+	Suggestions bool
 }
 type Failure struct {
 	Code  string
@@ -216,6 +222,9 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		return
 	}
 
+	extras := in.Extras
+	extras.PromptSuggestions = in.Suggestions && r.PromptSuggestions(ctx, sess)
+
 	if receipt != nil {
 		if err := r.Attachments(sess, receipt.Input().Request.Attachments); err != nil {
 			fail(err, "chat_attachments_invalid")
@@ -236,6 +245,9 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	}
 	turnStart = time.Now()
 	tally = s.Usage.NewChatTally(sess)
+	if extras.PromptSuggestions {
+		tally.MeterSuggestion()
+	}
 
 	// 容器起来之后才可能产生消耗，之后无论回合正常收尾、报错还是被中断，已经
 	// 报上来的用量都要落库——钱花了就得记。一行都没记到说明这个 agent/版本报
@@ -318,7 +330,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 				out += "\n\n" + in.Context
 			}
 			return out
-		}(), ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options, StrictResume: in.StrictResume, RequireAppServer: in.RequireAppServer, Extras: in.Extras}); err != nil {
+		}(), ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options, StrictResume: in.StrictResume, RequireAppServer: in.RequireAppServer, Extras: extras}); err != nil {
 		code := "chat_failed"
 		if errors.Is(err, ErrOptions) {
 			code = "chat_options_invalid"

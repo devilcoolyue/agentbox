@@ -29,6 +29,7 @@ import { initDelegationComposer } from "./features/delegation/composer.js";
 import { upsertDelegationCard, delegationLiveEntry, resetDelegationCards } from "./features/delegation/card.js";
 import { initComposerDrafts } from "./features/chat/drafts.js";
 import { initChatOutbox } from "./features/chat/outbox.js";
+import { createSuggestion, suggestionOf, latestSuggestion, suggestionsEnabled, setSuggestionsEnabled } from "./features/chat/suggestion.js";
 let drafts;
 let delegationComposer;
 let outbox;
@@ -91,8 +92,11 @@ const sessionAgent = () => S.current ? S.current.agent : "claude";
 const live = new TurnWriter(() => $("chat-log"), sessionAgent);
 const stream = createChatStream({ append: appendChat, working: setWorkingLabel, state: () => S.chatState,
     footer: () => live.footer, log: () => $("chat-log"), nearBottom });
+const suggestion = createSuggestion({ input: () => $("chat-input"), button: () => $("chat-suggest"),
+    changed: () => updateChatPlaceholder(), filled: () => autoGrow() });
 let chatEpoch = 0;
 export function chatTeardown() {
+    suggestion.set("");
     drafts?.leave();
     outbox?.leave();
     delegationComposer?.leave();
@@ -139,16 +143,21 @@ function handleChatMsg(msg) {
                 outbox?.message(msg.receipt);
             break;
         case "user_message":
+            suggestion.set("");
             stream.flush(); // 上一回合的回放立刻放完，不让新消息插到它前面
             noteThreadTitle(msg.text);
             appendChat(renderUserMsg(msg.text));
             live.context.turn = msg.turn;
             break;
-        case "agent_event":
+        case "agent_event": {
+            const next = suggestionOf(msg.event);
+            if (next)
+                suggestion.set(next);
             observeAnswer(live.context, msg.event, msg.ts);
             stream.event(msg.event);
             live.footer?.update();
             break;
+        }
         case "agent_raw":
             stream.append(chip(msg.text)); // 回放中则排队，保持时间线顺序
             break;
@@ -258,15 +267,17 @@ export function setChatStatus(state, error) {
 }
 /* 占位提示：窄屏一行放不下长文案，且键盘快捷键提示在手机上无意义 */
 function updateChatPlaceholder() {
-    setAttrRender($("chat-input"), "placeholder", () => isMobile() || enterInsertsNewline()
+    // 有下一步提示时它就是占位文字：空输入框里的灰字，Tab 填入
+    setAttrRender($("chat-input"), "placeholder", () => suggestion.current() || (isMobile() || enterInsertsNewline()
         ? i18nText("向 Agent 下达任务…")
-        : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）"));
+        : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）")));
 }
 /* 输入框随内容自动增高（1 行起步，封顶后内部滚动） */
 export function autoGrow() {
     const t = $("chat-input");
     t.style.height = "auto";
     t.style.height = Math.min(t.scrollHeight, 220) + "px";
+    suggestion.render();
     drafts?.save();
 }
 const attachmentFingerprint = () => JSON.stringify([...chatImgs.map].map(([id, { valid, ...a }]) => [id, a]));
@@ -288,7 +299,9 @@ const sender = new ChatSender({
             text = text.split(`[Image #${n}]`).join(`[图片#${n} ${info.path}]`).split(`[File #${n}]`).join(`[附件#${n} ${info.path}]`);
         }
         const delegation = delegationComposer?.value();
-        const input = { scope: S.chatScope, thread_id: composerThread, text, ...pick, attachments: draft.attachments.map(a => a.path), ...(delegation ? { delegation } : {}) };
+        // Only Claude predicts a next prompt; the extra request is charged, so it follows the setting.
+        const suggestions = S.promptSuggestions === 1 && sessionAgent() === "claude" && suggestionsEnabled();
+        const input = { scope: S.chatScope, thread_id: composerThread, text, ...pick, attachments: draft.attachments.map(a => a.path), ...(delegation ? { delegation } : {}), ...(suggestions ? { suggestions } : {}) };
         return { owner: JSON.stringify([S.token, chatEpoch, S.current.id, composerThread]), content: JSON.stringify([raw, pick, attachmentFingerprint(), delegation || null]), input, draft };
     },
     durable: () => !!outbox?.enabled, connected: () => connection.ready,
@@ -948,6 +961,7 @@ export async function loadHistory(opts = {}) {
         live.reset();
         resetDelegationCards();
         replayHistory(live, entries, costs, appendChat);
+        suggestion.set(latestSuggestion(entries));
         const id = active_thread || thread?.id;
         // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效
         kept = !!keep && keep.thread === id && keep.start === start;
@@ -976,6 +990,7 @@ export async function reloadThread() {
         legacyDraftVersions.set(S.current.id, (legacyDraftVersions.get(S.current.id) || 0) + 1);
     ++chatEpoch;
     sender.cancel();
+    suggestion.set("");
     drafts?.leave();
     outbox?.leave();
     composerThread = "";
@@ -1095,6 +1110,10 @@ export function initChat() {
             sendChat();
     }, { signal: lifetime.signal });
     $("chat-input").addEventListener("keydown", (e) => {
+        if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing && suggestion.accept()) {
+            e.preventDefault();
+            return;
+        }
         if (e.key === "Enter" && !e.shiftKey && !isImeEnter(e) && !enterInsertsNewline()) {
             e.preventDefault();
             sendChat();
@@ -1109,6 +1128,10 @@ export function initChat() {
         for (const f of files)
             attachFile(f);
     }, { signal: lifetime.signal });
+    $("chat-suggest").addEventListener("click", () => { suggestion.accept(); $("chat-input").focus(); }, { signal: lifetime.signal });
+    const suggestToggle = $("chat-suggest-enabled");
+    suggestToggle.checked = suggestionsEnabled();
+    suggestToggle.addEventListener("change", () => { setSuggestionsEnabled(suggestToggle.checked); suggestion.refresh(); }, { signal: lifetime.signal });
     $("btn-attach").addEventListener("click", () => $("attach-input").click(), { signal: lifetime.signal });
     $("attach-input").addEventListener("change", () => {
         if (!S.current)

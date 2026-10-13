@@ -38,6 +38,7 @@ import {upsertDelegationCard,delegationLiveEntry,resetDelegationCards} from "./f
 import {initComposerDrafts} from "./features/chat/drafts.js";
 import type {Draft,DraftAttachment} from "./features/chat/draft-store.js";
 import {initChatOutbox} from "./features/chat/outbox.js";
+import {createSuggestion,suggestionOf,latestSuggestion,suggestionsEnabled,setSuggestionsEnabled} from "./features/chat/suggestion.js";
 let drafts:ReturnType<typeof initComposerDrafts>|undefined;
 let delegationComposer:ReturnType<typeof initDelegationComposer>|undefined;
 let outbox:ReturnType<typeof initChatOutbox>|undefined;
@@ -94,8 +95,11 @@ const sessionAgent = () => S.current ? S.current.agent : "claude";
 const live = new TurnWriter(() => $("chat-log"), sessionAgent);
 const stream = createChatStream({append:appendChat,working:setWorkingLabel,state:()=>S.chatState,
  footer:()=>live.footer,log:()=>$("chat-log"),nearBottom});
+const suggestion = createSuggestion({input:()=>$<HTMLTextAreaElement>("chat-input"),button:()=>$("chat-suggest"),
+ changed:()=>updateChatPlaceholder(),filled:()=>autoGrow()});
 let chatEpoch = 0;
 export function chatTeardown() {
+  suggestion.set("");
   drafts?.leave();
   outbox?.leave();delegationComposer?.leave();composerThread="";
   sender.cancel();
@@ -148,16 +152,20 @@ function handleChatMsg(msg: ChatMessage) {
       if(msg.version===1)outbox?.message(msg.receipt);
       break;
     case "user_message":
+      suggestion.set("");
       stream.flush(); // 上一回合的回放立刻放完，不让新消息插到它前面
       noteThreadTitle(msg.text!);
       appendChat(renderUserMsg(msg.text));
       live.context.turn = msg.turn;
       break;
-    case "agent_event":
+    case "agent_event": {
+      const next = suggestionOf(msg.event);
+      if (next) suggestion.set(next);
       observeAnswer(live.context, msg.event, msg.ts);
       stream.event(msg.event);
       live.footer?.update();
       break;
+    }
     case "agent_raw":
       stream.append(chip(msg.text!)); // 回放中则排队，保持时间线顺序
       break;
@@ -246,9 +254,10 @@ export function setChatStatus(state: string, error?: string) {
 
 /* 占位提示：窄屏一行放不下长文案，且键盘快捷键提示在手机上无意义 */
 function updateChatPlaceholder() {
-  setAttrRender($<HTMLTextAreaElement>("chat-input"), "placeholder", () => isMobile() || enterInsertsNewline()
+  // 有下一步提示时它就是占位文字：空输入框里的灰字，Tab 填入
+  setAttrRender($<HTMLTextAreaElement>("chat-input"), "placeholder", () => suggestion.current() || (isMobile() || enterInsertsNewline()
     ? i18nText("向 Agent 下达任务…")
-    : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）"));
+    : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）")));
 }
 
 
@@ -258,6 +267,7 @@ export function autoGrow() {
   const t = $("chat-input");
   t.style.height = "auto";
   t.style.height = Math.min(t.scrollHeight, 220) + "px";
+  suggestion.render();
   drafts?.save();
 }
 
@@ -272,7 +282,9 @@ const sender = new ChatSender({
   let text=raw.trim();
   for(const [n,info] of chatImgs.map){if(!info.path)continue;text=text.split(`[Image #${n}]`).join(`[图片#${n} ${info.path}]`).split(`[File #${n}]`).join(`[附件#${n} ${info.path}]`);}
   const delegation=delegationComposer?.value();
-  const input={scope:S.chatScope,thread_id:composerThread,text,...pick,attachments:draft.attachments.map(a=>a.path),...(delegation?{delegation}:{})};
+  // Only Claude predicts a next prompt; the extra request is charged, so it follows the setting.
+  const suggestions=S.promptSuggestions===1&&sessionAgent()==="claude"&&suggestionsEnabled();
+  const input={scope:S.chatScope,thread_id:composerThread,text,...pick,attachments:draft.attachments.map(a=>a.path),...(delegation?{delegation}:{}),...(suggestions?{suggestions}:{})};
   return {owner:JSON.stringify([S.token,chatEpoch,S.current.id,composerThread]),content:JSON.stringify([raw,pick,attachmentFingerprint(),delegation||null]),input,draft};
  },
  durable:()=>!!outbox?.enabled,connected:()=>connection.ready,
@@ -883,6 +895,7 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
     live.reset();
     resetDelegationCards();
     replayHistory(live, entries, costs, appendChat);
+    suggestion.set(latestSuggestion(entries));
     const id = active_thread || thread?.id;
     // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效
     kept = !!keep && keep.thread === id && keep.start === start;
@@ -905,6 +918,7 @@ export async function reloadThread() {
   if (!S.current) return;
   if(S.draftProtocol!==1)legacyDraftVersions.set(S.current.id,(legacyDraftVersions.get(S.current.id)||0)+1);
   ++chatEpoch;sender.cancel();
+  suggestion.set("");
   drafts?.leave();
   outbox?.leave();composerThread="";
   history.cancel(); // 立刻作废在途加载，clear 之后它们不得再往里追加
@@ -1009,6 +1023,10 @@ $("chat-send").addEventListener("click", event => {
   else sendChat();
 }, { signal: lifetime.signal });
 $("chat-input").addEventListener("keydown", (e) => {
+  if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing && suggestion.accept()) {
+    e.preventDefault();
+    return;
+  }
   if (e.key === "Enter" && !e.shiftKey && !isImeEnter(e) && !enterInsertsNewline()) {
     e.preventDefault();
     sendChat();
@@ -1021,6 +1039,10 @@ $("chat-input").addEventListener("paste", (e) => {
   e.preventDefault();
   for (const f of files) attachFile(f);
 }, { signal: lifetime.signal });
+$("chat-suggest").addEventListener("click", () => { suggestion.accept(); $("chat-input").focus(); }, { signal: lifetime.signal });
+const suggestToggle = $<HTMLInputElement>("chat-suggest-enabled");
+suggestToggle.checked = suggestionsEnabled();
+suggestToggle.addEventListener("change", () => { setSuggestionsEnabled(suggestToggle.checked); suggestion.refresh(); }, { signal: lifetime.signal });
 $("btn-attach").addEventListener("click", () => $("attach-input").click(), { signal: lifetime.signal });
 $("attach-input").addEventListener("change", () => {
   if (!S.current) return;

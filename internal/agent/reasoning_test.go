@@ -105,6 +105,15 @@ func TestChatRequestsReasoningSummaries(t *testing.T) {
 			t.Fatalf("codex resume=%q: %v %q", resume, err, codex)
 		}
 	}
+	for _, agentType := range []string{"claude", "codex"} {
+		cmd, err := ChatCommandWith(ChatExtras{PromptSuggestions: true}, agentType, "bypassPermissions", "", "", "", "")
+		if err != nil || strings.Contains(strings.Join(cmd, " "), "--prompt-suggestions true") != (agentType == "claude") {
+			t.Fatalf("%s prompt suggestions: %v %q", agentType, err, cmd)
+		}
+	}
+	if strings.Contains(strings.Join(claude, " "), "--prompt-suggestions") {
+		t.Fatalf("suggestions requested by default: %q", claude)
+	}
 	script := "{\"id\":1,\"result\":{}}\n{\"id\":3,\"result\":{\"thread\":{\"id\":\"T1\"}}}\n{\"id\":4,\"result\":{\"turn\":{\"id\":\"U1\"}}}\n{\"method\":\"turn/completed\",\"params\":{\"turn\":{\"id\":\"U1\",\"status\":\"completed\"}}}\n"
 	for _, unsupported := range []bool{false, true} {
 		var sent bytes.Buffer

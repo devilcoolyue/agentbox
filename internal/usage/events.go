@@ -166,6 +166,14 @@ type Tally struct {
 	settlementErr error
 }
 
+// MeterSuggestion also bills the prompt-suggestion request a Claude chat turn
+// was started with; it only adds spend that the CLI's own totals show.
+func (t *Tally) MeterSuggestion() {
+	if t.claude != nil {
+		t.claude.suggest = true
+	}
+}
+
 // SettlementError reports unresolved accounting without adding a second
 // settlement/retry path or changing the ledger transaction.
 func (t *Tally) SettlementError() error { return t.settlementErr }

@@ -68,6 +68,11 @@ type ChatExtras struct {
 	AllowedTools    []string
 	DisallowedTools []string
 	Env             []string
+	// PromptSuggestions asks Claude Code for a predicted next user prompt. It
+	// arrives as a prompt_suggestion event after result, from one more model
+	// request that is metered from the session's cost-state, not its stream.
+	// Codex has no such feature and ignores it.
+	PromptSuggestions bool
 }
 
 var pidFileRe = regexp.MustCompile(`^/tmp/\.agentbox-[a-z0-9-]{1,64}\.pid$`)
@@ -153,6 +158,9 @@ func ChatCommandWith(extras ChatExtras, agentType, permissionMode, resumeID, mod
 		}
 		if resumeID != "" {
 			args = append(args, "--resume", resumeID)
+		}
+		if extras.PromptSuggestions {
+			args = append(args, "--prompt-suggestions", "true")
 		}
 		// Variadic flags last-but-one: each is followed by another option, so
 		// commander cannot swallow a later argument as a list item.

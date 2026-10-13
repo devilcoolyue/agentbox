@@ -132,8 +132,8 @@ func TestChatRequestStageCASAndUnknownReview(t *testing.T) {
 		t.Fatal(err)
 	}
 	c = advanceChat(t, s, u, c, ChatRunning)
-	if _, err = s.AdvanceChatRequest(u, sess.ID, c.RequestID, c.Revision, ChatFailed, ""); !errors.Is(err, ErrChatConflict) {
-		t.Fatal("post-invocation error converted to safe failure", err)
+	if _, err = s.AdvanceChatRequest(u, sess.ID, c.RequestID, c.Revision, ChatReviewed, ""); !errors.Is(err, ErrChatConflict) {
+		t.Fatal("running request reviewed without an unknown outcome", err)
 	}
 	if err = s.RecoverChatRequests(); err != nil {
 		t.Fatal(err)
@@ -163,6 +163,38 @@ func TestChatRequestStageCASAndUnknownReview(t *testing.T) {
 	}
 	if _, fresh, err := s.AcceptChatRequest(u, sess.ID, "next", input); err != nil || !fresh {
 		t.Fatal("new ID not available after review", fresh, err)
+	}
+}
+
+// A CLI that exited with an error after running ends the turn: the server
+// decides that, the store only records a terminal failure that frees admission.
+func TestChatRequestFailureAfterRunningIsTerminal(t *testing.T) {
+	s, u, sess, input := chatRequestFixture(t)
+	c, _, err := s.AcceptChatRequest(u, sess.ID, "request", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c = advanceChat(t, s, u, c, ChatStarting, ChatRunning)
+	failed, err := s.AdvanceChatRequest(u, sess.ID, c.RequestID, c.Revision, ChatFailed, "turn_failed")
+	if err != nil || failed.State != ChatFailed || failed.ErrorCode != "turn_failed" {
+		t.Fatal(failed, err)
+	}
+	for _, next := range []string{ChatReviewed, ChatCompleted, ChatUncertain} {
+		if _, err = s.AdvanceChatRequest(u, sess.ID, c.RequestID, failed.Revision, next, ""); !errors.Is(err, ErrChatConflict) {
+			t.Fatal("terminal failure moved to", next, err)
+		}
+	}
+	if err = s.RecoverChatRequests(); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := s.ChatRequest(u, sess.ID, c.RequestID); err != nil || again.State != ChatFailed {
+		t.Fatal("restart reopened a finished failure", again, err)
+	}
+	if old, fresh, err := s.AcceptChatRequest(u, sess.ID, c.RequestID, input); err != nil || fresh || old.State != ChatFailed {
+		t.Fatal("failed ID ran again", old, fresh, err)
+	}
+	if _, fresh, err := s.AcceptChatRequest(u, sess.ID, "next", input); err != nil || !fresh {
+		t.Fatal("failure kept blocking new messages", fresh, err)
 	}
 }
 

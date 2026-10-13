@@ -64,6 +64,7 @@ export async function tryEnter() {
   S.chatScope=me.chat_protocol===1&&/^[a-f0-9]{64}$/.test(me.chat_scope||"")?me.chat_scope!:"";
   S.chatProtocol=me.chat_protocol===1?1:me.chat_protocol===undefined||me.chat_protocol===0?0:-1;
   S.delegationProtocol=me.delegation_protocol===1?1:0;
+  S.promptSuggestions=me.prompt_suggestions===1?1:0;
   S.preserveChatCopiesOnSignout=false;
   rememberChatIdentity(localStorage,S.draftScope,me.chat_scope||"");
   S.role = me.role;

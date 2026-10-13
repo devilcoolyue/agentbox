@@ -212,3 +212,83 @@ func TestClaudeTranscriptSkipsPreexistingPartialLine(t *testing.T) {
 		t.Fatal(row)
 	}
 }
+
+func costStateLine(input, output, read, write int) string {
+	return fmt.Sprintf(`{"type":"cost-state","sessionId":"provider-session","modelUsage":{"opus":{"inputTokens":%d,"outputTokens":%d,"cacheReadInputTokens":%d,"cacheCreationInputTokens":%d,"costUSD":9}}}`, input, output, read, write)
+}
+
+// The prompt-suggestion request appears only in the cumulative cost-state the
+// CLI writes as it exits; the growth since result is charged once per turn.
+func TestClaudePromptSuggestionBilledFromCostStateGrowth(t *testing.T) {
+	s, sess := newTestServer(t)
+	sess.Agent = "claude"
+	s.cfg.Pricing = map[string]config.ModelPrice{"claude": {TokenRates: config.TokenRates{Input: 1, Output: 2, CacheRead: 0.1, CacheWrite: 3}}}
+	if _, err := s.store.Grant("alice", 1000000, "seed", "", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	main := filepath.Join(s.homeDir(sess), ".claude", "projects", "-workspace", "provider-session.jsonl")
+	// A previous process's totals are history, never this turn's spend.
+	appendTranscript(t, main, costStateLine(100, 1000, 5000, 20))
+	result := `{"type":"result","session_id":"provider-session","modelUsage":{"opus":{"inputTokens":110,"outputTokens":1050,"cacheReadInputTokens":9000,"cacheCreationInputTokens":20}}}`
+	run := func(turn string, suggest bool, final ...string) []store.UsageEvent {
+		t.Helper()
+		tally := s.NewChatTally(sess)
+		if suggest {
+			tally.MeterSuggestion()
+		}
+		observe(&tally, turn, `{"type":"system","session_id":"provider-session"}`, messageLine("msg-"+turn, "opus", "end_turn", 10, 50, 4000, 0), result)
+		appendTranscript(t, main, append([]string{messageLine("msg-"+turn, "opus", "end_turn", 10, 50, 4000, 0)}, final...)...)
+		s.Flush(&tally, time.Second)
+		var out []store.UsageEvent
+		for _, r := range s.store.ListUsage(store.UsageFilter{User: "alice"}) {
+			if r.TurnID == turn {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+	rows := run("one", true, costStateLine(110, 1050, 9000, 20), costStateLine(610, 1160, 30000, 20))
+	if len(rows) != 2 {
+		t.Fatalf("rows: %+v", rows)
+	}
+	var chat, suggestion store.UsageEvent
+	for _, r := range rows {
+		if r.Kind == store.UsageKindSuggestion {
+			suggestion = r
+		} else {
+			chat = r
+		}
+	}
+	if chat.Kind != store.UsageKindChat || chat.OutputTokens != 50 || chat.WallMS == 0 {
+		t.Fatalf("chat row: %+v", chat)
+	}
+	if suggestion.InputTokens != 500 || suggestion.OutputTokens != 110 || suggestion.CacheReadTokens != 21000 || suggestion.CacheWriteTokens != 0 ||
+		suggestion.CostMicroUSD != 500+220+2100 || suggestion.WallMS != 0 || suggestion.TTFTMs != 0 || !suggestion.Price.PerRequest {
+		t.Fatalf("suggestion row: %+v", suggestion)
+	}
+	q, _ := s.store.GetQuota("alice")
+	if q.BalanceMicroUSD != 1000000-chat.CostMicroUSD-suggestion.CostMicroUSD {
+		t.Fatalf("balance %d", q.BalanceMicroUSD)
+	}
+	// Replaying the same turn's growth cannot charge it again.
+	tally := s.NewChatTally(sess)
+	tally.MeterSuggestion()
+	observe(&tally, "one", `{"type":"system","session_id":"provider-session"}`, result)
+	appendTranscript(t, main, costStateLine(610, 1160, 30000, 20))
+	if n := s.Flush(&tally, time.Second); n != 0 {
+		t.Fatal("suggestion charged twice", n)
+	}
+	// Not requested, no exit record, or shrinking totals: nothing is guessed.
+	for turn, c := range map[string]struct {
+		suggest bool
+		final   []string
+	}{
+		"plain":   {false, []string{costStateLine(999, 9999, 99999, 99)}},
+		"missing": {true, nil},
+		"shrunk":  {true, []string{costStateLine(1, 1, 1, 1)}},
+	} {
+		if rows := run(turn, c.suggest, c.final...); len(rows) != 1 || rows[0].Kind != store.UsageKindChat {
+			t.Fatalf("%s: %+v", turn, rows)
+		}
+	}
+}

@@ -25,10 +25,13 @@ const (
 	// the terminal tab — it never passes through the server, so those rows are
 	// backfilled from the CLI's own transcript files and, unlike the other two,
 	// never move the user's balance (see UpsertTerminalUsage).
-	UsageKindChat     = "chat"
-	UsageKindDecision = "decision"
-	UsageKindTitle    = "title"
-	UsageKindTerminal = "terminal"
+	// UsageKindSuggestion is the extra request Claude Code makes after a web
+	// chat turn to predict the user's next prompt; it is charged like chat.
+	UsageKindChat       = "chat"
+	UsageKindDecision   = "decision"
+	UsageKindTitle      = "title"
+	UsageKindTerminal   = "terminal"
+	UsageKindSuggestion = "suggestion"
 
 	StatusStopped = "stopped"
 	StatusRunning = "running"

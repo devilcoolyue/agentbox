@@ -98,7 +98,7 @@ try{
   const entry=(id,p=page)=>p.locator(`.delivery-item[data-request-id="${id}"]`);
   const state=async(id,value,p=page)=>{await p.locator(`.delivery-item[data-request-id="${id}"][data-state="${value}"]`).waitFor({state:'attached'});};
   const expand=async(p=page)=>{if(await p.locator('#chat-delivery-toggle').getAttribute('aria-expanded')!=='true')await p.locator('#chat-delivery-toggle').click();};
-  const action=async(id,label,p=page)=>{await expand(p);const item=entry(id,p);if(!await item.evaluate(e=>e.open))await item.locator('summary').click();await item.getByRole('button',{name:await tr(label,p),exact:true}).click();};
+  const action=async(id,label,p=page)=>{await expand(p);await entry(id,p).getByRole('button',{name:await tr(label,p),exact:true}).click();};
   const confirm=async()=>{await page.locator('#dlg-ask').waitFor({state:'visible'});await page.locator('#ask-ok').click();};
   const records=()=>page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('agentbox.chat-outbox.v1.')).map(k=>JSON.parse(localStorage.getItem(k))));
   const input=page.locator('#chat-input');
@@ -127,41 +127,57 @@ try{
    const frozen=(await records())[0].input;
    emit('space-a',{type:'chat_request',version:1,receipt:{request_id:first,session_id:'space-a',thread_id:'wrong-thread',turn_id:'wrong-turn',request:{...frozen,thread_id:'wrong-thread'},state:'completed',revision:99,created_at:new Date().toISOString(),updated_at:new Date().toISOString()}});
    await page.waitForTimeout(60);assert.equal((await records()).length,1,'mismatched receipt cleared the outgoing copy');
-   await expand();await page.keyboard.press('Tab');await entry(first).getByRole('button',{name:await tr('重试原消息'),exact:true}).focus();
+   await expand();await page.keyboard.press('Tab');await entry(first).getByRole('button',{name:await tr('重试'),exact:true}).focus();
    await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.waitForTimeout(80);
-   assert.equal(await entry(first).getByRole('button',{name:await tr('重试原消息'),exact:true}).evaluate(e=>e===document.activeElement),true,'read-only polling stole keyboard focus');
+   assert.equal(await entry(first).getByRole('button',{name:await tr('重试'),exact:true}).evaluate(e=>e===document.activeElement),true,'read-only polling stole keyboard focus');
    await input.fill('Separate next draft');await page.evaluate(async()=>{(await import('/_v/{{BUILD}}/js/state.js')).S.pick.model='model-two';});
    const peer=await context.newPage();peer.setDefaultTimeout(15000);await peer.goto(base+'/#/sessions/space-a/chat');await ready(peer);assert.equal(await peer.locator('#chat-send').isDisabled(),true);assert.equal(puts.length,1,'reload/tab performed an automatic resend');
-   mode='normal';await action(first,'重试原消息');await state(first,'running');assert.equal(executions,1);assert.equal(puts[1].id,first);assert.equal(puts[1].input.model,'model-one');assert.equal(await input.inputValue(),'Separate next draft');
+   mode='normal';await action(first,'重试');await state(first,'running');assert.equal(executions,1);assert.equal(puts[1].id,first);assert.equal(puts[1].input.model,'model-one');assert.equal(await input.inputValue(),'Separate next draft');
    const completed=structuredClone(update('space-a',first,'completed'));await state(first,'completed');
    emit('space-a',{type:'chat_request',version:1,receipt:{...completed,state:'accepted',revision:1}});await page.waitForTimeout(60);await state(first,'completed');assert.equal(executions,1);await peer.close();
-   emit('space-a',{type:'status',state:'running'});await page.locator('#chat-delivery-refresh').click();await page.waitForTimeout(60);assert.equal(await page.locator('#chat-send').evaluate(e=>e.classList.contains('stop')),true,'historical receipt erased a newer legacy turn');emit('space-a',{type:'status',state:'idle'});
+   emit('space-a',{type:'status',state:'running'});await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.waitForTimeout(60);assert.equal(await page.locator('#chat-send').evaluate(e=>e.classList.contains('stop')),true,'historical receipt erased a newer legacy turn');emit('space-a',{type:'status',state:'idle'});
    mode='drop-after';await input.fill('Accepted with lost response');await page.locator('#chat-send').click();await page.waitForFunction(()=>document.querySelectorAll('.delivery-item[data-state="running"]').length===1);
    const second=puts.at(-1).id;await state(second,'running');assert.equal(executions,2);await input.fill('Draft after lost acknowledgement');
    const beforeReload=puts.length;await page.reload();await ready();await state(second,'running');assert.equal(puts.length,beforeReload);assert.equal(await input.inputValue(),'Draft after lost acknowledgement');
    assert.equal(await page.locator('#chat-delivery-toggle').getAttribute('aria-expanded'),'false');
-   assert.equal(await page.locator('#chat-delivery-status').innerText(),await tr('任务正在执行'));
+   assert.equal(await page.locator('#chat-delivery-status').innerText(),await tr('正在执行'));
    assert.ok((await page.locator('#chat-delivery').boundingBox()).height<=36,'running status consumed more than one row');
    if(locale==='zh-CN'){await mkdir('output/playwright',{recursive:true});await page.screenshot({path:'output/playwright/composer-running-desktop.png'});}
-   mode='normal';update('space-a',second,'uncertain',false);await page.locator('#chat-delivery-refresh').click();await state(second,'uncertain');
+   mode='normal';receipts.get(receiptKey('space-a',second)).error_code='server_restarted';update('space-a',second,'uncertain',false);await page.locator('#chat-delivery-refresh').click();await state(second,'uncertain');
    assert.equal(await page.locator('#chat-send').isDisabled(),true,'unknown outcome must not remain an active stop button');
-   await action(second,'已检查结果，继续');await confirm();await state(second,'reviewed');assert.equal(executions,2);
-   await action(second,'复制回输入框');assert.equal(await input.inputValue(),'Draft after lost acknowledgement');await input.fill('');await action(second,'复制回输入框');assert.equal(await input.inputValue(),'Accepted with lost response');await action(second,'关闭状态');
+   // The collapsed bar names the reason and carries the way out.
+   if(await page.locator('#chat-delivery-toggle').getAttribute('aria-expanded')==='true')await page.locator('#chat-delivery-toggle').click();
+   assert.equal(await page.locator('#chat-delivery-reason').innerText(),await tr('服务重启时任务正在运行'));
+   await page.locator('#chat-delivery-quick').getByRole('button',{name:await tr('已查看，继续'),exact:true}).click();await confirm();await state(second,'reviewed');assert.equal(executions,2);
+   await action(second,'复制回输入框');assert.equal(await input.inputValue(),'Draft after lost acknowledgement');await input.fill('');await action(second,'复制回输入框');assert.equal(await input.inputValue(),'Accepted with lost response');await action(second,'从列表移除');
+   // A CLI error after running ends the turn without a review; the next accepted
+   // message clears finished rows of the conversation.
+   const erroredPut=page.waitForRequest(r=>r.method()==='PUT'&&r.postDataJSON()?.text==='Errored task');
+   await input.fill('Errored task');await page.locator('#chat-send').click();
+   const errored=new URL((await erroredPut).url()).pathname.split('/').at(-1);await state(errored,'running');
+   receipts.get(receiptKey('space-a',errored)).error_code='turn_failed';update('space-a',errored,'failed');await state(errored,'failed');
+   await expand();assert.equal(await entry(errored).locator('.delivery-label').innerText(),await tr('执行出错'));
+   await input.fill('Next after error');await page.waitForFunction(()=>!document.querySelector('#chat-send').disabled);
+   const nextPut=page.waitForRequest(r=>r.method()==='PUT'&&r.postDataJSON()?.text==='Next after error');
+   await page.locator('#chat-send').click();const afterError=new URL((await nextPut).url()).pathname.split('/').at(-1);await state(afterError,'running');
+   await page.waitForFunction(id=>!document.querySelector(`.delivery-item[data-request-id="${id}"]`),errored);
+   update('space-a',afterError,'completed');await state(afterError,'completed');
+   assert.equal(await page.locator('#chat-delivery').isVisible(),false,'a completed turn kept the status row');
    // Offline delivery is retained and reconnect only queries.
    mode='offline';await input.fill('Offline task');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});
    const offline=(await records()).find(r=>r.draft?.text==='Offline task').id;const beforeOnline=puts.length;
    mode='normal';await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.locator('#chat-delivery-refresh').click();await page.waitForTimeout(80);assert.equal(puts.length,beforeOnline);
-   await action(offline,'放弃未接收消息');await confirm();await state(offline,'abandoned');await action(offline,'关闭状态');
+   await action(offline,'放弃发送');await confirm();await state(offline,'abandoned');await action(offline,'从列表移除');
    // Failed local persistence never submits. Explicit opt-out permits page-only recovery.
    await page.evaluate(()=>{const set=Storage.prototype.setItem;window.denyOutbox=true;Storage.prototype.setItem=function(k,v){if(window.denyOutbox&&k.startsWith('agentbox.chat-outbox.v1.'))throw Error('quota');return set.call(this,k,v);};});
    await page.locator('#attach-input').setInputFiles({name:'fixture.txt',mimeType:'text/plain',buffer:Buffer.from('synthetic recovery attachment')});await page.waitForFunction(()=>!document.querySelector('#chat-send').disabled);
    const beforeDenied=puts.length;await input.fill('Storage denied task [File #1]');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});assert.equal(puts.length,beforeDenied);assert.equal(await input.inputValue(),'Storage denied task [File #1]');
    const denied=await page.locator('.delivery-item[data-state="unconfirmed"]').getAttribute('data-request-id');
-   await setSaving(false);await action(denied,'重试原消息');await state(denied,'running');assert.equal((await records()).length,0);
+   await setSaving(false);await action(denied,'重试');await state(denied,'running');assert.equal((await records()).length,0);
    const beforeOffReload=puts.length;await page.reload();await ready();await state(denied,'running');assert.equal(puts.length,beforeOffReload);
-   update('space-a',denied,'uncertain');await state(denied,'uncertain');await action(denied,'已检查结果，继续');await confirm();await state(denied,'reviewed');
+   update('space-a',denied,'uncertain');await state(denied,'uncertain');await action(denied,'已查看，继续');await confirm();await state(denied,'reviewed');
    attachmentsValid=false;await action(denied,'复制回输入框');await page.locator('.attachment-invalid').waitFor();assert.equal(await page.locator('#chat-send').isDisabled(),true,'server-only recovery lost attachment validation');assert.equal(puts.length,beforeOffReload);
-   await page.locator('#chat-attach button').click();await input.fill('');await action(denied,'关闭状态');attachmentsValid=true;
+   await page.locator('#chat-attach button').click();await input.fill('');await action(denied,'从列表移除');attachmentsValid=true;
    await setSaving(true);
    // Late acknowledgement belongs to the old workspace and cannot clear new editing.
    // A local unconfirmed row precedes HTTP delivery. Wait for this fixture's
@@ -176,8 +192,8 @@ try{
    mode='drop-before';await input.fill('Expired pending private prompt');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});const expired=puts.at(-1).id;
    await page.goto(base+'/storage-helper');await page.evaluate(()=>{for(const k of Object.keys(localStorage)){if(!k.startsWith('agentbox.chat-outbox.v1.'))continue;const r=JSON.parse(localStorage.getItem(k));r.created=Date.now()-8*24*60*60*1000;localStorage.setItem(k,JSON.stringify(r));}});
    await page.goto(base+'/#/sessions/space-a/chat');await ready();await state(expired,'unconfirmed');assert.equal((await records()).find(r=>r.id===expired).input,null);
-   assert.equal(await entry(expired).getByRole('button',{name:await tr('重试原消息'),exact:true,includeHidden:true}).isDisabled(),true);
-   mode='normal';await action(expired,'放弃未接收消息');await confirm();await state(expired,'abandoned');await action(expired,'关闭状态');
+   assert.equal(await entry(expired).getByRole('button',{name:await tr('重试'),exact:true,includeHidden:true}).isDisabled(),true);
+   mode='normal';await action(expired,'放弃发送');await confirm();await state(expired,'abandoned');await action(expired,'从列表移除');
    // Switching threads cannot silently move or resend an unconfirmed message.
    // The local row is written before PUT; identify the actual request instead
    // of sampling puts.at(-1) while delivery may still be queued.
@@ -195,8 +211,8 @@ try{
    }finally{releaseThread();threadCreationGate=undefined;}
    await page.waitForFunction(async()=>{const {S}=await import('/_v/{{BUILD}}/js/state.js');return S.thread?.id==='thread-two'&&!S.histLoading;});
    await ready();assert.equal(await input.inputValue(),'');await state(transfer,'unconfirmed');
-   assert.equal(await entry(transfer).getByRole('button',{name:await tr('重试原消息'),exact:true,includeHidden:true}).isDisabled(),true);
-   mode='normal';await action(transfer,'放弃未接收消息');await confirm();await state(transfer,'abandoned');await action(transfer,'复制回输入框');await confirm();await page.waitForFunction(()=>document.querySelector('#chat-input').value==='Recover into another conversation');assert.equal(await input.inputValue(),'Recover into another conversation');assert.equal(puts.length,beforeThreadSwitch);await action(transfer,'关闭状态');
+   assert.equal(await entry(transfer).getByRole('button',{name:await tr('重试'),exact:true,includeHidden:true}).isDisabled(),true);
+   mode='normal';await action(transfer,'放弃发送');await confirm();await state(transfer,'abandoned');await action(transfer,'复制回输入框');await confirm();await page.waitForFunction(()=>document.querySelector('#chat-input').value==='Recover into another conversation');assert.equal(await input.inputValue(),'Recover into another conversation');assert.equal(puts.length,beforeThreadSwitch);await action(transfer,'从列表移除');
    // Mobile state/action layout and logout/another-user isolation.
    mode='drop-before';await input.fill('Private pending before logout');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});
    await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -205,7 +221,7 @@ try{
    const freezable=browserEngine()==='chromium';if(!freezable&&locale==='zh-CN')console.log(`Outbox: frozen-tab late sign-out not run in ${browserEngine()} (CDP-only)`);
    const suspended=freezable?await context.newPage():null;if(suspended){suspended.setDefaultTimeout(15000);await suspended.goto(base+'/#/sessions/space-a/chat');await ready(suspended);await page.bringToFront();}
    const cdp=suspended&&await context.newCDPSession(suspended);if(cdp)await cdp.send('Page.setWebLifecycleState',{state:'frozen'});
-   const logoutID=(await records()).find(r=>r.state==='unconfirmed').id;await action(logoutID,'放弃未接收消息');await page.locator('#dlg-ask').waitFor({state:'visible'});
+   const logoutID=(await records()).find(r=>r.state==='unconfirmed').id;await action(logoutID,'放弃发送');await page.locator('#dlg-ask').waitFor({state:'visible'});
    await page.evaluate(async()=>{(await import('/_v/{{BUILD}}/js/login.js')).showLogin();});assert.equal((await records()).length,0);assert.equal(await page.locator('#chat-delivery-list').innerText(),'');assert.equal(await page.locator('#dlg-ask').isVisible(),false,'logout left a delivery confirmation open');
    await page.locator('#login-user').fill('alice');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');
    await input.fill('New login pending survives old page');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});const newLoginID=(await records()).find(r=>r.draft?.text==='New login pending survives old page').id;
@@ -225,11 +241,11 @@ try{
    await page.waitForFunction(()=>document.querySelectorAll('.delivery-item').length===12);
    assert.equal(await page.locator('#chat-delivery-toggle').getAttribute('aria-expanded'),'false');
    assert.ok((await page.locator('#chat-delivery').boundingBox()).height<=36,'collapsed history grew with each turn');
-   await expand();assert.equal(await page.locator('.delivery-item summary').count(),12);
+   await expand();assert.equal(await page.locator('.delivery-item').count(),12);
    const listSize=await page.locator('#chat-delivery-list').evaluate(e=>({height:e.clientHeight,scroll:e.scrollHeight}));assert.ok(listSize.height<=240&&listSize.scroll>listSize.height);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    if(locale==='zh-CN')await page.screenshot({path:'output/playwright/composer-history-mobile.png'});
-   await page.locator('.delivery-item summary').last().focus();await page.keyboard.press('Escape');assert.equal(await page.locator('#chat-delivery-toggle').getAttribute('aria-expanded'),'false');assert.equal(await page.locator('#chat-delivery-toggle').evaluate(e=>e===document.activeElement),true);
+   await page.locator('.delivery-text').last().focus();await page.keyboard.press('Escape');assert.equal(await page.locator('#chat-delivery-toggle').getAttribute('aria-expanded'),'false');assert.equal(await page.locator('#chat-delivery-toggle').evaluate(e=>e===document.activeElement),true);
    const writesBeforeQuery=puts.length;await page.locator('#chat-delivery-refresh').click();assert.equal(await page.locator('#chat-delivery-toggle').getAttribute('aria-expanded'),'false');assert.equal(puts.length,writesBeforeQuery);
    protocol=2;const beforeUnsupported=puts.length;await page.reload();await page.locator('#chat-input').waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#chat-input').disabled);await input.fill('Unsupported protocol must not downgrade');assert.equal(await page.locator('#chat-send').isDisabled(),true);
    await page.evaluate(async()=>{await (await import('/_v/{{BUILD}}/js/chat.js')).sendChat();});assert.equal(puts.length,beforeUnsupported);

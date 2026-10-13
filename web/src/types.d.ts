@@ -344,6 +344,8 @@ export interface Me {
   chat_scope?:string;
   /** 1：服务端支持对话中的委派（主 Agent 把子任务交给跑腿模型）。 */
   delegation_protocol?:number;
+  /** 1：对话请求可带 suggestions，回合结束后预测下一句输入。 */
+  prompt_suggestions?:number;
   user: string;
   /** "admin" | "user"：admin 才能进系统设置 */
   role: string;
@@ -1068,6 +1070,8 @@ export interface AgentEvent {
   event?: StreamEvent;
   /** Claude：rate_limit_event */
   rate_limit_info?: RateLimitInfo;
+  /** Claude：prompt_suggestion 事件里预测的下一句输入 */
+  suggestion?: string;
   /** Claude：result 事件的耗时与计费 */
   duration_ms?: number;
   total_cost_usd?: number;

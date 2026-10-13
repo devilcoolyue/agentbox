@@ -671,6 +671,31 @@ details.think.streaming .think-body::after {
 .composer textarea:focus-visible { outline: none; }
 .composer-bar { display: flex; align-items: center; gap: 2px; min-width: 0; }
 
+/* 下一步提示：空输入框的占位文字就是提示本身，这枚键帽说明怎么填入（suggestion.ts） */
+.suggest-key {
+  flex: none; height: 26px; margin-left: 4px; padding: 0 9px 0 4px;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent;
+  border: 1px dashed var(--line); border-radius: var(--radius-pill);
+  color: var(--muted); font-size: 12px; line-height: 1; white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+.suggest-key kbd {
+  font: 600 10.5px/1 var(--mono);
+  padding: 3px 5px 2px;
+  background: var(--panel-2);
+  border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: calc(5px * var(--radius-scale));
+  color: var(--text);
+}
+.suggest-key:hover { color: var(--text); border-style: solid; border-color: var(--amber-dim); background: color-mix(in srgb, var(--amber) 6%, transparent); }
+.suggest-key:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+/* 触屏没有 Tab 键，只留「填入」 */
+@media (hover: none), (pointer: coarse) {
+  .suggest-key { height: 30px; padding: 0 12px; }
+  .suggest-key kbd { display: none; }
+}
+
 /* 圆形幽灵图标钮 */
 .icon-btn {
   width: 34px; height: 34px; flex: none;
@@ -880,32 +905,74 @@ details.think.streaming .think-body::after {
   .send-btn, .composer, .hero-pill, .cb-caret, .chat-scroll-bottom { transition: none; }
   .thread-panel, .tp-scrim { transition: none; }
 }
-/* Receipt details stay behind one status row; long histories scroll independently. */
+/* Message status: one quiet row above the input that names what happened and, when
+ * the composer is blocked, carries the way out. data-tone colours the dot and each
+ * row's mark; the list is flat and every row ends in its own actions. */
+.chat-delivery, .delivery-item { --tone:var(--muted); }
 .chat-delivery { margin:0 2px 6px; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
-.delivery-header { display:flex; align-items:center; gap:4px; min-width:0; }
-.delivery-toggle { display:flex; align-items:center; gap:8px; flex:1; min-width:0; min-height:32px; padding:4px 6px; border:0; border-radius:calc(6px * var(--radius-scale)); background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
-.delivery-toggle:hover { background:var(--panel-2); color:var(--text); }
+:is(.chat-delivery, .delivery-item)[data-tone="busy"],
+:is(.chat-delivery, .delivery-item)[data-tone="attention"] { --tone:var(--amber); }
+:is(.chat-delivery, .delivery-item)[data-tone="error"] { --tone:var(--red); }
+:is(.chat-delivery, .delivery-item)[data-tone="done"] { --tone:var(--green); }
+.delivery-header { display:flex; align-items:center; gap:2px; min-width:0; }
+.delivery-toggle { display:flex; align-items:center; gap:8px; flex:1; min-width:0; min-height:32px; padding:4px 8px; border:0; border-radius:calc(8px * var(--radius-scale)); background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; transition:background var(--dur-fast) ease; }
+.delivery-toggle:hover:not(:disabled) { background:var(--panel-2); }
 .delivery-toggle:disabled { cursor:default; }
-.delivery-dot { width:5px; height:5px; border-radius:50%; background:currentColor; flex:none; }
-#chat-delivery-status { min-width:0; line-height:1.5; }
-#chat-delivery-count { flex:none; font-size:11px; color:var(--muted); margin-left:auto; white-space:nowrap; }
-.delivery-chevron { flex:none; transition:transform .15s ease; }
+.delivery-dot { width:7px; height:7px; border-radius:50%; background:var(--tone); flex:none; }
+.chat-delivery[data-tone="busy"] .delivery-dot { animation:delivery-pulse 1.6s ease-in-out infinite; }
+@keyframes delivery-pulse { 50% { opacity:.3; } }
+/* The title may be an error notice: it wraps rather than hiding behind an ellipsis.
+ * The reason repeats in full in the open list, so the bar may cut it short. */
+#chat-delivery-status { flex:0 1 auto; min-width:0; line-height:1.45; color:var(--text); }
+.chat-delivery:is([data-tone="attention"], [data-tone="error"]) #chat-delivery-status { font-weight:500; }
+#chat-delivery-status.error { color:var(--red); }
+.delivery-header .delivery-reason { flex:1 1 0; color:var(--muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.delivery-header .delivery-reason::before { content:"·"; margin-right:8px; }
+.delivery-count { flex:none; margin-left:auto; min-width:18px; height:18px; padding:0 5px; border-radius:var(--radius-pill); background:var(--panel-2); color:var(--muted); font-size:11px; line-height:18px; text-align:center; font-variant-numeric:tabular-nums; }
+.delivery-chevron { flex:none; margin-left:auto; color:var(--muted); transition:transform var(--dur-fast) ease; }
+.delivery-count:not(.hidden) + .delivery-chevron { margin-left:0; }
 .delivery-toggle[aria-expanded="true"] .delivery-chevron { transform:rotate(180deg); }
 .delivery-toggle:disabled .delivery-chevron { visibility:hidden; }
+.delivery-quick { display:flex; flex:none; }
+.delivery-quick:empty, .delivery-toggle[aria-expanded="true"] + .delivery-quick { display:none; }
 .delivery-header .icon-btn { width:30px; height:30px; }
-.delivery-warning .delivery-dot { color:var(--amber); }
-.delivery-warning #chat-delivery-status { color:var(--text); }
-#chat-delivery-list { max-height:min(240px,28dvh); overflow:auto; overscroll-behavior:contain; margin:2px 6px 6px; border-top:1px solid var(--line); }
-.delivery-item + .delivery-item { border-top:1px solid var(--line); }
-.delivery-item summary { display:flex; align-items:center; gap:8px; min-height:32px; cursor:pointer; list-style:none; color:var(--text); }
-.delivery-item summary::-webkit-details-marker { display:none; }
-.delivery-item summary::before { content:""; width:5px; height:5px; border-right:1px solid currentColor; border-bottom:1px solid currentColor; transform:rotate(-45deg); flex:none; margin:0 3px; transition:transform .15s ease; }
-.delivery-item[open] summary::before { transform:rotate(45deg); }
-.delivery-label { flex:none; }
-.delivery-preview { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
-.delivery-item[open] .delivery-preview { visibility:hidden; }
-.delivery-item pre { font:inherit; white-space:pre-wrap; max-height:90px; overflow:auto; margin:2px 0 6px 16px; }
-.delivery-settings { margin:4px 0 8px 16px; font-size:11px; }
-.delivery-actions { display:flex; flex-wrap:wrap; gap:6px; padding:0 0 8px 16px; }
-.delivery-actions .btn { font-size:11px; padding:4px 8px; min-height:28px; }
-@media (prefers-reduced-motion:reduce) { .delivery-chevron, .delivery-item summary::before { transition:none; } }
+#chat-delivery-list { max-height:min(240px,28dvh); overflow:auto; overscroll-behavior:contain; margin:2px 0 4px; padding-top:2px; border-top:1px solid var(--line-soft); }
+.delivery-item { display:grid; grid-template-columns:16px minmax(0,1fr) auto; column-gap:10px; align-items:start; padding:8px; }
+.delivery-item + .delivery-item { border-top:1px solid var(--line-soft); }
+.delivery-mark { display:flex; align-items:center; justify-content:center; height:20px; color:var(--tone); }
+.delivery-mark:empty::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--tone); }
+.delivery-item[data-tone="busy"] .delivery-mark::before { animation:delivery-pulse 1.6s ease-in-out infinite; }
+.delivery-main { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.delivery-line { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:8px; margin:0; line-height:20px; }
+.delivery-label { color:var(--text); font-weight:500; }
+.delivery-item[data-tone="quiet"] .delivery-label { font-weight:400; }
+.delivery-text { display:block; width:100%; min-width:0; margin:0; padding:0; border:0; border-radius:calc(4px * var(--radius-scale)); background:none; color:var(--text); font:inherit; line-height:1.5; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+.delivery-text:hover { color:var(--text-hi); }
+.delivery-text.full { white-space:pre-wrap; max-height:120px; overflow:auto; }
+.delivery-text.expired { white-space:normal; color:var(--muted); cursor:default; }
+.delivery-settings { margin:0; font-size:11px; color:var(--muted); }
+.delivery-actions { display:flex; align-items:center; gap:2px; margin-block:-4px; }
+/* Compact actions: the primary one keeps its words and an amber tint, the rest
+ * are the shared icon buttons with tooltips. */
+:root .chat-delivery .btn.delivery-act:not(.action-icon) { min-height:28px; padding:0 10px; gap:5px; font-size:12px; font-weight:500; line-height:1; border-radius:calc(7px * var(--radius-scale)); }
+:root .chat-delivery .btn.delivery-act:not(.action-icon) > svg { width:14px; height:14px; }
+:root .chat-delivery .btn.delivery-act:not(.action-icon, .delivery-primary) { background:transparent; border-color:transparent; color:var(--muted); }
+:root .chat-delivery .btn.delivery-act:not(.action-icon, .delivery-primary):hover:not(:disabled) { background:var(--panel-2); color:var(--text); }
+:root .chat-delivery .btn.delivery-primary { background:color-mix(in srgb, var(--amber) 14%, transparent); border-color:color-mix(in srgb, var(--amber) 42%, transparent); color:var(--text); }
+:root .chat-delivery .btn.delivery-primary > svg { color:var(--amber); }
+:root .chat-delivery .btn.delivery-primary:hover:not(:disabled) { background:color-mix(in srgb, var(--amber) 22%, transparent); border-color:color-mix(in srgb, var(--amber) 60%, transparent); }
+.delivery-quick .btn.delivery-primary { margin-inline:4px 2px; }
+@media (min-width:761px) and (pointer:fine) {
+  :root .delivery-actions .btn.action-icon { --action-size:28px; }
+}
+@media (max-width:760px) {
+  /* A clipped reason ("服务…") says nothing; the open list shows it whole. */
+  .delivery-header .delivery-reason { display:none; }
+  /* Icon actions stay at the row's end; a worded action takes its own line. */
+  .delivery-item:has(.delivery-act:not(.action-icon)) .delivery-actions { grid-column:2 / -1; flex-wrap:wrap; margin:6px 0 -2px; }
+  .delivery-quick .btn.delivery-primary { padding:0 8px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .delivery-chevron, .delivery-toggle { transition:none; }
+  .chat-delivery[data-tone="busy"] .delivery-dot, .delivery-item[data-tone="busy"] .delivery-mark::before { animation:none; }
+}

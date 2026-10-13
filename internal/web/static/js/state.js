@@ -25,6 +25,7 @@ export const S = {
     chatScope: "",
     chatProtocol: 0,
     delegationProtocol: 0,
+    promptSuggestions: 0,
     preserveChatCopiesOnSignout: false,
     role: "",
     sessions: [],

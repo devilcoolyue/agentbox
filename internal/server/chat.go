@@ -74,6 +74,10 @@ type chatRoom struct {
 	// fileMu guards the session's on-disk chat state: thread transcripts,
 	// the active-thread pointer and the one-time legacy migration.
 	fileMu sync.Mutex
+
+	helpMu        sync.Mutex // see cliHelp
+	helpContainer string
+	help          string
 }
 
 func (r *chatRoom) broadcast(v any) {
@@ -334,6 +338,9 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 	}
 	service := chat.Service{Runtime: chatRuntime{r}, Usage: r.srv.usageService()}
 	in := chat.Input{SessionID: r.sessID, Text: text, Model: model, Effort: effort, Control: control}
+	if receipt != nil && receipt.receipt.Request != nil {
+		in.Suggestions = receipt.receipt.Request.Suggestions
+	}
 	if receipt != nil && receipt.receipt.Request != nil && receipt.receipt.Request.Delegation != nil {
 		// The grant lives exactly as long as this turn; closing it cancels any
 		// running worker before the room is released.

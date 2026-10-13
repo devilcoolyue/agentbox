@@ -2,19 +2,40 @@ import {readChatReceipt} from "../../contracts/chat.js";
 import {S} from "../../state.js";
 import {api} from "../../api.js";
 import {$,askConfirm} from "../../util.js";
-import {actionButton} from "../../icons.js";
-import {t,setTextRender} from "../../i18n.js";
-import {APIError} from "../../problems.js";
+import {actionButton,svgIcon} from "../../icons.js";
+import {t,setTextRender,setAttrRender} from "../../i18n.js";
+import {APIError,problemMessages} from "../../problems.js";
 import {keyboardInput} from "../../modality.js";
 import type {ChatRequestInput,ChatRequestReceipt,ChatRequestResponse,ChatRequestList} from "../../types.js";
 import type {Draft} from "./draft-store.js";
 import {OutboxStore,receiptActive,draftFromRequest,type Outgoing} from "./outbox-store.js";
 
-const labels:Record<Outgoing["state"],string>={unconfirmed:"等待接收确认",accepted:"消息已接收",starting:"正在准备任务",running:"任务正在执行",completed:"任务已完成",failed:"任务未开始",interrupted:"任务已中断",uncertain:"结果待核对",reviewed:"已核对未知结果",abandoned:"已放弃此消息",deleted:"消息已删除"};
+type Tone="busy"|"attention"|"error"|"done"|"quiet";
+type Look={title:string;reason:string;tone:Tone;icon:string};
+// Why a turn's outcome is unknown, by receipt code. Shown so "review" is not a
+// riddle: each names what the server could not confirm.
+const unknownReasons:Record<string,string>={server_restarted:"服务重启时任务正在运行",execution_incomplete:"没有收到任务结束信号",history_write_failed:"对话记录没有完整保存",usage_write_failed:"用量没有记账成功",receipt_write_failed:"任务状态没有保存成功",chat_failed:"任务报错结束"};
+function look(state:Outgoing["state"],code=""):Look{
+ switch(state){
+  case "unconfirmed":return {title:"未收到发送确认",reason:"可能没有发出去；重试会沿用原编号，不会重复执行",tone:"attention",icon:"alert"};
+  case "accepted":return {title:"已发送",reason:"",tone:"busy",icon:""};
+  case "starting":return {title:"正在准备",reason:"",tone:"busy",icon:""};
+  case "running":return {title:"正在执行",reason:"",tone:"busy",icon:""};
+  case "completed":return {title:"已完成",reason:"",tone:"done",icon:"check"};
+  // A failure after running may have changed files; one before never ran.
+  case "failed":return code==="turn_failed"?{title:"执行出错",reason:"可能已改动部分文件，请查看对话和文件",tone:"error",icon:"x-circle"}:{title:"未执行",reason:problemMessages[code]?.[0]||"没有执行，可以修改后重新发送",tone:"error",icon:"x-circle"};
+  case "interrupted":return {title:"已中断",reason:"",tone:"quiet",icon:"stop"};
+  case "uncertain":return {title:"结果不确定",reason:unknownReasons[code]||"无法确认任务做到了哪一步",tone:"attention",icon:"alert"};
+  case "reviewed":return {title:"已查看结果",reason:unknownReasons[code]||"",tone:"quiet",icon:"check"};
+  case "abandoned":return {title:"已放弃",reason:"没有执行",tone:"quiet",icon:"close"};
+  case "deleted":return {title:"已删除",reason:"",tone:"quiet",icon:"close"};
+ }
+}
+const settled=(state:Outgoing["state"])=>state!=="unconfirmed"&&!receiptActive(state);
 const identifier=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,"0")).join("");
 const key=(session:string,id:string)=>session+"/"+id;
 const delegationEnvelope=(input:ChatRequestInput)=>input.delegation?[input.delegation.version,input.delegation.workers.map(w=>[w.account_id,w.model]),input.delegation.jev]:null;
-const envelope=(input:ChatRequestInput)=>JSON.stringify([input.scope,input.thread_id,input.text,input.model,input.effort,input.effort_control,input.attachments||[],delegationEnvelope(input)]);
+const envelope=(input:ChatRequestInput)=>JSON.stringify([input.scope,input.thread_id,input.text,input.model,input.effort,input.effort_control,input.attachments||[],delegationEnvelope(input),input.suggestions===true]);
 
 function receipt(value:unknown,session:string,id?:string):ChatRequestReceipt {
  try { return readChatReceipt(value,session,id); }
@@ -29,7 +50,7 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
  const unsupported=protocol!==0&&protocol!==1;
  let active=true,context:{session:string;thread:string}|undefined,epoch=0,viewAbort=new AbortController();
  let loading=false,queryFailed=false,scopeChanged=false,refreshing=false,again=false,notice="",noticeError=false,noticeTranslated=false;
- const dismissed=new Set<string>();
+ const dismissed=new Set<string>(),fullText=new Set<string>();
  let listSignature="",expanded=false;
  const showDetails=(open:boolean)=>{expanded=open;$("chat-delivery-toggle").setAttribute("aria-expanded",String(open));$("chat-delivery-list").classList.toggle("hidden",!open);};
  let confirmation=false;
@@ -115,7 +136,8 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
    if(owns())response(value,row.session,row.id);
   }catch(error){
    if(owns()){
-    if(current(row.session,generation)){notice=error instanceof APIError?error.message:"发送确认未收到，内容已保留。请先查询结果。";noticeError=true;noticeTranslated=error instanceof APIError;}
+    // A lost reply is the unconfirmed row's own story; only a server answer adds news.
+    if(current(row.session,generation)&&error instanceof APIError){notice=error.message;noticeError=true;noticeTranslated=true;}
     try{await query(row);}catch{if(current(row.session,generation))queryFailed=true;}
    }
   }finally{busy.delete(id);if(owns())render();}
@@ -139,7 +161,7 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
   if(!guard()||busy.has(key(row.session,row.id)))return;
   const generation=epoch;
   if(action!=="interrupt"){
-   const message=action==="review"?"请先检查对话历史和工作区文件。核对后可发送新任务；原消息不会重新执行，也不保证已脱离连接的进程停止。":"放弃会阻止这条尚未接收的消息以后执行。已接收的任务不会被取消；请先查询并核对结果。";
+   const message=action==="review"?"请先查看对话记录和工作区文件，确认上一个任务做到了哪一步。继续后可以发送新消息；原消息不会重新执行。服务若曾重启，容器里的任务可能仍在运行。":"放弃会阻止这条尚未接收的消息以后执行。已接收的任务不会被取消；请先查询并核对结果。";
    if(!await confirm(message))return;
   }
   if(!guard()||!current(row.session,generation))return;
@@ -156,49 +178,88 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
   }catch(error){if(current(row.session,generation)){notice=error instanceof Error?error.message:t("无法确认消息结果，已保留待确认内容。请重新查询。");noticeError=true;noticeTranslated=true;}}
   finally{busy.delete(id);if(owns())render();}
  }
+ const dismiss=(row:Outgoing)=>{const id=key(row.session,row.id);dismissed.add(id);fullText.delete(id);storage.remove(row.id,row.session);views.delete(id);known.delete(id);};
+ // The one action a row needs before anything else can happen. The collapsed
+ // bar offers it too, so a blocked composer never hides its way out.
+ const primary=(row:Outgoing)=>row.state==="unconfirmed"?{label:"重试",tip:"用原编号重新发送，不会重复执行",icon:"refresh",run:()=>void retry(row),disabled:!row.input||row.thread!==context?.thread}
+  :row.state==="uncertain"?{label:"已查看，继续",tip:"确认已查看结果，然后可以发送新消息",icon:"check",run:()=>void act(row,"review"),disabled:false}:undefined;
+ const control=(label:string,tip:string,icon:string,run:()=>void,disabled:boolean,kind=""):HTMLButtonElement=>{
+  const b=document.createElement("button");b.type="button";b.className="btn btn-sm delivery-act"+(kind?" "+kind:"");b.dataset.deliveryAction=tip;
+  actionButton(b,label?()=>t(label):"",icon,()=>t(label||tip));setAttrRender(b,"data-tip",()=>t(tip));
+  b.disabled=disabled;b.addEventListener("click",()=>{if(owns())run();});return b;
+ };
+ const mark=(view:Look)=>{const m=document.createElement("span");m.className="delivery-mark";m.setAttribute("aria-hidden","true");if(view.icon)m.append(svgIcon(view.icon,14));return m;};
+ let quickSignature="";
  function render(){
   if(!owns())return;
-  const root=$("chat-delivery"),list=$("chat-delivery-list"),status=$("chat-delivery-status");
+  const root=$("chat-delivery"),list=$("chat-delivery-list"),status=$("chat-delivery-status"),reason=$("chat-delivery-reason"),quick=$("chat-delivery-quick");
   root.classList.toggle("hidden",!context);
   if(!context)return;
   const items=rows();
-  const highlighted=items.find(r=>r.state==="unconfirmed"||r.state==="uncertain")||items.find(r=>receiptActive(r.state))||items[0];
+  const code=(row:Outgoing)=>known.get(key(row.session,row.id))?.error_code||"";
+  const other=(row:Outgoing)=>row.thread!==context?.thread?" · "+t("另一对话的消息"):"";
+  const highlighted=items.find(r=>r.state==="unconfirmed"||r.state==="uncertain")||items.find(r=>receiptActive(r.state))||items.find(r=>r.state!=="completed")||items[0];
   $<HTMLButtonElement>("chat-delivery-toggle").disabled=!items.length;
   if(!items.length)showDetails(false);
-  setTextRender($("chat-delivery-count"),()=>t("{count} 条消息",{count:items.length}));
+  setTextRender($("chat-delivery-count"),()=>String(items.length));
+  setAttrRender($("chat-delivery-count"),"aria-label",()=>t("{count} 条消息",{count:items.length}));
   $("chat-delivery-count").classList.toggle("hidden",items.length<2);
-  root.classList.toggle("hidden",enabled&&!items.length&&!loading&&!queryFailed&&!scopeChanged&&!notice&&!storage.error);
-  root.classList.toggle("delivery-warning",queryFailed||scopeChanged||items.some(r=>r.state==="unconfirmed"||r.state==="uncertain"));
-  setTextRender(status,()=>unsupported?t("当前网页不支持此服务端的消息协议，请刷新页面或升级客户端。"):!enabled?t("此服务端使用旧发送方式，无法按消息编号确认接收结果。"):!scope||scopeChanged?t("消息所属的实例或登录身份已变化"):notice?(noticeTranslated?notice:t(notice)):storage.error?t("本机待确认副本保存失败，请保留本页并检查存储设置。"):loading?t("正在查询消息接收状态…"):items.some(r=>r.state==="unconfirmed")?t("发送确认未收到，内容已保留。请先查询结果。"):!storage.enabled?t("本机保存已关闭；待确认内容仅保留在当前页面。"):highlighted?t(labels[highlighted.state])+(highlighted.thread!==context?.thread?" · "+t("另一对话的消息"):""):t("消息确认与恢复"));
+  // A finished turn says nothing the conversation does not already show.
+  root.classList.toggle("hidden",enabled&&!items.some(r=>r.state!=="completed")&&!loading&&!queryFailed&&!scopeChanged&&!notice&&!storage.error);
+  // Any of these replaces the headline, so the row's reason and action step aside.
+  const pageIssue=unsupported||!enabled||!scope||scopeChanged||!!notice||storage.error;
+  const view=highlighted&&look(highlighted.state,code(highlighted));
+  root.dataset.tone=pageIssue&&noticeError||queryFailed||unsupported||scopeChanged||storage.error?"attention":loading?"busy":view?.tone||"quiet";
+  // Status precedence: a page/protocol problem, then this row's own story.
+  const headline=()=>unsupported?t("当前网页不支持此服务端的消息协议，请刷新页面或升级客户端。"):!enabled?t("此服务端使用旧发送方式，无法按消息编号确认接收结果。"):!scope||scopeChanged?t("消息所属的实例或登录身份已变化"):notice?(noticeTranslated?notice:t(notice)):storage.error?t("本机待确认副本保存失败，请保留本页并检查存储设置。"):loading?t("正在查询消息接收状态…"):view?t(view.title)+other(highlighted):t("消息确认与恢复");
+  const detail=()=>pageIssue||loading||!view?"":highlighted.state==="unconfirmed"&&!storage.enabled?t("本机保存已关闭；待确认内容仅保留在当前页面。"):view.reason?t(view.reason):"";
+  setTextRender(status,headline);setTextRender(reason,detail);
+  reason.classList.toggle("hidden",!detail());
   status.classList.toggle("error",noticeError||storage.error);
   $<HTMLButtonElement>("chat-delivery-refresh").disabled=!enabled||loading||refreshing;
-  const signature=JSON.stringify([context,items.map(row=>[row,known.get(key(row.session,row.id))?.request?.text,busy.has(key(row.session,row.id))])]);
+  const next=highlighted&&!pageIssue&&!loading?primary(highlighted):undefined;
+  const quickKey=JSON.stringify([highlighted?.id,highlighted?.state,next?.label,next?.disabled,highlighted&&busy.has(key(highlighted.session,highlighted.id))]);
+  if(quickKey!==quickSignature){
+   quickSignature=quickKey;
+   const keep=quick.contains(document.activeElement);
+   quick.replaceChildren(...(next&&highlighted?[control(next.label,next.tip,next.icon,next.run,next.disabled||busy.has(key(highlighted.session,highlighted.id)),"delivery-primary")]:[]));
+   if(keep)(quick.querySelector<HTMLElement>("button:not(:disabled)")||$("chat-delivery-toggle")).focus();
+  }
+  const signature=JSON.stringify([context,items.map(row=>{const id=key(row.session,row.id);return [row,known.get(id)?.request?.text,code(row),busy.has(id),fullText.has(id)];})]);
   if(signature===listSignature){hooks.changed();return;}
   listSignature=signature;
-  const prior=new Map([...list.querySelectorAll<HTMLDetailsElement>(".delivery-item")].map(item=>[item.dataset.requestId,{open:item.open,state:item.dataset.state}]));
   const focused=document.activeElement instanceof HTMLElement&&list.contains(document.activeElement)?document.activeElement:undefined;
   const focusID=focused?.closest<HTMLElement>(".delivery-item")?.dataset.requestId,focusAction=focused?.dataset.deliveryAction;
   list.replaceChildren();
   for(const row of items){
-   const id=key(row.session,row.id),c=known.get(id),working=busy.has(id);
-   const entry=document.createElement("details");entry.className="delivery-item";entry.dataset.requestId=row.id;entry.dataset.state=row.state;
-   const previous=prior.get(row.id);
-   entry.open=previous?.open??items.length===1;
-   const summary=document.createElement("summary"),label=document.createElement("span");label.className="delivery-label";setTextRender(label,()=>t(labels[row.state])+(row.thread!==context?.thread?" · "+t("另一对话的消息"):""));summary.append(label);
-   const preview=document.createElement("span");preview.className="delivery-preview";preview.textContent=row.draft?.text||row.input?.text||c?.request?.text||"";summary.append(preview);entry.append(summary);
-   const body=document.createElement("pre");body.textContent=row.draft?.text||row.input?.text||c?.request?.text||t("待确认正文已过期；仍可查询结果或放弃原消息编号。");entry.append(body);
+   const id=key(row.session,row.id),c=known.get(id),working=busy.has(id),rowView=look(row.state,c?.error_code||"");
+   const entry=document.createElement("div");entry.className="delivery-item";entry.dataset.requestId=row.id;entry.dataset.state=row.state;entry.dataset.tone=rowView.tone;
+   const main=document.createElement("div");main.className="delivery-main";
+   const line=document.createElement("p");line.className="delivery-line";
+   const label=document.createElement("span");label.className="delivery-label";setTextRender(label,()=>t(rowView.title)+other(row));line.append(label);
+   if(rowView.reason){const why=document.createElement("span");why.className="delivery-reason";setTextRender(why,()=>t(rowView.reason));line.append(why);}
+   main.append(line);
+   const text=row.draft?.text||row.input?.text||c?.request?.text||"";
+   if(text){
+    // One line until asked: long prompts must not push the composer away.
+    const open=fullText.has(id),body=document.createElement("button");body.type="button";body.className="delivery-text";body.dataset.deliveryAction="text";body.textContent=text;
+    body.classList.toggle("full",open);body.setAttribute("aria-expanded",String(open));
+    body.addEventListener("click",()=>{if(!owns())return;if(fullText.has(id))fullText.delete(id);else fullText.add(id);render();});
+    main.append(body);
+   }else{const gone=document.createElement("p");gone.className="delivery-text expired";setTextRender(gone,()=>t("待确认正文已过期；仍可查询结果或放弃原消息编号。"));main.append(gone);}
    const frozen=row.input||c?.request;
-   if(frozen){const settings=document.createElement("p");settings.className="delivery-settings";setTextRender(settings,()=>t("模型：{model}；推理强度：{effort}",{model:frozen.model,effort:frozen.effort||t("默认")}));entry.append(settings);}
-   if(row.draft?.attachments.length){const files=document.createElement("p");files.className="delivery-settings";files.textContent=row.draft.attachments.map(a=>a.orig||a.name).join(" · ");entry.append(files);}
-   const actions=document.createElement("div");actions.className="delivery-actions";
-   const button=(text:string,icon:string,run:()=>void,disabled=false)=>{const b=document.createElement("button");b.type="button";b.className="btn btn-sm";b.dataset.deliveryAction=text;actionButton(b,()=>t(text),icon);b.disabled=working||disabled;b.addEventListener("click",()=>{if(owns())run();});actions.append(b);};
-   if(row.state==="unconfirmed"){
-    button("重试原消息","send",()=>void retry(row),!row.input||row.thread!==context.thread);
-    button("放弃未接收消息","close",()=>void act(row,"abandon"));
+   if(frozen||row.draft?.attachments.length){
+    const meta=document.createElement("p");meta.className="delivery-settings";
+    const files=row.draft?.attachments.map(a=>a.orig||a.name).join(" · ")||"";
+    setTextRender(meta,()=>[frozen?t("模型：{model}；推理强度：{effort}",{model:frozen.model,effort:frozen.effort||t("默认")}):"",files].filter(Boolean).join(" · "));
+    main.append(meta);
    }
-   if(row.state==="uncertain")button("已检查结果，继续","check",()=>void act(row,"review"));
-   if(["accepted","starting","running"].includes(row.state))button("中断","stop",()=>void act(row,"interrupt"));
-   if(["failed","interrupted","reviewed","abandoned","deleted"].includes(row.state))button("复制回输入框","copy",()=>void(async()=>{
+   const actions=document.createElement("div");actions.className="delivery-actions";
+   const next=primary(row);
+   if(next)actions.append(control(next.label,next.tip,next.icon,next.run,working||next.disabled,"delivery-primary"));
+   if(row.state==="unconfirmed")actions.append(control("放弃发送","放弃这条消息，以后也不会执行","close",()=>void act(row,"abandon"),working));
+   if(["accepted","starting","running"].includes(row.state))actions.append(control("","中断任务","stop",()=>void act(row,"interrupt"),working));
+   if(settled(row.state)&&row.state!=="completed")actions.append(control("","复制回输入框","copy",()=>void(async()=>{
     if(context?.session!==row.session)return;
     const generation=epoch;
     if(context.thread!==row.thread&&!await confirm("这条消息属于另一对话。复制到当前对话的输入框？不会自动发送，也不会覆盖已有草稿。"))return;
@@ -206,14 +267,14 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
     const frozen=row.input||c?.request;
     const draft=row.draft||(frozen?draftFromRequest(frozen):undefined);
     if(draft)hooks.restore(structuredClone(draft));
-   })(),!row.draft&&!row.input&&!c?.request);
-   if(row.state!=="unconfirmed"&&!receiptActive(row.state))button("关闭状态","close",()=>{dismissed.add(id);storage.remove(row.id,row.session);views.delete(id);known.delete(id);render();});
-   entry.append(actions);list.append(entry);
+   })(),working||!row.draft&&!row.input&&!c?.request));
+   if(settled(row.state))actions.append(control("","从列表移除","close",()=>{dismiss(row);render();},working));
+   entry.append(mark(rowView),main,actions);list.append(entry);
   }
   if(focused&&keyboardInput()){
    const row=[...list.querySelectorAll<HTMLElement>(".delivery-item")].find(item=>item.dataset.requestId===focusID);
    const button=[...row?.querySelectorAll<HTMLButtonElement>("button")||[]].find(b=>b.dataset.deliveryAction===focusAction&&!b.disabled);
-   (button||row?.querySelector<HTMLElement>("summary")||$("chat-input")).focus();
+   (button||row?.querySelector<HTMLElement>("button:not(:disabled)")||$("chat-input")).focus();
   }
   hooks.changed();
  }
@@ -258,7 +319,10 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
     const row:Outgoing={version:1,id:identifier(),session,thread,created:Date.now(),input:structuredClone(input),draft:structuredClone(draft),revision:0,state:"unconfirmed"};
     if(!storage.add(row)){say("待确认副本未保存，暂未发送。请检查本机存储，或关闭本机保存后重试。",true);return false;}
     for(const [id,c] of known)if(c.state==="completed"){known.delete(id);views.delete(id);}
-    views.set(key(session,row.id),row);showDetails(false);hooks.move(draft);render();await transmit(row);return true;
+    views.set(key(session,row.id),row);showDetails(false);hooks.move(draft);render();await transmit(row);
+    // Accepted means the user moved on: finished rows of this conversation go.
+    if(current(session,generation)&&known.has(key(session,row.id))){for(const old of rows())if(old.id!==row.id&&old.thread===thread&&settled(old.state))dismiss(old);render();}
+    return true;
    };
    if(navigator.locks)return navigator.locks.request("agentbox-chat-send-"+scope+"-"+session,{ifAvailable:true},lock=>lock?prepare():false);
    return prepare();

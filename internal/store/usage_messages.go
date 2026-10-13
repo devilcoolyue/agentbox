@@ -15,12 +15,12 @@ func (s *Store) InsertUsageMessages(messages ...UsageEvent) (int, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
-	type key struct{ user, session, thread, turn, model string }
+	type key struct{ user, session, thread, turn, kind, model string }
 	groups := map[key]int{}
 	var evs []UsageEvent
 	var raws [][]json.RawMessage
 	for _, e := range messages {
-		if e.SessionID == "" || e.ReqID == "" || e.TurnID == "" || e.Agent != "claude" || e.Kind != UsageKindChat || e.Price == nil {
+		if e.SessionID == "" || e.ReqID == "" || e.TurnID == "" || e.Agent != "claude" || e.Kind != UsageKindChat && e.Kind != UsageKindSuggestion || e.Price == nil {
 			return 0, fmt.Errorf("invalid Claude message settlement")
 		}
 		// Validate even a duplicate: malformed snapshots must not be hidden.
@@ -41,7 +41,7 @@ func (s *Store) InsertUsageMessages(messages ...UsageEvent) (int, error) {
 		if n == 0 {
 			continue
 		}
-		k := key{e.User, e.SessionID, e.ThreadID, e.TurnID, e.Model}
+		k := key{e.User, e.SessionID, e.ThreadID, e.TurnID, e.Kind, e.Model}
 		i, ok := groups[k]
 		if !ok {
 			i = len(evs)

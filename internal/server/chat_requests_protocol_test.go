@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -37,13 +38,21 @@ type receiptFixture struct {
 	releaseOnce              sync.Once
 	output                   string
 	corrupt                  bool
+	exitCode                 atomic.Int32
+	help                     string   // stdout of `claude --help`
+	commands                 sync.Map // exec ID -> joined argv
 }
 
 func newReceiptFixture(t *testing.T, output string, corrupt bool, holdHandshake ...bool) *receiptFixture {
 	t.Helper()
+	return newAgentReceiptFixture(t, config.AgentCodex, output, corrupt, holdHandshake...)
+}
+
+func newAgentReceiptFixture(t *testing.T, agentType, output string, corrupt bool, holdHandshake ...bool) *receiptFixture {
+	t.Helper()
 	s, sess := newTestServer(t)
 	path := filepath.Join(t.TempDir(), "config.json")
-	raw, _ := json.Marshal(map[string]any{"data_dir": s.cfg.DataDir, "auth_token": "synthetic-test-token", "accounts": []config.Account{{ID: "shared", Type: config.AgentCodex}}, "pricing": map[string]any{"codex": map[string]int{"input": 1}}})
+	raw, _ := json.Marshal(map[string]any{"data_dir": s.cfg.DataDir, "auth_token": "synthetic-test-token", "accounts": []config.Account{{ID: "shared", Type: agentType}}, "pricing": map[string]any{agentType: map[string]int{"input": 1}}})
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +70,10 @@ func newReceiptFixture(t *testing.T, output string, corrupt bool, holdHandshake 
 		}
 	}
 	u, _ := s.store.GetUser("alice")
-	sess.Agent, sess.AccountID, sess.DefaultModel, sess.Status, sess.ContainerID = config.AgentCodex, "shared", "gpt-5.5", store.StatusRunning, "fixture"
+	sess.Agent, sess.AccountID, sess.DefaultModel, sess.Status, sess.ContainerID = agentType, "shared", "gpt-5.5", store.StatusRunning, "fixture"
+	if agentType == config.AgentClaude {
+		sess.DefaultModel = "claude-opus-5"
+	}
 	if err = s.store.Put(sess); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +98,7 @@ func newReceiptFixture(t *testing.T, output string, corrupt bool, holdHandshake 
 	}
 	f := &receiptFixture{s: s, sess: sess, u: u, started: make(chan struct{}), appStarted: make(chan struct{}), release: make(chan struct{}), output: output, corrupt: corrupt}
 	f.input = store.ChatRequestInput{Scope: s.chatRequestScope(u), ThreadID: tid, Text: "synthetic prompt", Model: sess.DefaultModel}
-	var commands sync.Map
+	commands := &f.commands
 	var execIDs atomic.Int32
 	engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -126,6 +138,10 @@ func newReceiptFixture(t *testing.T, output string, corrupt bool, holdHandshake 
 			}
 			defer conn.Close()
 			_, _ = io.WriteString(conn, "HTTP/1.1 101 UPGRADED\r\nContent-Type: application/vnd.docker.raw-stream\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n")
+			if strings.HasSuffix(cmd.(string), "claude --help") {
+				_, _ = io.WriteString(stdcopy.NewStdWriter(conn, stdcopy.Stdout), f.help)
+				return
+			}
 			if strings.Contains(cmd.(string), "app-server") {
 				close(f.appStarted)
 				if len(holdHandshake) > 0 && holdHandshake[0] {
@@ -157,7 +173,7 @@ func newReceiptFixture(t *testing.T, output string, corrupt bool, holdHandshake 
 			}
 		case strings.Contains(r.URL.Path, "/exec/") && strings.HasSuffix(r.URL.Path, "/json"):
 			f.inspections.Add(1)
-			_, _ = w.Write([]byte(`{"Running":false,"ExitCode":0}`))
+			_, _ = fmt.Fprintf(w, `{"Running":false,"ExitCode":%d}`, f.exitCode.Load())
 		default:
 			t.Errorf("unexpected Docker request %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(404)
@@ -313,7 +329,6 @@ func TestChatReceiptUnknownOutcomeBlocksLegacyAndThreadsUntilReview(t *testing.T
 	}{
 		{"missing-terminal", "{\"type\":\"item.completed\"}\n", false},
 		{"corrupt-output", receiptCompletedOutput, true},
-		{"provider-failed", "{\"type\":\"turn.failed\"}\n", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newReceiptFixture(t, tc.output, tc.corrupt)
@@ -365,6 +380,45 @@ func TestChatReceiptUnknownOutcomeBlocksLegacyAndThreadsUntilReview(t *testing.T
 			}
 			if f.invocations.Load() != 1 {
 				t.Fatal("unknown/reviewed ID repeated")
+			}
+		})
+	}
+}
+
+// A CLI that reported a failure and exited has nothing left running, so the
+// receipt ends as failed and the next message is admitted without a review.
+func TestChatReceiptExitedFailureDoesNotBlock(t *testing.T) {
+	for _, tc := range []struct {
+		name, output string
+		exit         int32
+	}{
+		{"provider-failed", "{\"type\":\"turn.failed\"}\n", 0},
+		{"non-zero-exit", "{\"type\":\"item.completed\"}\n", 1},
+		{"killed", "", 137},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newReceiptFixture(t, tc.output, false)
+			f.exitCode.Store(tc.exit)
+			id := newOperationID()
+			receiptFrom(t, f.request("PUT", "requests/"+id, "alice", f.input))
+			f.unblock()
+			c := f.wait(t, id)
+			if c.State != store.ChatFailed || c.ErrorCode != chatTurnFailed {
+				t.Fatal("exited failure not final", c)
+			}
+			if _, err := f.s.store.PendingChatRequest(f.sess.ID); !errors.Is(err, sql.ErrNoRows) {
+				t.Fatal("failure kept the admission gate", err)
+			}
+			w := f.request("POST", "requests/"+id, "alice", map[string]any{"action": "review", "revision": c.Revision, "scope": f.input.Scope})
+			if w.Code != 409 {
+				t.Fatal("finished failure needs no review", w.Code, w.Body.String())
+			}
+			if again := receiptFrom(t, f.request("PUT", "requests/"+id, "alice", f.input)); again.State != store.ChatFailed || f.invocations.Load() != 1 {
+				t.Fatal("failed ID executed again", again, f.invocations.Load())
+			}
+			next := receiptFrom(t, f.request("PUT", "requests/"+newOperationID(), "alice", f.input))
+			if next.State == store.ChatFailed || next.State == store.ChatUncertain {
+				t.Fatal("next message not admitted", next)
 			}
 		})
 	}
@@ -606,5 +660,62 @@ func TestChatReceiptHistorySyncRejectsLinks(t *testing.T) {
 	}
 	if raw, err := os.ReadFile(outside); err != nil || string(raw) != "preserved" {
 		t.Fatal("outside file changed", err)
+	}
+}
+
+const claudeSuggestionOutput = `{"type":"system","subtype":"init","session_id":"provider-session"}
+{"type":"assistant","session_id":"provider-session","message":{"id":"msg-1","model":"claude-opus-5","stop_reason":"end_turn","content":[{"type":"text","text":"done"}],"usage":{"input_tokens":3,"output_tokens":2}}}
+{"type":"result","subtype":"success","session_id":"provider-session","modelUsage":{"claude-opus-5":{"inputTokens":3,"outputTokens":2}}}
+{"type":"prompt_suggestion","suggestion":"Run the tests next","uuid":"synthetic","session_id":"provider-session"}
+`
+
+// The receipt's choice reaches the CLI only when the container's Claude Code
+// knows the flag; its --help is probed once per container, never by default.
+func TestChatReceiptPromptSuggestionsFollowRequestAndCLI(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		request bool
+		help    string
+		want    bool
+	}{
+		{"requested", true, "  --prompt-suggestions [value]  Enable prompt suggestions", true},
+		{"older-cli", true, "  --effort <level>", false},
+		{"not-requested", false, "  --prompt-suggestions [value]", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAgentReceiptFixture(t, config.AgentClaude, claudeSuggestionOutput, false)
+			f.help, f.input.Suggestions = tc.help, tc.request
+			f.unblock()
+			for range 2 {
+				id := newOperationID()
+				if c := receiptFrom(t, f.request("PUT", "requests/"+id, "alice", f.input)); c.Request == nil || c.Request.Suggestions != tc.request {
+					t.Fatal("request not frozen", c.Request)
+				}
+				if c := f.wait(t, id); c.State != store.ChatCompleted {
+					t.Fatal(c)
+				}
+			}
+			chats, probes := 0, 0
+			f.commands.Range(func(_, v any) bool {
+				switch cmd := v.(string); {
+				case strings.HasSuffix(cmd, "claude --help"):
+					probes++
+				case strings.Contains(cmd, "claude -p"):
+					chats++
+					if strings.Contains(cmd, "--prompt-suggestions true") != tc.want {
+						t.Errorf("command %q", cmd)
+					}
+				}
+				return true
+			})
+			if wantProbes := map[bool]int{true: 1, false: 0}[tc.request]; chats != 2 || probes != wantProbes {
+				t.Fatalf("chats=%d probes=%d", chats, probes)
+			}
+			tid := f.input.ThreadID
+			raw, err := os.ReadFile(filepath.Join(f.s.chatsDir(f.sess), tid+".jsonl"))
+			if err != nil || strings.Count(string(raw), `"prompt_suggestion"`) != 2 {
+				t.Fatal("suggestion not kept in history", err)
+			}
+		})
 	}
 }

@@ -18,6 +18,18 @@ import (
 var ErrInterrupted = errors.New("agent exited after interrupt")
 var ErrOptions = errors.New("exec fallback cannot preserve requested options")
 
+// ExitError is a CLI turn whose process has already exited with a failure
+// status: nothing it started is still running, unlike a lost stream or exit
+// code that leaves the outcome unknown.
+type ExitError struct {
+	Code   int
+	Stderr string
+}
+
+func (e *ExitError) Error() string {
+	return "agent 进程退出码 " + strconv.Itoa(e.Code) + ": " + e.Stderr
+}
+
 type Backend interface {
 	ExecStream(context.Context, string, []string, []string) (*dockerx.Stream, error)
 	ExitCode(context.Context, string) (int, error)
@@ -122,7 +134,7 @@ func (e Executor) execTurn(ctx context.Context, turn Turn, cmd []string) error {
 		if code == 130 {
 			return ErrInterrupted
 		}
-		return errors.New("agent 进程退出码 " + strconv.Itoa(code) + ": " + stderr.String())
+		return &ExitError{Code: code, Stderr: stderr.String()}
 	}
 	return nil
 }

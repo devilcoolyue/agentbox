@@ -30,6 +30,17 @@ type claudeMessage struct {
 	Model      string       `json:"model"`
 	StopReason string       `json:"stop_reason,omitempty"`
 	Usage      claudeTokens `json:"usage"`
+	kind       string       // empty is the turn's own chat spend
+}
+
+// claudeTotal is one model's cumulative counters in result.modelUsage and the
+// transcript's cost-state. They include resumed history, so only a difference
+// within the same process is ever billed.
+type claudeTotal struct {
+	Input      int64 `json:"inputTokens"`
+	Output     int64 `json:"outputTokens"`
+	CacheRead  int64 `json:"cacheReadInputTokens"`
+	CacheWrite int64 `json:"cacheCreationInputTokens"`
 }
 
 // Match cc-switch's selection rule: a completed snapshot wins, then the
@@ -52,6 +63,12 @@ type claudeMeter struct {
 	before      map[string]fs.FileInfo
 	transcripts bool
 	done        bool
+	// suggest bills the prompt-suggestion request the CLI makes after result:
+	// it reaches neither stdout nor the transcript's messages, only the final
+	// cost-state, so it is the growth from atResult to that record.
+	suggest  bool
+	atResult map[string]claudeTotal
+	final    map[string]claudeTotal
 }
 
 func newClaudeMeter() *claudeMeter {
@@ -102,8 +119,10 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 		var r claudeResult
 		if json.Unmarshal(line, &r) == nil {
 			c.durationMS = r.DurationMS
+			c.atResult = map[string]claudeTotal{}
 			for model, u := range r.ModelUsage {
 				c.providers[model] = u.Provider
+				c.atResult[model] = claudeTotal{u.Input, u.Output, u.CacheRead, u.CacheWrite}
 			}
 		}
 		// modelUsage / total_cost_usd may include earlier resumed turns.
@@ -240,11 +259,19 @@ func (c *claudeMeter) readTranscript(f *os.File, before fs.FileInfo, child bool)
 			continue
 		}
 		var rec struct {
-			Type       string        `json:"type"`
-			Entrypoint string        `json:"entrypoint"`
-			Message    claudeMessage `json:"message"`
+			Type       string                 `json:"type"`
+			Entrypoint string                 `json:"entrypoint"`
+			Message    claudeMessage          `json:"message"`
+			ModelUsage map[string]claudeTotal `json:"modelUsage"`
 		}
-		if json.Unmarshal(sc.Bytes(), &rec) != nil || rec.Type != "assistant" {
+		if json.Unmarshal(sc.Bytes(), &rec) != nil {
+			continue
+		}
+		if rec.Type == "cost-state" && !child && rec.ModelUsage != nil {
+			c.final = rec.ModelUsage // the last one is written as the CLI exits
+			continue
+		}
+		if rec.Type != "assistant" {
 			continue
 		}
 		if rec.Entrypoint != "sdk-cli" && !(child && rec.Entrypoint == "") {
@@ -254,12 +281,35 @@ func (c *claudeMeter) readTranscript(f *os.File, before fs.FileInfo, child bool)
 	}
 	return sc.Err()
 }
+
+// addSuggestion adds what the CLI spent after result, keyed by turn so a
+// replay cannot charge it twice. Without both totals nothing is guessed.
+func (c *claudeMeter) addSuggestion() {
+	if !c.suggest || c.atResult == nil {
+		return
+	}
+	if c.final == nil {
+		log.Printf("usage: 会话 %s 请求了下一步提示，但没有找到累计用量记录，这次提示的消耗不会入账", c.base.SessionID)
+		return
+	}
+	for model, after := range c.final {
+		before := c.atResult[model]
+		u := claudeTokens{after.Input - before.Input, after.Output - before.Output, after.CacheRead - before.CacheRead, after.CacheWrite - before.CacheWrite}
+		if u.Input < 0 || u.Output < 0 || u.CacheRead < 0 || u.CacheWrite < 0 {
+			log.Printf("usage: 会话 %s 的累计用量倒退（%s），下一步提示的消耗不入账", c.base.SessionID, model)
+			continue
+		}
+		c.add(claudeMessage{ID: "prompt-suggestion:" + c.base.TurnID + ":" + model, Model: model, Usage: u, kind: store.UsageKindSuggestion})
+	}
+}
+
 func (s *Service) flushClaudeMessages(t *Tally, wall time.Duration) int {
 	c := t.claude
 	if c.done {
 		return 0
 	}
 	s.completeClaudeMessages(c)
+	c.addSuggestion()
 	ids := make([]string, 0, len(c.messages))
 	for id := range c.messages {
 		ids = append(ids, id)
@@ -282,6 +332,10 @@ func (s *Service) flushClaudeMessages(t *Tally, wall time.Duration) int {
 		e.CacheWriteTokens = m.Usage.CacheWrite
 		e.DurationMS = c.durationMS
 		e.WallMS = wall.Milliseconds()
+		if m.kind != "" {
+			// Turn latency belongs to the answer, not to the follow-up request.
+			e.Kind, e.TTFTMs, e.DurationMS, e.WallMS = m.kind, 0, 0, 0
+		}
 		e.TS = time.Now()
 		e.Provider = c.providers[m.Model]
 		raw, _ := json.Marshal(m)
