@@ -32,6 +32,8 @@ import { openPricingSection } from "../../pricing.js";
 import { setTip } from "../../tip.js";
 import { editAccountReasoning, editReasoning, reasoningLabel } from "../../reasoning-editor.js";
 import { accessLabel, editAccountAccess } from "../../account-access.js";
+import { mountUserPicker } from "../../user-picker.js";
+import type { UserPicker } from "../../user-picker.js";
 import { moreButton } from "../../menu.js";
 import { modelCountLabel, openAccountModels } from "../../account-models.js";
 import { refreshModelDisplay, renderModelDisplay } from "../../model-display.js";
@@ -309,6 +311,7 @@ let authCreating = false;
 let authBusy = false;
 let authMode = "oauth";
 let createPicker: ProxyPicker | null = null;
+let createUsers: UserPicker | null = null;
 
 function authMsg(text: string, isErr?: boolean) {
   if(!scope.current())return;
@@ -379,7 +382,7 @@ async function ensureAuthAccount(): Promise<Account> {
   if (authAcct) return authAcct;
   const env = parseEnvText($<HTMLTextAreaElement>("acct-env").value);
   const mode = $<HTMLSelectElement>("acct-access").value;
-  const users = [...new Set($<HTMLTextAreaElement>("acct-users").value.split(/[\s,，]+/).filter(Boolean))];
+  const users = createUsers?.value() || [];
   // The request only happens on an authentication action. Retain its result on
   // errors so retry never creates a second account or loses the configured proxy.
   authAcct = await api<Account>("/accounts", {method: "POST", body: JSON.stringify({
@@ -396,6 +399,11 @@ async function ensureAuthAccount(): Promise<Account> {
 async function authAction(button: string, work: () => Promise<void>) {
   if (authBusy) return;
   if (!authAcct && !$<HTMLFormElement>("acct-form").reportValidity()) return;
+  if (!authAcct && $<HTMLSelectElement>("acct-access").value === "users" && !createUsers?.value().length) {
+    createUsers?.setError(i18nText("请至少选择一个用户，或改为「仅管理员」"));
+    createUsers?.focus();
+    return;
+  }
   authBusy = true;
   authMsg("");
   btnBusy($(button), () => i18nText("处理中…"));
@@ -854,6 +862,9 @@ $("btn-acct-add").addEventListener("click", () => {
   $("acct-created").classList.add("hidden");
   $("acct-users-row").classList.add("hidden");
   setSelectValue($<HTMLSelectElement>("acct-access"), "all");
+  if (!createUsers) createUsers = mountUserPicker($("acct-users"), { signal: lifetime.signal });
+  createUsers.set([]);
+  createUsers.invalidate(); // 用户可能刚在「用户管理」里增删过
   if (!createPicker) createPicker = mountProxyPicker($("acct-proxy"));
   createPicker.set("");
   void loadProxies().then(() => {if(scope.current())createPicker?.set(createPicker.get());}).catch(() => {});
@@ -875,7 +886,9 @@ $("acct-form").addEventListener("change", e => {
   if ((e.target as HTMLInputElement).name === "atype") { resetAuthCode(); updateAuthType(); }
 }, {signal: lifetime.signal});
 $("acct-access").addEventListener("change", () => {
-  $("acct-users-row").classList.toggle("hidden", $<HTMLSelectElement>("acct-access").value !== "users");
+  const on = $<HTMLSelectElement>("acct-access").value === "users";
+  $("acct-users-row").classList.toggle("hidden", !on);
+  if (on) createUsers?.ensure();
 }, {signal: lifetime.signal});
 $("dlg-auth").addEventListener("cancel", e => { if (authBusy) e.preventDefault(); }, {signal: lifetime.signal});
 $("dlg-auth").addEventListener("close", () => {

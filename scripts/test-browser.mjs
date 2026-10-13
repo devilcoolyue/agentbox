@@ -13,6 +13,7 @@ import { skinsSmoke } from './test-skins.mjs';
 import { themesSmoke } from './test-themes.mjs';
 import { switchAccountSmoke } from './test-switch-account.mjs';
 import { accountModelsSmoke } from './test-account-models.mjs';
+import { userPickerSmoke } from './test-user-picker.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
 import { remoteBrowserSmoke } from './test-remote-browser.mjs';
 import { imageUpdateSmoke } from './test-image-updates.mjs';
@@ -291,6 +292,8 @@ export async function smoke(page) {
   if (process.env.AGENTBOX_BROWSER_ONLY_SWITCH_ACCOUNT === '1') { assert.deepEqual(errors,[]); return; }
   await accountModelsSmoke(page,base);
   if (process.env.AGENTBOX_BROWSER_ONLY_ACCOUNT_MODELS === '1') { assert.deepEqual(errors,[]); return; }
+  await userPickerSmoke(page,base,()=>settings);
+  if (process.env.AGENTBOX_BROWSER_ONLY_USER_PICKER === '1') { assert.deepEqual(errors,[]); return; }
   await problemsSmoke(page,base,()=>chatSocket,entries=>{historyEntries=entries;});
   if (process.env.AGENTBOX_BROWSER_ONLY_PROBLEMS === '1') { assert.deepEqual(errors,[]); return; }
   if (process.env.AGENTBOX_BROWSER_ONLY_IMAGE_UPDATES === '1') {

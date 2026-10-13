@@ -10,6 +10,7 @@ import { setTextRender, t as i18nText } from "../../i18n.js";
 import type { Settings, DecisionSettingsPatch } from "../../types.js";
 import { $, askConfirm } from "../../util.js";
 import { setSelectValue } from "../../select.js";
+import { userPickerFor } from "../../user-picker.js";
 
 export type SettingsPatch = Partial<Omit<Settings, "decision">> & { decision?: DecisionSettingsPatch; expected_agent_image?: string };
 
@@ -54,7 +55,9 @@ export function holdDirty() {
   return () => {
     for (const [id, v] of held) {
       const el = document.getElementById(id);
-      if (el instanceof HTMLInputElement && el.type === "checkbox") el.checked = v === "true";
+      const picker = el instanceof HTMLInputElement ? userPickerFor(el) : undefined;
+      if (picker) picker.set(v.split("\n").filter(Boolean)); // 镜像字段改了还要同步勾选
+      else if (el instanceof HTMLInputElement && el.type === "checkbox") el.checked = v === "true";
       else if (el instanceof HTMLSelectElement) setSelectValue(el, v);
       else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.value = v;
     }

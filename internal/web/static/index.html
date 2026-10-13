@@ -1033,9 +1033,9 @@
                 <div class="card">
                   <h3 data-i18n="使用范围与限制">使用范围与限制</h3>
                   <div class="field-row">
-                    <label class="field"><span data-i18n="允许使用的用户">允许使用的用户</span><select id="set-decision-access"><option value="admin" data-i18n="仅管理员">仅管理员</option><option value="all" data-i18n="所有用户">所有用户</option><option value="users" data-i18n="指定用户">指定用户</option></select></label>
-                    <label class="field"><span data-i18n="指定用户名（逗号分隔）">指定用户名（逗号分隔）</span><input id="set-decision-users" type="text" maxlength="4096" autocomplete="off"><span class="hint" data-i18n="选择指定用户时生效，管理员始终可用。">选择指定用户时生效，管理员始终可用。</span></label>
+                    <label class="field"><span data-i18n="允许使用的用户">允许使用的用户</span><select id="set-decision-access"><option value="admin" data-i18n="仅管理员">仅管理员</option><option value="all" data-i18n="所有用户">所有用户</option><option value="users" data-i18n="指定用户（管理员始终可用）">指定用户（管理员始终可用）</option></select></label>
                   </div>
+                  <div id="set-decision-users-row" class="up-field" hidden><span class="up-label" data-i18n="可使用的用户">可使用的用户</span><input id="set-decision-users" type="hidden" value=""><div id="set-decision-users-picker"></div></div>
                   <details class="learn-more"><summary data-i18n="高级设置">高级设置</summary>
                     <div class="field-row">
                       <label class="field"><span data-i18n="决策超时（毫秒）">决策超时（毫秒）</span><input id="set-decision-timeout" type="number" min="100" max="30000" step="1" required value="1500" class="mono"></label>
@@ -2113,7 +2113,7 @@
         <label data-i18n-text="[&quot;使用范围&quot;]">使用范围<select id="acct-access"><option value="all" data-i18n-text="[&quot;全体用户&quot;]">全体用户</option><option value="users" data-i18n-text="[&quot;指定用户&quot;]">指定用户</option><option value="admin" data-i18n-text="[&quot;仅管理员&quot;]">仅管理员</option></select></label>
         <div><span class="acct-field-label" data-i18n-text="[&quot;出口 IP 代理&quot;]">出口 IP 代理</span><div id="acct-proxy"></div></div>
       </div>
-      <label id="acct-users-row" class="hidden" data-i18n-text="[&quot;用户名&quot;]">用户名<textarea id="acct-users" rows="2" placeholder="每行一个用户名，也可用逗号分隔" data-i18n-attrs="{&quot;placeholder&quot;:&quot;每行一个用户名，也可用逗号分隔&quot;}"></textarea></label>
+      <div id="acct-users-row" class="up-field hidden"><span class="acct-field-label" data-i18n="可使用的用户">可使用的用户</span><div id="acct-users"></div></div>
       <details class="acct-advanced"><summary data-i18n-text="[&quot;高级设置&quot;]">高级设置</summary>
         <label data-i18n-text="[&quot;环境变量&quot;]">环境变量<textarea id="acct-env" rows="2" class="mono" placeholder="每行一条 KEY=VALUE" spellcheck="false" data-i18n-attrs="{&quot;placeholder&quot;:&quot;每行一条 KEY=VALUE&quot;}"></textarea></label>
         <p class="field-hint" data-i18n-text="[&quot;账号 ID 创建后不可修改。认证信息请在下方填写，无需手动设置环境变量。&quot;]">账号 ID 创建后不可修改。认证信息请在下方填写，无需手动设置环境变量。</p>

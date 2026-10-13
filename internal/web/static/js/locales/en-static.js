@@ -428,7 +428,6 @@ export default {
     "每天自动检查": "Check automatically each day",
     "每日检查时间": "Daily check time",
     "每用户运行容器上限": "Maximum running containers per user",
-    "每行一个用户名，也可用逗号分隔": "One username per line, or separated by commas",
     "每行一条 KEY=VALUE": "One KEY=VALUE per line",
     "每行一条，支持三种写法": "One per line; three formats supported",
     "每行一条，最多 30 条；频率 0 表示不轮播（只显示第一条）": "One per line, up to 30. Set the interval to 0 to show only the first tip.",

@@ -1,6 +1,7 @@
 import { setTextRender, t as i18nText } from "../../i18n.js";
 import { $, askConfirm } from "../../util.js";
 import { setSelectValue } from "../../select.js";
+import { userPickerFor } from "../../user-picker.js";
 const groups = [];
 const baseline = new Map();
 function valueOf(id) {
@@ -31,7 +32,10 @@ export function holdDirty() {
     return () => {
         for (const [id, v] of held) {
             const el = document.getElementById(id);
-            if (el instanceof HTMLInputElement && el.type === "checkbox")
+            const picker = el instanceof HTMLInputElement ? userPickerFor(el) : undefined;
+            if (picker)
+                picker.set(v.split("\n").filter(Boolean)); // 镜像字段改了还要同步勾选
+            else if (el instanceof HTMLInputElement && el.type === "checkbox")
                 el.checked = v === "true";
             else if (el instanceof HTMLSelectElement)
                 setSelectValue(el, v);

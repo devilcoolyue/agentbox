@@ -578,6 +578,47 @@ dialog label.am-default { justify-self: center; gap: 6px; font-size: 12px; white
 .acct-basics > * { min-width: 0; }
 .acct-basics label { margin: 0; }
 .acct-advanced { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+#acct-users-row { margin-top: 16px; }
+
+/* ---- 用户多选（user-picker.ts）：账号使用范围、智能决策的「指定用户」 ----
+ * 弹窗和设置页共用，所以选择器都挂在 .user-picker 下，盖过通用的 dialog label 纵向布局。
+ * 这些元素自己设了 display，hidden 属性要显式补回 display: none。 */
+.up-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.up-field[hidden] { display: none; }
+.up-field > .up-label, .up-field > .acct-field-label { margin: 0; font-size: 12.5px; color: var(--muted); }
+.user-picker { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.user-picker [hidden] { display: none !important; }
+.up-bar { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
+.user-picker .up-search { flex: 1 1 180px; min-width: 0; width: auto; padding-block: 6px; font-size: 13px; }
+.user-picker label.up-all { flex: none; color: var(--text); }
+.up-count { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.up-list {
+  display: flex; flex-direction: column;
+  max-height: min(40vh, 272px); overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
+  background: var(--panel-solid);
+}
+.user-picker .up-row {
+  display: flex; flex-direction: row; align-items: center; gap: 10px;
+  min-height: 38px; margin: 0; padding: 6px 12px;
+  font-size: 13px; color: var(--text); cursor: pointer;
+}
+/* 分隔线只画在「前面还有可见行」的行上：筛选藏掉若干行后不会多出一道 */
+.user-picker .up-row:not([hidden]) ~ .up-row:not([hidden]) { border-top: 1px solid var(--line-soft); }
+.user-picker .up-row:hover:not(.up-admin, .up-missing) { background: var(--panel-2); }
+.user-picker input[type="checkbox"] { width: auto; margin: 0; flex: none; }
+.user-picker :is(.up-admin, .up-missing) { cursor: default; color: var(--muted); }
+.up-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-tag {
+  flex: none; margin-left: auto;
+  font-size: 11px; line-height: 1.5; padding: 0 7px; border-radius: var(--radius-pill);
+  border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+}
+.up-missing .up-tag { color: var(--warn); border-color: var(--warn-line); }
+.up-status { margin: 0; padding: 10px 12px; font-size: 12.5px; color: var(--muted); }
+.up-list > .btn { align-self: flex-start; margin: 0 12px 10px; }
+.up-note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.user-picker .up-error:empty { display: none; }
 .acct-advanced summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .acct-advanced label { margin-top: 12px; }
 .dlg-auth .auth-body > label { display: flex; flex-direction: column; gap: 6px; margin: 0; }

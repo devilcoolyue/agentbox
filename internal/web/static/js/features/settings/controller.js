@@ -24,6 +24,7 @@ import { openPricingSection } from "../../pricing.js";
 import { setTip } from "../../tip.js";
 import { editAccountReasoning, editReasoning, reasoningLabel } from "../../reasoning-editor.js";
 import { accessLabel, editAccountAccess } from "../../account-access.js";
+import { mountUserPicker } from "../../user-picker.js";
 import { moreButton } from "../../menu.js";
 import { modelCountLabel, openAccountModels } from "../../account-models.js";
 import { refreshModelDisplay, renderModelDisplay } from "../../model-display.js";
@@ -301,6 +302,7 @@ export function createSettingsController() {
     let authBusy = false;
     let authMode = "oauth";
     let createPicker = null;
+    let createUsers = null;
     function authMsg(text, isErr) {
         if (!scope.current())
             return;
@@ -369,7 +371,7 @@ export function createSettingsController() {
             return authAcct;
         const env = parseEnvText($("acct-env").value);
         const mode = $("acct-access").value;
-        const users = [...new Set($("acct-users").value.split(/[\s,，]+/).filter(Boolean))];
+        const users = createUsers?.value() || [];
         // The request only happens on an authentication action. Retain its result on
         // errors so retry never creates a second account or loses the configured proxy.
         authAcct = await api("/accounts", { method: "POST", body: JSON.stringify({
@@ -387,6 +389,11 @@ export function createSettingsController() {
             return;
         if (!authAcct && !$("acct-form").reportValidity())
             return;
+        if (!authAcct && $("acct-access").value === "users" && !createUsers?.value().length) {
+            createUsers?.setError(i18nText("请至少选择一个用户，或改为「仅管理员」"));
+            createUsers?.focus();
+            return;
+        }
         authBusy = true;
         authMsg("");
         btnBusy($(button), () => i18nText("处理中…"));
@@ -871,6 +878,10 @@ export function createSettingsController() {
             $("acct-created").classList.add("hidden");
             $("acct-users-row").classList.add("hidden");
             setSelectValue($("acct-access"), "all");
+            if (!createUsers)
+                createUsers = mountUserPicker($("acct-users"), { signal: lifetime.signal });
+            createUsers.set([]);
+            createUsers.invalidate(); // 用户可能刚在「用户管理」里增删过
             if (!createPicker)
                 createPicker = mountProxyPicker($("acct-proxy"));
             createPicker.set("");
@@ -898,7 +909,10 @@ export function createSettingsController() {
             }
         }, { signal: lifetime.signal });
         $("acct-access").addEventListener("change", () => {
-            $("acct-users-row").classList.toggle("hidden", $("acct-access").value !== "users");
+            const on = $("acct-access").value === "users";
+            $("acct-users-row").classList.toggle("hidden", !on);
+            if (on)
+                createUsers?.ensure();
         }, { signal: lifetime.signal });
         $("dlg-auth").addEventListener("cancel", e => { if (authBusy)
             e.preventDefault(); }, { signal: lifetime.signal });
