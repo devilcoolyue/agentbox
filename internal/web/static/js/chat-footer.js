@@ -19,6 +19,8 @@ export function observeAnswer(context, ev, ts) {
             : typeof ev.total_cost_usd === "number" && Number.isFinite(ev.total_cost_usd) ? Math.round(ev.total_cost_usd * 1e6) : 0;
         context.legacyCost = value > 0 ? value : undefined;
     }
+    if (ev.type === "result")
+        context.local = ev.num_turns === 0 && ev.is_error === false;
     if (ev.type === "stream_event" && ev.event?.delta?.type === "text_delta" && ts)
         context.ts = ts;
     const model = ev.type === "assistant" ? ev.message?.model
@@ -60,6 +62,12 @@ function costView(context) {
             priced: true,
         };
     }
+    // /compact 同样 num_turns=0 却会请求模型：等服务端确认这一轮没有用量再这么说
+    if (context.local && (cost ? cost.source === "unknown" : context.historical))
+        return {
+            label: i18nText("未调用模型"),
+            detail: i18nText("这条斜杠命令由 CLI 在本地执行，没有请求模型，不产生费用。"), priced: false,
+        };
     if (!context.turn && context.legacyCost !== undefined)
         return {
             label: money(context.legacyCost),

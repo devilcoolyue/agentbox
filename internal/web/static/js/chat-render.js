@@ -10,6 +10,8 @@ import { svgIcon, buttonLabel, actionButton } from "./icons.js";
 export { svgIcon } from "./icons.js";
 import { setTip } from "./tip.js";
 import { S } from "./state.js";
+import { contextCard, contextUsageOf } from "./features/chat/context-card.js";
+import { fmtTokens } from "./usage-math.js";
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
 /* 复制到剪贴板：clipboard API 优先，非安全上下文回退 execCommand */
 export async function copyText(text) {
@@ -677,13 +679,34 @@ function backgroundChip(ev) {
         setTip(c, desc);
     return c;
 }
+/* 上下文压缩：边界之后 CLI 会把保留下来的最近几条消息原样再发一遍（uuid 列在
+ * compact_metadata.preserved_messages 里），它们早已显示过，到本回合结束前不再重复。 */
+let compactReplays = new Set();
+function compactChip(meta) {
+    const c = document.createElement("div");
+    c.className = "chip compact";
+    const n = (v) => typeof v === "number" && v > 0 ? fmtTokens(v) : "";
+    const pre = n(meta?.pre_tokens), post = n(meta?.post_tokens), auto = meta?.trigger === "auto";
+    const text = document.createElement("span");
+    setTextRender(text, () => [auto ? i18nText("已自动压缩上下文") : i18nText("已压缩上下文"),
+        pre && post ? i18nText("{p0} → {p1} tokens", { p0: pre, p1: post }) : pre ? i18nText("压缩前 {p0} tokens", { p0: pre }) : ""].filter(Boolean).join(" · "));
+    c.append(svgIcon("sparkles", 12), text);
+    return c;
+}
+function preservedUUIDs(meta) {
+    const kept = meta?.preserved_messages;
+    const ids = Array.isArray(kept?.all_uuids) ? kept.all_uuids : Array.isArray(kept?.uuids) ? kept.uuids : [];
+    return new Set(ids.filter((id) => typeof id === "string"));
+}
 /* 一条落盘的 logEntry（线程 jsonl 行）→ 节点数组（历史加载入口）。
  * chat_session 等簿记类条目对用户不可见，落到兜底分支返回空。 */
 export function renderEntry(raw) {
     if (!raw || typeof raw !== "object")
         return [];
-    if (raw.kind === "user")
+    if (raw.kind === "user") {
+        compactReplays.clear();
         return [renderUserTurn(raw.text, raw.ts)];
+    }
     if (raw.kind === "event")
         return raw.state === "interrupted" ? [] : renderEvent(raw.event);
     if (raw.kind === "steer")
@@ -791,6 +814,26 @@ export function renderEvent(ev) {
             if (c)
                 out.push(c);
         }
+        if (ev.subtype === "compact_boundary") {
+            const meta = ev.compact_metadata;
+            compactReplays = preservedUUIDs(meta);
+            out.push(compactChip(meta));
+        }
+        if (ev.subtype === "status" && (ev.compact_result && ev.compact_result !== "success" || ev.compact_error)) {
+            const reason = typeof ev.compact_error === "string" ? ev.compact_error : "";
+            out.push(chip(reason ? i18nText("上下文压缩失败：{p0}", { p0: reason }) : i18nText("上下文压缩失败"), "err"));
+        }
+        return out;
+    }
+    if (ev.type === "assistant" && typeof ev.uuid === "string" && compactReplays.has(ev.uuid))
+        return out;
+    // /context：CLI 附带结构化结果时画成格子卡片，复制仍给它的 Markdown 原文
+    const usage = ev.type === "assistant" ? contextUsageOf(ev) : undefined;
+    if (usage) {
+        const card = contextCard(usage);
+        const content = ev.message?.content;
+        answerSources.set(card, Array.isArray(content) ? content.map(b => b.type === "text" ? b.text || "" : "").join("") : "");
+        out.push(card);
         return out;
     }
     if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
@@ -828,6 +871,7 @@ export function renderEvent(ev) {
         return out;
     }
     if (ev.type === "result") {
+        compactReplays.clear();
         if (ev.subtype === "success") {
             const secs = ev.duration_ms ? (ev.duration_ms / 1000).toFixed(1) + "s" : "";
             // Cost is shown in the footer from committed usage, including table-priced

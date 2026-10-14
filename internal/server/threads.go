@@ -97,6 +97,7 @@ type histEntry struct {
 		Kind  string          `json:"kind"`
 		Text  string          `json:"text"`
 		Event json.RawMessage `json:"event"`
+		Local bool            `json:"local"`
 	}
 }
 
@@ -247,12 +248,16 @@ func (s *Server) threadTitleSource(sess store.Session, tid string) (firstMsg str
 	if err != nil {
 		return "", 0, false
 	}
+	// A turn the CLI answered locally (/context…) closes with a local idle
+	// status; its message neither names the thread nor counts as a turn.
+	var messages []string
 	for _, e := range parseEntries(raw) {
 		switch e.meta.Kind {
 		case "user":
-			userTurns++
-			if firstMsg == "" {
-				firstMsg = e.meta.Text
+			messages = append(messages, e.meta.Text)
+		case "status":
+			if e.meta.Local && len(messages) > 0 {
+				messages = messages[:len(messages)-1]
 			}
 		case "title":
 			if e.meta.Text != "" {
@@ -260,7 +265,10 @@ func (s *Server) threadTitleSource(sess store.Session, tid string) (firstMsg str
 			}
 		}
 	}
-	return firstMsg, userTurns, hasTitle
+	if len(messages) > 0 {
+		firstMsg = messages[0]
+	}
+	return firstMsg, len(messages), hasTitle
 }
 
 // appendThreadEntry appends one entry to a specific thread file (not

@@ -8,7 +8,7 @@ import { actionButton, buttonLabel } from "./icons.js";
 import { S, bus, emit } from "./state.js";
 import type { Pick } from "./state.js";
 import type {
-  ChatMessage, History, ModelOption, QuestionView, ReasoningCapability, SessionModels, SteerView,
+  ChatMessage, History, ModelOption, QuestionView, ReasoningCapability, SessionModels, SlashCommandsView, SteerView,
 } from "./types.js";
 import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
@@ -34,6 +34,8 @@ import { ChatHistory } from "./features/chat/history.js";
 import { createOlderHistory } from "./features/chat/older.js";
 import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { createBackground } from "./features/chat/background.js";
+import { createContextMeter } from "./features/chat/context-meter.js";
+import { createCommandMenu } from "./features/chat/commands.js";
 import { ChatConnection } from "./features/chat/connection.js";
 import {initDelegationComposer} from "./features/delegation/composer.js";
 import {upsertDelegationCard,delegationLiveEntry,resetDelegationCards} from "./features/delegation/card.js";
@@ -100,6 +102,22 @@ const live = new TurnWriter(() => $("chat-log"), sessionAgent);
 const stream = createChatStream({append:appendChat,working:setWorkingLabel,state:()=>S.chatState,
  footer:()=>live.footer,log:()=>$("chat-log"),nearBottom});
 const background = createBackground(() => renderBackground());
+const contextMeter = createContextMeter({el:()=>$("chat-context"),agent:sessionAgent,session:()=>S.current?.id});
+// 斜杠命令：/clear、/model、/effort 由网页处理，其余原样交给 CLI
+const commandMenu = createCommandMenu({
+ input:()=>$<HTMLTextAreaElement>("chat-input"), menu:()=>$("chat-commands"),
+ session:()=>S.current?{id:S.current.id,agent:sessionAgent()}:undefined,
+ load:(id,signal)=>api<SlashCommandsView>(`/sessions/${id}/commands`,{signal}),
+ web:[
+  {name:"clear",aliases:["reset","new"],describe:()=>i18nText("新建对话，当前对话保留在历史中"),run:()=>$("btn-thread-new").click()},
+  {name:"model",describe:()=>i18nText("切换模型"),run:()=>openPicker("model")},
+  {name:"effort",describe:()=>i18nText("调整推理强度"),run:()=>openPicker("effort")},
+ ],
+ enterSends:()=>!enterInsertsNewline(),
+ // 运行中发出的命令排在这一轮之后，不插进正在跑的回合
+ send:()=>{ if (followupsOpen()) void sendFollow("queue"); else void sendChat(); },
+ changed:autoGrow,
+});
 const suggestion = createSuggestion({input:()=>$<HTMLTextAreaElement>("chat-input"),button:()=>$("chat-suggest"),
  changed:()=>updateChatPlaceholder(),filled:()=>autoGrow()});
 // 提问卡片等着作答时，执行指示与输入框占位都说明回合在等用户，而不是卡住了
@@ -124,11 +142,13 @@ export function chatTeardown() {
   manualEffort = false;
   omitEffortOnce = false;
   connection.dispose();
+  commandMenu.reset();
   chatConnectionID = undefined;
   setChatConn("connected");
   cancelHistoryLoad();
   stream.reset();
   live.reset();
+  contextMeter.reset();
   setChatStatus("idle");
 }
 
@@ -178,6 +198,8 @@ function handleChatMsg(msg: ChatMessage) {
       if (next) suggestion.set(next);
       observeAnswer(live.context, msg.event, msg.ts);
       background.observe(msg.event);
+      contextMeter.observe(msg.event);
+      commandMenu.observe(msg.event);
       // The failed result a stop produces; the interrupted status says it instead.
       if (msg.state !== "interrupted") stream.event(msg.event);
       live.footer?.update();
@@ -339,6 +361,8 @@ const sender = new ChatSender({
  timeout:()=>appendChat(chip(i18nText("唤醒工作空间超时，请稍后重试或手动启动工作空间"),"err")),
 });
 export async function sendChat() {
+ const input=$<HTMLTextAreaElement>("chat-input");
+ if(!chatImgs.map.size&&commandMenu.runWeb(input.value)){input.value="";autoGrow();return;}
  if(chatImgs.uploading>0){appendChat(chip(i18nText("附件仍在上传中，请稍候…"),"err"));return;}
  await sender.send();
 }
@@ -644,6 +668,20 @@ export function loadPick() {
 
 function savePick() { localStorage.setItem(pickKey(), JSON.stringify({ ...S.pick, version: 2, control: currentReasoning().control })); }
 function closePickMenu() { $("pick-menu").classList.add("hidden"); hideFly(); }
+/* /model、/effort：打开同一个选择面板并展开对应的一栏。等这次点击冒泡完再开，
+ * 否则 document 上「点到面板外就收起」会把它立刻关掉 */
+function openPicker(kind: "model" | "effort") {
+  setTimeout(() => {
+    const menu = $("pick-menu");
+    buildPickMain();
+    menu.classList.remove("hidden");
+    if (kind === "effort" && effortHidden()) { toast(i18nText("当前模型不支持调整推理强度")); return; }
+    const rows = [...menu.querySelectorAll<HTMLElement>(".pick-row")];
+    const row = kind === "effort" ? rows[rows.length - 1] : pickStyle() === "codex" ? rows[0] : undefined;
+    if (!row) return; // Claude 的面板直接列出模型
+    if (isMobile()) buildPickSub(kind); else showFly(row, kind);
+  });
+}
 
 function renderPickPill() {
   const btn = $("btn-pick");
@@ -957,9 +995,11 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
     background.reset(); // 重连时仍在等后台任务的回合，从最新一页恢复
     for (const e of entries) {
       if (e.kind === "user" || e.kind === "status") background.reset();
-      else if (e.kind === "event") background.observe(e.event);
+      else if (e.kind === "event") { background.observe(e.event); commandMenu.observe(e.event); }
     }
     renderBackground();
+    contextMeter.reset(); // 新线程、换空间或重连补拉，都以最新一页为准
+    contextMeter.replay(entries);
     suggestion.set(latestSuggestion(entries));
     const id = active_thread || thread?.id;
     // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效
@@ -990,6 +1030,7 @@ export async function reloadThread() {
   older.cancel();
   stream.reset(); // 回放动画与积压一并丢弃，历史里有完整内容
   live.reset();
+  contextMeter.reset();
   $("chat-log").replaceChildren();
   setThreadBar(null);
   await loadHistory();
@@ -1104,6 +1145,7 @@ $("chat-send").addEventListener("click", event => {
   else sendChat();
 }, { signal: lifetime.signal });
 $("chat-input").addEventListener("keydown", (e) => {
+  if (commandMenu.keydown(e)) return;
   if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing && suggestion.accept()) {
     e.preventDefault();
     return;
@@ -1115,7 +1157,16 @@ $("chat-input").addEventListener("keydown", (e) => {
     else sendChat();
   }
 }, { signal: lifetime.signal });
-$("chat-input").addEventListener("input", autoGrow, { signal: lifetime.signal });
+$("chat-input").addEventListener("input", () => { autoGrow(); commandMenu.update(); }, { signal: lifetime.signal });
+for (const type of ["click", "keyup", "focus"]) {
+  $("chat-input").addEventListener(type, event => {
+    // 方向键在菜单里移动选择，不当作挪光标重新过滤
+    if (event instanceof KeyboardEvent && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter" || event.key === "Tab" || event.key === "Escape")) return;
+    if (type === "focus") commandMenu.prefetch();
+    commandMenu.update();
+  }, { signal: lifetime.signal });
+}
+$("chat-input").addEventListener("blur", () => commandMenu.blur(), { signal: lifetime.signal });
 $("chat-input").addEventListener("paste", (e) => {
   const files = pastedImages(e);
   if (!files.length || !S.current) return;

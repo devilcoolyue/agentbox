@@ -32,6 +32,9 @@ type Entry struct {
 	State string        `json:"state,omitempty"`
 	Error string        `json:"error,omitempty"`
 	Turn  *TurnMetadata `json:"turn,omitempty"`
+	// Local marks the idle status of a slash command turn the CLI ran itself
+	// (/context, /compact…); it does not count toward the title.
+	Local bool `json:"local,omitempty"`
 }
 
 // Runtime is the adapter to workspace, authorization, history and live clients.
@@ -78,6 +81,22 @@ type Service struct {
 	Runtime Runtime
 	Usage   *usage.Service
 }
+
+// cliText is what the CLI reads for the turn: the user's text with the
+// server-owned preface and context around it. The CLI only recognizes a slash
+// command at the very start of the message, so a command goes without the
+// preface rather than turning into a prompt about "/context".
+func cliText(in Input, text string) string {
+	out := text
+	if in.Preface != "" && !agent.IsClaudeSlashCommand(text) {
+		out = in.Preface + "\n\n" + out
+	}
+	if in.Context != "" {
+		out += "\n\n" + in.Context
+	}
+	return out
+}
+
 type Input struct {
 	SessionID, Text, Model, Effort, Control string
 	Context                                 string
@@ -270,8 +289,12 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	// 容器起来之后才可能产生消耗，之后无论回合正常收尾、报错还是被中断，已经
 	// 报上来的用量都要落库——钱花了就得记。一行都没记到说明这个 agent/版本报
 	// 用量的形状我们没认出来：消耗真实发生了却不会进报表，宁可吵一句。
+	// A slash command the CLI ran itself: /context has no usage to warn
+	// about (/compact's own request is metered as usual), and neither names
+	// the thread. Set by onLine from the CLI's own result.
+	local := false
 	defer func() {
-		if s.Usage.Flush(&tally, time.Since(turnStart)) == 0 {
+		if s.Usage.Flush(&tally, time.Since(turnStart)) == 0 && !local {
 			log.Printf("usage: 会话 %s 回合结束但未记到用量（agent=%s），该回合消耗不会进报表", in.SessionID, sess.Agent)
 			if in.RequireUsage && receipt != nil {
 				receipt.UsageFailed()
@@ -304,6 +327,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 			}
 			if event.Terminal != "" {
 				terminal = event.Terminal
+				local = event.Local
 			}
 			ev := event.Raw
 			// 掐表要在增量分支之前：最早的模型输出往往就是个增量事件，放到
@@ -368,16 +392,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	}
 
 	if err := executor.Run(ctx, adapter, Turn{SessionID: sess.ID, ContainerID: sess.ContainerID,
-		Text: func() string {
-			out := text
-			if in.Preface != "" {
-				out = in.Preface + "\n\n" + out
-			}
-			if in.Context != "" {
-				out += "\n\n" + in.Context
-			}
-			return out
-		}(), ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options, StrictResume: in.StrictResume, RequireAppServer: in.RequireAppServer, Extras: extras}); err != nil {
+		Text: cliText(in, text), ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options, StrictResume: in.StrictResume, RequireAppServer: in.RequireAppServer, Extras: extras}); err != nil {
 		var exited *ExitError
 		if (errors.Is(err, ErrInterrupted) || errors.As(err, &exited)) && userStopped() {
 			if receipt != nil {
@@ -401,10 +416,11 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if terminal != "" && terminal != "completed" && userStopped() {
 		state = "interrupted"
 	}
-	record(Entry{Kind: "status", State: state}, "status", "")
+	record(Entry{Kind: "status", State: state, Local: local && state == "idle"}, "status", "")
 
-	// 首条消息的对话：异步用模型总结出一个标题，不阻塞对话流。
-	if firstTurn && tid != "" && (receipt == nil || receipt.Succeeded()) {
+	// 首条消息的对话：异步用模型总结出一个标题，不阻塞对话流。本地命令的回合
+	// 没有可总结的内容，留给下一条真正的消息。
+	if firstTurn && !local && tid != "" && (receipt == nil || receipt.Succeeded()) {
 		r.Title(tid, text)
 	}
 }

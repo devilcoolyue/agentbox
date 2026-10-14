@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -108,6 +109,25 @@ func IsClaudeResult(line []byte) bool {
 		Type string `json:"type"`
 	}
 	return json.Unmarshal(line, &probe) == nil && probe.Type == "result"
+}
+
+// claudeCommandName is the CLI's own test for a slash command's name.
+var claudeCommandName = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9:_-]*$`)
+
+// IsClaudeSlashCommand reports text Claude Code parses as a slash command
+// (/context, /compact, a skill…): the CLI only sees one at the very start of
+// the message, so nothing may be put in front of it. Like the CLI, a name
+// with a slash in it (/workspace/a.go) is an ordinary prompt.
+func IsClaudeSlashCommand(text string) bool {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(text), "/")
+	if !ok {
+		return false
+	}
+	name := rest
+	if i := strings.IndexFunc(rest, unicode.IsSpace); i >= 0 {
+		name = rest[:i]
+	}
+	return claudeCommandName.MatchString(name)
 }
 
 func ClaudeUserMessage(text string) []byte {

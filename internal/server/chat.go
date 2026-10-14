@@ -79,6 +79,11 @@ type chatRoom struct {
 	helpContainer string
 	help          string
 
+	commandsMu        sync.Mutex // see slashCommands
+	commandsContainer string
+	commandsAt        time.Time
+	commands          []agent.SlashCommand
+
 	questions map[string]*roomQuestion // under mu; see chat_questions.go
 	steer     chat.Steer               // under mu; set while the running turn takes follow-ups
 }

@@ -1001,6 +1001,8 @@ export interface HistoryEntry extends APIProblem {
   event?: AgentEvent;
   state?: string;
   error?: string;
+  /** status：本地斜杠命令的回合（CLI 未请求模型），不计入起标题 */
+  local?: boolean;
 }
 
 /** GET /api/sessions/{id}/history */
@@ -1137,6 +1139,36 @@ export interface AgentEvent {
   summary?: string;
   patch?: { status?: string; [key: string]: unknown };
   [key: string]: unknown;
+}
+
+/** Claude：/context 本地回答附带的结构化结果（assistant 事件的 context_usage），
+ * 由 CLI 估算，只用于展示（features/chat/context-card.ts） */
+export interface ContextUsage {
+  model?: string;
+  total_tokens?: number;
+  raw_max_tokens?: number;
+  percentage?: number;
+  /** kind：used | deferred（按需加载，不占窗口）| buffer（自动压缩预留）| free */
+  categories?: { name?: string; tokens?: number; kind?: string }[];
+  mcp_tools?: { name?: string; server_name?: string; tokens?: number }[];
+  memory_files?: { path?: string; type?: string; tokens?: number }[];
+  skills?: { name?: string; source?: string; tokens?: number }[];
+  agents?: { name?: string; agentType?: string; agent_type?: string; source?: string; tokens?: number }[];
+  over_limit?: { tokens_over?: number; kind?: string };
+}
+
+/** GET /api/sessions/{id}/commands：容器里 Claude Code 的斜杠命令（internal/server/slash_commands.go） */
+export interface SlashCommand {
+  name: string;
+  description?: string;
+  argument_hint?: string;
+  aliases?: string[];
+  builtin?: boolean;
+}
+export interface SlashCommandsView {
+  /** available | stopped（容器未运行）| unavailable（Codex 或 CLI 不支持） */
+  state: string;
+  commands: SlashCommand[];
 }
 
 /** Claude：仍在后台运行的任务（Bash run_in_background 等） */

@@ -20,6 +20,11 @@ type Event struct {
 	SessionID string
 	// Terminal is a provider-confirmed outcome, not a socket/exit-code guess.
 	Terminal string
+	// Local marks a Claude result for a slash command the CLI ran itself
+	// (num_turns 0): /context or an unknown command never asks the model,
+	// /compact makes its own summary request, metered as usual. Either way
+	// the turn says nothing worth naming a thread by.
+	Local bool
 }
 type Adapter interface {
 	Type() string
@@ -57,6 +62,8 @@ func (a cliAdapter) Decode(line []byte) (Event, bool) {
 		Subtype string `json:"subtype"`
 		IsError bool   `json:"is_error"`
 		Status  string `json:"status"`
+		// Claude result: model round-trips in the turn, 0 for a local command.
+		NumTurns *int `json:"num_turns"`
 	}
 	if len(line) == 0 || line[0] != '{' || json.Unmarshal(line, &probe) != nil {
 		return Event{}, false
@@ -69,6 +76,7 @@ func (a cliAdapter) Decode(line []byte) (Event, bool) {
 	if string(a) == config.AgentClaude && probe.Type == "result" {
 		if probe.Subtype == "success" && !probe.IsError {
 			e.Terminal = "completed"
+			e.Local = probe.NumTurns != nil && *probe.NumTurns == 0
 		} else if probe.IsError || strings.HasPrefix(probe.Subtype, "error_") {
 			e.Terminal = "failed"
 		}

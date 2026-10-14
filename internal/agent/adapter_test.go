@@ -69,3 +69,45 @@ func TestAdapterTerminalOutcomesAreExplicit(t *testing.T) {
 		}
 	}
 }
+
+// A result without any model round-trip is a local slash command: /context
+// and friends answer from the CLI itself and have no usage to meter.
+func TestAdapterMarksLocalClaudeResults(t *testing.T) {
+	a, _ := Lookup("claude")
+	for _, tc := range []struct {
+		raw   string
+		local bool
+	}{
+		{`{"type":"result","subtype":"success","is_error":false,"num_turns":0,"result":"## Context Usage"}`, true},
+		{`{"type":"result","subtype":"success","is_error":false,"num_turns":3}`, false},
+		{`{"type":"result","subtype":"success","is_error":false}`, false},
+		{`{"type":"result","subtype":"success","is_error":true,"num_turns":0}`, false},
+		{`{"type":"result","subtype":"error_during_execution","num_turns":0}`, false},
+	} {
+		if e, ok := a.Decode([]byte(tc.raw)); !ok || e.Local != tc.local {
+			t.Fatalf("%s: %+v", tc.raw, e)
+		}
+	}
+}
+
+// The same rule as the CLI: a name right after the slash, up to whitespace.
+func TestIsClaudeSlashCommand(t *testing.T) {
+	for text, want := range map[string]bool{
+		"/context":                      true,
+		"  /compact keep the API notes": true,
+		"/code-review\nfocus on auth":   true,
+		"/plugin:skill args":            true,
+		"/_private":                     true,
+		"/workspace/a.go 是什么":           false,
+		"/":                             false,
+		"/ context":                     false,
+		"/-x":                           false,
+		"context":                       false,
+		"看下 /context":                   false,
+		"/上下文":                          false,
+	} {
+		if got := IsClaudeSlashCommand(text); got != want {
+			t.Errorf("%q: got %v", text, got)
+		}
+	}
+}

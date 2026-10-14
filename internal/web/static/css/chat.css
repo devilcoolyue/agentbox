@@ -811,6 +811,103 @@ details.think.streaming .think-body::after {
 .send-btn :is(.ic-send, .ic-stop) { animation: icon-pop var(--dur) var(--ease-out); }
 @keyframes icon-pop { from { opacity: 0; scale: .4; } }
 
+/* ---- 斜杠命令提示（commands.ts）：贴在输入框上方的候选列表，与 CLI 的命令补全同序 ---- */
+.cmd-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 40;
+  max-height: min(340px, 46vh); overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line); border-radius: calc(14px * var(--radius-scale));
+  box-shadow: var(--shadow-lg);
+}
+.cmd-row {
+  display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); align-items: baseline; gap: 4px 16px;
+  padding: 6px 10px; border-radius: calc(9px * var(--radius-scale));
+  cursor: pointer;
+}
+.cmd-row[aria-selected="true"] { background: var(--panel-2); }
+.cmd-head { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 46ch; }
+.cmd-name { color: var(--text); font-size: 13px; white-space: nowrap; }
+.cmd-name b { color: var(--amber); font-weight: 700; }
+.cmd-row[aria-selected="true"] .cmd-name { color: var(--text-hi); }
+.cmd-hint { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.cmd-tag {
+  flex: none; padding: 0 6px; border: 1px solid var(--line); border-radius: var(--radius-pill);
+  color: var(--muted); font-size: 10.5px; line-height: 16px;
+}
+.cmd-desc {
+  color: var(--muted); font-size: 12.5px; line-height: 1.45; min-width: 0;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.cmd-note { padding: 8px 10px 6px; color: var(--muted); font-size: 12px; }
+@media (max-width: 760px) {
+  .cmd-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .cmd-head { max-width: 100%; }
+}
+
+/* ---- /context 结果卡片（context-card.ts）：终端里那张格子图 + 类别图例 ---- */
+.ctx-card { display: flex; flex-direction: column; gap: 10px; margin: 2px 0; }
+.ctx-top { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px 28px; }
+.ctx-grid {
+  flex: none; display: grid;
+  grid-template-columns: repeat(var(--cols, 20), 11px); grid-auto-rows: 11px; gap: 4px;
+}
+.ctx-cell { border-radius: calc(3px * var(--radius-scale)); background: var(--c, var(--muted)); }
+.ctx-cell[data-kind="free"] { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.ctx-cell[data-kind="buffer"] {
+  background: repeating-linear-gradient(135deg, var(--line) 0 2px, transparent 2px 4px);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.ctx-side { min-width: 0; flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; }
+.ctx-title { color: var(--text-hi); font-weight: 600; font-size: 15px; }
+.ctx-model { color: var(--muted); font-size: 12px; }
+.ctx-amount { color: var(--text); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.ctx-over { color: var(--red); font-size: 12.5px; }
+.ctx-legend-head { margin-top: 8px; color: var(--muted); font-size: 12px; font-style: italic; }
+.ctx-legend { display: flex; flex-direction: column; gap: 3px; }
+.ctx-row { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.ctx-row[data-kind="deferred"] { color: var(--muted); }
+.ctx-swatch { flex: none; width: 10px; height: 10px; border-radius: calc(3px * var(--radius-scale)); background: var(--c); }
+.ctx-swatch[data-kind="free"] { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.ctx-swatch[data-kind="buffer"] { background: repeating-linear-gradient(135deg, var(--line) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--line); }
+.ctx-swatch[data-kind="deferred"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
+.ctx-row-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-row-value { margin-left: auto; padding-left: 12px; color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ctx-more { border-top: 1px solid var(--line-soft); padding-top: 6px; }
+.ctx-more summary { cursor: pointer; color: var(--text); font-size: 13px; }
+.ctx-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; max-height: 260px; overflow-y: auto; }
+.ctx-item { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; min-width: 0; }
+.ctx-item-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; }
+.ctx-item-note { flex: none; color: var(--muted); font-size: 11.5px; }
+.ctx-item-tokens { margin-left: auto; flex: none; color: var(--muted); font-size: 12px; }
+@media (max-width: 760px) {
+  .ctx-grid { grid-template-columns: repeat(var(--cols, 20), 9px); grid-auto-rows: 9px; gap: 3px; }
+}
+
+/* 上下文压缩的分界：在回合里说明这里压缩过、压掉了多少 */
+.chip.compact { display: inline-flex; align-items: center; gap: 6px; color: var(--amber); font-family: var(--sans); font-size: 12px; padding: 3px 0; }
+.chip.compact svg { flex: none; }
+
+/* ---- 上下文占用（context-meter.ts）：CLI 状态栏上下文条的网页版，环形进度 + 百分比 ---- */
+.ctx-meter {
+  flex: none; margin-left: auto; height: 28px; padding: 0 8px 0 6px;
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: var(--radius-pill);
+  color: var(--muted); font: 500 12px/1 var(--mono); font-variant-numeric: tabular-nums;
+  white-space: nowrap; cursor: default;
+}
+/* 显示时由它吃掉左侧的空白，模型胶囊紧挨在右边 */
+.ctx-meter:not(.hidden) ~ .picker { margin-left: 0; }
+.ctx-meter:hover { color: var(--text); background: var(--panel-2); }
+.ctx-meter:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.ctx-meter svg { flex: none; display: block; transform: rotate(-90deg); }
+.ctx-meter circle { fill: none; stroke-width: 3; }
+.ctx-track { stroke: var(--line); }
+.ctx-fill { stroke: var(--amber); stroke-dasharray: var(--ctx, 0) 100; }
+.ctx-meter[data-level="warn"] .ctx-fill { stroke: var(--warn); }
+.ctx-meter[data-level="critical"] { color: var(--red); }
+.ctx-meter[data-level="critical"] .ctx-fill { stroke: var(--red); }
+
 /* ---- 模型 / 思考强度选择胶囊 + 上弹菜单 ---- */
 .picker { margin-left: auto; position: relative; min-width: 0; }
 .pick-pill {

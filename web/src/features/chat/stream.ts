@@ -176,6 +176,10 @@ function workLabelFromEvent(ev: AgentEvent | undefined) {
     hooks.working(() => i18nText("执行命令…"));
   } else if (ev.type === "item.completed" && ev.item && ev.item.type === "reasoning") {
     hooks.working(() => i18nText("推理中…"));
+  } else if (ev.type === "system" && ev.subtype === "status") {
+    // /compact 与自动压缩：CLI 先报 compacting，压完再报一次带 compact_result 的状态
+    if (ev.status === "compacting") hooks.working(() => i18nText("正在压缩上下文…"));
+    else if (ev.compact_result) hooks.working(() => i18nText("思考中…"));
   }
 }
 

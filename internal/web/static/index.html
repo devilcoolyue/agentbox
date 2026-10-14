@@ -436,6 +436,8 @@
                 <svg width="18" height="18" data-icon="arrow-down" aria-hidden="true"></svg>
               </button>
               <div class="composer">
+                <!-- 斜杠命令提示（features/chat/commands.ts） -->
+                <div id="chat-commands" class="cmd-menu hidden" role="listbox" aria-label="斜杠命令" data-i18n-attrs='{"aria-label":"斜杠命令"}'></div>
                 <section id="chat-delivery" class="chat-delivery hidden" aria-label="消息确认与恢复" data-i18n-attrs='{"aria-label":"消息确认与恢复"}'>
                   <div class="delivery-header">
                     <button id="chat-delivery-toggle" type="button" class="delivery-toggle" aria-expanded="false" aria-controls="chat-delivery-list">
@@ -449,7 +451,7 @@
                 <p id="chat-draft-status" class="hidden" role="status"></p>
                 <button id="chat-draft-check" type="button" class="btn btn-sm btn-ghost hidden" data-icon="refresh" data-i18n="重新检查附件">重新检查附件</button>
                 <div id="chat-attach" class="chat-attach hidden"></div>
-                <textarea id="chat-input" rows="1" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）" data-i18n-attrs="{&quot;placeholder&quot;:&quot;随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）&quot;}"></textarea>
+                <textarea id="chat-input" rows="1" aria-autocomplete="list" aria-controls="chat-commands" placeholder="随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）" data-i18n-attrs="{&quot;placeholder&quot;:&quot;随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）&quot;}"></textarea>
                 <div class="composer-bar">
                   <button id="btn-attach" class="icon-btn" aria-label="添加附件" data-tip="添加附件（图片或文件，48 小时后过期）" data-i18n-attrs="{&quot;aria-label&quot;:&quot;添加附件&quot;,&quot;data-tip&quot;:&quot;添加附件（图片或文件，48 小时后过期）&quot;}">
                     <svg width="18" height="18" data-icon="paperclip" aria-hidden="true"></svg>
@@ -465,6 +467,11 @@
                   </div>
                   <button id="chat-suggest" type="button" class="suggest-key hidden" aria-label="填入下一步提示" data-tip="按 Tab 填入下一步提示" data-i18n-attrs='{"aria-label":"填入下一步提示","data-tip":"按 Tab 填入下一步提示"}'><kbd>Tab</kbd><span data-i18n="填入">填入</span></button>
                   <input id="attach-input" type="file" multiple class="hidden">
+                  <!-- 上下文占用（features/chat/context-meter.ts），对应 CLI 状态栏的上下文条 -->
+                  <span id="chat-context" class="ctx-meter hidden" role="img" tabindex="0" data-level="ok">
+                    <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle class="ctx-track" cx="10" cy="10" r="7.5" pathLength="100"/><circle class="ctx-fill" cx="10" cy="10" r="7.5" pathLength="100"/></svg>
+                    <span class="ctx-value"></span>
+                  </span>
                   <div id="picker" class="picker">
                     <button id="btn-pick" class="pick-pill"></button>
                     <div id="pick-menu" class="pick-menu hidden"></div>
