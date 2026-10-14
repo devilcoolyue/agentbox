@@ -2349,5 +2349,9 @@ export default {
   "后台任务已停止": "Background task stopped",
   "等待后台任务结束：{p0}": "Waiting for background task: {p0}",
   "等待 {p0} 个后台任务结束…": "Waiting for {p0} background tasks…",
-  "后台任务 {p0} 个运行中": "{p0} background task(s) running"
+  "后台任务 {p0} 个运行中": "{p0} background task(s) running",
+  "消息操作": "Message actions",
+  "发送时间：{p0}（{p1}）": "Sent: {p0} ({p1})",
+  "复制消息": "Copy message",
+  "填回输入框": "Put back in composer"
 } satisfies Record<string, string>;

@@ -46,23 +46,50 @@
 .chat-older.error { color: var(--text); }
 
 /* 新消息淡入（历史加载在隐藏态完成，呈现时整体淡入一次） */
-.msg, .turn { animation: msg-in 0.2s ease-out; }
+.msg, .turn, .user-turn { animation: msg-in 0.2s ease-out; }
+.user-turn .msg { animation: none; }
 @keyframes msg-in {
   from { opacity: 0; transform: translateY(4px); }
 }
 
-/* ---- 用户消息：右对齐圆角气泡，无边框 ---- */
+/* ---- 用户消息：右对齐圆角气泡 + 右侧首字头像（与左侧 Agent 头像对称），
+ * 气泡下方一行时间 / 复制 / 填回输入框，悬停或键盘获焦才显出来 ---- */
 .msg { font-size: 15px; line-height: 1.75; }
-.msg.user {
+.user-turn {
   align-self: flex-end;
-  max-width: 78%;
+  display: flex; align-items: flex-start; gap: 12px;
+  max-width: calc(78% + 40px);
+  margin-top: 8px;
+}
+.user-main { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.msg.user {
+  max-width: 100%;
   background: var(--panel-2);
   border-radius: calc(18px * var(--radius-scale)) calc(18px * var(--radius-scale)) calc(6px * var(--radius-scale)) calc(18px * var(--radius-scale));
   padding: 10px 16px;
-  margin-top: 8px;
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* 单行气泡高 46px，28px 头像下移 9px 正好与它居中 */
+.user-avatar {
+  flex: none; width: 28px; height: 28px; margin-top: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-round);
+  background: var(--panel-2); color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 13px; font-weight: 600; line-height: 1;
+  user-select: none;
+}
+.user-actions {
+  display: flex; align-items: center; gap: 2px;
+  margin-top: 2px; margin-right: -6px;
+  color: var(--muted); font-size: 12px;
+  opacity: 0; transition: opacity var(--dur-fast) var(--ease-out);
+}
+.user-turn:hover .user-actions, .user-actions:focus-within { opacity: 1; }
+@media (hover: none) { .user-actions { opacity: 1; } }
+.user-time { margin-right: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.user-actions .answer-copy { width: 28px; height: 28px; }
 
 /* ---- Agent 回合：品牌头像 + 内容列 ---- */
 .turn { display: flex; gap: 12px; align-items: flex-start; }
@@ -918,7 +945,9 @@ details.think.streaming .think-body::after {
 /* ---- 窄屏：收窄留白、放宽气泡、防 iOS 聚焦缩放、引导 pills 改单列 ---- */
 @media (max-width: 760px) {
   .chat-log { padding: 14px 12px 4px; gap: 12px; --fade-top: 20px; --fade-bottom: 10px; }
-  .msg.user { max-width: 88%; }
+  .user-turn { max-width: 88%; }
+  .user-avatar { display: none; }
+  .user-actions .answer-copy { width: 34px; height: 34px; }
   .steer-msg { max-width: 88%; }
   .thread-bar { padding: 6px 8px 0; }
   .thread-cur { padding: 6px 10px; }
@@ -941,7 +970,8 @@ details.think.streaming .think-body::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .msg, .turn { animation: none; }
+  .msg, .turn, .user-turn { animation: none; }
+  .user-actions { transition: none; }
   .work-label, .turn.working .agent-ico { animation: none; }
   .icon-btn.rec { animation: none; }
   .hero-cursor { animation: none; }

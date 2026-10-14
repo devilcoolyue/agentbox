@@ -13,7 +13,7 @@ import type {
 import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
-import { chip, renderUserMsg, renderSteer, interruptedChip, svgIcon } from "./chat-render.js";
+import { chip, renderUserTurn, renderSteer, interruptedChip, svgIcon, USER_ATTACH_RE } from "./chat-render.js";
 import { observeAnswer } from "./chat-footer.js";
 import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
@@ -170,7 +170,7 @@ function handleChatMsg(msg: ChatMessage) {
       sealQuestions(); // 新一轮开始，之前没答的提问不再可答
       stream.flush(); // 上一回合的回放立刻放完，不让新消息插到它前面
       noteThreadTitle(msg.text!);
-      appendChat(renderUserMsg(msg.text));
+      appendChat(renderUserTurn(msg.text, msg.ts));
       live.context.turn = msg.turn;
       break;
     case "agent_event": {
@@ -1127,12 +1127,22 @@ $("chat-follow").addEventListener("click", event => { if (event.detail <= 1) voi
 const followSelect = $<HTMLSelectElement>("chat-followup-mode");
 setSelectValue(followSelect, followupDefault());
 followSelect.addEventListener("change", () => { setFollowupDefault(followSelect.value === "steer" ? "steer" : "queue"); renderFollow(); updateChatPlaceholder(); }, { signal: lifetime.signal });
-// 「引导未生效」气泡里的复制：只填空输入框，不覆盖已有草稿，也不自动发送
+// 用户消息的「填回输入框」与「引导未生效」的复制：只填空输入框，不覆盖已有草稿，也不自动发送。
+// 原文里的附件标记还原成输入框的附件，发送前照常经服务端检查是否还在。
 document.addEventListener("chat-restore-text", event => {
   const text = (event as CustomEvent<string>).detail, current = composerDraft();
   if (typeof text !== "string" || !text) return;
   if (current.text || current.attachments.length) { toast(i18nText("输入框已有草稿，请先保存或清空后再复制。"), true); return; }
-  applyComposerDraft({ text, attachments: [] });
+  const attachments: DraftAttachment[] = [];
+  const restored = text.replace(USER_ATTACH_RE, (whole, kind: string, n: string, path: string) => {
+    const id = Number(n), img = kind === "图片", name = path.split("/").pop() || "";
+    const same = attachments.find(a => a.id === id);
+    if (same && same.path !== path) return whole;
+    if (!same) attachments.push({ id, path, name, orig: name, kind: img ? "img" : "file", valid: false });
+    return `[${img ? "Image" : "File"} #${id}]`;
+  });
+  applyComposerDraft({ text: restored, attachments });
+  if (attachments.length) void drafts?.validate();
   $("chat-input").focus();
 }, { signal: lifetime.signal });
 const suggestToggle = $<HTMLInputElement>("chat-suggest-enabled");

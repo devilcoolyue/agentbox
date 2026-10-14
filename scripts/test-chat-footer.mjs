@@ -66,6 +66,36 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  await page.setViewportSize({width:1280,height:900});
  await page.evaluate(()=>document.documentElement.dataset.theme='light');
 
+ // User messages: initial avatar on the right, actions only on hover, readable copy, put back in the composer.
+ const asked = '看下这张图 [图片#1 /shared/.images/a1.png]\n还有 [附件#2 /shared/.file/b2.pdf]';
+ setHistory([
+  {kind:'user',ts:'2026-09-26T08:20:00Z',text:asked,turn:makeTurn('saved','gpt-5.5','high')},
+  {kind:'event',ts:'2026-09-26T08:22:00Z',event:{type:'item.completed',item:{type:'agent_message',text:'好的'}}},
+ ]);
+ await reload();
+ const userRow = page.locator('#chat-log .user-turn').last();
+ assert.equal(await userRow.locator('.user-avatar').innerText(),'F');
+ const userActions = userRow.locator('.user-actions');
+ const opacity = () => userActions.evaluate(e=>getComputedStyle(e).opacity);
+ await page.mouse.move(0,0);
+ assert.equal(await opacity(),'0');
+ await userRow.locator('.msg.user').hover();
+ assert.equal(await opacity(),'1');
+ assert.match(await userActions.innerText(),/2026-09-26 08:20/);
+ await page.screenshot({path:'output/playwright/user-turn-hover.png',animations:'disabled'});
+ await userActions.getByRole('button',{name:'复制消息',exact:true}).click();
+ await userRow.locator('.user-action.copied').waitFor();
+ assert.equal(await readClipboard(page),'看下这张图 [图片 #1]\n还有 [附件 #2 b2.pdf]');
+ await userActions.getByRole('button',{name:'填回输入框',exact:true}).click();
+ assert.equal(await page.locator('#chat-input').inputValue(),'看下这张图 [Image #1]\n还有 [File #2]');
+ assert.equal(await page.locator('#chat-attach .attach-remove').count(),2);
+ while (await page.locator('#chat-attach .attach-remove').count()) await page.locator('#chat-attach .attach-remove').first().click();
+ await page.locator('#chat-input').fill('');
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await userRow.locator('.user-avatar').isVisible(),false);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.setViewportSize({width:1280,height:900});
+
  for(const [cost,label] of [
   [{source:'provider',cost_micro_usd:97500},'$0.0975'],
   [{source:'table',cost_micro_usd:1100},'$0.0011'],

@@ -1,11 +1,11 @@
 import { formatProblem } from "./problems.js";
-import { setText, setTextRender, t as i18nText } from "./i18n.js";
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 /* chat-render：对话流的纯渲染管线 —— 用户消息、agent 事件（Claude stream-json /
  * Codex --json 新旧两种结构）、轻量 Markdown、附件缩略图。无状态副作用。
  * 全部通过 DOM 构建输出，模型文本永远走 textContent，不存在注入面。 */
 "use strict";
 
-import { openLightbox, fmtTime, toast } from "./util.js";
+import { openLightbox, fmtTime, fmtDateTime, toast } from "./util.js";
 import { imgURLFromPath } from "./api.js";
 import type {
   AgentEvent, ContentBlock, HistoryEntry, LiveNode, RateLimitInfo, SteerView,
@@ -14,6 +14,7 @@ import { svgIcon, buttonLabel, actionButton } from "./icons.js";
 export { svgIcon } from "./icons.js";
 
 import { setTip } from "./tip.js";
+import { S } from "./state.js";
 
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
 
@@ -104,6 +105,72 @@ export function renderUserMsg(text: string | undefined) {
   }
   if (last < str.length) d.appendChild(document.createTextNode(str.slice(last)));
   return d;
+}
+
+/* 复制出去给人看：附件标记换成「[图片 #1]」「[附件 #2 report.pdf]」，不带容器路径 */
+export function readableUserText(text: string) {
+  return text.replace(USER_ATTACH_RE, (_m, kind: string, n: string, path: string) =>
+    kind === "图片" ? `[${i18nText("图片 #")}${n}]` : `[${i18nText("附件 #")}${n} ${path.split("/").pop()}]`);
+}
+
+function userActionButton(label: () => string, icon: string, run: (btn: HTMLButtonElement) => void) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "answer-copy user-action";
+  setAttrRender(btn, "aria-label", label);
+  btn.append(svgIcon(icon, 16));
+  setTip(btn, label);
+  btn.addEventListener("click", () => run(btn));
+  return btn;
+}
+
+/* 用户消息一行：气泡 + 右侧首字头像，气泡下方是悬停才出现的时间 / 复制 / 填回输入框
+ * （窄屏不显示头像，触屏没有悬停就常驻）。引导消息只用 renderUserMsg 的气泡，不走这里。 */
+export function renderUserTurn(text: string | undefined, ts?: string) {
+  const str = String(text ?? "");
+  const row = document.createElement("div");
+  row.className = "user-turn";
+  const main = document.createElement("div");
+  main.className = "user-main";
+  const actions = document.createElement("div");
+  actions.className = "user-actions";
+  actions.setAttribute("role", "group");
+  setAttrRender(actions, "aria-label", () => i18nText("消息操作"));
+  const d = ts ? new Date(ts) : null;
+  if (d && Number.isFinite(d.getTime())) {
+    const time = document.createElement("time");
+    time.className = "user-time";
+    time.textContent = fmtDateTime(d, false);
+    time.dateTime = d.toISOString();
+    setTip(time, () => i18nText("发送时间：{p0}（{p1}）", { p0: fmtDateTime(d), p1: S.timeZone || "Asia/Shanghai" }));
+    actions.append(time);
+  }
+  const copy = userActionButton(() => i18nText("复制消息"), "copy", async btn => {
+    if (btn.classList.contains("copied")) return;
+    try { await copyText(readableUserText(str)); }
+    catch (_) { toast(i18nText("复制失败，请选择内容后手动复制"), true); return; }
+    btn.replaceChildren(svgIcon("check", 16));
+    btn.classList.add("copied");
+    setTip(btn, () => i18nText("已复制"));
+    setTimeout(() => {
+      btn.replaceChildren(svgIcon("copy", 16));
+      btn.classList.remove("copied");
+      setTip(btn, () => i18nText("复制消息"));
+    }, 1400);
+  });
+  // 与「引导未生效」的复制同一入口：不覆盖已有草稿，不自动发送
+  const restore = userActionButton(() => i18nText("填回输入框"), "undo",
+    () => document.dispatchEvent(new CustomEvent("chat-restore-text", { detail: str })));
+  actions.append(copy, restore);
+  main.append(renderUserMsg(str), actions);
+  const avatar = document.createElement("span");
+  avatar.className = "user-avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  const initial = Array.from(S.user.trim())[0]?.toUpperCase();
+  if (initial) avatar.textContent = initial;
+  else avatar.append(svgIcon("user", 16));
+  row.append(main, avatar);
+  return row;
 }
 
 /* 消息气泡里的图片缩略图 */
@@ -602,7 +669,7 @@ function backgroundChip(ev: AgentEvent) {
  * chat_session 等簿记类条目对用户不可见，落到兜底分支返回空。 */
 export function renderEntry(raw: HistoryEntry | null | undefined) {
   if (!raw || typeof raw !== "object") return [];
-  if (raw.kind === "user") return [renderUserMsg(raw.text)];
+  if (raw.kind === "user") return [renderUserTurn(raw.text, raw.ts)];
   if (raw.kind === "event") return raw.state === "interrupted" ? [] : renderEvent(raw.event);
   if (raw.kind === "steer") return renderSteer(raw.event as unknown as SteerView);
   if (raw.kind === "divider") return [divider(raw.ts ? i18nText("新对话 · ") + fmtTime(raw.ts) : "")];
