@@ -137,7 +137,7 @@
 .usage-table tbody tr { transition: background-color 0.12s ease; }
 .usage-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--page) 80%, var(--panel)); }
 .usage-table tbody tr:hover { background: color-mix(in srgb, var(--amber) 4%, var(--panel)); }
-.usage-table :is(.u-sub, .u-cache, .u-billing) { margin-top: 2px; }
+.usage-table :is(.u-sub, .u-billing) { margin-top: 2px; }
 /* 骨架行（usage.ts）高度对上两行格的真实行，数据换进来时表格不跳 */
 .usage-table .skeleton-row td { padding-top: 17px; padding-bottom: 17px; }
 .usage-table .num { text-align: right; white-space: nowrap; }
@@ -170,11 +170,28 @@
 .u-billing { margin-top: 4px; font-family: var(--sans); font-weight: 400; }
 .u-billing .u-chip { padding: 0; border: 0; background: none; font-size: 10.5px; }
 
-/* token：输入/输出一行，缓存另起一行。箭头只是方向记号，别抢数字的注意力 */
-.u-io { display: inline-flex; align-items: baseline; gap: 3px; }
-.u-arrow { font-style: normal; color: var(--muted); margin-left: 6px; }
-.u-io .u-arrow:first-child { margin-left: 0; }
-.u-cache { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+/* token：照 sub2api 排两行——↓ 输入 ↑ 输出（完整数字），缓存读取 / 写入按
+ * K/M/B 缩写；每个桶一种颜色，取自各风格都定义了的全局令牌。右边 ⓘ 悬停看完整数字。 */
+.usage-table td.u-tok { text-align: left; }
+.usage-table td.u-tok .u-v { display: inline-flex; align-items: center; gap: 8px; }
+.u-tk-lines { display: grid; gap: 4px; justify-items: start; }
+.u-tk-line { display: inline-flex; align-items: center; gap: 10px; }
+.u-tk { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.u-tk .ui-icon { flex: none; stroke-width: 2.2; }
+.u-tk.in .ui-icon { color: var(--green); }
+.u-tk.out .ui-icon { color: var(--syntax-keyword); }
+.u-tk.in, .u-tk.out { color: var(--text-hi); font-weight: 500; }
+.u-tk.read, .u-tk.read .ui-icon { color: var(--info); }
+.u-tk.write, .u-tk.write .ui-icon { color: var(--warn); }
+.u-tk-info {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: color-mix(in srgb, var(--panel-2) 70%, transparent);
+  color: var(--muted); cursor: help;
+}
+.u-tk-info:hover, .u-tk-info:focus-visible { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+/* 类型下方「第 3/27 次」：同回合连着的几行一眼看出是一组 */
+.u-seq { white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* 模型下面一行：服务方 · 思考强度 */
 .u-sub:has(.u-effort) { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; }
 .u-effort { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
@@ -365,6 +382,9 @@
   .u-model { justify-content: flex-end; white-space: normal; }
   .u-model > span { max-width: 100%; overflow-wrap: anywhere; }
   .u-model + .u-sub { padding-left: 0; }
+
+  .usage-table td.u-tok .u-v { justify-content: flex-end; }
+  .u-tk-lines { justify-items: end; }
 }
 
 /* 手机横屏和矮窗口为列表留空间，筛选仍可在自身区域滚动操作。 */

@@ -122,6 +122,8 @@ GET    /api/usage/events            消耗明细流水（使用记录页）；�
                                     &agent=&model=&limit=（默认 50，上限 500）&offset=&order=asc|desc
                                     明细时间支持 RFC3339 或系统时区 YYYY-MM-DDTHH:mm
                                     返回 rows + 整个筛选范围的 total + 筛选可选值 facets + 异步补记状态 sync
+                                    一行 = 一次模型请求；turn_seq/turn_requests 是同回合第几次/共几次，
+                                    merged_requests 是升级前按回合合并的旧行合并了几次
 ```
 
 明细接口 `/api/usage/events` 的 `kind=delegation` 筛选跑腿模型的消耗，`kind=chat` 只筛普通对话（不含跑腿），`kind=decision` 保留独立决策调用（含委派时的 Jev 判断）。跑腿用量入账时就记在属主空间与主线程下，行上带 `delegation_id`；`kind=delegation` 只是对 `kind=chat` 且有委派 ID 的行的只读投影，不改写结算记录或重复扣费。

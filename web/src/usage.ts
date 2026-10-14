@@ -1,16 +1,16 @@
 import { t as i18nText, setText, setTextRender, setAttrRender } from "./i18n.js";
 import { svgIcon } from "./icons.js";
 import { BUDGETS, EFFORT_LABELS } from "./reasoning.js";
-import { cacheHitText } from "./usage-math.js";
+import { cacheHitText, fmtTokens } from "./usage-math.js";
 /* usage：使用记录（消耗流水明细）。
  *
- * **一行是什么**：一个回合 × 一个模型，不是一次 API 调用。容器里的 CLI 直接打
- * provider 官方接口，我们不在链路上，只拿得到 CLI 在回合收尾汇总报的那份账。
- * 一个回合内部可能真打了十几次接口，这里合成一行；claude 会按模型再拆开
- * （子 agent 起标题用的 haiku 就是这么单独成行的），同回合各行共享 turn_id。
+ * **一行是什么**：一次 provider 请求（一条 API 响应）。容器里的 CLI 一个回合内部
+ * 每调一次工具就多打一次接口、每次重发整段上下文，所以同回合会连着好几行，共享
+ * turn_id，类型下方标「第几次 / 共几次」。升级前的 Claude 对话按回合合并保存，
+ * 那些旧行标「合并 N 次」。
  *
- * 因此「回合数」永远按 turn_id 去重，而耗时/首字延迟是回合级指标、在同回合各行
- * 上重复出现——它们只能取一份看，跨行求和没有意义，合计里也就没有这两项。
+ * 因此「回合数」永远按 turn_id 去重；首字与总耗时是回合级指标，只记在回合第一次
+ * 请求上，其余行显示 —，合计里也没有这两项。
  *
  * 金额一律以微美元整数在前后端之间传递，只在显示的最后一步除 1e6（同 quota.ts）。
  * 管理员看全部并多一列「用户」，普通用户只看得到自己的，服务端按 scope 下发。 */
@@ -78,7 +78,7 @@ function readFilters(): Filters {
 const pad = (n: number) => String(n).padStart(2, "0");
 const dateRange = new DateRangePicker($<HTMLButtonElement>("uf-date-range"), () => usageTimeZone, reload, "today");
 
-interface ClockParts { year: number; month: number; day: number; hour: number; minute: number }
+interface ClockParts { year: number; month: number; day: number; hour: number; minute: number; second: number }
 
 const zoneFormatters = new Map<string, Intl.DateTimeFormat>();
 
@@ -90,7 +90,7 @@ function clockParts(d: Date): ClockParts {
     fmt = new Intl.DateTimeFormat("en-CA", {
       timeZone: usageTimeZone,
       year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
     });
     zoneFormatters.set(usageTimeZone, fmt);
   }
@@ -100,7 +100,7 @@ function clockParts(d: Date): ClockParts {
   }
   return {
     year: values.year!, month: values.month!, day: values.day!,
-    hour: values.hour!, minute: values.minute!,
+    hour: values.hour!, minute: values.minute!, second: values.second!,
   };
 }
 
@@ -108,6 +108,12 @@ function fmtUsageTime(ms: number | string, withYear = false) {
   const p = clockParts(new Date(ms));
   const core = `${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}`;
   return withYear ? `${p.year}-${core}` : core;
+}
+
+/* 一次请求一行，同回合的请求相隔几秒，时间列要精确到秒。 */
+function fmtUsageClock(ms: number) {
+  const p = clockParts(new Date(ms));
+  return `${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}`;
 }
 
 const ZONE_NAMES: Record<string, string> = {
@@ -283,29 +289,44 @@ function cell(label: string | (() => string), text: string, cls = "") {
   return td;
 }
 
+/* Token 格照 sub2api 的排法：第一行 ↓ 输入 ↑ 输出（完整数字），第二行缓存读取
+ * （数据库图标）与缓存写入（铅笔图标）按 K/M/B 缩写，右边 ⓘ 悬停看完整数字。
+ * 箭头只是图形记号，读屏与悬停提示里仍写明「输入 / 输出」。 */
+function tokenPart(icon: string, cls: string, text: string, label: () => string) {
+  const part = document.createElement("span");
+  part.className = "u-tk " + cls;
+  const value = document.createElement("span");
+  value.textContent = text;
+  part.append(svgIcon(icon, 13), value);
+  setAttrRender(part, "aria-label", () => label() + " " + text);
+  return part;
+}
+
 function tokenCell(r: UsageEventRow) {
   const { td, v } = cellEl("Token", "num u-tok");
-  // 主行给「入 / 出」，缓存读单独一行——缓存读经常是输入的十几倍，
-  // 混在一起看不出这个回合到底喂了多少新内容。全站统一写字不画箭头：
-  // 箭头方向在「发给模型」和「模型返回」两种视角下正好相反，曾经两页各画一套。
-  const main = document.createElement("div");
-  const io = document.createElement("span");
-  io.className = "u-io";
-  const incoming = document.createElement("i"), outgoing = document.createElement("i");
-  incoming.className = outgoing.className = "u-arrow";
-  setText(incoming, "入");
-  setText(outgoing, "出");
-  io.append(incoming, document.createTextNode(num(r.input_tokens)),
-    outgoing, document.createTextNode(num(r.output_tokens)));
-  main.appendChild(io);
-  const cache = document.createElement("div");
-  cache.className = "u-cache";
-  setTextRender(cache, () => i18nText("缓存 ") + num(r.cache_read_tokens) +
-    (r.cache_write_tokens ? i18nText(" / 写 ") + num(r.cache_write_tokens) : ""));
-  v.append(main, cache);
-  setAttrRender(td, "title", () => i18nText("输入 {p0}\n输出 {p1}\n", { p0: String(num(r.input_tokens)), p1: String(num(r.output_tokens)) }) +
-    i18nText("缓存读取 {p0}\n缓存写入 {p1}\n", { p0: String(num(r.cache_read_tokens)), p1: String(num(r.cache_write_tokens)) }) +
-    i18nText("合计 {p0}", { p0: String(num(r.total_tokens)) }));
+  const lines = document.createElement("div");
+  lines.className = "u-tk-lines";
+  const io = document.createElement("div");
+  io.className = "u-tk-line";
+  io.append(tokenPart("arrow-down", "in", num(r.input_tokens), () => i18nText("输入")),
+    tokenPart("arrow-up", "out", num(r.output_tokens), () => i18nText("输出")));
+  lines.appendChild(io);
+  if (r.cache_read_tokens || r.cache_write_tokens) {
+    const cache = document.createElement("div");
+    cache.className = "u-tk-line";
+    if (r.cache_read_tokens) cache.appendChild(tokenPart("archive", "read", fmtTokens(r.cache_read_tokens), () => i18nText("缓存读取")));
+    if (r.cache_write_tokens) cache.appendChild(tokenPart("edit", "write", fmtTokens(r.cache_write_tokens), () => i18nText("缓存写入")));
+    lines.appendChild(cache);
+  }
+  const info = document.createElement("span");
+  info.className = "u-tk-info";
+  info.tabIndex = 0;
+  info.appendChild(svgIcon("info", 13));
+  setAttrRender(info, "aria-label", () => i18nText("Token 明细"));
+  setTip(info, () => i18nText("输入 {p0}\n输出 {p1}\n", { p0: num(r.input_tokens), p1: num(r.output_tokens) }) +
+    i18nText("缓存读取 {p0}\n缓存写入 {p1}\n", { p0: num(r.cache_read_tokens), p1: num(r.cache_write_tokens) }) +
+    i18nText("合计 {p0}", { p0: num(r.total_tokens) }));
+  v.append(lines, info);
   return td;
 }
 
@@ -399,6 +420,19 @@ function renderRows(data: UsageEvents) {
     setTextRender(chip, () => KIND_LABEL[r.kind] || r.kind);
     if (KIND_HINT[r.kind]) setTip(chip, () => KIND_HINT[r.kind]);
     kindv.appendChild(chip);
+    // 同回合连着好几行：标出这是第几次请求；升级前合并保存的旧行标合并次数。
+    if (r.turn_requests || r.merged_requests) {
+      const seq = document.createElement("div");
+      seq.className = "u-sub u-seq";
+      if (r.turn_requests) {
+        setTextRender(seq, () => i18nText("第 {p0}/{p1} 次", { p0: num(r.turn_seq || 0), p1: num(r.turn_requests || 0) }));
+        setTip(seq, () => i18nText("这一回合里的第几次模型请求：CLI 每调用一次工具就再请求一次，每次都重新发送整段上下文"));
+      } else {
+        setTextRender(seq, () => i18nText("合并 {p0} 次", { p0: num(r.merged_requests || 0) }));
+        setTip(seq, () => i18nText("升级前的记录按回合合并保存，这一行是 {p0} 次请求之和；已按整行入账，不再拆开", { p0: num(r.merged_requests || 0) }));
+      }
+      kindv.appendChild(seq);
+    }
     tr.appendChild(kind);
 
     const b = billingFor(r);
@@ -439,25 +473,32 @@ function renderRows(data: UsageEvents) {
     // 两个数都是回合级的，同回合拆成多行时每行重复——所以标题里点明，免得有人
     // 把一列加起来当总时长。
     const { td: lat, v: latv } = cellEl(() => i18nText("延迟"), "num u-lat");
-    const ttft = document.createElement("div");
-    setTextRender(ttft, () => i18nText("首字 ") + fmtDur(r.ttft_ms));
-    const dur = document.createElement("div");
-    dur.className = "u-sub";
-    // 老数据没量过墙钟，那种行退回 provider 报的模型侧耗时，并把标签换掉——
-    // 宁可标明这是另一个口径，也不要把它冒充成总耗时。
-    setTextRender(dur, () => r.wall_ms ? i18nText("总耗时 ") + fmtDur(r.wall_ms) : i18nText("模型 ") + fmtDur(r.duration_ms));
-    latv.append(ttft, dur);
-    setTip(lat, () => i18nText("首字与总耗时都从容器就绪开始算，含 CLI 启动，两个数同源。")
-      + i18nText("老数据没量过总耗时，退回显示 provider 自报的模型侧耗时（标「模型」，不含启动）。")
-      + i18nText("都是回合级指标：同一回合拆成多行时每行都是这个值，不要跨行求和"));
+    if (!r.ttft_ms && !r.wall_ms && !r.duration_ms) {
+      // 回合里后续的请求：耗时只在回合第一次请求上量一次。
+      latv.textContent = "—";
+      setTip(lat, () => i18nText("首字与总耗时按回合测量，记在这一回合的第一次请求上"));
+    } else {
+      const ttft = document.createElement("div");
+      setTextRender(ttft, () => i18nText("首字 ") + fmtDur(r.ttft_ms));
+      const dur = document.createElement("div");
+      dur.className = "u-sub";
+      // 老数据没量过墙钟，那种行退回 provider 报的模型侧耗时，并把标签换掉——
+      // 宁可标明这是另一个口径，也不要把它冒充成总耗时。
+      setTextRender(dur, () => r.wall_ms ? i18nText("总耗时 ") + fmtDur(r.wall_ms) : i18nText("模型 ") + fmtDur(r.duration_ms));
+      latv.append(ttft, dur);
+      setTip(lat, () => i18nText("首字与总耗时都从容器就绪开始算，含 CLI 启动，两个数同源。")
+        + i18nText("老数据没量过总耗时，退回显示 provider 自报的模型侧耗时（标「模型」，不含启动）。")
+        + i18nText("都是回合级指标：只记在回合的第一次请求上，总耗时是整个回合的耗时"));
+    }
     tr.appendChild(lat);
 
     const { td: time, v: timev } = cellEl(() => i18nText("时间"), "num u-time");
+    // 同回合的请求相隔几秒，主行精确到秒。
     const stamp = fmtUsageTime(r.ts, true);
     const day = document.createElement("div");
     day.className = "u-sub";
     day.textContent = stamp.slice(0, 10).replaceAll("-", "/");
-    timev.append(document.createTextNode(stamp.slice(11)), day);
+    timev.append(document.createTextNode(fmtUsageClock(r.ts)), day);
     tr.appendChild(time);
     body.appendChild(tr);
     rowMotion.play(tr, String(r.id));
@@ -598,13 +639,15 @@ function renderSummary(data: UsageEvents) {
   const box = $("usage-summary");
   box.replaceChildren();
   const t = data.total;
+  // token 合计动辄上千万，卡片里按 K/M/B 缩写，悬停给完整数字。
+  const exact = (n: number, note?: () => string) => () => num(n) + (note ? " · " + note() : "");
   const items: [string, string, (() => string)?][] = [
     ["总花费", fmtUSD(t.cost_micro_usd, 2), () => i18nText("筛选范围内所有行的费用之和")],
-    ["回合", num(t.turns), () => i18nText("按 turn_id 去重；共 {p0} 行明细", { p0: String(num(t.rows)) })],
-    ["输入", num(t.input_tokens), () => i18nText("未命中缓存的输入 token")],
-    ["输出", num(t.output_tokens)],
-    ["缓存读取", num(t.cache_read_tokens), () => i18nText("命中缓存的输入，计价远低于新输入")],
-    ["缓存写入", num(t.cache_write_tokens)],
+    ["回合", num(t.turns), () => i18nText("按 turn_id 去重；共 {p0} 条记录，一次模型请求一条", { p0: String(num(t.rows)) })],
+    ["输入", fmtTokens(t.input_tokens), exact(t.input_tokens, () => i18nText("未命中缓存的输入 token"))],
+    ["输出", fmtTokens(t.output_tokens), exact(t.output_tokens)],
+    ["缓存读取", fmtTokens(t.cache_read_tokens), exact(t.cache_read_tokens, () => i18nText("命中缓存的输入，计价远低于新输入"))],
+    ["缓存写入", fmtTokens(t.cache_write_tokens), exact(t.cache_write_tokens)],
   ];
   for (const [label, value, tip] of items) {
     const card = document.createElement("div");
@@ -741,8 +784,8 @@ export async function openUsageView() {
   usageTimeZone = S.timeZone || "Asia/Shanghai";
   syncTimeZone();
   setTextRender($("usage-sub"), () => S.role === "admin"
-    ? i18nText("查看所有用户的用量与费用，每行对应一个回合中的一个模型。")
-    : i18nText("查看你的用量与费用，每行对应一个回合中的一个模型。"));
+    ? i18nText("查看所有用户的用量与费用，每行对应一次模型请求。")
+    : i18nText("查看你的用量与费用，每行对应一次模型请求。"));
   await load();
 }
 
@@ -766,7 +809,7 @@ async function exportCSV() {
         i18nText("请缩小时间范围后分批导出"), true);
     }
     const head = [i18nText("时间（{p0}）", { p0: String(usageTimeZone) }), i18nText("用户"), i18nText("工作空间"), i18nText("工作空间ID"), i18nText("账号"), "Agent", i18nText("模型"), i18nText("思考强度"), i18nText("类型"), i18nText("计费"),
-      i18nText("输入"), i18nText("输出"), i18nText("缓存读取"), i18nText("缓存写入"), i18nText("缓存命中率"), i18nText("合计Token"), i18nText("费用USD"),
+      i18nText("输入"), i18nText("输出"), i18nText("缓存读取"), i18nText("缓存写入"), i18nText("缓存命中率"), i18nText("合计Token"), i18nText("回合内序号"), i18nText("合并请求数"), i18nText("费用USD"),
       i18nText("首字ms"), i18nText("总耗时ms"), i18nText("模型耗时ms"), i18nText("回合ID"), i18nText("委派ID")];
     const lines = [head.join(",")];
     for (const r of data.rows) {
@@ -775,6 +818,9 @@ async function exportCSV() {
         r.user, workspaceName(r), r.session_id, r.account_label || "",
         r.agent, r.model || "", effortText(r), KIND_LABEL[r.kind] || r.kind, billingFor(r).text,
         r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_tokens, cacheHitText(r), r.total_tokens,
+        // 「3/27」：这一回合第 3 次请求、共 27 次；回合只有一次请求时留空。
+        r.turn_requests ? `${r.turn_seq}/${r.turn_requests}` : "",
+        r.merged_requests || "",
         // 导出给人算账，这里才把微美元换成美元；六位小数才装得下一次便宜回合。
         (r.cost_micro_usd / 1e6).toFixed(6),
         r.ttft_ms, r.wall_ms, r.duration_ms, r.turn_id, r.delegation_id || "",

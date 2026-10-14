@@ -30,7 +30,11 @@ type claudeMessage struct {
 	Model      string       `json:"model"`
 	StopReason string       `json:"stop_reason,omitempty"`
 	Usage      claudeTokens `json:"usage"`
-	kind       string       // empty is the turn's own chat spend
+	// TS is when the response first showed up (Unix ms): the stream's arrival
+	// time or the transcript timestamp, whichever is earlier. Provider message
+	// objects carry no such field, so only we set it; old rows lack it.
+	TS   int64  `json:"ts,omitempty"`
+	kind string // empty is the turn's own chat spend
 }
 
 // claudeTotal is one model's cumulative counters in result.modelUsage and the
@@ -83,9 +87,23 @@ func (c *claudeMeter) add(m claudeMessage) {
 		return
 	}
 	old, ok := c.messages[m.ID]
-	if !ok || preferClaudeMessage(m, old) {
+	if !ok {
 		c.messages[m.ID] = m
+		return
 	}
+	ts := earliest(old.TS, m.TS)
+	if preferClaudeMessage(m, old) {
+		old = m
+	}
+	old.TS = ts
+	c.messages[m.ID] = old
+}
+
+func earliest(a, b int64) int64 {
+	if a == 0 || b != 0 && b < a {
+		return b
+	}
+	return a
 }
 func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 	if c.done {
@@ -112,8 +130,10 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 	if e.SessionID != "" && e.Parent == "" {
 		c.sessionID = e.SessionID
 	}
+	now := time.Now().UnixMilli()
 	switch e.Type {
 	case "assistant":
+		e.Message.TS = now
 		c.add(e.Message)
 	case "result":
 		var r claudeResult
@@ -130,6 +150,7 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 	case "stream_event":
 		switch e.Event.Type {
 		case "message_start":
+			e.Event.Message.TS = now
 			c.streams[e.Parent] = e.Event.Message
 			c.add(e.Event.Message)
 		case "message_delta":
@@ -261,6 +282,7 @@ func (c *claudeMeter) readTranscript(f *os.File, before fs.FileInfo, child bool)
 		var rec struct {
 			Type       string                 `json:"type"`
 			Entrypoint string                 `json:"entrypoint"`
+			Timestamp  string                 `json:"timestamp"`
 			Message    claudeMessage          `json:"message"`
 			ModelUsage map[string]claudeTotal `json:"modelUsage"`
 		}
@@ -276,6 +298,10 @@ func (c *claudeMeter) readTranscript(f *os.File, before fs.FileInfo, child bool)
 		}
 		if rec.Entrypoint != "sdk-cli" && !(child && rec.Entrypoint == "") {
 			continue
+		}
+		rec.Message.TS = 0
+		if ts, err := time.Parse(time.RFC3339Nano, rec.Timestamp); err == nil {
+			rec.Message.TS = ts.UnixMilli()
 		}
 		c.add(rec.Message)
 	}
@@ -299,7 +325,7 @@ func (c *claudeMeter) addSuggestion() {
 			log.Printf("usage: 会话 %s 的累计用量倒退（%s），下一步提示的消耗不入账", c.base.SessionID, model)
 			continue
 		}
-		c.add(claudeMessage{ID: "prompt-suggestion:" + c.base.TurnID + ":" + model, Model: model, Usage: u, kind: store.UsageKindSuggestion})
+		c.add(claudeMessage{ID: "prompt-suggestion:" + c.base.TurnID + ":" + model, Model: model, Usage: u, TS: time.Now().UnixMilli(), kind: store.UsageKindSuggestion})
 	}
 }
 
@@ -310,16 +336,26 @@ func (s *Service) flushClaudeMessages(t *Tally, wall time.Duration) int {
 	}
 	s.completeClaudeMessages(c)
 	c.addSuggestion()
+	// One row per provider response, in the order the responses happened.
+	// Rows from transcripts that predate per-message timestamps sort by ID.
 	ids := make([]string, 0, len(c.messages))
 	for id := range c.messages {
 		ids = append(ids, id)
 	}
-	sort.Strings(ids)
+	sort.Slice(ids, func(i, j int) bool {
+		a, b := c.messages[ids[i]], c.messages[ids[j]]
+		if a.TS != b.TS {
+			return a.TS != 0 && (b.TS == 0 || a.TS < b.TS)
+		}
+		return ids[i] < ids[j]
+	})
 	plan := t.pricing
 	if plan == nil {
 		p := s.cfg.PricingPlan()
 		plan = &p
 	}
+	now := time.Now()
+	timed := false
 	evs := make([]store.UsageEvent, 0, len(ids))
 	for _, id := range ids {
 		m := c.messages[id]
@@ -330,19 +366,26 @@ func (s *Service) flushClaudeMessages(t *Tally, wall time.Duration) int {
 		e.OutputTokens = m.Usage.Output
 		e.CacheReadTokens = m.Usage.CacheRead
 		e.CacheWriteTokens = m.Usage.CacheWrite
-		e.DurationMS = c.durationMS
-		e.WallMS = wall.Milliseconds()
-		if m.kind != "" {
-			// Turn latency belongs to the answer, not to the follow-up request.
-			e.Kind, e.TTFTMs, e.DurationMS, e.WallMS = m.kind, 0, 0, 0
+		// Turn latency is measured once per turn; it sits on the turn's first
+		// chat request and stays 0 on the rest, so MAX per turn still holds.
+		if m.kind == "" && !timed {
+			timed = true
+			e.DurationMS = c.durationMS
+			e.WallMS = wall.Milliseconds()
+		} else {
+			e.TTFTMs, e.DurationMS, e.WallMS = 0, 0, 0
 		}
-		e.TS = time.Now()
+		if m.kind != "" {
+			e.Kind = m.kind
+		}
+		e.TS = now
+		if m.TS != 0 {
+			e.TS = time.UnixMilli(m.TS)
+		}
 		e.Provider = c.providers[m.Model]
 		raw, _ := json.Marshal(m)
 		e.Raw = string(raw)
-		e = priceWith(*plan, e)
-		e.Price.PerRequest = true
-		evs = append(evs, e)
+		evs = append(evs, priceWith(*plan, e))
 	}
 	n, err := s.store.InsertUsageMessages(evs...)
 	if err != nil {

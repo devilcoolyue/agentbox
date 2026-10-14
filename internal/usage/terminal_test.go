@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentbox/internal/config"
 	"agentbox/internal/store"
 )
 
@@ -46,15 +47,15 @@ func TestClaudeTerminalEffortUsesRecordedEffectiveValue(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			rows, err := parseTerminalReader(strings.NewReader(raw))
-			if err != nil || len(rows) != 2 || rows[0].ev.OutputTokens != 150 {
+			if err != nil || len(rows) != 3 || rows[0].ev.OutputTokens != 100 || rows[1].ev.OutputTokens != 50 {
 				t.Fatalf("effort changed usage: %+v, %v", rows, err)
 			}
-			want := ""
-			if name == "recorded" {
-				want = "xhigh"
-			}
-			if rows[0].ev.Effort != want || (want != "" && rows[0].ev.EffortControl != "effort") || (want == "" && rows[0].ev.EffortControl != "") {
-				t.Fatalf("effort = %+v, want %q", rows[0].ev, want)
+			// 一次请求一行，各自带自己记录的强度；混用不再互相抹掉。
+			want := map[string][2]string{"recorded": {"xhigh", "xhigh"}, "mixed requests": {"xhigh", "high"}}[name]
+			for i, r := range rows[:2] {
+				if r.ev.Effort != want[i] || (want[i] != "" && r.ev.EffortControl != "effort") || (want[i] == "" && r.ev.EffortControl != "") {
+					t.Fatalf("request %d effort = %+v, want %q", i, r.ev, want[i])
+				}
 			}
 		})
 	}
@@ -75,31 +76,32 @@ func TestParseTerminalTranscript(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(turns) != 2 {
-		t.Fatalf("回合数 = %d，想要 2（终端两问；sdk-cli 的那问不算）", len(turns))
+	if len(turns) != 3 {
+		t.Fatalf("行数 = %d，想要 3（第一问两次请求 + 第二问一次；sdk-cli 的那问不算）", len(turns))
 	}
 
-	// 第一问：req_A 重复出现只算一次，加上 req_B 才是这一回合的总量。
-	got := turns[0]
-	if got.model != "claude-sonnet-5" {
-		t.Errorf("模型 = %q", got.model)
+	// 第一问：req_A 在文件里重复出现只算一次，req_B 另成一行，两行共享回合 ID。
+	first, second := turns[0], turns[1]
+	if first.model != "claude-sonnet-5" || second.model != "claude-sonnet-5" {
+		t.Errorf("模型 = %q / %q", first.model, second.model)
 	}
-	if got.ev.OutputTokens != 150 {
-		t.Errorf("输出 = %d，想要 150（100+50，req_A 的重复记录不重复计）", got.ev.OutputTokens)
+	if first.ev.OutputTokens != 100 || second.ev.OutputTokens != 50 {
+		t.Errorf("输出 = %d / %d，想要 100 / 50（req_A 的重复记录不重复计）", first.ev.OutputTokens, second.ev.OutputTokens)
 	}
-	if got.ev.CacheReadTokens != 2200 || got.ev.CacheWriteTokens != 200 {
-		t.Errorf("缓存 = 读 %d / 写 %d，想要 2200 / 200", got.ev.CacheReadTokens, got.ev.CacheWriteTokens)
+	if first.ev.CacheReadTokens != 1000 || first.ev.CacheWriteTokens != 200 || second.ev.CacheReadTokens != 1200 {
+		t.Errorf("缓存 = %+v / %+v", first.ev, second.ev)
 	}
-	if got.reqID != "req_A" || got.ev.TurnID != "req_A" {
-		t.Errorf("去重键/回合 ID = %q/%q，想要都是首个 requestId req_A", got.reqID, got.ev.TurnID)
+	// 第一次请求的键就是旧版合并行的键（回合首个 requestId），重扫时原地覆盖旧行。
+	if first.reqID != "req_A" || second.reqID != "req_B" || first.ev.TurnID != "req_A" || second.ev.TurnID != "req_A" {
+		t.Errorf("去重键/回合 ID = %q,%q / %q,%q", first.reqID, second.reqID, first.ev.TurnID, second.ev.TurnID)
 	}
-	if got.ts.Format("15:04:05") != "10:00:02" {
-		t.Errorf("回合时间 = %s，想要回合里最早那次调用 10:00:02", got.ts.Format("15:04:05"))
+	if first.ts.Format("15:04:05") != "10:00:02" || second.ts.Format("15:04:05") != "10:00:05" {
+		t.Errorf("请求时间 = %s / %s，想要各自最早那条记录", first.ts.Format("15:04:05"), second.ts.Format("15:04:05"))
 	}
 
-	// 第二问换了模型，必须是另一个回合、另一个去重键。
-	if turns[1].model != "claude-haiku-4-5" || turns[1].ev.TurnID != "req_D" {
-		t.Errorf("第二个回合 = %q/%q，想要 claude-haiku-4-5/req_D", turns[1].model, turns[1].ev.TurnID)
+	// 第二问换了模型，是另一个回合。
+	if turns[2].model != "claude-haiku-4-5" || turns[2].ev.TurnID != "req_D" || turns[2].reqID != "req_D" {
+		t.Errorf("第二个回合 = %q/%q", turns[2].model, turns[2].ev.TurnID)
 	}
 
 	// sdk-cli 的量一个 token 都不能漏进来，漏了就是对话消耗记两遍。
@@ -165,8 +167,8 @@ func TestScanTerminalUsage(t *testing.T) {
 	s.scanTerminalUsage(sc)
 
 	rows := s.store.ListUsage(store.UsageFilter{Kind: store.UsageKindTerminal})
-	if len(rows) != 2 {
-		t.Fatalf("终端行数 = %d，想要 2", len(rows))
+	if len(rows) != 3 {
+		t.Fatalf("终端行数 = %d，想要 3", len(rows))
 	}
 	for _, r := range rows {
 		if r.User != sess.User || r.SessionID != sess.ID || r.AccountID != sess.AccountID {
@@ -179,8 +181,8 @@ func TestScanTerminalUsage(t *testing.T) {
 
 	// 文件没动过就不该再读一遍；再扫一次也不许多出行来（req_id 兜底）。
 	s.scanTerminalUsage(sc)
-	if again := s.store.ListUsage(store.UsageFilter{Kind: store.UsageKindTerminal}); len(again) != 2 {
-		t.Fatalf("再扫一遍变成 %d 行，想要还是 2", len(again))
+	if again := s.store.ListUsage(store.UsageFilter{Kind: store.UsageKindTerminal}); len(again) != 3 {
+		t.Fatalf("再扫一遍变成 %d 行，想要还是 3", len(again))
 	}
 }
 
@@ -209,5 +211,45 @@ func TestTerminalUsageNeverCharges(t *testing.T) {
 	if after.BalanceMicroUSD != before.BalanceMicroUSD {
 		t.Errorf("余额从 %d 变成 %d，终端消耗不该扣额度",
 			before.BalanceMicroUSD, after.BalanceMicroUSD)
+	}
+}
+
+// 升级前终端行按 (回合, 模型) 合并、键是首个 requestId。升级后重扫同一份
+// transcript：第一次请求原地覆盖旧合并行，其余请求新增成行并沿用旧行的价格
+// 快照，合计不变、不重复。
+func TestTerminalMergedRowsConvertInPlace(t *testing.T) {
+	s, sess := newTestServer(t)
+	sess.Agent = "claude"
+	if err := s.store.Put(sess); err != nil {
+		t.Fatal(err)
+	}
+	old := &store.PriceSnapshot{Version: 1, Source: "table", Key: "claude", Standard: store.TokenRates{Input: 1, Output: 2, CacheRead: 0.1, CacheWrite: 1}}
+	merged := store.UsageEvent{User: sess.User, SessionID: sess.ID, TurnID: "req_A", ReqID: "req_A", Agent: "claude", Model: "claude-sonnet-5",
+		InputTokens: 6, OutputTokens: 150, CacheReadTokens: 2200, CacheWriteTokens: 200, Price: old}
+	merged.CostMicroUSD = old.Cost(merged)
+	if err := s.store.UpsertTerminalUsage(merged); err != nil {
+		t.Fatal(err)
+	}
+	// Today's table differs; converted rows must keep the turn's snapshot.
+	s.cfg.Pricing = map[string]config.ModelPrice{"claude": {TokenRates: config.TokenRates{Input: 99, Output: 99}}}
+	dir := filepath.Join(s.homeDir(sess), ".claude", "projects", "-workspace")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "abc.jsonl"), []byte(termFixture), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.scanTerminalUsage(&Scanner{seen: map[string]termFileState{}})
+	var sonnet []store.UsageEvent
+	for _, r := range s.store.ListUsage(store.UsageFilter{Kind: store.UsageKindTerminal, Asc: true}) {
+		if r.Model == "claude-sonnet-5" {
+			sonnet = append(sonnet, r)
+		}
+	}
+	if len(sonnet) != 2 || sonnet[0].OutputTokens != 100 || sonnet[1].OutputTokens != 50 || sonnet[0].TurnID != "req_A" || sonnet[1].TurnID != "req_A" {
+		t.Fatalf("merged row not converted: %+v", sonnet)
+	}
+	if sonnet[0].Price.Standard.Input != 1 || sonnet[1].Price.Standard.Input != 1 || sonnet[0].CostMicroUSD+sonnet[1].CostMicroUSD != merged.CostMicroUSD {
+		t.Fatalf("conversion repriced: %d + %d != %d", sonnet[0].CostMicroUSD, sonnet[1].CostMicroUSD, merged.CostMicroUSD)
 	}
 }

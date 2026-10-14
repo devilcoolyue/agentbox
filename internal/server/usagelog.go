@@ -5,16 +5,20 @@ package server
 //
 // 一行是什么，先说清楚，不然读数的人会按别处的直觉理解错：
 //
-//   一行 = 一个回合 × 一个模型，**不是一次 API 调用**。
+//   一行 = 一次 provider 请求（一条 API 响应）。
 //
-// 容器里的 CLI 直接打 provider 官方接口，我们不在链路上，看不见单次 HTTP 请求；
-// 拿得到的只有 CLI 在回合收尾汇总报的那一份账（见 usage.go）。一个回合内部
-// claude 可能真打了十几次接口，这里合成一行。
+// 容器里的 CLI 直接打 provider 官方接口，我们不在链路上，但每次请求的用量都看得见：
+// Claude 来自按 message.id 去重的消息流与 transcript，Codex 来自 app-server 的累计
+// 用量差值（见 usage/requests.go）。一个回合内部 CLI 每调一次工具就多打一次接口、
+// 每次重发整段上下文，所以同回合会连着好几行，行上的 turn_seq/turn_requests 标出
+// 「第几次 / 共几次」。回合级的首字与总耗时只记在回合第一次请求上。
+//
+// 例外：升级前的 Claude 对话行按回合合并保存（merged_requests 是合并的次数），
+// 账本已按整行扣款，不再拆开；Codex exec 回退和更早的记录同样只有合计。终端
+// 补记的历史行在升级后重扫时自动拆成逐次请求（不扣额度，无账本可破坏）。
 //
 // 行的来源有两种，靠 kind 区分：对话/起标题来自 runTurn 当场收到的收尾事件，
-// 终端来自事后扫 CLI 自己的 transcript（见 termusage.go）。后者其实**看得见**
-// 单次调用（transcript 里每条 assistant 都带 requestId 和最终 usage），但仍按
-// 回合聚合落库，好让两种来源的行粒度一致、能放在一张表里比。
+// 终端来自事后扫 CLI 自己的 transcript（见 termusage.go）。
 //
 // 同理，中转站面板上的「端点 / API 密钥 / 分组」这几列我们没有对应物，别为了
 // 凑齐列去编。
@@ -27,6 +31,7 @@ import (
 
 	"agentbox/internal/config"
 	"agentbox/internal/store"
+	"agentbox/internal/usage"
 )
 
 // 一页多少行。前端可以调小，但不许调大：这个接口没有游标，全靠 OFFSET 翻页，
@@ -81,6 +86,12 @@ type usageRowView struct {
 	DurationMS       int64 `json:"duration_ms"`
 	WallMS           int64 `json:"wall_ms"`
 	TTFTMs           int64 `json:"ttft_ms"`
+	// TurnSeq/TurnRequests：这次请求是同回合、同类型的第几次 / 共几次（按时间）。
+	// 只有一次时省略。
+	TurnSeq      int `json:"turn_seq,omitempty"`
+	TurnRequests int `json:"turn_requests,omitempty"`
+	// MergedRequests 是升级前按回合合并的旧行里合并了几次请求；新记录为 0。
+	MergedRequests int `json:"merged_requests,omitempty"`
 	// Rate 让前端能把「输入 × 单价 + 输出 × 单价 + …」逐项摊开给用户看。
 	// 查不到价时为 nil（那一行就是「未定价」）。
 	Rate *usageRateView `json:"rate,omitempty"`
@@ -271,7 +282,8 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows := []usageRowView{}
-	for _, e := range s.store.ListUsage(f) {
+	events := s.store.ListUsage(f)
+	for _, e := range events {
 		label := ""
 		if acct, ok := s.cfg.Account(e.AccountID); ok {
 			label = acct.Label
@@ -281,7 +293,7 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 			SessionName: sessionName(e.SessionID), SessionID: e.SessionID,
 			ThreadID: e.ThreadID, TurnID: e.TurnID,
 			Agent: e.Agent, AccountID: e.AccountID, AccountLabel: label,
-			Model: e.Model, Kind: e.Kind, Provider: e.Provider,
+			Model: e.Model, Kind: e.Kind, DelegationID: e.DelegationID, Provider: e.Provider,
 			Billing:          billingMode(e),
 			InputTokens:      e.InputTokens,
 			OutputTokens:     e.OutputTokens,
@@ -292,11 +304,31 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 			DurationMS:       e.DurationMS,
 			WallMS:           e.WallMS,
 			TTFTMs:           e.TTFTMs,
+			MergedRequests:   usage.MergedRequests(e),
 			Rate:             s.rateFor(e),
 		})
 		if e.Kind == store.UsageKindTerminal {
 			rows[len(rows)-1].Effort, rows[len(rows)-1].EffortControl = e.Effort, e.EffortControl
 		}
+	}
+	// 只给一次请求的行标序号：升级前的合计行（按模型拆的同回合几行）不是几次请求。
+	ids := make([]int64, 0, len(rows))
+	single := map[int64]bool{}
+	for _, e := range events {
+		if usage.SingleRequest(e) {
+			single[e.ID] = true
+			ids = append(ids, e.ID)
+		}
+	}
+	// A failed lookup only hides the sequence label; the spend rows still matter.
+	if pos, err := s.store.TurnPositions(ids); err == nil {
+		for i := range rows {
+			if p, ok := pos[rows[i].ID]; ok && p.Count > 1 && single[rows[i].ID] {
+				rows[i].TurnSeq, rows[i].TurnRequests = p.Seq, p.Count
+			}
+		}
+	} else {
+		log.Printf("usage: 读取回合内请求序号失败: %v", err)
 	}
 	turns := make([]string, 0, len(rows))
 	for _, r := range rows {

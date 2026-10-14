@@ -236,6 +236,12 @@ export interface UsageEventRow {
   ttft_ms: number;
   /** 这一行的入账单价快照；旧数据回退当前参考单价，用来把费用逐项摊开；查不到价时没有这个字段 */
   rate?: UsageRate;
+  /** 同回合、同类型的第几次请求（按时间，1 起）；回合只有一次请求时没有 */
+  turn_seq?: number;
+  /** 同回合、同类型共几次请求 */
+  turn_requests?: number;
+  /** 升级前按回合合并保存的旧行合并了几次请求；新记录没有 */
+  merged_requests?: number;
 }
 
 /** 一行消耗对应的单价（已按档位选好），美元 / 百万 token。 */

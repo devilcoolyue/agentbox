@@ -95,6 +95,8 @@ const ICONS: Record<string, string> = {
   "mic": "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8",
   "send": "m21 3-9 9m9-9-6 18-3-9-9-3 18-6Z",
   "arrow-down": "M12 4v16m-6-6 6 6 6-6",
+  "arrow-up": "M12 20V4m-6 6 6-6 6 6",
+  "archive": "M5 8h14M5 8a2 2 0 1 1 0-4h14a2 2 0 1 1 0 4M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8m-9 4h4",
   "chevron-up": "m6 15 6-6 6 6",
   "plug": "M8 3v5m8-5v5M6 8h12v3a6 6 0 0 1-12 0V8ZM12 17v5",
   "keyboard": "M4 4h16a2 2 0 0 1 2 2v12H2V6a2 2 0 0 1 2-2ZM6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 11h.01M10 11h.01M14 11h.01M18 11h.01M7 15h10M9 21h6",

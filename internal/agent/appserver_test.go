@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 // 按真实 app-server 抓包整理的一回合协议脚本：resume 失败落到新开线程，
@@ -154,5 +156,92 @@ func TestRunCodexTurnInterrupted(t *testing.T) {
 	joined := strings.Join(events, "\n")
 	if !strings.Contains(joined, "回合已中断") {
 		t.Fatalf("中断回合应产出 turn.failed 提示\n%s", joined)
+	}
+}
+
+// 按 codex-cli 0.162.1 实测整理（合成 ID 与 token 数）：续聊进程在回合开始前
+// 先补发上一回合的累计值（带旧 turnId），回合内每次模型请求一条通知，限流
+// 更新会把同一份累计原样重发一遍。
+const multiRequestScript = `{"id":1,"result":{"userAgent":"codex"}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"T1","turnId":"OLD-TURN","tokenUsage":{"total":{"inputTokens":300,"cachedInputTokens":50,"outputTokens":17,"reasoningOutputTokens":2},"last":{"inputTokens":200,"cachedInputTokens":50,"outputTokens":9,"reasoningOutputTokens":1}}}}
+{"id":2,"result":{"thread":{"id":"T1"}}}
+{"id":4,"result":{"turn":{"id":"U2","status":"inProgress"}}}
+{"method":"turn/started","params":{"threadId":"T1","turn":{"id":"U2"}}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"T1","turnId":"U2","tokenUsage":{"total":{"inputTokens":600,"cachedInputTokens":150,"outputTokens":27,"reasoningOutputTokens":3},"last":{"inputTokens":300,"cachedInputTokens":100,"outputTokens":10,"reasoningOutputTokens":1}}}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"T1","turnId":"U2","tokenUsage":{"total":{"inputTokens":600,"cachedInputTokens":150,"outputTokens":27,"reasoningOutputTokens":3},"last":{"inputTokens":300,"cachedInputTokens":100,"outputTokens":10,"reasoningOutputTokens":1}}}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"T1","turnId":"U2","tokenUsage":{"total":{"inputTokens":1000,"cachedInputTokens":450,"outputTokens":39,"reasoningOutputTokens":4},"last":{"inputTokens":400,"cachedInputTokens":300,"outputTokens":12,"reasoningOutputTokens":1}}}}
+{"method":"turn/completed","params":{"turn":{"id":"U2","status":"%s"}}}
+`
+
+type turnUsageEvent struct {
+	Type  string `json:"type"`
+	Usage struct {
+		Input     int64 `json:"input_tokens"`
+		Cached    int64 `json:"cached_input_tokens"`
+		Output    int64 `json:"output_tokens"`
+		Reasoning int64 `json:"reasoning_output_tokens"`
+	} `json:"usage"`
+	Requests []codexRequest `json:"requests"`
+}
+
+func runMultiRequest(t *testing.T, status string) turnUsageEvent {
+	t.Helper()
+	var last string
+	err := RunCodexTurn(context.Background(), io.Discard, strings.NewReader(strings.Replace(multiRequestScript, "%s", status, 1)),
+		func() {}, nil, CodexTurn{Prompt: "hi", ThreadID: "T1", Cwd: "/workspace"},
+		func(line []byte) { last = string(line) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ev turnUsageEvent
+	if err := json.Unmarshal([]byte(last), &ev); err != nil {
+		t.Fatalf("收尾事件 %q: %v", last, err)
+	}
+	return ev
+}
+
+func TestRunCodexTurnMetersEveryRequest(t *testing.T) {
+	ev := runMultiRequest(t, "completed")
+	if ev.Type != "turn.completed" {
+		t.Fatalf("收尾事件类型 %q", ev.Type)
+	}
+	// 只算本回合的两次请求：恢复出来的旧累计只作基线，重发的那条去掉。
+	if ev.Usage.Input != 700 || ev.Usage.Cached != 400 || ev.Usage.Output != 22 || ev.Usage.Reasoning != 2 {
+		t.Fatalf("回合用量 %+v", ev.Usage)
+	}
+	if len(ev.Requests) != 2 {
+		t.Fatalf("请求明细 %+v", ev.Requests)
+	}
+	first, second := ev.Requests[0], ev.Requests[1]
+	if first.Input != 300 || first.Cached != 100 || first.Output != 10 ||
+		second.Input != 400 || second.Cached != 300 || second.Output != 12 {
+		t.Fatalf("请求明细 %+v", ev.Requests)
+	}
+	if first.TS == 0 || second.TS < first.TS {
+		t.Fatalf("请求时间 %d / %d", first.TS, second.TS)
+	}
+}
+
+// 中断的回合里已经发生的请求 provider 照样计费，收尾事件必须带上。
+func TestRunCodexTurnInterruptedKeepsUsage(t *testing.T) {
+	ev := runMultiRequest(t, "interrupted")
+	if ev.Type != "turn.failed" || ev.Usage.Input != 700 || len(ev.Requests) != 2 {
+		t.Fatalf("中断收尾 %+v", ev)
+	}
+}
+
+// 压缩/重置后累计倒退：退回 last，且 last 不能超过新的累计。
+func TestCodexMeterTotalReset(t *testing.T) {
+	var m codexMeter
+	at := time.Unix(1, 0)
+	m.observe("U", "U", &codexTokens{Input: 500, Cached: 100, Output: 20}, &codexTokens{Input: 500, Cached: 100, Output: 20}, at)
+	m.observe("U", "U", &codexTokens{Input: 80, Cached: 0, Output: 5}, &codexTokens{Input: 80, Output: 5}, at)
+	m.observe("U", "U", &codexTokens{Input: 90, Output: 6}, &codexTokens{Input: 900, Output: 6}, at)
+	got := []int64{}
+	for _, r := range m.requests {
+		got = append(got, r.Input, r.Output)
+	}
+	if fmt.Sprint(got) != "[500 20 80 5 10 1]" {
+		t.Fatalf("请求 %v", got)
 	}
 }

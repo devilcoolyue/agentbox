@@ -261,7 +261,8 @@ func TestUsageEventsOrder(t *testing.T) {
 // 首字与总耗时必须出自同一块表：都从容器就绪开始算，所以墙钟不可能比首字小。
 // provider 自报的 duration_ms 只算模型侧、不含 CLI 启动的那两秒，比首字小是它
 // 的正常状态——线上真出现过「首字 3.1s / 总耗时 2.3s」，就是拿它当了总耗时。
-// 回合拆成几行，每行都得带上同一个墙钟。
+// 一次请求一行；回合级的墙钟、首字与 provider 耗时只记在回合第一次请求上，
+// 其余行为 0（按 turn_id 取 MAX 仍是这一回合的值）。
 func TestFlushUsageStampsWallClock(t *testing.T) {
 	s, _ := newTestServer(t)
 	r := &chatRoom{srv: s, sessID: "s1"}
@@ -282,16 +283,21 @@ func TestFlushUsageStampsWallClock(t *testing.T) {
 	tally.Observe(store.UsageEvent{User: "alice", SessionID: "s1", TurnID: "t9",
 		Agent: "claude", Kind: store.UsageKindChat, TTFTMs: ttft}, line)
 	if n := r.flushUsage(&tally, wall*time.Millisecond); n != 2 {
-		t.Fatalf("落库行数 = %d，想要 2（回合按模型拆两行）", n)
+		t.Fatalf("落库行数 = %d，想要 2（两次请求两行）", n)
 	}
 
 	rows := s.store.ListUsage(store.UsageFilter{User: "alice"})
 	if len(rows) != 2 {
 		t.Fatalf("读回 %d 行，想要 2", len(rows))
 	}
+	timed := 0
 	for _, e := range rows {
+		if e.WallMS == 0 && e.DurationMS == 0 && e.TTFTMs == 0 {
+			continue
+		}
+		timed++
 		if e.WallMS != wall {
-			t.Errorf("%s: wall_ms = %d，想要 %d（回合各行共用同一个墙钟）", e.Model, e.WallMS, wall)
+			t.Errorf("%s: wall_ms = %d，想要 %d", e.Model, e.WallMS, wall)
 		}
 		if e.DurationMS != providerDur {
 			t.Errorf("%s: duration_ms = %d，想要原样保留 provider 的 %d", e.Model, e.DurationMS, providerDur)
@@ -299,6 +305,9 @@ func TestFlushUsageStampsWallClock(t *testing.T) {
 		if e.WallMS < e.TTFTMs {
 			t.Errorf("%s: 墙钟 %d 小于首字 %d，两个数没同源", e.Model, e.WallMS, e.TTFTMs)
 		}
+	}
+	if timed != 1 {
+		t.Errorf("带回合耗时的行 = %d，想要只有第一次请求那一行", timed)
 	}
 }
 
@@ -440,5 +449,59 @@ func TestUsageEventsShowTheTurnsEffort(t *testing.T) {
 	}
 	if efforts["terminal/terminal-codex"] != "high/effort" || efforts["terminal/terminal-claude"] != "xhigh/effort" || efforts["terminal/terminal-legacy"] != "/" {
 		t.Fatal(efforts)
+	}
+}
+
+// 一行一次请求：同回合的各行带「第几次 / 共几次」（按时间，跨页也算整回合），
+// 升级前按回合合并的旧行带合并次数；跑腿模型的对话行显示为委派类型。
+func TestUsageRowsCarryTurnPosition(t *testing.T) {
+	s, _ := newTestServer(t)
+	base := time.Now().Add(-time.Hour)
+	evs := []store.UsageEvent{
+		{TS: base.Add(2 * time.Second), User: "alice", SessionID: "s1", TurnID: "t1", Agent: "claude", Model: "opus", Kind: store.UsageKindChat, InputTokens: 2, Raw: `{"id":"m3","model":"opus"}`},
+		{TS: base, User: "alice", SessionID: "s1", TurnID: "t1", Agent: "claude", Model: "opus", Kind: store.UsageKindChat, InputTokens: 1, TTFTMs: 900, WallMS: 4000, Raw: `{"id":"m1","model":"opus"}`},
+		{TS: base.Add(3 * time.Second), User: "alice", SessionID: "s1", TurnID: "t1", Agent: "claude", Model: "opus", Kind: store.UsageKindSuggestion, InputTokens: 3, Raw: `{"id":"prompt-suggestion:t1:opus","model":"opus"}`},
+		{TS: base.Add(time.Second), User: "alice", SessionID: "s1", TurnID: "t1", Agent: "claude", Model: "haiku", Kind: store.UsageKindChat, InputTokens: 4, Raw: `{"id":"m2","model":"haiku"}`},
+		{TS: base.Add(time.Minute), User: "alice", SessionID: "s1", TurnID: "legacy", Agent: "claude", Model: "opus", Kind: store.UsageKindChat,
+			Raw: `{"type":"claude.messages","messages":[{"id":"a"},{"id":"b"},{"id":"c"}]}`},
+		{TS: base.Add(time.Minute), User: "alice", SessionID: "s1", TurnID: "legacy", Agent: "claude", Model: "haiku", Kind: store.UsageKindChat,
+			Raw: `{"type":"claude.messages","messages":[{"id":"d"}]}`},
+		{TS: base.Add(90 * time.Second), User: "alice", SessionID: "s1", TurnID: "older", Agent: "claude", Model: "opus", Kind: store.UsageKindChat, Raw: `{"type":"result"}`},
+		{TS: base.Add(90 * time.Second), User: "alice", SessionID: "s1", TurnID: "older", Agent: "claude", Model: "haiku", Kind: store.UsageKindChat},
+		{TS: base.Add(2 * time.Minute), User: "bob", SessionID: "s2", TurnID: "t2", Agent: "claude", Model: "opus", Kind: store.UsageKindChat, DelegationID: "dlg-1", InputTokens: 1},
+	}
+	if err := s.store.InsertUsage(evs...); err != nil {
+		t.Fatal(err)
+	}
+	got := getUsageEvents(t, s, "/api/usage/events?order=asc&limit=2", "root", store.RoleAdmin)
+	if len(got.Rows) != 2 || got.Rows[0].InputTokens != 1 || got.Rows[0].TurnSeq != 1 || got.Rows[0].TurnRequests != 3 ||
+		got.Rows[1].InputTokens != 4 || got.Rows[1].TurnSeq != 2 || got.Rows[1].TurnRequests != 3 {
+		t.Fatalf("first page %+v", got.Rows)
+	}
+	all := getUsageEvents(t, s, "/api/usage/events?order=asc", "root", store.RoleAdmin)
+	for _, r := range all.Rows {
+		switch {
+		case r.TurnID == "t1" && r.InputTokens == 2:
+			if r.TurnSeq != 3 || r.TurnRequests != 3 {
+				t.Fatalf("third request %+v", r)
+			}
+		case r.Kind == store.UsageKindSuggestion:
+			if r.TurnSeq != 0 || r.TurnRequests != 0 {
+				t.Fatalf("a lone request of its kind has no position: %+v", r)
+			}
+		case r.TurnID == "legacy" && r.Model == "opus":
+			if r.MergedRequests != 3 || r.TurnRequests != 0 {
+				t.Fatalf("legacy row %+v", r)
+			}
+		case r.TurnID == "legacy" || r.TurnID == "older":
+			// Per-model aggregates of one turn are not requests of it.
+			if r.TurnRequests != 0 || r.TurnSeq != 0 {
+				t.Fatalf("aggregate row numbered as a request: %+v", r)
+			}
+		case r.User == "bob":
+			if r.Kind != "delegation" || r.DelegationID != "dlg-1" {
+				t.Fatalf("worker row %+v", r)
+			}
+		}
 	}
 }

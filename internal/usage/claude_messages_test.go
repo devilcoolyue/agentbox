@@ -124,7 +124,7 @@ func TestClaudeTranscriptCompletesOnlyCurrentTurnAndModels(t *testing.T) {
 	for _, r := range rows {
 		output += r.OutputTokens
 		cost += r.CostMicroUSD
-		if !r.Price.PerRequest {
+		if r.Price == nil || r.Price.Source != "table" {
 			t.Fatal("missing pricing semantics")
 		}
 	}
@@ -185,12 +185,13 @@ func TestClaudeRequestPricingDoesNotUseAggregateContext(t *testing.T) {
 	s.cfg.Pricing = map[string]config.ModelPrice{"claude": {TokenRates: config.TokenRates{Input: 1}, LongContextOver: 100, Long: &config.TokenRates{Input: 2}}}
 	tally := s.NewTally()
 	observe(&tally, "one", messageLine("a", "opus", "end_turn", 80, 0, 0, 0), messageLine("b", "opus", "end_turn", 80, 0, 0, 0))
-	if n := s.Flush(&tally, time.Second); n != 1 {
+	if n := s.Flush(&tally, time.Second); n != 2 {
 		t.Fatal(n)
 	}
-	row := s.store.ListUsage(store.UsageFilter{User: "alice"})[0]
-	if row.InputTokens != 160 || row.CostMicroUSD != 160 {
-		t.Fatalf("aggregate prompt applied long tier: %+v", row)
+	for _, row := range s.store.ListUsage(store.UsageFilter{User: "alice"}) {
+		if row.InputTokens != 80 || row.CostMicroUSD != 80 {
+			t.Fatalf("aggregate prompt applied long tier: %+v", row)
+		}
 	}
 }
 
@@ -263,7 +264,7 @@ func TestClaudePromptSuggestionBilledFromCostStateGrowth(t *testing.T) {
 		t.Fatalf("chat row: %+v", chat)
 	}
 	if suggestion.InputTokens != 500 || suggestion.OutputTokens != 110 || suggestion.CacheReadTokens != 21000 || suggestion.CacheWriteTokens != 0 ||
-		suggestion.CostMicroUSD != 500+220+2100 || suggestion.WallMS != 0 || suggestion.TTFTMs != 0 || !suggestion.Price.PerRequest {
+		suggestion.CostMicroUSD != 500+220+2100 || suggestion.WallMS != 0 || suggestion.TTFTMs != 0 || suggestion.Price.Source != "table" {
 		t.Fatalf("suggestion row: %+v", suggestion)
 	}
 	q, _ := s.store.GetQuota("alice")

@@ -76,9 +76,9 @@ type appServerConn struct {
 	sc   *bufio.Scanner
 	emit func(line []byte)
 
-	block    string         // 当前流式块："" | "text" | "thinking"
-	sawDelta bool           // 当前 thinking 块内是否已有内容（summary 分段用分隔符续接）
-	usage    map[string]any // 最近一次 tokenUsage，turn.completed 时带出
+	block    string     // 当前流式块："" | "text" | "thinking"
+	sawDelta bool       // 当前 thinking 块内是否已有内容（summary 分段用分隔符续接）
+	meter    codexMeter // 本回合每次模型请求的用量，收尾事件时带出
 
 	mu     sync.Mutex // 保护 turnID（interrupt 协程读）
 	thread string
@@ -363,22 +363,7 @@ func (c *appServerConn) handleNotification(method string, params json.RawMessage
 		c.sawDelta = true
 		c.emitDelta("thinking_delta", "thinking", deltaOf(params))
 	case "thread/tokenUsage/updated":
-		var p struct {
-			TokenUsage struct {
-				Last struct {
-					Input  int `json:"inputTokens"`
-					Cached int `json:"cachedInputTokens"`
-					Output int `json:"outputTokens"`
-				} `json:"last"`
-			} `json:"tokenUsage"`
-		}
-		if json.Unmarshal(params, &p) == nil {
-			c.usage = map[string]any{
-				"input_tokens":        p.TokenUsage.Last.Input,
-				"cached_input_tokens": p.TokenUsage.Last.Cached,
-				"output_tokens":       p.TokenUsage.Last.Output,
-			}
-		}
+		c.observeTokenUsage(params)
 	case "turn/completed":
 		var p struct {
 			Turn struct {
@@ -393,20 +378,22 @@ func (c *appServerConn) handleNotification(method string, params json.RawMessage
 		switch p.Turn.Status {
 		case "completed":
 			ev := map[string]any{"type": "turn.completed"}
-			if c.usage != nil {
-				ev["usage"] = c.usage
-			}
+			c.meter.attach(ev)
 			c.emitJSON(ev)
 		case "interrupted":
-			c.emitJSON(map[string]any{"type": "turn.failed", "status": "interrupted",
-				"error": map[string]any{"message": "回合已中断"}})
+			ev := map[string]any{"type": "turn.failed", "status": "interrupted",
+				"error": map[string]any{"message": "回合已中断"}}
+			c.meter.attach(ev)
+			c.emitJSON(ev)
 		default:
 			msg := "回合失败"
 			if p.Turn.Error != nil && p.Turn.Error.Message != "" {
 				msg = p.Turn.Error.Message
 			}
-			c.emitJSON(map[string]any{"type": "turn.failed",
-				"error": map[string]any{"message": msg}})
+			ev := map[string]any{"type": "turn.failed",
+				"error": map[string]any{"message": msg}}
+			c.meter.attach(ev)
+			c.emitJSON(ev)
 		}
 		return true
 	case "error":

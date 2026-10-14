@@ -9,7 +9,10 @@ package usage
 //   claude  {"type":"result", "total_cost_usd":…, "duration_ms":…,
 //            "usage":{…}, "modelUsage":{"<model>":{…}}}
 //   codex   {"type":"turn.completed", "usage":{input_tokens, cached_input_tokens,
-//            output_tokens}}
+//            output_tokens}, "requests":[…]}
+//
+// app-server 路径的 codex 收尾事件另带 requests（每次模型请求一项），据此逐次
+// 计价并在使用记录里展开，见 requests.go。
 //
 // Claude 网页对话走 claude_messages.go 的消息 ID 去重及 transcript 补全。
 // result.modelUsage / total_cost_usd 在续聊时可能累计整段会话，不能用于单轮扣款。
@@ -127,7 +130,9 @@ func ParseUsage(line []byte, base store.UsageEvent) (evs []store.UsageEvent, cum
 		}
 		return out, true
 
-	case "turn.completed":
+	case "turn.completed", "turn.failed":
+		// app-server 路径给中断/失败的回合也带上已发生请求的用量；exec 的
+		// turn.failed 不带 usage，下面按全零跳过。
 		var t codexTurn
 		if json.Unmarshal(line, &t) != nil {
 			return nil, false

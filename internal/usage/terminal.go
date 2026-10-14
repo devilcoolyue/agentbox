@@ -76,8 +76,10 @@ type termTranscriptRec struct {
 // termTurn 是补记的单位：终端里的一次提问及其后续所有 API 调用，按模型分开。
 // 与对话行的粒度对齐（一行 = 一个回合 × 一个模型），这样两种来源的行放在同一
 // 张表里才可比。
+// termTurn 是终端补记的一行：一次 provider 请求。名字沿用按回合聚合的年代，
+// reqID 是这一行的去重键，ev.TurnID 是同回合各行共享的回合键。
 type termTurn struct {
-	reqID string // 本回合首个 requestId，去重键
+	reqID string
 	model string
 	ts    time.Time
 	ev    store.UsageEvent
@@ -95,19 +97,6 @@ func transcriptEffort(raw json.RawMessage) string {
 		return effort
 	default:
 		return ""
-	}
-}
-
-// mergeEffort preserves the turn/model grouping and its stable dedup key. If
-// requests in one row disagree or omit effort, no single setting describes it.
-func (t *termTurn) mergeEffort(effort string, first bool) {
-	if first {
-		t.ev.Effort = effort
-		if effort != "" {
-			t.ev.EffortControl = "effort"
-		}
-	} else if t.ev.Effort != effort {
-		t.ev.Effort, t.ev.EffortControl = "", ""
 	}
 }
 
@@ -380,17 +369,18 @@ func (s *Service) syncTermWatches(w *fsnotify.Watcher, watched map[string]string
 	}
 }
 
-// parseTerminalTranscript 从一个 transcript 文件里读出终端回合。
+// parseTerminalTranscript 从一个 transcript 文件里读出终端补记的行，一次请求一行。
 //
-// 按文件顺序流式聚合：遇到 user 记录就开一个新回合，其后的 assistant 记录按模型
-// 累加进去。同一个 message.id 会在文件里出现多次，优先完整 stop_reason，
-// 同等完整度取 output 较大者，避免累加或用晚到占位覆盖最终记录。
+// 遇到 user 记录就开一个新回合，其后的 assistant 记录各是一次请求。同一个
+// message.id 会在文件里出现多次，优先完整 stop_reason，同等完整度取 output
+// 较大者，避免累加或用晚到占位覆盖最终记录。
+//
+// 去重键是这次请求的 requestId。旧版按 (回合, 模型) 合并成一行、键是该组第一个
+// requestId——正好等于新版该组第一次请求的键，所以重扫时第一次请求原地覆盖旧的
+// 合并行，其余请求新增成行，不会重复记账。
 func parseTerminalReader(f io.Reader) ([]termTurn, error) {
-	// 按 (回合, 模型) 归并，同时记住出场顺序——报表里回合按时间排，靠这个稳定。
 	type key struct{ turn, model string }
-	acc := map[key]*termTurn{}
-	var order []key
-	// 同一消息选一份最终用量，读完文件后再累加。
+	// 同一消息选一份最终用量，读完文件后再逐条输出。
 	type reqUsage struct {
 		k       key
 		ev      store.UsageEvent
@@ -468,34 +458,20 @@ func parseTerminalReader(f io.Reader) ([]termTurn, error) {
 		return nil, err
 	}
 
+	// 回合 ID 用这一回合最早出现的 requestId：同一回合的各行共享它，与对话行
+	// 「同回合共享 turn_id」的语义一致，报表里数回合才不会重复计数。
+	out := make([]termTurn, 0, len(reqOrder))
+	firstReq := map[string]string{}
 	for _, id := range reqOrder {
 		r := reqs[id]
-		t, ok := acc[r.k]
-		if !ok {
-			t = &termTurn{reqID: r.reqID, model: r.k.model, ts: r.ts}
-			acc[r.k] = t
-			order = append(order, r.k)
+		if _, ok := firstReq[r.k.turn]; !ok {
+			firstReq[r.k.turn] = r.reqID
 		}
-		t.mergeEffort(r.ev.Effort, !ok)
-		t.ev.InputTokens += r.ev.InputTokens
-		t.ev.OutputTokens += r.ev.OutputTokens
-		t.ev.CacheReadTokens += r.ev.CacheReadTokens
-		t.ev.CacheWriteTokens += r.ev.CacheWriteTokens
-		if t.ts.IsZero() || (!r.ts.IsZero() && r.ts.Before(t.ts)) {
-			t.ts = r.ts // 回合时间取最早那次调用，和对话行的「回合开始」对齐
+		t := termTurn{reqID: r.reqID, model: r.k.model, ts: r.ts, ev: r.ev}
+		t.ev.TurnID = firstReq[r.k.turn]
+		if t.ev.Effort != "" {
+			t.ev.EffortControl = "effort"
 		}
-	}
-
-	// 回合 ID 用这一回合最早出现的 requestId：同一回合按模型拆出的多行共享它，
-	// 与对话行「同回合共享 turn_id」的语义一致，报表里数回合才不会重复计数。
-	out := make([]termTurn, 0, len(order))
-	firstReq := map[string]string{}
-	for _, k := range order {
-		t := *acc[k]
-		if _, ok := firstReq[k.turn]; !ok {
-			firstReq[k.turn] = t.reqID
-		}
-		t.ev.TurnID = firstReq[k.turn]
 		out = append(out, t)
 	}
 	return out, nil

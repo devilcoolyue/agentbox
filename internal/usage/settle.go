@@ -26,21 +26,24 @@ func (s *Service) Flush(t *Tally, wall time.Duration) int {
 	if len(t.evs) == 0 {
 		return 0
 	}
-	evs := t.evs
-	t.evs = nil // 防重复落库：同一个 tally 再 flush 一次不该再扣钱
 	now := time.Now()
 	plan := t.pricing
 	if plan == nil {
 		current := s.cfg.PricingPlan()
 		plan = &current
 	}
-	for i := range evs {
-		evs[i].TS = now
-		evs[i].WallMS = wall.Milliseconds()
-		// provider 不报价的行（codex）在这里按配置的价目表折算，落库前定好价，
-		// 扣减才有依据。查不到价就是 0，只记不扣。
-		evs[i] = priceWith(*plan, evs[i])
+	var evs []store.UsageEvent
+	for _, ev := range t.evs {
+		ev.TS = now
+		ev.WallMS = wall.Milliseconds()
+		// app-server 的 Codex 回合逐次请求成行，各自查价判档。provider 不报价的
+		// 行（codex）在这里按配置的价目表折算，落库前定好价，扣减才有依据。
+		// 查不到价就是 0，只记不扣。
+		for _, row := range expandCodexRequests(ev) {
+			evs = append(evs, priceWith(*plan, row))
+		}
 	}
+	t.evs = nil // 防重复落库：同一个 tally 再 flush 一次不该再扣钱
 	if err := s.store.InsertUsage(evs...); err != nil {
 		t.settlementErr = err
 		log.Printf("record usage %s: %v", evs[0].SessionID, err)

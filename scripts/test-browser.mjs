@@ -132,7 +132,8 @@ export async function smoke(page) {
    body={now:Date.now(),window_ms:0,process:{rss:0,heap_alloc:0,goroutines:1,uptime_ms:100},host:{cpu_count:1,load1:0,mem_total:0,mem_used:0,disks:[{roles:['system'],total:30*2**30,used:19*2**30,available:11*2**30},{roles:['data','tools'],total:49*2**30,used:35*2**30,available:14*2**30}]},summary:{total:0,running:0,cpu_percent:0,mem_usage:0},containers:[]};
   } else if(path==='/api/usage/events') {
    const kind=u.searchParams.get('kind'),rows=usageRows.filter(row=>!kind||row.kind===kind);
-   body={rows,total:{rows:rows.length,turns:rows.length,input_tokens:0,output_tokens:0,cache_read_tokens:0,cache_write_tokens:0,cost_micro_usd:0},facets:{users:[],agents:[],models:[]},scope:'all',timezone:'UTC',order:'desc',limit:20,offset:0,sync:{last_scan_at:Date.now(),last_success_at:Date.now(),scanning:false,errors:0}};
+   const sum=key=>rows.reduce((n,row)=>n+(row[key]||0),0);
+   body={rows,total:{rows:rows.length,turns:rows.length,input_tokens:sum('input_tokens'),output_tokens:sum('output_tokens'),cache_read_tokens:sum('cache_read_tokens'),cache_write_tokens:sum('cache_write_tokens'),cost_micro_usd:0},facets:{users:[],agents:[],models:[]},scope:'all',timezone:'UTC',order:'desc',limit:20,offset:0,sync:{last_scan_at:Date.now(),last_success_at:Date.now(),scanning:false,errors:0}};
   }
   await route.fulfill({json:body});
  });
@@ -238,17 +239,48 @@ export async function smoke(page) {
   assert.deepEqual(terminalLines.slice(1).map(row=>row[terminalEffortColumn]),['High','Max']);
   await page.locator('#uf-kind').selectOption('',{force:true});
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===8);
+  // One row per provider request, drawn like sub2api: arrows for input/output,
+  // compact cache buckets, an info tip with exact counts, the request's place in
+  // its turn, and legacy merged rows labelled as such.
+  Object.assign(usageRows[0],{input_tokens:2,output_tokens:12182,cache_read_tokens:6775776,cache_write_tokens:1178,total_tokens:6789138,turn_seq:1,turn_requests:27});
+  Object.assign(usageRows[1],{cache_read_tokens:236230,cache_write_tokens:0,turn_seq:2,turn_requests:27,ttft_ms:0,wall_ms:0,duration_ms:0});
+  usageRows[2].merged_requests=27;
+  await page.locator('#uf-refresh').click();
+  await page.locator('#usage-rows tr').first().locator('.u-tk.read').waitFor();
+  const firstUsage=page.locator('#usage-rows tr').first(), secondUsage=page.locator('#usage-rows tr').nth(1);
+  assert.deepEqual(await firstUsage.locator('.u-tk').allInnerTexts(),['2','12,182','6.8M','1.2K']);
+  assert.deepEqual(await firstUsage.locator('.u-tk .ui-icon').evaluateAll(icons=>icons.map(i=>i.dataset.iconName)),['arrow-down','arrow-up','archive','edit']);
+  assert.equal(await firstUsage.locator('.u-tk.in').getAttribute('aria-label'),'输入 2');
+  assert.equal(await secondUsage.locator('.u-tk.write').count(),0,'empty cache buckets are omitted');
+  assert.equal(await secondUsage.locator('.u-tk.read').innerText(),'236.2K');
+  assert.equal(await firstUsage.locator('.u-tk-info').getAttribute('data-tip'),'输入 2\n输出 12,182\n缓存读取 6,775,776\n缓存写入 1,178\n合计 6,789,138');
+  assert.equal(await firstUsage.locator('.u-seq').innerText(),'第 1/27 次');
+  assert.equal(await secondUsage.locator('.u-seq').innerText(),'第 2/27 次');
+  assert.equal(await page.locator('#usage-rows tr').nth(2).locator('.u-seq').innerText(),'合并 27 次');
+  assert.equal(await secondUsage.locator('.u-lat .u-v').innerText(),'—','later requests of a turn carry no turn latency');
+  assert.match(await firstUsage.locator('.u-time .u-v').innerText(),/^\d\d:\d\d:\d\d/,'request rows show seconds');
+  assert.equal(await page.locator('.us-item').nth(4).locator('.us-value').innerText(),'7.0M','summary cards abbreviate token totals');
+  const requestDownload=page.waitForEvent('download');
+  await page.locator('#uf-export').click();
+  const requestLines=(await readFile(await(await requestDownload).path(),'utf8')).trim().split('\r\n').map(line=>line.split(','));
+  const seqColumn=requestLines[0].indexOf('回合内序号'),mergedColumn=requestLines[0].indexOf('合并请求数'),readColumn=requestLines[0].indexOf('缓存读取');
+  assert.deepEqual([requestLines[1][seqColumn],requestLines[2][seqColumn],requestLines[3][mergedColumn]],['1/27','2/27','27']);
+  assert.equal(requestLines[1][readColumn],'6775776','CSV keeps exact token counts');
   if(process.env.AGENTBOX_USAGE_SCREENSHOTS) {
     await mkdir('output/playwright',{recursive:true});
     await page.screenshot({path:'output/playwright/usage-cache-desktop.png',animations:'disabled'});
+    const theme=await page.evaluate(()=>{const old=document.documentElement.dataset.theme||'';document.documentElement.dataset.theme='dark';return old;});
+    await page.screenshot({path:'output/playwright/usage-cache-desktop-dark.png',animations:'disabled'});
+    await page.evaluate(old=>{document.documentElement.dataset.theme=old;},theme);
   }
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.locator('#usage-rows .u-hit').first().getAttribute('data-l'),'缓存命中率');
   if(await page.locator('#uf-toggle').getAttribute('aria-expanded')==='true') await page.locator('#uf-toggle').click();
   await page.locator('#usage-rows .u-hit').first().scrollIntoViewIfNeeded();
-  assert.equal(await page.locator('#usage-rows .u-hit .u-v').first().innerText(),'80.0%');
+  assert.equal(await page.locator('#usage-rows .u-hit .u-v').first().innerText(),'100.0%');
   assert.equal(await page.locator('#view-usage').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'usage page overflows on mobile');
   if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-cache-mobile.png',animations:'disabled'});
+  assert.equal(await page.locator('#usage-rows tr').first().locator('.u-tk').count(),4,'token buckets stay visible on mobile');
   await page.setViewportSize({width:1280,height:900});
   usageRows=[];
   }

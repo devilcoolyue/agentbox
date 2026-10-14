@@ -687,9 +687,11 @@ func insertUsageTx(tx *sql.Tx, evs []UsageEvent) error {
 //     draining a balance on that basis would be unexplainable to the user. The
 //     guard against terminal spend is the balance check that blocks opening a
 //     terminal at all (see the quota section in AGENTS.md), not a debit here.
-//   - It upserts on ReqID. The scanner re-reads whole transcript files, and a
-//     turn that was still in flight last sweep comes back with more tokens on
-//     it, so the same key has to update in place rather than pile up.
+//   - It upserts on ReqID, one row per provider request. The scanner re-reads
+//     whole transcript files, and a request that was still streaming last sweep
+//     comes back with more tokens on it, so the same key has to update in place
+//     rather than pile up. A request first seen in a turn already on record
+//     inherits that turn's price snapshot.
 //
 // ReqID must be non-empty; a row without one would fall out of the partial
 // unique index and duplicate on the next sweep.
@@ -714,10 +716,27 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 		var oldJSON string
 		var oldCost, inTok, outTok, readTok, writeTok int64
 		err := tx.QueryRow("SELECT price_snapshot,cost_micro_usd,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens FROM usage_events WHERE req_id=?", e.ReqID).Scan(&oldJSON, &oldCost, &inTok, &outTok, &readTok, &writeTok)
-		if err != nil && err != sql.ErrNoRows {
+		if err == sql.ErrNoRows {
+			// A new request in a turn already on record (including one that an
+			// older version merged into a single row) keeps that turn's original
+			// price table instead of today's.
+			var sibling string
+			serr := tx.QueryRow(`SELECT price_snapshot FROM usage_events WHERE session_id=? AND turn_id=? AND model=? AND kind=? AND price_snapshot != '' ORDER BY id LIMIT 1`,
+				e.SessionID, e.TurnID, e.Model, UsageKindTerminal).Scan(&sibling)
+			if serr != nil && serr != sql.ErrNoRows {
+				return serr
+			}
+			if serr == nil {
+				var original PriceSnapshot
+				if err := json.Unmarshal([]byte(sibling), &original); err != nil {
+					return err
+				}
+				e.Price = &original
+				e.CostMicroUSD = original.Cost(e)
+			}
+		} else if err != nil {
 			return err
-		}
-		if err == nil {
+		} else {
 			if oldJSON != "" {
 				var original PriceSnapshot
 				if err := json.Unmarshal([]byte(oldJSON), &original); err != nil {
@@ -854,22 +873,36 @@ func (s *Store) ListUsage(f UsageFilter) []UsageEvent {
 	defer rows.Close()
 	var out []UsageEvent
 	for rows.Next() {
-		var e UsageEvent
-		var ts, snapshot string
-		if err := rows.Scan(&e.ID, &ts, &e.User, &e.SessionID, &e.ThreadID, &e.TurnID,
-			&e.Agent, &e.AccountID, &e.Model, &e.Kind,
-			&e.InputTokens, &e.OutputTokens, &e.CacheReadTokens, &e.CacheWriteTokens,
-			&e.CostMicroUSD, &e.DurationMS, &e.WallMS, &e.TTFTMs, &e.Provider,
-			&e.ReqID, &e.Raw, &snapshot, &e.Effort, &e.EffortControl, &e.DelegationID); err != nil {
+		e, err := scanUsage(rows)
+		if err != nil {
 			continue
 		}
-		if snapshot != "" {
-			_ = json.Unmarshal([]byte(snapshot), &e.Price)
-		}
-		e.TS, _ = time.Parse(time.RFC3339Nano, ts)
 		out = append(out, e)
 	}
 	return out
+}
+
+// UsageEventByID reads one row; callers enforce who may see it.
+func (s *Store) UsageEventByID(id int64) (UsageEvent, bool) {
+	e, err := scanUsage(s.db.QueryRow("SELECT "+usageCols+" FROM usage_events WHERE id = ?", id))
+	return e, err == nil
+}
+
+func scanUsage(row interface{ Scan(...any) error }) (UsageEvent, error) {
+	var e UsageEvent
+	var ts, snapshot string
+	if err := row.Scan(&e.ID, &ts, &e.User, &e.SessionID, &e.ThreadID, &e.TurnID,
+		&e.Agent, &e.AccountID, &e.Model, &e.Kind,
+		&e.InputTokens, &e.OutputTokens, &e.CacheReadTokens, &e.CacheWriteTokens,
+		&e.CostMicroUSD, &e.DurationMS, &e.WallMS, &e.TTFTMs, &e.Provider,
+		&e.ReqID, &e.Raw, &snapshot, &e.Effort, &e.EffortControl, &e.DelegationID); err != nil {
+		return e, err
+	}
+	if snapshot != "" {
+		_ = json.Unmarshal([]byte(snapshot), &e.Price)
+	}
+	e.TS, _ = time.Parse(time.RFC3339Nano, ts)
+	return e, nil
 }
 
 // UsageTotals is the whole filtered set summed up, independent of paging —
@@ -954,4 +987,56 @@ func (s *Store) FacetsUsage(f UsageFilter, scopeUser string) UsageFacets {
 	out.Agents = append(out.Agents, distinct("agent", relax(func(g *UsageFilter) { g.Agent = "" }))...)
 	out.Models = append(out.Models, distinct("model", relax(func(g *UsageFilter) { g.Model = "" }))...)
 	return out
+}
+
+// TurnPosition places one usage row among the rows of the same turn and kind:
+// Seq is 1-based in time order, Count the number of rows (provider requests).
+type TurnPosition struct {
+	Seq   int
+	Count int
+}
+
+// TurnPositions returns positions for the given row IDs. Rows sharing a turn
+// may sit on other pages; the window runs over the whole turn, not the page.
+func (s *Store) TurnPositions(ids []int64) (map[int64]TurnPosition, error) {
+	out := map[int64]TurnPosition{}
+	for start := 0; start < len(ids); start += 500 {
+		batch := ids[start:min(start+500, len(ids))]
+		args := make([]any, len(batch))
+		for i, id := range batch {
+			args[i] = id
+		}
+		marks := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		rows, err := s.db.Query(`WITH page AS (
+				SELECT DISTINCT session_id, turn_id, kind FROM usage_events WHERE id IN (`+marks+`) AND turn_id != ''
+			)
+			SELECT u.id,
+				ROW_NUMBER() OVER (PARTITION BY u.session_id, u.turn_id, u.kind ORDER BY u.ts, u.id),
+				COUNT(*) OVER (PARTITION BY u.session_id, u.turn_id, u.kind)
+			FROM usage_events u JOIN page p ON u.session_id = p.session_id AND u.turn_id = p.turn_id AND u.kind = p.kind`, args...)
+		if err != nil {
+			return nil, err
+		}
+		want := map[int64]bool{}
+		for _, id := range batch {
+			want[id] = true
+		}
+		for rows.Next() {
+			var id int64
+			var p TurnPosition
+			if err := rows.Scan(&id, &p.Seq, &p.Count); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if want[id] {
+				out[id] = p
+			}
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }

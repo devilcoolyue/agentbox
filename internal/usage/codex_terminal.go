@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"strconv"
 	"time"
 
 	"agentbox/internal/store"
@@ -24,6 +25,11 @@ type codexTokens struct {
 // on rate-limit updates, so last_token_usage must never be blindly summed.
 // Monotonic total_token_usage deltas identify actual new usage; last is used
 // only at an initial observation or counter reset, bounded by the new total.
+//
+// Each nonzero delta is one provider request and becomes its own row. Older
+// versions merged a turn/model into one row keyed by its hash; the first
+// request keeps that key (so a rescan updates the merged row in place) and
+// later requests append their sequence number.
 func parseCodexTerminal(f io.Reader) ([]termTurn, error) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1<<20), 32<<20)
@@ -32,8 +38,8 @@ func parseCodexTerminal(f io.Reader) ([]termTurn, error) {
 	allowed := false
 	var previous codexTokens
 	havePrevious := false
-	acc := map[string]*termTurn{}
-	var order []string
+	seq := map[string]int{}
+	var rows []termTurn
 	for sc.Scan() {
 		var rec struct {
 			Type      string          `json:"type"`
@@ -121,34 +127,31 @@ func parseCodexTerminal(f io.Reader) ([]termTurn, error) {
 					continue
 				}
 				key := session + "\x00" + turn + "\x00" + model
-				row := acc[key]
-				first := row == nil
-				if row == nil {
-					sum := sha256.Sum256([]byte(key))
-					id := "codex-terminal:" + hex.EncodeToString(sum[:])
-					turnSum := sha256.Sum256([]byte(session + "\x00" + turn))
-					row = &termTurn{reqID: id, model: model, ts: ts, ev: store.UsageEvent{TurnID: "codex-terminal:" + hex.EncodeToString(turnSum[:])}}
-					acc[key] = row
-					order = append(order, key)
+				sum := sha256.Sum256([]byte(key))
+				id := "codex-terminal:" + hex.EncodeToString(sum[:])
+				if n := seq[key]; n > 0 {
+					id += ":" + strconv.Itoa(n)
 				}
-				row.mergeEffort(effort, first)
+				seq[key]++
+				turnSum := sha256.Sum256([]byte(session + "\x00" + turn))
+				row := termTurn{reqID: id, model: model, ts: ts, ev: store.UsageEvent{TurnID: "codex-terminal:" + hex.EncodeToString(turnSum[:]), Effort: effort}}
+				if effort != "" {
+					row.ev.EffortControl = "effort"
+				}
 				uncached := delta.Input - delta.Cached
 				if uncached < 0 {
 					uncached = 0
 				}
-				row.ev.InputTokens += uncached
-				row.ev.CacheReadTokens += delta.Cached
-				row.ev.OutputTokens += delta.Output
-				row.ev.CacheWriteTokens += delta.CacheWrite
+				row.ev.InputTokens = uncached
+				row.ev.CacheReadTokens = delta.Cached
+				row.ev.OutputTokens = delta.Output
+				row.ev.CacheWriteTokens = delta.CacheWrite
+				rows = append(rows, row)
 			}
 		}
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
-	}
-	rows := make([]termTurn, 0, len(order))
-	for _, key := range order {
-		rows = append(rows, *acc[key])
 	}
 	return rows, nil
 }

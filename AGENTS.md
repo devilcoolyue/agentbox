@@ -291,11 +291,18 @@ data/
 
 - 回合收尾事件里的 token/费用落进 `usage_events` 表（`internal/usage/events.go` 解析，
   `runTurn` 的 `onLine` 里挂钩），并在**同一个事务**里从用户额度扣掉（见下节）。
-- Claude 网页对话在 `internal/usage/claude_messages.go` 按 `message.id` 去重：优先有 `stop_reason` 的记录，同等完整度取 output 最大者。`message_delta` 必须在 partial 早返回前交给 tally；回合启动前保存 transcript 文件边界，收尾只读同一 provider 会话及子 Agent 的新增记录补齐用量。`modelUsage` / `total_cost_usd` 可能包含续聊历史，绝不用于网页扣款；仅独立、不 resume 的起标题进程允许 result 计量。按回合开始锁定的价目表逐请求计价，再按模型聚合。`usage_messages` 按空间/message ID 持久去重，认领、写流水、扣额度同事务，重启或重放不能重复扣款。
+- Claude 网页对话在 `internal/usage/claude_messages.go` 按 `message.id` 去重：优先有 `stop_reason` 的记录，同等完整度取 output 最大者。`message_delta` 必须在 partial 早返回前交给 tally；回合启动前保存 transcript 文件边界，收尾只读同一 provider 会话及子 Agent 的新增记录补齐用量。`modelUsage` / `total_cost_usd` 可能包含续聊历史，绝不用于网页扣款；仅独立、不 resume 的起标题进程允许 result 计量。按回合开始锁定的价目表逐条计价，**每条消息（一次 API 响应）各成一行**，行时间取流里首次看到与 transcript 时间中较早者；回合级的 ttft/wall/duration 只放在回合第一条对话请求上，其余为 0。`usage_messages` 按空间/message ID 持久去重，认领、写流水、扣额度同事务，重启或重放不能重复扣款。
 - Codex 的 `type:"turn.completed"` 只有 token、**不报费用**（`cost_micro_usd` 记 0，
-  待定价表就位后按 token 折算）。两处形状已对 codex-cli 0.145.0 实测核对过，
-  app-server 翻译出的事件与 `codex exec --json` 自己吐的完全一致，`parseUsage` 一套
-  分支通吃。两条语义是实测结论，别按字面直觉改：
+  按价目表折算）。app-server 路径由 `agent/appserver_usage.go` 合成收尾事件：
+  `thread/tokenUsage/updated` 每次模型请求一条，带线程累计 `total` 与单次 `last`；
+  **不能只留最后一份 `last`**（旧实现如此，工具调用多的回合只记到最后一次请求），
+  也不能把 `last` 直接相加（限流更新会原样重发同一份）。按 `total` 的单调差值认出
+  每次请求，不属于本回合 `turnId` 的通知只更新基线——codex-cli 0.162.1 实测续聊进程
+  会在回合开始前补发上一回合的累计。收尾事件的 `usage` 是各次之和、`requests` 逐次
+  列出，结算时 `usage/requests.go` 的 `expandCodexRequests` 展开成一次请求一行；
+  中断/失败的 `turn.failed` 同样带上，已发生的请求照样入账。`codex exec --json`
+  回退路径的 `turn.completed` 没有 `requests`，仍按原样一行计。两条语义是实测结论，
+  别按字面直觉改：
   - `cached_input_tokens` 是 `input_tokens` 的**子集**，写库时减掉才对齐 Claude 的
     「未命中缓存输入」语义；
   - `reasoning_output_tokens` 已经含在 `output_tokens` 里（实测 output=150 /
@@ -323,14 +330,15 @@ data/
 - **耗时有两块表，别混用**：`wall_ms` 是我们量的（`turnStart` → 回合收尾，与 `ttft_ms`
   同源，含 CLI 启动），`duration_ms` 是 provider 自报的模型侧耗时（**不含** CLI 启动）。
   实测容器里跑一趟 haiku：墙钟 4534ms，claude 自报 `duration_ms` 2335ms，差的 2.2 秒
-  全是 Claude Code 自己的启动。`wall_ms` 由 `flushUsage` 在回合真结束的那一刻统一盖到
-  各行上（回合中途量不到）。使用记录页的「延迟」列显示**首字 + 总耗时**，两个数同源
+  全是 Claude Code 自己的启动。`wall_ms` 由 `flushUsage` 在回合真结束的那一刻盖到
+  回合第一次请求那一行上（回合中途量不到）。使用记录页的「延迟」列显示**首字 + 总耗时**，两个数同源
   （都是我们量的），所以首字必然 ≤ 总耗时；「总耗时」必须用 `wall_ms`——早先拿
   `duration_ms` 当总耗时，出过「首字 3.1s / 总耗时 2.3s」这种看着不可能的记录。老数据
   没量过墙钟（`wall_ms == 0`），那种行退回显示 `duration_ms` 并把标签换成「模型」，
   不能顶着「总耗时」的名字混口径。`duration_ms` 平时不上表，但仍在记、仍进 CSV 导出。
-- `duration_ms` / `wall_ms` / `ttft_ms` 都是**回合级**指标，在同回合拆出的各行上重复；
-  聚合时只能按 `turn_id` 取一份，绝不能 SUM。`store.UsageTotals` 因此故意不含这几项。
+- `duration_ms` / `wall_ms` / `ttft_ms` 都是**回合级**指标：新记录只放在回合第一次请求
+  那一行，其余行为 0；升级前按模型拆的旧行在同回合各行上重复。聚合时只能按 `turn_id`
+  取 MAX，绝不能 SUM。`store.UsageTotals` 因此故意不含这几项。
 
 ### 价格目录维护
 
@@ -373,10 +381,13 @@ data/
 - Claude 4.6 及之后的模型 1M 上下文按标准价计费，所以 claude 各行**都不配长上下文档**。
 - Claude 0 费用按表补算时，新记录保存 table 来源；旧记录没有价格快照，仍只能按旧规则推断来源。不要把事后参考价当作历史入账价格。
 - **长上下文是「过线整轮翻倍」，不是对超出部分加价。** 提示词超过
-  `long_context_over`（OpenAI 现为 272000 input token）后，整个回合的四个桶都按
-  `long` 那一档算。判定用的是「这轮喂进去多少」= 未命中缓存的输入 + 命中缓存的
+  `long_context_over`（OpenAI 现为 272000 input token）后，这次请求的四个桶都按
+  `long` 那一档算。判定用的是「喂进去多少」= 未命中缓存的输入 + 命中缓存的
   输入，两者相加正好还原 codex 报的 `input_tokens`；`cache_write` 不计入，它是否
-  含在 `input_tokens` 里没实测过，而这家 provider 一直报 0。
+  含在 `input_tokens` 里没实测过，而这家 provider 一直报 0。**判档以单次请求为准**：
+  每次请求都重发整段上下文，回合合计的提示词动辄几十万，按合计判档会把整回合错算
+  成长档。新记录一次请求一行，自然逐次判档；只剩 `codex exec` 回退等只有合计的行
+  按整行判。升级前合并保存的 Claude 行快照标 `per_request`（当时逐条计价再求和）。
 - `quotas.balance_micro_usd` 是账本的物化缓存，两者永远同事务更新；对不上账用
   `store.RecomputeBalance` 按 `credit_ledger` 重算核对。
 - 管理接口：`GET/PUT /api/users/{name}/quota`、`POST /api/users/{name}/credits`、
@@ -392,11 +403,22 @@ data/
 用户都有入口。`GET /api/usage` 出的是聚合，这里 `GET /api/usage/events` 出的是一行行
 明细，带筛选、翻页、合计与筛选可选值。
 
-- **一行 = 一个回合 × 一个模型，不是一次 API 调用。** 容器里的 CLI 直连 provider，
-  我们不在链路上，看不见单次 HTTP 请求。中转站面板上的「端点 / API 密钥 / 分组 / IP」
-  我们没有对应物，别为了凑齐列去编。想要单请求粒度只能自己做反代，那是另一件事。
-  （顺带：claude 的 `assistant` 事件确实带每次调用的 usage，但其中 `output_tokens`
-  是流式开始时的占位值、永远不更新，**算不了钱**——所以粒度只能停在回合。）
+- **一行 = 一次 provider 请求（一条 API 响应），也是计费与扣额度的单位**（每行一条
+  `usage:<id>` 流水）。回合里 CLI 每调一次工具就再请求一次、每次重发整段上下文，按回合
+  合并时缓存读取逐次累加、远超上下文窗口，用户看不懂也对不上官方账单，所以全部来源都
+  逐次成行：Claude 网页（按 message.id，raw 是单条消息）、Codex app-server（raw 是
+  `codex.request`）、终端补记（见下）。同回合各行共享 turn_id；`store.TurnPositions`
+  用窗口函数按 (session, turn, kind) 算「第几次 / 共几次」，行视图的 `turn_seq` /
+  `turn_requests` 在类型下方显示（跨页也按整回合算）；只标 `usage.SingleRequest` 认得
+  的单次请求行，升级前按模型拆的同回合合计行不是几次请求。回合级耗时只在第一次请求上，其余
+  行延迟显示 —。**升级前的 Claude 网页行是按回合合并的**（raw = `claude.messages`），
+  账本已按整行扣款且每条流水带 `balance_after` 余额链，拆行会破坏账本，所以不拆，行视图
+  的 `merged_requests` 标「合并 N 次」。中转站面板上的「端点 / API 密钥 / 分组 / IP」
+  我们没有对应物，别为了凑齐列去编。
+- Token 格照 sub2api：↓ 输入 ↑ 输出给完整数字，缓存读取（archive 图标、`--info` 蓝）与
+  缓存写入（edit 图标、`--warn` 黄）用 `usage-math.ts` 的 `fmtTokens` 缩写成 K/M/B，
+  ⓘ 悬停给完整数字；汇总卡片同样缩写。颜色只用各风格都定义了的全局令牌，别写死色值；
+  CSV 一律导出完整数字。
 - **合计与筛选可选值都按「筛选条件」算，不按「当前这一页」算。** 否则翻页时表头的
   总花费跟着变，没法用。三者共用 `UsageFilter.where()`，不会各算各的。
 - 跑腿模型的用量仍以 `kind=chat` 记账，入账时就记在属主空间与主线程下并带 `delegation_id`；明细接口只读投影为 `delegation`，`kind=chat` 的网页筛选排除这些行，列表/合计/facets 共用条件。不得为展示补写委派总额或改写原种类，以免重复扣款或破坏 Claude 去重。委派时的 Jev 判断仍为独立 `decision` 类型并带同一委派 ID。
@@ -434,14 +456,17 @@ data/
   - **`entrypoint` 是分水岭**：`cli` = 用户手敲的 TUI（要补），`sdk-cli` = 我们自己发的
     `claude -p`（已记账，漏掉这个过滤就是对话消耗记两遍）。
   - transcript 里的 `usage` 是**最终值**，不是流式 `assistant` 事件里那个恒为 2 的
-    `output_tokens` 占位——所以这条路其实看得见单次 API 调用，但仍按回合聚合落库，
-    好让两种来源的行粒度一致。回合边界用最近一条 `user` 记录的 `uuid`（老版本 CLI 的
-    `promptId` 是 null，不能用）。
+    `output_tokens` 占位——所以这条路看得见单次 API 调用，与对话行一样一次请求一行。
+    回合边界用最近一条 `user` 记录的 `uuid`（老版本 CLI 的 `promptId` 是 null，不能用），
+    同回合各行共享回合首个 requestId 作为 turn_id。
   - 按 `message.id` 去重（旧日志缺 ID 才回退 requestId）：优先完整 stop_reason，再选 output 较大者；时间取最早一份。不能让晚到占位记录覆盖最终用量。
-  - 去重靠 `usage_events.req_id`（回合首个 requestId）上的**部分唯一索引**
-    （`WHERE req_id != ''`，对话行的空串必须排除）。`UpsertTerminalUsage` 的
+  - 一次请求一行，去重靠 `usage_events.req_id`（这次请求的 requestId；Codex 为回合/模型
+    哈希、第二次起追加 `:序号`）上的**部分唯一索引**。旧版按回合合并、键是回合首个
+    requestId，正好等于新版该组第一次请求的键：升级后重扫时第一次请求原地覆盖旧合并行，
+    其余请求新增，并沿用同回合同模型已有行的价格快照。部分索引的条件是
+    `WHERE req_id != ''`（对话行的空串必须排除），`UpsertTerminalUsage` 的
     `ON CONFLICT` 必须把这个 WHERE 原样带上，否则 SQLite 认不出这条约束。upsert 而非
-    insert 是因为扫描时回合可能还没结束，下一轮要把新调用更新到同一行上。
+    insert 是因为扫描时请求可能还没写完，下一轮要把最终用量更新到同一行上。
   - **只记账不扣额度**：补记是异步的、价还是我们查表折的，拿它动余额用户没法对账。
     拦终端仍然靠余额见底不让开终端（见下节）。`billingMode` 因此对 `terminal` 特判——
     哪怕是 claude 也只能标「价目表 / 未定价」，不能标「官方报价」。
@@ -461,8 +486,8 @@ data/
 - 终端页顶栏的「本会话已花」（`term.ts` 的 `termSpendPolling`）直接复用
   `GET /api/usage/events?session=<id>&limit=1` 的 `total`，没有单独的接口——那个 total
   本来就是「按筛选条件算、与翻页无关」，正好是这个数。只在终端页轮询（15 秒）。
-- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源，按 thread/turn/model 聚合；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；仍只记账不扣额度。
-- 终端推理强度只读历史日志：Claude assistant 顶层 `effort`（不回退 `perTurnEffort`），Codex `turn_context.payload.effort`；schema 17 的 `usage_events.effort/effort_control` 随原行 upsert，同回合/模型缺失或混用档位留空。重启后重扫现存日志可补历史强度，不拆分原去重键、不替换价格快照、不扣余额；禁止用当前账号配置推断历史。网页强度仍取冻结聊天回执，起标题不借用网页回合强度。升级前保留 schema 16 兼容备份，回退使用匹配旧版本恢复到新目录。
+- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源，每个非零累计差值是一次请求、一行（键见上）；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；仍只记账不扣额度。
+- 终端推理强度只读历史日志：Claude assistant 顶层 `effort`（不回退 `perTurnEffort`），Codex `turn_context.payload.effort`；schema 17 的 `usage_events.effort/effort_control` 随原行 upsert，每次请求取它自己记录的档位，缺失留空。重启后重扫现存日志可补历史强度，不拆分原去重键、不替换价格快照、不扣余额；禁止用当前账号配置推断历史。网页强度仍取冻结聊天回执，起标题不借用网页回合强度。升级前保留 schema 16 兼容备份，回退使用匹配旧版本恢复到新目录。
 
 ### 终端
 
