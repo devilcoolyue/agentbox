@@ -4,17 +4,23 @@ import { mkdir } from 'node:fs/promises';
 // Shared synthetic browser suite: the composer's "@" file mentions, fed by a
 // synthetic /files/search. Ranking is the server's (Go tests); here only what
 // the page does with the answer. No provider calls.
-/** Largest per-channel difference between two same-sized screenshots (canvas in the page, no CSP). */
+/** Share of the text's pixels that clearly differ between two same-sized screenshots (canvas in the page, no CSP). */
 async function pixelDrift(page, a, b) {
  return page.evaluate(async ([a, b]) => {
   const load = src => new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = reject; img.src = 'data:image/png;base64,' + src; });
   const pixels = img => { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, img.width, img.height).data; };
   const [ia, ib] = await Promise.all([load(a), load(b)]);
-  if (ia.width !== ib.width || ia.height !== ib.height) return 255;
+  if (ia.width !== ib.width || ia.height !== ib.height) return 1;
   const pa = pixels(ia), pb = pixels(ib);
-  let max = 0;
-  for (let i = 0; i < pa.length; i++) if (i % 4 !== 3) max = Math.max(max, Math.abs(pa[i] - pb[i]));
-  return max;
+  const near = (p, i, q, j, limit) => Math.abs(p[i] - q[j]) <= limit && Math.abs(p[i + 1] - q[j + 1]) <= limit && Math.abs(p[i + 2] - q[j + 2]) <= limit;
+  // Ink: pixels away from the background (the top-left corner) in either shot.
+  let ink = 0, off = 0;
+  for (let i = 0; i < pa.length; i += 4) {
+   if (near(pa, i, pa, 0, 40) && near(pb, i, pb, 0, 40)) continue;
+   ink++;
+   if (!near(pa, i, pb, i, 100)) off++;
+  }
+  return ink ? off / ink : 0;
  }, [a.toString('base64'), b.toString('base64')]);
 }
 
@@ -82,10 +88,11 @@ export async function chatMentionsSmoke(page, { setHistory, messages, socket, se
   });
   const plain = await page.locator('.composer-field').screenshot();
   await style.evaluate(el => el.remove());
-  // Span boundaries may move glyphs by a fraction of a pixel (softer antialiasing);
-  // a misplaced line or a one-pixel shift changes glyph edges almost completely.
+  // Span boundaries may move glyphs by a fraction of a pixel: softer antialiasing, or a
+  // whole pixel for a few glyphs of a bitmap fallback font (WenQuanYi on CI). A misplaced
+  // line, a different wrap or a one-pixel shift of the layer changes most of the text.
   const drift = await pixelDrift(page, painted, plain);
-  assert.ok(drift < 128, `mirror text drifted from the textarea by ${drift}/255 (${JSON.stringify(text.slice(0, 30))}, scroll ${scroll})`);
+  assert.ok(drift < 0.1, `mirror text drifted from the textarea: ${(drift * 100).toFixed(1)}% of its pixels differ (${JSON.stringify(text.slice(0, 30))}, scroll ${scroll})`);
   await input.fill('');
  };
  await aligned('/review 帮我看看 @src/main.go 里 handleFiles 的边界条件，'.repeat(3) + 'averyveryverylongwordwithoutanyspacesaverylongwordwithoutanyspacesaverylongword\n\t缩进 @README.md\n', 0);
