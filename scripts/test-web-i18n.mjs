@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Locale behavior against synthetic HTTP/WS only; no real users or model calls.
-import {reduceMotion} from './playwright-launch.mjs';
+import {recordNavigations,reduceMotion} from './playwright-launch.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -23,6 +23,7 @@ export async function webI18nSmoke(browser) {
  const base=`http://127.0.0.1:${server.address().port}`;
  const context=await browser.newContext({locale:'en-GB', viewport:{width:1280,height:900}});
  const page=await context.newPage();
+ recordNavigations(page,'web-i18n');
  const errors=[]; page.on('pageerror',e=>errors.push(e.stack||e.message));
  const space={id:'locale-space',name:'保存',agent:'codex',account_id:'fixture',account_label:'取消',status:'running',default_model:'fixture'};
  let sockets=0, writes=0, usageReads=0, terminalSocket;

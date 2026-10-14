@@ -24,11 +24,12 @@ import { chatHistorySettingsSmoke, chatPagesSmoke } from './test-chat-pages.mjs'
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
 import { motionSmoke } from './test-motion.mjs';
-import {browserEngine,cancelledFetchError,launchBrowser} from './playwright-launch.mjs';
+import {browserEngine,cancelledFetchError,launchBrowser,recordNavigations} from './playwright-launch.mjs';
 
 export async function smoke(page) {
  await page.addInitScript(() => { if (window === window.top && /^https?:$/.test(location.protocol)) localStorage.setItem("agentbox.language", "zh-CN"); });
  page.setDefaultTimeout(15000);
+ recordNavigations(page, 'console');
  const root = resolve(fileURLToPath(new URL('../internal/web/static/', import.meta.url)));
  const server = createServer(async (req,res) => {
   try {

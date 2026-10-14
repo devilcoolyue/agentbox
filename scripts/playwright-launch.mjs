@@ -48,6 +48,29 @@ export function cancelledFetchError(error){
  return [error.message,rejoined].some(text=>CANCELLED_FETCH.test(String(text).split('\n')[0]));
 }
 
+// CI intermittently fails a page.evaluate with "Execution context was destroyed", i.e. a
+// full-page navigation the test did not ask for, and it has not reproduced locally. Keep the
+// page's recent document requests and print them only when the run fails, so the next CI
+// failure shows what navigated (method, URL, form body) next to the stack.
+const navigationLogs=[];
+export function recordNavigations(page,label='page'){
+ const log=[],start=Date.now();
+ navigationLogs.push({label,log});
+ page.on('request',request=>{
+  if(!request.isNavigationRequest()||request.frame()!==page.mainFrame())return;
+  const body=request.postData();
+  log.push(`+${((Date.now()-start)/1000).toFixed(1)}s ${request.method()} ${request.url()}${body?' body='+JSON.stringify(body.slice(0,200)):''}`);
+  if(log.length>40)log.shift();
+ });
+}
+process.on('exit',code=>{
+ if(!code)return;
+ for(const {label,log} of navigationLogs){
+  console.error(`Recent document navigations (${label}, oldest first):`);
+  for(const line of log.length?log:['(none)'])console.error('  '+line);
+ }
+});
+
 // WebKit 26 (Playwright 1.58) refuses navigator.clipboard.readText() even with
 // clipboard-read granted; a real paste into a scratch textarea reads the same pasteboard.
 export async function readClipboard(page){
