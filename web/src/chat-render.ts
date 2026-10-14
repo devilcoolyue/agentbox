@@ -16,6 +16,7 @@ export { svgIcon } from "./icons.js";
 import { setTip } from "./tip.js";
 import { S } from "./state.js";
 import { contextCard, contextUsageOf } from "./features/chat/context-card.js";
+import { usageCard, usageReportOf } from "./features/chat/usage-card.js";
 import { fmtTokens } from "./usage-math.js";
 
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
@@ -804,12 +805,14 @@ export function renderEvent(ev: AgentEvent | undefined) {
     return out;
   }
   if (ev.type === "assistant" && typeof ev.uuid === "string" && compactReplays.has(ev.uuid)) return out;
-  // /context：CLI 附带结构化结果时画成格子卡片，复制仍给它的 Markdown 原文
+  // /context、/usage：CLI 附带结构化结果时画成卡片，复制仍给它的文字原文
   const usage = ev.type === "assistant" ? contextUsageOf(ev) : undefined;
-  if (usage) {
-    const card = contextCard(usage);
+  const report = ev.type === "assistant" && !usage ? usageReportOf(ev) : undefined;
+  if (usage || report) {
     const content = ev.message?.content;
-    answerSources.set(card, Array.isArray(content) ? content.map(b => b.type === "text" ? b.text || "" : "").join("") : "");
+    const text = Array.isArray(content) ? content.map(b => b.type === "text" ? b.text || "" : "").join("") : "";
+    const card = usage ? contextCard(usage) : usageCard(report!, text);
+    answerSources.set(card, text);
     out.push(card);
     return out;
   }

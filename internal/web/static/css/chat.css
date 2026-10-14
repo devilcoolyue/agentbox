@@ -884,6 +884,35 @@ details.think.streaming .think-body::after {
   .ctx-grid { grid-template-columns: repeat(var(--cols, 20), 9px); grid-auto-rows: 9px; gap: 3px; }
 }
 
+/* ---- /usage 结果卡片（usage-card.ts）：套餐各额度窗口的进度条 + 用量构成 ---- */
+.usage-card { display: flex; flex-direction: column; gap: 14px; margin: 2px 0; max-width: 560px; }
+.usage-card-head { display: flex; flex-direction: column; gap: 2px; }
+.usage-card-title { color: var(--text-hi); font-weight: 600; font-size: 15px; }
+.usage-card-sub { color: var(--muted); font-size: 12.5px; }
+.usage-limits { display: flex; flex-direction: column; gap: 14px; }
+.usage-limit { display: flex; flex-direction: column; gap: 6px; }
+.usage-limit-head { display: flex; align-items: baseline; gap: 12px; font-size: 13.5px; min-width: 0; }
+.usage-limit-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 500; }
+.usage-limit-value { margin-left: auto; flex: none; color: var(--text); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.usage-bar { height: 8px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--line) 75%, transparent); overflow: hidden; }
+.usage-bar-fill { display: block; height: 100%; width: var(--p, 0%); border-radius: inherit; background: var(--amber); }
+.usage-limit[data-level="warning"] .usage-bar-fill { background: var(--warn); }
+.usage-limit[data-level="critical"] .usage-bar-fill { background: var(--red); }
+.usage-limit[data-level="critical"] .usage-limit-value { color: var(--red); }
+.usage-limit-reset { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.usage-traits { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.usage-traits-title { color: var(--text-hi); font-weight: 600; font-size: 13.5px; }
+.usage-traits-note { color: var(--muted); font-size: 12px; }
+.usage-period { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.usage-period-head { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.usage-trait { display: flex; align-items: baseline; gap: 10px; font-size: 13px; min-width: 0; }
+.usage-trait-pct { flex: none; width: 3.2em; text-align: right; color: var(--amber); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.usage-trait-text { min-width: 0; color: var(--text); }
+.usage-trait-label { flex: none; color: var(--text); }
+.usage-trait-tags { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+.usage-tag { padding: 0 6px; border-radius: var(--radius-pill); background: var(--panel-2); color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+.usage-note { color: var(--muted); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 /* 上下文压缩的分界：在回合里说明这里压缩过、压掉了多少 */
 .chip.compact { display: inline-flex; align-items: center; gap: 6px; color: var(--amber); font-family: var(--sans); font-size: 12px; padding: 3px 0; }
 .chip.compact svg { flex: none; }

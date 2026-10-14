@@ -27,7 +27,7 @@ const BUILTIN_TEXT: Record<string, () => string> = {
   compact: () => i18nText("压缩上下文：把目前的对话总结成摘要以释放空间（会请求一次模型）"),
   context: () => i18nText("查看上下文用量明细"),
   init: () => i18nText("生成 CLAUDE.md，记录项目结构与约定"),
-  usage: () => i18nText("查看本会话花费与套餐用量"),
+  usage: () => i18nText("查看套餐额度的用量与重置时间"),
   "security-review": () => i18nText("审查当前分支改动里的安全问题"),
 };
 

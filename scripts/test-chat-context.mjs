@@ -146,10 +146,63 @@ export async function chatContextSmoke(page, { setHistory, send, socket, setAgen
  await page.locator('.chip.err').filter({hasText:'上下文压缩失败：Not enough messages to compact.'}).waitFor();
  send({type:'status',state:'idle'});
 
+ // /usage draws the plan's limit rows from usage_report as bars (server order,
+ // severity and scope), resets in the system time zone, and the text-only
+ // "what's contributing" part parsed into rows; unknown lines stay text.
+ const usageText = ['You are currently using your subscription to power your Claude Code usage','',
+  'Current session: 47% used · resets Jan 1, 12am (UTC)','Current week (all models): 71% used · resets Oct 17, 9am (UTC)','',
+  "What's contributing to your limits usage?",
+  'Approximate, based on local sessions on this machine — does not include other devices or claude.ai. Behaviors are independent characteristics, not a breakdown.','',
+  'Last 24h · 1258 requests · 35 sessions','  87% of your usage was at >150k context','',
+  'Last 7d · 3729 requests · 81 sessions','  88% of your usage was at >150k context','  39% of your usage came from sessions active for 8+ hours',
+  '  Top skills: /frontend-design 3%, /pdf 1%, +2 more','  12% of your usage did something new','<img src=x onerror=alert(1)> unknown footer'].join('\n');
+ const usageReport = {session:{total_cost_usd:0,total_api_duration_ms:0,total_duration_ms:3247,total_lines_added:0,total_lines_removed:0,model_usage:{}},
+  rate_limits:{limits:[
+   {kind:'session',group:'session',percent:47,resets_at:'2020-01-01T00:00:00+00:00',scope:null,severity:'normal',is_active:false},
+   {kind:'weekly_all',group:'weekly',percent:71.4,resets_at:'2099-10-17T09:00:00+00:00',scope:null,severity:'warning',is_active:true},
+   {kind:'weekly_scoped',group:'weekly',percent:92,resets_at:null,scope:{model:{display_name:'Opus <b>5</b>'}},severity:'critical',is_active:false}],
+   extra_usage:{is_enabled:true,monthly_limit:5000,used_credits:1250,utilization:25,currency:'usd'}}};
+ setHistory([
+  {kind:'user',ts:'2026-10-14T11:00:00Z',text:'/usage',turn:turn('usage-card')},
+  {kind:'event',ts:'2026-10-14T11:00:01Z',event:{type:'assistant',uuid:'usage-uuid',parent_tool_use_id:null,usage_report:usageReport,local_command_run:{command:'usage',args:''},
+   message:{id:'local-usage',model:'<synthetic>',content:[{type:'text',text:usageText}],usage:{input_tokens:0,output_tokens:0}}}},
+  {kind:'event',ts:'2026-10-14T11:00:01Z',event:{type:'result',subtype:'success',is_error:false,num_turns:0,local_command:'usage',result:usageText,modelUsage:{}}},
+  {kind:'status',ts:'2026-10-14T11:00:02Z',state:'idle',local:true},
+ ]);
+ await reload();
+ const usageCard = page.locator('.usage-card');
+ await usageCard.waitFor();
+ assert.equal(await page.locator('#chat-log').getByText('You are currently using').count(), 0, 'the card replaces the text answer');
+ assert.equal(await usageCard.locator('.usage-card-sub').innerText(), '正在使用订阅套餐额度');
+ assert.deepEqual(await usageCard.locator('.usage-limit-label').allInnerTexts(), ['当前会话','本周（全部模型）','本周（Opus <b>5</b>）','本月额外用量']);
+ assert.deepEqual(await usageCard.locator('.usage-limit-value').allInnerTexts(), ['已用 47%','已用 71%','已用 92%','$12.50 / $50.00']);
+ assert.deepEqual(await usageCard.locator('.usage-limit').evaluateAll(rows => rows.map(r => r.dataset.level)), ['normal','warning','critical','normal']);
+ assert.equal(await usageCard.locator('.usage-bar').nth(1).getAttribute('aria-valuenow'), '71');
+ assert.equal(await usageCard.locator('.usage-bar').nth(1).getAttribute('aria-label'), '本周（全部模型）');
+ const resets = await usageCard.locator('.usage-limit-reset').allInnerTexts();
+ assert.equal(resets[0], '已于 01-01 00:00 重置', 'reset time in the system time zone (UTC here)');
+ assert.match(resets[1], /^10-17 09:00 重置 · \d+ 天( \d+ 小时)?后$/);
+ assert.equal(resets[2], '套餐额度用完后按量计费', 'no reset time: no reset line');
+ assert.deepEqual(await usageCard.locator('.usage-period-head').allInnerTexts(), ['近 24 小时 · 1258 次请求 · 35 个会话','近 7 天 · 3729 次请求 · 81 个会话']);
+ assert.deepEqual(await usageCard.locator('.usage-trait-pct').allInnerTexts(), ['87%','88%','39%','','12%']);
+ assert.equal(await usageCard.locator('.usage-trait').nth(2).innerText(), '39%\n用量来自持续活跃 8 小时以上的会话');
+ assert.deepEqual(await usageCard.locator('.usage-tag').allInnerTexts(), ['/frontend-design 3%','/pdf 1%','另有 2 个']);
+ assert.equal(await usageCard.locator('.usage-trait').last().locator('.usage-trait-text').innerText(), 'did something new');
+ assert.equal(await usageCard.locator('.usage-note').innerText(), '<img src=x onerror=alert(1)> unknown footer');
+ assert.equal(await usageCard.locator('img, b').count(), 0, 'CLI and server text stays text');
+ assert.equal(await footers.last().locator('.answer-cost').innerText(), '未调用模型');
+ await usageCard.evaluate(card => { card.scrollIntoView({block:'start'}); document.getElementById('chat-log')?.scrollBy(0, -64); });
+ await page.screenshot({path:'output/playwright/chat-usage-card.png',animations:'disabled'});
+ await page.setViewportSize({width:390,height:844});
+ await usageCard.scrollIntoViewIfNeeded();
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.screenshot({path:'output/playwright/chat-usage-card-mobile.png',animations:'disabled'});
+ await page.setViewportSize({width:1280,height:900});
+
  // Codex reports no context window: no meter.
  setAgent('codex');
  await reload();
  assert.equal(await meter.isVisible(),false);
  setHistory([]);
- console.log('Chat context: meter from history and live requests, subagents ignored, warn/critical, compaction, first-turn size, local /context footer, mobile, Codex hidden passed');
+ console.log('Chat context: meter from history and live requests, subagents ignored, warn/critical, compaction, first-turn size, local /context footer, /usage card, mobile, Codex hidden passed');
 }

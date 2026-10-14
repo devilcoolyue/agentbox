@@ -1157,6 +1157,30 @@ export interface ContextUsage {
   over_limit?: { tokens_over?: number; kind?: string };
 }
 
+/** Claude：/usage 本地回答附带的结构化结果（assistant 事件的 usage_report，CLI 标为实验字段），
+ * 套餐各额度窗口原样照服务端给的顺序与严重程度（features/chat/usage-card.ts） */
+export interface UsageLimit {
+  /** session | weekly_all | weekly_scoped …，按它分类，不按文案 */
+  kind?: string;
+  group?: string;
+  /** 0–100 */
+  percent?: number;
+  resets_at?: string | null;
+  scope?: { model?: { display_name?: string } | null; surface?: { display_name?: string } | null } | null;
+  /** normal | warning | critical */
+  severity?: string;
+  is_active?: boolean;
+}
+export interface UsageReport {
+  /** 这一次 CLI 进程的累计；网页每轮另起进程，不显示 */
+  session?: Record<string, unknown>;
+  rate_limits?: {
+    limits?: UsageLimit[] | null;
+    /** 金额是 currency 的最小单位（美元即美分），utilization 为 0–100 */
+    extra_usage?: { is_enabled?: boolean; monthly_limit?: number | null; used_credits?: number | null; utilization?: number | null; currency?: string | null } | null;
+  } | null;
+}
+
 /** GET /api/sessions/{id}/commands：容器里 Claude Code 的斜杠命令（internal/server/slash_commands.go） */
 export interface SlashCommand {
   name: string;
