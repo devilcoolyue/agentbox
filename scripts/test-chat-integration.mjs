@@ -144,7 +144,9 @@ try {
  const disconnectCount = puts.length; await context.setOffline(true); for (const socket of sockets) socket.close();
  await input.fill('draft edited while offline'); await finish(disconnected.input.text);
  await until(async () => (await receipt(disconnected.id)).state === 'completed', 'server did not finish offline turn');
- await context.setOffline(false); await page.reload(); await ready(); await page.locator('#chat-delivery-refresh').click();
+ // Reloading queries the receipt; with every row completed the confirmation bar is hidden, so there is no refresh to click.
+ await context.setOffline(false); await page.reload(); await ready(); await state(disconnected.id, 'completed');
+ assert.equal(await page.locator('#chat-delivery').isHidden(), true);
  assert.equal(await input.inputValue(), 'draft edited while offline'); assert.equal(puts.length, disconnectCount); await accounting(disconnected.id);
  passed('disconnect after acceptance, server completion/settlement while offline, reconnect only queries');
  // SIGTERM is not a user-confirmed interruption, even if the synthetic CLI responds to SIGINT.
