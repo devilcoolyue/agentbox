@@ -148,6 +148,8 @@
   --shadow-lg: 0 16px 40px rgba(45, 38, 24, 0.16);
   --checker-a: #e8e4d8;
   --checker-b: #f5f2ea;
+  /* 纸底上的蓝字要压深才有对比度（diff 段头、缓存读取、输入框里的命令与 @ 引用） */
+  --info: #2763c4;
 
   color-scheme: light;
 }

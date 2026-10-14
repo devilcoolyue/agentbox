@@ -270,6 +270,10 @@ export function createCommandMenu(hooks) {
                 if (typeof name === "string")
                     terminalOnly.add(name);
         },
+        /** 网页接管的命令名（含别名） */
+        isWeb(name) {
+            return hooks.web.some(c => c.name === name || !!c.aliases?.includes(name));
+        },
         /** 输入的是网页接管的命令（含别名）时执行它并返回 true */
         runWeb(text) {
             const name = commandName(text);

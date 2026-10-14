@@ -10,13 +10,14 @@ import { imgURLFromPath } from "./api.js";
 import type {
   AgentEvent, ContentBlock, HistoryEntry, LiveNode, RateLimitInfo, SteerView,
 } from "./types.js";
-import { svgIcon, buttonLabel, actionButton } from "./icons.js";
+import { svgIcon, buttonLabel, actionButton, fileIconName } from "./icons.js";
 export { svgIcon } from "./icons.js";
 
 import { setTip } from "./tip.js";
 import { S } from "./state.js";
 import { contextCard, contextUsageOf } from "./features/chat/context-card.js";
 import { usageCard, usageReportOf } from "./features/chat/usage-card.js";
+import { syntaxMarks, type SyntaxMark } from "./features/chat/syntax.js";
 import { fmtTokens } from "./usage-math.js";
 
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
@@ -99,15 +100,45 @@ export function renderUserMsg(text: string | undefined) {
   const d = document.createElement("div");
   d.className = "msg user";
   const str = String(text);
+  // 发给 CLI 的斜杠命令整条换成命令样式，@路径 换成文件引用标签（原文不变，复制、填回仍用原文）
+  const marks = syntaxMarks(str, S.current?.agent || "claude");
+  if (marks[0]?.kind === "command") {
+    d.classList.add("cmd");
+    const icon = svgIcon("tool", 14);
+    icon.classList.add("msg-cmd-icon");
+    d.append(icon);
+  }
   let last = 0;
   for (const m of str.matchAll(USER_ATTACH_RE)) {
-    if (m.index > last) d.appendChild(document.createTextNode(str.slice(last, m.index)));
+    if (m.index > last) appendMarked(d, str, last, m.index, marks);
     if (m[1] === "图片") d.appendChild(chatThumb(m[3], i18nText("图片 #") + m[2]));
     else d.appendChild(fileLink(m[3], i18nText("附件 #") + m[2]));
     last = m.index + m[0].length;
   }
-  if (last < str.length) d.appendChild(document.createTextNode(str.slice(last)));
+  if (last < str.length) appendMarked(d, str, last, str.length, marks);
   return d;
+}
+
+/** str 的 [from, to) 一段文字，落在其中的标记换成命令 / 文件引用 */
+function appendMarked(box: HTMLElement, str: string, from: number, to: number, marks: SyntaxMark[]) {
+  let at = from;
+  for (const m of marks) {
+    if (m.start < at || m.end > to) continue;
+    if (m.start > at) box.append(str.slice(at, m.start));
+    const raw = str.slice(m.start, m.end), span = document.createElement("span");
+    if (m.kind === "command") {
+      span.className = "msg-cmd";
+      span.textContent = raw;
+    } else {
+      const path = raw.slice(1).replace(/^"|"$/g, ""), name = path.split("/").filter(Boolean).pop() || path;
+      span.className = "msg-mention mono";
+      span.append(svgIcon(path.endsWith("/") ? "folder" : fileIconName(name), 13), path);
+      setTip(span, () => i18nText("引用文件：{p0}", { p0: path }));
+    }
+    box.append(span);
+    at = m.end;
+  }
+  if (at < to) box.append(str.slice(at, to));
 }
 
 /* 复制出去给人看：附件标记换成「[图片 #1]」「[附件 #2 report.pdf]」，不带容器路径 */

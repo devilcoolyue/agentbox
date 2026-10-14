@@ -28,6 +28,7 @@ import (
 	"agentbox/internal/credentials"
 	"agentbox/internal/decision"
 	"agentbox/internal/dockerx"
+	"agentbox/internal/filesearch"
 	"agentbox/internal/gitaccess"
 	"agentbox/internal/gitx"
 	"agentbox/internal/imageupdate"
@@ -108,7 +109,8 @@ type Server struct {
 	storageReserved  int64
 	storageUsersMu   sync.Mutex
 	storageUsers     map[string]bool
-	cliCatalog       cliCatalogCache // models the Agent image's CLIs list, per image ID
+	cliCatalog       cliCatalogCache  // models the Agent image's CLIs list, per image ID
+	fileSearch       filesearch.Cache // workspace file names for the composer's "@" mentions
 	runtimeOnce      sync.Once
 	serving          atomic.Bool
 	life             *runtimeState
@@ -424,6 +426,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/sessions/{id}/upload", s.auth(s.withSession(s.handleUpload)))
 	mux.Handle("GET /api/sessions/{id}/archive", s.auth(s.withSession(s.handleArchive)))
 	mux.Handle("GET /api/sessions/{id}/files", s.auth(s.withSession(s.handleFiles)))
+	mux.Handle("GET /api/sessions/{id}/files/search", s.auth(s.withSession(s.handleFileMentions)))
 	mux.Handle("DELETE /api/sessions/{id}/files", s.auth(s.withSession(s.handleFileDelete)))
 	mux.Handle("POST /api/sessions/{id}/files/move", s.auth(s.withSession(s.handleFileMove)))
 	mux.Handle("POST /api/sessions/{id}/files/mkdir", s.auth(s.withSession(s.handleFileMkdir)))

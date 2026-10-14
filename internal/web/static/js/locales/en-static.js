@@ -795,5 +795,6 @@ export default {
     "仅影响此浏览器，从下一条消息开始生效。": "Only affects this browser. Applies from your next message.",
     "Claude 回合结束后，在空输入框里显示下一步提示，按 Tab 填入": "After a Claude turn, show a suggested next prompt in the empty message box; press Tab to insert it",
     "生成提示会在每轮结束后多调用一次模型，费用计入你的额度，在使用记录里单独列为「下一步提示」。": "Each suggestion is one extra model request after the turn. It is charged to your balance and listed separately in Usage history as “Next-prompt suggestions”.",
-    "斜杠命令": "Slash commands"
+    "斜杠命令": "Slash commands",
+    "引用文件": "Mention files"
 };

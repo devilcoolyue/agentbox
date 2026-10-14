@@ -28,6 +28,9 @@ import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { createBackground } from "./features/chat/background.js";
 import { createContextMeter } from "./features/chat/context-meter.js";
 import { createCommandMenu } from "./features/chat/commands.js";
+import { createMentionMenu } from "./features/chat/mentions.js";
+import { createInputMarks } from "./features/chat/input-marks.js";
+import { syntaxMarks } from "./features/chat/syntax.js";
 import { ChatConnection } from "./features/chat/connection.js";
 import { initDelegationComposer } from "./features/delegation/composer.js";
 import { upsertDelegationCard, delegationLiveEntry, resetDelegationCards } from "./features/delegation/card.js";
@@ -118,6 +121,19 @@ const commandMenu = createCommandMenu({
         void sendChat(); },
     changed: autoGrow,
 });
+// 「@」引用文件：搜工作区，填入 @路径（Claude Code 自己把文件内容带进这一轮）
+const mentionMenu = createMentionMenu({
+    input: () => $("chat-input"), menu: () => $("chat-mentions"),
+    session: () => S.current ? { id: S.current.id, agent: sessionAgent() } : undefined,
+    search: (id, q, signal) => api(`/sessions/${id}/files/search?q=${encodeURIComponent(q)}`, { signal }),
+    changed: autoGrow,
+});
+// 输入框里有特殊含义的 /命令、@路径 与附件占位标成蓝字；删除键碰到附件占位整块删，附件一起移除
+const inputMarks = createInputMarks({
+    input: () => $("chat-input"), layer: () => $("chat-input-marks"),
+    marks: text => syntaxMarks(text, sessionAgent(), name => commandMenu.isWeb(name), (kind, n) => chatImgs.map.get(n)?.kind === kind),
+    removed: dropAttachment,
+});
 const suggestion = createSuggestion({ input: () => $("chat-input"), button: () => $("chat-suggest"),
     changed: () => updateChatPlaceholder(), filled: () => autoGrow() });
 // 提问卡片等着作答时，执行指示与输入框占位都说明回合在等用户，而不是卡住了
@@ -150,6 +166,7 @@ export function chatTeardown() {
     omitEffortOnce = false;
     connection.dispose();
     commandMenu.reset();
+    mentionMenu.reset();
     chatConnectionID = undefined;
     setChatConn("connected");
     cancelHistoryLoad();
@@ -345,6 +362,7 @@ export function autoGrow() {
     const t = $("chat-input");
     t.style.height = "auto";
     t.style.height = Math.min(t.scrollHeight, 220) + "px";
+    inputMarks.render();
     suggestion.render();
     renderFollow();
     drafts?.save();
@@ -393,6 +411,7 @@ const sender = new ChatSender({
         $("chat-input").value = "";
         resetChatImgs();
         autoGrow();
+        mentionMenu.close();
     },
     changed: updateHero, edited: () => toast(i18nText("输入已变化，请确认后重新发送。")),
     waking: () => setChatConn("waking"), awake: () => { void refreshAll(); },
@@ -449,6 +468,34 @@ function sendInterrupt() {
 }
 /* ---------------- 附件（粘贴图片 / 上传文件） ---------------- */
 const chatImgs = { seq: 0, map: new Map(), uploading: 0 };
+// 删除键整块删掉的附件：撤销（Ctrl+Z）让占位回到输入框时把附件接回来；没传完的不留
+const droppedImgs = new Map();
+const attachToken = (n, kind) => `[${kind === "img" ? "Image" : "File"} #${n}]`;
+/** 去掉附件占位，连同填入时补在后面的空格 */
+const withoutToken = (text, token) => text.split(token + " ").join("").split(token).join("");
+function dropAttachment(token) {
+    for (const [n, info] of chatImgs.map) {
+        if (attachToken(n, info.kind) !== token)
+            continue;
+        chatImgs.map.delete(n);
+        if (info.path)
+            droppedImgs.set(n, info);
+        renderAttach();
+        updateHero();
+        return;
+    }
+}
+function undropAttachments() {
+    const text = $("chat-input").value;
+    for (const [n, info] of droppedImgs) {
+        if (chatImgs.map.has(n) || !text.includes(attachToken(n, info.kind)))
+            continue;
+        droppedImgs.delete(n);
+        chatImgs.map.set(n, info);
+        renderAttach();
+        updateHero();
+    }
+}
 const composerDraft = () => ({ text: $("chat-input").value, attachments: [...chatImgs.map].map(([id, a]) => ({ id, ...a })) });
 const draftFingerprint = (d) => JSON.stringify({ text: d.text, attachments: d.attachments.map(({ valid, ...a }) => a) });
 function applyComposerDraft(value) { resetChatImgs(); $("chat-input").value = value.text; for (const { id, ...a } of value.attachments) {
@@ -464,6 +511,7 @@ export function resetChatImgs() {
     attachmentUploads.clear();
     chatImgs.seq = 0;
     chatImgs.map.clear();
+    droppedImgs.clear();
     chatImgs.uploading = 0;
     renderAttach();
 }
@@ -486,7 +534,7 @@ function renderAttach() {
         remove.addEventListener("click", () => {
             chatImgs.map.delete(n);
             const input = $("chat-input");
-            input.value = input.value.split(`[${info.kind === "img" ? "Image" : "File"} #${n}]`).join("");
+            input.value = withoutToken(input.value, attachToken(n, info.kind));
             autoGrow();
             renderAttach();
             updateHero();
@@ -558,7 +606,11 @@ async function attachFile(file) {
     const tag = isImg ? "Image" : "File";
     const n = ++chatImgs.seq;
     chatImgs.map.set(n, { path: "", name: "", orig: file.name || "", kind: isImg ? "img" : "file" });
-    insertAtCursor($("chat-input"), `[${tag} #${n}]`);
+    // 占位后面空一格，光标落在空格之后接着打字（后面本来就是空格就跳过它）
+    const input = $("chat-input"), spaced = input.value[input.selectionEnd ?? input.value.length] === " ";
+    insertAtCursor(input, `[${tag} #${n}]` + (spaced ? "" : " "));
+    if (spaced)
+        input.setSelectionRange(input.selectionEnd + 1, input.selectionEnd + 1);
     autoGrow();
     chatImgs.uploading++;
     renderAttach();
@@ -572,7 +624,8 @@ async function attachFile(file) {
         if (epoch !== attachmentEpoch || S.current?.id !== session || S.token !== owner || controller.signal.aborted)
             return;
         chatImgs.map.delete(n);
-        $("chat-input").value = $("chat-input").value.replace(`[${tag} #${n}]`, "");
+        $("chat-input").value = withoutToken($("chat-input").value, `[${tag} #${n}]`);
+        autoGrow();
         appendChat(chip(i18nText("附件上传失败：") + e.message, "err"));
     }
     finally {
@@ -1271,7 +1324,8 @@ export function initChat() {
             sendChat();
     }, { signal: lifetime.signal });
     $("chat-input").addEventListener("keydown", (e) => {
-        if (commandMenu.keydown(e))
+        inputMarks.keydown(e);
+        if (commandMenu.keydown(e) || mentionMenu.keydown(e))
             return;
         if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing && suggestion.accept()) {
             e.preventDefault();
@@ -1286,7 +1340,9 @@ export function initChat() {
                 sendChat();
         }
     }, { signal: lifetime.signal });
-    $("chat-input").addEventListener("input", () => { autoGrow(); commandMenu.update(); }, { signal: lifetime.signal });
+    $("chat-input").addEventListener("beforeinput", e => inputMarks.beforeinput(e), { signal: lifetime.signal });
+    $("chat-input").addEventListener("input", e => { inputMarks.edited(e); if (droppedImgs.size)
+        undropAttachments(); autoGrow(); commandMenu.update(); mentionMenu.update(); }, { signal: lifetime.signal });
     for (const type of ["click", "keyup", "focus"]) {
         $("chat-input").addEventListener(type, event => {
             // 方向键在菜单里移动选择，不当作挪光标重新过滤
@@ -1295,9 +1351,11 @@ export function initChat() {
             if (type === "focus")
                 commandMenu.prefetch();
             commandMenu.update();
+            mentionMenu.update();
         }, { signal: lifetime.signal });
     }
-    $("chat-input").addEventListener("blur", () => commandMenu.blur(), { signal: lifetime.signal });
+    $("chat-input").addEventListener("blur", () => { commandMenu.blur(); mentionMenu.blur(); }, { signal: lifetime.signal });
+    $("chat-input").addEventListener("scroll", () => inputMarks.scrolled(), { signal: lifetime.signal });
     $("chat-input").addEventListener("paste", (e) => {
         const files = pastedImages(e);
         if (!files.length || !S.current)

@@ -70,6 +70,27 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* 发给 CLI 的斜杠命令（syntax.ts）：等宽字、淡蓝底加细边，前面一个终端提示符，
+ * 一眼和普通提问分开；命令名标蓝，后面的参数照常 */
+.msg.user.cmd {
+  background: color-mix(in srgb, var(--info) 9%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--info) 30%, transparent);
+  font-family: var(--mono); font-size: 13.5px; line-height: 1.7;
+  padding: 10px 16px 10px 13px;
+}
+.msg-cmd-icon.ui-icon { display: inline-block; color: var(--info); vertical-align: -2px; margin-right: 7px; }
+.msg-cmd { color: var(--info); font-weight: 600; }
+/* @路径：文件引用标签（图标 + 路径），和命令同一种蓝 */
+.msg-mention {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  padding: 0 6px; margin: 0 1px;
+  vertical-align: 1px;
+  border-radius: calc(6px * var(--radius-scale));
+  background: color-mix(in srgb, var(--info) 13%, transparent);
+  color: var(--info); font-size: .86em; line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.msg-mention .ui-icon { flex: none; }
 /* 单行气泡高 46px，28px 头像下移 9px 正好与它居中 */
 .user-avatar {
   flex: none; width: 28px; height: 28px; margin-top: 9px;
@@ -706,13 +727,35 @@ details.think.streaming .think-body::after {
   box-shadow: var(--shadow-md),
     0 0 0 3px color-mix(in srgb, var(--amber) 12%, transparent);
 }
+/* 输入框与身后的标记镜像（input-marks.ts）共用排版：字体、字号、行高、内边距、换行规则
+ * 逐项一致，镜像画出的字才和光标、选区对得上 */
+.composer-field { position: relative; display: flex; flex-direction: column; min-width: 0; }
+.composer textarea, .composer-marks {
+  padding: 4px 6px 8px 2px;
+  font: inherit; font-size: 15px; line-height: 1.6; letter-spacing: normal;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; tab-size: 8;
+}
 .composer textarea {
+  position: relative; /* 盖在镜像上面 */
   background: transparent; border: none; outline: none;
   resize: none;
-  padding: 4px 6px 8px 2px;
   min-height: 36px; max-height: 220px;
   color: var(--text);
-  font-size: 15px; line-height: 1.6;
+}
+.composer-marks {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  padding-right: calc(6px + var(--marks-gutter, 0px));
+  color: var(--text);
+}
+.composer-marks:empty { display: none; }
+/* 有标记时字由镜像来画，textarea 只留光标和选区 */
+.composer textarea.marked { color: transparent; caret-color: var(--text); }
+.composer textarea.marked::selection { color: var(--text); }
+.composer-marks :is(.mark-command, .mark-mention, .mark-attachment) {
+  color: var(--info);
+  background: color-mix(in srgb, var(--info) 13%, transparent);
+  border-radius: calc(4px * var(--radius-scale));
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
 }
 .composer textarea::placeholder { color: color-mix(in srgb, var(--muted) 75%, transparent); }
 .composer textarea:focus-visible { outline: none; }
@@ -844,6 +887,15 @@ details.think.streaming .think-body::after {
   .cmd-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .cmd-head { max-width: 100%; }
 }
+/* 「@」引用文件（mentions.ts）：同一个弹层，一行一个文件：图标、文件名、淡色的所在目录 */
+.cmd-row.mention-row { display: flex; align-items: baseline; gap: 8px; }
+.mention-icon { flex: none; align-self: center; color: var(--muted); }
+.mention-row[aria-selected="true"] .mention-icon { color: var(--amber); }
+.mention-name, .mention-dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mention-name { flex: 0 1 auto; max-width: 72%; color: var(--text); font-size: 13px; }
+.mention-dir { flex: 1 1 0; color: var(--muted); font-size: 12px; }
+:is(.mention-name, .mention-dir) b { color: var(--amber); font-weight: 700; }
+.mention-row[aria-selected="true"] .mention-name { color: var(--text-hi); }
 
 /* ---- /context 结果卡片（context-card.ts）：终端里那张格子图 + 类别图例 ---- */
 .ctx-card { display: flex; flex-direction: column; gap: 10px; margin: 2px 0; }
@@ -1087,7 +1139,8 @@ details.think.streaming .think-body::after {
   .composer-wrap { padding: 4px 10px 12px; }
   .composer { border-radius: calc(20px * var(--radius-scale)); padding: 10px 10px 8px 12px; }
   /* iOS 聚焦时字号 <16px 会强制放大整页 */
-  .composer textarea { font-size: 16px; min-height: 32px; }
+  .composer textarea, .composer-marks { font-size: 16px; }
+  .composer textarea { min-height: 32px; }
   .chat-hero { justify-content: flex-start; padding-top: 13vh; gap: 15px; }
   .chat-hero h2 { font-size: 21px; }
   .hero-avatar .agent-avatar { width: 52px; height: 52px; }

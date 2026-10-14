@@ -22,6 +22,7 @@ import { pricingSmoke } from './test-pricing.mjs';
 import { chatFooterSmoke } from './test-chat-footer.mjs';
 import { chatContextSmoke } from './test-chat-context.mjs';
 import { chatCommandsSmoke } from './test-chat-commands.mjs';
+import { chatMentionsSmoke } from './test-chat-mentions.mjs';
 import { chatHistorySettingsSmoke, chatPagesSmoke } from './test-chat-pages.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
@@ -292,6 +293,13 @@ export async function smoke(page) {
    assert.deepEqual(errors,[]);
    console.log('Usage browser: ordinary and delegation rows, owner workspaces, decision attribution, category filtering, cost details, CSV and narrow layout passed. Synthetic API only.');
    return;
+  }
+  if (process.env.AGENTBOX_BROWSER_ONLY_CHAT_INPUT === '1') {
+   await page.goto(base + '/#/sessions/fixture-space/chat');
+   await page.locator('#chat-input').waitFor({state:'visible'});
+   await chatCommandsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
+   await chatMentionsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
+   assert.deepEqual(errors,[]); return;
   }
   if (process.env.AGENTBOX_BROWSER_ONLY_CHAT_PAGES === '1') {
    await chatHistorySettingsSmoke(page);
@@ -766,6 +774,7 @@ export async function smoke(page) {
   await chatFooterSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg))});
   await chatContextSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
   await chatCommandsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
+  await chatMentionsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
   await chatPagesSmoke(page,{session:'fixture-space',closeChat:()=>chatSocket.close()});
   await page.locator('.tab[data-tab="files"]').click();
   await at('#/sessions/fixture-space/files','#tab-files');

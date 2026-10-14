@@ -2418,5 +2418,10 @@ export default {
     "套餐用量": "Plan usage",
     "正在使用超额额度，套餐额度重置后自动切回": "Using extra usage; switches back when plan limits reset",
     "正在使用订阅套餐额度": "Using your subscription plan limits",
-    "已用 {p0}%": "{p0}% used"
+    "已用 {p0}%": "{p0}% used",
+    "正在搜索文件…": "Searching files…",
+    "暂时读不到工作区文件": "Can't read the workspace files right now",
+    "没有匹配的文件": "No matching files",
+    "工作区文件很多，只搜索了靠上的一部分": "This workspace has many files; only the upper levels were searched",
+    "引用文件：{p0}": "Mentioned file: {p0}"
 };

@@ -8,7 +8,7 @@ import { actionButton, buttonLabel } from "./icons.js";
 import { S, bus, emit } from "./state.js";
 import type { Pick } from "./state.js";
 import type {
-  ChatMessage, History, ModelOption, QuestionView, ReasoningCapability, SessionModels, SlashCommandsView, SteerView,
+  ChatMessage, FileMentionsView, History, ModelOption, QuestionView, ReasoningCapability, SessionModels, SlashCommandsView, SteerView,
 } from "./types.js";
 import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
@@ -36,6 +36,9 @@ import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { createBackground } from "./features/chat/background.js";
 import { createContextMeter } from "./features/chat/context-meter.js";
 import { createCommandMenu } from "./features/chat/commands.js";
+import { createMentionMenu } from "./features/chat/mentions.js";
+import { createInputMarks } from "./features/chat/input-marks.js";
+import { syntaxMarks } from "./features/chat/syntax.js";
 import { ChatConnection } from "./features/chat/connection.js";
 import {initDelegationComposer} from "./features/delegation/composer.js";
 import {upsertDelegationCard,delegationLiveEntry,resetDelegationCards} from "./features/delegation/card.js";
@@ -118,6 +121,19 @@ const commandMenu = createCommandMenu({
  send:()=>{ if (followupsOpen()) void sendFollow("queue"); else void sendChat(); },
  changed:autoGrow,
 });
+// 「@」引用文件：搜工作区，填入 @路径（Claude Code 自己把文件内容带进这一轮）
+const mentionMenu = createMentionMenu({
+ input:()=>$<HTMLTextAreaElement>("chat-input"), menu:()=>$("chat-mentions"),
+ session:()=>S.current?{id:S.current.id,agent:sessionAgent()}:undefined,
+ search:(id,q,signal)=>api<FileMentionsView>(`/sessions/${id}/files/search?q=${encodeURIComponent(q)}`,{signal}),
+ changed:autoGrow,
+});
+// 输入框里有特殊含义的 /命令、@路径 与附件占位标成蓝字；删除键碰到附件占位整块删，附件一起移除
+const inputMarks = createInputMarks({
+ input:()=>$<HTMLTextAreaElement>("chat-input"), layer:()=>$("chat-input-marks"),
+ marks:text=>syntaxMarks(text,sessionAgent(),name=>commandMenu.isWeb(name),(kind,n)=>chatImgs.map.get(n)?.kind===kind),
+ removed:dropAttachment,
+});
 const suggestion = createSuggestion({input:()=>$<HTMLTextAreaElement>("chat-input"),button:()=>$("chat-suggest"),
  changed:()=>updateChatPlaceholder(),filled:()=>autoGrow()});
 // 提问卡片等着作答时，执行指示与输入框占位都说明回合在等用户，而不是卡住了
@@ -143,6 +159,7 @@ export function chatTeardown() {
   omitEffortOnce = false;
   connection.dispose();
   commandMenu.reset();
+  mentionMenu.reset();
   chatConnectionID = undefined;
   setChatConn("connected");
   cancelHistoryLoad();
@@ -321,6 +338,7 @@ export function autoGrow() {
   const t = $("chat-input");
   t.style.height = "auto";
   t.style.height = Math.min(t.scrollHeight, 220) + "px";
+  inputMarks.render();
   suggestion.render();
   renderFollow();
   drafts?.save();
@@ -354,7 +372,7 @@ const sender = new ChatSender({
   if(snapshot.input.delivery||!connection.ready||!current())return;
   const {text,model,effort,effort_control}=snapshot.input;
   if(!connection.send(JSON.stringify({type:"user_message",text,model,effort,effort_control})))return;
-  $<HTMLTextAreaElement>("chat-input").value="";resetChatImgs();autoGrow();
+  $<HTMLTextAreaElement>("chat-input").value="";resetChatImgs();autoGrow();mentionMenu.close();
  },
  changed:updateHero,edited:()=>toast(i18nText("输入已变化，请确认后重新发送。")),
  waking:()=>setChatConn("waking"),awake:()=>{void refreshAll();},
@@ -399,6 +417,27 @@ function sendInterrupt() {
 /* ---------------- 附件（粘贴图片 / 上传文件） ---------------- */
 
 const chatImgs = { seq: 0, map: new Map<number,Omit<DraftAttachment,"id">>(), uploading: 0 };
+// 删除键整块删掉的附件：撤销（Ctrl+Z）让占位回到输入框时把附件接回来；没传完的不留
+const droppedImgs = new Map<number,Omit<DraftAttachment,"id">>();
+const attachToken = (n: number, kind: string) => `[${kind === "img" ? "Image" : "File"} #${n}]`;
+/** 去掉附件占位，连同填入时补在后面的空格 */
+const withoutToken = (text: string, token: string) => text.split(token + " ").join("").split(token).join("");
+function dropAttachment(token: string) {
+  for (const [n, info] of chatImgs.map) {
+    if (attachToken(n, info.kind) !== token) continue;
+    chatImgs.map.delete(n);
+    if (info.path) droppedImgs.set(n, info);
+    renderAttach(); updateHero();
+    return;
+  }
+}
+function undropAttachments() {
+  const text = $<HTMLTextAreaElement>("chat-input").value;
+  for (const [n, info] of droppedImgs) {
+    if (chatImgs.map.has(n) || !text.includes(attachToken(n, info.kind))) continue;
+    droppedImgs.delete(n); chatImgs.map.set(n, info); renderAttach(); updateHero();
+  }
+}
 const composerDraft=():Draft=>({text:$<HTMLTextAreaElement>("chat-input").value,attachments:[...chatImgs.map].map(([id,a])=>({id,...a}))});
 const draftFingerprint=(d:Draft)=>JSON.stringify({text:d.text,attachments:d.attachments.map(({valid,...a})=>a)});
 function applyComposerDraft(value:Draft){resetChatImgs();$<HTMLTextAreaElement>("chat-input").value=value.text;for(const {id,...a} of value.attachments){chatImgs.map.set(id,a);chatImgs.seq=Math.max(chatImgs.seq,id);}renderAttach();autoGrow();}
@@ -409,6 +448,7 @@ export function resetChatImgs() {
   ++attachmentEpoch;for(const controller of attachmentUploads)controller.abort();attachmentUploads.clear();
   chatImgs.seq = 0;
   chatImgs.map.clear();
+  droppedImgs.clear();
   chatImgs.uploading = 0;
   renderAttach();
 }
@@ -426,7 +466,7 @@ function renderAttach() {
     buttonLabel(remove,"","close");setAttrRender(remove,"aria-label",()=>i18nText("移除附件 #{n}",{n}));setTip(remove,()=>i18nText("移除附件 #{n}",{n}));
     remove.addEventListener("click",()=>{
       chatImgs.map.delete(n);
-      const input=$<HTMLTextAreaElement>("chat-input");input.value=input.value.split(`[${info.kind==="img"?"Image":"File"} #${n}]`).join("");
+      const input=$<HTMLTextAreaElement>("chat-input");input.value=withoutToken(input.value,attachToken(n,info.kind));
       autoGrow();renderAttach();updateHero();
     });
     if(info.valid===false){
@@ -481,7 +521,10 @@ async function attachFile(file: File) {
   const tag = isImg ? "Image" : "File";
   const n = ++chatImgs.seq;
   chatImgs.map.set(n, { path: "", name: "", orig: file.name || "", kind: isImg ? "img" : "file" });
-  insertAtCursor($("chat-input"), `[${tag} #${n}]`);
+  // 占位后面空一格，光标落在空格之后接着打字（后面本来就是空格就跳过它）
+  const input = $<HTMLTextAreaElement>("chat-input"), spaced = input.value[input.selectionEnd ?? input.value.length] === " ";
+  insertAtCursor(input, `[${tag} #${n}]` + (spaced ? "" : " "));
+  if (spaced) input.setSelectionRange(input.selectionEnd + 1, input.selectionEnd + 1);
   autoGrow();
   chatImgs.uploading++;
   renderAttach();
@@ -492,7 +535,8 @@ async function attachFile(file: File) {
   } catch (e) {
     if(epoch!==attachmentEpoch||S.current?.id!==session||S.token!==owner||controller.signal.aborted)return;
     chatImgs.map.delete(n);
-    $<HTMLTextAreaElement>("chat-input").value = $<HTMLTextAreaElement>("chat-input").value.replace(`[${tag} #${n}]`, "");
+    $<HTMLTextAreaElement>("chat-input").value = withoutToken($<HTMLTextAreaElement>("chat-input").value, `[${tag} #${n}]`);
+    autoGrow();
     appendChat(chip(i18nText("附件上传失败：") + (e as Error).message, "err"));
   } finally {
     attachmentUploads.delete(controller);
@@ -1145,7 +1189,8 @@ $("chat-send").addEventListener("click", event => {
   else sendChat();
 }, { signal: lifetime.signal });
 $("chat-input").addEventListener("keydown", (e) => {
-  if (commandMenu.keydown(e)) return;
+  inputMarks.keydown(e);
+  if (commandMenu.keydown(e) || mentionMenu.keydown(e)) return;
   if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing && suggestion.accept()) {
     e.preventDefault();
     return;
@@ -1157,16 +1202,19 @@ $("chat-input").addEventListener("keydown", (e) => {
     else sendChat();
   }
 }, { signal: lifetime.signal });
-$("chat-input").addEventListener("input", () => { autoGrow(); commandMenu.update(); }, { signal: lifetime.signal });
+$("chat-input").addEventListener("beforeinput", e => inputMarks.beforeinput(e as InputEvent), { signal: lifetime.signal });
+$("chat-input").addEventListener("input", e => { inputMarks.edited(e); if (droppedImgs.size) undropAttachments(); autoGrow(); commandMenu.update(); mentionMenu.update(); }, { signal: lifetime.signal });
 for (const type of ["click", "keyup", "focus"]) {
   $("chat-input").addEventListener(type, event => {
     // 方向键在菜单里移动选择，不当作挪光标重新过滤
     if (event instanceof KeyboardEvent && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter" || event.key === "Tab" || event.key === "Escape")) return;
     if (type === "focus") commandMenu.prefetch();
     commandMenu.update();
+    mentionMenu.update();
   }, { signal: lifetime.signal });
 }
-$("chat-input").addEventListener("blur", () => commandMenu.blur(), { signal: lifetime.signal });
+$("chat-input").addEventListener("blur", () => { commandMenu.blur(); mentionMenu.blur(); }, { signal: lifetime.signal });
+$("chat-input").addEventListener("scroll", () => inputMarks.scrolled(), { signal: lifetime.signal });
 $("chat-input").addEventListener("paste", (e) => {
   const files = pastedImages(e);
   if (!files.length || !S.current) return;

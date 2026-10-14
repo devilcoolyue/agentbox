@@ -1195,6 +1195,18 @@ export interface SlashCommandsView {
   commands: SlashCommand[];
 }
 
+/** GET /sessions/{id}/files/search：「@」引用文件的候选（server/file_mentions.go） */
+export interface FileMention {
+  /** 相对工作区（/workspace）的路径，斜杠分隔，文件夹不带结尾斜杠 */
+  path: string;
+  dir?: boolean;
+}
+export interface FileMentionsView {
+  files: FileMention[];
+  /** 工作区太大，只索引了靠上的部分 */
+  truncated?: boolean;
+}
+
 /** Claude：仍在后台运行的任务（Bash run_in_background 等） */
 export interface BackgroundTask {
   task_id?: string;

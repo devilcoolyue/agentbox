@@ -270,6 +270,10 @@ export function createCommandMenu(hooks: {
       if (ev?.type !== "system" || ev.subtype !== "init" || !Array.isArray(ev.terminal_slash_commands)) return;
       for (const name of ev.terminal_slash_commands) if (typeof name === "string") terminalOnly.add(name);
     },
+    /** 网页接管的命令名（含别名） */
+    isWeb(name: string) {
+      return hooks.web.some(c => c.name === name || !!c.aliases?.includes(name));
+    },
     /** 输入的是网页接管的命令（含别名）时执行它并返回 true */
     runWeb(text: string) {
       const name = commandName(text);
