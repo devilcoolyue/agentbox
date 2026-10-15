@@ -280,16 +280,147 @@ func TestClaudePromptSuggestionBilledFromCostStateGrowth(t *testing.T) {
 		t.Fatal("suggestion charged twice", n)
 	}
 	// Not requested, no exit record, or shrinking totals: nothing is guessed.
-	for turn, c := range map[string]struct {
+	for _, c := range []struct {
+		turn    string
 		suggest bool
 		final   []string
 	}{
-		"plain":   {false, []string{costStateLine(999, 9999, 99999, 99)}},
-		"missing": {true, nil},
-		"shrunk":  {true, []string{costStateLine(1, 1, 1, 1)}},
+		{"plain", false, []string{costStateLine(999, 9999, 99999, 99)}},
+		{"missing", true, nil},
+		{"shrunk", true, []string{costStateLine(1, 1, 1, 1)}},
 	} {
-		if rows := run(turn, c.suggest, c.final...); len(rows) != 1 || rows[0].Kind != store.UsageKindChat {
-			t.Fatalf("%s: %+v", turn, rows)
+		if rows := run(c.turn, c.suggest, c.final...); len(rows) != 1 || rows[0].Kind != store.UsageKindChat {
+			t.Fatalf("%s: %+v", c.turn, rows)
 		}
+	}
+}
+
+func costStateAt(start int64, input, output, read, write int) string {
+	return fmt.Sprintf(`{"type":"cost-state","sessionId":"provider-session","startTime":%d,"modelUsage":{"opus":{"inputTokens":%d,"outputTokens":%d,"cacheReadInputTokens":%d,"cacheCreationInputTokens":%d,"costUSD":9}}}`, start, input, output, read, write)
+}
+func resultTotals(input, output, read, write int) string {
+	return fmt.Sprintf(`{"type":"result","subtype":"success","num_turns":0,"session_id":"provider-session","modelUsage":{"opus":{"inputTokens":%d,"outputTokens":%d,"cacheReadInputTokens":%d,"cacheCreationInputTokens":%d}}}`, input, output, read, write)
+}
+
+// /compact's summary request reaches neither the stream nor the transcript's
+// messages (Claude Code 2.1.296, checked against a local mock API); only the
+// CLI's cumulative totals grow. That growth, less restored history and the
+// messages metered one by one, is billed once as the turn's own spend.
+func TestClaudeHiddenRequestsBilledFromCostState(t *testing.T) {
+	s, sess := newTestServer(t)
+	sess.Agent = "claude"
+	s.cfg.Pricing = map[string]config.ModelPrice{"claude": {TokenRates: config.TokenRates{Input: 1, Output: 2, CacheRead: 0.1, CacheWrite: 3}}}
+	main := filepath.Join(s.homeDir(sess), ".claude", "projects", "-workspace", "provider-session.jsonl")
+	rowsOf := func(turn string) []store.UsageEvent {
+		var out []store.UsageEvent
+		for _, r := range s.store.ListUsage(store.UsageFilter{User: "alice"}) {
+			if r.TurnID == turn {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+	// Earlier process: one message, billed in its own turn, then its exit record.
+	appendTranscript(t, main, `{"type":"last-prompt"}`)
+	first := s.NewChatTally(sess)
+	observe(&first, "first", `{"type":"system","session_id":"provider-session"}`, resultTotals(6021, 81, 2100, 147))
+	appendTranscript(t, main, messageLine("old", "opus", "end_turn", 6021, 81, 2100, 147), costStateAt(1791988749804, 6021, 81, 2100, 147))
+	if n := s.Flush(&first, time.Second); n != 1 {
+		t.Fatal("first turn rows", n)
+	}
+	compact := func(turn string, start int64, lines ...string) {
+		t.Helper()
+		tally := s.NewChatTally(sess)
+		observe(&tally, turn, `{"type":"system","subtype":"status","status":"compacting","session_id":"provider-session"}`,
+			`{"type":"system","subtype":"compact_boundary","session_id":"provider-session","compact_metadata":{"trigger":"manual"}}`)
+		// The preserved segment is replayed with its original ids: history, not this turn.
+		observe(&tally, turn, lines...)
+		observe(&tally, turn, resultTotals(7028, 98, 2800, 196))
+		appendTranscript(t, main, `{"type":"user","isCompactSummary":true,"entrypoint":"sdk-cli","message":{"role":"user","content":"summary"}}`,
+			costStateAt(start, 7028, 98, 2800, 196))
+		s.Flush(&tally, 2*time.Second)
+	}
+	compact("compact", 1791988749804, messageLine("old", "opus", "end_turn", 6021, 81, 2100, 147))
+	rows := rowsOf("compact")
+	if len(rows) != 1 || rows[0].InputTokens != 1007 || rows[0].OutputTokens != 17 || rows[0].CacheReadTokens != 700 || rows[0].CacheWriteTokens != 49 ||
+		rows[0].Kind != store.UsageKindChat || rows[0].Model != "opus" || rows[0].WallMS != 2000 || rows[0].CostMicroUSD != 1007+34+70+147 {
+		t.Fatalf("compact rows: %+v", rows)
+	}
+	// Replaying the same turn cannot charge it again.
+	tally := s.NewChatTally(sess)
+	observe(&tally, "compact", `{"type":"system","session_id":"provider-session"}`, resultTotals(7028, 98, 2800, 196))
+	appendTranscript(t, main, costStateAt(1791988749804, 7028, 98, 2800, 196))
+	if n := s.Flush(&tally, time.Second); n != 0 {
+		t.Fatal("hidden request charged twice", n)
+	}
+
+	// A turn whose messages account for all the growth adds nothing.
+	tally = s.NewChatTally(sess)
+	observe(&tally, "plain", `{"type":"system","session_id":"provider-session"}`,
+		`{"type":"stream_event","session_id":"provider-session","event":{"type":"message_start","message":{"id":"m-plain","model":"opus","usage":{"input_tokens":10,"output_tokens":1}}}}`,
+		`{"type":"stream_event","session_id":"provider-session","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}}`,
+		resultTotals(7038, 103, 2800, 196))
+	appendTranscript(t, main, costStateAt(1791988749804, 7038, 103, 2800, 196))
+	if n := s.Flush(&tally, time.Second); n != 1 {
+		t.Fatal("plain turn rows", n)
+	}
+
+	// A CLI that did not carry its totals over (a new startTime) spent all it shows.
+	tally = s.NewChatTally(sess)
+	observe(&tally, "fresh-totals", `{"type":"system","session_id":"provider-session"}`, resultTotals(500, 20, 0, 0))
+	appendTranscript(t, main, costStateAt(1791999999999, 500, 20, 0, 0))
+	s.Flush(&tally, time.Second)
+	if rows := rowsOf("fresh-totals"); len(rows) != 1 || rows[0].InputTokens != 500 || rows[0].OutputTokens != 20 {
+		t.Fatalf("unrestored totals: %+v", rows)
+	}
+
+	// Without the exit record a resumed turn's totals cannot be told from history.
+	tally = s.NewChatTally(sess)
+	observe(&tally, "no-exit", `{"type":"system","session_id":"provider-session"}`, resultTotals(9000, 900, 9000, 900))
+	appendTranscript(t, main, `{"type":"last-prompt"}`)
+	if n := s.Flush(&tally, time.Second); n != 0 {
+		t.Fatal("guessed without exit record", n)
+	}
+}
+
+// A new session has no history: its totals are all this process's own, so a
+// request the stream never showed (WebFetch's digest) is billed without an
+// earlier record. Totals that fall short, or messages under a model the
+// totals do not name, leave the per-message rows alone.
+func TestClaudeHiddenRequestsInNewSessionAndMismatches(t *testing.T) {
+	s, sess := newTestServer(t)
+	sess.Agent = "claude"
+	s.cfg.Pricing = map[string]config.ModelPrice{"claude": {TokenRates: config.TokenRates{Output: 1}}}
+	run := func(session, turn string, lines ...string) []store.UsageEvent {
+		t.Helper()
+		path := filepath.Join(s.homeDir(sess), ".claude", "projects", "-workspace", session+".jsonl")
+		tally := s.NewChatTally(sess)
+		observe(&tally, turn, append([]string{`{"type":"system","session_id":"` + session + `"}`}, lines...)...)
+		appendTranscript(t, path, `{"type":"last-prompt"}`)
+		s.Flush(&tally, time.Second)
+		var out []store.UsageEvent
+		for _, r := range s.store.ListUsage(store.UsageFilter{User: "alice"}) {
+			if r.TurnID == turn {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+	start := `{"type":"stream_event","event":{"type":"message_start","message":{"id":"%s","model":"%s","usage":{"input_tokens":10,"output_tokens":5}}}}`
+	twoModels := `{"type":"result","modelUsage":{"opus":{"inputTokens":%d,"outputTokens":%d},"haiku":{"inputTokens":%d,"outputTokens":%d}}}`
+	rows := run("new-a", "fetch", fmt.Sprintf(start, "m1", "opus-20260101"), fmt.Sprintf(twoModels, 10, 5, 300, 40))
+	if len(rows) != 2 {
+		t.Fatalf("new session rows: %+v", rows)
+	}
+	for _, r := range rows {
+		if r.Model == "haiku" && (r.InputTokens != 300 || r.OutputTokens != 40) || r.Model != "haiku" && r.OutputTokens != 5 {
+			t.Fatalf("new session row: %+v", r)
+		}
+	}
+	if rows := run("new-b", "short", fmt.Sprintf(start, "m2", "opus"), fmt.Sprintf(twoModels, 9, 5, 0, 0)); len(rows) != 1 {
+		t.Fatalf("short totals: %+v", rows)
+	}
+	if rows := run("new-c", "renamed", fmt.Sprintf(start, "m3", "relay-name"), fmt.Sprintf(twoModels, 10, 5, 300, 40)); len(rows) != 1 {
+		t.Fatalf("renamed model: %+v", rows)
 	}
 }

@@ -22,8 +22,9 @@ type Event struct {
 	Terminal string
 	// Local marks a Claude result for a slash command the CLI ran itself
 	// (num_turns 0): /context or an unknown command never asks the model,
-	// /compact makes its own summary request, metered as usual. Either way
-	// the turn says nothing worth naming a thread by.
+	// /compact makes its own summary request, which the usage meter bills
+	// from the CLI's cost-state. Either way the turn says nothing worth
+	// naming a thread by.
 	Local bool
 }
 type Adapter interface {

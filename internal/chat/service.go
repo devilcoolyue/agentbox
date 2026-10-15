@@ -290,8 +290,8 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	// 报上来的用量都要落库——钱花了就得记。一行都没记到说明这个 agent/版本报
 	// 用量的形状我们没认出来：消耗真实发生了却不会进报表，宁可吵一句。
 	// A slash command the CLI ran itself: /context has no usage to warn
-	// about (/compact's own request is metered as usual), and neither names
-	// the thread. Set by onLine from the CLI's own result.
+	// about (/compact's summary request is billed from the CLI's cost-state),
+	// and neither names the thread. Set by onLine from the CLI's own result.
 	local := false
 	defer func() {
 		if s.Usage.Flush(&tally, time.Since(turnStart)) == 0 && !local {
