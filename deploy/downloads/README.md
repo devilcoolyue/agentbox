@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.13 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.14 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.13
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.14
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.13_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.14_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.13_linux_arm64/install.sh --version v0.1.13
+sudo bash agentbox_v0.1.14_linux_arm64/install.sh --version v0.1.14
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,16 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### 升级至 v0.1.14
+
+本版新增 Agent 提问、运行中消息排队与引导、下一步提示，输入框支持 `/` 命令菜单、`@` 引用文件、上下文占用和任务列表；终端里程序复制的文字写入本机剪贴板。使用记录改为一次模型请求一行，并补记此前漏记的 Codex 回合内请求和 Claude Code 压缩等请求；完整分类说明见 [v0.1.14 Release](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.14)。
+
+从 v0.1.13 升级会执行 schema 18 → 19 迁移；从 v0.1.12 及更早升级会连续执行到 19。升级前先保存并验证备份；**v0.1.13 及更早的二进制不能直接打开 schema 19 数据库**，回退须恢复升级前兼容备份到新目录，升级后排队而尚未执行的消息不会保留。
+
+提问、引导与下一步提示按空间镜像内 Claude Code 的参数探测启用，默认固定镜像（Claude Code 2.1.280）已支持；更旧的自建镜像只能排队、不显示提示。标准部署使用「关于与更新」或校验包内的 `deploy/release.py` 升级；原样安装的 v0.1.13 若已启用存储配额，其升级器仍不支持一键升级，需按[存储维护流程](https://github.com/devilcoolyue/agentbox/blob/v0.1.14/docs/storage-capacity.md)手工升级一次。
+
+本版提供两个 Linux 服务端包、五个平台 abox-link 及清单/校验和；桌面安装包和空间镜像独立更新。
 
 ### 升级至 v0.1.13
 

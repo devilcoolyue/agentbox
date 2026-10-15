@@ -8,7 +8,15 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.13](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.13)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.14](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.14)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.14：对话中提问与跟进、命令与文件引用、逐次请求计费
+
+Claude 执行中可以提问并在同一轮里等待回答；任务运行中继续发送的消息可排队或引导进当前回合，每轮结束后可显示下一步提示。输入框支持 `/` 命令菜单（`/context`、`/usage` 显示为卡片）、`@` 引用工作区文件、上下文占用指示和 Agent 任务列表；终端里程序复制的文字写入本机剪贴板，iPhone / iPad 长按松开即粘贴。使用记录改为一次模型请求一行，并补记 Codex 回合内此前漏记的请求与 Claude Code 不逐条上报的压缩等请求。分项内容见 [CHANGELOG](../CHANGELOG.md)。
+
+从 v0.1.13 升级会执行 schema 18 → 19 迁移（从 v0.1.12 及更早升级连续执行到 19）。先保存并验证备份；v0.1.13 及更早的二进制不能直接打开新库，回退须恢复兼容备份到新目录，升级后排队而尚未执行的消息不会保留。提问、引导与下一步提示按容器内 Claude Code 的参数探测启用，默认固定镜像 2.1.280 已支持；Agent 镜像候选验证新增提问检查。
+
+本次发布两个 Linux 服务端包、五个平台 abox-link、`release.json` 与 `SHA256SUMS`，不发布新桌面包。原样安装的 v0.1.13 若已启用存储配额，仍需按[存储文档](storage-capacity.md)手工升级一次。
 
 ### v0.1.13：主管委派、主题编辑与长对话改进
 
@@ -70,7 +78,7 @@ v0.1.0～v0.1.4 的七个平台包、`release.json` 和 `SHA256SUMS` 从旧仓�
 
 ```bash
 python3 scripts/verify-third-party.py
-python3 scripts/build-release.py --version v0.1.13 --output /tmp/agentbox-release
+python3 scripts/build-release.py --version v0.1.14 --output /tmp/agentbox-release
 python3 scripts/test-release.py /tmp/agentbox-release
 # 已在本机构建固定镜像后，可验证真实服务与容器链路（合成数据，无模型请求）
 python3 scripts/test-release-server.py /tmp/agentbox-release --image agentbox-agent:claude-2.1.280-codex-0.145.0
@@ -93,8 +101,8 @@ python3 scripts/scan-secrets.py --artifacts /tmp/agentbox-release --output /tmp/
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
-tar -xzf agentbox_v0.1.13_linux_arm64.tar.gz
-cd agentbox_v0.1.13_linux_arm64
+tar -xzf agentbox_v0.1.14_linux_arm64.tar.gz
+cd agentbox_v0.1.14_linux_arm64
 ./agentbox --version
 cp config.example.json config.json
 chmod 600 config.json

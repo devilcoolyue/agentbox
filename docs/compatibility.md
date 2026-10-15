@@ -43,7 +43,7 @@ v0.1.12 沿用 schema 12 与 `compatibility_epoch` 1，现有网页、abox-link�
 
 v0.1.13 从 v0.1.12/schema 12 迁移至 schema 18，增加主管委派及用量推理强度记录；旧二进制不能直接打开新库，回退须恢复升级前兼容备份到新目录。schema 13–17 开发预览中的旧协作任务及参与者空间记录会被移除，参与者容器与文件另行核对清理。主管委派须主动开启，跑腿直接修改当前工作区。Desktop 0.1.2 继续独立发布，桌面同步默认关闭；共享工具和容量策略也默认关闭，启用项目配额的 systemd 附加配置暂不支持网页一键升级，见[存储容量管理](storage-capacity.md)。
 
-v0.1.13 之后的未发布版本从 schema 18 迁移至 19，增加对话排队与引导；v0.1.13 不能直接打开新库，回退须恢复升级前兼容备份到新目录，升级后排队而尚未执行的消息不会保留。下一步提示、Agent 提问与引导按容器内 Claude Code 的 `--help` 探测启用（提示需 `--prompt-suggestions`；提问与引导需 `--input-format`、`--permission-prompt-tool` 与 `--replay-user-messages`）；旧镜像不显示提示、不提问，运行中发送的消息只能排队，Codex 空间不受影响。旧网页不发送新字段，按原方式执行。Agent 镜像候选验证新增 `claude_question` 必检项，Claude Code 不支持该控制协议的候选镜像不会被切换。
+v0.1.14 从 schema 18 迁移至 19（从 v0.1.12 及更早升级连续执行到 19），增加对话排队与引导；v0.1.13 及更早的二进制不能直接打开新库，回退须恢复升级前兼容备份到新目录，升级后排队而尚未执行的消息不会保留。下一步提示、Agent 提问与引导按容器内 Claude Code 的 `--help` 探测启用（提示需 `--prompt-suggestions`；提问与引导需 `--input-format`、`--permission-prompt-tool` 与 `--replay-user-messages`）；默认固定镜像 Claude Code 2.1.280 均已支持；更旧的镜像不显示提示、不提问，运行中发送的消息只能排队，Codex 空间不受影响。旧网页不发送新字段，按原方式执行。Agent 镜像候选验证新增 `claude_question` 必检项，Claude Code 不支持该控制协议的候选镜像不会被切换。
 
 客户端按能力发现显示扩展入口，旧服务端返回 404 或页面时进入基础模式；鉴权错误、网络故障和无效响应不会冒充基础模式。新桌面包不会自动升级服务端。
 
