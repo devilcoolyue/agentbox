@@ -2,6 +2,7 @@
 #chat-draft-status { margin:2px 8px 6px; color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
 .attach-remove { border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:10px; padding:3px; }
 .attach-thumb .attach-remove { position:absolute; right:0; top:0; background:var(--panel-solid); max-width:70px; }
+.attach-remove:is(:hover, :focus-visible) { color:var(--red); }
 .attachment-invalid { border-color:var(--red); gap:8px; flex-wrap:wrap; }
 .attachment-invalid > span { overflow-wrap:anywhere; }
 
@@ -611,7 +612,7 @@ details.think.streaming .think-body::after {
   background: none; border: none; border-radius: calc(8px * var(--radius-scale));
   color: var(--muted);
 }
-.tp-del:hover { color: var(--red); background: var(--panel); }
+.tp-del:is(:hover, :focus-visible) { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
 /* 桌面端删除钮悬停行才浮现；触屏无悬停，常驻可见 */
 @media (hover: hover) {
   .tp-item .tp-del { opacity: 0; }
@@ -1211,8 +1212,11 @@ details.think.streaming .think-body::after {
  * are the shared icon buttons with tooltips. */
 :root .chat-delivery .btn.delivery-act:not(.action-icon) { min-height:28px; padding:0 10px; gap:5px; font-size:12px; font-weight:500; line-height:1; border-radius:calc(7px * var(--radius-scale)); }
 :root .chat-delivery .btn.delivery-act:not(.action-icon) > svg { width:14px; height:14px; }
-:root .chat-delivery .btn.delivery-act:not(.action-icon, .delivery-primary) { background:transparent; border-color:transparent; color:var(--muted); }
-:root .chat-delivery .btn.delivery-act:not(.action-icon, .delivery-primary):hover:not(:disabled) { background:var(--panel-2); color:var(--text); }
+:root .chat-delivery .btn.delivery-act:not(.action-icon, .delivery-primary, .btn-danger) { background:transparent; border-color:transparent; color:var(--muted); }
+:root .chat-delivery .btn.delivery-act:not(.action-icon, .delivery-primary, .btn-danger):hover:not(:disabled) { background:var(--panel-2); color:var(--text); }
+/* 放弃发送：与「重试」同一行，淡红底与主操作的淡琥珀底对仗 */
+:root .chat-delivery .btn.delivery-act.btn-danger:not(.action-icon) { background:color-mix(in srgb, var(--red) 10%, transparent); border-color:color-mix(in srgb, var(--red) 36%, transparent); color:var(--red-hi); }
+:root .chat-delivery .btn.delivery-act.btn-danger:not(.action-icon):hover:not(:disabled) { background:color-mix(in srgb, var(--red) 18%, transparent); border-color:color-mix(in srgb, var(--red) 55%, transparent); }
 :root .chat-delivery .btn.delivery-primary { background:color-mix(in srgb, var(--amber) 14%, transparent); border-color:color-mix(in srgb, var(--amber) 42%, transparent); color:var(--text); }
 :root .chat-delivery .btn.delivery-primary > svg { color:var(--amber); }
 :root .chat-delivery .btn.delivery-primary:hover:not(:disabled) { background:color-mix(in srgb, var(--amber) 22%, transparent); border-color:color-mix(in srgb, var(--amber) 60%, transparent); }

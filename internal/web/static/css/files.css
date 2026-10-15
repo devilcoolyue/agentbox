@@ -147,7 +147,7 @@
 .file-act:hover, .file-act:focus-visible {
   color: var(--text); border-color: var(--line); background: var(--panel-2);
 }
-.file-act.danger:hover, .file-act.danger:focus-visible { color: var(--red); border-color: var(--red-line); }
+.file-act.danger:hover, .file-act.danger:focus-visible { color: var(--red); border-color: var(--red-line); background: color-mix(in srgb, var(--red) 10%, var(--panel)); }
 .file-act:disabled { opacity: 0.4; cursor: progress; }
 .files-empty { color: var(--muted); padding: 24px 10px; font-size: 13px; }
 /* 目录读取中：直接用 base.css 的 .loading-block */

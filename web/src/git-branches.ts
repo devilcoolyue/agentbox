@@ -32,7 +32,7 @@ export function openGitBranches(repo:string,refreshed:()=>Promise<void>){
    const title=document.createElement("strong");setTextRender(title, () => b.name+(b.current?i18nText(" · 当前"):"")+(b.remote?i18nText(" · 远程跟踪"):""));
    const meta=document.createElement("p");meta.className="field-hint";meta.textContent=b.head.slice(0,12)+(b.upstream?" → "+b.upstream:"");
    const buttons=document.createElement("div");buttons.className="git-connection-tools";
-   const button=(label:string,action:string,disabled:boolean,tip=label)=>{const btn=document.createElement("button");btn.className="btn btn-sm";actionButton(btn, label, action==="delete"?"trash":action==="switch"?"arrow-right":"branch", tip);btn.disabled=disabled;btn.addEventListener("click",()=>void run(()=>act(action,b)));return btn;};
+   const button=(label:string,action:string,disabled:boolean,tip=label)=>{const btn=document.createElement("button");btn.className=action==="delete"?"btn btn-sm btn-danger":"btn btn-sm";actionButton(btn, label, action==="delete"?"trash":action==="switch"?"arrow-right":"branch", tip);btn.disabled=disabled;btn.addEventListener("click",()=>void run(()=>act(action,b)));return btn;};
    if(b.remote)buttons.append(button(i18nText("设为上游"),"upstream",state.detached||state.unborn,i18nText("设为当前分支上游")));
    else buttons.append(button(i18nText("切换"),"switch",b.current||data.dirty),button(i18nText("删除"),"delete",b.current,i18nText("删除已合并的本地分支")));
    row.append(title,meta,buttons);list.append(row);

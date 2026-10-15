@@ -146,7 +146,7 @@ function customRows(scope: Scope, views: ThemeView[], canDelete: boolean) {
     const actions = [themeButton(() => i18nText("导出"), "download", () => exportManifest(m), true)];
     // 能删的就能改：个人主题归本人，全站主题归管理员
     if (canDelete) actions.unshift(themeButton(() => i18nText("编辑"), "edit", () => edit(scope, m, false), true));
-    if (canDelete) actions.push(themeButton(() => i18nText("删除"), "trash", () => remove(scope, view), true));
+    if (canDelete) actions.push(themeButton(() => i18nText("删除"), "trash", () => remove(scope, view), true, true));
     for (const b of actions) b.disabled = busy;
     return row({
       key: keyOf(view),

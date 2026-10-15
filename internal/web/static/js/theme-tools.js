@@ -154,10 +154,10 @@ export function problemText(err, limitBytes = 64 << 10) {
         default: return err instanceof Error ? err.message : String(err);
     }
 }
-export function themeButton(label, icon, onClick, iconOnly = false) {
+export function themeButton(label, icon, onClick, iconOnly = false, danger = false) {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "btn btn-sm";
+    b.className = danger ? "btn btn-sm btn-danger" : "btn btn-sm";
     actionButton(b, iconOnly ? "" : label, icon, label);
     b.addEventListener("click", onClick);
     return b;

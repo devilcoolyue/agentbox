@@ -277,7 +277,7 @@
   flex-shrink: 0; border: none; background: none; color: var(--muted);
   cursor: pointer; font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: calc(5px * var(--radius-scale));
 }
-.change-discard:hover { color: var(--red); background: var(--panel); }
+.change-discard:is(:hover, :focus-visible) { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
 .changes-diff .diff { margin: 0; font-size: 12.5px; line-height: 1.55; white-space: pre; }
 .diff span { display: block; }
 .diff .d-add { color: var(--diff-add); background: color-mix(in srgb, var(--diff-add) 12%, transparent); }

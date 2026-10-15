@@ -332,7 +332,7 @@
             <!-- 运行状态在标题旁的说明行里；这里只放随状态切换的启动/停止，额度、重命名、删除收进 ⋯，与窄屏顶栏共用 -->
             <div class="wb-actions">
               <button id="btn-start" class="btn btn-sm btn-primary" data-icon="play" aria-label="启动工作空间" data-tip="启动工作空间" data-i18n-text="[&quot;启动&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;启动工作空间&quot;,&quot;data-tip&quot;:&quot;启动工作空间&quot;}">启动</button>
-              <button id="btn-stop" class="btn btn-sm" data-icon="stop" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话" data-i18n-text="[&quot;停止&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;停止工作空间&quot;,&quot;data-tip&quot;:&quot;停止工作空间，保留文件与对话&quot;}">停止</button>
+              <button id="btn-stop" class="btn btn-sm btn-danger" data-icon="stop" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话" data-i18n-text="[&quot;停止&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;停止工作空间&quot;,&quot;data-tip&quot;:&quot;停止工作空间，保留文件与对话&quot;}">停止</button>
               <button id="btn-wb-more" class="btn btn-sm" data-icon="more" aria-label="工作空间更多操作" aria-haspopup="menu" aria-expanded="false" data-tip="更多操作" data-i18n-attrs="{&quot;aria-label&quot;:&quot;工作空间更多操作&quot;,&quot;data-tip&quot;:&quot;更多操作&quot;}"></button>
             </div>
           </header>
@@ -1090,7 +1090,7 @@
                 <p class="note" data-i18n="按用户、空间和对话隔离；只保存文字和附件引用，不保存文件内容。关闭后清除本机副本，当前页面输入仍保留。">按用户、空间和对话隔离；只保存文字和附件引用，不保存文件内容。关闭后清除本机副本，当前页面输入仍保留。</p>
                 <p class="note" data-i18n="待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。">待确认正文过期后保留查询标识；关闭保存或退出不会取消服务器已接收的任务。</p>
                 <p id="chat-draft-settings-status" class="note hidden" role="status"></p>
-                <div class="card-foot"><button id="chat-draft-clear" type="button" class="btn btn-sm" data-icon="trash" data-i18n="清除本机副本并关闭保存">清除本机副本并关闭保存</button></div>
+                <div class="card-foot"><button id="chat-draft-clear" type="button" class="btn btn-sm btn-danger" data-icon="trash" data-i18n="清除本机副本并关闭保存">清除本机副本并关闭保存</button></div>
               </div>
               <div class="card" id="set-chat-suggestions">
                 <h3 data-i18n="下一步提示">下一步提示</h3>
@@ -1346,7 +1346,7 @@
             <div id="set-savebar" class="set-savebar" role="region" aria-label="未保存的修改" hidden data-i18n-attrs="{&quot;aria-label&quot;:&quot;未保存的修改&quot;}">
               <span class="set-savebar-dot" aria-hidden="true"></span>
               <span id="set-savebar-text" class="set-savebar-text"></span>
-              <button id="set-discard" type="button" class="btn btn-sm btn-ghost" data-icon="undo" data-i18n-text="[&quot;放弃修改&quot;]">放弃修改</button>
+              <button id="set-discard" type="button" class="btn btn-sm btn-ghost btn-danger" data-icon="undo" data-i18n-text="[&quot;放弃修改&quot;]">放弃修改</button>
               <button id="set-save" type="button" class="btn btn-sm btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
             </div>
           </div>
@@ -2184,7 +2184,7 @@
       <button id="auth-savekey" class="btn btn-primary" data-icon="save" data-i18n-text="[&quot;保存&quot;]">保存</button>
     </div>
     <div id="auth-models" class="auth-models hidden"></div>
-    <button id="auth-clearkey" class="btn btn-ghost btn-sm hidden" data-icon="undo" data-tip="清除中转站配置并切回订阅凭证" data-i18n-text="[&quot;切回订阅&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;清除中转站配置并切回订阅凭证&quot;}">切回订阅</button>
+    <button id="auth-clearkey" class="btn btn-ghost btn-danger btn-sm hidden" data-icon="undo" data-tip="清除中转站配置并切回订阅凭证" data-i18n-text="[&quot;切回订阅&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;清除中转站配置并切回订阅凭证&quot;}">切回订阅</button>
   </div>
   </div>
   <p id="auth-msg" class="auth-msg hidden" role="status" aria-live="polite"></p>

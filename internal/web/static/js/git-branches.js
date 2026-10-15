@@ -43,7 +43,7 @@ export function openGitBranches(repo, refreshed) {
             meta.textContent = b.head.slice(0, 12) + (b.upstream ? " → " + b.upstream : "");
             const buttons = document.createElement("div");
             buttons.className = "git-connection-tools";
-            const button = (label, action, disabled, tip = label) => { const btn = document.createElement("button"); btn.className = "btn btn-sm"; actionButton(btn, label, action === "delete" ? "trash" : action === "switch" ? "arrow-right" : "branch", tip); btn.disabled = disabled; btn.addEventListener("click", () => void run(() => act(action, b))); return btn; };
+            const button = (label, action, disabled, tip = label) => { const btn = document.createElement("button"); btn.className = action === "delete" ? "btn btn-sm btn-danger" : "btn btn-sm"; actionButton(btn, label, action === "delete" ? "trash" : action === "switch" ? "arrow-right" : "branch", tip); btn.disabled = disabled; btn.addEventListener("click", () => void run(() => act(action, b))); return btn; };
             if (b.remote)
                 buttons.append(button(i18nText("设为上游"), "upstream", state.detached || state.unborn, i18nText("设为当前分支上游")));
             else

@@ -29,7 +29,7 @@ export function openGitTerminal(repo:string,remote:string,readOnly:boolean){
    const label=document.createElement("p");label.className="field-hint";setTextRender(label, () => i18nText("{p0} · 到期 {p1}", { p0: String(g.write?i18nText("允许推送"):i18nText("只读远程")), p1: String(fmtTime(Date.parse(g.expires_at))) }));
    const commands=document.createElement("pre");commands.style.whiteSpace="pre-wrap";commands.style.overflowWrap="anywhere";
    commands.textContent=`${g.command} status\n${g.command} fetch\n${g.command} pull`+(g.write?`\n${g.command} push`:"");
-   const revoke=document.createElement("button");revoke.className="btn btn-sm";actionButton(revoke, () => i18nText("撤销"), "shield-off", () => i18nText("撤销授权"));
+   const revoke=document.createElement("button");revoke.className="btn btn-sm btn-danger";actionButton(revoke, () => i18nText("撤销"), "shield-off", () => i18nText("撤销授权"));
    revoke.addEventListener("click",()=>void run(async()=>{await api(prefix+"/"+g.id,{method:"DELETE"});await load();}));
    row.append(label,commands,revoke);list.append(row);
   }

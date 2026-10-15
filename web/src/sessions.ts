@@ -217,7 +217,7 @@ function sessionMenu(withPower: boolean): MenuItem[] {
   const running = s.status === "running";
   return [
     { label: i18nText("启动"), icon: "play", run: doStart, hidden: !withPower || running, disabled: S.actionBusy },
-    { label: i18nText("停止"), icon: "stop", run: doStop, hidden: !withPower || !running, disabled: S.actionBusy, tip: i18nText("停止工作空间，保留文件与对话") },
+    { label: i18nText("停止"), icon: "stop", danger: true, run: doStop, hidden: !withPower || !running, disabled: S.actionBusy, tip: i18nText("停止工作空间，保留文件与对话") },
     { label: i18nText("使用指引"), icon: "bulb", run: () => emit("workspace-guide-open"), sep: true },
     { label: i18nText("环境检查"), icon: "activity", run: () => openDiagnostics(s.id), sep: true },
     { label: i18nText("查看账号额度"), icon: "gauge", run: openAcctUsage, hidden: agentKey(s.agent) !== "claude", sep: true, tip: i18nText("该账号订阅的 5 小时 / 每周用量窗口") },

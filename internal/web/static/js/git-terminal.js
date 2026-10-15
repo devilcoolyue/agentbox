@@ -41,7 +41,7 @@ export function openGitTerminal(repo, remote, readOnly) {
             commands.style.overflowWrap = "anywhere";
             commands.textContent = `${g.command} status\n${g.command} fetch\n${g.command} pull` + (g.write ? `\n${g.command} push` : "");
             const revoke = document.createElement("button");
-            revoke.className = "btn btn-sm";
+            revoke.className = "btn btn-sm btn-danger";
             actionButton(revoke, () => i18nText("撤销"), "shield-off", () => i18nText("撤销授权"));
             revoke.addEventListener("click", () => void run(async () => { await api(prefix + "/" + g.id, { method: "DELETE" }); await load(); }));
             row.append(label, commands, revoke);

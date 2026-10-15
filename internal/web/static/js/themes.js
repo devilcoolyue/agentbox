@@ -136,7 +136,7 @@ function customRows(scope, views, canDelete) {
         if (canDelete)
             actions.unshift(themeButton(() => i18nText("编辑"), "edit", () => edit(scope, m, false), true));
         if (canDelete)
-            actions.push(themeButton(() => i18nText("删除"), "trash", () => remove(scope, view), true));
+            actions.push(themeButton(() => i18nText("删除"), "trash", () => remove(scope, view), true, true));
         for (const b of actions)
             b.disabled = busy;
         return row({

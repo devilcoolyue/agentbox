@@ -273,9 +273,9 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
    const actions=document.createElement("div");actions.className="delivery-actions";
    const next=primary(row);
    if(next)actions.append(control(next.label,next.tip,next.icon,next.run,working||next.disabled,"delivery-primary"));
-   if(row.state==="unconfirmed")actions.append(control("放弃发送","放弃这条消息，以后也不会执行","close",()=>void act(row,"abandon"),working));
+   if(row.state==="unconfirmed")actions.append(control("放弃发送","放弃这条消息，以后也不会执行","close",()=>void act(row,"abandon"),working,"btn-danger"));
    if(row.state==="queued")actions.append(control("撤回","撤回到输入框，不再自动执行","undo",()=>void act(row,"withdraw"),working));
-   if(["accepted","starting","running"].includes(row.state))actions.append(control("","中断任务","stop",()=>void act(row,"interrupt"),working));
+   if(["accepted","starting","running"].includes(row.state))actions.append(control("","中断任务","stop",()=>void act(row,"interrupt"),working,"btn-danger"));
    if(settled(row.state)&&row.state!=="completed")actions.append(control("","复制回输入框","copy",()=>void(async()=>{
     if(context?.session!==row.session)return;
     const generation=epoch;

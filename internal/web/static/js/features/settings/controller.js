@@ -573,7 +573,7 @@ export function createSettingsController() {
                 id.textContent = m.id;
                 id.title = m.id;
                 const rm = document.createElement("button");
-                rm.className = "btn btn-sm btn-ghost m-remove";
+                rm.className = m.id === selected ? "btn btn-sm btn-ghost m-remove" : "btn btn-sm btn-ghost btn-danger m-remove";
                 actionButton(rm, () => m.id === selected ? i18nText("默认") : i18nText("移除"), m.id === selected ? "check" : "close", () => m.id === selected ? i18nText("当前默认模型") : i18nText("移除模型"));
                 rm.disabled = m.id === selected;
                 setTip(rm, () => m.id === selected ? i18nText("移除前请先选择其他默认模型") : i18nText("移除模型"));
