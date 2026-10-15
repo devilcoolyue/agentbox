@@ -117,17 +117,18 @@ try:
             while True:
                 events=request('/api/usage/events?session='+sess['id'])
                 rows=events['rows']
-                if len(rows)==3: break
+                # One row per request: the fixture's first turn makes three, the second one.
+                if len(rows)==4: break
                 if time.monotonic()>deadline: raise AssertionError(events)
                 time.sleep(.3)
-            assert len(rows)==3,events
+            assert len(rows)==4 and len({r['turn_id'] for r in rows})==2,events
             costs={r['id']:r['cost_micro_usd'] for r in rows}
             assert all(r['rate']['snapshot'] and r['rate']['input']==2 for r in rows),rows
             request('/api/settings',{'pricing':{'codex':{'input':99,'output':99}}},'PUT')
             rows=request('/api/usage/events?session='+sess['id'])['rows']
             assert {r['id']:r['cost_micro_usd'] for r in rows}==costs
             assert all(r['rate']['input']==2 for r in rows)
-            print('Codex terminal: synthetic rollout yielded 3 rows; saved prices survive table edits')
+            print('Codex terminal: synthetic rollout yielded 4 request rows in 2 turns; saved prices survive table edits')
         if a.restart:
             docker('exec','--user','1000:1000',cid,'tmux','new-session','-d','-s','lifecycle-smoke','sleep 120')
             ws=socket.create_connection(('127.0.0.1',int(bindings[0]['HostPort'])),timeout=3)
