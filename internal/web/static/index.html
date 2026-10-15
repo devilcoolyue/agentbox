@@ -480,8 +480,8 @@
                   </div>
                   <button id="chat-suggest" type="button" class="suggest-key hidden" aria-label="填入下一步提示" data-tip="按 Tab 填入下一步提示" data-i18n-attrs='{"aria-label":"填入下一步提示","data-tip":"按 Tab 填入下一步提示"}'><kbd>Tab</kbd><span data-i18n="填入">填入</span></button>
                   <input id="attach-input" type="file" multiple class="hidden">
-                  <!-- 上下文占用（features/chat/context-meter.ts），对应 CLI 状态栏的上下文条 -->
-                  <span id="chat-context" class="ctx-meter hidden" role="img" tabindex="0" data-level="ok">
+                  <!-- 上下文占用（features/chat/context-meter.ts），对应 CLI 状态栏的上下文条；触屏点按看详情（data-tip-tap） -->
+                  <span id="chat-context" class="ctx-meter hidden" role="img" tabindex="0" data-level="ok" data-tip-tap>
                     <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle class="ctx-track" cx="10" cy="10" r="7.5" pathLength="100"/><circle class="ctx-fill" cx="10" cy="10" r="7.5" pathLength="100"/></svg>
                     <span class="ctx-value"></span>
                   </span>

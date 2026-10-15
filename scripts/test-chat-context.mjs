@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import { browserEngine } from './playwright-launch.mjs';
 
 // Shared synthetic browser suite: the composer's context meter (the web form of
 // the CLI status line) from history and live events, plus the footer of a
@@ -81,6 +82,33 @@ export async function chatContextSmoke(page, { setHistory, send, socket, setAgen
  const bar = await page.locator('.composer-bar').boundingBox(), box = await meter.boundingBox();
  assert.ok(box.x >= bar.x && box.x + box.width <= bar.x + bar.width + 0.5, 'meter overflows the composer bar');
  await page.screenshot({path:'output/playwright/chat-context-mobile.png',animations:'disabled'});
+ // Touch has no hover: a tap shows the details, a second tap closes them, and
+ // the composer keeps focus (the soft keyboard stays up). Real touch via CDP.
+ if (browserEngine() === 'chromium') {
+  const cdp = await page.context().newCDPSession(page);
+  const center = await meter.boundingBox();
+  const tap = async (x = center.x + center.width / 2, y = center.y + center.height / 2) => {
+   await cdp.send('Input.dispatchTouchEvent', {type:'touchStart', touchPoints:[{x, y}]});
+   await cdp.send('Input.dispatchTouchEvent', {type:'touchEnd', touchPoints:[]});
+  };
+  const bubble = page.locator('#tip');
+  await page.locator('#chat-input').focus();
+  await tap();
+  await page.locator('#tip.show').filter({hasText:'上下文已用 90.0K / 200.0K tokens（45%）'}).waitFor();
+  assert.equal(await page.evaluate(()=>document.activeElement?.id), 'chat-input', 'tapping the meter must not take focus from the composer');
+  await page.waitForTimeout(3000); // longer than the long-press linger: a tapped tip stays to be read
+  assert.equal(await bubble.evaluate(el=>el.classList.contains('show')), true);
+  await page.evaluate(()=>document.getElementById('chat-log')?.dispatchEvent(new Event('scroll'))); // streaming auto-scroll elsewhere
+  assert.equal(await bubble.evaluate(el=>el.classList.contains('show')), true, 'scrolling the message list does not move the meter');
+  await tap();
+  await page.waitForFunction(()=>!document.getElementById('tip').classList.contains('show'));
+  await tap();
+  await page.locator('#tip.show').waitFor();
+  const bar = await page.locator('.composer-bar').boundingBox();
+  await tap(bar.x + 8, bar.y - 40); // elsewhere
+  await page.waitForFunction(()=>!document.getElementById('tip').classList.contains('show'));
+  await cdp.detach();
+ }
  await page.setViewportSize({width:1280,height:900});
 
  // /context draws the CLI's grid from its structured result; /compact marks the
@@ -204,5 +232,5 @@ export async function chatContextSmoke(page, { setHistory, send, socket, setAgen
  await reload();
  assert.equal(await meter.isVisible(),false);
  setHistory([]);
- console.log('Chat context: meter from history and live requests, subagents ignored, warn/critical, compaction, first-turn size, local /context footer, /usage card, mobile, Codex hidden passed');
+ console.log('Chat context: meter from history and live requests, subagents ignored, warn/critical, compaction, first-turn size, touch tap details, local /context footer, /usage card, mobile, Codex hidden passed');
 }

@@ -5,7 +5,8 @@ import { setAttrRender } from "./i18n.js";
  * 键盘 focus 时根本不出现、移动端完全没有。
  *
  * 用法：静态结构写 data-tip="文本"，动态代码调 setTip(el, 文本)（传空串即清除）；
- * 可选 data-tip-pos="top|bottom|left|right" 指定首选方向，放不下会自动翻面。
+ * 可选 data-tip-pos="top|bottom|left|right" 指定首选方向，放不下会自动翻面；
+ * 没有动作、只为展示详情的徽标加 data-tip-tap，触屏上点一下就浮出（见文末）。
  * 元素上残留的 title 在悬停时会被静默搬进 data-tip——聊天区渲染的用户内容也可能
  * 带 title，这条兜底保证全站不再冒出原生气泡；iframe 除外，那上面的 title 是
  * 无障碍名称不是提示。
@@ -210,7 +211,9 @@ document.addEventListener("pointermove", (e) => {
   });
 }, { passive: true });
 
-document.addEventListener("pointerleave", () => hide());
+/* 鼠标移出窗口就收。手指抬起时浏览器也会对 document 发一次 pointerleave，那不算离开，
+ * 不排除的话长按、点按浮出的气泡一松手就没了 */
+document.addEventListener("pointerleave", (e) => { if (e.pointerType !== "touch") hide(); });
 
 /* 键盘走到带提示的控件上立即显示——原生 title 做不到这件事。手指点开弹窗时 iOS 会把
  * showModal() 给关闭按钮的焦点也算成 :focus-visible，所以还要核对最近一次是不是键盘操作。 */
@@ -225,22 +228,31 @@ document.addEventListener("focusin", (e) => {
 });
 document.addEventListener("focusout", (e) => { if (e.target === anchor) hide(); });
 
-addEventListener("scroll", () => hide(), { capture: true, passive: true });
+/* 只有锚点跟着滚走了才收：对话流式输出时消息列表一直在自动滚，输入框上的气泡不受影响 */
+addEventListener("scroll", (e) => {
+  if (anchor && e.target instanceof Node && !e.target.contains(anchor)) return;
+  hide();
+}, { capture: true, passive: true });
 addEventListener("resize", () => hide());
 addEventListener("blur", () => hide());
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); }, true);
 
 /* 触屏：原生 title 在移动端完全不显示，这里补一条长按通道 */
 let tx = 0, ty = 0;
+let moved = false;
+let wasOpen: HTMLElement | null = null; // 按下前已经浮着的锚点：再点一下是要收起
 const cancelHold = () => { clearTimeout(holdTimer); holdTimer = undefined; };
+const tapTarget = (t: EventTarget | null) => t instanceof Element ? t.closest<HTMLElement>("[data-tip-tap]") : null;
 
 document.addEventListener("pointerdown", (e) => {
+  wasOpen = shown ? anchor : null;
   hide();       // 点下去就收起，别让气泡挂在操作结果上面
   cancelHold();
+  if (e.pointerType === "mouse") return;
+  tx = e.clientX; ty = e.clientY; moved = false;
   if (e.pointerType !== "touch") return;
   const el = resolve(e.target, e.clientX, e.clientY);
   if (!el) return;
-  tx = e.clientX; ty = e.clientY;
   holdTimer = setTimeout(() => {
     holdTimer = undefined;
     anchor = el;
@@ -249,11 +261,28 @@ document.addEventListener("pointerdown", (e) => {
   }, TOUCH_HOLD);
 }, true);
 
-document.addEventListener("pointerup", cancelHold, true);
+/* 点按浮出：上下文占用这类纯信息徽标点了没有反应，长按又没人想得到，所以带
+ * data-tip-tap 的元素用手指或笔点一下就浮出、再点一下收起，点别处或页面滚动照常收起，
+ * 不自动消失（要留时间读完）。鼠标仍走悬停。用 pointerup 而不是 click：iOS 只给它
+ * 认为可点的元素派发 click。 */
+document.addEventListener("pointerup", (e) => {
+  cancelHold();
+  if (e.pointerType === "mouse" || moved) return;
+  const el = tapTarget(e.target);
+  if (!el?.dataset.tip) return;
+  if (shown && anchor === el) { clearTimeout(lingerTimer); lingerTimer = undefined; return; } // 长按已经浮出，松手后留着
+  if (wasOpen === el) return; // 第二下：按下时已经收起了
+  anchor = el;
+  show(el);
+}, true);
+/* 不抢焦点：手机上正开着软键盘打字时点一下看详情，键盘不该收起（收起会重排、把气泡挤走） */
+document.addEventListener("mousedown", (e) => { if (tapTarget(e.target)) e.preventDefault(); }, true);
+
 document.addEventListener("pointercancel", cancelHold, true);
 document.addEventListener("pointermove", (e) => {
-  if (e.pointerType === "touch" && holdTimer
-    && Math.abs(e.clientX - tx) + Math.abs(e.clientY - ty) > TOUCH_SLOP) cancelHold();
+  if (e.pointerType === "mouse" || Math.abs(e.clientX - tx) + Math.abs(e.clientY - ty) <= TOUCH_SLOP) return;
+  moved = true;
+  cancelHold();
 }, { capture: true, passive: true });
 
 window.addEventListener("agentbox-language-change", () => { if (shown && anchor) show(anchor); });
