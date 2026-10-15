@@ -226,6 +226,23 @@ const KIND_HINT = {
     get title() { return i18nText("服务端自动为新对话生成标题的那趟消耗，不是用户发起的"); },
     get suggestion() { return i18nText("对话回合结束后预测你下一句输入的那次调用；可在「系统设置 → 界面与提示」里关闭"); },
 };
+/* 类型列只画图标：这一列的用处是一眼看出「这笔钱是谁按下去的」，图形比两个字更快
+ * 扫读。名称留在图标里（桌面只给读屏，窄屏卡片上图标旁直接显示），悬停给名称与说明。
+ * 墨色深浅沿用原来的分档：对话是主体最重，终端次之，服务端自发的调用最轻——
+ * 不加色相，旁边的 Token 与计费列已经用了好几种颜色。 */
+const KIND_ICON = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network" };
+const KIND_TONE = { chat: "chat", delegation: "chat", suggestion: "chat", terminal: "term", title: "title", decision: "title" };
+function kindBadge(kind) {
+    const badge = document.createElement("span");
+    badge.className = "u-kind" + (KIND_TONE[kind] ? " " + KIND_TONE[kind] : "");
+    badge.dataset.kind = kind;
+    const label = document.createElement("span");
+    label.className = "u-kind-label";
+    setTextRender(label, () => KIND_LABEL[kind] || kind);
+    badge.append(svgIcon(KIND_ICON[kind] || "activity", 15), label);
+    setTip(badge, () => (KIND_LABEL[kind] || kind) + (KIND_HINT[kind] ? "\n" + KIND_HINT[kind] : ""));
+    return badge;
+}
 const workspaceName = (r) => r.session_name || r.session_id;
 const BILLING = {
     // 与对话页每轮下方的说法一致：写用户看得懂的来源，不写「价目表」「CLI」
@@ -357,7 +374,7 @@ function renderRows(data) {
         acct.textContent = r.account_label || r.account_id || "—";
         sessv.append(name, acct);
         tr.appendChild(sess);
-        const { td: model, v: modelv } = cellEl(() => i18nText("模型"));
+        const { td: model, v: modelv } = cellEl(() => i18nText("模型 / 推理强度"));
         const mline = document.createElement("div");
         mline.className = "u-model";
         const modelName = document.createElement("span");
@@ -383,14 +400,8 @@ function renderRows(data) {
             modelv.appendChild(p);
         }
         tr.appendChild(model);
-        const { td: kind, v: kindv } = cellEl(() => i18nText("类型"));
-        const chip = document.createElement("span");
-        // 终端和起标题各有各的颜色：这一列的用处就是一眼看出「这笔钱是谁按下去的」。
-        chip.className = "u-chip" + (r.kind === "title" ? " title" : r.kind === "terminal" ? " term" : r.kind === "chat" || r.kind === "delegation" || r.kind === "suggestion" ? " chat" : "");
-        setTextRender(chip, () => KIND_LABEL[r.kind] || r.kind);
-        if (KIND_HINT[r.kind])
-            setTip(chip, () => KIND_HINT[r.kind]);
-        kindv.appendChild(chip);
+        const { td: kind, v: kindv } = cellEl(() => i18nText("类型"), "u-cell-kind");
+        kindv.appendChild(kindBadge(r.kind));
         // 同回合连着好几行：标出这是第几次请求；升级前合并保存的旧行标合并次数。
         if (r.turn_requests || r.merged_requests) {
             const seq = document.createElement("div");
@@ -608,9 +619,11 @@ function renderSummary(data) {
     const t = data.total;
     // token 合计动辄上千万，卡片里按 K/M/B 缩写，悬停给完整数字。
     const exact = (n, note) => () => num(n) + (note ? " · " + note() : "");
+    // 总量与每行的「合计」同一口径：四个桶相加。回合数退到悬停提示里。
+    const tokens = t.input_tokens + t.output_tokens + t.cache_read_tokens + t.cache_write_tokens;
     const items = [
         ["总花费", fmtUSD(t.cost_micro_usd, 2), () => i18nText("筛选范围内所有行的费用之和")],
-        ["回合", num(t.turns), () => i18nText("按 turn_id 去重；共 {p0} 条记录，一次模型请求一条", { p0: String(num(t.rows)) })],
+        ["总 Token", fmtTokens(tokens), exact(tokens, () => i18nText("输入 + 输出 + 缓存读取 + 缓存写入；{p0} 个回合，{p1} 条记录", { p0: String(num(t.turns)), p1: String(num(t.rows)) }))],
         ["输入", fmtTokens(t.input_tokens), exact(t.input_tokens, () => i18nText("未命中缓存的输入 token"))],
         ["输出", fmtTokens(t.output_tokens), exact(t.output_tokens)],
         ["缓存读取", fmtTokens(t.cache_read_tokens), exact(t.cache_read_tokens, () => i18nText("命中缓存的输入，计价远低于新输入"))],

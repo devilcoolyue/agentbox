@@ -167,10 +167,10 @@ export async function webI18nSmoke(browser) {
   const assertUsageLanguage=async preference=>{
    const labels=usageLabels[preference],rows=page.locator('#usage-rows tr');
    const kind=row=>rows.nth(row).locator('td').nth(3);
-   assert.equal(await kind(0).locator('.u-chip').innerText(),labels.kind);
-   assert.equal(await kind(1).locator('.u-chip').innerText(),labels.kind);
-   assert.equal(await kind(2).locator('.u-chip').innerText(),labels.decision);
-   assert.equal(await kind(3).locator('.u-chip').innerText(),labels.chat,'ordinary chat keeps its own type');
+   assert.equal(await kind(0).locator('.u-kind').innerText(),labels.kind);
+   assert.equal(await kind(1).locator('.u-kind').innerText(),labels.kind);
+   assert.equal(await kind(2).locator('.u-kind').innerText(),labels.decision);
+   assert.equal(await kind(3).locator('.u-kind').innerText(),labels.chat,'ordinary chat keeps its own type');
    assert.equal(await page.locator('#uf-kind option[value="delegation"]').textContent(),labels.kind);
    assert.equal(await rows.first().locator('.u-sess').innerText(),'保存','workspace names stay verbatim');
    assert.equal(usageReads,usageCount,'switching delegation labels must not refetch');

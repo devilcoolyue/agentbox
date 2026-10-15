@@ -1347,7 +1347,7 @@
         </div>
       </div>
 
-      <!-- 使用记录视图：一行 = 一个回合 × 一个模型（不是一次 API 调用） -->
+      <!-- 使用记录视图：一行 = 一次模型请求（同回合的多次请求共享 turn_id） -->
       <div id="view-usage" class="view hidden">
         <header class="set-head usage-head">
           <div>
@@ -1361,13 +1361,21 @@
         </header>
 
         <div class="usage-body">
-          <!-- 筛选条可折叠：窄屏上六个筛选项能吃掉大半屏，收起来才看得见下面的明细 -->
+          <!-- 筛选条可折叠：窄屏上六个筛选项能吃掉大半屏，收起来才看得见下面的明细。
+               重置/刷新/导出放在标题行右侧，收起筛选时照样点得到。 -->
           <div id="usage-filters" class="usage-filters">
-            <button id="uf-toggle" class="uf-toggle" aria-expanded="true" aria-controls="uf-fields">
-              <span class="uf-caret"></span>
-              <span class="uf-title" data-i18n-text="[&quot;筛选条件&quot;]">筛选条件</span>
-              <span id="uf-active" class="uf-active"></span>
-            </button>
+            <div class="uf-head">
+              <button id="uf-toggle" class="uf-toggle" aria-expanded="true" aria-controls="uf-fields">
+                <span class="uf-caret"></span>
+                <span class="uf-title" data-i18n-text="[&quot;筛选条件&quot;]">筛选条件</span>
+                <span id="uf-active" class="uf-active"></span>
+              </button>
+              <div class="uf-actions action-tools">
+                <button id="uf-reset" class="btn btn-ghost btn-sm" data-icon="undo" data-i18n-text="[&quot;重置&quot;]">重置</button>
+                <button id="uf-refresh" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新&quot;]">刷新</button>
+                <button id="uf-export" class="btn btn-sm" data-icon="download" data-tip="导出当前筛选范围的 CSV" data-i18n-text="[&quot;导出&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;导出当前筛选范围的 CSV&quot;}">导出</button>
+              </div>
+            </div>
             <div id="uf-fields" class="uf-fields">
               <label class="uf-item" id="uf-user-wrap">
                 <span data-i18n-text="[&quot;用户&quot;]">用户</span>
@@ -1401,11 +1409,6 @@
                   <svg width="1.6" height="1.6" data-icon="chevron" aria-hidden="true"></svg>
                 </button>
               </div>
-              <div class="uf-actions action-tools">
-                <button id="uf-reset" class="btn btn-ghost btn-sm" data-icon="undo" data-i18n-text="[&quot;重置&quot;]">重置</button>
-                  <button id="uf-refresh" class="btn btn-sm" data-icon="refresh" data-i18n-text="[&quot;刷新&quot;]">刷新</button>
-                  <button id="uf-export" class="btn btn-sm" data-icon="download" data-tip="导出当前筛选范围的 CSV" data-i18n-text="[&quot;导出&quot;]" data-i18n-attrs="{&quot;data-tip&quot;:&quot;导出当前筛选范围的 CSV&quot;}">导出</button>
-              </div>
             </div>
           </div>
 
@@ -1418,8 +1421,8 @@
                   <tr>
                     <th class="col-user" data-i18n-text="[&quot;用户&quot;]">用户</th>
                     <th data-i18n-text="[&quot;工作空间 / 账号&quot;]">工作空间 / 账号</th>
-                    <th data-i18n-text="[&quot;模型&quot;]">模型</th>
-                    <th data-i18n-text="[&quot;类型&quot;]">类型</th>
+                    <th data-i18n-text="[&quot;模型 / 推理强度&quot;]">模型 / 推理强度</th>
+                    <th class="col-kind" data-i18n-text="[&quot;类型&quot;]">类型</th>
                     <th class="col-tok">Token</th>
                     <th class="num" data-i18n-text="[&quot;缓存命中率&quot;]">缓存命中率</th>
                     <th class="num" data-i18n-text="[&quot;费用&quot;]">费用</th>

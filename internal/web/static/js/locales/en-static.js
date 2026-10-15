@@ -407,6 +407,7 @@ export default {
     "检查正式发布版本，升级前自动备份。重启服务会短暂断开连接。": "Check stable releases. A backup is made before upgrading. Restarting briefly disconnects clients.",
     "检查远程价目目录有没有新价格，只预览不应用": "Check the remote catalog for new prices without applying them",
     "模型": "Model",
+    "模型 / 推理强度": "Model / Effort",
     "模型 ID": "Model ID",
     "模型 ID / agent": "Model ID / agent",
     "模型 ID 或 agent 名，如 claude-opus-5": "Model ID or agent name, e.g. claude-opus-5",

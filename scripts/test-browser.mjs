@@ -183,9 +183,17 @@ export async function smoke(page) {
   // The reasoning effort a web turn was sent with sits under its model.
   assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['Extra High','Medium (13000)']);
   assert.match(await page.locator('#usage-rows tr').first().locator('.u-sub:has(.u-effort)').innerText(),/官方直连[\s\S]*Extra High/);
-  // Every type is a tag: title rows are not bare text.
-  const chipBorder=kind=>page.locator(`#usage-rows .u-chip.${kind}`).first().evaluate(el=>getComputedStyle(el).borderTopColor);
-  assert.equal(await chipBorder('title'),await chipBorder('chat'));
+  // Every type is an icon badge that still names itself for screen readers and tips.
+  const kindBadges=page.locator('#usage-rows .u-kind');
+  assert.deepEqual(await kindBadges.evaluateAll(els=>els.map(el=>[el.dataset.kind,el.querySelector('.ui-icon').dataset.iconName])),[['chat','message'],['title','type'],['chat','message']]);
+  assert.equal(await kindBadges.nth(1).getAttribute('data-tip'),'起标题\n服务端自动为新对话生成标题的那趟消耗，不是用户发起的');
+  assert.equal(await kindBadges.nth(1).locator('.u-kind-label').isVisible(),true,'the type name stays in the accessibility tree');
+  const badgeBorder=i=>kindBadges.nth(i).evaluate(el=>getComputedStyle(el).borderTopColor);
+  assert.equal(await badgeBorder(1),await badgeBorder(0));
+  // Actions stay on the filter title row and the token card sums all four buckets.
+  assert.equal(await page.locator('.uf-head .uf-actions #uf-export').count(),1);
+  assert.equal(await page.locator('#uf-fields .uf-actions').count(),0);
+  assert.equal(await page.locator('.us-item').nth(1).locator('.us-label').innerText(),'总 Token');
   const downloaded=page.waitForEvent('download');
   await page.locator('#uf-export').click();
   const csv=await readFile(await (await downloaded).path(),'utf8');
@@ -280,6 +288,7 @@ export async function smoke(page) {
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.locator('#usage-rows .u-hit').first().getAttribute('data-l'),'缓存命中率');
   if(await page.locator('#uf-toggle').getAttribute('aria-expanded')==='true') await page.locator('#uf-toggle').click();
+  assert.equal(await page.locator('#uf-export').isVisible(),true,'collapsing the filters keeps the actions');
   await page.locator('#usage-rows .u-hit').first().scrollIntoViewIfNeeded();
   assert.equal(await page.locator('#usage-rows .u-hit .u-v').first().innerText(),'100.0%');
   assert.equal(await page.locator('#view-usage').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'usage page overflows on mobile');
