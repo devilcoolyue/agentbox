@@ -165,7 +165,7 @@ sudo ./agentbox -config config.json
 
 ### 需要直接控制时，切回熟悉的 CLI
 
-打开 Shell、Claude Code 或 Codex CLI 终端，运行测试、安装依赖。只要容器仍在运行，网络断开后可重新连接原来的 tmux 会话。
+打开 Shell、Claude Code 或 Codex CLI 终端，运行测试、安装依赖。只要容器仍在运行，网络断开后可重新连接原来的 tmux 会话。在 Claude Code 里选中文字会直接复制到本机剪贴板；浏览器不允许自动写入时（如 Safari），终端底部会出现「复制到剪贴板」按钮。
 
 [![浏览器终端：项目 Shell 与测试输出](docs/images/terminal.png)](docs/images/terminal.png)
 

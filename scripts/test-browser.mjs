@@ -27,6 +27,7 @@ import { chatTasksSmoke } from './test-chat-tasks.mjs';
 import { chatHistorySettingsSmoke, chatPagesSmoke } from './test-chat-pages.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
+import { terminalClipboardSmoke } from './test-term-clipboard.mjs';
 import { motionSmoke } from './test-motion.mjs';
 import {browserEngine,cancelledFetchError,launchBrowser,recordNavigations} from './playwright-launch.mjs';
 
@@ -801,9 +802,15 @@ export async function smoke(page) {
   await page.goto(base + '/#/sessions/fixture-space/skills');
   await at('#/sessions/fixture-space/chat','#tab-chat'); // Codex has no skills tab.
   // Mobile keys go through the real xterm input and binary WebSocket path.
+  // The terminal header's spend uses the usage page's K/M/B abbreviation; the tip keeps the exact count.
+  const savedUsageRows = usageRows;
+  usageRows = [{input_tokens:1_000_000_000,output_tokens:84_000_000,cache_read_tokens:99_999_000,cache_write_tokens:1_000}];
   await page.setViewportSize({width:390,height:844});
   await page.locator('.tab[data-tab="term"]').click();
   await page.locator('#term-state[data-state="connected"]').waitFor();
+  await page.locator('#term-spend .ts-tok').filter({hasText:'1.2B tok'}).waitFor();
+  assert.match(await page.locator('#term-spend').getAttribute('data-tip'), /合计 1,184,000,000 tokens。/);
+  usageRows = savedUsageRows;
   const key = name => page.locator(`[data-term-key="${name}"]`);
   const modifier = name => page.locator(`[data-term-mod="${name}"]`);
   const lastInput = async expected => {
@@ -863,8 +870,10 @@ export async function smoke(page) {
   // Message boundaries depend on whether xterm or the bridge sends the insertion; the PTY sees one byte stream.
   assert.equal(terminalInput.slice(cycleStart).join(''), '\x7f。\x7f？\x7f', 'cycled punctuation must replace the previous symbol');
   // Real touch input is driven through CDP, which only Chromium exposes.
-  if (browserEngine() === 'chromium') await terminalTouchSmoke(page, {send:data => terminalSocket.send(data), input:() => terminalInput});
-  else console.log(`Terminal touch: not run in ${browserEngine()} (CDP-only touch input)`);
+  if (browserEngine() === 'chromium') {
+   await terminalTouchSmoke(page, {send:data => terminalSocket.send(data), input:() => terminalInput});
+   await terminalClipboardSmoke(page, {send:data => terminalSocket.send(data), input:() => terminalInput});
+  } else console.log(`Terminal touch and clipboard: not run in ${browserEngine()} (CDP-only touch input, clipboard permissions)`);
   await page.locator('#term-keyboard').click();
   assert.equal(await page.locator('.xterm-helper-textarea').evaluate(el=>el===document.activeElement),false);
   await page.locator('#term-keyboard').click();

@@ -2452,5 +2452,11 @@ export default {
   "新建任务": "New task",
   "更新任务": "Update task",
   "更新任务列表": "Update task list",
-  "按最近一次模型请求计算，与 Codex 终端的剩余上下文同口径（扣除约 12K 固定开销）": "Based on the latest model request, measured like the context left in the Codex terminal (about 12K of fixed overhead excluded)"
+  "按最近一次模型请求计算，与 Codex 终端的剩余上下文同口径（扣除约 12K 固定开销）": "Based on the latest model request, measured like the context left in the Codex terminal (about 12K of fixed overhead excluded)",
+  "已复制到剪贴板（{p0} 个字符）": "Copied to the clipboard ({p0} characters)",
+  "终端复制了 {p0} 个字符": "The terminal copied {p0} characters",
+  "浏览器拒绝写入剪贴板": "The browser refused to write to the clipboard",
+  "终端复制的内容太大，没有写入剪贴板": "The text copied in the terminal is too large and was not written to the clipboard",
+  "松开粘贴": "Release to paste",
+  "合计 {p0} tokens。": "{p0} tokens in total. "
 } satisfies Record<string, string>;

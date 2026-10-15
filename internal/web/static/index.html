@@ -551,6 +551,12 @@
             </div>
             <div class="term-body">
               <div id="term-mount" class="term-mount"></div>
+              <!-- 终端程序复制的文字（OSC 52），浏览器不让脚本直接写剪贴板时（Safari）点这里写入；term-clipboard.ts -->
+              <div id="term-copy" class="term-copy hidden" role="status">
+                <span class="term-copy-msg"><span id="term-copy-label" class="term-copy-label"></span><span id="term-copy-preview" class="term-copy-preview"></span></span>
+                <button id="term-copy-btn" type="button" class="btn btn-sm btn-primary" data-icon="copy" data-i18n-text="[&quot;复制到剪贴板&quot;]">复制到剪贴板</button>
+                <button id="term-copy-close" type="button" class="icon-btn term-copy-x" aria-label="关闭" data-tip="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;,&quot;data-tip&quot;:&quot;关闭&quot;}"></button>
+              </div>
               <div id="term-loading" class="term-loading loading-block hidden">
                 <span class="spin"></span><span data-i18n-text="[&quot;连接中…（首次可能需要拉起容器）&quot;]">连接中…（首次可能需要拉起容器）</span>
               </div>

@@ -118,6 +118,63 @@ export async function terminalTouchSmoke(page, {send, input}) {
   await touch('touchStart', 200, 600); await touch('touchEnd');
   await pasteItem.waitFor({state:'detached'});
   assert.equal(await sentSince(from), '', 'the dismissing tap is not a click');
+  // iPhone / iPad: the system confirms every clipboard read with its own Paste bubble,
+  // so a long press only hints and tries a read on release instead of opening a menu first.
+  await page.evaluate(() => Object.defineProperty(navigator, 'userAgent', {configurable:true,
+    get:() => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1'}));
+  const hint = page.locator('.term-paste-hint');
+  const hold = async () => { await touch('touchStart', 200, 400); await page.waitForTimeout(650); await hint.filter({hasText:'松开粘贴'}).waitFor(); };
+  await page.evaluate(() => { window.__read = navigator.clipboard.read.bind(navigator.clipboard); });
+  const stubRead = delay => page.evaluate(delay => {
+    let once = true;
+    navigator.clipboard.read = () => once ? (once = false, new Promise((_, reject) => setTimeout(() => reject(new DOMException('no', 'NotAllowedError')), delay))) : window.__read();
+  }, delay);
+  await page.evaluate(() => navigator.clipboard.writeText('iOS 粘贴'));
+  // A browser that counts the release as a gesture shows its bubble right away: one step.
+  from = input().length;
+  await hold();
+  assert.equal(await pasteItem.count(), 0, 'no menu of our own while holding on iOS');
+  assert.ok((await hint.boundingBox()).y + 30 < 400, 'the hint floats above the finger');
+  await page.screenshot({path:'output/playwright/term-paste-hint.png', animations:'disabled'});
+  assert.equal(input().slice(from).join(''), '', 'holding sends nothing');
+  await touch('touchEnd');
+  await hint.waitFor({state:'detached'});
+  assert.equal(await sentSince(from), '\x1b[200~iOS 粘贴\x1b[201~', 'release pastes in one step');
+  assert.equal((await term()).focused, true, 'pasting keeps the keyboard up');
+  // Safari today: a long press release is only a "potential" gesture and the read is refused
+  // on the spot without any UI. The paste menu then opens at the finger instead of nothing.
+  await stubRead(0);
+  from = input().length;
+  await hold(); await touch('touchEnd');
+  await pasteItem.waitFor();
+  assert.ok((await pasteItem.boundingBox()).y + 30 < 400, 'the fallback menu floats above the finger');
+  assert.equal(await page.locator('#toast.show.err').count(), 0, 'a refused release read is not an error');
+  await tapPaste();
+  assert.equal(await sentSince(from), '\x1b[200~iOS 粘贴\x1b[201~', 'the menu tap pastes');
+  // Tapping beside the system bubble (a later rejection) cancels: no menu, no error, nothing typed.
+  await stubRead(450);
+  from = input().length;
+  await hold(); await touch('touchEnd');
+  await page.waitForTimeout(700);
+  assert.equal(await pasteItem.count(), 0, 'a dismissed bubble does not reopen a menu');
+  assert.equal(await page.locator('#toast.show.err').count(), 0, 'a dismissed bubble is not an error');
+  assert.equal(await sentSince(from), '');
+  // iOS takes over a long press near the caret (touchcancel) and shows its own Paste: stay out of it.
+  from = input().length;
+  await hold();
+  await cdp.send('Input.dispatchTouchEvent', {type:'touchCancel', touchPoints:[]});
+  await hint.waitFor({state:'detached'});
+  await page.waitForTimeout(200);
+  assert.equal(await pasteItem.count(), 0, 'no menu when the system took over');
+  assert.equal(await sentSince(from), '', 'no read when the system took over');
+  // A second finger during the hold hands over to pinch zoom: the hint goes, nothing is read.
+  from = input().length;
+  await hold();
+  await cdp.send('Input.dispatchTouchEvent', {type:'touchStart', touchPoints:[{x:200, y:400, id:0}, {x:260, y:460, id:1}]});
+  await hint.waitFor({state:'detached'});
+  await touch('touchEnd');
+  assert.equal(await sentSince(from), '', 'an interrupted hold does not paste');
+  await page.evaluate(() => { navigator.clipboard.read = window.__read; delete navigator.userAgent; });
   // Android also fires contextmenu on a long press; xterm would treat it as a right click.
   assert.equal(await page.locator('.xterm-screen').evaluate(el => {
     const e = new PointerEvent('contextmenu', {pointerType:'touch', bubbles:true, cancelable:true});

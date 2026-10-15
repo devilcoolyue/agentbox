@@ -801,5 +801,6 @@ export default {
     "任务列表": "Task list",
     "Claude 5 也使用任务列表": "Use the task list with Claude 5 too",
     "Claude Code 只给较早的模型（如 Opus 4.7、Sonnet 4.6）默认开启任务列表，Claude 5 默认关闭。开启后 Claude 5 也会在输入框上方列出任务和进度。": "Claude Code turns its task list on by default only for older models (such as Opus 4.7 and Sonnet 4.6) and leaves it off for Claude 5. Turn this on and Claude 5 also lists its tasks and progress above the message box.",
-    "开启后可能多花 token：每次请求都会多带任务工具的说明，模型也会多调用几次来建立和更新任务，费用计入你的额度。": "This may use more tokens: every request carries the task tools' descriptions, and the model makes a few extra calls to create and update tasks. The cost is charged to your balance."
+    "开启后可能多花 token：每次请求都会多带任务工具的说明，模型也会多调用几次来建立和更新任务，费用计入你的额度。": "This may use more tokens: every request carries the task tools' descriptions, and the model makes a few extra calls to create and update tasks. The cost is charged to your balance.",
+    "复制到剪贴板": "Copy to clipboard"
 };

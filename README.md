@@ -165,7 +165,7 @@ Chat and terminal share files, **not an automatic conversation context**. Each w
 
 ### Use the original CLI when you want direct control
 
-Switch to a Shell, Claude Code, or Codex CLI terminal. Run tests, install dependencies, and reconnect to the same tmux session after a network disconnect while the container remains running.
+Switch to a Shell, Claude Code, or Codex CLI terminal. Run tests, install dependencies, and reconnect to the same tmux session after a network disconnect while the container remains running. Text you select in Claude Code is copied to your local clipboard; when the browser blocks automatic clipboard writes (as Safari does), a "Copy to clipboard" button appears at the bottom of the terminal.
 
 [![Browser terminal showing the project shell and test output](docs/images/terminal.png)](docs/images/terminal.png)
 

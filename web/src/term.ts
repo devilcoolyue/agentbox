@@ -8,12 +8,15 @@ import type { TerminalTips, UsageEvents, UsageTotals } from "./types.js";
 import { $, isMobile, openLightbox, toast } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { fmtUSD } from "./quota.js";
+import { fmtTokens } from "./usage-math.js";
 import { refreshAll } from "./data.js";
 import { pastedImages } from "./chat.js";
 import { setTip } from "./tip.js";
-import { attachTermInputDebug, traceTermInput } from "./term-input-debug.js";
+import { attachTermInputDebug, traceTermEvent, traceTermInput } from "./term-input-debug.js";
 import { attachTouchScroll } from "./term-touch.js";
+import { attachTermClipboard, resetTermClipboard } from "./term-clipboard.js";
 import { menuJustDismissed, openMenuAt } from "./menu.js";
+import { enter, leave } from "./motion.js";
 
 const TerminalClass = window.Terminal && (window.Terminal.Terminal || window.Terminal);
 const FitAddonClass = window.FitAddon && (window.FitAddon.FitAddon || window.FitAddon);
@@ -116,6 +119,7 @@ export function termDisconnect() {
 // 完全收尾（切换/删除会话时）：连实例一起销毁。
 export function termTeardown() {
   termDisconnect();
+  resetTermClipboard();
   if (S.term) { S.term.dispose(); S.term = null; S.fit = null; }
   fitTermViewport();
 }
@@ -254,6 +258,7 @@ function ensureTerm() {
   S.term = term;
   S.fit = fit;
   fitTermViewport();
+  attachTermClipboard(term, refocusTerm);
 
   if (term.element && term.textarea) {
     bridgeDroppedInput(term.element, term.textarea);
@@ -261,8 +266,16 @@ function ensureTerm() {
   }
   attachTouchScroll(term, {
     longPress: (x, y) => {
+      traceTermEvent("longpress", { ios: systemConfirmsPaste() });
       if (termKeys.disabled) return;
-      openMenuAt(x, y, [{ label: i18nText("粘贴"), icon: "paste", run: () => void pasteClipboard() }]);
+      if (systemConfirmsPaste()) showPasteHint(x, y);
+      else openPasteMenu(x, y);
+    },
+    longPressEnd: (released, x, y) => {
+      traceTermEvent("longpress-end", { released, hint: !!pasteHint });
+      if (!pasteHint) return;
+      hidePasteHint();
+      if (released && !termKeys.disabled) void pasteOnRelease(x, y);
     },
     swallowTap: menuJustDismissed,
   });
@@ -543,12 +556,6 @@ const SPEND_POLL_MS = 15000;
 let spendTimer: ReturnType<typeof setInterval> | null = null;
 let spendFor = ""; // 当前显示的是哪个工作空间的数，切工作空间时先清空免得串台
 
-function fmtTok(n: number) {
-  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "K";
-  return String(n);
-}
-
 async function loadSpend() {
   const sess = S.current;
   const box = $("term-spend");
@@ -575,10 +582,11 @@ async function loadSpend() {
     className: "ts-cost", textContent: fmtUSD(total.cost_micro_usd, 2),
   });
   const tok = Object.assign(document.createElement("span"), {
-    className: "ts-tok", textContent: fmtTok(tokens) + " tok",
+    className: "ts-tok", textContent: fmtTokens(tokens) + " tok", // 与使用记录同一套 K/M/B 缩写
   });
   box.replaceChildren(label, cost, tok);
   setTip(box, () => i18nText("{p0} 个回合 / {p1} 条记录，含网页对话、终端和起标题。", { p0: String(total.turns), p1: String(total.rows) })
+    + i18nText("合计 {p0} tokens。", { p0: tokens.toLocaleString("en-US") })
     + i18nText("金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗计入这里但不扣额度。"));
   box.classList.remove("hidden");
 }
@@ -636,15 +644,64 @@ $("term-mount").addEventListener("paste", (e) => {
   void uploadTermImages(files);
 }, true);
 
+/* iPhone / iPad 上网页每次读剪贴板，系统都会在手指旁再弹一个「粘贴」气泡确认（只有本站自己
+ * 写进去的内容例外），先弹自己的菜单就得点两次，所以那边长按时不弹菜单，只提示「松开粘贴」：
+ * - 按在输入光标附近、键盘开着时，iOS 会在 0.5 秒多后接管这次长按（网页收到 touchcancel），
+ *   抬手弹原生编辑菜单，点「粘贴」一次就粘上——这时什么都不做，别跟它抢；
+ * - 正常抬手先直接读剪贴板，抬手若算手势，系统气泡出来点一下就好。但 WebKit 目前只把长按后的
+ *   抬手当「可能的手势」（够播音频、不够读剪贴板），读取立刻被拒、不出任何界面，于是当场在手指
+ *   处弹「粘贴」菜单，点它（真正的点击）再读，跟系统气泡确认。
+ * 安卓读剪贴板不确认，长按松手直接粘贴太容易误触，仍先弹菜单。iOS 上所有浏览器都是 WebKit；
+ * iPadOS 默认报成 Mac，靠触点数认出来。每次现算，测试里可以换 UA。 */
+function systemConfirmsPaste() {
+  const ua = navigator.userAgent;
+  return /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+}
+
+let pasteHint: HTMLElement | null = null;
+
+function showPasteHint(x: number, y: number) {
+  hidePasteHint();
+  const hint = document.createElement("div");
+  hint.className = "term-paste-hint";
+  hint.setAttribute("aria-hidden", "true");
+  hint.textContent = i18nText("松开粘贴");
+  document.body.append(hint);
+  // 浮在手指上方、别被手指挡住，贴着视口边缘时往里收
+  const w = hint.offsetWidth, h = hint.offsetHeight, edge = 8;
+  hint.style.left = Math.round(Math.min(Math.max(x - w / 2, edge), innerWidth - w - edge)) + "px";
+  hint.style.top = Math.round(Math.max(y - h - 44, edge)) + "px";
+  enter(hint, 4);
+  pasteHint = hint;
+}
+
+function hidePasteHint() {
+  const hint = pasteHint;
+  pasteHint = null;
+  if (hint) leave(hint, () => hint.remove(), 4);
+}
+
+function openPasteMenu(x: number, y: number) {
+  openMenuAt(x, y, [{ label: i18nText("粘贴"), icon: "paste", run: () => void pasteClipboard() }]);
+}
+
+async function pasteOnRelease(x: number, y: number) {
+  if (await pasteClipboard(true) === "refused" && S.term && !termKeys.disabled) openPasteMenu(x, y);
+}
+
+/* 被拒得这么快就不是人点掉了系统气泡，而是浏览器根本没给机会（这次不算手势） */
+const REFUSED_MS = 300;
+
 /* 手机上长按终端的「粘贴」。触屏上 xterm 的输入框只是光标处看不见的一个点，长按别处出不来
  * 系统的粘贴菜单，只能自己读剪贴板（要 HTTPS）：iOS 会再弹一个系统「粘贴」气泡确认，Android
  * 第一次会问剪贴板权限。图片与桌面粘贴一样上传后写入路径；文字走 xterm 的 paste，程序开着
  * 括号粘贴（Claude 会开）时多行文字整段送达，不会被当成一行行回车。 */
-async function pasteClipboard() {
+async function pasteClipboard(onRelease = false): Promise<"pasted" | "refused" | "dismissed" | "failed"> {
   const clip = navigator.clipboard;
-  if (!clip?.read && !clip?.readText) { toast(i18nText("浏览器不允许网页读取剪贴板（需要 HTTPS 访问）"), true); return; }
+  if (!clip?.read && !clip?.readText) { toast(i18nText("浏览器不允许网页读取剪贴板（需要 HTTPS 访问）"), true); return "failed"; }
   let text = "";
   const images: Blob[] = [];
+  const started = performance.now();
   try {
     if (clip.read) {
       for (const item of await clip.read()) {
@@ -655,12 +712,19 @@ async function pasteClipboard() {
     } else {
       text = await clip.readText();
     }
-  } catch {
+  } catch (e) {
+    const ms = Math.round(performance.now() - started);
+    traceTermEvent("clipboard-read", { ok: false, error: e instanceof DOMException ? e.name : String(e), ms, onRelease });
+    // 长按抬手时的读取：立刻被拒是这次抬手不算手势，交给调用方弹菜单；过一会儿才被拒是用户
+    // 点了系统「粘贴」气泡以外的地方，算取消
+    if (onRelease && e instanceof DOMException && e.name === "NotAllowedError") return ms < REFUSED_MS ? "refused" : "dismissed";
     toast(i18nText("没能读取剪贴板：请允许浏览器访问剪贴板后再试"), true);
-    return;
+    return "failed";
   }
-  if (!S.term || !S.current || termKeys.disabled) return;
+  traceTermEvent("clipboard-read", { ok: true, text: text.length, images: images.length, ms: Math.round(performance.now() - started), onRelease });
+  if (!S.term || !S.current || termKeys.disabled) return "failed";
   if (images.length) void uploadTermImages(images);
   else if (text) S.term.paste(text);
   else toast(i18nText("剪贴板里没有文字或图片"));
+  return "pasted";
 }

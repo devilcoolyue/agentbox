@@ -121,6 +121,40 @@
 }
 .term-overlay-box .spin { width: 26px; height: 26px; border-width: 3px; }
 
+/* 终端程序复制的文字（term-clipboard.ts）：浏览器不让直接写剪贴板时浮在终端底部，点一下写入。
+   压在终端内容上，所以用不透明的 --panel-solid */
+.term-copy {
+  position: absolute; left: 50%; bottom: 14px; z-index: 15;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+  width: max-content; max-width: calc(100% - 24px);
+  box-sizing: border-box;
+  padding: 8px 6px 8px 14px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
+  box-shadow: var(--shadow-md);
+  color: var(--text); font-size: 12.5px;
+}
+.term-copy-msg { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.term-copy-label { white-space: nowrap; }
+.term-copy-preview {
+  max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--muted); font: 12px/1.4 var(--mono);
+}
+.term-copy .btn { flex: none; }
+.term-copy-x { width: 30px; height: 30px; }
+
+/* iPhone / iPad 长按终端：提示松手即粘贴（term.ts 的 showPasteHint），挂在 body 上按手指定位 */
+.term-paste-hint {
+  position: fixed; z-index: 120;
+  padding: 6px 12px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  color: var(--text); font-size: 13px; white-space: nowrap;
+  pointer-events: none; user-select: none; -webkit-user-select: none;
+}
+
 /* 手机辅助键独立于终端滚动区；横滑查看更多，键盘开关始终留在右侧。 */
 .term-keys { display: none; }
 @media (max-width: 760px), (pointer: coarse) {

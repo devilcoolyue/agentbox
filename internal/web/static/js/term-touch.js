@@ -1,4 +1,4 @@
-/* term-touch：手机上单指上下滑动终端，翻看之前的输出；按住不动则交给 longPress（长按粘贴）。
+/* term-touch：手机上单指上下滑动终端，翻看之前的输出；按住不动则交给 longPress / longPressEnd（长按粘贴）。
  *
  * xterm 6 没有触摸滚动（自带的手势类没接到视口上），手指拖动落到浏览器手里，滚走的是整个
  * 页面。电脑上滚轮能翻，是 xterm 把滚轮编码成鼠标滚轮上报发给 tmux（tmux.conf 开了 mouse），
@@ -76,8 +76,16 @@ export function attachTouchScroll(term, opts = {}) {
     }
     const tracked = (list) => [...list].find((t) => t.identifier === finger);
     const cancelHold = () => { clearTimeout(hold); hold = undefined; };
+    /** 长按过的触摸收尾一次；axis 复位，后续事件不会再报 */
+    const endHold = (released) => {
+        if (axis !== "hold")
+            return;
+        axis = "";
+        opts.longPressEnd?.(released, startX, startY);
+    };
     host.addEventListener("touchstart", (e) => {
         swallow = stopFling() || !!opts.swallowTap?.();
+        endHold(false);
         finger = null;
         cancelHold();
         const zoomed = (window.visualViewport?.scale ?? 1) > 1.01;
@@ -107,6 +115,7 @@ export function attachTouchScroll(term, opts = {}) {
         if (e.touches.length > 1) {
             finger = null;
             cancelHold();
+            endHold(false);
             return;
         } // 第二根手指落下：交还浏览器缩放
         const t = tracked(e.changedTouches);
@@ -139,6 +148,7 @@ export function attachTouchScroll(term, opts = {}) {
             return;
         finger = null;
         cancelHold();
+        endHold(e.type === "touchend");
         if (axis !== "y" || e.type !== "touchend" || reducedMotion.matches)
             return;
         const first = samples[0], last = samples[samples.length - 1];

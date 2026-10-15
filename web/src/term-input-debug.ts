@@ -1,6 +1,7 @@
 /* 终端输入诊断（默认关闭）：地址带 ?imedebug 时，记录 xterm 输入框收到的键盘、组字与输入
- * 事件，以及最终发往 PTY 的数据，点「上传」存进共享目录的附件区（/shared/.file/），用来排查
- * 移动端输入法在真机上的事件顺序。只在开启期间记录（会包含这期间输入的字符），不自动上传。 */
+ * 事件、终端上的触摸与粘贴事件、长按粘贴读剪贴板的结果，以及最终发往 PTY 的数据，点「上传」
+ * 存进共享目录的附件区（/shared/.file/），用来排查移动端输入法与长按粘贴在真机上的事件顺序。
+ * 只在开启期间记录（会包含这期间输入的字符），不自动上传。 */
 import { t as i18nText } from "./i18n.js";
 "use strict";
 
@@ -25,6 +26,11 @@ export function traceTermInput(source: "xterm" | "bridge", data: string) {
   if (enabled) push({ ev: "send", source, data });
 }
 
+/** 记录终端里别的环节（长按、读剪贴板）发生了什么 */
+export function traceTermEvent(ev: string, data: Record<string, unknown> = {}) {
+  if (enabled) push({ ev, ...data });
+}
+
 export function attachTermInputDebug(host: HTMLElement, ta: HTMLTextAreaElement) {
   if (!enabled) return;
   const tail = () => ({ len: ta.value.length, tail: ta.value.slice(-4) });
@@ -43,6 +49,21 @@ export function attachTermInputDebug(host: HTMLElement, ta: HTMLTextAreaElement)
     host.addEventListener(type, (e) => { if (e.target === ta) push({ ev: type, ...describe(e), ...tail() }); }, true);
     host.addEventListener(type, (e) => { if (e.target === ta) push({ ev: type + ":after", ...describe(e), ...tail() }); });
   }
+
+  // 触摸只记形态，不记坐标以外的内容；冒泡阶段再记一次能看出有没有被拦（defaultPrevented）
+  for (const type of ["touchstart", "touchend", "touchcancel"]) {
+    host.addEventListener(type, (e) => {
+      const t = e as TouchEvent;
+      const p = t.changedTouches[0];
+      push({ ev: type, touches: t.touches.length, x: p && Math.round(p.clientX), y: p && Math.round(p.clientY), cancelable: t.cancelable });
+    }, { capture: true, passive: true });
+    host.addEventListener(type, (e) => push({ ev: type + ":after", prevented: e.defaultPrevented }), { passive: true });
+  }
+  host.addEventListener("contextmenu", (e) => push({ ev: "contextmenu", pointerType: (e as PointerEvent).pointerType, prevented: e.defaultPrevented }), true);
+  host.addEventListener("paste", (e) => {
+    const data = (e as ClipboardEvent).clipboardData;
+    push({ ev: "paste", target: (e.target as HTMLElement)?.className || (e.target as HTMLElement)?.tagName, types: data ? [...data.types] : [], text: data?.getData("text/plain").length ?? 0 });
+  }, true);
 
   const box = document.createElement("div");
   box.className = "term-input-debug";

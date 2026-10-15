@@ -97,7 +97,7 @@ EXTERNAL = {
     'desktop/src-tauri/src/credentials.rs': 'native/manual: AGENTBOX_CREDENTIAL_TEST=1 touches the OS credential store; isolated runner only',
 }
 
-BROWSER_HELPERS = ['feature-lifetimes-browser','actions','chat-footer','chat-context','chat-commands','chat-mentions','chat-tasks','chat-pages','diagnostics-browser','image-updates','update-components','mcp','pricing','problems-browser','remote-browser','responsive','skins','themes','switch-account','account-models','user-picker','term-touch','motion']
+BROWSER_HELPERS = ['feature-lifetimes-browser','actions','chat-footer','chat-context','chat-commands','chat-mentions','chat-tasks','chat-pages','diagnostics-browser','image-updates','update-components','mcp','pricing','problems-browser','remote-browser','responsive','skins','themes','switch-account','account-models','user-picker','term-touch','term-clipboard','motion']
 COVERED = {f'scripts/test-{name}.mjs':'browser.browser' for name in BROWSER_HELPERS}
 COVERED['scripts/test-remote-browser-live.mjs']='docker.remote-browser'
 COVERED['desktop/scripts/test-legacy-browser.mjs']='desktop.compat'

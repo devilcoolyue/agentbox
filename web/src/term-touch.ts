@@ -1,4 +1,4 @@
-/* term-touch：手机上单指上下滑动终端，翻看之前的输出；按住不动则交给 longPress（长按粘贴）。
+/* term-touch：手机上单指上下滑动终端，翻看之前的输出；按住不动则交给 longPress / longPressEnd（长按粘贴）。
  *
  * xterm 6 没有触摸滚动（自带的手势类没接到视口上），手指拖动落到浏览器手里，滚走的是整个
  * 页面。电脑上滚轮能翻，是 xterm 把滚轮编码成鼠标滚轮上报发给 tmux（tmux.conf 开了 mouse），
@@ -25,6 +25,9 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 export interface TouchOptions {
   /** 按住不动到时调用，坐标是手指位置；这次触摸之后的移动和抬手都不再交给终端 */
   longPress?: (x: number, y: number) => void;
+  /** 长按之后这次触摸结束，坐标同 longPress：released 为真是正常抬手（仍在 touchend 处理里）；
+   * 被系统接管（touchcancel，如 iOS 在输入光标附近接手长按）或落下第二根手指时为假 */
+  longPressEnd?: (released: boolean, x: number, y: number) => void;
   /** 为真时这次触摸只是在收起别处的弹层，抬手同样吞掉点击 */
   swallowTap?: () => boolean;
 }
@@ -90,9 +93,16 @@ export function attachTouchScroll(term: XtermTerminal, opts: TouchOptions = {}) 
   const tracked = (list: TouchList) => [...list].find((t) => t.identifier === finger);
 
   const cancelHold = () => { clearTimeout(hold); hold = undefined; };
+  /** 长按过的触摸收尾一次；axis 复位，后续事件不会再报 */
+  const endHold = (released: boolean) => {
+    if (axis !== "hold") return;
+    axis = "";
+    opts.longPressEnd?.(released, startX, startY);
+  };
 
   host.addEventListener("touchstart", (e) => {
     swallow = stopFling() || !!opts.swallowTap?.();
+    endHold(false);
     finger = null;
     cancelHold();
     const zoomed = (window.visualViewport?.scale ?? 1) > 1.01;
@@ -117,7 +127,7 @@ export function attachTouchScroll(term: XtermTerminal, opts: TouchOptions = {}) 
 
   host.addEventListener("touchmove", (e) => {
     if (finger === null) return;
-    if (e.touches.length > 1) { finger = null; cancelHold(); return; } // 第二根手指落下：交还浏览器缩放
+    if (e.touches.length > 1) { finger = null; cancelHold(); endHold(false); return; } // 第二根手指落下：交还浏览器缩放
     const t = tracked(e.changedTouches);
     if (!t) return;
     if (e.cancelable) e.preventDefault();
@@ -142,6 +152,7 @@ export function attachTouchScroll(term: XtermTerminal, opts: TouchOptions = {}) 
     if (finger === null || !tracked(e.changedTouches)) return;
     finger = null;
     cancelHold();
+    endHold(e.type === "touchend");
     if (axis !== "y" || e.type !== "touchend" || reducedMotion.matches) return;
     const first = samples[0]!, last = samples[samples.length - 1]!;
     // 停住再抬手不算甩动：最后一次移动离抬手太久就没有速度
