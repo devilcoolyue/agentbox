@@ -10,6 +10,7 @@ package server
 // on disk. All on-disk access goes through the room's fileMu.
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
@@ -304,18 +305,41 @@ func parseEntries(raw []byte) []histEntry {
 
 // threadResumeID is the provider conversation id a thread continues from:
 // the last chat_session entry ("" when the thread predates id recording).
+// A chat_session entry is a short line, so longer ones are skipped unread.
 func (s *Server) threadResumeID(sess store.Session, tid string) string {
-	raw, err := os.ReadFile(s.threadPath(sess, tid))
-	if err != nil {
-		return ""
-	}
 	resume := ""
-	for _, e := range parseEntries(raw) {
-		if e.meta.Kind == "chat_session" && e.meta.Text != "" {
-			resume = e.meta.Text
+	s.streamThread(sess, tid, func(line []byte, whole bool) {
+		if whole && bytes.Contains(line, []byte(`"chat_session"`)) {
+			var e logEntry
+			if json.Unmarshal(line, &e) == nil && e.Kind == "chat_session" && e.Text != "" {
+				resume = e.Text
+			}
+		}
+	})
+	return resume
+}
+
+// streamThread reads a thread's JSONL without loading it: tool output makes
+// long threads large. fn gets each line, or only the first 64 KiB of a longer
+// one (whole false); the slice is valid until fn returns.
+func (s *Server) streamThread(sess store.Session, tid string, fn func(line []byte, whole bool)) {
+	f, err := os.Open(s.threadPath(sess, tid))
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, 64<<10)
+	inLine := false // the previous chunk did not end its line
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if !inLine && len(chunk) > 0 {
+			fn(chunk, err != bufio.ErrBufferFull)
+		}
+		inLine = err == bufio.ErrBufferFull
+		if err != nil && !inLine {
+			return
 		}
 	}
-	return resume
 }
 
 func (s *Server) listThreads(sess store.Session) []threadMeta {

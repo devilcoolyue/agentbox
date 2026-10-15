@@ -79,6 +79,7 @@ type appServerConn struct {
 	block    string     // 当前流式块："" | "text" | "thinking"
 	sawDelta bool       // 当前 thinking 块内是否已有内容（summary 分段用分隔符续接）
 	meter    codexMeter // 本回合每次模型请求的用量，收尾事件时带出
+	context  string     // 上一次发出的上下文占用，限流更新原样重发时不再发
 
 	mu     sync.Mutex // 保护 turnID（interrupt 协程读）
 	thread string
@@ -364,6 +365,9 @@ func (c *appServerConn) handleNotification(method string, params json.RawMessage
 		c.emitDelta("thinking_delta", "thinking", deltaOf(params))
 	case "thread/tokenUsage/updated":
 		c.observeTokenUsage(params)
+		c.emitContext(params)
+	case "turn/plan/updated":
+		c.emitPlan(params)
 	case "turn/completed":
 		var p struct {
 			Turn struct {

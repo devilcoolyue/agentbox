@@ -2440,5 +2440,16 @@ export default {
   "暂时读不到工作区文件": "Can't read the workspace files right now",
   "没有匹配的文件": "No matching files",
   "工作区文件很多，只搜索了靠上的一部分": "This workspace has many files; only the upper levels were searched",
-  "引用文件：{p0}": "Mentioned file: {p0}"
+  "引用文件：{p0}": "Mentioned file: {p0}",
+  "任务 {p0}/{p1}": "Tasks {p0}/{p1}",
+  "全部完成": "All done",
+  "下一项：{p0}": "Next: {p0}",
+  "进行中": "In progress",
+  "待办": "To do",
+  "等待 {p0}": "Waiting on {p0}",
+  "任务太多，只显示前 200 项": "Too many tasks; showing the first 200",
+  "新建任务": "New task",
+  "更新任务": "Update task",
+  "更新任务列表": "Update task list",
+  "按最近一次模型请求计算，与 Codex 终端的剩余上下文同口径（扣除约 12K 固定开销）": "Based on the latest model request, measured like the context left in the Codex terminal (about 12K of fixed overhead excluded)"
 } satisfies Record<string, string>;

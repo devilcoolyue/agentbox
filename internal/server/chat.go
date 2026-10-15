@@ -355,6 +355,7 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 	if receipt != nil && receipt.receipt.Request != nil {
 		in.Suggestions = receipt.receipt.Request.Suggestions
 		in.Questions = receipt.receipt.Request.Questions
+		in.Tasks = receipt.receipt.Request.Tasks
 	}
 	if receipt != nil && receipt.receipt.Request != nil && receipt.receipt.Request.Delegation != nil {
 		// The grant lives exactly as long as this turn; closing it cancels any

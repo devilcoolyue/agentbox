@@ -1232,6 +1232,34 @@ details.think.streaming .think-body::after {
   .chat-delivery[data-tone="busy"] .delivery-dot, .delivery-item[data-tone="busy"] .delivery-mark::before { animation:none; }
 }
 
+/* ---- Agent 的任务列表（features/chat/tasks.ts）：与消息确认区同样是一行可展开的条，
+ * 一行写「任务 2/5 · 进行中的那项」，展开列出全部；进行中琥珀、全部完成绿。 ---- */
+.chat-tasks { --tone:var(--muted); margin:0 2px 6px; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+.chat-tasks[data-tone="busy"] { --tone:var(--amber); }
+.chat-tasks[data-tone="done"] { --tone:var(--green); }
+.tasks-toggle { display:flex; align-items:center; gap:8px; width:100%; min-width:0; min-height:32px; padding:4px 8px; border:0; border-radius:calc(8px * var(--radius-scale)); background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; transition:background var(--dur-fast) ease; }
+.tasks-toggle:hover { background:var(--panel-2); }
+.tasks-icon { flex:none; color:var(--tone); }
+.tasks-count { flex:none; color:var(--text); font-weight:500; font-variant-numeric:tabular-nums; }
+.tasks-current { flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tasks-current::before { content:"·"; margin-right:8px; }
+.tasks-chevron { flex:none; margin-left:auto; color:var(--muted); transition:transform var(--dur-fast) ease; }
+.tasks-toggle[aria-expanded="true"] .tasks-chevron { transform:rotate(180deg); }
+.tasks-list { list-style:none; max-height:min(220px,26dvh); overflow:auto; overscroll-behavior:contain; margin:2px 0 4px; padding:4px 0 0; border-top:1px solid var(--line-soft); }
+.task-item { display:grid; grid-template-columns:16px minmax(0,1fr) auto; column-gap:10px; align-items:start; padding:3px 8px; line-height:20px; }
+.task-mark { display:flex; align-items:center; justify-content:center; height:20px; color:var(--green); }
+.task-mark:empty::before { content:""; box-sizing:border-box; width:10px; height:10px; border-radius:50%; border:1.5px solid color-mix(in srgb, var(--muted) 80%, transparent); }
+.task-item[data-status="in_progress"] .task-mark:empty::before { border-color:var(--amber); background:var(--amber); animation:delivery-pulse 1.6s ease-in-out infinite; }
+.task-text { min-width:0; color:var(--text); }
+.task-item[data-status="in_progress"] .task-text { color:var(--text-hi); font-weight:500; }
+.task-item[data-status="completed"] .task-text { color:var(--muted); text-decoration:line-through; text-decoration-color:color-mix(in srgb, var(--muted) 55%, transparent); }
+.task-wait { color:var(--muted); font-size:11px; white-space:nowrap; }
+.task-more { padding:3px 8px 3px 34px; color:var(--muted); }
+@media (prefers-reduced-motion:reduce) {
+  .tasks-chevron, .tasks-toggle { transition:none; }
+  .task-item[data-status="in_progress"] .task-mark:empty::before { animation:none; }
+}
+
 /* ---- Agent 的提问卡片（features/chat/questions.ts）：回合停下等用户选，
  * 等待作答时描一圈琥珀；结束后收成「问题 + 回答」的摘要。 ---- */
 .question-card {

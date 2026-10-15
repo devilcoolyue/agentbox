@@ -132,3 +132,65 @@ func (c *appServerConn) observeTokenUsage(params json.RawMessage) {
 	c.mu.Unlock()
 	c.meter.observe(turn, p.TurnID, p.TokenUsage.Total, p.TokenUsage.Last, time.Now())
 }
+
+// emitContext 把最近一次请求的用量和上下文窗口转成 token_count 事件（与 Codex
+// 会话记录里的同名事件同形状），网页据此显示上下文占用，并随历史落盘以便刷新
+// 后还原。只在数值变了时发：限流更新会把同一份用量原样重发。
+func (c *appServerConn) emitContext(params json.RawMessage) {
+	var p struct {
+		TokenUsage struct {
+			Last *struct {
+				Input     int64 `json:"inputTokens"`
+				Cached    int64 `json:"cachedInputTokens"`
+				Output    int64 `json:"outputTokens"`
+				Reasoning int64 `json:"reasoningOutputTokens"`
+				Total     int64 `json:"totalTokens"`
+			} `json:"last"`
+			Window *int64 `json:"modelContextWindow"`
+		} `json:"tokenUsage"`
+	}
+	if json.Unmarshal(params, &p) != nil || p.TokenUsage.Last == nil {
+		return
+	}
+	last := p.TokenUsage.Last
+	info := map[string]any{"last_token_usage": map[string]any{"input_tokens": last.Input, "cached_input_tokens": last.Cached,
+		"output_tokens": last.Output, "reasoning_output_tokens": last.Reasoning, "total_tokens": last.Total}}
+	if w := p.TokenUsage.Window; w != nil && *w > 0 {
+		info["model_context_window"] = *w
+	}
+	raw, err := json.Marshal(map[string]any{"type": "token_count", "info": info})
+	if err != nil || string(raw) == c.context {
+		return
+	}
+	c.context = string(raw)
+	c.emit(raw)
+}
+
+// emitPlan 把 update_plan 的计划（turn/plan/updated，每次带完整列表）转成
+// codex exec --json 同形状的 todo_list 事件；exec 只有 completed，这里另带
+// status 保留「进行中」。
+func (c *appServerConn) emitPlan(params json.RawMessage) {
+	var p struct {
+		Explanation *string `json:"explanation"`
+		Plan        []struct {
+			Step   string `json:"step"`
+			Status string `json:"status"`
+		} `json:"plan"`
+	}
+	if json.Unmarshal(params, &p) != nil {
+		return
+	}
+	items := make([]map[string]any, 0, len(p.Plan))
+	for _, step := range p.Plan {
+		status := step.Status
+		if status == "inProgress" {
+			status = "in_progress"
+		}
+		items = append(items, map[string]any{"text": step.Step, "completed": step.Status == "completed", "status": status})
+	}
+	item := map[string]any{"type": "todo_list", "items": items}
+	if p.Explanation != nil && *p.Explanation != "" {
+		item["explanation"] = *p.Explanation
+	}
+	c.emitJSON(map[string]any{"type": "item.updated", "item": item})
+}

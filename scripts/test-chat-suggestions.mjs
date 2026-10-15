@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Next-prompt suggestions in the composer against a synthetic HTTP/WS chat. No model calls.
+// Next-prompt suggestions in the composer, and the opt-in Claude 5 task list
+// sent with the request, against a synthetic HTTP/WS chat. No model calls.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile} from 'node:fs/promises';
+import {mkdir,readFile} from 'node:fs/promises';
 import {resolve,extname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {cancelledFetchError,launchBrowser} from './playwright-launch.mjs';
@@ -45,7 +46,8 @@ async function scenario(browser,{mobile}={}){
  await context.route('**/api/**',async route=>{
   const req=route.request(),path=new URL(req.url()).pathname,session=path.split('/')[3];let body={},status=200;
   if(path==='/api/login')body={token:'alice-token'};
-  else if(path==='/api/me')body={user:'alice',role:'user',draft_protocol:1,draft_scope:'c'.repeat(64),chat_protocol:1,chat_scope:scope,prompt_suggestions:1,timezone:'UTC',models:{claude:[{id:'claude-opus-5',label:'Claude Opus 5'}],codex:[{id:'gpt-5.5',label:'GPT-5.5'}]},quota:{metered:false}};
+  else if(path.endsWith('/chat/tasks'))body={tasks:[]};
+  else if(path==='/api/me')body={user:'alice',role:'user',draft_protocol:1,draft_scope:'c'.repeat(64),chat_protocol:1,chat_scope:scope,prompt_suggestions:1,chat_tasks:1,timezone:'UTC',models:{claude:[{id:'claude-opus-5',label:'Claude Opus 5'}],codex:[{id:'gpt-5.5',label:'GPT-5.5'}]},quota:{metered:false}};
   else if(path==='/api/sessions')body=[{id:'space-a',name:'Space A',user:'alice',agent:'claude',account_id:'cl',status:'running',default_model:'claude-opus-5'},{id:'space-b',name:'Space B',user:'alice',agent:'claude',account_id:'cl',status:'running',default_model:'claude-opus-5'},{id:'space-c',name:'Space C',user:'alice',agent:'codex',account_id:'cx',status:'running',default_model:'gpt-5.5'}];
   else if(path==='/api/accounts')body=[{id:'cl',type:'claude',label:'Claude',cred_status:'ok'},{id:'cx',type:'codex',label:'Codex',cred_status:'ok'}];
   else if(path==='/api/onboarding')body={version:1,can_configure:false,can_create:true,has_workspaces:true,accounts:[],default_models:{claude:'claude-opus-5',codex:'gpt-5.5'},container_resources:{cpus:1,memory_mb:512,pids_limit:128}};
@@ -117,6 +119,23 @@ async function scenario(browser,{mobile}={}){
  await toggle(true);
  assert.equal(await placeholder(),'关闭时的提示');
  assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_chat_suggestions')),null);
+ // The Claude 5 task list costs tokens: off by default, explained with the
+ // cost next to the switch, sent as "tasks" from the next message once on.
+ assert.ok(puts.every(p=>p.input.tasks===undefined),'task list requested by default');
+ await page.evaluate(()=>{location.hash='#/settings/interface';});
+ const card=page.locator('#set-chat-tasks'),tasksToggle=page.locator('#chat-tasks-claude5');
+ await card.waitFor({state:'visible'});
+ assert.equal(await tasksToggle.isChecked(),false);
+ assert.match(await card.locator('.dc-callout.warn').innerText(),/多花 token/);
+ assert.equal(await page.locator('#sec-interface').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'task list card overflows');
+ await card.screenshot({path:`output/playwright/chat-tasks-setting${mobile?'-mobile':''}.png`,animations:'disabled'});
+ await tasksToggle.setChecked(true);
+ assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_chat_task_tools')),'on');
+ await open('space-a');
+ await input.fill('分几步做');await page.locator('#chat-send').click();
+ await page.waitForFunction(()=>document.querySelector('#chat-input').value==='');await page.waitForTimeout(200);
+ assert.equal(puts.at(-1).input.tasks,true,'task list not requested');
+ await finish('space-a');
  // A running turn's history has no suggestion yet.
  await open('space-b');
  assert.equal(await placeholder(),DEFAULT);assert.ok(!(await key.isVisible()));
@@ -126,13 +145,15 @@ async function scenario(browser,{mobile}={}){
  await input.fill('codex 任务');await page.locator('#chat-send').click();
  await page.waitForFunction(()=>document.querySelector('#chat-input').value==='');await page.waitForTimeout(200);
  assert.equal(puts.at(-1).session,'space-c');assert.equal(puts.at(-1).input.suggestions,undefined);
+ assert.equal(puts.at(-1).input.tasks,undefined,'Codex was sent the Claude task list switch');
  assert.deepEqual(errors,[]);
  await context.close();
 }
 
+await mkdir('output/playwright',{recursive:true});
 const browser=await launchBrowser();
 try{
  await scenario(browser);
  await scenario(browser,{mobile:true});
- console.log('chat suggestions ok');
+ console.log('chat suggestions and task list switch ok');
 }finally{await browser.close();server.closeAllConnections();server.close();}

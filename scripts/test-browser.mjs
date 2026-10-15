@@ -23,6 +23,7 @@ import { chatFooterSmoke } from './test-chat-footer.mjs';
 import { chatContextSmoke } from './test-chat-context.mjs';
 import { chatCommandsSmoke } from './test-chat-commands.mjs';
 import { chatMentionsSmoke } from './test-chat-mentions.mjs';
+import { chatTasksSmoke } from './test-chat-tasks.mjs';
 import { chatHistorySettingsSmoke, chatPagesSmoke } from './test-chat-pages.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
@@ -64,7 +65,7 @@ export async function smoke(page) {
  const me = {user:'fixture',role:'admin',timezone:'UTC',models:{claude:[],codex:[]},quota:{metered:false}};
  Object.defineProperty(me,'chat_history_timeout_sec',{enumerable:true,get:()=>settings.chat_history_timeout_sec});
  let sessions = [{id:'fixture-space',name:'Fixture workspace',agent:'codex',account_id:'fixture',account_label:'Fixture',status:'stopped',default_model:'fixture'}];
- const chatMessages = []; let chatSocket, historyEntries = [], historyCosts = {};
+ const chatMessages = []; let chatSocket, historyEntries = [], historyCosts = {}, historyThread = null;
  let usageRows = [];
  await page.routeWebSocket('**/api/sessions/*/chat?*', ws => { chatSocket=ws; ws.onMessage(data => chatMessages.push(JSON.parse(data))); });
  const terminalInput = []; let terminalSocket;
@@ -126,7 +127,7 @@ export async function smoke(page) {
    keyWrites++; accounts.find(a=>a.id===path.split('/')[3]).auth_mode='apikey';
    accounts.find(a=>a.id===path.split('/')[3]).cred_status='ok';body={ok:true};
   } else if(['/api/proxies','/api/users','/api/tunnel/clients'].includes(path) || path.endsWith('/files')) body=[];
-  else if(path.endsWith('/history')) body={entries:historyEntries,thread:null,costs:historyCosts};
+  else if(path.endsWith('/history')) body={entries:historyEntries,thread:historyThread,costs:historyCosts};
   else if(path === '/api/settings') {
    if(route.request().method()==='PUT'){settingsWrites++;settings={...settings,...route.request().postDataJSON()};}
    body=settings;
@@ -299,6 +300,7 @@ export async function smoke(page) {
    await page.locator('#chat-input').waitFor({state:'visible'});
    await chatCommandsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
    await chatMentionsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
+   await chatTasksSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];},setThread:t=>{historyThread=t;}});
    assert.deepEqual(errors,[]); return;
   }
   if (process.env.AGENTBOX_BROWSER_ONLY_CHAT_PAGES === '1') {
@@ -775,6 +777,7 @@ export async function smoke(page) {
   await chatContextSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
   await chatCommandsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
   await chatMentionsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
+  await chatTasksSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];},setThread:t=>{historyThread=t;}});
   await chatPagesSmoke(page,{session:'fixture-space',closeChat:()=>chatSocket.close()});
   await page.locator('.tab[data-tab="files"]').click();
   await at('#/sessions/fixture-space/files','#tab-files');

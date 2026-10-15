@@ -27,6 +27,7 @@ import { createOlderHistory } from "./features/chat/older.js";
 import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { createBackground } from "./features/chat/background.js";
 import { createContextMeter } from "./features/chat/context-meter.js";
+import { createTaskPanel, taskToolsEnabled, setTaskToolsEnabled } from "./features/chat/tasks.js";
 import { createCommandMenu } from "./features/chat/commands.js";
 import { createMentionMenu } from "./features/chat/mentions.js";
 import { createInputMarks } from "./features/chat/input-marks.js";
@@ -103,6 +104,10 @@ const stream = createChatStream({ append: appendChat, working: setWorkingLabel, 
     footer: () => live.footer, log: () => $("chat-log"), nearBottom });
 const background = createBackground(() => renderBackground());
 const contextMeter = createContextMeter({ el: () => $("chat-context"), agent: sessionAgent, session: () => S.current?.id });
+// Agent 的任务列表（Claude 的任务文件、TodoWrite、Codex 的计划），进行中那项同时当执行指示的文案
+const tasks = createTaskPanel({ el: () => $("chat-tasks"), agent: sessionAgent, session: () => S.current?.id, running: () => S.chatState === "running",
+    load: (id, thread, signal) => api(`/sessions/${id}/chat/tasks?thread=${encodeURIComponent(thread)}`, { signal }),
+    changed: () => applyWorkingLabel() });
 // 斜杠命令：/clear、/model、/effort 由网页处理，其余原样交给 CLI
 const commandMenu = createCommandMenu({
     input: () => $("chat-input"), menu: () => $("chat-commands"),
@@ -173,6 +178,7 @@ export function chatTeardown() {
     stream.reset();
     live.reset();
     contextMeter.reset();
+    tasks.reset();
     setChatStatus("idle");
 }
 /* 贴底判定：用户已在底部附近（正在跟读）才把视口拉到最底，
@@ -206,6 +212,7 @@ function handleChatMsg(msg) {
             sealQuestions(); // 新一轮开始，之前没答的提问不再可答
             stream.flush(); // 上一回合的回放立刻放完，不让新消息插到它前面
             noteThreadTitle(msg.text);
+            tasks.turnStarted();
             appendChat(renderUserTurn(msg.text, msg.ts));
             live.context.turn = msg.turn;
             break;
@@ -216,6 +223,7 @@ function handleChatMsg(msg) {
             observeAnswer(live.context, msg.event, msg.ts);
             background.observe(msg.event);
             contextMeter.observe(msg.event);
+            tasks.observe(msg.event);
             commandMenu.observe(msg.event);
             // The failed result a stop produces; the interrupted status says it instead.
             if (msg.state !== "interrupted")
@@ -343,6 +351,7 @@ export function setChatStatus(state, error) {
             appendChat(interruptedChip());
     }
     refreshQuestions(); // 回合结束后没答的提问不再可答
+    tasks.render(); // 运行中展开、空闲时收起
     renderFollow();
     updateChatPlaceholder();
     updateHero();
@@ -392,7 +401,9 @@ const sender = new ChatSender({
         const questions = S.chatQuestions === 1 && sessionAgent() === "claude";
         // Sent while a turn runs: queue it after the turn or steer the running turn.
         const delivery = sendingFollow || undefined;
-        const input = { scope: S.chatScope, thread_id: composerThread, text, ...pick, attachments: draft.attachments.map(a => a.path), ...(delegation ? { delegation } : {}), ...(suggestions ? { suggestions } : {}), ...(questions ? { questions } : {}), ...(delivery ? { delivery } : {}) };
+        // Claude Code leaves its task list off for Claude 5; turning it on costs tokens, so only on request.
+        const taskTools = S.chatTasks === 1 && sessionAgent() === "claude" && taskToolsEnabled();
+        const input = { scope: S.chatScope, thread_id: composerThread, text, ...pick, attachments: draft.attachments.map(a => a.path), ...(delegation ? { delegation } : {}), ...(suggestions ? { suggestions } : {}), ...(questions ? { questions } : {}), ...(delivery ? { delivery } : {}), ...(taskTools ? { tasks: true } : {}) };
         return { owner: JSON.stringify([S.token, chatEpoch, S.current.id, composerThread]), content: JSON.stringify([raw, pick, attachmentFingerprint(), delegation || null]), input, draft };
     },
     durable: () => !!outbox?.enabled, connected: () => connection.ready,
@@ -1156,6 +1167,8 @@ export async function loadHistory(opts = {}) {
         contextMeter.replay(entries);
         suggestion.set(latestSuggestion(entries));
         const id = active_thread || thread?.id;
+        tasks.reset();
+        tasks.replay(entries, id);
         // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效
         kept = !!keep && keep.thread === id && keep.start === start;
         older.reset(id && typeof start === "number" ? { thread: id, start, more: !!has_more && start > 0 } : null);
@@ -1192,6 +1205,7 @@ export async function reloadThread() {
     stream.reset(); // 回放动画与积压一并丢弃，历史里有完整内容
     live.reset();
     contextMeter.reset();
+    tasks.reset();
     $("chat-log").replaceChildren();
     setThreadBar(null);
     await loadHistory();
@@ -1235,6 +1249,7 @@ function ensureWorking() {
         turn.append(av, body);
         workingEl = turn;
         renderBackground();
+        applyWorkingLabel();
     }
     $("chat-log").appendChild(workingEl); // 移到末尾（已在 DOM 中则只是重新排位）
 }
@@ -1256,15 +1271,26 @@ function clearWorking() {
     if (workingEl)
         workingEl.remove();
     workingEl = null;
+    workStage = "";
 }
+/* 阶段文案（思考 / 生成 / 运行工具…）；有进行中的任务时与 CLI 一样改说这项任务 */
+let workStage = "";
 function setWorkingLabel(text) {
+    workStage = text;
+    applyWorkingLabel();
+}
+function applyWorkingLabel() {
     const l = workingEl && workingEl.querySelector(".work-label");
-    if (l) {
-        if (typeof text === "function")
-            setTextRender(l, text);
-        else
-            l.textContent = text;
-    }
+    if (!l)
+        return;
+    const task = tasks.activeLabel();
+    const text = task ? task.replace(/(…|\.{3})$/, "") + "…" : workStage;
+    if (!text)
+        return;
+    if (typeof text === "function")
+        setTextRender(l, text);
+    else
+        l.textContent = text;
 }
 let disposeChat;
 export function initChat() {
@@ -1365,6 +1391,7 @@ export function initChat() {
             attachFile(f);
     }, { signal: lifetime.signal });
     $("chat-suggest").addEventListener("click", () => { suggestion.accept(); $("chat-input").focus(); }, { signal: lifetime.signal });
+    $("chat-tasks-toggle").addEventListener("click", () => tasks.toggle(), { signal: lifetime.signal });
     $("chat-follow").addEventListener("click", event => { if (event.detail <= 1)
         void sendFollow(followMode(sessionAgent())); }, { signal: lifetime.signal });
     const followSelect = $("chat-followup-mode");
@@ -1398,6 +1425,9 @@ export function initChat() {
     const suggestToggle = $("chat-suggest-enabled");
     suggestToggle.checked = suggestionsEnabled();
     suggestToggle.addEventListener("change", () => { setSuggestionsEnabled(suggestToggle.checked); suggestion.refresh(); }, { signal: lifetime.signal });
+    const taskToolsToggle = $("chat-tasks-claude5");
+    taskToolsToggle.checked = taskToolsEnabled();
+    taskToolsToggle.addEventListener("change", () => setTaskToolsEnabled(taskToolsToggle.checked), { signal: lifetime.signal });
     $("btn-attach").addEventListener("click", () => $("attach-input").click(), { signal: lifetime.signal });
     $("attach-input").addEventListener("change", () => {
         if (!S.current)

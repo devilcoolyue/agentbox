@@ -28,6 +28,7 @@ export const S = {
     promptSuggestions: 0,
     chatQuestions: 0,
     chatFollowups: 0,
+    chatTasks: 0,
     preserveChatCopiesOnSignout: false,
     role: "",
     sessions: [],

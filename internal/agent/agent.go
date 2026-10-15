@@ -73,6 +73,13 @@ type ChatExtras struct {
 	// request that is metered from the session's cost-state, not its stream.
 	// Codex has no such feature and ignores it.
 	PromptSuggestions bool
+	// TaskTools turns on Claude Code's task list tools (TaskCreate/TaskUpdate…)
+	// for the models it leaves them off for in -p: 2.1.296+ enables them by
+	// default only on the older models it lists (Claude 3.x, Opus/Sonnet
+	// 4.0–4.7, Haiku 4.5), so Claude 5 needs CLAUDE_CODE_ENABLE_TODO_TOOLS.
+	// The listed models already have them; the variable changes nothing there.
+	// Codex has its own plan tool and ignores it.
+	TaskTools bool
 	// Interactive keeps stdin open as stream-json for the whole turn so the
 	// host can answer the CLI's questions (AskUserQuestion), steer it with
 	// follow-up messages and interrupt it in protocol; the turn's text is then
@@ -170,6 +177,9 @@ func ChatCommandWith(extras ChatExtras, agentType, permissionMode, resumeID, mod
 		}
 		if extras.PromptSuggestions {
 			args = append(args, "--prompt-suggestions", "true")
+		}
+		if extras.TaskTools {
+			prelude += "export CLAUDE_CODE_ENABLE_TODO_TOOLS=1; "
 		}
 		// Variadic flags last-but-one: each is followed by another option, so
 		// commander cannot swallow a later argument as a list item.

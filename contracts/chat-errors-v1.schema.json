@@ -51,6 +51,10 @@
           "type": "boolean",
           "description": "The sending page can show the agent's questions and answer them during the turn; only sent when /me reports chat_questions."
         },
+        "tasks": {
+          "type": "boolean",
+          "description": "Turns on Claude Code's task list tools for models the CLI leaves them off for (Claude 5), at some extra token cost; only sent when /me reports chat_tasks."
+        },
         "delivery": {
           "type": "string",
           "enum": ["queue", "steer"],

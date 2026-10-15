@@ -55,6 +55,7 @@ export interface AppState {
   promptSuggestions:number;
   chatQuestions:number;
   chatFollowups:number;
+  chatTasks:number;
   preserveChatCopiesOnSignout:boolean;
   /** "admin" | "user"：admin 才能进系统设置 */
   role: string;
@@ -110,6 +111,7 @@ export const S: AppState = {
   promptSuggestions:0,
   chatQuestions:0,
   chatFollowups:0,
+  chatTasks:0,
   preserveChatCopiesOnSignout:false,
   role: "",
   sessions: [],

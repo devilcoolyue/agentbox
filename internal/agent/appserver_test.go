@@ -245,3 +245,32 @@ func TestCodexMeterTotalReset(t *testing.T) {
 		t.Fatalf("请求 %v", got)
 	}
 }
+
+// 协议形状按 codex-cli 0.162.1 的 generate-json-schema（ThreadTokenUsage 带
+// modelContextWindow，TurnPlanUpdated 带完整计划）；ID 与数值为合成。
+const planScript = `{"id":1,"result":{"userAgent":"codex"}}
+{"id":2,"result":{"thread":{"id":"T1"}}}
+{"id":4,"result":{"turn":{"id":"U3","status":"inProgress"}}}
+{"method":"turn/plan/updated","params":{"threadId":"T1","turnId":"U3","explanation":"先读再改","plan":[{"step":"读配置","status":"completed"},{"step":"改代码","status":"inProgress"},{"step":"跑测试","status":"pending"}]}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"T1","turnId":"U3","tokenUsage":{"total":{"inputTokens":900,"cachedInputTokens":100,"outputTokens":30,"reasoningOutputTokens":5,"totalTokens":930},"last":{"inputTokens":900,"cachedInputTokens":100,"outputTokens":30,"reasoningOutputTokens":5,"totalTokens":930},"modelContextWindow":272000}}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"T1","turnId":"U3","tokenUsage":{"total":{"inputTokens":900,"cachedInputTokens":100,"outputTokens":30,"reasoningOutputTokens":5,"totalTokens":930},"last":{"inputTokens":900,"cachedInputTokens":100,"outputTokens":30,"reasoningOutputTokens":5,"totalTokens":930},"modelContextWindow":272000}}}
+{"method":"turn/completed","params":{"turn":{"id":"U3","status":"completed"}}}
+`
+
+func TestRunCodexTurnForwardsPlanAndContext(t *testing.T) {
+	var events []string
+	err := RunCodexTurn(context.Background(), io.Discard, strings.NewReader(planScript), func() {}, nil,
+		CodexTurn{Prompt: "hi", ThreadID: "T1", Cwd: "/workspace"}, func(line []byte) { events = append(events, string(line)) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(events, "\n")
+	plan := `{"item":{"explanation":"先读再改","items":[{"completed":true,"status":"completed","text":"读配置"},{"completed":false,"status":"in_progress","text":"改代码"},{"completed":false,"status":"pending","text":"跑测试"}],"type":"todo_list"},"type":"item.updated"}`
+	if !strings.Contains(joined, plan) {
+		t.Fatalf("计划事件缺失\n%s", joined)
+	}
+	context := `{"info":{"last_token_usage":{"cached_input_tokens":100,"input_tokens":900,"output_tokens":30,"reasoning_output_tokens":5,"total_tokens":930},"model_context_window":272000},"type":"token_count"}`
+	if strings.Count(joined, context) != 1 {
+		t.Fatalf("上下文事件应恰好一条（重发的不再发）\n%s", joined)
+	}
+}

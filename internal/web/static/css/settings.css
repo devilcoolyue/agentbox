@@ -82,9 +82,10 @@
 .card h3 { margin: 0; font-size: 13.5px; font-weight: 600; }
 .card h3.agent-h3 { display: flex; align-items: center; gap: 8px; }
 .card .card-desc { margin: -8px 0 0; color: var(--muted); font-size: 12.5px; }
-#set-local-saving .note { margin:0; color:var(--muted); font-size:12px; line-height:1.6; }
-#set-local-saving label.check { color:var(--text); align-items:flex-start; }
-#set-local-saving label.check input { flex:none; margin-top:3px; }
+/* 「界面与提示」里的个人偏好卡片：勾选项用正文色，说明是小号灰字 */
+:is(#set-local-saving, #set-chat-suggestions, #set-chat-tasks, #set-chat-followups) .note { margin:0; color:var(--muted); font-size:12px; line-height:1.6; }
+:is(#set-local-saving, #set-chat-suggestions, #set-chat-tasks) label.check { color:var(--text); align-items:flex-start; }
+:is(#set-local-saving, #set-chat-suggestions, #set-chat-tasks) label.check input { flex:none; margin-top:3px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { font-size: 12.5px; color: var(--muted); }

@@ -427,6 +427,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/sessions/{id}/archive", s.auth(s.withSession(s.handleArchive)))
 	mux.Handle("GET /api/sessions/{id}/files", s.auth(s.withSession(s.handleFiles)))
 	mux.Handle("GET /api/sessions/{id}/files/search", s.auth(s.withSession(s.handleFileMentions)))
+	mux.Handle("GET /api/sessions/{id}/chat/tasks", s.auth(s.withSession(s.handleChatTasks)))
 	mux.Handle("DELETE /api/sessions/{id}/files", s.auth(s.withSession(s.handleFileDelete)))
 	mux.Handle("POST /api/sessions/{id}/files/move", s.auth(s.withSession(s.handleFileMove)))
 	mux.Handle("POST /api/sessions/{id}/files/mkdir", s.auth(s.withSession(s.handleFileMkdir)))
@@ -714,7 +715,9 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		// Accepts chat request "questions" and answers at chat/questions/{id}.
 		"chat_questions": 1,
 		// Accepts chat request "delivery" (queue / steer) while a turn runs.
-		"chat_followups":           1,
+		"chat_followups": 1,
+		// Accepts chat request "tasks" (Claude 5 task list tools).
+		"chat_tasks":               1,
 		"user":                     u.Name,
 		"role":                     u.Role,
 		"models":                   s.cfg.GetModels(),

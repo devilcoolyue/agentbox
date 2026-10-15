@@ -125,6 +125,9 @@ type Input struct {
 	// the answer within the turn. Only a page that can show the question
 	// sets it; otherwise nobody could answer and the turn would just wait.
 	Questions bool
+	// Tasks turns on Claude Code's task list tools for Claude 5 models, which
+	// the CLI leaves off; the user opted in to the extra tokens.
+	Tasks bool
 }
 type Failure struct {
 	Code  string
@@ -261,6 +264,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	extras := in.Extras
 	extras.PromptSuggestions = in.Suggestions && r.PromptSuggestions(ctx, sess)
 	extras.Interactive = in.Questions && r.Questions(ctx, sess)
+	extras.TaskTools = in.Tasks // Claude only; other agents ignore it
 
 	if receipt != nil {
 		if err := r.Attachments(sess, receipt.Input().Request.Attachments); err != nil {

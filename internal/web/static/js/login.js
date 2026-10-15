@@ -68,6 +68,7 @@ export async function tryEnter() {
     S.promptSuggestions = me.prompt_suggestions === 1 ? 1 : 0;
     S.chatQuestions = me.chat_questions === 1 ? 1 : 0;
     S.chatFollowups = me.chat_followups === 1 ? 1 : 0;
+    S.chatTasks = me.chat_tasks === 1 ? 1 : 0;
     S.preserveChatCopiesOnSignout = false;
     rememberChatIdentity(localStorage, S.draftScope, me.chat_scope || "");
     S.role = me.role;

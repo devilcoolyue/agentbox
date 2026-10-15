@@ -8,9 +8,26 @@ import { fmtTokens } from "../../usage-math.js";
  * 输入 + 缓存写入 + 缓存读取 = 这次喂给模型的整段上下文，与 claude-hud 同口径；
  * 窗口大小取回合结果 modelUsage 里的 contextWindow，不按模型名猜。
  * 子 Agent（parent_tool_use_id）与跑腿各有各的上下文，不算进来。
- * 只认 Claude：Codex 的事件里暂时没有上下文窗口。 */
+ * Codex 走 app-server 时服务端把每次请求的用量与窗口转成 token_count 事件，按
+ * Codex 终端「N% context left」的算法换成已用比例；exec 回退路径没有窗口，不显示。 */
 
 const WARN = 70, CRITICAL = 85; // claude-hud 的默认阈值
+// codex-rs 的 BASELINE_TOKENS：系统提示等固定开销，「context left」的分子分母都先扣掉它
+const CODEX_BASELINE = 12000;
+
+/** Codex 一次请求留在上下文里的量：总量去掉推理（推理不进下一次请求） */
+export function codexContextTokens(usage: { total_tokens?: unknown; input_tokens?: unknown; output_tokens?: unknown; reasoning_output_tokens?: unknown } | undefined) {
+  if (!usage) return 0;
+  const total = count(usage.total_tokens) || count(usage.input_tokens) + count(usage.output_tokens);
+  return Math.max(0, total - count(usage.reasoning_output_tokens));
+}
+
+/** 已用比例；Codex 与它的终端同算法（扣掉固定开销后的比例），Claude 直接相除 */
+export function contextPercent(agent: string, used: number, window: number) {
+  if (!used || !window) return -1;
+  if (agent === "codex" && window > CODEX_BASELINE) return Math.min(100, Math.round(Math.max(0, used - CODEX_BASELINE) / (window - CODEX_BASELINE) * 100));
+  return Math.min(100, Math.round(used / window * 100));
+}
 
 type Usage = { input_tokens?: unknown; cache_creation_input_tokens?: unknown; cache_read_input_tokens?: unknown };
 
@@ -65,6 +82,13 @@ export function createContextMeter(hooks: { el: () => HTMLElement; agent: () => 
       const kept = meta?.preserved_messages;
       const ids = Array.isArray(kept?.all_uuids) ? kept.all_uuids : Array.isArray(kept?.uuids) ? kept.uuids : [];
       replays = new Set(ids.filter((id): id is string => typeof id === "string"));
+    } else if (ev.type === "token_count") {
+      const info = ev.info as { last_token_usage?: Parameters<typeof codexContextTokens>[0]; model_context_window?: unknown } | undefined;
+      const tokens = codexContextTokens(info?.last_token_usage);
+      if (!tokens) return;
+      used = tokens;
+      compacted = 0;
+      if (count(info?.model_context_window)) size = count(info?.model_context_window);
     } else if (ev.type === "result") {
       replays.clear();
       const window = contextWindow(ev.modelUsage, model);
@@ -78,10 +102,11 @@ export function createContextMeter(hooks: { el: () => HTMLElement; agent: () => 
   function render() {
     const el = hooks.el();
     const window = size || known.get(knownKey()) || 0;
-    const show = hooks.agent() === "claude" && (used > 0 || compacted > 0);
+    const agent = hooks.agent();
+    const show = used > 0 || compacted > 0;
     el.classList.toggle("hidden", !show);
     if (!show) return;
-    const percent = used && window ? Math.min(100, Math.round(used / window * 100)) : -1;
+    const percent = contextPercent(agent, used, window);
     el.dataset.level = percent >= CRITICAL ? "critical" : percent >= WARN ? "warn" : "ok";
     el.style.setProperty("--ctx", String(Math.max(percent, 0)));
     const value = el.querySelector<HTMLElement>(".ctx-value")!;
@@ -98,7 +123,8 @@ export function createContextMeter(hooks: { el: () => HTMLElement; agent: () => 
     setAttrRender(el, "aria-label", summary);
     setTip(el, () => [
       summary(),
-      i18nText("按最近一次模型请求计算（输入 + 缓存），与 CLI 状态栏同口径"),
+      agent === "codex" ? i18nText("按最近一次模型请求计算，与 Codex 终端的剩余上下文同口径（扣除约 12K 固定开销）")
+        : i18nText("按最近一次模型请求计算（输入 + 缓存），与 CLI 状态栏同口径"),
       ...percent >= CRITICAL ? [i18nText("接近上限时 CLI 会自动压缩较早的对话")] : [],
     ].join("\n"));
   }

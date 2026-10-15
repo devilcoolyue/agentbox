@@ -752,6 +752,37 @@ function summarizeInput(input: unknown) {
   return s.length > 100 ? s.slice(0, 100) + "…" : s;
 }
 
+/* 任务列表的工具（列表本身在输入框上方的任务面板，features/chat/tasks.ts）：对话流里
+ * 只留一行说明做了什么；只读的 TaskList / TaskGet 与 CLI 一样不显示。
+ * 不是任务工具返回 undefined，不显示返回 null。 */
+const TASK_STATUS: Record<string, () => string> = {
+  pending: () => i18nText("待办"),
+  in_progress: () => i18nText("进行中"),
+  completed: () => i18nText("已完成"),
+  deleted: () => i18nText("已删除"),
+};
+function taskToolChip(name: string | undefined, input: unknown): HTMLElement | null | undefined {
+  const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const text = (v: unknown) => typeof v === "string" ? v : "";
+  switch (name) {
+    case "TaskList": case "TaskGet":
+      return null;
+    case "TaskCreate":
+      return toolChip(i18nText("新建任务"), text(o.subject));
+    case "TaskUpdate": {
+      const status = TASK_STATUS[text(o.status)]?.() || "";
+      const what = text(o.subject);
+      return toolChip(i18nText("更新任务"), ["#" + text(o.taskId), status && "→ " + status, what].filter(Boolean).join(" "));
+    }
+    case "TodoWrite": {
+      const todos = Array.isArray(o.todos) ? o.todos as { status?: unknown }[] : [];
+      const done = todos.filter(t => t?.status === "completed").length;
+      return toolChip(i18nText("更新任务列表"), todos.length ? `${done}/${todos.length}` : "");
+    }
+  }
+  return undefined;
+}
+
 /* 流式生成中的临时节点：body 由 chat.ts 的打字机填充（text 走 Markdown
  * 重渲染，thinking 纯文本），完整事件到达后整体移除交给正式渲染。
  * thinking 生成中默认展开。 */
@@ -859,6 +890,8 @@ export function renderEvent(ev: AgentEvent | undefined) {
           out.push(toolChip(i18nText("委派评价"), [String(input.verdict || ""), String(input.note || "")].filter(Boolean).join(" · ")));
           continue;
         }
+        const task = taskToolChip(block.name, block.input);
+        if (task !== undefined) { if (task) out.push(task); continue; }
         const input = block.input as Record<string, unknown> | undefined;
         out.push(toolChip(block.name!, summarizeInput(block.input), htmlOutputPath(block.input), input?.run_in_background === true));
       }

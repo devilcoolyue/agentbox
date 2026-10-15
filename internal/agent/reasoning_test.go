@@ -114,6 +114,16 @@ func TestChatRequestsReasoningSummaries(t *testing.T) {
 	if strings.Contains(strings.Join(claude, " "), "--prompt-suggestions") {
 		t.Fatalf("suggestions requested by default: %q", claude)
 	}
+	// Claude 5's task list is opt-in: the CLI reads it from the environment.
+	for _, agentType := range []string{"claude", "codex"} {
+		cmd, err := ChatCommandWith(ChatExtras{TaskTools: true}, agentType, "bypassPermissions", "", "", "", "")
+		if err != nil || strings.Contains(cmd[2], "export CLAUDE_CODE_ENABLE_TODO_TOOLS=1; ") != (agentType == "claude") {
+			t.Fatalf("%s task tools: %v %q", agentType, err, cmd)
+		}
+	}
+	if strings.Contains(strings.Join(claude, " "), "CLAUDE_CODE_ENABLE_TODO_TOOLS") {
+		t.Fatalf("task tools on by default: %q", claude)
+	}
 	if cmd, err := ChatCommandWith(ChatExtras{Interactive: true}, "claude", "bypassPermissions", "", "", "", ""); err != nil || !strings.Contains(strings.Join(cmd, " "), "--input-format stream-json --permission-prompt-tool stdio") {
 		t.Fatalf("interactive claude: %v %q", err, cmd)
 	}

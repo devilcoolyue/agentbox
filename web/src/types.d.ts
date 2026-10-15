@@ -356,6 +356,8 @@ export interface Me {
   chat_questions?:number;
   /** 1：回合运行中可发跟进消息，请求带 delivery（queue 排队 / steer 引导）。 */
   chat_followups?:number;
+  /** 1：对话请求可带 tasks，给 Claude 5 打开 Claude Code 的任务列表工具。 */
+  chat_tasks?:number;
   user: string;
   /** "admin" | "user"：admin 才能进系统设置 */
   role: string;
@@ -1050,6 +1052,22 @@ export interface ThreadRenamed {
  * 事件、Codex 的 app-server item 事件，两家结构不同且各自还有新旧版本。这里
  * 只声明渲染管线真正读到的字段，全部可选 —— 拿不到就走兜底分支，与原来的
  * `ev && ev.type === ...` 防御式写法一致。 */
+
+/** GET /sessions/{id}/chat/tasks 的一项：Claude Code 的任务文件（server/chat_tasks.go） */
+export interface ChatTask {
+  id: string;
+  subject: string;
+  active_form?: string;
+  /** pending / in_progress / completed */
+  status: string;
+  /** 还没做完、挡着这一项的任务编号 */
+  blocked_by?: string[];
+}
+
+export interface ChatTasksView {
+  tasks: ChatTask[];
+  truncated?: boolean;
+}
 
 export interface ContentBlock {
   type?: string;

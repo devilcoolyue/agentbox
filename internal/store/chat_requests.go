@@ -55,6 +55,9 @@ type ChatRequestInput struct {
 	// Questions says the sending page can show the model's questions and
 	// answer them within the turn; omitted when false, like Suggestions.
 	Questions bool `json:"questions,omitempty"`
+	// Tasks turns on Claude Code's task list for models it leaves it off for
+	// (Claude 5), which can cost more tokens; omitted when false.
+	Tasks bool `json:"tasks,omitempty"`
 	// Delivery is how a message sent while a turn runs should reach the agent:
 	// "queue" runs it as the next turn, "steer" hands it to the running turn
 	// when that turn takes more input (else it queues). Empty is an ordinary

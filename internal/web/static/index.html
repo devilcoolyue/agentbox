@@ -450,6 +450,13 @@
                   </div>
                   <div id="chat-delivery-list" class="hidden"></div>
                 </section>
+                <!-- Agent 的任务列表（features/chat/tasks.ts） -->
+                <section id="chat-tasks" class="chat-tasks hidden" aria-label="任务列表" data-i18n-attrs='{"aria-label":"任务列表"}'>
+                  <button id="chat-tasks-toggle" type="button" class="tasks-toggle" aria-expanded="false" aria-controls="chat-tasks-list">
+                    <svg class="tasks-icon" width="14" height="14" data-icon="list-check" aria-hidden="true"></svg><span class="tasks-count"></span><span class="tasks-current"></span><svg class="tasks-chevron" width="14" height="14" data-icon="chevron" aria-hidden="true"></svg>
+                  </button>
+                  <ol id="chat-tasks-list" class="tasks-list hidden"></ol>
+                </section>
                 <p id="chat-draft-status" class="hidden" role="status"></p>
                 <button id="chat-draft-check" type="button" class="btn btn-sm btn-ghost hidden" data-icon="refresh" data-i18n="重新检查附件">重新检查附件</button>
                 <div id="chat-attach" class="chat-attach hidden"></div>
@@ -1084,6 +1091,13 @@
                 <p class="card-desc" data-i18n="仅影响此浏览器，从下一条消息开始生效。">仅影响此浏览器，从下一条消息开始生效。</p>
                 <label class="check"><input id="chat-suggest-enabled" type="checkbox"><span data-i18n="Claude 回合结束后，在空输入框里显示下一步提示，按 Tab 填入">Claude 回合结束后，在空输入框里显示下一步提示，按 Tab 填入</span></label>
                 <p class="note" data-i18n="生成提示会在每轮结束后多调用一次模型，费用计入你的额度，在使用记录里单独列为「下一步提示」。">生成提示会在每轮结束后多调用一次模型，费用计入你的额度，在使用记录里单独列为「下一步提示」。</p>
+              </div>
+              <div class="card" id="set-chat-tasks">
+                <h3 data-i18n="任务列表">任务列表</h3>
+                <p class="card-desc" data-i18n="仅影响此浏览器，从下一条消息开始生效。">仅影响此浏览器，从下一条消息开始生效。</p>
+                <label class="check"><input id="chat-tasks-claude5" type="checkbox"><span data-i18n="Claude 5 也使用任务列表">Claude 5 也使用任务列表</span></label>
+                <p class="note" data-i18n="Claude Code 只给较早的模型（如 Opus 4.7、Sonnet 4.6）默认开启任务列表，Claude 5 默认关闭。开启后 Claude 5 也会在输入框上方列出任务和进度。">Claude Code 只给较早的模型（如 Opus 4.7、Sonnet 4.6）默认开启任务列表，Claude 5 默认关闭。开启后 Claude 5 也会在输入框上方列出任务和进度。</p>
+                <p class="dc-callout warn" data-i18n="开启后可能多花 token：每次请求都会多带任务工具的说明，模型也会多调用几次来建立和更新任务，费用计入你的额度。">开启后可能多花 token：每次请求都会多带任务工具的说明，模型也会多调用几次来建立和更新任务，费用计入你的额度。</p>
               </div>
               <div class="card" id="set-chat-followups">
                 <h3 data-i18n="任务运行中发送的消息">任务运行中发送的消息</h3>

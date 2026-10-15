@@ -10,6 +10,7 @@ export interface ChatRequestInput {
   delegation?: DelegationOptions;
   suggestions?: boolean;
   questions?: boolean;
+  tasks?: boolean;
   delivery?: "queue" | "steer";
 }
 export interface DelegationOptions {

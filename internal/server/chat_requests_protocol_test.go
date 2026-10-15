@@ -679,6 +679,36 @@ const claudeSuggestionOutput = `{"type":"system","subtype":"init","session_id":"
 {"type":"prompt_suggestion","suggestion":"Run the tests next","uuid":"synthetic","session_id":"provider-session"}
 `
 
+// Claude 5's task list is the user's opt-in: the frozen request turns on the
+// CLI's task tools through its environment, and only for that request.
+func TestChatReceiptTasksFollowRequest(t *testing.T) {
+	for _, want := range []bool{true, false} {
+		f := newAgentReceiptFixture(t, config.AgentClaude, claudeSuggestionOutput, false)
+		f.input.Tasks = want
+		f.unblock()
+		id := newOperationID()
+		if c := receiptFrom(t, f.request("PUT", "requests/"+id, "alice", f.input)); c.Request == nil || c.Request.Tasks != want {
+			t.Fatal("request not frozen", c.Request)
+		}
+		if c := f.wait(t, id); c.State != store.ChatCompleted {
+			t.Fatal(c)
+		}
+		chats := 0
+		f.commands.Range(func(_, v any) bool {
+			if cmd := v.(string); strings.Contains(cmd, "claude -p") {
+				chats++
+				if strings.Contains(cmd, "export CLAUDE_CODE_ENABLE_TODO_TOOLS=1") != want {
+					t.Errorf("tasks=%t command %q", want, cmd)
+				}
+			}
+			return true
+		})
+		if chats != 1 {
+			t.Fatalf("tasks=%t chats=%d", want, chats)
+		}
+	}
+}
+
 // The receipt's choice reaches the CLI only when the container's Claude Code
 // knows the flag; its --help is probed once per container, never by default.
 func TestChatReceiptPromptSuggestionsFollowRequestAndCLI(t *testing.T) {
