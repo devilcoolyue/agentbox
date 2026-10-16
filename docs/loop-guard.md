@@ -2,7 +2,7 @@
 
 `abox-loop-guard` 放在 agent harness 与模型 API 之间，实时检测短句复读并取消上游请求。它是独立二进制，不需要运行 Agentbox、Docker 或数据库；同一实现也能通过 Go 包 `agentbox/pkg/loopguard` 嵌入其他网关。它不属于 Claude/Codex 的技能或 MCP 工具：这些入口通常不能观察并中断一次尚未结束的模型输出。
 
-Agentbox 内已作为首个扩展 `agentbox.loop-guard` 提供：管理员在「扩展」菜单启用、批准权限并绑定 Claude API Key / 中转账号即可，不必再单独部署本网关或手改账号 base URL（Codex 账号在后续版本支持）。两者共用 `pkg/modelgw` 的转发与协议解码和 `pkg/loopguard` 的检测核心。设计与限制见 [扩展与 SPI 协议](architecture/extensions-spi.md)。独立二进制继续保留，用于不运行 Agentbox 的场景。
+Agentbox 内已作为首个扩展 `agentbox.loop-guard` 提供：管理员在「扩展」菜单启用、批准权限并绑定 Claude 或 Codex 的 API Key / 中转账号即可，不必再单独部署本网关或手改账号 base URL；独占连接在扩展页的「每次请求独占一条连接」开启。迁移步骤见下文「从独立网关迁到扩展」。两者共用 `pkg/modelgw` 的转发与协议解码和 `pkg/loopguard` 的检测核心。设计与限制见 [扩展与 SPI 协议](architecture/extensions-spi.md)。独立二进制继续保留，用于不运行 Agentbox 的场景。
 
 ```text
 Codex / Claude Code / DSH / Pi / 其他客户端
@@ -44,6 +44,19 @@ go build -o /tmp/abox-loop-guard ./cmd/abox-loop-guard
 Linux 常驻服务模板见 [`deploy/abox-loop-guard.service`](../deploy/abox-loop-guard.service)。二进制位于 `/opt/abox-loop-guard/current/abox-loop-guard`，环境文件 `/etc/abox-loop-guard/gateway.env` 提供 `LOOP_GUARD_LISTEN`、`LOOP_GUARD_UPSTREAM`、`LOOP_GUARD_AUTH_HEADER` 和 `LOOP_GUARD_TOKEN`。服务使用动态低权限用户，无需改动 `agentbox.service`。先验证监听、鉴权和上游连通性，再切换目标账号；回退时先还原账号 base URL，再停止网关。
 
 `-dedicated-connections` 开启请求独占连接：只用 HTTP/1.1，禁止 keep-alive 复用，循环取消时关闭这一次请求的 TCP/TLS 连接。systemd 模板要求环境文件另设 `LOOP_GUARD_DEDICATED_CONNECTIONS=true` 或 `false`。代价是每次请求重新握手。默认不开启时，HTTP/2 取消通常通过 RST_STREAM 结束单条流，连接仍可供其他请求使用；这本身也是合法取消，不能凭连接是否复用判断中转站有没有终止模型。独占连接能明确关闭我们这一跳，不能强制中转/CDN 关闭它自己到供应商的连接。
+
+## 从独立网关迁到扩展
+
+适用于已经把某个账号的 base URL 手工改到独立网关（如 `http://172.17.0.1:8788`）的部署。顺序的目的是全程都有保护：先让扩展网关接手，再撤掉独立网关这一层。
+
+1. 发布包含 Codex 支持的版本（按 `docs/architecture/deployment-layout.md` 的布局用 `deploy/release.py` 暂存、激活）。发布会重启 `agentbox.service`，不影响独立网关。
+2. 管理员打开「扩展 → 循环保护」：勾选启用，批准「请求指纹」「读取模型回复文字」，「作用于哪些账号」选「指定账号」并勾上原来受保护的账号；独立网关开了 `LOOP_GUARD_DEDICATED_CONNECTIONS=true` 的，在扩展列表页勾上「每次请求独占一条连接」。保存后扩展页显示「运行中」、网关状态为「运行中」。此时该账号的请求依次经过扩展网关和独立网关，两层都在检查。账号绑定了出口 IP 代理时例外：扩展网关会经代理去连宿主机上的独立网关，通常连不上（不会回落直连）；这种情况先做第 4 步、再启用扩展，中间短暂没有保护。
+3. 在该账号的空间里新开一轮对话：工作空间头部出现盾牌标记；对话正常回复；回复期间扩展页「检查中的流」大于 0。容器访问不到网关（防火墙只放行了特定端口）时 CLI 会连接失败，需放行 `extensions.gateway.bind` 的端口（默认 1083）。
+4. 编辑该账号的 API Key 设置：地址填回原供应商（例如 `https://api.1024gate.com/v1`），Key 填原来那一个（保存接口要求重新填写），接口类型不变。保存会把账号池改回真实上游，并把各空间的会话配置重新写成扩展网关地址。
+5. 再开一轮对话确认正常，并确认独立网关日志不再有新请求：`journalctl -u abox-loop-guard --since "5 minutes ago"`。已经开着的终端里正在运行的 Codex 仍用旧地址，重新启动即可。
+6. `systemctl disable --now abox-loop-guard`。保留 `/etc/abox-loop-guard/gateway.env` 和 `/opt/abox-loop-guard`，以便回退。
+
+回退：`systemctl enable --now abox-loop-guard`，把账号地址改回独立网关，然后在扩展页解绑或停用。只停用扩展而不改账号地址时，账号直连原供应商、不再受保护。
 
 ## 协议与检测范围
 

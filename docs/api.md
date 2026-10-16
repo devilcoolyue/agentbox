@@ -203,9 +203,10 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 
 | 方法与路径 | 请求 / 返回用途 |
 | --- | --- |
-| `GET /api/extensions` | `gateway`（监听地址、是否运行、绑定失败原因）与已安装扩展列表；每项含清单字段、`setting`（保存的设置与 `revision`）、`status`（状态、指标、检查中的流、重启次数）和 `accounts`（可选账号及 `eligible`，只有 API Key / 中转账号可绑定） |
+| `GET /api/extensions` | `gateway`（监听地址、是否运行、绑定失败原因）与已安装扩展列表；每项含清单字段、`setting`（保存的设置与 `revision`）、`status`（状态、指标、检查中的流、重启次数）和 `accounts`（可选账号及 `eligible`，只有 Claude / Codex 的 API Key / 中转账号可绑定）；`gateway` 另含 `dedicated_connections` 与 `revision` |
 | `GET /api/extensions/{id}` | 单个扩展，字段同上 |
 | `PUT /api/extensions/{id}` | `{expected_revision, enabled, order, config, permissions, bindings:{mode, accounts}, failure_policy}`；`config` 按清单的 `config_schema` 校验并补默认值，启用时必须批准钩子所需权限；修订不符返回 409。保存后扩展按新设置重启 |
+| `PUT /api/extensions/gateway` | `{expected_revision, dedicated_connections}`：切换网关的独占连接，返回网关视图；修订不符返回 409。新请求立即使用，已在进行的流不受影响 |
 | `GET /api/extensions/{id}/logs?since=` | 扩展日志（内存环形缓冲，最近 200 条），返回 `seq` 大于 `since` 的条目 |
 | `GET /api/extensions/{id}/events` | 最近的中断与拒绝（内存，最近 200 条，重启清空，不含提示词与回复内容） |
 

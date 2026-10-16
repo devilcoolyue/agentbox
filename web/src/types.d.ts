@@ -40,8 +40,17 @@ export interface SessionExtension {
 }
 
 /** GET /api/extensions（server.extensionsResponse）。 */
+export interface ExtensionGateway {
+  bind: string;
+  host: string;
+  active: boolean;
+  error?: string;
+  dedicated_connections: boolean;
+  revision: number;
+}
+
 export interface ExtensionsResponse {
-  gateway: { bind: string; host: string; active: boolean; error?: string };
+  gateway: ExtensionGateway;
   extensions: ExtensionView[];
 }
 

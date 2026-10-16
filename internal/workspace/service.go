@@ -44,6 +44,7 @@ type Runtime interface {
 type Service struct {
 	mcp             func(context.Context, store.Session) error
 	network         func(context.Context, store.Session) error
+	connection      func(context.Context, store.Session, config.Account) error
 	cfg             *config.Config
 	store           Store
 	dock            Runtime
@@ -172,6 +173,12 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 				return store.Session{}, err
 			}
 		}
+		// Each chat turn and terminal starts a new CLI process, which rereads
+		// its connection; extension bindings changed since the last start
+		// apply without restarting the container.
+		if err := s.applyConnection(ctx, cur, acct); err != nil {
+			return store.Session{}, fmt.Errorf("%w: %w", ErrCredentials, err)
+		}
 		s.applyMCP(ctx, cur)
 		s.activity.Touch(cur.ID)
 		return cur, nil
@@ -201,6 +208,10 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	}
 	if err := agent.SeedDefaultModel(cur.Agent, s.HomeDir(cur), acct.ResolveModel(cur.DefaultModel), dockerx.AgentUID, dockerx.AgentGID); err != nil {
 		return store.Session{}, err
+	}
+	// After seeding: the pool copy just written carries the real upstream.
+	if err := s.applyConnection(ctx, cur, acct); err != nil {
+		return store.Session{}, fmt.Errorf("%w: %w", ErrCredentials, err)
 	}
 	// Only advertise the intranet proxy to the agent when the feature is on;
 	// the hint keys off $AGENTBOX_INTRANET_PROXY so it stays inert if no tunnel
@@ -465,6 +476,19 @@ func (s *Service) UseRunning(ctx context.Context, id string, fn func(store.Sessi
 		return errors.New("工作空间未运行")
 	}
 	return fn(sess)
+}
+
+// SetConnectionHook installs the per-start connection adjustment (the Codex
+// extension gateway endpoint). Call it before the service is shared.
+func (s *Service) SetConnectionHook(hook func(context.Context, store.Session, config.Account) error) {
+	s.connection = hook
+}
+
+func (s *Service) applyConnection(ctx context.Context, sess store.Session, acct config.Account) error {
+	if s.connection == nil {
+		return nil
+	}
+	return s.connection(ctx, sess, acct)
 }
 
 // MCP failures keep the terminal available for repair. Chat checks again before inference.

@@ -28,7 +28,8 @@ func extensionTestServer(t *testing.T, upstream string) (*Server, store.Session)
 		"accounts": []config.Account{
 			{ID: "relay", Label: "Relay", Type: config.AgentClaude, Env: map[string]string{envAnthropicBaseURL: upstream, envAnthropicToken: "relay-token"}},
 			{ID: "oauth", Label: "Subscription", Type: config.AgentClaude},
-			{ID: "codex", Label: "Codex", Type: config.AgentCodex},
+			// No auth.json yet: not eligible until a test writes an API key.
+			{ID: "codex", Label: "Codex", Type: config.AgentCodex, CredentialsDir: t.TempDir()},
 		}})
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
@@ -265,5 +266,160 @@ func TestExtensionEnvNoProxyAndTmuxCleanup(t *testing.T) {
 	}
 	if !strings.Contains(tmuxEnvSync(nil), "set-environment -gu ANTHROPIC_BASE_URL") {
 		t.Fatal("injected base URL would linger in tmux after unbinding")
+	}
+}
+
+// writeCodexRelayPool writes the pool files SaveCodexKey produces for a relay.
+func writeCodexRelayPool(t *testing.T, dir, base string) []byte {
+	t.Helper()
+	pool := []byte("forced_login_method = \"api\"\nmodel_provider = \"agentbox\"\n\n[model_providers.agentbox]\nbase_url = \"" + base +
+		"\"\nname = \"agentbox\"\nrequires_openai_auth = true\nwire_api = \"responses\"\n")
+	if err := os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"OPENAI_API_KEY":"codex-key"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), pool, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return pool
+}
+
+func waitForFile(t *testing.T, path, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		raw, _ := os.ReadFile(path)
+		if strings.Contains(string(raw), want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never contained %q:\n%s", path, want, raw)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// Codex API key / relay accounts reach the gateway through the session's
+// config.toml: binding rewrites the session copy (never the pool), the gateway
+// forwards to the pool's real upstream and interrupts a Responses loop, and
+// unbinding restores the upstream.
+func TestExtensionCodexRelayThroughSessionConfig(t *testing.T) {
+	var calls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.URL.Path != "/v1/responses" || r.Header.Get("Authorization") != "Bearer codex-key" {
+			t.Errorf("bad upstream request %s auth=%q", r.URL.Path, r.Header.Get("Authorization"))
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		for i := 0; i < 2000 && r.Context().Err() == nil; i++ {
+			b, _ := json.Marshal(map[string]any{"type": "response.reasoning_summary_text.delta", "item_id": "rs_1", "output_index": 0,
+				"summary_index": 0, "delta": "Checking the file again.\n"})
+			io.WriteString(w, "event: response.reasoning_summary_text.delta\ndata: "+string(b)+"\n\n")
+			w.(http.Flusher).Flush()
+		}
+	}))
+	defer upstream.Close()
+	s, _ := extensionTestServer(t, "https://relay.example.com")
+	acct, _ := s.cfg.Account("codex")
+	credDir := acct.CredentialsDir
+	pool := writeCodexRelayPool(t, credDir, upstream.URL+"/v1")
+	sess := store.Session{ID: "s3", User: "alice", Name: "codex", Agent: config.AgentCodex, AccountID: "codex"}
+	if err := s.store.Put(sess); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(s.homeDir(sess), ".codex")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sessionConfig := filepath.Join(home, "config.toml")
+	if err := os.WriteFile(sessionConfig, append([]byte("model = \"session-model\"\n"), pool...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	enableLoopGuard(t, s, 0, "codex")
+	gatewayURL := s.extensionGatewayURL(sess.ID)
+	// applyExtensions reconciled the seeded session in the background; a
+	// workspace start would apply the same through the connection hook.
+	waitForFile(t, sessionConfig, gatewayURL)
+	if raw, _ := os.ReadFile(filepath.Join(credDir, "config.toml")); string(raw) != string(pool) {
+		t.Fatalf("gateway URL leaked into the account pool:\n%s", raw)
+	}
+	if raw, _ := os.ReadFile(sessionConfig); !strings.Contains(string(raw), "session-model") {
+		t.Fatalf("session settings lost:\n%s", raw)
+	}
+	if !gatewayEligible(acct) {
+		t.Fatal("Codex API key account not eligible")
+	}
+	env := s.extensionEnv(sess, acct, []string{"NO_PROXY=localhost"})
+	if envValue(env, "NO_PROXY") != "localhost,127.0.0.1" || envValue(env, envAnthropicBaseURL) != "" {
+		t.Fatalf("Codex env: %v", env)
+	}
+	if v := s.view(sess); len(v.Extensions) != 1 {
+		t.Fatalf("workspace view hides the inspecting extension: %+v", v.Extensions)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for s.extensions.Status("agentbox.loop-guard").State != "running" {
+		if time.Now().After(deadline) {
+			t.Fatal("extension did not start")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	gw := httptest.NewServer(s.extGW.proxy)
+	defer gw.Close()
+	req, _ := http.NewRequest("POST", gw.URL+"/x/"+sess.ID+"/"+s.extensionMAC(sess.ID)+"/responses", strings.NewReader(`{"stream":true,"input":"x"}`))
+	req.Header.Set("Authorization", "Bearer codex-key")
+	resp, err := gw.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.Header.Get("X-Agentbox-Extensions") != "monitoring" || !strings.Contains(string(body), "response.failed") ||
+		!strings.Contains(string(body), "model_output_loop") || calls.Load() != 1 {
+		t.Fatalf("Codex loop not interrupted: %s calls=%d %.300s", resp.Header.Get("X-Agentbox-Extensions"), calls.Load(), body)
+	}
+	if events := s.extensions.Events("agentbox.loop-guard"); len(events) != 1 || events[0].Account != "codex" || events[0].Session != sess.ID {
+		t.Fatalf("events: %+v", events)
+	}
+
+	// Unbinding restores the pool's real upstream for the next CLI start.
+	w := extensionRequest(s, "root", "PUT", "/api/extensions/agentbox.loop-guard",
+		`{"expected_revision":1,"enabled":true,"permissions":["model.request.fingerprint","model.stream.text"],"bindings":{"mode":"none"}}`,
+		s.handleUpdateExtension, "agentbox.loop-guard")
+	if w.Code != http.StatusOK {
+		t.Fatalf("unbind: %d %s", w.Code, w.Body.String())
+	}
+	waitForFile(t, sessionConfig, upstream.URL+"/v1")
+	if raw, _ := os.ReadFile(sessionConfig); strings.Contains(string(raw), "/x/") {
+		t.Fatalf("gateway URL left behind:\n%s", raw)
+	}
+}
+
+func TestExtensionGatewayDedicatedConnections(t *testing.T) {
+	s, _ := extensionTestServer(t, "https://relay.example.com")
+	acct, _ := s.cfg.Account("relay")
+	rt, err := s.extensionTransport(acct)
+	if err != nil || rt.(*http.Transport).DisableKeepAlives {
+		t.Fatalf("default transport: %v", err)
+	}
+	put := func(body string) *httptest.ResponseRecorder {
+		return extensionRequest(s, "root", "PUT", "/api/extensions/gateway", body, s.handleUpdateExtensionGateway, "")
+	}
+	if w := put(`{"dedicated_connections":true}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("missing revision accepted: %d", w.Code)
+	}
+	w := put(`{"expected_revision":0,"dedicated_connections":true}`)
+	var gw extensionGatewayView
+	if err := json.Unmarshal(w.Body.Bytes(), &gw); w.Code != http.StatusOK || err != nil || !gw.DedicatedConnections || gw.Revision != 1 {
+		t.Fatalf("enable dedicated: %d %s", w.Code, w.Body.String())
+	}
+	if w := put(`{"expected_revision":0,"dedicated_connections":false}`); w.Code != http.StatusConflict {
+		t.Fatalf("stale revision: %d", w.Code)
+	}
+	rt, err = s.extensionTransport(acct)
+	tr := rt.(*http.Transport)
+	if err != nil || !tr.DisableKeepAlives || tr.ForceAttemptHTTP2 || !tr.DisableCompression || tr.ResponseHeaderTimeout == 0 {
+		t.Fatalf("dedicated transport not applied: %+v %v", tr, err)
 	}
 }

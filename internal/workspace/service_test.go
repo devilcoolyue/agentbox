@@ -279,3 +279,36 @@ func TestWorkerWorkspaceMountsOwnerFilesAndLeavesWithOwner(t *testing.T) {
 		t.Fatal("worker container not removed", runtime.removes)
 	}
 }
+
+// The connection hook (Codex extension gateway endpoint) runs on every start:
+// a running container's next CLI rereads its config, and a fresh start applies
+// it after seeding so the pool copy cannot overwrite it. Its failure blocks the
+// start instead of letting the CLI bypass the gateway.
+func TestConnectionHookRunsOnEveryStartAfterSeeding(t *testing.T) {
+	s, runtime, sess := fixture(t)
+	var calls int
+	var fail error
+	s.SetConnectionHook(func(_ context.Context, got store.Session, acct config.Account) error {
+		calls++
+		if got.ID != sess.ID || acct.ID != "acct" {
+			t.Errorf("hook got %s/%s", got.ID, acct.ID)
+		}
+		return fail
+	})
+	if _, err := s.Start(t.Context(), sess.ID); err != nil || calls != 1 {
+		t.Fatalf("running start: calls=%d err=%v", calls, err)
+	}
+	if err := os.MkdirAll(s.HomeDir(sess), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runtime.mu.Lock()
+	runtime.running = false
+	runtime.mu.Unlock()
+	if _, err := s.Start(t.Context(), sess.ID); err != nil || calls != 2 || runtime.starts != 1 {
+		t.Fatalf("fresh start: calls=%d starts=%d err=%v", calls, runtime.starts, err)
+	}
+	fail = errors.New("synthetic endpoint failure")
+	if _, err := s.Start(t.Context(), sess.ID); !errors.Is(err, ErrCredentials) || !errors.Is(err, fail) {
+		t.Fatalf("hook failure did not block the start: %v", err)
+	}
+}
