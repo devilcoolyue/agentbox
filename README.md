@@ -261,6 +261,7 @@ English and Chinese READMEs cover the same overview and setup. Detailed guides a
 | --- | --- |
 | Use chat, terminal, files, previews, and Git | [Workspace guide](docs/user-guide.md) |
 | Connect accounts or choose models | [Accounts and models](docs/accounts-and-models.md) |
+| Interrupt repetitive model streams across harnesses | [Standalone loop guard (preview)](docs/loop-guard.md) |
 | Reuse skills, templates, and MCP tools | [Skills, plugins, and MCP](docs/skills-and-mcp.md) |
 | Understand or manage costs | [Usage and credits](docs/usage-and-quotas.md) · [Pricing catalogs](docs/pricing-catalog.md) |
 | Connect private services | [Proxies and abox-link](docs/networking.md) |

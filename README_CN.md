@@ -261,6 +261,7 @@ Agent 镜像更新使用固定底座，避免 CLI 每次升级叠加旧层。存
 | --- | --- |
 | 使用对话、终端、文件、预览与 Git | [工作空间指南](docs/user-guide.md) |
 | 接入账号、选择模型 | [账号与模型](docs/accounts-and-models.md) |
+| 为不同 Agent 打断模型复读 | [独立循环保护网关（开发预览）](docs/loop-guard.md) |
 | 复用技能、模板与 MCP 工具 | [技能、插件与 MCP](docs/skills-and-mcp.md) |
 | 查看或管理成本 | [用量与额度](docs/usage-and-quotas.md) · [价格目录](docs/pricing-catalog.md) |
 | 访问内网服务 | [代理与 abox-link](docs/networking.md) |

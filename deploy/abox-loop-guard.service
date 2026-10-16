@@ -1,0 +1,22 @@
+[Unit]
+Description=Model output loop guard gateway
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+EnvironmentFile=/etc/abox-loop-guard/gateway.env
+ExecStart=/opt/abox-loop-guard/current/abox-loop-guard -listen ${LOOP_GUARD_LISTEN} -upstream ${LOOP_GUARD_UPSTREAM} -auth-header ${LOOP_GUARD_AUTH_HEADER} -dedicated-connections=${LOOP_GUARD_DEDICATED_CONNECTIONS}
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

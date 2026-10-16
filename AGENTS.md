@@ -6,10 +6,11 @@
 
 `agentbox` 是一个 Go 单二进制服务端：在 Linux 服务器上通过 Docker 为每个浏览器会话拉起一个容器，容器里运行 Claude Code / Codex CLI。浏览器通过 HTTP/WebSocket 使用对话、终端、文件、共享目录、账号池和内网反向隧道。
 
-两个入口：
+主要入口：
 
 - `cmd/agentbox`：服务端。加载 `config.json`，对 `data_dir` 加 flock，初始化 store/docker/server 后监听 HTTP。
 - `cmd/abox-link`：用户本机反向隧道客户端。无参数时开本机控制台 `127.0.0.1:7801`；带 `--server` 时走命令行无头模式。
+- `cmd/abox-loop-guard`：独立模型 SSE 循环保护网关（开发预览），固定上游、无 Docker/数据库依赖；检测核心在 `pkg/loopguard`，文档见 `docs/loop-guard.md`。只中断当前流，不自动续跑或伪造成功；生产接入仍需明确授权。
 
 运行环境：服务端依赖 Docker daemon；生产部署目标是 Linux + systemd。macOS 上可以 `go build`/`go test`，但不能完整验证容器链路。
 
@@ -19,6 +20,7 @@
 |---|---|
 | `cmd/agentbox/main.go` | 服务端入口与信号；`internal/app` 管理数据锁、启动与依赖清理。 |
 | `cmd/abox-link/main.go` | 隧道客户端入口；面板模式与 `--server` 无头模式分流。 |
+| `pkg/loopguard` | 独立短句复读检测与四协议 SSE 网关；回归入口 `race.loop-guard`，只有合成协议/离线文本验证，不代表真实 harness 验收。 |
 | `internal/app` | 启动编排、数据目录独占锁与依赖收尾。 |
 | `internal/workspace` | 会话创建/启停/删除、模板与凭证播种、活动引用与空闲回收。 |
 | `internal/credentials` | 账号凭证读取/保存、轮换同步、续期与账号级可取消锁。 |

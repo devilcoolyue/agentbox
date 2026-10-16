@@ -15,6 +15,7 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 | 恢复未发送的输入 | [聊天草稿与恢复](chat-recovery.md)（v0.1.11 起；草稿、待确认副本和查询恢复） |
 | 接入持久聊天接收与结果查询 | [聊天协议 v1](chat-protocol.md)（v0.1.11 起；网页发送与显式核对） |
 | 管理用户和成本 | [配置参考](configuration.md) → [账号与模型](accounts-and-models.md) → [额度与价目表](usage-and-quotas.md) |
+| 为不同 Agent 打断模型复读 | [独立循环保护网关](loop-guard.md)（开发预览；Responses / Chat / Anthropic / Gemini SSE） |
 | 区分服务端、镜像和桌面更新 | [三类更新与生效范围](update-components.md) → [兼容矩阵](compatibility.md) → [升级与回退](releases.md) |
 | 访问本地数据库或公司内网 | [出口代理与内网隧道](networking.md) |
 | 接入脚本或参与开发 | [API 参考](api.md) → [开发指南](development.md) → [统一验证](verification.md) |
