@@ -25,7 +25,7 @@ export const emit = (type: string, detail?: unknown) =>
   bus.dispatchEvent(new CustomEvent(type, { detail }));
 
 /** 主区当前视图 */
-export type View = "work" | "settings" | "usage" | "tunnel" | "git";
+export type View = "work" | "settings" | "usage" | "tunnel" | "git" | "extensions";
 /** 工作台当前标签页 */
 export type Tab = "chat" | "term" | "files" | "changes" | "skills" | "mcp" | "browser";
 /** 文件浏览范围（shared = 共享目录，同用户所有会话可见） */
@@ -70,6 +70,8 @@ export interface AppState {
   /** 模型管理分区里的标签页：accounts / pricing / system */
   modelTab: string;
   gitSec: string;
+  /** 扩展页当前选中的扩展 ID（"" = 列表） */
+  extSel: string;
   tab: Tab;
   termWS: WebSocket | null;
   /** 终端连接代际：切换/收尾/手动重连时自增，作废旧连接的重连定时器 */
@@ -121,6 +123,7 @@ export const S: AppState = {
   sec: "accounts",
   modelTab: "accounts",
   gitSec: "guide",
+  extSel: "",
   tab: "chat",
   termWS: null,
   termWSGen: 0,

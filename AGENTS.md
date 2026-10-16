@@ -20,7 +20,10 @@
 |---|---|
 | `cmd/agentbox/main.go` | 服务端入口与信号；`internal/app` 管理数据锁、启动与依赖清理。 |
 | `cmd/abox-link/main.go` | 隧道客户端入口；面板模式与 `--server` 无头模式分流。 |
-| `pkg/loopguard` | 独立短句复读检测与四协议 SSE 网关；回归入口 `race.loop-guard`，只有合成协议/离线文本验证，不代表真实 harness 验收。 |
+| `pkg/loopguard` | 短句复读检测（`Detector`/`Monitor`/`Cooldown`）与独立网关 `Gateway`；回归入口 `race.loop-guard`，只有合成协议/离线文本验证，不代表真实 harness 验收。 |
+| `pkg/modelgw` | 模型 SSE 网关核心：转发、四协议增量解码、中断错误写法、请求指纹；独立 abox-loop-guard 与服务端扩展网关共用。 |
+| `pkg/extspi` | 扩展 SPI：消息类型、`Handler`/`Host` 接口、NDJSON JSON-RPC 传输与 `Pipe` 一致性测试；第三方 Go 扩展也用它。 |
+| `internal/extension` | 扩展宿主：清单与配置 schema 校验、builtin 注册（`builtin/`）、实例生命周期与失效策略、网关钩子分发；设计见 `docs/architecture/extensions-spi.md`。 |
 | `internal/app` | 启动编排、数据目录独占锁与依赖收尾。 |
 | `internal/workspace` | 会话创建/启停/删除、模板与凭证播种、活动引用与空闲回收。 |
 | `internal/credentials` | 账号凭证读取/保存、轮换同步、续期与账号级可取消锁。 |
@@ -723,6 +726,17 @@ data/
   env 镜像进 tmux 全局环境（隧道变量缺失时 `-gu` 清除）——否则「会话先开、隧道后连」时
   终端里的 agent 永远看不到代理变量。运行中的窗格改不了，须重连后新开 tmux 窗口；在旧 Shell 内仅重启 agent 仍会继承旧环境。
 - 端口映射按来源 IP 鉴权：只有属主用户自己的容器（和宿主机）能连映射端口。
+
+### 扩展（Extensions）
+
+- 设计、已定决策与 P1 实施记录见 `docs/architecture/extensions-spi.md`。界面叫「扩展」；「插件」专指 Claude Code 插件市场（`market.go`），不要混用。内网隧道刻意保持内嵌，不是扩展。
+- 第三方代码不进服务端进程，不用 Go `plugin`。`runtime=builtin` 只给 `agentbox.*` 官方扩展；container 运行时与市场在 P3/P4，清单校验目前直接拒绝。
+- 网络这一跳归宿主：扩展只拿授权数据（文字增量、加盐指纹），只能放行/拒绝/中断，错误码必须在清单 `errors` 里声明；协议错误由 `modelgw` 写，扩展不能拼 SSE。拒绝不带 `Retry-After`（Codex 会等冷却后重发）。不做自动续跑（已定）。
+- 只改道 Claude API Key / 中转账号（`claudeGatewayEligible`），订阅账号不改道（已定）。`execEnv` 末尾 `extensionEnv` 改写 `ANTHROPIC_BASE_URL` 并给 `NO_PROXY` 补网关主机；`extensionEnvNames` 在 `tmuxEnvSync` 的清除列表里，解绑后新窗口不残留网关地址。Codex（P2）的 base_url 在 `config.toml`：种子与 credsync 的 `codexConnectionConfig` 两处都要套改写，账号池文件绝不能写进按空间生成的网关地址。
+- 网关路径 `/x/<空间>/<MAC>/<原路径>`，MAC 由 `auth_token` 派生；每个请求重查 `sessionAccount`，上游按当前账号解析，出口与 `acctClient` 同规则（绑定代理不可用 → 502，不回落直连）。默认 `172.17.0.1:1083`，与隧道 1080、代理桥 1081、透明网络控制 1082 错开，`validateExtensions` 拒绝冲突。网关起来后不随停用关闭：老 CLI 还拿着地址，此时只转发不检查。
+- 失效策略默认放行（已定），必须在扩展页可见；`fail_closed` 时网关没起来也照样改写，让请求失败而不是绕过检查。中断/拒绝记录 P1 只在内存（最近 200 条）。
+- 设置走 `Host.Normalize` → `Config.SetExtension(expected_revision)` → `applyExtensions`；`extensions` 段必须随 mutate/persist 保留。新增官方扩展：`internal/extension/builtin` 加清单 JSON 与 `extspi.Handler`（并发安全）并登记进 `All()`，清单过 `ParseManifest`，测试里用 `PipeBuiltins` 再跑一遍 NDJSON 一致性。
+- 回归：`go test ./pkg/modelgw ./pkg/extspi ./pkg/loopguard ./internal/extension/... ./internal/config`、`go test ./internal/server -run Extension`、`race.extensions`、`browser.browser`（含 `scripts/test-extensions.mjs`）。真实 Claude Code 走带路径前缀的 base URL 与容器到网关的可达性尚未验收。
 
 ## 代码约定与注意事项
 

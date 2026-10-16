@@ -69,6 +69,7 @@
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/usage.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/date-range.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/tunnel.css">
+<link rel="stylesheet" href="/_v/{{BUILD}}/css/extensions.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/dialogs.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/delegation.css">
 <link rel="stylesheet" href="/_v/{{BUILD}}/css/responsive.css">
@@ -249,6 +250,9 @@
             <button id="btn-git-management" aria-label="Git 管理" data-tip="Git 身份、仓库连接与授权" class="side-item side-tool" data-i18n-attrs="{&quot;aria-label&quot;:&quot;Git 管理&quot;,&quot;data-tip&quot;:&quot;Git 身份、仓库连接与授权&quot;}"><span class="glyph">
               <svg width="17" height="17" data-icon="branch" aria-hidden="true"></svg>
             </span><span class="side-item-label" data-i18n-text="[&quot;Git 管理&quot;]">Git 管理</span></button>
+            <button id="btn-extensions" aria-label="扩展" data-tip="扩展：循环保护等官方维护的功能" class="side-item side-tool hidden" data-i18n-attrs="{&quot;aria-label&quot;:&quot;扩展&quot;,&quot;data-tip&quot;:&quot;扩展：循环保护等官方维护的功能&quot;}"><span class="glyph">
+              <svg width="17" height="17" data-icon="shield" aria-hidden="true"></svg>
+            </span><span class="side-item-label" data-i18n-text="[&quot;扩展&quot;]">扩展</span></button>
             <button id="btn-tunnel" aria-label="内网隧道" data-tip="内网隧道" class="side-item side-tool hidden" data-i18n-attrs="{&quot;aria-label&quot;:&quot;内网隧道&quot;,&quot;data-tip&quot;:&quot;内网隧道&quot;}"><span class="glyph">
               <svg width="17" height="17" data-icon="link" aria-hidden="true"></svg>
             </span><span class="side-item-label" data-i18n-text="[&quot;内网隧道&quot;]">内网隧道</span><span id="tunnel-state" class="tunnel-state mono"><span id="tunnel-dot" class="t-dot"></span><span id="tunnel-text" data-i18n-text="[&quot;离线&quot;]">离线</span></span></button>
@@ -1482,6 +1486,18 @@
       </div>
 
       <!-- 内网隧道视图 -->
+      <div id="view-extensions" class="view hidden">
+        <header class="set-head">
+          <h1 data-i18n-text="[&quot;扩展&quot;]">扩展</h1>
+          <p data-i18n-text="[&quot;扩展在模型请求经过网关时检查流量，例如打断复读的回复。只对绑定的 API Key / 中转账号生效。&quot;]">扩展在模型请求经过网关时检查流量，例如打断复读的回复。只对绑定的 API Key / 中转账号生效。</p>
+        </header>
+        <div class="ext-body">
+          <p id="ext-gateway" class="ext-gateway" role="status"></p>
+          <div id="ext-list" class="ext-list"></div>
+          <div id="ext-detail" class="ext-detail hidden"></div>
+        </div>
+      </div>
+
       <div id="view-tunnel" class="view hidden">
         <header class="set-head">
           <h1 data-i18n-text="[&quot;内网隧道&quot;]">内网隧道</h1>

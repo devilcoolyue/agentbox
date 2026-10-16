@@ -28,6 +28,7 @@ import (
 	"agentbox/internal/credentials"
 	"agentbox/internal/decision"
 	"agentbox/internal/dockerx"
+	"agentbox/internal/extension"
 	"agentbox/internal/filesearch"
 	"agentbox/internal/gitaccess"
 	"agentbox/internal/gitx"
@@ -134,6 +135,9 @@ type Server struct {
 	bridgeBind string       // bind address bridgeLn was created with
 	bridgeUp   atomic.Bool  // set while the bridge is actually bound
 
+	extensions *extension.Host       // extension host; see extensions.go
+	extGW      extensionGatewayState // model gateway for extension-bound accounts
+
 	upgrader websocket.Upgrader
 
 	startedAt  time.Time
@@ -231,6 +235,11 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 	})
 	s.chat = newChatManager(s)
 	s.git = gitx.New(dock, s.prepareGitSession)
+	if err := s.initExtensions(); err != nil {
+		dock.Close()
+		st.Close()
+		return nil, err
+	}
 	if err := s.seedUsers(); err != nil {
 		dock.Close()
 		st.Close()
@@ -397,6 +406,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/image-updates", s.admin(http.HandlerFunc(s.handleImageUpdates)))
 	mux.Handle("POST /api/image-updates/{action}", s.admin(http.HandlerFunc(s.handleImageUpdateAction)))
 	mux.Handle("GET /api/settings", s.admin(http.HandlerFunc(s.handleGetSettings)))
+	mux.Handle("GET /api/extensions", s.admin(http.HandlerFunc(s.handleExtensions)))
+	mux.Handle("GET /api/extensions/{id}", s.admin(http.HandlerFunc(s.handleExtension)))
+	mux.Handle("PUT /api/extensions/{id}", s.admin(http.HandlerFunc(s.handleUpdateExtension)))
+	mux.Handle("GET /api/extensions/{id}/logs", s.admin(http.HandlerFunc(s.handleExtensionLogs)))
+	mux.Handle("GET /api/extensions/{id}/events", s.admin(http.HandlerFunc(s.handleExtensionEvents)))
 	mux.Handle("PUT /api/settings", s.admin(http.HandlerFunc(s.handlePutSettings)))
 	mux.Handle("GET /api/storage", s.admin(http.HandlerFunc(s.handleStorage)))
 	mux.Handle("DELETE /api/cache/marketplace", s.admin(http.HandlerFunc(s.handleClearMarketCache)))
@@ -562,6 +576,13 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	if err := s.applyProxyBridge(); err != nil {
 		log.Printf("account proxy bridge disabled: %v", err)
 	}
+	if _, ok := s.track(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		s.extensions.Close(ctx)
+	}); ok {
+		s.applyExtensions()
+	}
 	s.spawn(s.dispatchQueuedChats) // follow-ups queued before a restart run in order
 	log.Printf("agentbox listening on http://%s", ln.Addr())
 	serveErr := make(chan error, 1)
@@ -717,7 +738,9 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		// Accepts chat request "delivery" (queue / steer) while a turn runs.
 		"chat_followups": 1,
 		// Accepts chat request "tasks" (Claude 5 task list tools).
-		"chat_tasks":               1,
+		"chat_tasks": 1,
+		// Workspace views list the extensions inspecting their model traffic.
+		"extensions":               1,
 		"user":                     u.Name,
 		"role":                     u.Role,
 		"models":                   s.cfg.GetModels(),
@@ -809,7 +832,8 @@ func (s *Server) execEnv(sess store.Session) ([]string, error) {
 		}
 		env = append(filtered, "ANTHROPIC_MODEL="+model)
 	}
-	return append(env, s.tunnelEnvList(sess)...), nil
+	env = append(env, s.tunnelEnvList(sess)...)
+	return s.extensionEnv(sess, acct, env), nil
 }
 
 // accountSessionCounts counts sessions per account across all users (guards

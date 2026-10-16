@@ -346,6 +346,7 @@ type Config struct {
 	Container             ContainerLimits          `json:"container"`
 	Tunnel                TunnelConfig             `json:"tunnel"`
 	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
+	Extensions            ExtensionsConfig         `json:"extensions"`
 	Accounts              []Account                `json:"accounts"`
 	Proxies               []Proxy                  `json:"proxies,omitempty"`
 	GitOAuthApps          []GitOAuthApp            `json:"git_oauth_apps,omitempty"`
@@ -414,6 +415,7 @@ func Load(path string) (*Config, error) {
 
 	cfg.initDefaultModels()
 	cfg.Decision = cfg.Decision.normalized()
+	cfg.Extensions.compactConfigs()
 
 	// 未配置 terminal_tips（老配置文件里没这一块）时，补上原来的单条提示，
 	// 避免终端页顶栏空掉。已显式配置的（哪怕 interval 为 0）尊重原样。
@@ -486,6 +488,9 @@ func (c *Config) validateLocked() error {
 		return err
 	}
 	if err := c.validatePricing(); err != nil {
+		return err
+	}
+	if err := c.validateExtensions(); err != nil {
 		return err
 	}
 	if c.Resources.MaxRunning < 0 || c.Resources.MaxRunningPerUser < 0 || c.Resources.MinFreeBytes < 0 {
@@ -701,6 +706,7 @@ type persistConfig struct {
 	Container             ContainerLimits          `json:"container"`
 	Tunnel                TunnelConfig             `json:"tunnel"`
 	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
+	Extensions            ExtensionsConfig         `json:"extensions"`
 	Accounts              []persistAccount         `json:"accounts"`
 	Proxies               []Proxy                  `json:"proxies,omitempty"`
 	GitOAuthApps          []GitOAuthApp            `json:"git_oauth_apps,omitempty"`
@@ -737,6 +743,7 @@ func (c *Config) saveLocked() error {
 		Container:             c.Container,
 		Tunnel:                c.Tunnel,
 		ProxyBridge:           c.ProxyBridge,
+		Extensions:            c.Extensions.Clone(),
 		Accounts:              make([]persistAccount, 0, len(c.Accounts)),
 		Proxies:               c.Proxies,
 		GitOAuthApps:          cloneGitOAuthApps(c.GitOAuthApps),
@@ -1078,6 +1085,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Container:             c.Container,
 		Tunnel:                c.Tunnel,
 		ProxyBridge:           c.ProxyBridge,
+		Extensions:            c.Extensions.Clone(),
 		Accounts:              append([]Account(nil), c.Accounts...),
 		Proxies:               append([]Proxy(nil), c.Proxies...),
 		GitOAuthApps:          cloneGitOAuthApps(c.GitOAuthApps),
@@ -1130,6 +1138,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.StoragePolicy = work.StoragePolicy.Clone()
 	c.Tunnel = work.Tunnel
 	c.ProxyBridge = work.ProxyBridge
+	c.Extensions = work.Extensions
 	c.Accounts = work.Accounts
 	c.Proxies = work.Proxies
 	c.GitOAuthApps = work.GitOAuthApps
@@ -1328,6 +1337,9 @@ func (c *Config) RemoveAccount(id string) error {
 		for i := range w.Accounts {
 			if w.Accounts[i].ID == id {
 				w.Accounts = append(w.Accounts[:i:i], w.Accounts[i+1:]...)
+				// A binding to a deleted account would fail validation on
+				// every later write; drop it in the same atomic mutation.
+				w.pruneExtensionAccount(id)
 				return nil
 			}
 		}

@@ -25,8 +25,8 @@
 ## 工作空间
 
 ```text
-GET    /api/sessions                工作空间列表
-GET    /api/sessions/{id}           单个工作空间详情
+GET    /api/sessions                工作空间列表（每项带 extensions：正在检查本空间模型流量的扩展 [{id, name}]）
+GET    /api/sessions/{id}           单个工作空间详情（同上）
 GET    /api/sessions/{id}/models    当前空间的候选模型、推理能力与发现状态（不保证上游调用权限）；restricted/default_model 见账号可用模型，client_effort 是账号 CLI 配置的默认原生强度
 GET    /api/sessions/{id}/account/usage  当前空间账号的订阅额度（校验账号使用权限）
 POST   /api/sessions                新建 {name, agent, account_id}
@@ -196,6 +196,20 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `POST /api/updates/upgrade` | 管理员：提交 `{"version":"vX.Y.Z"}`，须匹配成功检查到的新版本；返回 202 与任务。同一进行中目标复用任务，不接受 URL/路径；不支持的部署或过期版本返回 409，提交结果不确定返回 503，应先查询任务再重试 |
 
 `/api/updates/components` 使用 `Cache-Control: no-store`，返回 `version:1`、`observed_at`、`server`、`image`、`desktop`。`server.candidate_compatibility=preflight_required` 表示本接口不证明候选兼容；`image.state=labels_only/unavailable/changed`，版本是当前配置镜像的标签，不能冒充运行中容器或协议验收结果；`desktop.installed_version_state=browser_unknown` 表示网页无法读取本机安装版本。观察范围和更新生效方式见[三类更新](update-components.md)。
+
+## 扩展
+
+设计与边界见[扩展与 SPI 协议](architecture/extensions-spi.md)。本节均要求管理员角色；`/me` 返回 `extensions: 1` 表示服务端支持。
+
+| 方法与路径 | 请求 / 返回用途 |
+| --- | --- |
+| `GET /api/extensions` | `gateway`（监听地址、是否运行、绑定失败原因）与已安装扩展列表；每项含清单字段、`setting`（保存的设置与 `revision`）、`status`（状态、指标、检查中的流、重启次数）和 `accounts`（可选账号及 `eligible`，只有 API Key / 中转账号可绑定） |
+| `GET /api/extensions/{id}` | 单个扩展，字段同上 |
+| `PUT /api/extensions/{id}` | `{expected_revision, enabled, order, config, permissions, bindings:{mode, accounts}, failure_policy}`；`config` 按清单的 `config_schema` 校验并补默认值，启用时必须批准钩子所需权限；修订不符返回 409。保存后扩展按新设置重启 |
+| `GET /api/extensions/{id}/logs?since=` | 扩展日志（内存环形缓冲，最近 200 条），返回 `seq` 大于 `since` 的条目 |
+| `GET /api/extensions/{id}/events` | 最近的中断与拒绝（内存，最近 200 条，重启清空，不含提示词与回复内容） |
+
+模型网关不在主 HTTP 端口上：它监听 `extensions.gateway.bind`（默认 `172.17.0.1:1083`），只供容器访问，路径为 `/x/<空间 ID>/<MAC>/<原 API 路径>`，MAC 由 `auth_token` 派生。网关自身的错误码以 `extension_gateway_` 开头，扩展拒绝或中断时使用清单声明的错误码（如 `model_output_loop`），失效策略为拦截时使用 `extension_unavailable` / `extension_overloaded`。响应头 `X-Agentbox-Extensions` 为 `monitoring` 或 `not-inspected`。
 
 ## 界面主题
 

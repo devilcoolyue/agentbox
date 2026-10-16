@@ -13,7 +13,8 @@ STEPS = [
     step('go.unit', 'offline', ['{python}', 'scripts/verify.py', '_go_nonserver'], 'Go packages except server; gated live tests disabled.'),
     step('go.chown-denial', 'linux', ['go', 'test', '-json', './internal/server', '-run', '^(TestSyncMutationLinuxChownDeniedPreservesTarget|TestProjectUploadLinuxChownDenied)$', '-count=1'], 'Linux non-root EPERM regression; root cannot prove this gate.', env={'AGENTBOX_CHOWN_DENIAL_TEST':'1'}, platform='linux', nonroot=True),
     step('race.chat', 'offline', ['{python}', 'scripts/verify.py', '_race_chat'], 'Targeted receipt, lifecycle, store/usage and executor race tests; Linux server runs via sudo.'),
-    step('race.loop-guard', 'offline', ['go', 'test', '-race', '-json', './pkg/loopguard', './cmd/abox-loop-guard'], 'Standalone gateway: synthetic four-protocol SSE, upstream cancellation, retry cooldown and detector controls; no real provider or harness.'),
+    step('race.loop-guard', 'offline', ['go', 'test', '-race', '-json', './pkg/loopguard', './pkg/modelgw', './cmd/abox-loop-guard'], 'Standalone gateway: synthetic four-protocol SSE, upstream cancellation, retry cooldown and detector controls; no real provider or harness.'),
+    step('race.extensions', 'offline', ['go', 'test', '-race', '-json', './pkg/extspi', './internal/extension/...'], 'Extension host and SPI: NDJSON transport, builtin loop guard through the real gateway (direct and piped), failure policies; synthetic upstream, no provider or CLI.'),
     step('go.server', 'offline', ['{python}', 'scripts/verify.py', '_go_server'], 'Server tests; Linux non-root uses sudo -n only for the test executable.'),
     step('web.types', 'offline', ['npm', 'run', 'check'], 'TypeScript type checking.', requires=['node_modules/.bin/tsc']),
     step('web.artifacts', 'offline', ['{python}', 'scripts/verify.py', '_web_artifacts'], 'Rebuild and compare complete JS inventory/bytes with the starting worktree.', requires=['node_modules/.bin/tsc']),
@@ -99,7 +100,7 @@ EXTERNAL = {
     'desktop/src-tauri/src/credentials.rs': 'native/manual: AGENTBOX_CREDENTIAL_TEST=1 touches the OS credential store; isolated runner only',
 }
 
-BROWSER_HELPERS = ['feature-lifetimes-browser','actions','chat-footer','chat-context','chat-commands','chat-mentions','chat-tasks','chat-pages','diagnostics-browser','image-updates','update-components','mcp','pricing','problems-browser','remote-browser','responsive','skins','themes','switch-account','account-models','user-picker','term-touch','term-clipboard','motion']
+BROWSER_HELPERS = ['feature-lifetimes-browser','actions','chat-footer','chat-context','chat-commands','chat-mentions','chat-tasks','chat-pages','diagnostics-browser','image-updates','update-components','mcp','pricing','problems-browser','remote-browser','responsive','skins','themes','switch-account','account-models','user-picker','term-touch','term-clipboard','motion','extensions']
 COVERED = {f'scripts/test-{name}.mjs':'browser.browser' for name in BROWSER_HELPERS}
 COVERED['scripts/test-remote-browser-live.mjs']='docker.remote-browser'
 COVERED['desktop/scripts/test-legacy-browser.mjs']='desktop.compat'

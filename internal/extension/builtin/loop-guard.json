@@ -1,0 +1,46 @@
+{
+  "id": "agentbox.loop-guard",
+  "version": "1.0.0",
+  "spi": "1.0",
+  "publisher": "agentbox",
+  "name": {"zh-CN": "循环保护", "zh-TW": "循環保護", "en": "Loop guard"},
+  "description": {
+    "zh-CN": "检测模型输出里的短句复读，命中后中断这次回复；相同请求随后在冷却期内被拒绝。只检查文字与推理增量，不读取提示词、工具参数和凭证。",
+    "zh-TW": "偵測模型輸出中的短句複讀，命中後中斷這次回覆；相同請求隨後在冷卻期內被拒絕。只檢查文字與推理增量，不讀取提示詞、工具參數和憑證。",
+    "en": "Interrupts a model reply that keeps repeating short sentences, then rejects identical retries during a cooldown. Only text and reasoning deltas are inspected; prompts, tool arguments and credentials are never read."
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/devilcoolyue/agentbox/blob/main/docs/loop-guard.md",
+  "runtime": {"type": "builtin"},
+  "hooks": ["model.request", "model.stream"],
+  "permissions": ["model.request.fingerprint", "model.stream.text"],
+  "bindings": ["account"],
+  "failure_policy": "fail_open",
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "window": {"type": "integer", "minimum": 32, "maximum": 1024, "default": 256,
+        "title": {"zh-CN": "检测窗口（句）", "zh-TW": "偵測視窗（句）", "en": "Window (sentences)"},
+        "description": {"zh-CN": "统计最近多少个短句。", "zh-TW": "統計最近多少個短句。", "en": "How many recent short sentences are considered."}},
+      "distinct_limit": {"type": "integer", "minimum": 2, "maximum": 256, "default": 24,
+        "title": {"zh-CN": "不同句子上限", "zh-TW": "不同句子上限", "en": "Distinct sentence limit"},
+        "description": {"zh-CN": "窗口内不同句子不超过这个数就判为复读。", "zh-TW": "視窗內不同句子不超過這個數就判為複讀。", "en": "A window with at most this many distinct sentences counts as a loop."}},
+      "cooldown_seconds": {"type": "integer", "minimum": 0, "maximum": 600, "default": 30,
+        "title": {"zh-CN": "相同请求冷却（秒）", "zh-TW": "相同請求冷卻（秒）", "en": "Identical request cooldown (s)"},
+        "description": {"zh-CN": "中断后，同一请求在这段时间内直接被拒绝。0 表示不冷却。", "zh-TW": "中斷後，同一請求在這段時間內直接被拒絕。0 表示不冷卻。", "en": "After an interruption, the identical request is rejected for this long. 0 disables the cooldown."}}
+    }
+  },
+  "errors": [
+    {"code": "model_output_loop", "message": {
+      "zh-CN": "模型在重复短句，这次回复已中断。",
+      "zh-TW": "模型在重複短句，這次回覆已中斷。",
+      "en": "The model kept repeating short sentences; this reply was interrupted."}}
+  ],
+  "status": {
+    "metrics": [
+      {"name": "trips", "title": {"zh-CN": "中断次数", "zh-TW": "中斷次數", "en": "Interruptions"}},
+      {"name": "cooldown_rejects", "title": {"zh-CN": "冷却拒绝", "zh-TW": "冷卻拒絕", "en": "Cooldown rejections"}},
+      {"name": "cooldown_entries", "title": {"zh-CN": "冷却中的请求", "zh-TW": "冷卻中的請求", "en": "Requests cooling down"}}
+    ]
+  }
+}

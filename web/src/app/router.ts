@@ -11,6 +11,7 @@ const TABS: Tab[] = ["chat", "term", "files", "changes", "skills", "mcp", "brows
 
 function currentHash() {
   if (S.view === "git") return `#/git/${S.gitSec}`;
+  if (S.view === "extensions") return S.extSel ? `#/extensions/${encodeURIComponent(S.extSel)}` : "#/extensions";
   if (S.view === "settings") return S.sec === "models" && S.modelTab !== "accounts" ? `#/settings/models/${S.modelTab}` : `#/settings/${S.sec}`;
   if (S.view !== "work") return `#/${S.view}`;
   return S.current ? `#/sessions/${encodeURIComponent(S.current.id)}/${S.tab}` : "#/";
@@ -42,6 +43,8 @@ export function initRouter() {
         emit(`open-${page}`);
       } else if (page === "git" && parts.length <= 2) {
         emit("open-git", GIT_SECS.includes(id) ? id : "guide");
+      } else if (page === "extensions" && parts.length <= 2 && S.role === "admin") {
+        emit("open-extensions", id || "");
       } else if (page === "settings" && parts.length <= 3) {
         // The price list used to be its own section; it is now a tab of 模型管理.
         const pricing = id === "pricing";

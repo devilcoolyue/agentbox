@@ -1,0 +1,102 @@
+/* extensions：管理员「扩展」页（列表 → 详情）与工作台头部的扩展检查提示。 */
+
+.ext-body {
+  flex: 1; min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  padding: 18px 28px 40px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.ext-gateway {
+  margin: 0; font-size: 12.5px; color: var(--muted);
+  display: flex; align-items: center; gap: 8px;
+  overflow-wrap: anywhere;
+}
+.ext-gateway::before {
+  content: ""; flex: none;
+  width: 8px; height: 8px; border-radius: var(--radius-pill);
+  background: var(--muted);
+}
+.ext-gateway[data-state="on"]::before { background: var(--green); }
+.ext-gateway[data-state="error"]::before { background: var(--red); }
+.ext-gateway:empty { display: none; }
+
+.ext-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.ext-card {
+  text-align: left; cursor: pointer; font: inherit; color: inherit;
+  gap: 8px;
+}
+.ext-card:hover { border-color: var(--accent); }
+.ext-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ext-card-head b, .ext-card-head h3 { min-width: 0; overflow-wrap: anywhere; }
+.ext-meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.ext-desc { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-line; overflow-wrap: anywhere; }
+
+.ext-state {
+  flex: none;
+  font-size: 11.5px; line-height: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  color: var(--muted);
+}
+.ext-state[data-state="running"] { color: var(--green); border-color: var(--green-line); }
+.ext-state:is([data-state="degraded"], [data-state="restarting"], [data-state="starting"]) { color: var(--warn); border-color: var(--warn-line); }
+.ext-state:is([data-state="failed"], [data-state="invalid"]) { color: var(--red); border-color: var(--red-line); }
+
+.ext-detail { display: flex; flex-direction: column; gap: 12px; }
+.ext-detail.hidden { display: none; }
+.ext-back { align-self: flex-start; }
+.ext-detail > div:empty { display: none; }
+.ext-detail > div { display: flex; flex-direction: column; gap: 12px; }
+.ext-link { font-size: 12.5px; color: var(--info); align-self: flex-start; }
+.ext-overview h4 { margin: 4px 0 0; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.ext-errors { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 12.5px; }
+.ext-errors li { overflow-wrap: anywhere; }
+.ext-errors code { margin-right: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+
+.ext-stats { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 12.5px; }
+.ext-stats dt { color: var(--muted); }
+.ext-stats dd { margin: 0; overflow-wrap: anywhere; }
+.ext-error { margin: 0; font-size: 12.5px; color: var(--red); overflow-wrap: anywhere; }
+
+.ext-settings fieldset {
+  margin: 0; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
+  display: flex; flex-direction: column; gap: 10px;
+  min-width: 0;
+}
+.ext-settings legend { padding: 0 6px; font-size: 12.5px; color: var(--muted); }
+.ext-settings .hint { font-size: 12px; color: var(--muted); opacity: 0.85; line-height: 1.6; margin: 0; }
+.ext-enable { font-size: 13px; color: var(--text); }
+.ext-perm { align-items: flex-start; color: var(--text); }
+.ext-perm input { margin-top: 3px; }
+.ext-perm-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
+.ext-perm-text code { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.ext-perm-text .hint { flex-basis: 100%; }
+.ext-accounts { display: flex; flex-direction: column; gap: 6px; }
+.ext-accounts.hidden { display: none; }
+.ext-accounts .check { flex-wrap: wrap; color: var(--text); }
+.ext-accounts .check:has(input:disabled) { opacity: 0.6; }
+
+.ext-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ext-table th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ext-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+
+.ext-log { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 11.5px; max-height: 320px; overflow-y: auto; }
+.ext-log li { overflow-wrap: anywhere; color: var(--text); }
+.ext-log time { color: var(--muted); }
+.ext-log li[data-level="warn"] { color: var(--warn); }
+.ext-log li[data-level="error"] { color: var(--red); }
+
+/* 工作台头部：本空间的模型流量正被扩展检查 */
+.wb-ext { display: inline-flex; align-items: center; gap: 4px; vertical-align: -1px; }
+.wb-ext svg { flex: none; }
+
+@media (max-width: 760px) {
+  .ext-body { padding: 14px 16px 28px; }
+  .ext-table thead { display: none; }
+  .ext-table, .ext-table tbody, .ext-table tr, .ext-table td { display: block; width: 100%; }
+  .ext-table tr { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .ext-table td { display: flex; justify-content: space-between; gap: 12px; border: 0; padding: 3px 0; text-align: right; }
+  .ext-table td::before { content: attr(data-l); color: var(--muted); text-align: left; flex: none; }
+}

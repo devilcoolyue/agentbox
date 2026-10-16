@@ -10,6 +10,13 @@ export const i18n = createI18n({ catalogs: {
 } });
 export const t = i18n.t;
 export { languages };
+
+/** Picks the current language from server-provided localized text (extension
+ * manifests). Falls back to English, then to any language present. */
+export function pickLocal(text: Record<string, string> | undefined): string {
+  if (!text) return "";
+  return text[i18n.locale] || text.en || text["zh-CN"] || text["zh-TW"] || Object.values(text).find(Boolean) || "";
+}
 export const escapeHTML = (value: string): string => value.replace(/[&<>"']/g,
   char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 

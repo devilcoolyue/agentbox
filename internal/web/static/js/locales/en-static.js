@@ -802,5 +802,8 @@ export default {
     "Claude 5 也使用任务列表": "Use the task list with Claude 5 too",
     "Claude Code 只给较早的模型（如 Opus 4.7、Sonnet 4.6）默认开启任务列表，Claude 5 默认关闭。开启后 Claude 5 也会在输入框上方列出任务和进度。": "Claude Code turns its task list on by default only for older models (such as Opus 4.7 and Sonnet 4.6) and leaves it off for Claude 5. Turn this on and Claude 5 also lists its tasks and progress above the message box.",
     "开启后可能多花 token：每次请求都会多带任务工具的说明，模型也会多调用几次来建立和更新任务，费用计入你的额度。": "This may use more tokens: every request carries the task tools' descriptions, and the model makes a few extra calls to create and update tasks. The cost is charged to your balance.",
-    "复制到剪贴板": "Copy to clipboard"
+    "复制到剪贴板": "Copy to clipboard",
+    "扩展": "Extensions",
+    "扩展：循环保护等官方维护的功能": "Extensions: officially maintained features such as Loop guard",
+    "扩展在模型请求经过网关时检查流量，例如打断复读的回复。只对绑定的 API Key / 中转账号生效。": "Extensions inspect model traffic as it passes through the gateway, for example to interrupt a reply that keeps repeating itself. They only apply to bound API key / relay accounts."
 };
