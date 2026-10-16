@@ -105,7 +105,7 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 ```json
 {
   "extensions": {
-    "gateway": {"bind": "172.17.0.1:1083", "host": ""},
+    "gateway": {"bind": "172.17.0.1:1083", "host": "", "dedicated_connections": false},
     "items": {
       "agentbox.loop-guard": {
         "enabled": true,
@@ -124,10 +124,11 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 | --- | --- | --- |
 | `extensions.gateway.bind` | `172.17.0.1:1083` | 模型网关监听地址，须容器可达；不能与 `proxy_bridge.bind`、`tunnel.proxy_bind`、`tunnel.network_bind` 相同。有扩展启用时才开始监听 |
 | `extensions.gateway.host` | 从 bind 提取主机 | 写进容器 base URL 的主机；bind 为通配地址时必须填写 |
+| `extensions.gateway.dedicated_connections` | `false` | 每次上游请求独占一条 HTTP/1.1 连接、不复用，中断时关掉这条连接（同独立网关的 `-dedicated-connections`）。代价是每次请求重新握手。扩展页可直接切换，`gateway.revision` 由服务端维护 |
 | `items.<id>.enabled` | `false` | 是否运行该扩展 |
 | `items.<id>.config` | 清单默认值 | 按扩展清单的 `config_schema` 校验，未知键会被拒绝 |
 | `items.<id>.permissions` | 空 | 管理员批准的权限，只能是清单申请过的；缺少钩子所需权限时不能启用 |
-| `items.<id>.bindings` | `{"mode":"none"}` | `none` / `accounts`（列出账号 ID）/ `all`（全部 API Key / 中转账号，含以后新增的）。订阅登录账号不会被改道 |
+| `items.<id>.bindings` | `{"mode":"none"}` | `none` / `accounts`（列出账号 ID）/ `all`（全部 API Key / 中转账号，含以后新增的）。Claude 与 Codex 都支持；Claude 订阅、ChatGPT 登录的账号不会被改道。Codex 的地址写在空间的 `.codex/config.toml` 里，账号池保持真实上游 |
 | `items.<id>.failure_policy` | 空 = 清单默认 | `fail_open` 放行或 `fail_closed` 拦截；循环保护默认放行 |
 | `items.<id>.revision` | 服务端维护 | 每次保存加一；网页提交时用它防止覆盖他人的修改 |
 

@@ -30,6 +30,8 @@ type Service struct {
 	clientID string
 	tokenURL func() string
 	locks    sync.Map
+	// codexEndpoint returns a session's extension gateway URL ("" = direct).
+	codexEndpoint func(config.Account, store.Session) string
 }
 
 func New(cfg *config.Config, sessions Sessions, client func(config.Account, time.Duration) (*http.Client, error), clientID string, tokenURL func() string) *Service {
@@ -138,7 +140,7 @@ func (s *Service) broadcast(acct config.Account) {
 					var poolConfig []byte
 					poolConfig, readErr = readPoolFile(acct, "config.toml")
 					if readErr == nil {
-						next, readErr = codexConnectionConfig(configRaw, poolConfig)
+						next, readErr = s.codexSessionConfig(acct, sess, configRaw, poolConfig)
 					}
 					if readErr == nil {
 						_, readErr = home.WriteFile(".codex/config.toml", next, safefs.WriteOptions{Mode: 0600, Chown: true, UID: dockerx.AgentUID, GID: dockerx.AgentGID, BestEffortChown: true})

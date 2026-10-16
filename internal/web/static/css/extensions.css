@@ -20,6 +20,10 @@
 .ext-gateway[data-state="on"]::before { background: var(--green); }
 .ext-gateway[data-state="error"]::before { background: var(--red); }
 .ext-gateway:empty { display: none; }
+.ext-gateway-opts { display: flex; flex-direction: column; gap: 2px; }
+.ext-gateway-opts:empty { display: none; }
+.ext-gateway-opts .check { color: var(--text); font-size: 13px; }
+.ext-gateway-opts .hint { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; max-width: 72ch; }
 
 .ext-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .ext-card {

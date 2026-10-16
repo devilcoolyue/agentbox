@@ -355,8 +355,10 @@ v1 不提供文件、网络、聊天等宿主能力。以后计划通过权限�
 
 只支持 API Key 和中转账号（已定决策）：
 
-- Claude：账号 env 里有 `ANTHROPIC_AUTH_TOKEN` 或 `ANTHROPIC_API_KEY`（即 `claudeRelay` 返回令牌）。P1 支持。
-- Codex：非 ChatGPT 登录、使用 `config.toml` 自定义 provider 的账号。P2 支持。
+- Claude：账号 env 里有 `ANTHROPIC_AUTH_TOKEN` 或 `ANTHROPIC_API_KEY`（即 `claudeRelay` 返回令牌）。
+- Codex：账号池 `auth.json` 是 API Key 登录（`CodexAuthMode` 为 `apikey`），官方地址和中转都算：内置 `openai` provider 的上游是账号 env 的 `OPENAI_BASE_URL`（缺省为官方地址），自定义 provider 的上游是它的 `base_url`（`credentials.CodexUpstream`）。所选 provider 没有配置时不能绑定。
+
+两种都在 P1 支持（Codex 在首版合并后补齐，见 §17）。
 
 OAuth 订阅账号（Claude 订阅、ChatGPT 登录）不能绑定。账号从中转切回订阅登录后，宿主不再改写它的 base URL，网关对它的请求也不调用钩子。
 
@@ -370,6 +372,7 @@ OAuth 订阅账号（Claude 订阅、ChatGPT 登录）不能绑定。账号从�
 - 上游**在每次请求时**根据空间当前绑定的账号解析：Claude 用账号 env 里的 `ANTHROPIC_BASE_URL`（缺省为官方地址），Codex 用账号池 `config.toml` 里所选 provider 的 `base_url`。修改账号后立即生效，不用重建容器。
 - 认证头（`Authorization`、`x-api-key` 等）由容器里的 CLI 带上，宿主原样转给上游，**从不交给扩展**。
 - 上游连接走账号的出口（与 `acctClient` / `dialThrough` 相同，fail-closed）：绑定的代理不可用时直接返回 502，不退回直连。
+- `extensions.gateway.dedicated_connections` 开启后，每次上游请求独占一条 HTTP/1.1 连接、不复用（同独立网关的 `-dedicated-connections`，`loopguard.DedicatedTransport`）：中断时关掉这次请求的 TCP/TLS 连接，而不只是在共享的 HTTP/2 连接上重置一条流。只管得到网关到上游这一跳，中转站到供应商的连接不受控制。默认关闭，管理员在扩展页切换，带修订号；新请求立即生效，已经在跑的流沿用原连接。
 - 其余限制沿用 loop-guard：正文最大 32 MiB、单个 SSE 事件最大 1 MiB、单请求最长 30 分钟、强制 `Accept-Encoding: identity`、不跟随重定向、不支持 WebSocket / CONNECT。响应头 `X-Agentbox-Extensions` 标记 `monitoring` 或 `not-inspected`。
 
 ### 8.3 base URL 改写的位置
@@ -377,8 +380,14 @@ OAuth 订阅账号（Claude 订阅、ChatGPT 登录）不能绑定。账号从�
 全部改写经过同一个函数（计划名 `effectiveModelBase(sess, acct)`），不能散落在各处：
 
 - **Claude**：在 `execEnv` 里替换 `ANTHROPIC_BASE_URL`。网关地址必须在 `NO_PROXY` / `no_proxy` 里，否则绑定了出口代理的容器会把发往网关的请求送进代理桥。默认网关和代理桥同一个 host，已经在 `proxyEnvList` 的 `NO_PROXY` 里；配成不同 host 时要一起追加。
-- **Codex**：base URL 写在会话 home 的 `.codex/config.toml` 里，不在 env 里。`SeedCredentials` 和 credsync 的 `codexConnectionConfig` 每 45 秒都会从账号池把 provider 配置拷回 home，两处必须同时套用改写，否则改写会被冲掉。**账号池里的 `config.toml` 永远不能写入网关地址**：账号池被多个空间共用，而网关地址是按空间生成的。
-- **终端**：`tmuxEnvSync` 会把 env 同步到 tmux 全局环境，但已经打开的 shell 仍保留旧值，要新开 tmux 窗口才生效（与隧道变量的限制一样）。新启动的 codex 会重新读 `config.toml`。
+- **Codex**：base URL 写在会话 home 的 `.codex/config.toml` 里，不在 env 里，所以改写的是这份文件（`credentials.Service.codexSessionConfig`）：先按原规则把账号池的连接设置套到会话配置上（`codexConnectionConfig`），再把当前 provider 的 `base_url` 换成网关地址。账号用的是内置 `openai` provider 时（它在配置里不能指定 `base_url`），换成同等的自定义 provider `agentbox`（`wire_api = "responses"`、`requires_openai_auth = true`），并同步改当前 profile 的 `model_provider`。写入的地方：
+  - 空间启动：`workspace` 的连接钩子在 `SeedCredentials`、`SeedDefaultModel` 之后执行（种子写进来的是账号池原样，含真实上游），容器已在运行时每次准入（每轮对话、每次打开终端）也执行；
+  - 账号改 Key、改地址或换登录方式时的播发（`broadcast`）；
+  - 绑定、停用、网关地址变化时，`applyExtensions` 在后台把所有已播种的 Codex 空间对齐一遍（`reconcileCodexEndpoints`）。
+
+  文件内容没变就不写。credsync 的 45 秒同步只同步 `auth.json`，不碰 `config.toml`，所以不会把网关地址收回账号池。**账号池里的 `config.toml` 永远不能写入网关地址**：账号池被多个空间共用，而网关地址是按空间生成的；网关在每次请求时从账号池读真实上游。改写失败时空间启动报错，不让 CLI 绕过网关。切换账号时 `clearCodexConnection` 会删掉 `agentbox` provider，新账号重新播种。
+- **NO_PROXY**：两种 Agent 都在 `execEnv` 末尾把网关主机补进 `NO_PROXY` / `no_proxy`，Codex（reqwest）同样认这两个变量。
+- **终端**：`tmuxEnvSync` 会把 env 同步到 tmux 全局环境，但已经打开的 shell 仍保留旧值，Claude 要新开 tmux 窗口才生效（与隧道变量的限制一样）。Codex 每次启动都重新读 `config.toml`，在原窗口重新运行即可。
 - **跑腿和起标题**：都经过 `execEnv` 或会话 home，规则自动覆盖。
 
 解绑或停用扩展后，新的 exec 用回原地址；还在运行的进程仍然带着网关地址，网关继续接受这些请求，只是不再调用钩子，直接转发。网关本身没有运行时，CLI 会连接失败并明确报错，不会悄悄直连。
@@ -414,7 +423,7 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
 
   ```json
   "extensions": {
-    "gateway": {"bind": "172.17.0.1:1083", "host": ""},
+    "gateway": {"bind": "172.17.0.1:1083", "host": "", "dedicated_connections": false, "revision": 1},
     "items": {
       "agentbox.loop-guard": {
         "enabled": true,
@@ -430,7 +439,7 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
   }
   ```
 
-  所有写入都带 `expected_revision`，防止并发覆盖。
+  所有写入都带 `expected_revision`，防止并发覆盖。`gateway.bind` / `host` 只在 `config.json` 里改（改了会换掉所有 CLI 持有的地址）；`dedicated_connections` 由扩展页修改，用 `gateway.revision` 防并发覆盖。
 - 安装的扩展包放在 `data/extensions/<id>/<version>/`（只保存清单和镜像 digest）。builtin 的清单嵌在二进制里，不落盘。
 - `extension_events` 表通过下一个 schema 版本迁移（当前为 19），遵守 `migrations.go` 的连续迁移规则。
 - 系统备份包含 `extensions` 配置与数据库。以后的 `storage` 目录进入系统备份。
@@ -442,6 +451,7 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
 | `GET /api/extensions` | admin | 已安装扩展、版本、状态、绑定数量 |
 | `GET /api/extensions/{id}` | admin | 清单、配置、批准的权限、状态指标 |
 | `PUT /api/extensions/{id}` | admin | 启停、配置、权限、绑定、故障策略、顺序；带 `expected_revision` |
+| `PUT /api/extensions/gateway` | admin | 网关连接方式：`{"expected_revision":n,"dedicated_connections":bool}`，返回网关视图；修订号过期回 409 |
 | `GET /api/extensions/{id}/logs?since=` | admin | 日志环形缓冲 |
 | `GET /api/extensions/{id}/events` | admin | 中断与拒绝记录。P1 返回内存里最近 200 条，P2 改为数据库分页 |
 | `GET /api/sessions`、`GET /api/sessions/{id}`（新增字段） | auth + withSession | `extensions: [{id, name}]`：哪些扩展正在检查本空间的模型流量（已定决策：对用户可见） |
@@ -466,7 +476,7 @@ P1 已按下表完成：
 | `gateway.go` 的冷却表 | `loopguard.Cooldown`，独立网关与扩展各用一份 |
 | `cmd/abox-loop-guard` | 未改；`loopguard.Gateway` 改为 `modelgw.Proxy` + 同步检测，原有 HTTP 行为测试全部保留并通过 |
 
-接入 agentbox 后，生产上不再需要单独的 `abox-loop-guard.service`，也不再手工改账号的 base URL。迁移步骤：先启用扩展并绑定测试账号，把测试账号的 base URL 改回原供应商地址，确认网关和钩子正常后再停用独立服务。
+接入 agentbox 后，生产上不再需要单独的 `abox-loop-guard.service`，也不再手工改账号的 base URL。迁移步骤见 [`docs/loop-guard.md`](../loop-guard.md) 的「从独立网关迁到扩展」：先启用扩展并绑定账号（此时请求依次经过扩展网关和独立网关，保护不中断），再把账号地址改回原供应商，确认后停用独立服务并保留其配置用于回退。
 
 ## 14. 市场（以后）
 
@@ -481,8 +491,8 @@ P1 已按下表完成：
 | 阶段 | 内容 | 验证 |
 |---|---|---|
 | P0 | 本文评审 | — |
-| P1（已实现） | SPI 1.0-draft 类型与 `pkg/extspi`；宿主核心（仅 builtin）；`pkg/modelgw`；循环保护扩展；管理 API 与「扩展」菜单；只支持 Claude 中转/API Key 账号 | 已完成：Go 单元与竞态测试、合成 API 的浏览器回归。**未完成**：合成上游 + 真实 Claude CLI 的 Docker 回归（见 §17） |
-| P2 | Codex 改写（种子和 credsync 两处）；`extension_events` 表与回执里的中断说明；按回合归属（若 §16 验证通过） | 同上，加 Codex CLI 路径 |
+| P1（已实现） | SPI 1.0-draft 类型与 `pkg/extspi`；宿主核心（仅 builtin）；`pkg/modelgw`；循环保护扩展；管理 API 与「扩展」菜单；Claude 与 Codex 的 API Key / 中转账号；网关独占连接 | 已完成：Go 单元与竞态测试、合成 API 的浏览器回归。**未完成**：合成上游 + 真实 Claude / Codex CLI 的 Docker 回归（见 §17） |
+| P2 | `extension_events` 表与回执里的中断说明；按回合归属（若 §16 验证通过） | 同上 |
 | P3 | container 运行时；一致性测试工具；**冻结 SPI 1.0** | 沙箱隔离实测（network=none、只读根、资源限额、标签清理） |
 | P4 | 市场；`storage` | 另行设计 |
 
@@ -490,7 +500,7 @@ P1 已按下表完成：
 
 ## 16. 待验证与待决问题
 
-- **带路径前缀的 base URL**：Claude Code 和 Codex 对 `http://host/x/<session>/<mac>` 这种地址能否正确拼接 API 路径，需要用真实 CLI 实测；不行就改为在请求头里传令牌（Claude 的自定义请求头 env、Codex provider 的 `http_headers`）。
+- **带路径前缀的 base URL**：Claude Code 对 `http://host/x/<session>/<mac>` 这种地址能否正确拼接 API 路径，需要用真实 CLI 实测；不行就改为在请求头里传令牌（Claude 的自定义请求头 env）。Codex 的 provider `base_url` 本来就常带路径（如 `https://relay/v1`），按字符串拼接 `/responses`，风险较低，但同样需要实测。
 - **透明网络**：开启透明网络的空间能否访问网关端口，需要和代理桥一起核对。
 - **Codex 的 WebSocket 传输**：较新的 Codex 可能对 Responses 使用 WebSocket，网关不支持；需要确认所用 provider 配置不会启用它。
 - **用户级开关**：是否允许普通用户为自己的空间选择不检查（v1 不提供，由管理员按账号决定）。
@@ -524,3 +534,16 @@ P1 已按下表完成：
 - 网关核心放在公开的 `pkg/modelgw`（设计稿写的是 `internal/modelgw`），以便独立 `abox-loop-guard` 与第三方网关复用。
 - 增量批量方式改为「按积压合并」，没有固定 50 ms 定时器，`limits` 里也去掉了 `delta_batch_ms`。
 - `source` 在 P1 一律为 `unknown`，不推断网页回合与终端。
+
+## 18. Codex 与独占连接补充记录（2026-10-16）
+
+首版合并后发现，生产上独立网关保护的正是一个 Codex 中转账号（DeepSeek 渠道，开启了独占连接）。已定决策「只支持 API Key 和中转账号」本来就包括 Codex，首版只做了 Claude，不能替代生产部署，因此补齐：
+
+- `credentials`：`CodexUpstream`（从账号池读真实上游、判断能否绑定）、`codexGatewayConfig`（改写当前 provider 或替换内置 `openai`）、`ApplyCodexEndpoint`（账号锁内只改已播种空间的 `config.toml`，内容不变不写）；播发改用 `codexSessionConfig`，改 Key、改地址时网关地址不丢。
+- `workspace`：新增连接钩子，运行中准入与全新启动（种子之后）都执行，失败即启动失败。
+- 服务端：`gatewayEligible` 覆盖两种 Agent；`extensionEnv` 只给 Claude 注入 `ANTHROPIC_BASE_URL`，`NO_PROXY` 两种都补；`extensionRoute` 按账号类型解析上游（Codex 每次读账号池，账号已改为 ChatGPT 登录时回 400 并提示重开）；`applyExtensions` 后台对齐 Codex 空间；`extensions.gateway.dedicated_connections` 与 `PUT /api/extensions/gateway`，传输缓存键包含连接方式。
+- 网页：账号列表里 Codex API Key 账号可选、ChatGPT 登录不可选；列表页增加「每次请求独占一条连接」开关；三语词典。
+
+**已验证**：`internal/credentials` 的改写、解绑恢复、播发保留网关、未播种空间不创建、账号池不被写入；`internal/workspace` 的钩子在运行中与全新启动都执行、失败阻止启动；服务端用合成 Responses 上游（推理摘要复读）跑通：绑定后后台改写空间配置、账号池不变、请求经网关转到账号池的真实上游并被中断（`response.failed` + `model_output_loop`）、事件记录、解绑后恢复上游；独占连接接口的修订号与传输生效；浏览器回归覆盖 Codex 账号可选与开关保存。Go 测试均在 `-race` 下通过。
+
+**尚未验证**：真实 Codex CLI 在容器里使用改写后的 `config.toml` 走网关（含 app-server 与 exec 两条路径、终端）；生产网桥与防火墙对 1083 端口的放行。迁移时先绑定、再改账号地址，期间请求会依次经过两层网关，保护不中断。

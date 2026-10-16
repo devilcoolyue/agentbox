@@ -6,7 +6,7 @@ import { $, fmtDateTime, toast } from "./util.js";
 import { showView } from "./shell.js";
 import { buttonLabel } from "./icons.js";
 import { enhanceSelects } from "./select.js";
-import type { ExtensionEvent, ExtensionLogLine, ExtensionSchemaProp, ExtensionsResponse, ExtensionView, LocalText } from "./types.js";
+import type { ExtensionEvent, ExtensionGateway, ExtensionLogLine, ExtensionSchemaProp, ExtensionsResponse, ExtensionView, LocalText } from "./types.js";
 
 /* extensions：管理员的「扩展」页（docs/architecture/extensions-spi.md）。
  * 列表 → 详情（概览与权限、设置、事件、日志）。扩展提供的名称、说明、错误文案
@@ -76,7 +76,7 @@ export function initExtensionsPage() {
     try {
       const next = await api<ExtensionsResponse>("/extensions", { signal });
       if (mine !== gen || signal.aborted) return;
-      data = { gateway: next.gateway || { bind: "", host: "", active: false }, extensions: next.extensions || [] };
+      data = { gateway: next.gateway || { bind: "", host: "", active: false, dedicated_connections: false, revision: 0 }, extensions: next.extensions || [] };
     } catch (err) {
       if (signal.aborted || mine !== gen) return;
       if (!data) $("ext-gateway").textContent = (err as Error).message;
@@ -115,11 +115,53 @@ export function initExtensionsPage() {
         ? i18nText("模型网关 {addr} 未运行：{error}", { addr: g.bind, error: g.error })
         : i18nText("模型网关 {addr} · 启用扩展后开始监听", { addr: g.bind }));
     $("ext-gateway").dataset.state = g.active ? "on" : g.error ? "error" : "off";
+    renderGatewayOptions();
+  }
+
+  /* Gateway options apply to every routed account, so they sit on the list
+   * view. The single switch saves at once; a refresh does not redraw it
+   * mid-save. */
+  let gatewaySaving = false;
+  function renderGatewayOptions() {
+    const box = $("ext-gateway-opts");
+    box.classList.toggle("hidden", !!S.extSel);
+    if (gatewaySaving || !data) return;
+    const g = data.gateway;
+    const row = el("label", "check");
+    const input = el("input");
+    input.type = "checkbox";
+    input.checked = g.dedicated_connections;
+    input.addEventListener("change", () => void saveGateway(g, input));
+    row.append(input, el("span", "", () => i18nText("每次请求独占一条连接")));
+    box.replaceChildren(row, el("p", "hint", () => i18nText("只用 HTTP/1.1、不复用连接：中断回复时直接关掉这次请求的连接，而不只是重置共享连接上的一条流。代价是每次请求重新握手；只管得到网关到上游这一跳，中转站到供应商的连接不受控制。")));
+  }
+
+  async function saveGateway(g: ExtensionGateway, input: HTMLInputElement) {
+    if (gatewaySaving) return;
+    gatewaySaving = true;
+    input.disabled = true;
+    try {
+      const saved = await api<ExtensionGateway>("/extensions/gateway", { method: "PUT", body: JSON.stringify({ expected_revision: g.revision, dedicated_connections: input.checked }), signal });
+      if (signal.aborted) return;
+      if (data) data.gateway = saved;
+      toast(i18nText("网关连接设置已保存"));
+    } catch (err) {
+      if (signal.aborted) return;
+      input.checked = g.dedicated_connections;
+      toast(err instanceof APIError && err.status === 409 ? i18nText("扩展设置已被其他人修改，已重新载入") : (err as Error).message, true);
+    } finally {
+      gatewaySaving = false;
+      if (!signal.aborted && data) {
+        renderGatewayOptions();
+        void load(false);
+      }
+    }
   }
 
   function renderList() {
     const list = $("ext-list");
     list.classList.toggle("hidden", !!S.extSel);
+    $("ext-gateway-opts").classList.toggle("hidden", !!S.extSel);
     list.replaceChildren();
     for (const ext of data?.extensions || []) {
       const card = el("button", "card ext-card");
@@ -319,7 +361,7 @@ export function initExtensionsPage() {
     const syncMode = () => accountBox.classList.toggle("hidden", mode.value !== "accounts");
     mode.addEventListener("change", () => { dirty = true; syncMode(); });
     syncMode();
-    bindBox.append(mode, accountBox, el("p", "hint", () => i18nText("订阅登录的账号不能绑定。绑定后，新开的对话与终端会改走模型网关；已打开的终端窗口需要新开窗口才生效。")));
+    bindBox.append(mode, accountBox, el("p", "hint", () => i18nText("订阅登录（Claude 订阅、ChatGPT 登录）的账号不能绑定。绑定后，新开的对话与终端会改走模型网关；已打开的终端里，Claude 要新开窗口，Codex 重新启动即可。")));
     card.append(bindBox);
 
     const policyField = el("label", "field");
@@ -480,6 +522,7 @@ export function initExtensionsPage() {
     $("ext-list").replaceChildren();
     $("ext-detail").replaceChildren();
     $("ext-gateway").textContent = "";
+    $("ext-gateway-opts").replaceChildren();
     btn.classList.add("hidden");
   };
 }

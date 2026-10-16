@@ -409,6 +409,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/extensions", s.admin(http.HandlerFunc(s.handleExtensions)))
 	mux.Handle("GET /api/extensions/{id}", s.admin(http.HandlerFunc(s.handleExtension)))
 	mux.Handle("PUT /api/extensions/{id}", s.admin(http.HandlerFunc(s.handleUpdateExtension)))
+	mux.Handle("PUT /api/extensions/gateway", s.admin(http.HandlerFunc(s.handleUpdateExtensionGateway)))
 	mux.Handle("GET /api/extensions/{id}/logs", s.admin(http.HandlerFunc(s.handleExtensionLogs)))
 	mux.Handle("GET /api/extensions/{id}/events", s.admin(http.HandlerFunc(s.handleExtensionEvents)))
 	mux.Handle("PUT /api/settings", s.admin(http.HandlerFunc(s.handlePutSettings)))
@@ -886,6 +887,7 @@ func (s *Server) workspaces() *workspace.Service {
 		s.workspace = workspace.New(s.cfg, s.store, s.dock, s.sessionAccount, s.credentialService().Sync)
 		s.workspace.SetNetworkHook(s.ensureNetwork)
 		s.workspace.SetMCPHook(s.syncMCPOnStart)
+		s.workspace.SetConnectionHook(s.applyCodexEndpoint)
 	})
 	return s.workspace
 }

@@ -103,3 +103,24 @@ func writeRaw(t *testing.T, raw map[string]any) string {
 	}
 	return path
 }
+
+func TestExtensionGatewayOptions(t *testing.T) {
+	c := extensionsTestConfig(t, map[string]any{"extensions": map[string]any{"gateway": map[string]any{"bind": "172.17.0.1:1093"}}})
+	gw, err := c.SetExtensionGatewayOptions(true, 0)
+	if err != nil || !gw.DedicatedConnections || gw.Revision != 1 || gw.Bind != "172.17.0.1:1093" {
+		t.Fatalf("set: %+v %v", gw, err)
+	}
+	if _, err := c.SetExtensionGatewayOptions(false, 0); !errors.Is(err, ErrExtensionRevision) {
+		t.Fatalf("stale write: %v", err)
+	}
+	if err := c.ApplySettings(SettingsPatch{}); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := Load(c.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.GetExtensions().Gateway; !got.DedicatedConnections || got.Revision != 1 || got.Bind != "172.17.0.1:1093" {
+		t.Fatalf("reloaded: %+v", got)
+	}
+}

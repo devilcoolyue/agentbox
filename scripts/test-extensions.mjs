@@ -20,15 +20,23 @@ export async function extensionsSmoke(page, base, setSessions) {
   metrics:[{name:'trips',title:t('中断次数')}],
   setting:{enabled:false,order:0,config:{cooldown_seconds:30,window:256},permissions:['model.request.fingerprint','model.stream.text'],bindings:{mode:'none'},failure_policy:'',revision:0},
   status:{state:'disabled',restarts:0,active_streams:0},
-  accounts:[{id:'relay',label:'Relay',type:'claude',eligible:true},{id:'sub',label:'Subscription',type:'claude',eligible:false}],
+  accounts:[{id:'relay',label:'Relay',type:'claude',eligible:true},{id:'sub',label:'Subscription',type:'claude',eligible:false},
+   {id:'ds4',label:'ds4-1f',type:'codex',eligible:true},{id:'gpt',label:'ChatGPT login',type:'codex',eligible:false}],
  };
- const puts = []; let conflictNext = false;
+ const puts = [], gatewayPuts = []; let conflictNext = false;
+ let gateway = {bind:'172.17.0.1:1083',host:'172.17.0.1',dedicated_connections:false,revision:0};
  const events = [{seq:1,time:new Date().toISOString(),extension:view.id,kind:'abort',code:'model_output_loop',session:'fixture-space',account:'relay',user:'fixture',detail:{window:256,distinct:12}}];
  const logs = [{seq:1,time:new Date().toISOString(),level:'info',message:'interrupted <b>a</b> repeating text stream'}];
  await page.route('**/api/extensions**', async route => {
   const req = route.request(), path = new URL(req.url()).pathname;
   if (path.endsWith('/events')) return route.fulfill({json:{events}});
   if (path.endsWith('/logs')) return route.fulfill({json:{logs:new URL(req.url()).searchParams.get('since')==='0'?logs:[]}});
+  if (req.method() === 'PUT' && path === '/api/extensions/gateway') {
+   const body = req.postDataJSON(); gatewayPuts.push(body);
+   assert.equal(body.expected_revision, gateway.revision, 'stale gateway revision sent');
+   gateway = {...gateway, dedicated_connections:body.dedicated_connections, revision:gateway.revision+1};
+   return route.fulfill({json:{...gateway,active:view.setting.enabled}});
+  }
   if (req.method() === 'PUT') {
    const body = req.postDataJSON(); puts.push(body);
    if (conflictNext) { conflictNext=false; return route.fulfill({status:409,json:{error:'扩展设置已变化，请刷新后重试'}}); }
@@ -38,7 +46,7 @@ export async function extensionsSmoke(page, base, setSessions) {
    view.status = body.enabled ? {state:'running',restarts:0,active_streams:0,started_at:new Date().toISOString(),metrics:{trips:1},hooks:view.hooks} : {state:'disabled',restarts:0,active_streams:0};
    return route.fulfill({json:view});
   }
-  if (path === '/api/extensions') return route.fulfill({json:{gateway:{bind:'172.17.0.1:1083',host:'172.17.0.1',active:view.setting.enabled},extensions:[view]}});
+  if (path === '/api/extensions') return route.fulfill({json:{gateway:{...gateway,active:view.setting.enabled},extensions:[view]}});
   return route.fulfill({json:view});
  });
  try {
@@ -49,6 +57,15 @@ export async function extensionsSmoke(page, base, setSessions) {
   assert.equal(await page.locator('#btn-extensions').getAttribute('aria-current'), 'page');
   assert.match(await page.locator('#ext-gateway').innerText(), /172\.17\.0\.1:1083/);
   assert.match(await card.innerText(), /循环保护[\s\S]*未启用/);
+  // The gateway's dedicated-connection switch saves at once with its revision.
+  const dedicated = page.locator('#ext-gateway-opts input[type=checkbox]');
+  assert.equal(await dedicated.isChecked(), false);
+  await dedicated.check();
+  await page.locator('#toast').filter({hasText:'网关连接设置已保存'}).waitFor();
+  assert.deepEqual(gatewayPuts, [{expected_revision:0,dedicated_connections:true}]);
+  await page.waitForFunction(()=>document.querySelector('#ext-gateway-opts input')?.checked===true && !document.querySelector('#ext-gateway-opts input').disabled);
+  await mkdir('output/playwright',{recursive:true});
+  await page.screenshot({path:'output/playwright/extensions-list.png',animations:'disabled'});
   await card.click();
   await page.waitForFunction(()=>location.hash==='#/extensions/agentbox.loop-guard');
   const detail = page.locator('#ext-detail');
@@ -70,7 +87,12 @@ export async function extensionsSmoke(page, base, setSessions) {
   const relay = accountBox.locator('label', {hasText:'Relay'}).locator('input');
   const sub = accountBox.locator('label', {hasText:'Subscription'}).locator('input');
   assert.equal(await sub.isDisabled(), true);
+  // Codex API key / relay accounts are eligible; ChatGPT logins are not.
+  assert.equal(await accountBox.locator('label', {hasText:'ds4-1f'}).locator('input').isDisabled(), false);
+  assert.equal(await accountBox.locator('label', {hasText:'ChatGPT login'}).locator('input').isDisabled(), true);
+  assert.equal(await page.locator('#ext-gateway-opts').isVisible(), false, 'gateway options stay on the list view');
   await relay.check();
+  await accountBox.locator('label', {hasText:'ds4-1f'}).locator('input').check();
   await detail.locator('.ext-config [data-key="window"] input').fill('120');
   await mkdir('output/playwright',{recursive:true});
   for (const [width, name] of [[1280,'desktop'],[390,'mobile']]) {
@@ -84,7 +106,7 @@ export async function extensionsSmoke(page, base, setSessions) {
   const saved = puts.at(-1);
   assert.equal(saved.enabled, true);
   assert.deepEqual(saved.permissions, ['model.request.fingerprint','model.stream.text']);
-  assert.deepEqual(saved.bindings, {mode:'accounts',accounts:['relay']});
+  assert.deepEqual(saved.bindings, {mode:'accounts',accounts:['relay','ds4']});
   assert.deepEqual(saved.config, {cooldown_seconds:30,window:120});
   assert.equal(saved.failure_policy, '');
   // A concurrent edit is reported and the form reloads the stored revision.
@@ -105,7 +127,7 @@ export async function extensionsSmoke(page, base, setSessions) {
   const badge = page.locator('#wb-ext');
   await badge.waitFor();
   assert.match(await badge.innerText(), /循环保护/);
-  console.log('Extensions: list/detail, permission approval, account binding with ineligible subscription accounts, schema form, revisioned save and conflict reload, plain-text manifest strings, events/logs and workspace badge passed');
+  console.log('Extensions: list/detail, gateway dedicated-connection switch, permission approval, Claude and Codex API key binding with ineligible subscription/ChatGPT accounts, schema form, revisioned save and conflict reload, plain-text manifest strings, events/logs and workspace badge passed');
   await page.screenshot({path:'output/playwright/extensions-workspace.png',animations:'disabled',clip:{x:0,y:0,width:1280,height:160}});
   assert.match(await badge.getAttribute('aria-label'), /循环保护 正在检查本空间的模型输出/);
  } finally {

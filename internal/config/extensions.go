@@ -31,9 +31,14 @@ type ExtensionsConfig struct {
 
 // ExtensionGateway is where the model gateway listens (reachable from
 // containers) and the host advertised to them (defaults to Bind's host).
+// DedicatedConnections gives every upstream request its own HTTP/1.1 TCP/TLS
+// connection, so an interruption closes that connection instead of only
+// resetting one HTTP/2 stream. Revision guards the administrator's edits.
 type ExtensionGateway struct {
-	Bind string `json:"bind,omitempty"`
-	Host string `json:"host,omitempty"`
+	Bind                 string `json:"bind,omitempty"`
+	Host                 string `json:"host,omitempty"`
+	DedicatedConnections bool   `json:"dedicated_connections,omitempty"`
+	Revision             int64  `json:"revision,omitempty"`
 }
 
 type ExtensionSetting struct {
@@ -105,6 +110,9 @@ func (c *Config) validateExtensions() error {
 		if e.Gateway.Host == "" && (host == "" || net.ParseIP(host).IsUnspecified()) {
 			return fmt.Errorf("extensions.gateway.host is required when the bind host is empty or a wildcard")
 		}
+	}
+	if e.Gateway.Revision < 0 || e.Gateway.Revision == math.MaxInt64 {
+		return fmt.Errorf("extensions.gateway.revision invalid")
 	}
 	bind := e.Gateway.Bind
 	if bind == "" {
@@ -206,6 +214,23 @@ func (c *Config) SetExtension(id string, s ExtensionSetting, expectedRevision in
 		items[id] = next
 		w.Extensions.Items = items
 		out = next.Clone()
+		return nil
+	})
+	return out, err
+}
+
+// SetExtensionGatewayOptions changes the administrator-editable gateway
+// options if expectedRevision matches. Bind and host stay operator settings in
+// config.json: moving the listener changes the URL every routed CLI holds.
+func (c *Config) SetExtensionGatewayOptions(dedicated bool, expectedRevision int64) (ExtensionGateway, error) {
+	var out ExtensionGateway
+	err := c.mutate(func(w *Config) error {
+		if w.Extensions.Gateway.Revision != expectedRevision {
+			return ErrExtensionRevision
+		}
+		w.Extensions.Gateway.DedicatedConnections = dedicated
+		w.Extensions.Gateway.Revision++
+		out = w.Extensions.Gateway
 		return nil
 	})
 	return out, err

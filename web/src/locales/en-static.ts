@@ -807,5 +807,5 @@ export default {
   "复制到剪贴板": "Copy to clipboard",
   "扩展": "Extensions",
   "扩展：循环保护等官方维护的功能": "Extensions: officially maintained features such as Loop guard",
-  "扩展在模型请求经过网关时检查流量，例如打断复读的回复。只对绑定的 API Key / 中转账号生效。": "Extensions inspect model traffic as it passes through the gateway, for example to interrupt a reply that keeps repeating itself. They only apply to bound API key / relay accounts."
+  "扩展在模型请求经过网关时检查流量，例如打断复读的回复。只对绑定的 Claude / Codex API Key 与中转账号生效。": "Extensions inspect model traffic as it passes through the gateway, for example to interrupt a reply that keeps repeating itself. They only apply to bound Claude / Codex API key and relay accounts."
 } satisfies Record<string, string>;
