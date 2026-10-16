@@ -156,6 +156,17 @@ try{
       assert.ok(!(await page.locator('#setup-steps').innerText()).includes('model available'));
       await page.locator('#setup-steps > li').nth(1).getByRole('button').click();await page.locator('#sec-accounts').waitFor({state:'visible'});
       await home();await page.locator('#btn-settings').click();await page.locator('#sec-accounts').waitFor({state:'visible'});
+      if(insecure){
+        // This origin exercises issue #3. The full creation/download flow below
+        // runs on the local server, independently of HTTP-origin routing.
+        await page.locator('#btn-acct-add').click();await page.locator('#acct-form').waitFor({state:'visible'});
+        await page.keyboard.press('Escape');await page.locator('#acct-form').waitFor({state:'hidden'});
+        await page.reload();await page.locator('#sec-accounts').waitFor({state:'visible'});
+        await home();await page.locator('#btn-settings').click();await page.locator('#sec-accounts').waitFor({state:'visible'});
+        assert.equal(created,0);assert.equal(modelTurns,0);assert.deepEqual(errors,[]);
+        console.log('Onboarding admin/zh-CN/remote-http: account configuration, settings, account dialog and reload passed');
+        continue;
+      }
       await page.locator('#btn-acct-add').click();await page.locator('#acct-form label.agent-codex').click();
       await page.locator('#acct-id').fill('codex-fixture');await page.locator('#acct-label').fill('Fixture account');
       await page.locator('#auth-mode-key').click();await page.locator('#auth-apikey').fill('synthetic-key');await page.locator('#auth-savekey').click();
