@@ -27,6 +27,91 @@ export interface Session {
   updated_at: string;
   /** sessionView 在 store.Session 之上补的账号展示名 */
   account_label: string;
+  /** 正在检查本空间模型流量的扩展（服务端 sessionView.Extensions；旧服务端没有） */
+  extensions?: SessionExtension[];
+}
+
+/** Localized manifest text keyed by locale (zh-CN / zh-TW / en). */
+export type LocalText = Record<string, string>;
+
+export interface SessionExtension {
+  id: string;
+  name: LocalText;
+}
+
+/** GET /api/extensions（server.extensionsResponse）。 */
+export interface ExtensionsResponse {
+  gateway: { bind: string; host: string; active: boolean; error?: string };
+  extensions: ExtensionView[];
+}
+
+export interface ExtensionSchemaProp {
+  type: "boolean" | "integer" | "number" | "string" | "enum";
+  title: LocalText;
+  description?: LocalText;
+  minimum?: number;
+  maximum?: number;
+  maxLength?: number;
+  enum?: string[];
+  default?: unknown;
+}
+
+export interface ExtensionSetting {
+  enabled: boolean;
+  version?: string;
+  order: number;
+  config?: Record<string, unknown>;
+  permissions: string[];
+  bindings: { mode: "none" | "accounts" | "all"; accounts?: string[] };
+  failure_policy?: "" | "fail_open" | "fail_closed";
+  revision: number;
+}
+
+export interface ExtensionStatus {
+  state: "disabled" | "invalid" | "starting" | "running" | "degraded" | "restarting" | "failed" | "stopped";
+  error?: string;
+  started_at?: string;
+  restarts: number;
+  hooks?: string[];
+  metrics?: Record<string, number>;
+  active_streams: number;
+  dropped_logs?: number;
+}
+
+export interface ExtensionView {
+  id: string;
+  version: string;
+  publisher: string;
+  name: LocalText;
+  description: LocalText;
+  license?: string;
+  homepage?: string;
+  builtin: boolean;
+  runtime: string;
+  hooks: string[];
+  permissions: string[];
+  failure_policy: "fail_open" | "fail_closed";
+  config_schema: { type: "object"; properties?: Record<string, ExtensionSchemaProp> };
+  errors: { code: string; message: LocalText }[];
+  metrics: { name: string; title: LocalText }[];
+  setting: ExtensionSetting;
+  status: ExtensionStatus;
+  accounts: { id: string; label: string; type: string; eligible: boolean }[];
+}
+
+export interface ExtensionLogLine { seq: number; time: string; level: string; message: string }
+
+export interface ExtensionEvent {
+  seq: number;
+  time: string;
+  extension: string;
+  kind: "abort" | "reject" | "unavailable" | "overloaded";
+  code: string;
+  stream?: string;
+  session?: string;
+  account?: string;
+  user?: string;
+  detail?: Record<string, number>;
 }
 
 export interface AccountAccess {

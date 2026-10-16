@@ -42,6 +42,8 @@
 
 **主管委派（开发预览）**让强模型带着便宜模型干活：在 Claude Code 空间的输入框旁打开「委派」并勾选跑腿模型，主 Agent（例如 Opus）照常对话、定方案、写关键代码，遇到规则明确的子任务（批量修改、按接口实现、补测试等）时通过平台工具交给 Sonnet、Codex 模型或挂在 Claude Code / Codex 账号下的中转模型去做。跑腿直接修改当前空间的文件，主 Agent 查看平台实测的改动后再汇报。管理员给每个账号模型标注能接的任务类型和不接的风险，路由按标签过滤，并可选让 Jev 判断交给哪个跑腿或由主 Agent 自己做。跑腿费用记在原空间下。该预览需要 schema 18，替换并删除了旧的多 Agent 协作，不承诺省钱比例。[设计与边界 →](docs/architecture/delegation-supervisor.md)
 
+**扩展**是管理员在侧栏「扩展」里启用的服务端功能，检查经过模型网关的流量；首个官方扩展「循环保护」在模型反复说同样的短句时中断这次回复，并在冷却期内拒绝相同的重试，不读取提示词、工具参数和凭证。管理员逐项批准权限、选择作用的账号（只支持 API Key / 中转账号，订阅登录账号不改道），扩展失效时默认放行并在扩展页标出。被检查的空间头部会显示盾牌和扩展名。扩展用统一的 SPI 协议接入，以后可增加更多官方扩展。[设计与边界 →](docs/architecture/extensions-spi.md)
+
 **下一步提示**沿用 Claude Code 命令行的做法：Claude 空间每轮结束后，空输入框里以灰字显示预测的下一句，按 Tab（手机点「填入」）放进输入框，确认后再发送。生成提示会多调用一次模型，费用计入额度并在使用记录里单独列为「下一步提示」；可在「系统设置 → 界面与提示」里按浏览器关闭。需要 Agent 镜像内的 Claude Code 支持 `--prompt-suggestions`，旧镜像不显示提示。
 
 **Agent 提问**同样来自命令行：Claude 执行中需要你拿主意时（它的 AskUserQuestion 工具），这一轮会停下来，对话里出现一张卡片，列出问题和选项（单选或多选，另有「其他」可自由填写）。提交后同一轮带着你的回答继续；点「跳过」或 10 分钟内没人回答，Agent 会按自己的判断继续并说明它的假设。多个页面同时打开时只认第一份回答，中断会撤回提问，等待的时间不计入回合时限。只有 Claude 空间会提问，而且只在能显示卡片的页面发出的消息里；需要 Agent 镜像内的 Claude Code 支持 stream-json 输入与 `--permission-prompt-tool stdio`。
@@ -261,7 +263,7 @@ Agent 镜像更新使用固定底座，避免 CLI 每次升级叠加旧层。存
 | --- | --- |
 | 使用对话、终端、文件、预览与 Git | [工作空间指南](docs/user-guide.md) |
 | 接入账号、选择模型 | [账号与模型](docs/accounts-and-models.md) |
-| 为不同 Agent 打断模型复读 | [独立循环保护网关（开发预览）](docs/loop-guard.md) |
+| 为不同 Agent 打断模型复读 | [扩展：循环保护](docs/architecture/extensions-spi.md) · [独立循环保护网关（开发预览）](docs/loop-guard.md) |
 | 复用技能、模板与 MCP 工具 | [技能、插件与 MCP](docs/skills-and-mcp.md) |
 | 查看或管理成本 | [用量与额度](docs/usage-and-quotas.md) · [价格目录](docs/pricing-catalog.md) |
 | 访问内网服务 | [代理与 abox-link](docs/networking.md) |

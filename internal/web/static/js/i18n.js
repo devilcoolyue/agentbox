@@ -8,6 +8,13 @@ export const i18n = createI18n({ catalogs: {
     } });
 export const t = i18n.t;
 export { languages };
+/** Picks the current language from server-provided localized text (extension
+ * manifests). Falls back to English, then to any language present. */
+export function pickLocal(text) {
+    if (!text)
+        return "";
+    return text[i18n.locale] || text.en || text["zh-CN"] || text["zh-TW"] || Object.values(text).find(Boolean) || "";
+}
 export const escapeHTML = (value) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 /** Only for authored HTML templates whose parameter values are ALREADY escaped
  * (or trusted markup). For arbitrary values use escapeHTML(t(source, params)). */

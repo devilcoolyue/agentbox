@@ -38,6 +38,7 @@ export const S = {
     sec: "accounts",
     modelTab: "accounts",
     gitSec: "guide",
+    extSel: "",
     tab: "chat",
     termWS: null,
     termWSGen: 0,

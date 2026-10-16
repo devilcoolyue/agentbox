@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"agentbox/internal/config"
+	"agentbox/internal/extension"
 	"agentbox/internal/store"
 	"agentbox/internal/workspace"
 )
@@ -57,17 +58,24 @@ func (s *Server) ensureSharedDir(user string) (string, error) {
 type sessionView struct {
 	store.Session
 	AccountLabel string `json:"account_label"`
+	// Extensions inspecting this workspace's model traffic, so its owner
+	// knows their model output is being inspected.
+	Extensions []extension.BoundExtension `json:"extensions"`
 }
 
 func (s *Server) view(sess store.Session) sessionView {
 	label := sess.AccountID
+	extensions := []extension.BoundExtension{}
 	if a, ok := s.cfg.Account(sess.AccountID); ok {
 		label = a.Label
 		// Report the model the workspace actually uses after the account's
 		// list changed; the stored value is kept for a later list that has it.
 		sess.DefaultModel = a.ResolveModel(sess.DefaultModel)
+		if bound, rewrite := s.inspectingExtensions(sess, a); rewrite {
+			extensions = bound
+		}
 	}
-	return sessionView{Session: sess, AccountLabel: label}
+	return sessionView{Session: sess, AccountLabel: label, Extensions: extensions}
 }
 
 func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {

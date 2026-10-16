@@ -220,7 +220,7 @@ window.addEventListener("keydown", (e) => {
 syncSidebar();
 /* ---- 顶栏：设置视图显示标题，工作台视图显示 状态灯+会话名+⋯菜单 ---- */
 const VIEW_TITLE = {
-    get git() { return i18nText("Git 管理"); }, get settings() { return i18nText("系统设置"); }, get usage() { return i18nText("使用记录"); }, get tunnel() { return i18nText("内网隧道"); },
+    get git() { return i18nText("Git 管理"); }, get settings() { return i18nText("系统设置"); }, get usage() { return i18nText("使用记录"); }, get tunnel() { return i18nText("内网隧道"); }, get extensions() { return i18nText("扩展"); },
 };
 export function updateTopbarTitle() {
     const inWork = S.view === "work" && !!S.current;
@@ -250,7 +250,8 @@ export function showView(name) {
     $("view-settings").classList.toggle("hidden", name !== "settings");
     $("view-usage").classList.toggle("hidden", name !== "usage");
     $("view-tunnel").classList.toggle("hidden", name !== "tunnel");
-    for (const [id, view] of [["btn-git-management", "git"], ["btn-settings", "settings"], ["btn-usagelog", "usage"], ["btn-tunnel", "tunnel"]]) {
+    $("view-extensions").classList.toggle("hidden", name !== "extensions");
+    for (const [id, view] of [["btn-git-management", "git"], ["btn-settings", "settings"], ["btn-usagelog", "usage"], ["btn-tunnel", "tunnel"], ["btn-extensions", "extensions"]]) {
         $(id).classList.toggle("active", name === view);
         if (name === view)
             $(id).setAttribute("aria-current", "page");

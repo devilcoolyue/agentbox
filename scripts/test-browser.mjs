@@ -15,6 +15,7 @@ import { switchAccountSmoke } from './test-switch-account.mjs';
 import { accountModelsSmoke } from './test-account-models.mjs';
 import { userPickerSmoke } from './test-user-picker.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
+import { extensionsSmoke } from './test-extensions.mjs';
 import { remoteBrowserSmoke } from './test-remote-browser.mjs';
 import { imageUpdateSmoke } from './test-image-updates.mjs';
 import {updateComponentsSmoke} from './test-update-components.mjs';
@@ -365,6 +366,11 @@ export async function smoke(page) {
   }
   if (process.env.AGENTBOX_BROWSER_ONLY_PRICING === '1') {
    await pricingSmoke(page);
+   assert.deepEqual(errors,[]);
+   return;
+  }
+  if (process.env.AGENTBOX_BROWSER_ONLY_EXTENSIONS === '1') {
+   await extensionsSmoke(page,base,next=>{sessions=next;});
    assert.deepEqual(errors,[]);
    return;
   }
@@ -914,6 +920,7 @@ export async function smoke(page) {
   await skinsSmoke(page, base);
   await themesSmoke(page);
   await pricingSmoke(page);
+  await extensionsSmoke(page,base,next=>{sessions=next;});
   const checksBeforeUser=updateChecks, readsBeforeUser=updateReads, upgradesBeforeUser=upgradeReads;
   me.role = 'user';
   await page.reload();
@@ -925,6 +932,7 @@ export async function smoke(page) {
   await page.goto(base + '/#/sessions/%E0%A4%A/files');
   await at('#/','#empty'); // Malformed URL must not break initialization.
   assert.equal(await page.locator('#version-badge').isVisible(),false);
+  assert.equal(await page.locator('#btn-extensions').isVisible(),false,'ordinary user sees the 扩展 entry');
   assert.equal(updateChecks,checksBeforeUser,'ordinary user initiated update check');
   assert.equal(updateReads,readsBeforeUser,'ordinary user fetched update metadata');
   assert.equal(upgradeReads,upgradesBeforeUser,'ordinary user fetched upgrade status');

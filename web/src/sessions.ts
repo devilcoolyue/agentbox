@@ -1,5 +1,5 @@
 import { openDiagnostics } from "./diagnostics.js";
-import { setText, setTextRender, t as i18nText } from "./i18n.js";
+import { pickLocal, setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
 /* sessions：会话的打开/切换、生命周期（启动/停止/删除，含窄屏 ⋯ 菜单）、
  * 新建会话弹窗、工作台标签页。 */
 "use strict";
@@ -26,7 +26,7 @@ import { bindMenu } from "./menu.js";
 import { sessionState } from "./session-state.js";
 import { ListMotion } from "./motion.js";
 import { renderHome } from "./home.js";
-import { actionButton } from "./icons.js";
+import { actionButton, svgIcon } from "./icons.js";
 import type { MenuItem } from "./menu.js";
 
 /* ---------------- 打开 / 切换 ---------------- */
@@ -102,6 +102,20 @@ export function renderHead() {
   setTextRender(st, () => sessionState(sess).label);
   setTip(st, () => sessionState(sess).tip);
   meta.append(an, document.createTextNode(` · ${sess.account_label} · `), st, document.createTextNode(" · "), id);
+  const inspectors = sess.extensions || [];
+  if (inspectors.length) {
+    // 用户应当知道自己的模型输出正被扩展（如循环保护）检查。
+    const names = () => inspectors.map(e => pickLocal(e.name) || e.id).join("、");
+    const ext = document.createElement("span");
+    ext.id = "wb-ext";
+    ext.className = "wb-ext";
+    const label = document.createElement("span");
+    setTextRender(label, names);
+    ext.append(svgIcon("shield", 12), label);
+    setAttrRender(ext, "aria-label", () => i18nText("{names} 正在检查本空间的模型输出", { names: names() }));
+    setTip(ext, () => i18nText("{names} 正在检查本空间的模型输出", { names: names() }));
+    meta.append(document.createTextNode(" · "), ext);
+  }
   const changeKey = stateChangeKey(sess.id, state.cls);
   stateText.play(st, changeKey);
   stateLed.play(av.querySelector<HTMLElement>(".led")!, changeKey);

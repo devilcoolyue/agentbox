@@ -100,6 +100,39 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 
 这些是容器侧服务端口，日常部署不需要把它们开放到公网。用户电脑通过 HTTPS / WSS 连接 agentbox 即可。配置和使用步骤见[网络手册](networking.md)。
 
+## 扩展
+
+```json
+{
+  "extensions": {
+    "gateway": {"bind": "172.17.0.1:1083", "host": ""},
+    "items": {
+      "agentbox.loop-guard": {
+        "enabled": true,
+        "config": {"window": 256, "distinct_limit": 24, "cooldown_seconds": 30},
+        "permissions": ["model.request.fingerprint", "model.stream.text"],
+        "bindings": {"mode": "accounts", "accounts": ["relay-a"]},
+        "failure_policy": "",
+        "revision": 1
+      }
+    }
+  }
+}
+```
+
+| 字段 | 默认值 / 格式 | 说明 |
+| --- | --- | --- |
+| `extensions.gateway.bind` | `172.17.0.1:1083` | 模型网关监听地址，须容器可达；不能与 `proxy_bridge.bind`、`tunnel.proxy_bind`、`tunnel.network_bind` 相同。有扩展启用时才开始监听 |
+| `extensions.gateway.host` | 从 bind 提取主机 | 写进容器 base URL 的主机；bind 为通配地址时必须填写 |
+| `items.<id>.enabled` | `false` | 是否运行该扩展 |
+| `items.<id>.config` | 清单默认值 | 按扩展清单的 `config_schema` 校验，未知键会被拒绝 |
+| `items.<id>.permissions` | 空 | 管理员批准的权限，只能是清单申请过的；缺少钩子所需权限时不能启用 |
+| `items.<id>.bindings` | `{"mode":"none"}` | `none` / `accounts`（列出账号 ID）/ `all`（全部 API Key / 中转账号，含以后新增的）。订阅登录账号不会被改道 |
+| `items.<id>.failure_policy` | 空 = 清单默认 | `fail_open` 放行或 `fail_closed` 拦截；循环保护默认放行 |
+| `items.<id>.revision` | 服务端维护 | 每次保存加一；网页提交时用它防止覆盖他人的修改 |
+
+建议在「扩展」页修改，不必手写；网页保存会校验清单并立即生效（扩展重启、冷却记录清空）。删除账号时会同时把它从各扩展的绑定中移除。绑定后新开的对话与终端执行改走网关，已打开的终端窗口需新开窗口。
+
 ## 终端提示语
 
 ```json
@@ -121,6 +154,7 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 | 在网页修改空闲时间、价格、候选模型和时区 | 保存后供后续操作读取 |
 | 系统默认模型 | 随后新建的空间；已有空间保留自己的值 |
 | 账号 env、出口代理与兼容隧道环境变量 | 后续 CLI 执行；已运行终端需重连并新建窗口 |
+| 扩展的启用、参数与账号绑定 | 网页保存后扩展立即重启；base URL 改写对后续 CLI 执行生效，已运行终端需新建窗口 |
 | 透明隧道放行规则 | 约 2 秒同步，以空间网络就绪状态为准；既有 Shell 的新连接生效 |
 | 透明模式开关 | 影响容器网络布局；切换前停止空间，再按[网络手册](networking.md#透明内网访问)重启 |
 | home 模板 | 下次启动路径执行时同步；技能也可手动装到当前空间 |

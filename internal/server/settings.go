@@ -299,5 +299,6 @@ func (s *Server) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	s.applyExtensions() // the removal pruned the account from extension bindings
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }

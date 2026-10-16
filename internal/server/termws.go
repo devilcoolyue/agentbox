@@ -95,7 +95,7 @@ func tmuxEnvSync(env []string) string {
 		have[k] = true
 		fmt.Fprintf(&b, "tmux set-environment -g %s %s; ", k, shellQuote(v))
 	}
-	for _, k := range append(append([]string{}, tunnelEnvNames...), proxyEnvNames...) {
+	for _, k := range append(append(append([]string{}, tunnelEnvNames...), proxyEnvNames...), extensionEnvNames...) {
 		if !have[k] {
 			fmt.Fprintf(&b, "tmux set-environment -gu %s; ", k)
 		}

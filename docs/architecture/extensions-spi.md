@@ -1,6 +1,13 @@
 # 扩展与 SPI 协议设计
 
-日期：2026-10-16。状态：**设计草案，未实现**。本文供评审；SPI 1.0 冻结前（见 §15 P3）字段和方法名可能调整，不承诺兼容。
+日期：2026-10-16。状态：**设计已评审；P1 已实现**（「扩展」菜单 + 循环保护，作用于 Claude API Key / 中转账号）。真实 Claude Code 与 Linux Docker 链路尚未验收，见 §17。SPI 1.0 冻结前（见 §15 P3）字段和方法名可能调整，不承诺兼容。
+
+**已定决策（2026-10-16）**
+
+1. 只支持 API Key 和中转账号绑定扩展；OAuth 订阅账号（Claude 订阅、ChatGPT 登录）不支持。
+2. 扩展失效时默认放行（`fail_open`），管理员可以按扩展改成拦截。
+3. 对用户可见：空间里显示有哪些扩展在检查它的模型流量。
+4. 不做自动续跑：中断后由用户决定怎么继续，SPI 不提供发起消息的能力。
 
 ## 1. 目标与边界
 
@@ -17,6 +24,7 @@
 - 不在服务端进程里运行第三方代码，不支持 Go `plugin`（.so）。服务端以 root 运行，持有 Docker socket、账号凭证和 Git 密钥库，进程内插件等于整机权限；`.so` 还要求完全相同的工具链与依赖版本，不能卸载，也配不上多平台发布。
 - 扩展不能往网页注入自己的脚本或样式。界面由宿主按扩展的声明渲染，理由同自定义主题：控制台没有 CSP，令牌在 localStorage。
 - 不替代 Agent 侧的扩展方式。Agent 里要加工具或技能，继续用 MCP、技能、home 模板和 Claude 插件市场。
+- 不做自动续跑。扩展只能放行、拒绝或中断，不能替用户发消息、重试或切换模型。
 
 **命名**：界面和代码里统一叫「扩展」（`extension`）。「插件」继续专指 Claude Code 插件（`market.go`、技能页），两者不混用。
 
@@ -34,11 +42,11 @@
                                                └─ container：Docker 沙箱，stdio JSON-RPC
 ```
 
-| 组件 | 位置（计划） | 职责 |
+| 组件 | 位置 | 职责 |
 |---|---|---|
-| 扩展宿主 | `internal/extension` | 清单校验、注册表、实例生命周期、钩子分发、权限、故障策略、状态与日志 |
-| 模型网关 | `internal/modelgw` | 接收容器的模型请求；走账号出口转发；把四种协议的 SSE 解码成统一增量；执行中断并按协议写错误事件 |
-| SPI SDK | `pkg/extspi`（公开） | 消息类型、NDJSON JSON-RPC 编解码、`Serve(handler)`、一致性测试工具；官方和第三方 Go 扩展共用 |
+| 扩展宿主 | `internal/extension`（官方扩展在 `internal/extension/builtin`） | 清单校验、注册表、实例生命周期、钩子分发、权限、故障策略、状态与日志 |
+| 模型网关 | `pkg/modelgw`（公开，独立 `abox-loop-guard` 共用）+ `internal/server/extensions.go` | 转发、四协议 SSE 解码成统一增量、执行中断并按协议写错误事件；服务端部分负责监听、路径鉴权、上游与账号出口解析 |
+| SPI SDK | `pkg/extspi`（公开） | 消息类型、NDJSON JSON-RPC 编解码、`Serve(handler)`、`Pipe` 一致性测试；官方和第三方 Go 扩展共用 |
 | 扩展实例 | builtin / container | 只处理被授权的数据，只能返回裁决 |
 
 关键取舍：**网络这一跳由宿主执行**。凭证、出口代理、协议解析和中断的写法都在宿主手里，扩展只看到授权给它的数据（例如模型输出的文字增量），只能回答「放行 / 拒绝 / 中断」。市场扩展因此看不到 API Key，也发不出网络请求。
@@ -181,7 +189,7 @@
   "extension":{"id":"agentbox.loop-guard","version":"1.0.0"},
   "config":{"window":256,"distinct_limit":24,"cooldown_seconds":30},
   "permissions":["model.request.fingerprint","model.stream.text"],
-  "limits":{"request_timeout_ms":200,"max_message_bytes":1048576,"delta_batch_ms":50}
+  "limits":{"request_timeout_ms":200,"max_message_bytes":1048576}
 }}
 ```
 
@@ -258,7 +266,7 @@
 
 - 宿主把四种协议解码成统一的文字增量。`part` 是不透明的分区键（候选、输出项、内容块、摘要序号的组合），`channel` 为 `text` 或 `reasoning`。扩展必须按 (`part`, `channel`) 分别处理。`ended_parts` 表示这些分区已结束（例如 Anthropic 的 `content_block_stop`），扩展可以释放对应状态。
 - 只包含增量，不重复发送最终的完整快照。工具调用参数、工具结果和 usage 不发送（`model.stream.tools` 保留）。
-- `seq` 在每条流内从 1 递增，用来发现丢失。宿主每 50 ms 或攒满 32 KiB 合并发送一次。
+- `seq` 在每条流内从 1 递增，用来发现丢失。增量先进入实例队列，宿主轮到这条流时把积压的增量合并成一条通知，没有积压就逐事件发送。
 - **转发不等扩展**：宿主把上游事件立刻转给客户端，同时把增量异步送给扩展。中断可能晚到几个事件，换来的是对回复速度没有影响。
 - `close.reason`：`completed` / `upstream_error` / `client_closed` / `aborted` / `rejected` / `not_inspected` / `overflow` / `timeout`。中断时另带 `aborted_by`（扩展 ID）与 `code`。
 
@@ -296,7 +304,7 @@
 | `status/report` | 通知 | `{"state":"ok"|"degraded","metrics":{"trips":3}}`。只接受清单 `status.metrics` 里声明过的数值指标，显示在扩展页 |
 | `log` | 通知 | `{"level":"info"|"warn"|"error","message":"…"}`。单条最长 1 KiB，每秒最多 20 条，超出丢弃并计数；只保留在内存环形缓冲里，只给管理员看。container 的 stderr 也进入同一缓冲，每分钟最多 64 KiB |
 
-v1 不提供文件、网络、聊天等宿主能力。以后计划通过权限开放：`storage`（扩展私有目录或 KV，带配额）、`chat.followup`（发起跟进消息，见 §10）。
+v1 不提供文件、网络、聊天等宿主能力。以后计划通过权限开放 `storage`（扩展私有目录或 KV，带配额）。按已定决策，不提供发起聊天消息的能力。
 
 ### 6.6 错误码
 
@@ -336,7 +344,6 @@ v1 不提供文件、网络、聊天等宿主能力。以后计划通过权限�
 | `model.request.body` | 请求正文（提示词） | 能读到完整对话上下文 | 保留 |
 | `model.stream.tools` | 工具调用参数 | 能读到 Agent 要执行的命令和文件内容 | 保留 |
 | `storage` | 私有持久存储 | 有配额 | 保留 |
-| `chat.followup` | 发起跟进消息 | 会产生新的模型调用和费用 | 保留 |
 
 - 管理员启用时逐项批准，可以只批准一部分；缺少钩子必需的权限时，宿主不调用该钩子。
 - 升级时如果新版本要了更多权限，在管理员批准之前继续运行旧版本。
@@ -346,18 +353,18 @@ v1 不提供文件、网络、聊天等宿主能力。以后计划通过权限�
 
 ### 8.1 哪些账号能绑定
 
-v1 只支持「请求能改道」且已经验证过的账号：
+只支持 API Key 和中转账号（已定决策）：
 
-- Claude：API Key 或中转模式（账号 env 里有 `ANTHROPIC_AUTH_TOKEN` 或 `ANTHROPIC_API_KEY`，即 `claudeRelay` 返回令牌）。
-- Codex：非 ChatGPT 登录、使用 `config.toml` 自定义 provider 的账号。
+- Claude：账号 env 里有 `ANTHROPIC_AUTH_TOKEN` 或 `ANTHROPIC_API_KEY`（即 `claudeRelay` 返回令牌）。P1 支持。
+- Codex：非 ChatGPT 登录、使用 `config.toml` 自定义 provider 的账号。P2 支持。
 
-OAuth 订阅账号（Claude 订阅、ChatGPT 登录）能否改 base URL 还没验证，v1 不提供绑定（§16）。
+OAuth 订阅账号（Claude 订阅、ChatGPT 登录）不能绑定。账号从中转切回订阅登录后，宿主不再改写它的 base URL，网关对它的请求也不调用钩子。
 
 扩展配置里的绑定写法：`{"mode":"none"|"accounts"|"all","accounts":["relay-a"]}`。`all` 表示所有符合条件的账号，包括以后新建的。删除账号时，在同一次 `Config.mutate` 里把它从所有扩展的绑定中移除，避免留下悬空引用。
 
 ### 8.2 网关地址与鉴权
 
-- 监听地址配置在 `extensions.gateway.bind` / `host`，形式同 `proxy_bridge`，默认 `172.17.0.1:1082`。只要有扩展启用就监听，生命周期挂在服务端上。
+- 监听地址配置在 `extensions.gateway.bind` / `host`，形式同 `proxy_bridge`，默认 `172.17.0.1:1083`。只要有扩展启用就监听，生命周期挂在服务端上。
 - 改写后的 base URL：`http://<host>:<port>/x/<session_id>/<mac>`，其中 `mac = base64url(HMAC-SHA256(auth_token, "agentbox-extension-gateway\x00" + session_id))` 的前 32 个字符。轮换 `auth_token` 后旧地址全部失效，与 `proxySecret` 相同。
 - 每个请求都重新检查：MAC 正确、空间存在、`sessionAccount` 仍然允许属主使用该账号。撤销授权后返回 403。
 - 上游**在每次请求时**根据空间当前绑定的账号解析：Claude 用账号 env 里的 `ANTHROPIC_BASE_URL`（缺省为官方地址），Codex 用账号池 `config.toml` 里所选 provider 的 `base_url`。修改账号后立即生效，不用重建容器。
@@ -380,8 +387,8 @@ OAuth 订阅账号（Claude 订阅、ChatGPT 登录）能否改 base URL 还没�
 
 v1 的网关地址按空间生成，所以能确定是哪个空间，但不能确定是哪个回合：
 
-- 网页对话的回合和终端可能在同一个容器里同时运行，`source` 按空间当前是否只有一个网页回合在跑来推断，推断不出来就填 `unknown`，**不猜**。
-- Claude 的网页回合可以给每次 exec 生成带回合号的地址（`/x/<session>/t/<turn>/<mac>`，MAC 覆盖回合号），做到按回合归属；需要先实测 Claude Code 能否正确处理带路径前缀的 base URL（§16）。Codex 的地址在 `config.toml` 里，只能按空间归属。
+- 网页对话的回合和终端可能在同一个容器里同时运行，宿主分不出一个请求来自哪边，所以 P1 的 `source` 一律填 `unknown`，**不猜**。
+- 以后可以给 Claude 网页回合的每次 exec 生成带回合号的地址（`/x/<session>/t/<turn>/<mac>`，MAC 覆盖回合号），做到按回合归属。Codex 的地址在 `config.toml` 里，只能按空间归属。
 
 ## 9. 故障策略
 
@@ -392,14 +399,14 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
 | 增量积压超限（单实例 4 MiB） | 这条流停止检查，发 `close`（`overflow`） | 中断这条流，错误码 `extension_overloaded` |
 | 实例在流进行中崩溃 | 流继续，不再检查 | 中断这条流 |
 
-默认值来自清单，管理员可以覆盖。循环保护默认 `fail_open`：保护功能失效不应该挡住所有工作，但必须让人看得见（扩展页状态、响应头、日志）。
+默认值来自清单，管理员可以覆盖。按已定决策，循环保护默认 `fail_open`：保护功能失效不应该挡住所有工作，但必须让人看得见（扩展页状态、响应头、日志）。
 
-## 10. 中断之后：聊天、计费与续跑
+## 10. 中断之后：聊天与计费
 
 - **聊天**：中断后 CLI 收到协议错误并退出，按现有规则记为 `failed` / `turn_failed`。P2 新增 SQLite 表 `extension_events`（扩展 ID、空间、账号、回合（如有）、流、错误码、数值 `detail`、时间，不存任何正文）。回合失败时如果同一空间在回合时间窗内有扩展中断记录，回执错误细节带上扩展 ID 和错误码，网页用清单里的三语文案显示「已被循环保护中断」，不再只显示「进程退出码」。
 - **计费**：沿用 loop-guard 的原则。中断时 provider 可能还没发最终用量，网关不编造 token 数；网页对话仍按现有的 transcript 和 `cost-state` 对账。provider 是否停止计费取决于它自己的取消处理。
-- **不自动重试**。冷却拒绝的语义见 §6.4。
-- **自动续跑（以后）**：通过 `chat.followup` 权限开放。扩展只能提出一条跟进消息，由宿主走现有的跟进队列和准入（`chat_queue.go`、`AcceptChatRequest`、额度检查与回执），每个回合有次数上限，只适用于网页对话，不适用于终端。
+- **不自动重试，也不自动续跑**（已定决策）。冷却拒绝的语义见 §6.4。中断后由用户看过已完成的工具操作，再决定怎么继续。
+- **P1 的中断记录**：先保存在内存里（每个扩展最近 200 条，扩展页可见，重启后清空），P2 再持久化到 `extension_events`。
 
 ## 11. 配置与存储
 
@@ -407,7 +414,7 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
 
   ```json
   "extensions": {
-    "gateway": {"bind": "172.17.0.1:1082", "host": ""},
+    "gateway": {"bind": "172.17.0.1:1083", "host": ""},
     "items": {
       "agentbox.loop-guard": {
         "enabled": true,
@@ -436,25 +443,28 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
 | `GET /api/extensions/{id}` | admin | 清单、配置、批准的权限、状态指标 |
 | `PUT /api/extensions/{id}` | admin | 启停、配置、权限、绑定、故障策略、顺序；带 `expected_revision` |
 | `GET /api/extensions/{id}/logs?since=` | admin | 日志环形缓冲 |
-| `GET /api/extensions/{id}/events` | admin | 中断与拒绝记录，按筛选分页 |
-| `GET /api/sessions/{id}`（新增字段） | auth + withSession | `extensions: [{id, name}]`：哪些扩展正在检查本空间的模型流量。让用户知道自己的输出被检查 |
+| `GET /api/extensions/{id}/events` | admin | 中断与拒绝记录。P1 返回内存里最近 200 条，P2 改为数据库分页 |
+| `GET /api/sessions`、`GET /api/sessions/{id}`（新增字段） | auth + withSession | `extensions: [{id, name}]`：哪些扩展正在检查本空间的模型流量（已定决策：对用户可见） |
 
 - `/me` 增加能力位 `extensions: 1`。
 - 侧栏新增管理员入口「扩展」，与「使用记录」「Git 管理」并列，路由 `#/extensions` 和 `#/extensions/<id>`。
 - 列表页用卡片展示名称、发布者、版本、状态、绑定账号数。详情页分为：概览与权限、设置（按 `config_schema` 渲染表单，下拉沿用 `select.ts`）、绑定（账号选择）、状态指标、日志、事件。
 - 三语文案进词典；扩展提供的文字一律按文本节点插入。
+- 用户可见：工作空间头部的信息行（Agent · 账号 · 状态 · 编号）末尾显示盾牌和扩展名，悬停说明「正在检查本空间的模型输出」。该行在桌面和窄屏都可见；顶栏只在窄屏显示，不放在那里。
 - 以后的「市场」作为同一菜单下的一个标签页。
 
 ## 13. 循环保护迁成首个扩展
 
-| 现有代码 | 去向 |
+P1 已按下表完成：
+
+| 原代码 | 现在的位置 |
 |---|---|
-| `pkg/loopguard/detector.go` | 留在 `pkg/loopguard`，作为扩展的检测核心。窗口、不同句数现在是常量，改成可配置并保持默认值不变 |
-| `protocol.go` 的解码（`observe`） | 迁到 `internal/modelgw`，产出 §6.4 的统一增量 |
-| `protocol.go` 的 `failure` | 迁到 `internal/modelgw`，由宿主统一写中断错误 |
-| `gateway.go` 的转发、限额、指纹算法 | 转发和限额迁到 `internal/modelgw`；指纹算法迁到宿主（加盐见 §6.4） |
-| `gateway.go` 的冷却表 | 留在扩展里，由 `model.request` 钩子查询 |
-| `cmd/abox-loop-guard` | 保留，给不跑 agentbox 的场景用。改为组合 `modelgw` 和循环保护的 Handler，行为与现在一致，现有测试（`race.loop-guard`、`docker.loop-guard`）继续通过 |
+| `pkg/loopguard/detector.go` | 仍在 `pkg/loopguard`；窗口与不同句数可配置（`NewDetector`），零值保持原默认 256 / 24 |
+| `protocol.go` 的解码 | `pkg/modelgw.Decoder`，产出 §6.4 的统一增量；按分区、通道持有检测器的部分是 `loopguard.Monitor` |
+| `protocol.go` 的 `failure` | `pkg/modelgw.Decoder.Failure`，由网关统一写中断错误 |
+| `gateway.go` 的转发、限额、指纹 | `pkg/modelgw.Proxy` 与 `Fingerprint`；宿主再按实例加盐（§6.4） |
+| `gateway.go` 的冷却表 | `loopguard.Cooldown`，独立网关与扩展各用一份 |
+| `cmd/abox-loop-guard` | 未改；`loopguard.Gateway` 改为 `modelgw.Proxy` + 同步检测，原有 HTTP 行为测试全部保留并通过 |
 
 接入 agentbox 后，生产上不再需要单独的 `abox-loop-guard.service`，也不再手工改账号的 base URL。迁移步骤：先启用扩展并绑定测试账号，把测试账号的 base URL 改回原供应商地址，确认网关和钩子正常后再停用独立服务。
 
@@ -471,17 +481,46 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
 | 阶段 | 内容 | 验证 |
 |---|---|---|
 | P0 | 本文评审 | — |
-| P1 | SPI 1.0-draft 类型与 `pkg/extspi`；宿主核心（仅 builtin）；`internal/modelgw`；循环保护扩展；管理 API 与「扩展」菜单；只支持 Claude 中转/API Key 账号 | Go 单元测试；合成 API 的浏览器回归；合成上游 + 真实 Claude CLI 的 Docker 回归（无付费请求） |
+| P1（已实现） | SPI 1.0-draft 类型与 `pkg/extspi`；宿主核心（仅 builtin）；`pkg/modelgw`；循环保护扩展；管理 API 与「扩展」菜单；只支持 Claude 中转/API Key 账号 | 已完成：Go 单元与竞态测试、合成 API 的浏览器回归。**未完成**：合成上游 + 真实 Claude CLI 的 Docker 回归（见 §17） |
 | P2 | Codex 改写（种子和 credsync 两处）；`extension_events` 表与回执里的中断说明；按回合归属（若 §16 验证通过） | 同上，加 Codex CLI 路径 |
 | P3 | container 运行时；一致性测试工具；**冻结 SPI 1.0** | 沙箱隔离实测（network=none、只读根、资源限额、标签清理） |
-| P4 | 市场；`chat.followup` 与自动续跑；`storage` | 另行设计 |
+| P4 | 市场；`storage` | 另行设计 |
 
 新增的测试入口要在 `scripts/verification_catalog.py` 登记。
 
 ## 16. 待验证与待决问题
 
-- **OAuth 订阅账号能否改道**：Claude Code 使用 OAuth 时是否接受 `ANTHROPIC_BASE_URL`，并且把 OAuth Bearer 发给自定义地址；Codex 使用 ChatGPT 登录时能否覆盖后端地址。未验证前不开放绑定。
 - **带路径前缀的 base URL**：Claude Code 和 Codex 对 `http://host/x/<session>/<mac>` 这种地址能否正确拼接 API 路径，需要用真实 CLI 实测；不行就改为在请求头里传令牌（Claude 的自定义请求头 env、Codex provider 的 `http_headers`）。
 - **透明网络**：开启透明网络的空间能否访问网关端口，需要和代理桥一起核对。
 - **Codex 的 WebSocket 传输**：较新的 Codex 可能对 Responses 使用 WebSocket，网关不支持；需要确认所用 provider 配置不会启用它。
 - **用户级开关**：是否允许普通用户为自己的空间选择不检查（v1 不提供，由管理员按账号决定）。
+
+## 17. P1 实施记录（2026-10-16）
+
+**已实现**
+
+- `pkg/modelgw`：独立网关与服务端共用的转发核心。路由函数负责鉴权与上游解析，Inspector 负责准入和观察；同步裁决（独立网关）与异步中断（扩展宿主）走同一套取消与错误写法。不检查的 SSE 也逐事件刷新。
+- `pkg/extspi`：§6 的消息类型、`Handler` / `Host` 接口、NDJSON JSON-RPC 传输（应答由读协程分发、请求与通知由独立协程按序处理，扩展在通知处理里调用 `abort` 不会死锁；积压上限 1024 条、单条 1 MiB）、`Pipe`。
+- `internal/extension`：清单与配置 schema 校验、builtin 注册、实例生命周期（崩溃按 1～60 秒退避重启，10 分钟内 5 次即 `failed`）、请求钩子 200 ms 期限、按实例 4 MiB 的增量队列（轮到时合并积压）、两种失效策略、中断校验与记录（内存最近 200 条）、日志限速。
+- `internal/extension/builtin`：`agentbox.loop-guard`（清单内嵌）。
+- 服务端：`extensions` 配置段（随 mutate/persist/validate，删除账号同一次写入解绑）、网关监听（默认 `172.17.0.1:1083`，与 1080～1082 的隧道、代理桥、透明网络控制端口错开，配置校验拒绝冲突）、`/x/<空间>/<MAC>/…` 鉴权、每次请求重查账号授权、按账号出口代理转发（不可用即 502，不回落直连）、`execEnv` 改写 `ANTHROPIC_BASE_URL` 并补 `NO_PROXY`、tmux 环境同步在解绑后清除注入的地址、管理 API、`/me` 能力位、空间视图 `extensions` 字段。
+- 网页：侧栏「扩展」（仅管理员）、`#/extensions` 与 `#/extensions/<id>`、权限逐项批准、账号绑定（订阅账号不可选）、按 schema 渲染参数、带修订号保存与冲突重载、事件与日志、空间头部的盾牌标记；三语词典。
+
+**已验证**
+
+- `go test ./...`：新增包与改动包全部通过（`-race` 多次重复无抖动）。`race.loop-guard`（现含 `pkg/modelgw`）、新登记的 `race.extensions` 通过。唯一失败的 `internal/filesearch TestBuildLimitsKeepTheTop` 在未改动的基线提交上同样失败，与本次无关。
+- 扩展宿主测试让循环保护分别以进程内调用和真实 NDJSON 管道两种方式跑过真实网关：复读被中断、上游被取消、相同请求 422 冷却且不到上游、事件与指标正确。
+- 服务端测试覆盖管理 API、修订冲突、启用前的权限要求、base URL 改写、订阅账号不改道、网关不可用时放行策略不改写、MAC 错误 403、未知空间 404、撤权 403、删除账号解绑。
+- 浏览器回归 `scripts/test-extensions.mjs`（并入 `browser.browser`）：合成 API 下的列表、详情、保存、冲突、纯文本渲染（含 HTML 片段的说明不被解析）、事件与日志、空间头部标记、普通用户看不到入口；完整浏览器回归通过。
+
+**尚未验证（启用到生产前必须补）**
+
+- 真实 Claude Code 能否使用带路径前缀的 base URL（`http://172.17.0.1:1083/x/<空间>/<MAC>`）正确拼接 `/v1/messages` 等路径；本环境没有 Docker，没有跑真实 CLI。若不能，改为在请求头里传令牌（§16）。
+- 容器到网关端口的可达性（默认网桥、透明网络两种布局）。
+- 生产上建议先只绑定一个测试中转账号，确认对话与终端都能正常请求、复读能被中断后，再扩大范围；回退只需在扩展页停用或解绑（新开的 CLI 执行即恢复原地址）。
+
+**与设计的差异**
+
+- 网关核心放在公开的 `pkg/modelgw`（设计稿写的是 `internal/modelgw`），以便独立 `abox-loop-guard` 与第三方网关复用。
+- 增量批量方式改为「按积压合并」，没有固定 50 ms 定时器，`limits` 里也去掉了 `delta_batch_ms`。
+- `source` 在 P1 一律为 `unknown`，不推断网页回合与终端。

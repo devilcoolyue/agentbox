@@ -2,7 +2,7 @@
 
 `abox-loop-guard` 放在 agent harness 与模型 API 之间，实时检测短句复读并取消上游请求。它是独立二进制，不需要运行 Agentbox、Docker 或数据库；同一实现也能通过 Go 包 `agentbox/pkg/loopguard` 嵌入其他网关。它不属于 Claude/Codex 的技能或 MCP 工具：这些入口通常不能观察并中断一次尚未结束的模型输出。
 
-计划把它迁成 Agentbox 的首个扩展 `agentbox.loop-guard`，由「扩展」菜单按账号启用；独立二进制继续保留。设计见 [扩展与 SPI 协议设计](architecture/extensions-spi.md)（草案，未实现）。
+Agentbox 内已作为首个扩展 `agentbox.loop-guard` 提供：管理员在「扩展」菜单启用、批准权限并绑定 Claude API Key / 中转账号即可，不必再单独部署本网关或手改账号 base URL（Codex 账号在后续版本支持）。两者共用 `pkg/modelgw` 的转发与协议解码和 `pkg/loopguard` 的检测核心。设计与限制见 [扩展与 SPI 协议](architecture/extensions-spi.md)。独立二进制继续保留，用于不运行 Agentbox 的场景。
 
 ```text
 Codex / Claude Code / DSH / Pi / 其他客户端
