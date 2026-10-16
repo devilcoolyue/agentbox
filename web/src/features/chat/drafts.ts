@@ -6,7 +6,9 @@ import {DraftStore,type Draft} from "./draft-store.js";
 
 export function initComposerDrafts(hooks:{read:()=>Draft;apply:(draft:Draft)=>void;validated:(paths:string[],valid:boolean[])=>void;changed:()=>void}){
  const owner=S.token,lifetime=new AbortController();
- const storage=new DraftStore(localStorage,sessionStorage,S.draftScope,crypto.randomUUID());
+ // getRandomValues also works on remote HTTP origins; randomUUID requires a secure context.
+ const writer=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,"0")).join("");
+ const storage=new DraftStore(localStorage,sessionStorage,S.draftScope,writer);
  const enabled=$<HTMLInputElement>("chat-draft-enabled");
  let context:{session:string;thread:string}|undefined,active=true,applying=false,checking=false,notice="",epoch=0,validation:AbortController|undefined;
  const owns=()=>{try{return active&&S.token===owner&&localStorage.getItem("agentbox_token")===owner;}catch{return active&&S.token===owner;}};

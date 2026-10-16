@@ -5,7 +5,9 @@ import { setTextRender, t } from "../../i18n.js";
 import { DraftStore } from "./draft-store.js";
 export function initComposerDrafts(hooks) {
     const owner = S.token, lifetime = new AbortController();
-    const storage = new DraftStore(localStorage, sessionStorage, S.draftScope, crypto.randomUUID());
+    // getRandomValues also works on remote HTTP origins; randomUUID requires a secure context.
+    const writer = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+    const storage = new DraftStore(localStorage, sessionStorage, S.draftScope, writer);
     const enabled = $("chat-draft-enabled");
     let context, active = true, applying = false, checking = false, notice = "", epoch = 0, validation;
     const owns = () => { try {

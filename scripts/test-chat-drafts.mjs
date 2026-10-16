@@ -17,11 +17,18 @@ const server=createServer(async(req,res)=>{
  }catch{res.writeHead(404).end();}
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
-const base=`http://127.0.0.1:${server.address().port}`;
+const localBase=`http://127.0.0.1:${server.address().port}`;
 const browser=await launchBrowser();
 try{
- for(const locale of ['zh-CN','zh-TW','en']){
+ const cases=[{locale:'zh-CN',insecure:true},...['zh-CN','zh-TW','en'].map(locale=>({locale,insecure:false}))];
+ for(const {locale,insecure} of cases){
+  const base=insecure?'http://agentbox-http.test':localBase;
   const context=await browser.newContext({viewport:{width:1280,height:900}});const page=await context.newPage();page.setDefaultTimeout(12000);
+  // Do not simulate missing crypto APIs: exercise the browser's actual HTTP policy.
+  if(insecure)await context.route(base+'/**',async route=>{
+   const url=new URL(route.request().url());
+   await route.fulfill({response:await route.fetch({url:localBase+url.pathname+url.search})});
+  });
   const errors=[],sent=[],requests=[],sockets=new Map(),allSockets=new Set();let identity='alice',holdUpload=false;const uploads=[],validPaths=new Set();let uploadCount=0;
   const threads={'space-a':'thread-one','space-b':'thread-one'};
   const spaces=['a','b'].map(id=>({id:'space-'+id,name:'Space '+id.toUpperCase(),user:'alice',agent:'codex',account_id:'fixture',account_label:'Fixture',status:'stopped',default_model:'fixture'}));
@@ -53,7 +60,10 @@ try{
   const settings=async()=>{await page.evaluate(()=>location.hash='#/settings/interface');await page.locator('#set-local-saving').waitFor({state:'visible'});};
   const setSaving=async enabled=>{await settings();await page.locator('#chat-draft-enabled').setChecked(enabled);await go('space-a');};
   try{
-   await page.goto(base);await page.locator('#login-user').fill('alice');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');
+   await page.goto(base);
+   assert.equal(await page.evaluate(()=>isSecureContext),!insecure);
+   if(insecure)assert.equal(await page.evaluate(()=>typeof crypto.randomUUID),'undefined');
+   await page.locator('#login-user').fill('alice');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');
    assert.equal(await page.locator('#chat-draft-options, .composer #chat-draft-enabled').count(),0,'saving control remained in the composer');
    await page.locator('#btn-settings').click();await page.locator('#set-local-saving').waitFor({state:'visible'});
    assert.equal(new URL(page.url()).hash,'#/settings/interface');
@@ -117,7 +127,7 @@ try{
    identity='bob';await page.locator('#login-user').fill('bob');await page.locator('#login-pass').fill('fixture');await page.locator('#login-btn').click();await page.locator('#app').waitFor({state:'visible'});await go('space-a');assert.equal(await input.inputValue(),'');
    assert.equal(sent.length,0,'draft restoration invoked a model');assert.deepEqual(errors,[]);
    assert.deepEqual(requests.filter(path=>/^\/api\/(settings|users|proxies|system|monitor|image-updates)(\/|$)/.test(path)),[],'ordinary-user settings requested privileged APIs');
-   console.log(`Drafts ${locale}: scoped reload, multi-tab, threads, upload cancellation, reference validation, denied storage, opt-out, expiry and logout passed`);
+   console.log(`Drafts ${locale}/${insecure?'remote-http':'localhost'}: scoped reload, multi-tab, threads, upload cancellation, reference validation, denied storage, opt-out, expiry and logout passed`);
   }catch(error){console.error(`Drafts ${locale} failed:`,error);throw error;
   }finally{
    for(const release of uploads.splice(0))release();

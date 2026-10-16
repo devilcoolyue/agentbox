@@ -19,11 +19,18 @@ const server=createServer(async(req,res)=>{
   }catch{res.writeHead(404).end();}
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
-const base=`http://127.0.0.1:${server.address().port}`;
+const localBase=`http://127.0.0.1:${server.address().port}`;
 const browser=await launchBrowser();
 try{
- for(const locale of ['zh-CN','zh-TW','en'])for(const role of ['admin','user']){
+ const cases=[{locale:'zh-CN',role:'admin',insecure:true},...['zh-CN','zh-TW','en'].flatMap(locale=>['admin','user'].map(role=>({locale,role,insecure:false})))];
+ for(const {locale,role,insecure} of cases){
+  const base=insecure?'http://agentbox-http.test':localBase;
   const context=await browser.newContext({locale:'en-US',viewport:{width:1280,height:900}});
+  // Keep a real non-secure browser origin while serving only local fixture bytes.
+  if(insecure)await context.route(base+'/**',async route=>{
+    const url=new URL(route.request().url());
+    await route.fulfill({response:await route.fetch({url:localBase+url.pathname+url.search})});
+  });
   const page=await context.newPage();page.setDefaultTimeout(12000);
   await page.addInitScript(locale=>{if(window===window.top&&/^https?:$/.test(location.protocol))localStorage.setItem('agentbox.language',locale);},locale);
   const errors=[];page.on('pageerror',e=>{errors.push(e.stack||e.message);console.error('Onboarding page error:',e.stack||e.message);});
@@ -126,7 +133,10 @@ try{
 
   const home=async()=>{await page.locator('#btn-home').click();await ready();};
   try{
-    await page.goto(base);await page.locator('#login-user').fill('fixture');await page.locator('#login-pass').fill('synthetic-password');await page.locator('#login-btn').click();
+    await page.goto(base);
+    assert.equal(await page.evaluate(()=>isSecureContext),!insecure);
+    if(insecure)assert.equal(await page.evaluate(()=>typeof crypto.randomUUID),'undefined');
+    await page.locator('#login-user').fill('fixture');await page.locator('#login-pass').fill('synthetic-password');await page.locator('#login-btn').click();
     await page.locator('#app').waitFor({state:'visible'});await ready();
     assert.equal(await page.locator('#home-setup').getAttribute('open')!==null,true,'first user guide should open');
     assert.equal(await page.locator('#empty-new').isDisabled(),true);
@@ -145,6 +155,7 @@ try{
       await page.locator('.diagnostics-dialog button[data-icon="close"]').click();
       assert.ok(!(await page.locator('#setup-steps').innerText()).includes('model available'));
       await page.locator('#setup-steps > li').nth(1).getByRole('button').click();await page.locator('#sec-accounts').waitFor({state:'visible'});
+      await home();await page.locator('#btn-settings').click();await page.locator('#sec-accounts').waitFor({state:'visible'});
       await page.locator('#btn-acct-add').click();await page.locator('#acct-form label.agent-codex').click();
       await page.locator('#acct-id').fill('codex-fixture');await page.locator('#acct-label').fill('Fixture account');
       await page.locator('#auth-mode-key').click();await page.locator('#auth-apikey').fill('synthetic-key');await page.locator('#auth-savekey').click();
@@ -326,7 +337,7 @@ try{
     assert.equal(await page.locator('#chat-input').inputValue(),'','logout retained an example draft');
     assert.equal(modelTurns,1,'navigation invoked another model turn');
     assert.deepEqual(errors,[]);
-    console.log(`Onboarding ${role}/${locale}: scoped guide, configuration links, fresh accounts, no-account/read-failure/revocation gates and single submission passed`);
+    console.log(`Onboarding ${role}/${locale}/${insecure?'remote-http':'localhost'}: scoped guide, configuration links, fresh accounts, no-account/read-failure/revocation gates and single submission passed`);
   }finally{releaseAccounts();await context.close();}
  }
 }finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}
