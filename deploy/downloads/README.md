@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.14_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.15_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.14_linux_arm64/install.sh --version v0.1.14
+sudo bash agentbox_v0.1.15_linux_arm64/install.sh --version v0.1.15
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,34 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### 升级至 v0.1.15
+
+本版以 v0.1.14 为基准，修复普通 HTTP 域名或 IP 访问时「配置账号」「系统设置」点击无反应的问题。数据库仍为 schema 19，无需更新空间镜像；升级后刷新页面。请先结束当前网页任务，升级会备份并重启服务。
+
+标准 Linux/systemd 版本目录安装（程序 `/opt/agentbox`、配置 `/etc/agentbox/config.json`）可在 Bash 中执行：
+
+```bash
+set -e
+version=v0.1.15
+case "$(uname -m)" in
+  x86_64) arch=amd64 ;;
+  aarch64|arm64) arch=arm64 ;;
+  *) echo "不支持的架构"; exit 1 ;;
+esac
+upgrade_dir=$(mktemp -d)
+cd "$upgrade_dir"
+package="agentbox_${version}_linux_${arch}"
+base="https://github.com/devilcoolyue/agentbox/releases/download/${version}"
+curl -fL --retry 3 -o "$package.tar.gz" "$base/$package.tar.gz"
+curl -fL --retry 3 -o SHA256SUMS "$base/SHA256SUMS"
+sha256sum --ignore-missing -c SHA256SUMS
+tar -xzf "$package.tar.gz"
+sudo python3 "$upgrade_dir/$package/deploy/release.py" install --package "$upgrade_dir/$package"
+sudo python3 "$upgrade_dir/$package/deploy/release.py" activate --version "$version"
+```
+
+已有实例不要重跑首次安装器。自定义路径需按实际布局设置 `--app` / `--config`，源码仓库布局使用其原有发布流程。v0.1.13 及更早版本直接升级仍涉及 schema 19 迁移，遵守下节的备份与回退约束。
 
 ### 升级至 v0.1.14
 

@@ -8,7 +8,13 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.14](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.14)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.15](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.15)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.15：修复 HTTP 下设置入口失效
+
+以 v0.1.14 为基准的补丁版本，修复普通 HTTP 域名或 IP 访问时「配置账号」「系统设置」点击无反应的问题（#3），补充入口导航、刷新及草稿恢复回归。数据库仍为 schema 19，无需更新 Agent 镜像；浏览器剪贴板等功能自身的 HTTPS 要求不变。源码另含需单独构建配置的循环保护网关开发预览，服务端升级不会自动启用。
+
+标准版本目录安装可按[包内升级命令](../deploy/downloads/README.md#升级至-v0115)完成升级，再刷新页面。本次仍提供七个平台归档、`release.json` 与 `SHA256SUMS`。
 
 ### v0.1.14：对话中提问与跟进、命令与文件引用、逐次请求计费
 
