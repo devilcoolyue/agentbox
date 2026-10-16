@@ -1,7 +1,7 @@
 package loopguard
 
 import (
-	"bufio"
+	"agentbox/pkg/modelgw"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,6 +16,30 @@ import (
 )
 
 func wire(v any) string { b, _ := json.Marshal(v); return "data: " + string(b) + "\n\n" }
+
+type protocol = modelgw.Protocol
+
+const (
+	responses = modelgw.Responses
+	chat      = modelgw.Chat
+	anthropic = modelgw.Anthropic
+	gemini    = modelgw.Gemini
+)
+
+// streamGuard decodes raw events with the gateway's decoder and feeds them to
+// a default Monitor, exactly as a gateway stream does.
+type streamGuard struct {
+	protocol protocol
+	decoder  *modelgw.Decoder
+	monitor  *Monitor
+}
+
+func (g *streamGuard) observe(event []byte) *Detection {
+	if g.decoder == nil {
+		g.decoder, g.monitor = modelgw.NewDecoder(g.protocol), NewMonitor(0, 0)
+	}
+	return g.monitor.Push(g.decoder.Observe(event))
+}
 
 func delta(p protocol, text string) string {
 	switch p {
@@ -171,40 +195,6 @@ func TestProtocolIsolationAndIgnoredFields(t *testing.T) {
 	}
 }
 
-func TestReadEventBoundaries(t *testing.T) {
-	want := ": ping\r\ndata: {\r\ndata: \"x\": 1}\r\n\r\n"
-	r := bufio.NewReaderSize(strings.NewReader(want+"data: tail"), 16)
-	got, err := readEvent(r)
-	if err != nil || string(got) != want {
-		t.Fatalf("bad framing: %q %v", got, err)
-	}
-	got, err = readEvent(r)
-	if err != io.EOF || string(got) != "data: tail" {
-		t.Fatal("lost EOF tail")
-	}
-	_, err = readEvent(bufio.NewReader(strings.NewReader(strings.Repeat("x", maxEventBytes+1))))
-	if err == nil || err == io.EOF {
-		t.Fatal("unbounded event")
-	}
-}
-
-func TestFingerprintJSONNormalization(t *testing.T) {
-	a := []byte(`{"input":[{"b":2,"a":1}],"n":9007199254740993}`)
-	b := []byte(`{ "n":9007199254740993,"input":[{"a":1,"b":2}] }`)
-	if string(fingerprintBody(a)) != string(fingerprintBody(b)) {
-		t.Fatal("object ordering bypasses cooldown")
-	}
-	c := []byte(`{"input":[{"b":2,"a":1}],"n":9007199254740992}`)
-	if string(fingerprintBody(a)) == string(fingerprintBody(c)) {
-		t.Fatal("large integer rounded")
-	}
-	for _, raw := range []string{`not-json`, `{} {}`} {
-		if string(fingerprintBody([]byte(raw))) != raw {
-			t.Fatal("malformed input modified")
-		}
-	}
-}
-
 func TestGatewayAuthAndNonStreaming(t *testing.T) {
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -266,23 +256,28 @@ func TestGatewayProviderBearerAuthentication(t *testing.T) {
 }
 
 func TestCooldownIsolationExpiryAndBound(t *testing.T) {
-	g, _ := New(Config{Upstream: "https://example.invalid"})
+	c := NewCooldown(retryCooldown)
 	for i := 0; i < 1100; i++ {
 		var k [32]byte
 		copy(k[:], fmt.Sprint(i))
-		g.cooling(k, true)
+		c.Block(k)
 	}
-	if len(g.blocked) > 1024 {
+	if c.Len() > 1024 {
 		t.Fatal("unbounded cooldown")
 	}
 	var k [32]byte
 	k[0] = 255
-	if g.cooling(k, false) {
+	if c.Blocked(k) {
 		t.Fatal("unrelated request blocked")
 	}
-	g.blocked[k] = time.Now().Add(-time.Second)
-	if g.cooling(k, false) {
+	c.blocked[k] = time.Now().Add(-time.Second)
+	if c.Blocked(k) {
 		t.Fatal("expired cooldown retained")
+	}
+	off := NewCooldown(0)
+	off.Block(k)
+	if off.Blocked(k) {
+		t.Fatal("disabled cooldown blocked a request")
 	}
 }
 
@@ -398,7 +393,7 @@ func TestGatewayOversizeEventCancelsAndReportsFailure(t *testing.T) {
 	cancelled := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		io.WriteString(w, "data: "+strings.Repeat("x", maxEventBytes))
+		io.WriteString(w, "data: "+strings.Repeat("x", modelgw.MaxEventBytes))
 		w.(http.Flusher).Flush()
 		<-r.Context().Done()
 		close(cancelled)

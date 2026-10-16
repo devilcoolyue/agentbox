@@ -7,8 +7,12 @@ import (
 	"unicode"
 )
 
-const windowSize = 256
-const distinctLimit = 24
+// DefaultWindow and DefaultDistinctLimit are the detection thresholds used by
+// a zero Detector: the last 256 short sentences containing at most 24 distinct
+// phrases trip the detector.
+const DefaultWindow = 256
+const DefaultDistinctLimit = 24
+
 const maxUnitRunes = 160
 
 // Detection deliberately contains no model output or prompt text.
@@ -18,18 +22,40 @@ type Detection struct {
 	Distinct int    `json:"distinct"`
 }
 
-// Detector has bounded memory. Its zero value is ready to use. It recognizes
-// low-diversity runs of short sentences, including shuffled phrase pools, rather
-// than identical transport chunks. Long prose and code reset the candidate run.
+// Detector has bounded memory. Its zero value is ready to use with the default
+// thresholds. It recognizes low-diversity runs of short sentences, including
+// shuffled phrase pools, rather than identical transport chunks. Long prose and
+// code reset the candidate run.
 type Detector struct {
-	unit    []rune
-	stop    bool
-	over    bool
-	fenced  bool
-	ring    [windowSize]string
-	counts  map[string]int
-	n, next int
-	tripped *Detection
+	window   int
+	distinct int
+	unit     []rune
+	stop     bool
+	over     bool
+	fenced   bool
+	ring     []string
+	counts   map[string]int
+	n, next  int
+	tripped  *Detection
+}
+
+// NewDetector uses window sentences and at most distinctLimit distinct ones.
+// Values <= 0 select the defaults.
+func NewDetector(window, distinctLimit int) *Detector {
+	return &Detector{window: window, distinct: distinctLimit}
+}
+
+func (d *Detector) init() {
+	if d.ring != nil {
+		return
+	}
+	if d.window <= 0 {
+		d.window = DefaultWindow
+	}
+	if d.distinct <= 0 {
+		d.distinct = DefaultDistinctLimit
+	}
+	d.ring = make([]string, d.window)
 }
 
 // Push consumes decoded text deltas; callers must not feed a final full-text
@@ -39,6 +65,7 @@ func (d *Detector) Push(delta string) *Detection {
 	if d.tripped != nil {
 		return d.tripped
 	}
+	d.init()
 	for _, r := range delta {
 		if r == '\n' || (d.stop && unicode.IsSpace(r)) {
 			if hit := d.end(); hit != nil {
@@ -65,7 +92,7 @@ func (d *Detector) Push(delta string) *Detection {
 
 func (d *Detector) reset() {
 	d.n, d.next = 0, 0
-	clear(d.ring[:])
+	clear(d.ring)
 	clear(d.counts)
 }
 
@@ -106,7 +133,7 @@ func (d *Detector) end() *Detection {
 	if d.counts == nil {
 		d.counts = make(map[string]int)
 	}
-	if d.n == windowSize {
+	if d.n == d.window {
 		old := d.ring[d.next]
 		d.counts[old]--
 		if d.counts[old] == 0 {
@@ -116,10 +143,10 @@ func (d *Detector) end() *Detection {
 		d.n++
 	}
 	d.ring[d.next] = s
-	d.next = (d.next + 1) % windowSize
+	d.next = (d.next + 1) % d.window
 	d.counts[s]++
-	if d.n == windowSize && len(d.counts) <= distinctLimit {
-		d.tripped = &Detection{Window: windowSize, Distinct: len(d.counts)}
+	if d.n == d.window && len(d.counts) <= d.distinct {
+		d.tripped = &Detection{Window: d.window, Distinct: len(d.counts)}
 	}
 	return d.tripped
 }
