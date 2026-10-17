@@ -124,8 +124,15 @@ func (h *Host) Normalize(id string, s config.ExtensionSetting) (config.Extension
 	default:
 		return s, fmt.Errorf("failure_policy must be fail_open or fail_closed")
 	}
+	out.Bindings = out.Bindings.Normalized()
 	if out.Bindings.Mode == "" {
-		out.Bindings.Mode = "none"
+		out.Bindings.Mode = config.BindingModeNone
+	}
+	if len(out.Bindings.Accounts) != 0 && !p.Manifest.BindsBy(extspi.BindAccount) {
+		return s, fmt.Errorf("this extension cannot be bound to accounts")
+	}
+	if len(out.Bindings.Users) != 0 && !p.Manifest.BindsBy(extspi.BindUser) {
+		return s, fmt.Errorf("this extension cannot be bound to users")
 	}
 	return out, nil
 }
@@ -236,13 +243,13 @@ func (in *instance) uses(hooks []string) bool {
 }
 
 // Bound lists enabled extensions with one of hooks whose bindings include
-// the account, in dispatch order, with their effective failure policy.
-func (h *Host) Bound(account string, hooks ...string) []BoundExtension {
+// the target, in dispatch order, with their effective failure policy.
+func (h *Host) Bound(target config.BindingTarget, hooks ...string) []BoundExtension {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var out []BoundExtension
 	for _, inst := range h.orderedLocked() {
-		if inst.uses(hooks) && inst.setting.Binds(account) {
+		if inst.uses(hooks) && inst.setting.Binds(target) {
 			out = append(out, BoundExtension{ID: inst.pkg.Manifest.ID, Name: inst.pkg.Manifest.Name, Policy: inst.policy})
 		}
 	}

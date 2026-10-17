@@ -6,6 +6,7 @@ import { $, fmtDateTime, toast } from "./util.js";
 import { showView } from "./shell.js";
 import { buttonLabel } from "./icons.js";
 import { enhanceSelects } from "./select.js";
+import { mountUserPicker } from "./user-picker.js";
 /* extensions：管理员的「扩展」页（docs/architecture/extensions-spi.md）。
  * 列表 → 详情（概览与权限、设置、事件、日志）。扩展提供的名称、说明、错误文案
  * 都是服务端校验过的纯文本，这里一律当文本节点插入，扩展不能带自己的脚本或样式。
@@ -41,13 +42,22 @@ function stateChip(state) {
     chip.dataset.state = state;
     return chip;
 }
+/** 模型钩子只改道 API Key / 中转账号，「全部」与提示要按这个说 */
+const routesModel = (ext) => ext.hooks.some(h => h.startsWith("model."));
 function bindingSummary(ext) {
     const b = ext.setting.bindings;
     if (b.mode === "all")
-        return i18nText("全部 API Key / 中转账号");
-    if (b.mode === "accounts" && b.accounts?.length)
-        return i18nText("{n} 个账号", { n: String(b.accounts.length) });
-    return i18nText("未绑定账号");
+        return routesModel(ext) ? i18nText("全部 API Key / 中转账号") : i18nText("全部");
+    if (b.mode === "selected" || b.mode === "accounts") {
+        const parts = [];
+        if (b.accounts?.length)
+            parts.push(i18nText("{n} 个账号", { n: String(b.accounts.length) }));
+        if (b.users?.length)
+            parts.push(i18nText("{n} 位用户", { n: String(b.users.length) }));
+        if (parts.length)
+            return parts.join(" · ");
+    }
+    return i18nText("未生效");
 }
 /** App-owned lifetime: logout aborts requests and timers and clears the page. */
 export function initExtensionsPage() {
@@ -308,36 +318,69 @@ export function initExtensionsPage() {
             permBox.append(row);
         }
         card.append(permBox);
-        // Bindings: only API key / relay accounts can be routed through the gateway.
+        // Bindings: the selectors come from the manifest. Model hooks only route
+        // API key / relay accounts through the gateway, so others are disabled.
+        const byAccount = ext.bindings.includes("account"), byUser = ext.bindings.includes("user");
         const bindBox = el("fieldset", "ext-bindings");
-        bindBox.append(el("legend", "", () => i18nText("作用于哪些账号")));
+        bindBox.append(el("legend", "", () => i18nText("作用范围")));
         const mode = el("select");
-        for (const [value, label] of [["none", () => i18nText("不绑定")], ["accounts", () => i18nText("指定账号")], ["all", () => i18nText("全部 API Key / 中转账号（含以后新增的）")]]) {
+        const selectedLabel = byAccount && byUser ? () => i18nText("指定账号或用户") : byUser ? () => i18nText("指定用户") : () => i18nText("指定账号");
+        const allLabel = routesModel(ext) ? () => i18nText("全部 API Key / 中转账号（含以后新增的）") : () => i18nText("全部（含以后新增的）");
+        const modes = [["none", () => i18nText("暂不生效")]];
+        if (byAccount || byUser)
+            modes.push(["selected", selectedLabel]);
+        modes.push(["all", allLabel]);
+        for (const [value, label] of modes) {
             const opt = el("option", "", label);
             opt.value = value;
             mode.append(opt);
         }
-        mode.value = s.bindings.mode || "none";
-        const accountBox = el("div", "ext-accounts");
+        mode.value = s.bindings.mode === "accounts" ? "selected" : s.bindings.mode || "none";
+        const selectedBox = el("div", "ext-selected");
         const accountInputs = new Map();
-        for (const a of ext.accounts) {
-            const row = el("label", "check");
-            const input = el("input");
-            input.type = "checkbox";
-            input.checked = !!s.bindings.accounts?.includes(a.id);
-            input.disabled = !a.eligible && !input.checked;
-            input.addEventListener("change", () => { dirty = true; });
-            accountInputs.set(a.id, input);
-            const label = el("span", "", `${a.label || a.id} (${a.type})`);
-            row.append(input, label);
-            if (!a.eligible)
-                row.append(el("span", "hint", () => i18nText("仅支持 API Key / 中转账号")));
-            accountBox.append(row);
+        if (byAccount) {
+            const accountBox = el("div", "ext-accounts");
+            if (byUser)
+                accountBox.append(el("span", "ext-sub", () => i18nText("账号")));
+            for (const a of ext.accounts) {
+                const row = el("label", "check");
+                const input = el("input");
+                input.type = "checkbox";
+                input.checked = !!s.bindings.accounts?.includes(a.id);
+                input.disabled = !a.eligible && !input.checked;
+                input.addEventListener("change", () => { dirty = true; });
+                accountInputs.set(a.id, input);
+                const label = el("span", "", `${a.label || a.id} (${a.type})`);
+                row.append(input, label);
+                if (!a.eligible)
+                    row.append(el("span", "hint", () => i18nText("仅支持 API Key / 中转账号")));
+                accountBox.append(row);
+            }
+            selectedBox.append(accountBox);
         }
-        const syncMode = () => accountBox.classList.toggle("hidden", mode.value !== "accounts");
+        let users = null;
+        if (byUser) {
+            const userBox = el("div", "ext-users");
+            userBox.append(el("span", "ext-sub", () => i18nText("用户")));
+            const pickerRoot = el("div");
+            const mirror = el("input");
+            mirror.type = "hidden";
+            mirror.addEventListener("change", () => { dirty = true; });
+            userBox.append(pickerRoot, mirror);
+            users = mountUserPicker(pickerRoot, { signal, field: mirror, includeAdmins: true });
+            users.set(s.bindings.users || []);
+            selectedBox.append(userBox);
+        }
+        const syncMode = () => {
+            selectedBox.classList.toggle("hidden", mode.value !== "selected");
+            if (mode.value === "selected")
+                users?.ensure();
+        };
         mode.addEventListener("change", () => { dirty = true; syncMode(); });
         syncMode();
-        bindBox.append(mode, accountBox, el("p", "hint", () => i18nText("订阅登录（Claude 订阅、ChatGPT 登录）的账号不能绑定。绑定后，新开的对话与终端会改走模型网关；已打开的终端里，Claude 要新开窗口，Codex 重新启动即可。")));
+        bindBox.append(mode, selectedBox);
+        if (routesModel(ext))
+            bindBox.append(el("p", "hint", () => i18nText("订阅登录（Claude 订阅、ChatGPT 登录）的账号不能绑定。绑定后，新开的对话与终端会改走模型网关；已打开的终端里，Claude 要新开窗口，Codex 重新启动即可。")));
         card.append(bindBox);
         const policyField = el("label", "field");
         policyField.append(el("span", "", () => i18nText("扩展失效时")));
@@ -385,7 +428,9 @@ export function initExtensionsPage() {
                 return {
                     expected_revision: s.revision, enabled: enabled.checked, order: s.order, config,
                     permissions: [...permInputs].filter(([, i]) => i.checked).map(([p]) => p),
-                    bindings: { mode: mode.value, accounts: mode.value === "accounts" ? [...accountInputs].filter(([, i]) => i.checked).map(([id]) => id) : [] },
+                    bindings: mode.value === "selected"
+                        ? { mode: "selected", accounts: [...accountInputs].filter(([, i]) => i.checked).map(([id]) => id), users: users ? users.value() : [] }
+                        : { mode: mode.value },
                     failure_policy: policy.value,
                 };
             },

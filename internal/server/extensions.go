@@ -67,6 +67,9 @@ type extensionView struct {
 	Runtime       string                   `json:"runtime"`
 	Hooks         []string                 `json:"hooks"`
 	Permissions   []string                 `json:"permissions"`
+	// Bindings are the selectors the extension can be scoped by (account,
+	// user); none means it is either off or on everywhere.
+	Bindings []string `json:"bindings"`
 	FailurePolicy string                   `json:"failure_policy"`
 	ConfigSchema  extension.ConfigSchema   `json:"config_schema"`
 	Errors        []extension.ErrorDef     `json:"errors"`
@@ -113,7 +116,7 @@ func (s *Server) extensionView(p extension.Package, items map[string]config.Exte
 		setting.Permissions = []string{}
 	}
 	v := extensionView{ID: m.ID, Version: m.Version, Publisher: m.Publisher, Name: m.Name, Description: m.Description, License: m.License,
-		Homepage: m.Homepage, Builtin: p.Builtin, Runtime: m.Runtime.Type, Hooks: m.Hooks, Permissions: m.Permissions,
+		Homepage: m.Homepage, Builtin: p.Builtin, Runtime: m.Runtime.Type, Hooks: m.Hooks, Permissions: m.Permissions, Bindings: m.Bindings,
 		FailurePolicy: m.FailurePolicy, ConfigSchema: m.ConfigSchema, Errors: m.Errors, Metrics: m.Status.Metrics,
 		Setting: setting, Status: s.extensions.Status(m.ID), Accounts: []extensionAccountChoice{}, Requires: []extensionRequirement{}}
 	for _, hook := range m.Hooks {
@@ -130,8 +133,16 @@ func (s *Server) extensionView(p extension.Package, items map[string]config.Exte
 	if v.Metrics == nil {
 		v.Metrics = []extension.MetricDef{}
 	}
-	for _, a := range s.cfg.AccountList() {
-		v.Accounts = append(v.Accounts, extensionAccountChoice{ID: a.ID, Label: a.Label, Type: a.Type, Eligible: gatewayEligible(a)})
+	if v.Bindings == nil {
+		v.Bindings = []string{}
+	}
+	if m.BindsBy(extspi.BindAccount) {
+		// Model hooks only route API key / relay accounts; other hooks take
+		// any account.
+		modelOnly := slices.ContainsFunc(modelHooks, m.HasHook)
+		for _, a := range s.cfg.AccountList() {
+			v.Accounts = append(v.Accounts, extensionAccountChoice{ID: a.ID, Label: a.Label, Type: a.Type, Eligible: !modelOnly || gatewayEligible(a)})
+		}
 	}
 	return v
 }
@@ -193,6 +204,12 @@ func (s *Server) handleUpdateExtension(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	for _, name := range setting.Bindings.Users {
+		if _, ok := s.store.GetUser(name); !ok {
+			writeErr(w, http.StatusBadRequest, "用户不存在："+name)
+			return
+		}
 	}
 	if setting.Enabled {
 		for _, hook := range p.Manifest.Hooks {

@@ -208,7 +208,7 @@ func (s *Server) inspectingExtensions(sess store.Session, acct config.Account) (
 	}
 	// Bindings first: they are in memory, while Codex eligibility reads the
 	// account pool and the workspace list asks for every session.
-	bound := s.extensions.Bound(acct.ID, modelHooks...)
+	bound := s.extensions.Bound(config.BindingTarget{Account: acct.ID, User: sess.User}, modelHooks...)
 	if len(bound) == 0 || !gatewayEligible(acct) {
 		return nil, false
 	}

@@ -432,5 +432,11 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	if err := s.themeService().RemoveUser(name); err != nil {
 		log.Printf("delete user %s: remove personal themes: %v", name, err)
 	}
+	// 扩展绑定里的这个名字一并移除，同名重建的用户不继承绑定。
+	if err := s.cfg.PruneExtensionUser(name); err != nil {
+		log.Printf("delete user %s: prune extension bindings: %v", name, err)
+	} else {
+		s.applyExtensions()
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }

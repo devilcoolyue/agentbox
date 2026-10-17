@@ -74,8 +74,10 @@
 .ext-perm-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
 .ext-perm-text code { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .ext-perm-text .hint { flex-basis: 100%; }
-.ext-accounts { display: flex; flex-direction: column; gap: 6px; }
-.ext-accounts.hidden { display: none; }
+.ext-selected { display: flex; flex-direction: column; gap: 12px; }
+.ext-selected.hidden { display: none; }
+.ext-accounts, .ext-users { display: flex; flex-direction: column; gap: 6px; }
+.ext-sub { font-size: 12px; color: var(--muted); }
 .ext-accounts .check { flex-wrap: wrap; color: var(--text); }
 .ext-accounts .check:has(input:disabled) { opacity: 0.6; }
 

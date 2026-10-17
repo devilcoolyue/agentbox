@@ -12,7 +12,7 @@ export async function extensionsSmoke(page, base, setSessions) {
   name:{'zh-CN':'循环保护','zh-TW':'循環保護',en:'Loop guard'},
   description:t('检测复读。<img src=x onerror="window.__extXSS=1">'),
   homepage:'https://example.invalid/loop-guard',license:'Apache-2.0',
-  hooks:['model.request','model.stream'],permissions:['model.request.fingerprint','model.stream.text'],failure_policy:'fail_open',
+  hooks:['model.request','model.stream'],permissions:['model.request.fingerprint','model.stream.text'],bindings:['account'],failure_policy:'fail_open',
   config_schema:{type:'object',properties:{
    window:{type:'integer',minimum:32,maximum:1024,default:256,title:t('检测窗口（句）')},
    cooldown_seconds:{type:'integer',minimum:0,maximum:600,default:30,title:t('相同请求冷却（秒）')},
@@ -72,8 +72,11 @@ export async function extensionsSmoke(page, base, setSessions) {
   await page.screenshot({path:'output/playwright/extensions-overview.png',animations:'disabled'});
   const accountBox = detail.locator('.ext-accounts');
   assert.equal(await accountBox.isVisible(), false, 'account list hidden until "selected accounts"');
+  // Model hooks are scoped by account only: no user picker, account-only wording.
+  assert.equal(await detail.locator('.ext-users').count(), 0);
+  assert.deepEqual(await detail.locator('.ext-bindings select option').allInnerTexts(), ['暂不生效','指定账号','全部 API Key / 中转账号（含以后新增的）']);
   await detail.locator('.ext-enable input').check();
-  await detail.locator('.ext-bindings select').evaluate(sel=>{sel.value='accounts';sel.dispatchEvent(new Event('change',{bubbles:true}));});
+  await detail.locator('.ext-bindings select').evaluate(sel=>{sel.value='selected';sel.dispatchEvent(new Event('change',{bubbles:true}));});
   await accountBox.waitFor();
   const relay = accountBox.locator('label', {hasText:'Relay'}).locator('input');
   const sub = accountBox.locator('label', {hasText:'Subscription'}).locator('input');
@@ -99,7 +102,7 @@ export async function extensionsSmoke(page, base, setSessions) {
   const saved = puts.at(-1);
   assert.equal(saved.enabled, true);
   assert.deepEqual(saved.permissions, ['model.request.fingerprint','model.stream.text']);
-  assert.deepEqual(saved.bindings, {mode:'accounts',accounts:['relay','ds4']});
+  assert.deepEqual(saved.bindings, {mode:'selected',accounts:['relay','ds4'],users:[]});
   assert.deepEqual(saved.config, {cooldown_seconds:30,window:120});
   assert.equal(saved.failure_policy, '');
   // A concurrent edit is reported and the form reloads the stored revision.

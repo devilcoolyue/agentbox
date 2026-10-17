@@ -123,6 +123,14 @@ func TestExtensionAdminAPIAndEnvRewrite(t *testing.T) {
 		`{"expected_revision":0,"enabled":false,"config":{"window":8},"bindings":{"mode":"none"}}`, s.handleUpdateExtension, "agentbox.loop-guard"); w.Code != http.StatusBadRequest {
 		t.Fatalf("out-of-range config accepted: %d", w.Code)
 	}
+	// Model hooks are scoped by account; a user binding makes no sense there.
+	if w = extensionRequest(s, "root", "PUT", "/api/extensions/agentbox.loop-guard",
+		`{"expected_revision":0,"enabled":false,"bindings":{"mode":"selected","users":["alice"]}}`, s.handleUpdateExtension, "agentbox.loop-guard"); w.Code != http.StatusBadRequest {
+		t.Fatalf("user binding accepted for model hooks: %d", w.Code)
+	}
+	if len(lg.Bindings) != 1 || lg.Bindings[0] != "account" {
+		t.Fatalf("manifest selectors: %+v", lg.Bindings)
+	}
 	enableLoopGuard(t, s, 0, "relay")
 	if gw := s.modelGatewayView(); !gw.Needed {
 		t.Fatalf("loop guard's model hooks do not require the gateway: %+v", gw)

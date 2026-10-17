@@ -128,7 +128,7 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
         "enabled": true,
         "config": {"window": 256, "distinct_limit": 24, "cooldown_seconds": 30},
         "permissions": ["model.request.fingerprint", "model.stream.text"],
-        "bindings": {"mode": "accounts", "accounts": ["relay-a"]},
+        "bindings": {"mode": "selected", "accounts": ["relay-a"]},
         "failure_policy": "",
         "revision": 1
       }
@@ -142,11 +142,11 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 | `items.<id>.enabled` | `false` | 是否运行该扩展 |
 | `items.<id>.config` | 清单默认值 | 按扩展清单的 `config_schema` 校验，未知键会被拒绝 |
 | `items.<id>.permissions` | 空 | 管理员批准的权限，只能是清单申请过的；缺少钩子所需权限时不能启用 |
-| `items.<id>.bindings` | `{"mode":"none"}` | `none` / `accounts`（列出账号 ID）/ `all`（全部 API Key / 中转账号，含以后新增的）。Claude 与 Codex 都支持；Claude 订阅、ChatGPT 登录的账号不会被改道。Codex 的地址写在空间的 `.codex/config.toml` 里，账号池保持真实上游 |
+| `items.<id>.bindings` | `{"mode":"none"}` | 作用范围：`none` 不生效；`all` 全部（含以后新增的）；`selected` 按 `accounts`（账号 ID）和 / 或 `users`（用户名）选择，命中其一即生效。能按哪种选由扩展清单的 `bindings` 决定：模型钩子（如循环保护）只能按账号，且只改道 Claude / Codex 的 API Key / 中转账号，订阅与 ChatGPT 登录不会改道；Codex 的地址写在空间的 `.codex/config.toml` 里，账号池保持真实上游。旧配置的 `accounts` 模式按 `selected` 读取 |
 | `items.<id>.failure_policy` | 空 = 清单默认 | `fail_open` 放行或 `fail_closed` 拦截；循环保护默认放行 |
 | `items.<id>.revision` | 服务端维护 | 每次保存加一；网页提交时用它防止覆盖他人的修改 |
 
-建议在「扩展」页修改，不必手写；网页保存会校验清单并立即生效（扩展重启、冷却记录清空）。删除账号时会同时把它从各扩展的绑定中移除。带模型钩子的扩展绑定后，新开的对话与终端执行改走模型网关，已打开的终端窗口需新开窗口。
+建议在「扩展」页修改，不必手写；网页保存会校验清单并立即生效（扩展重启、冷却记录清空）。删除账号或用户时会同时把它从各扩展的绑定中移除。带模型钩子的扩展绑定后，新开的对话与终端执行改走模型网关，已打开的终端窗口需新开窗口。
 
 ## 终端提示语
 

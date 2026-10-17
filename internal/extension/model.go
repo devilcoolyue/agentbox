@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"agentbox/internal/config"
 	"agentbox/pkg/extspi"
 	"agentbox/pkg/modelgw"
 )
@@ -182,7 +183,7 @@ func (h *Host) Inspector(sc StreamContext) modelgw.Inspector {
 	defer h.mu.Unlock()
 	var list []*instance
 	for _, inst := range h.orderedLocked() {
-		if inst.uses(modelHooks) && inst.setting.Binds(sc.Account) {
+		if inst.uses(modelHooks) && inst.setting.Binds(config.BindingTarget{Account: sc.Account, User: sc.User}) {
 			list = append(list, inst)
 		}
 	}

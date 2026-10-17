@@ -416,7 +416,7 @@ func Load(path string) (*Config, error) {
 
 	cfg.initDefaultModels()
 	cfg.Decision = cfg.Decision.normalized()
-	cfg.Extensions.compactConfigs()
+	cfg.Extensions.normalizeLoaded()
 	cfg.migrateModelGateway()
 
 	// 未配置 terminal_tips（老配置文件里没这一块）时，补上原来的单条提示，

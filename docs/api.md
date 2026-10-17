@@ -203,9 +203,9 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 
 | 方法与路径 | 请求 / 返回用途 |
 | --- | --- |
-| `GET /api/extensions` | 已安装扩展列表；每项含清单字段、`setting`（保存的设置与 `revision`）、`status`（状态、指标、检查中的流、重启次数）、`accounts`（可选账号及 `eligible`，只有 Claude / Codex 的 API Key / 中转账号可绑定）和 `requires`（钩子依赖的基础设施及状态，目前只有带模型钩子时的 `model_gateway`：`bind`、`active`、`error`） |
+| `GET /api/extensions` | 已安装扩展列表；每项含清单字段、`setting`（保存的设置与 `revision`）、`status`（状态、指标、检查中的流、重启次数）、`accounts`（可选账号及 `eligible`，只有 Claude / Codex 的 API Key / 中转账号可绑定）、`bindings`（可按哪些维度限定作用范围：`account` / `user`）和 `requires`（钩子依赖的基础设施及状态，目前只有带模型钩子时的 `model_gateway`：`bind`、`active`、`error`） |
 | `GET /api/extensions/{id}` | 单个扩展，字段同上 |
-| `PUT /api/extensions/{id}` | `{expected_revision, enabled, order, config, permissions, bindings:{mode, accounts}, failure_policy}`；`config` 按清单的 `config_schema` 校验并补默认值，启用时必须批准钩子所需权限；修订不符返回 409。保存后扩展按新设置重启 |
+| `PUT /api/extensions/{id}` | `{expected_revision, enabled, order, config, permissions, bindings:{mode, accounts, users}, failure_policy}`；`mode` 为 `none` / `selected` / `all`（旧值 `accounts` 视同 `selected`），只能使用扩展 `bindings` 字段列出的维度，用户必须存在；`config` 按清单的 `config_schema` 校验并补默认值，启用时必须批准钩子所需权限；修订不符返回 409。保存后扩展按新设置重启 |
 | `GET /api/extensions/{id}/logs?since=` | 扩展日志（内存环形缓冲，最近 200 条），返回 `seq` 大于 `since` 的条目 |
 | `GET /api/extensions/{id}/events` | 最近的中断与拒绝（内存，最近 200 条，重启清空，不含提示词与回复内容） |
 

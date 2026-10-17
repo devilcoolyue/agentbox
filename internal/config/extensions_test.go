@@ -48,14 +48,14 @@ func TestExtensionSettingPersistenceAndRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := reloaded.GetExtensions().Items["agentbox.loop-guard"]
-	if got.Revision != 1 || string(got.Config) != `{"window":64}` || !got.Binds("other") || got.FailurePolicy != "fail_closed" {
+	if got.Revision != 1 || string(got.Config) != `{"window":64}` || !got.Binds(BindingTarget{Account: "other"}) || got.FailurePolicy != "fail_closed" {
 		t.Fatalf("reloaded: %+v", got)
 	}
 	if err := reloaded.RemoveAccount("other"); err != nil {
 		t.Fatal(err)
 	}
 	got = reloaded.GetExtensions().Items["agentbox.loop-guard"]
-	if got.Binds("other") || !got.Binds("relay") || got.Revision != 2 {
+	if got.Binds(BindingTarget{Account: "other"}) || !got.Binds(BindingTarget{Account: "relay"}) || got.Revision != 2 || got.Bindings.Mode != BindingModeSelected {
 		t.Fatalf("prune: %+v", got)
 	}
 }
@@ -67,6 +67,8 @@ func TestExtensionValidation(t *testing.T) {
 		"duplicate":       {Bindings: ExtensionBindings{Mode: "accounts", Accounts: []string{"relay", "relay"}}},
 		"bad mode":        {Bindings: ExtensionBindings{Mode: "some"}},
 		"accounts in all": {Bindings: ExtensionBindings{Mode: "all", Accounts: []string{"relay"}}},
+		"users in none":   {Bindings: ExtensionBindings{Mode: "none", Users: []string{"alice"}}},
+		"duplicate user":  {Bindings: ExtensionBindings{Mode: "selected", Users: []string{"alice", "alice"}}},
 		"bad policy":      {Bindings: ExtensionBindings{Mode: "none"}, FailurePolicy: "maybe"},
 		"bad config":      {Bindings: ExtensionBindings{Mode: "none"}, Config: json.RawMessage(`{`)},
 	} {
@@ -88,4 +90,44 @@ func writeRaw(t *testing.T, raw map[string]any) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// Bindings select accounts and users; the pre-2026-10-17 accounts mode is
+// read as selected, and deleted users are pruned like deleted accounts.
+func TestExtensionBindingsSelectUsersAndAccounts(t *testing.T) {
+	c := extensionsTestConfig(t, map[string]any{"extensions": map[string]any{"items": map[string]any{
+		"agentbox.legacy": map[string]any{"enabled": true, "bindings": map[string]any{"mode": "accounts", "accounts": []string{"relay"}}},
+	}}})
+	legacy := c.GetExtensions().Items["agentbox.legacy"]
+	if legacy.Bindings.Mode != BindingModeSelected || !legacy.Binds(BindingTarget{Account: "relay", User: "bob"}) {
+		t.Fatalf("legacy mode: %+v", legacy.Bindings)
+	}
+	s := ExtensionSetting{Enabled: true, Bindings: ExtensionBindings{Mode: "selected", Accounts: []string{"relay"}, Users: []string{"alice", "bob"}}}
+	if _, err := c.SetExtension("agentbox.webhook", s, 0); err != nil {
+		t.Fatal(err)
+	}
+	got := c.GetExtensions().Items["agentbox.webhook"]
+	for target, want := range map[BindingTarget]bool{
+		{User: "alice"}:                   true,
+		{Account: "relay"}:                true,
+		{Account: "other", User: "carol"}: false,
+		{}:                                false,
+	} {
+		if got.Binds(target) != want {
+			t.Errorf("Binds(%+v) = %v", target, !want)
+		}
+	}
+	if (ExtensionSetting{Bindings: ExtensionBindings{Mode: "all"}}).Binds(BindingTarget{}) != true {
+		t.Error("mode all")
+	}
+	if err := c.PruneExtensionUser("alice"); err != nil {
+		t.Fatal(err)
+	}
+	got = c.GetExtensions().Items["agentbox.webhook"]
+	if got.Binds(BindingTarget{User: "alice"}) || !got.Binds(BindingTarget{User: "bob"}) || got.Revision != 2 {
+		t.Fatalf("prune user: %+v", got)
+	}
+	if c.GetExtensions().Items["agentbox.legacy"].Revision != 0 {
+		t.Fatal("unrelated extension touched by the prune")
+	}
 }

@@ -71,7 +71,7 @@ func gateway(t *testing.T, h *Host, upstream string, sc StreamContext) *httptest
 
 func loopSetting(accounts ...string) config.ExtensionSetting {
 	return config.ExtensionSetting{Enabled: true, Revision: 1, Permissions: []string{extspi.PermRequestFingerprint, extspi.PermStreamText},
-		Bindings: config.ExtensionBindings{Mode: "accounts", Accounts: accounts}}
+		Bindings: config.ExtensionBindings{Mode: "selected", Accounts: accounts}}
 }
 
 func waitFor(t *testing.T, what string, cond func() bool) {
@@ -172,10 +172,11 @@ func TestUnboundAccountAndDisable(t *testing.T) {
 	if h.Inspector(StreamContext{Account: "other"}) != nil {
 		t.Fatal("unbound account inspected")
 	}
-	if len(h.Bound("relay-a", modelHooks...)) != 1 || len(h.Bound("other", modelHooks...)) != 0 {
+	relay, other := config.BindingTarget{Account: "relay-a"}, config.BindingTarget{Account: "other"}
+	if len(h.Bound(relay, modelHooks...)) != 1 || len(h.Bound(other, modelHooks...)) != 0 {
 		t.Fatal("bound list wrong")
 	}
-	if len(h.Bound("relay-a")) != 0 || !h.Uses(modelHooks...) || h.Uses() {
+	if len(h.Bound(relay)) != 0 || !h.Uses(modelHooks...) || h.Uses() {
 		t.Fatal("hook filter ignored")
 	}
 	off := loopSetting("relay-a")
@@ -202,6 +203,8 @@ func TestNormalize(t *testing.T) {
 		{Config: json.RawMessage(`[]`)},
 		{Permissions: []string{extspi.PermContext}},
 		{FailurePolicy: "maybe"},
+		// Model hooks are bound by account only.
+		{Bindings: config.ExtensionBindings{Mode: "selected", Users: []string{"alice"}}},
 	} {
 		if _, err := h.Normalize("agentbox.loop-guard", bad); err == nil {
 			t.Fatalf("accepted %+v", bad)
@@ -237,6 +240,8 @@ func TestManifestValidation(t *testing.T) {
 		"bad id":                           mutate(`"agentbox.test-ext"`, `"Agentbox.Test"`),
 		"unknown field":                    mutate(`"publisher": "test",`, `"publisher": "test", "scripts": "x",`),
 		"unknown hook":                     mutate(`"hooks": ["model.request", "model.stream"]`, `"hooks": ["model.request", "files.write"]`),
+		"selector a hook cannot use":       mutate(`"bindings": ["account"]`, `"bindings": ["account", "user"]`),
+		"unknown selector":                 mutate(`"bindings": ["account"]`, `"bindings": ["team"]`),
 		"hook without permission":          mutate(`"permissions": ["model.request.fingerprint", "model.stream.text", "model.context"]`, `"permissions": ["model.stream.text"]`),
 		"unsupported spi":                  mutate(`"spi": "1.0"`, `"spi": "2.0"`),
 		"newer spi minor":                  mutate(`"spi": "1.0"`, `"spi": "1.9"`),

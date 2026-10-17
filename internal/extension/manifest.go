@@ -200,8 +200,18 @@ func (m *Manifest) validate(builtin bool) error {
 			return fmt.Errorf("hook %s requires permission %s", hook, spec.Permission)
 		}
 	}
-	if len(m.Bindings) != 1 || m.Bindings[0] != "account" {
-		return fmt.Errorf(`bindings must be ["account"]`)
+	// Every selector the extension offers must make sense for each of its
+	// hooks: a model request has no meaningful user binding, for example.
+	if err := unique("bindings", m.Bindings, extspi.KnownBinding); err != nil {
+		return err
+	}
+	for _, hook := range m.Hooks {
+		spec, _ := extspi.LookupHook(hook)
+		for _, b := range m.Bindings {
+			if !slices.Contains(spec.Bindings, b) {
+				return fmt.Errorf("hook %s cannot be bound by %s", hook, b)
+			}
+		}
 	}
 	if m.FailurePolicy != FailOpen && m.FailurePolicy != FailClosed {
 		return fmt.Errorf("failure_policy must be fail_open or fail_closed")
@@ -266,6 +276,9 @@ func splitVersion(v string) (int, int, bool) {
 	b, err2 := strconv.Atoi(minor)
 	return a, b, err1 == nil && err2 == nil
 }
+
+// BindsBy reports whether the manifest offers the binding selector.
+func (m Manifest) BindsBy(selector string) bool { return slices.Contains(m.Bindings, selector) }
 
 // HasHook reports whether the manifest declares hook.
 func (m Manifest) HasHook(hook string) bool { return slices.Contains(m.Hooks, hook) }

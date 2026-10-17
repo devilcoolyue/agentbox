@@ -54,10 +54,24 @@ const (
 	PermContext            = "model.context"
 )
 
-// Binding selectors: what an administrator may scope an extension to.
+// Binding selectors: what an administrator may scope an extension to. An
+// extension whose manifest lists none can only be off or on everywhere.
 const (
 	BindAccount = "account"
+	BindUser    = "user"
 )
+
+var bindings = []string{BindAccount, BindUser}
+
+// KnownBinding reports whether b is a binding selector.
+func KnownBinding(b string) bool {
+	for _, known := range bindings {
+		if known == b {
+			return true
+		}
+	}
+	return false
+}
 
 // Host infrastructure a hook may depend on.
 const (

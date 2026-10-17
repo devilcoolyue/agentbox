@@ -79,7 +79,8 @@ export interface ExtensionSetting {
   order: number;
   config?: Record<string, unknown>;
   permissions: string[];
-  bindings: { mode: "none" | "accounts" | "all"; accounts?: string[] };
+  /** selected 时按账号或用户命中其一即生效；旧服务端可能仍回 accounts（同 selected） */
+  bindings: { mode: "none" | "selected" | "all" | "accounts"; accounts?: string[]; users?: string[] };
   failure_policy?: "" | "fail_open" | "fail_closed";
   revision: number;
 }
@@ -107,6 +108,8 @@ export interface ExtensionView {
   runtime: string;
   hooks: string[];
   permissions: string[];
+  /** 可按哪些维度限定作用范围（account / user）；为空表示只有「不生效 / 全部」 */
+  bindings: string[];
   failure_policy: "fail_open" | "fail_closed";
   config_schema: { type: "object"; properties?: Record<string, ExtensionSchemaProp> };
   errors: { code: string; message: LocalText }[];

@@ -57,7 +57,8 @@ export function mountUserPicker(root, opts = {}) {
     error.className = "up-error login-error";
     error.setAttribute("role", "alert");
     root.append(bar, list, note, error);
-    const known = () => new Set((users || []).filter(u => u.role !== "admin").map(u => u.name));
+    const selectable = (u) => opts.includeAdmins || u.role !== "admin";
+    const known = () => new Set((users || []).filter(selectable).map(u => u.name));
     const value = () => {
         if (!users)
             return [...selected].sort(byName);
@@ -141,8 +142,8 @@ export function mountUserPicker(root, opts = {}) {
                 list.append(skelRows(3, i18nText("读取用户中…"), { rowClass: "up-row", lines: 0, title: [18, 20] }));
             return;
         }
-        const regular = users.filter(u => u.role !== "admin").map(u => u.name).sort(byName);
-        const admins = users.filter(u => u.role === "admin").map(u => u.name).sort(byName);
+        const regular = users.filter(selectable).map(u => u.name).sort(byName);
+        const admins = users.filter(u => !selectable(u)).map(u => u.name).sort(byName);
         const names = new Set(users.map(u => u.name));
         const missing = stored.filter(n => !names.has(n)).sort(byName);
         const rows = [...regular.map(n => row(n, "user")), ...admins.map(n => row(n, "admin")), ...missing.map(n => row(n, "missing"))];

@@ -34,6 +34,8 @@ export interface UserPickerOptions {
   signal?: AbortSignal;
   /** 保存条比较用的隐藏 input */
   field?: HTMLInputElement;
+  /** 管理员也作为普通选项（扩展绑定等「选人」而非「授权」的场合）；缺省锁成已选、不写进名单 */
+  includeAdmins?: boolean;
 }
 
 const pickers = new WeakMap<HTMLInputElement, UserPicker>();
@@ -85,7 +87,8 @@ export function mountUserPicker(root: HTMLElement, opts: UserPickerOptions = {})
   error.setAttribute("role", "alert");
   root.append(bar, list, note, error);
 
-  const known = () => new Set((users || []).filter(u => u.role !== "admin").map(u => u.name));
+  const selectable = (u: User) => opts.includeAdmins || u.role !== "admin";
+  const known = () => new Set((users || []).filter(selectable).map(u => u.name));
   const value = () => {
     if (!users) return [...selected].sort(byName);
     const names = known();
@@ -168,8 +171,8 @@ export function mountUserPicker(root: HTMLElement, opts: UserPickerOptions = {})
       } else list.append(skelRows(3, i18nText("读取用户中…"), { rowClass: "up-row", lines: 0, title: [18, 20] }));
       return;
     }
-    const regular = users.filter(u => u.role !== "admin").map(u => u.name).sort(byName);
-    const admins = users.filter(u => u.role === "admin").map(u => u.name).sort(byName);
+    const regular = users.filter(selectable).map(u => u.name).sort(byName);
+    const admins = users.filter(u => !selectable(u)).map(u => u.name).sort(byName);
     const names = new Set(users.map(u => u.name));
     const missing = stored.filter(n => !names.has(n)).sort(byName);
     const rows = [...regular.map(n => row(n, "user")), ...admins.map(n => row(n, "admin")), ...missing.map(n => row(n, "missing"))];
