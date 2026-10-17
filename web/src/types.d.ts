@@ -27,7 +27,7 @@ export interface Session {
   updated_at: string;
   /** sessionView 在 store.Session 之上补的账号展示名 */
   account_label: string;
-  /** 正在检查本空间模型流量的扩展（服务端 sessionView.Extensions；旧服务端没有） */
+  /** 作用于本空间的扩展：检查模型流量或接收本空间事件（服务端 sessionView.Extensions；旧服务端没有） */
   extensions?: SessionExtension[];
 }
 
@@ -37,6 +37,8 @@ export type LocalText = Record<string, string>;
 export interface SessionExtension {
   id: string;
   name: LocalText;
+  /** 扩展看到本空间的哪些方面：model（模型流量）/ workspace（空间启停）/ chat（对话结果）；旧服务端没有，按 model 处理 */
+  groups?: string[];
 }
 
 /** GET /api/extensions（server.extensionsResponse）。 */

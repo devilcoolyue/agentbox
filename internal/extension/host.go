@@ -250,17 +250,31 @@ func (h *Host) Bound(target config.BindingTarget, hooks ...string) []BoundExtens
 	var out []BoundExtension
 	for _, inst := range h.orderedLocked() {
 		if inst.uses(hooks) && inst.setting.Binds(target) {
-			out = append(out, BoundExtension{ID: inst.pkg.Manifest.ID, Name: inst.pkg.Manifest.Name, Policy: inst.policy})
+			out = append(out, BoundExtension{ID: inst.pkg.Manifest.ID, Name: inst.pkg.Manifest.Name, Groups: inst.groups(hooks), Policy: inst.policy})
 		}
 	}
 	return out
 }
 
-// BoundExtension is what a workspace may know about an extension inspecting it.
+// groups lists the hook groups (model, workspace, chat) among hooks the
+// instance may run, in registry order.
+func (in *instance) groups(hooks []string) []string {
+	var out []string
+	for _, spec := range extspi.Hooks() {
+		if slices.Contains(hooks, spec.Name) && in.uses([]string{spec.Name}) && !slices.Contains(out, spec.Group) {
+			out = append(out, spec.Group)
+		}
+	}
+	return out
+}
+
+// BoundExtension is what a workspace's owner may know about an extension
+// acting on it: its name and which areas (hook groups) it sees.
 type BoundExtension struct {
-	ID     string `json:"id"`
-	Name   Text   `json:"name"`
-	Policy string `json:"-"`
+	ID     string   `json:"id"`
+	Name   Text     `json:"name"`
+	Groups []string `json:"groups"`
+	Policy string   `json:"-"`
 }
 
 func (h *Host) orderedLocked() []*instance {

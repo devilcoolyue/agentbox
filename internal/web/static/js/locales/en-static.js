@@ -4,6 +4,7 @@ export default {
     "仅影响当前账号在此浏览器的输入与待确认内容，修改后即时生效。": "Only affects the current account’s drafts and unconfirmed messages in this browser. Changes apply immediately.",
     "账号池、服务端配置与此浏览器的个人偏好。需要重启的项会单独标出。": "Account pool, server configuration and personal preferences for this browser. Settings that require a restart are marked.",
     "此浏览器的个人偏好，修改后即时生效。": "Personal preferences for this browser. Changes apply immediately.",
+    "扩展：按需启用的可选功能，如循环保护、Webhook 通知": "Extensions: optional features you turn on as needed, such as Loop guard and Webhook notifications",
     "扩展为 agentbox 增加可选功能，由管理员启用并决定作用范围。每个扩展只能拿到你批准的数据。": "Extensions add optional features to agentbox. Administrators enable them and choose where they apply; each extension only receives the data you approve.",
     "模型网关": "Model gateway",
     "检查模型流量的扩展（例如循环保护）通过它转发所绑定账号的请求。只在这类扩展启用后监听，与其他扩展无关。": "Extensions that inspect model traffic (such as Loop guard) forward their bound accounts' requests through it. It only listens while such an extension is enabled and is unrelated to other extensions.",
@@ -809,5 +810,4 @@ export default {
     "开启后可能多花 token：每次请求都会多带任务工具的说明，模型也会多调用几次来建立和更新任务，费用计入你的额度。": "This may use more tokens: every request carries the task tools' descriptions, and the model makes a few extra calls to create and update tasks. The cost is charged to your balance.",
     "复制到剪贴板": "Copy to clipboard",
     "扩展": "Extensions",
-    "扩展：循环保护等官方维护的功能": "Extensions: officially maintained features such as Loop guard",
 };

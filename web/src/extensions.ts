@@ -53,6 +53,20 @@ function stateChip(state: string) {
   return chip;
 }
 
+/** 钩子分组（与服务端 extspi.HookSpec.Group 一致，取钩子名的第一段） */
+const GROUPS: Record<string, () => string> = {
+  model: () => i18nText("模型流量"), workspace: () => i18nText("空间事件"), chat: () => i18nText("对话事件"),
+};
+function groupChips(ext: ExtensionView) {
+  const box = el("div", "ext-chips");
+  for (const g of [...new Set(ext.hooks.map(h => h.split(".")[0]))]) {
+    const chip = el("span", "ext-chip", GROUPS[g] || (() => g));
+    chip.dataset.group = g;
+    box.append(chip);
+  }
+  return box;
+}
+
 /** 模型钩子只改道 API Key / 中转账号，「全部」与提示要按这个说 */
 const routesModel = (ext: ExtensionView) => ext.hooks.some(h => h.startsWith("model."));
 
@@ -86,7 +100,12 @@ export function initExtensionsPage() {
   const onPage = () => S.view === "extensions";
   const selected = () => data?.extensions.find(e => e.id === S.extSel) || null;
 
+  // A reset asked for by a load that a newer one superseded (the 5-second
+  // poll racing a conflict reload) still happens on the next completed load.
+  let resetPending = false;
+
   async function load(resetForm: boolean) {
+    resetPending ||= resetForm;
     const mine = ++gen;
     try {
       const next = await api<ExtensionsResponse>("/extensions", { signal });
@@ -103,7 +122,7 @@ export function initExtensionsPage() {
       await loadActivity(ext.id, mine);
       if (mine !== gen) return;
     }
-    if (resetForm || !dirty) renderDetail();
+    if (resetPending || !dirty) renderDetail();
     else renderLive();
   }
 
@@ -131,7 +150,7 @@ export function initExtensionsPage() {
       const head = el("div", "ext-card-head");
       head.append(el("b", "", local(ext.name)), stateChip(ext.status.state));
       const meta = el("div", "ext-meta", () => [ext.version, ext.publisher, ext.builtin ? i18nText("官方内置") : "", bindingSummary(ext)].filter(Boolean).join(" · "));
-      card.append(head, el("p", "ext-desc", local(ext.description)), meta);
+      card.append(head, el("p", "ext-desc", local(ext.description)), groupChips(ext), meta);
       card.addEventListener("click", () => openExtension(ext.id));
       list.append(card);
     }
@@ -151,6 +170,7 @@ export function initExtensionsPage() {
     box.replaceChildren();
     form = null;
     dirty = false;
+    resetPending = false;
     if (!ext) return;
     const back = el("button", "btn btn-ghost btn-sm ext-back");
     back.type = "button";
@@ -174,7 +194,7 @@ export function initExtensionsPage() {
     const head = el("div", "ext-card-head");
     head.append(el("h3", "", local(ext.name)), stateChip(ext.status.state));
     const meta = el("div", "ext-meta", () => [i18nText("版本 {v}", { v: ext.version }), ext.publisher, ext.builtin ? i18nText("官方内置") : "", ext.license || ""].filter(Boolean).join(" · "));
-    card.append(head, meta, el("p", "ext-desc", local(ext.description)));
+    card.append(head, meta, el("p", "ext-desc", local(ext.description)), groupChips(ext));
     if (ext.homepage) {
       const link = el("a", "ext-link", () => i18nText("说明文档"));
       link.href = ext.homepage;

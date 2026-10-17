@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -58,8 +59,8 @@ func (s *Server) ensureSharedDir(user string) (string, error) {
 type sessionView struct {
 	store.Session
 	AccountLabel string `json:"account_label"`
-	// Extensions inspecting this workspace's model traffic, so its owner
-	// knows their model output is being inspected.
+	// Extensions acting on this workspace — inspecting its model traffic or
+	// receiving its events — so its owner knows (decided 2026-10-16).
 	Extensions []extension.BoundExtension `json:"extensions"`
 }
 
@@ -73,6 +74,20 @@ func (s *Server) view(sess store.Session) sessionView {
 		sess.DefaultModel = a.ResolveModel(sess.DefaultModel)
 		if bound, rewrite := s.inspectingExtensions(sess, a); rewrite {
 			extensions = bound
+		}
+	}
+	if s.extensions != nil {
+		for _, b := range s.extensions.Bound(bindingTarget(sess), eventHooks...) {
+			i := slices.IndexFunc(extensions, func(e extension.BoundExtension) bool { return e.ID == b.ID })
+			if i < 0 {
+				extensions = append(extensions, b)
+				continue
+			}
+			for _, g := range b.Groups {
+				if !slices.Contains(extensions[i].Groups, g) {
+					extensions[i].Groups = append(extensions[i].Groups, g)
+				}
+			}
 		}
 	}
 	return sessionView{Session: sess, AccountLabel: label, Extensions: extensions}

@@ -62,7 +62,8 @@ export async function extensionsSmoke(page, base, setSessions) {
   await card.waitFor();
   assert.equal(await page.locator('#btn-extensions').isVisible(), true, 'admin sees the 扩展 entry');
   assert.equal(await page.locator('#btn-extensions').getAttribute('aria-current'), 'page');
-  assert.match(await card.innerText(), /循环保护[\s\S]*未启用/);
+  assert.match(await card.innerText(), /循环保护[\s\S]*未启用[\s\S]*模型流量/);
+  assert.match(await page.locator('#ext-list .ext-card', {hasText:'Webhook 通知'}).innerText(), /空间事件\s*对话事件/);
   // The list is about extensions only: no gateway banner or switch.
   const listPage = await page.locator('#view-extensions').innerText();
   assert.doesNotMatch(listPage, /172\.17\.0\.1|网关/, 'the 扩展 page names the model gateway');
@@ -158,15 +159,16 @@ export async function extensionsSmoke(page, base, setSessions) {
   await card.waitFor();
   // Users see which extensions inspect their workspace.
   setSessions([{id:'fixture-space',name:'Fixture workspace',agent:'claude',account_id:'relay',account_label:'Relay',status:'stopped',default_model:'fixture',
-   extensions:[{id:'agentbox.loop-guard',name:{'zh-CN':'循环保护','zh-TW':'循環保護',en:'Loop guard'}}]}]);
+   extensions:[{id:'agentbox.loop-guard',name:{'zh-CN':'循环保护','zh-TW':'循環保護',en:'Loop guard'},groups:['model']},
+    {id:'agentbox.webhook',name:{'zh-CN':'Webhook 通知','zh-TW':'Webhook 通知',en:'Webhook notifications'},groups:['workspace','chat']}]}]);
   await page.goto(base + '/#/sessions/fixture-space/chat');
   await page.reload(); // pick up the replaced session list
   const badge = page.locator('#wb-ext');
   await badge.waitFor();
-  assert.match(await badge.innerText(), /循环保护/);
+  assert.match(await badge.innerText(), /循环保护、Webhook 通知/);
   console.log('Extensions: list/detail without gateway, event-only webhook detail with user picker, model gateway dependency and settings card, permission approval, Claude and Codex API key binding with ineligible subscription/ChatGPT accounts, schema form, revisioned save and conflict reload, plain-text manifest strings, events/logs and workspace badge passed');
   await page.screenshot({path:'output/playwright/extensions-workspace.png',animations:'disabled',clip:{x:0,y:0,width:1280,height:160}});
-  assert.match(await badge.getAttribute('aria-label'), /循环保护 正在检查本空间的模型输出/);
+  assert.equal(await badge.getAttribute('aria-label'), '循环保护 正在检查本空间的模型输出；Webhook 通知 会收到本空间的空间启停与对话结果通知');
  } finally {
   await page.unroute('**/api/extensions**');
   setSessions([]);

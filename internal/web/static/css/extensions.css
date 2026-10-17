@@ -105,3 +105,10 @@
 }
 .ext-require { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 10px; }
 .ext-require .ext-link { align-self: center; }
+.ext-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ext-chip {
+  font-size: 11.5px; line-height: 1; padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line); color: var(--muted);
+}
+.ext-chip[data-group="model"] { color: var(--info); border-color: color-mix(in srgb, var(--info) 40%, transparent); }

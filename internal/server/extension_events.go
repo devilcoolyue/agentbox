@@ -13,6 +13,19 @@ import (
 // fans it out to the extensions subscribed and bound to it. Nothing here waits
 // for an extension.
 
+// eventHooks are the notification hooks.
+var eventHooks = hooksOfKind(extspi.KindEvent)
+
+func hooksOfKind(kind string) []string {
+	var out []string
+	for _, h := range extspi.Hooks() {
+		if h.Kind == kind {
+			out = append(out, h.Name)
+		}
+	}
+	return out
+}
+
 func workspaceRef(sess store.Session) extspi.WorkspaceRef {
 	return extspi.WorkspaceRef{ID: sess.ID, Name: sess.Name, Agent: sess.Agent, Account: sess.AccountID, User: sess.User}
 }

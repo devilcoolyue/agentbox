@@ -156,7 +156,7 @@ func TestExtensionAdminAPIAndEnvRewrite(t *testing.T) {
 	if envValue(env, envAnthropicBaseURL) != want || envValue(env, envAnthropicToken) != "relay-token" {
 		t.Fatalf("base URL not rewritten: %v", env)
 	}
-	if v := s.view(sess); len(v.Extensions) != 1 || v.Extensions[0].ID != "agentbox.loop-guard" {
+	if v := s.view(sess); len(v.Extensions) != 1 || v.Extensions[0].ID != "agentbox.loop-guard" || len(v.Extensions[0].Groups) != 1 || v.Extensions[0].Groups[0] != "model" {
 		t.Fatalf("workspace view hides the inspecting extension: %+v", v.Extensions)
 	}
 
@@ -476,6 +476,10 @@ func TestExtensionEventHooksReachWebhook(t *testing.T) {
 	}
 	if s.modelGatewayView().Needed {
 		t.Fatal("an extension without model hooks needs the gateway")
+	}
+	// The owner sees which extension receives their workspace's events.
+	if v := s.view(sess); len(v.Extensions) != 1 || v.Extensions[0].ID != "agentbox.webhook" || strings.Join(v.Extensions[0].Groups, ",") != "workspace,chat" {
+		t.Fatalf("workspace view: %+v", v.Extensions)
 	}
 	if env, _ := s.execEnv(sess); envValue(env, envAnthropicBaseURL) != "https://relay.example.com" {
 		t.Fatal("an event extension rerouted model traffic")
