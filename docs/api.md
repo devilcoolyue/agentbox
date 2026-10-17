@@ -25,7 +25,7 @@
 ## 工作空间
 
 ```text
-GET    /api/sessions                工作空间列表（每项带 extensions：正在检查本空间模型流量的扩展 [{id, name}]）
+GET    /api/sessions                工作空间列表（每项带 extensions：作用于本空间的扩展 [{id, name, groups}]，groups 为 model / workspace / chat）
 GET    /api/sessions/{id}           单个工作空间详情（同上）
 GET    /api/sessions/{id}/models    当前空间的候选模型、推理能力与发现状态（不保证上游调用权限）；restricted/default_model 见账号可用模型，client_effort 是账号 CLI 配置的默认原生强度
 GET    /api/sessions/{id}/account/usage  当前空间账号的订阅额度（校验账号使用权限）

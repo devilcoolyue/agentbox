@@ -1,20 +1,21 @@
 # 扩展与 SPI 协议设计
 
-日期：2026-10-16。状态：**设计已评审；P1 已实现**（「扩展」菜单 + 循环保护，作用于 Claude API Key / 中转账号）。真实 Claude Code 与 Linux Docker 链路尚未验收，见 §17。SPI 1.0 冻结前（见 §15 P3）字段和方法名可能调整，不承诺兼容。
+日期：2026-10-16，2026-10-17 解耦（§19）。状态：**设计已评审；P1 已实现**（「扩展」菜单、循环保护、Webhook 通知）。真实 Claude Code 与 Linux Docker 链路尚未验收，见 §17。SPI 1.0 冻结前（见 §15 P3）字段和方法名可能调整，不承诺兼容。
 
 **已定决策（2026-10-16）**
 
-1. 只支持 API Key 和中转账号绑定扩展；OAuth 订阅账号（Claude 订阅、ChatGPT 登录）不支持。
-2. 扩展失效时默认放行（`fail_open`），管理员可以按扩展改成拦截。
-3. 对用户可见：空间里显示有哪些扩展在检查它的模型流量。
+1. 检查模型流量的扩展只能绑定 API Key 和中转账号；OAuth 订阅账号（Claude 订阅、ChatGPT 登录）不改道。其他扩展不受此限。
+2. 检查型扩展失效时默认放行（`fail_open`），管理员可以按扩展改成拦截。事件型扩展没有失效策略。
+3. 对用户可见：空间里显示有哪些扩展作用于它（检查模型流量或接收本空间事件）。
 4. 不做自动续跑：中断后由用户决定怎么继续，SPI 不提供发起消息的能力。
+5. 扩展框架与模型网关分离（2026-10-17）：网关是系统级设施，只在有扩展用到模型钩子时启动；扩展按钩子声明依赖，不是所有扩展都建立在网关之上。
 
 ## 1. 目标与边界
 
 **目标**
 
 - 管理员在独立的「扩展」菜单里浏览、启用、配置、停用扩展，并能看到每个扩展的状态和最近的动作。
-- 首批扩展由官方维护，第一个是循环保护（现 `abox-loop-guard`）。以后开放市场，接收第三方提交。
+- 首批扩展由官方维护：循环保护（现 `abox-loop-guard`，检查模型流量）和 Webhook 通知（接收空间与对话事件）。以后开放市场，接收第三方提交。
 - 官方扩展和第三方扩展共用一套 SPI。接入新扩展不需要改服务端代码。
 - 扩展出错不拖垮主服务；默认最小权限；**凭证和网络出口永远不交给扩展**。
 
@@ -31,25 +32,28 @@
 ## 2. 总体结构
 
 ```text
-                     网页「扩展」菜单（管理员）
-                              │ /api/extensions*
-                              ▼
-容器内 CLI ──HTTP（base URL 改写）──▶ 模型网关 ──账号出口（fail-closed）──▶ provider / 中转
-                                      │  钩子调用（SPI）
-                                      ▼
-                                  扩展宿主 ──▶ 扩展实例
+                     网页「扩展」菜单（管理员）          系统设置 → 模型网关
+                              │ /api/extensions*              │ /api/settings
+                              ▼                               ▼
+空间服务 ─ workspace.lifecycle ─┐                  容器内 CLI ─▶ 模型网关 ─账号出口─▶ provider / 中转
+对话服务 ─ chat.turn.ended ─────┤                               │ model.request / model.stream
+                                ▼                               ▼
+                             扩展宿主（事件投递、检查调用、权限、绑定）──▶ 扩展实例
                                                ├─ builtin：编进二进制，进程内直接调用
                                                └─ container：Docker 沙箱，stdio JSON-RPC
 ```
 
+宿主不知道网关的存在：网关只是模型钩子的一个调用方，和空间服务、对话服务地位相同。
+
 | 组件 | 位置 | 职责 |
 |---|---|---|
 | 扩展宿主 | `internal/extension`（官方扩展在 `internal/extension/builtin`） | 清单校验、注册表、实例生命周期、钩子分发、权限、故障策略、状态与日志 |
-| 模型网关 | `pkg/modelgw`（公开，独立 `abox-loop-guard` 共用）+ `internal/server/extensions.go` | 转发、四协议 SSE 解码成统一增量、执行中断并按协议写错误事件；服务端部分负责监听、路径鉴权、上游与账号出口解析 |
+| 模型网关 | `pkg/modelgw`（公开，独立 `abox-loop-guard` 共用）+ `internal/server/modelgateway.go` | 转发、四协议 SSE 解码成统一增量、执行中断并按协议写错误事件；服务端部分负责监听、路径鉴权、上游与账号出口解析。配置在顶层 `model_gateway`，界面在系统设置 |
+| 事件源 | `workspace.Service.SetLifecycleHook`、`chat.Runtime.TurnEnded` → `internal/server/extension_events.go` | 把空间启停和对话回合结果转成 `Host.Emit` |
 | SPI SDK | `pkg/extspi`（公开） | 消息类型、NDJSON JSON-RPC 编解码、`Serve(handler)`、`Pipe` 一致性测试；官方和第三方 Go 扩展共用 |
 | 扩展实例 | builtin / container | 只处理被授权的数据，只能返回裁决 |
 
-关键取舍：**网络这一跳由宿主执行**。凭证、出口代理、协议解析和中断的写法都在宿主手里，扩展只看到授权给它的数据（例如模型输出的文字增量），只能回答「放行 / 拒绝 / 中断」。市场扩展因此看不到 API Key，也发不出网络请求。
+关键取舍：**网络这一跳由宿主执行**（对模型钩子而言）。凭证、出口代理、协议解析和中断的写法都在宿主手里，扩展只看到授权给它的数据（例如模型输出的文字增量），只能回答「放行 / 拒绝 / 中断」。市场扩展因此看不到 API Key，也发不出网络请求。
 
 ## 3. 概念
 
@@ -57,10 +61,10 @@
 |---|---|
 | 扩展包 | 清单 `extension.json` 加运行时产物（builtin 无产物；container 为按 digest 固定的 OCI 镜像） |
 | 实例 | 一个启用中的扩展在宿主里的运行副本。每个扩展最多一个实例，按需并发处理多条流 |
-| 钩子 | 宿主在固定时机调用扩展的点，v1 只有 `model.request` 与 `model.stream` |
+| 钩子 | 宿主在固定时机调用扩展的点。分两类：检查（`inspect`：`model.request`、`model.stream`，可以拒绝或中断）和事件（`event`：`workspace.lifecycle`、`chat.turn.ended`，只通知）。每个钩子有分组（`model` / `workspace` / `chat`）、所需权限、能用的绑定方式，以及依赖的系统设施（目前只有 `model_gateway`），都登记在 `extspi.Hooks()` |
 | 权限 | 扩展能拿到哪些数据、能调用哪些宿主方法。清单声明，管理员启用时逐项批准 |
-| 绑定 | 扩展作用于哪些账号。v1 只支持按账号绑定 |
-| 故障策略 | 实例不可用、超时、积压时放行（`fail_open`）还是拦截（`fail_closed`） |
+| 绑定 | 扩展作用于哪些空间：`none` / `all` / `selected`（按账号和 / 或用户挑选）。能用哪种挑选方式由钩子决定 |
+| 故障策略 | 检查型钩子在实例不可用、超时、积压时放行（`fail_open`）还是拦截（`fail_closed`）；事件型钩子不适用 |
 
 ## 4. 清单 `extension.json`
 
@@ -118,12 +122,12 @@
 | `spi` | 声明需要的 SPI `major.minor`，宿主必须支持同 major 且 minor 不低于它 |
 | `name` / `description` / `title` / `message` | 三语对象，缺的语言回退 `en`，再回退任意一种。纯文本，宿主按文本节点渲染 |
 | `runtime` | `{"type":"builtin"}` 仅官方；`{"type":"container","image":"<仓库>@sha256:<digest>","resources":{...}}`，必须用 digest，不接受可变标签。`process` 保留不开放（见 §5.3） |
-| `hooks` | 只能是 §6.4 里的名字；宿主不会调用未声明的钩子 |
+| `hooks` | 只能是 §6.4 里的名字；宿主不会调用未声明的钩子。扩展必须实现对应接口（检查型 `ModelHandler`，事件型 `EventHandler`），否则启动失败 |
 | `permissions` | 见 §7。钩子所需权限没声明时，清单校验失败 |
-| `bindings` | v1 只有 `account` |
-| `failure_policy` | 默认值；管理员可以覆盖 |
+| `bindings` | `account`、`user` 的子集，每一项必须被所有声明的钩子支持（模型钩子只支持 `account`） |
+| `failure_policy` | 默认值；管理员可以覆盖。只对检查型钩子有意义 |
 | `config_schema` | JSON Schema 子集：顶层 `object`；属性类型 `boolean` / `integer` / `number` / `string` / `enum`；支持 `minimum`、`maximum`、`maxLength`（≤ 1024）、`default`、`title`、`description`。属性最多 64 个。v1 不支持嵌套和密钥字段 |
-| `errors` | 扩展能用来拒绝或中断的错误码及三语文案。`code` 为 `^[a-z][a-z0-9_]{2,47}$`，最多 32 个 |
+| `errors` | 扩展能用来拒绝或中断的错误码及三语文案。`code` 为 `^[a-z][a-z0-9_]{2,47}$`，0～32 个，只做事件的扩展可以不声明 |
 | `status.metrics` | 扩展能上报的数值指标及三语名称，最多 32 个。只能报这里声明过的指标 |
 
 清单本身是不可信输入：宿主校验全部字段与长度，拒绝未知的顶层字段（以后通过 `spi` 次版本扩展）。
@@ -293,9 +297,28 @@
 
 多个扩展同时请求中断时，以第一个为准，其余返回 `applied:false, reason:"superseded"`。流已经结束时返回 `reason:"closed"`。
 
-#### 预留的事件钩子（未实现）
+#### 事件钩子：`event`
 
-以下只读通知的名字现在保留，以后按 `spi` 次版本加入：`chat.turn.completed`、`usage.recorded`、`extension.aborted`。它们只发送标识和数值，不发送正文。
+| 钩子 | 时机 | 所需权限 | 绑定 |
+|---|---|---|---|
+| `workspace.lifecycle` | 空间创建、启动（只算冷启动）、停止（停止前须在运行；空闲回收带 `reason: "idle"`）、删除。隐藏的委派跑腿空间不报 | `workspace.events` | `account`、`user` |
+| `chat.turn.ended` | 网页对话的每个回合结束，用量入账之后。委派跑腿回合不报 | `chat.turns` | `account`、`user` |
+
+两种都用同一个通知方法 `event`，不阻塞、不回结果：
+
+```json
+{"jsonrpc":"2.0","method":"event","params":{"hook":"workspace.lifecycle","id":"evt_…","time":"2026-10-17T15:00:00Z",
+  "workspace":{"action":"stopped","reason":"idle","workspace":{"id":"…","name":"…","agent":"claude","account":"relay-a","user":"alice"}}}}
+
+{"jsonrpc":"2.0","method":"event","params":{"hook":"chat.turn.ended","id":"evt_…","time":"…",
+  "turn":{"workspace":{…},"thread":"…","turn":"…","status":"failed","code":"turn_failed","model":"…",
+          "duration_ms":81234,"cost_micro_usd":12345,"cost_source":"…"}}}
+```
+
+- `action`：`created` / `started` / `stopped` / `deleted`。`status`：`completed` / `failed` / `interrupted`。
+- 只发送标识、名称和数值，**不发送对话内容**。
+- 宿主按订阅、批准的权限和绑定（空间的账号、属主）过滤后放进实例队列（每实例 1024 条）。队列满了丢弃并写扩展日志，不阻塞空间或对话。实例未运行时事件直接丢弃，不补发。
+- `usage.recorded`、`extension.aborted` 仍保留名字，以后按次版本加入。
 
 ### 6.5 扩展 → 宿主的其他消息
 
@@ -341,15 +364,17 @@ v1 不提供文件、网络、聊天等宿主能力。以后计划通过权限�
 | `model.stream.text` | 模型回复与推理的文字增量 | 能读到模型输出，可能包含代码或密钥片段 | 有 |
 | `model.request.fingerprint` | 加盐的请求指纹 | 只能判断两次请求是否相同，拿不到原文 | 有 |
 | `model.context` | 空间 ID、账号 ID、用户名、来源、回合 | 能把流量关联到具体用户 | 有 |
+| `workspace.events` | 空间何时创建、启动、停止、删除，以及空间名称、账号和属主 | 能知道谁在什么时候用了哪个空间 | 有 |
+| `chat.turns` | 每个回合的状态、错误码、模型、耗时和费用，以及所属空间和用户 | 能统计每个人的使用量；拿不到对话内容 | 有 |
 | `model.request.body` | 请求正文（提示词） | 能读到完整对话上下文 | 保留 |
 | `model.stream.tools` | 工具调用参数 | 能读到 Agent 要执行的命令和文件内容 | 保留 |
 | `storage` | 私有持久存储 | 有配额 | 保留 |
 
-- 管理员启用时逐项批准，可以只批准一部分；缺少钩子必需的权限时，宿主不调用该钩子。
+- 管理员启用时逐项批准，可以只批准一部分（至少一个钩子的权限）；缺少钩子必需的权限时，宿主不调用该钩子。
 - 升级时如果新版本要了更多权限，在管理员批准之前继续运行旧版本。
-- container 扩展没有网络，能把数据带出去的途径只有拒绝和中断的文案、数值指标和日志，都有长度限制，而且只给管理员看。
+- 官方内置的 Webhook 扩展是唯一允许出站的扩展（它的用途就是推送）。container 扩展没有网络，能把数据带出去的途径只有拒绝和中断的文案、数值指标和日志，都有长度限制，而且只给管理员看。
 
-## 8. 模型网关与绑定
+## 8. 模型网关（模型钩子依赖的系统设施）
 
 ### 8.1 哪些账号能绑定
 
@@ -362,11 +387,11 @@ v1 不提供文件、网络、聊天等宿主能力。以后计划通过权限�
 
 OAuth 订阅账号（Claude 订阅、ChatGPT 登录）不能绑定。账号从中转切回订阅登录后，宿主不再改写它的 base URL，网关对它的请求也不调用钩子。
 
-扩展配置里的绑定写法：`{"mode":"none"|"accounts"|"all","accounts":["relay-a"]}`。`all` 表示所有符合条件的账号，包括以后新建的。删除账号时，在同一次 `Config.mutate` 里把它从所有扩展的绑定中移除，避免留下悬空引用。
+扩展配置里的绑定写法：`{"mode":"none"|"all"|"selected","accounts":["relay-a"],"users":["alice"]}`。`selected` 时空间的账号在 `accounts` 里、或属主在 `users` 里即命中；`all` 表示全部，包括以后新建的（对模型钩子仍只覆盖符合条件的账号）。旧写法 `"mode":"accounts"` 加载时转成 `selected`。删除账号或用户时，在同一次 `Config.mutate` 里把它从所有扩展的绑定中移除，避免留下悬空引用。
 
 ### 8.2 网关地址与鉴权
 
-- 监听地址配置在顶层 `model_gateway.bind` / `host`（2026-10-17 前在 `extensions.gateway`，加载时自动迁移），形式同 `proxy_bridge`，默认 `172.17.0.1:1083`。只有启用了带模型钩子（且批准了对应权限）的扩展时才监听，生命周期挂在服务端上。
+- 监听地址配置在顶层 `model_gateway.bind` / `host`（2026-10-17 前在 `extensions.gateway`，加载时自动迁移），形式同 `proxy_bridge`，默认 `172.17.0.1:1083`。只有启用了带模型钩子（且批准了对应权限）的扩展时才监听，生命周期挂在服务端上。系统设置显示它是否在监听、是否有扩展需要它；扩展详情页的「依赖」一行链接到这里。
 - 改写后的 base URL：`http://<host>:<port>/x/<session_id>/<mac>`，其中 `mac = base64url(HMAC-SHA256(auth_token, "agentbox-extension-gateway\x00" + session_id))` 的前 32 个字符。轮换 `auth_token` 后旧地址全部失效，与 `proxySecret` 相同。
 - 每个请求都重新检查：MAC 正确、空间存在、`sessionAccount` 仍然允许属主使用该账号。撤销授权后返回 403。
 - 上游**在每次请求时**根据空间当前绑定的账号解析：Claude 用账号 env 里的 `ANTHROPIC_BASE_URL`（缺省为官方地址），Codex 用账号池 `config.toml` 里所选 provider 的 `base_url`。修改账号后立即生效，不用重建容器。
@@ -430,7 +455,7 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
         "order": 10,
         "config": {"window": 256, "distinct_limit": 24, "cooldown_seconds": 30},
         "permissions": ["model.request.fingerprint", "model.stream.text"],
-        "bindings": {"mode": "accounts", "accounts": ["relay-a"]},
+        "bindings": {"mode": "selected", "accounts": ["relay-a"], "users": []},
         "failure_policy": "fail_open",
         "revision": 3
       }
@@ -452,13 +477,13 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
 | `PUT /api/extensions/{id}` | admin | 启停、配置、权限、绑定、故障策略、顺序；带 `expected_revision` |
 | `GET /api/extensions/{id}/logs?since=` | admin | 日志环形缓冲 |
 | `GET /api/extensions/{id}/events` | admin | 中断与拒绝记录。P1 返回内存里最近 200 条，P2 改为数据库分页 |
-| `GET /api/sessions`、`GET /api/sessions/{id}`（新增字段） | auth + withSession | `extensions: [{id, name}]`：哪些扩展正在检查本空间的模型流量（已定决策：对用户可见） |
+| `GET /api/sessions`、`GET /api/sessions/{id}`（新增字段） | auth + withSession | `extensions: [{id, name, groups}]`：哪些扩展作用于本空间，`groups` 为 `model` / `workspace` / `chat`（已定决策：对用户可见） |
 
 - `/me` 增加能力位 `extensions: 1`。
 - 侧栏新增管理员入口「扩展」，与「使用记录」「Git 管理」并列，路由 `#/extensions` 和 `#/extensions/<id>`。
-- 列表页用卡片展示名称、发布者、版本、状态、绑定账号数。详情页分为：概览与权限、设置（按 `config_schema` 渲染表单，下拉沿用 `select.ts`）、绑定（账号选择）、状态指标、日志、事件。
+- 列表页用卡片展示名称、说明、钩子分组标签（模型流量 / 空间事件 / 对话事件）、发布者、版本、状态和作用范围。详情页里检查型扩展才显示失效策略、检查中的流和中断记录；依赖网关的扩展显示网关状态。详情页分为：概览与权限、设置（按 `config_schema` 渲染表单，下拉沿用 `select.ts`）、绑定（账号选择）、状态指标、日志、事件。
 - 三语文案进词典；扩展提供的文字一律按文本节点插入。
-- 用户可见：工作空间头部的信息行（Agent · 账号 · 状态 · 编号）末尾显示盾牌和扩展名，悬停说明「正在检查本空间的模型输出」。该行在桌面和窄屏都可见；顶栏只在窄屏显示，不放在那里。
+- 用户可见：工作空间头部的信息行（Agent · 账号 · 状态 · 编号）末尾显示盾牌和扩展名，悬停按扩展说明「正在检查本空间的模型输出」或「会收到本空间的空间启停与对话结果通知」。该行在桌面和窄屏都可见；顶栏只在窄屏显示，不放在那里。
 - 以后的「市场」作为同一菜单下的一个标签页。
 
 ## 13. 循环保护迁成首个扩展
@@ -545,3 +570,15 @@ P1 已按下表完成：
 **已验证**：`internal/credentials` 的改写、解绑恢复、播发保留网关、未播种空间不创建、账号池不被写入；`internal/workspace` 的钩子在运行中与全新启动都执行、失败阻止启动；服务端用合成 Responses 上游（推理摘要复读）跑通：绑定后后台改写空间配置、账号池不变、请求经网关转到账号池的真实上游并被中断（`response.failed` + `model_output_loop`）、事件记录、解绑后恢复上游；独占连接接口的修订号与传输生效；浏览器回归覆盖 Codex 账号可选与开关保存。Go 测试均在 `-race` 下通过。
 
 **尚未验证**：真实 Codex CLI 在容器里使用改写后的 `config.toml` 走网关（含 app-server 与 exec 两条路径、终端）；生产网桥与防火墙对 1083 端口的放行。迁移时先绑定、再改账号地址，期间请求会依次经过两层网关，保护不中断。
+
+## 19. 扩展与模型网关解耦（2026-10-17）
+
+首版把网关做成了扩展框架的一部分：扩展页顶部是网关开关，SPI 的 `Handler` 必须实现模型方法，绑定只能按账号，清单的 `errors` 必填。这样后续每个扩展都隐含「建立在网关之上」，与「各种扩展各自独立」的目标不符。改造如下：
+
+1. **网关移出**：配置从 `extensions.gateway` 迁到顶层 `model_gateway`（加载时自动迁移，旧段不再写回），代码在 `internal/server/modelgateway.go`，界面在「系统设置 → IP 代理 → 模型网关」，删除 `PUT /api/extensions/gateway`。网关地址的路径与 MAC 域（`agentbox-extension-gateway`）不变，正在运行的 CLI 不受影响。
+2. **SPI 与宿主通用化**：钩子注册表 `extspi.Hooks()`（类型、权限、分组、依赖、绑定方式）；`Handler` 只剩 `Initialize` / `Shutdown`，模型方法在可选的 `ModelHandler`，`abort` 在 `ModelHost`；实例队列改为通用的 notice；`Host.Uses` / `Bound` 按钩子过滤。
+3. **绑定通用化**：`none` / `all` / `selected`，可按账号和用户挑选；删除用户时同步解绑。
+4. **事件钩子与 Webhook**：`workspace.lifecycle`、`chat.turn.ended`（§6.4）；第二个官方扩展 `agentbox.webhook`，推送通用 JSON 或飞书、钉钉、企业微信机器人消息（配置见 `docs/configuration.md`），完全不依赖网关。
+5. **界面**：卡片显示钩子分组，空间头部列出所有作用于本空间的扩展。
+
+外置进程运行时（§5.2、§5.3）仍按原计划在 P3 做；本次改动让 SPI 不再假设扩展处理模型流量，container 扩展可以只订阅事件。
