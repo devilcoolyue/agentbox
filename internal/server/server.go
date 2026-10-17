@@ -887,6 +887,7 @@ func (s *Server) workspaces() *workspace.Service {
 		s.workspace.SetNetworkHook(s.ensureNetwork)
 		s.workspace.SetMCPHook(s.syncMCPOnStart)
 		s.workspace.SetConnectionHook(s.applyCodexEndpoint)
+		s.workspace.SetLifecycleHook(s.emitWorkspaceLifecycle)
 	})
 	return s.workspace
 }

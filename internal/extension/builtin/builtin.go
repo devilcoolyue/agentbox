@@ -18,9 +18,13 @@ type Entry struct {
 //go:embed loop-guard.json
 var loopGuardManifest []byte
 
+//go:embed webhook.json
+var webhookManifest []byte
+
 // All returns the builtin extensions in display order.
 func All() []Entry {
 	return []Entry{
 		{Manifest: loopGuardManifest, New: func() extspi.Handler { return &LoopGuard{} }},
+		{Manifest: webhookManifest, New: func() extspi.Handler { return &Webhook{} }},
 	}
 }

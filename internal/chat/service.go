@@ -64,6 +64,25 @@ type Runtime interface {
 	Permission() string
 	PublishCost(string, string)
 	Title(string, string)
+	// TurnEnded observes the end of every turn that got past admission, after
+	// its usage is booked. It must not block.
+	TurnEnded(TurnOutcome)
+}
+
+// Turn outcomes reported to Runtime.TurnEnded.
+const (
+	OutcomeCompleted   = "completed"
+	OutcomeFailed      = "failed"
+	OutcomeInterrupted = "interrupted"
+)
+
+// TurnOutcome summarizes a finished turn: identifiers, how it ended (with
+// the problem code of a failure) and how long it took. No text.
+type TurnOutcome struct {
+	SessionID, ThreadID, TurnID string
+	Model                       string
+	Status, Code                string
+	Duration                    time.Duration
 }
 type Observation interface {
 	Input() store.ChatRequest
@@ -157,6 +176,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	ctx, cancelTurn := context.WithCancelCause(parent)
 	clock := newTurnClock(timeout, func() { cancelTurn(context.DeadlineExceeded) })
 	defer func() { clock.stop(); cancelTurn(context.Canceled) }()
+	outcome := TurnOutcome{SessionID: in.SessionID, Status: OutcomeFailed}
 	record := func(e Entry, messageType, retryText string) error {
 		err := r.Record(e, messageType, retryText)
 		if receipt != nil && err != nil {
@@ -170,6 +190,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 			err = context.DeadlineExceeded // the turn ran out of time, nobody cancelled it
 		}
 		p := r.Problem(ctx, "chat.turn", err, fallback)
+		outcome.Code = p.Code
 		if receipt != nil {
 			receipt.Fail(err, p.Code)
 		}
@@ -178,6 +199,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 
 	rejectOptions := func(_ string) {
 		p := r.Problem(ctx, "chat.options", nil, "chat_options_invalid")
+		outcome.Code = p.Code
 		if receipt != nil {
 			receipt.Fail(nil, p.Code)
 		}
@@ -186,6 +208,12 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if receipt != nil && !receipt.Advance(store.ChatStarting) {
 		return
 	}
+	// Registered first so it runs last, after usage is flushed.
+	began := time.Now()
+	defer func() {
+		outcome.Model, outcome.Duration = model, time.Since(began)
+		r.TurnEnded(outcome)
+	}()
 
 	sess, ok := r.Session()
 	if !ok {
@@ -220,6 +248,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	// 消息让模型生成一个简洁标题。房间占用期间线程不会被切换，tid 稳定，
 	// 用量流水也挂在它上面。
 	tid, firstTurn := r.Thread(sess)
+	outcome.ThreadID = tid
 	if receipt != nil && tid != receipt.Input().ThreadID {
 		fail(nil, "chat_thread_changed")
 		return
@@ -232,6 +261,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if receipt != nil {
 		turnID = receipt.Input().TurnID
 	}
+	outcome.TurnID = turnID
 	var tally usage.Tally
 	// 回合计时的起点，首字延迟与墙钟总耗时共用一块表：容器就绪之后开表（别把
 	// 拉容器的几秒算进去），第一个模型输出事件量首字（见 Adapter.Decode），回合
@@ -402,6 +432,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 			if receipt != nil {
 				receipt.Fail(err, "operation_cancelled")
 			}
+			outcome.Status = OutcomeInterrupted
 			record(Entry{Kind: "status", State: "interrupted"}, "status", "")
 			return
 		}
@@ -417,8 +448,10 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		receipt.Completed(ctx)
 	}
 	state := "idle"
+	outcome.Status = OutcomeCompleted
 	if terminal != "" && terminal != "completed" && userStopped() {
 		state = "interrupted"
+		outcome.Status = OutcomeInterrupted
 	}
 	record(Entry{Kind: "status", State: state, Local: local && state == "idle"}, "status", "")
 

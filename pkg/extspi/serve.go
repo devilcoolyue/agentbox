@@ -58,6 +58,13 @@ func Serve(ctx context.Context, r io.Reader, w io.Writer, h Handler) error {
 				return result, err
 			}
 		}
+		if eh, ok := h.(EventHandler); ok && method == MethodEvent {
+			var p EventParams
+			if decode(params, &p) == nil {
+				eh.Event(p)
+			}
+			return nil, nil
+		}
 		if notify {
 			return nil, nil
 		}
@@ -189,6 +196,7 @@ func (cl *Client) ModelRequest(ctx context.Context, p ModelRequestParams) (Reque
 	return out, err
 }
 
+func (cl *Client) Event(p EventParams)             { _ = cl.c.notify(MethodEvent, p) }
 func (cl *Client) StreamOpen(p StreamOpenParams)   { _ = cl.c.notify(MethodStreamOpen, p) }
 func (cl *Client) StreamDelta(p StreamDeltaParams) { _ = cl.c.notify(MethodStreamDelta, p) }
 func (cl *Client) StreamClose(p StreamCloseParams) { _ = cl.c.notify(MethodStreamClose, p) }

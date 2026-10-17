@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // Version is the SPI version this package speaks.
@@ -37,14 +38,17 @@ const (
 	MethodStreamDelta  = "model/stream/delta"
 	MethodStreamClose  = "model/stream/close"
 	MethodStreamAbort  = "model/stream/abort"
+	MethodEvent        = "event"
 	MethodStatusReport = "status/report"
 	MethodLog          = "log"
 )
 
 // Hooks an extension may subscribe to.
 const (
-	HookModelRequest = "model.request"
-	HookModelStream  = "model.stream"
+	HookModelRequest       = "model.request"
+	HookModelStream        = "model.stream"
+	HookWorkspaceLifecycle = "workspace.lifecycle"
+	HookChatTurnEnded      = "chat.turn.ended"
 )
 
 // Permissions an administrator may grant.
@@ -52,6 +56,14 @@ const (
 	PermStreamText         = "model.stream.text"
 	PermRequestFingerprint = "model.request.fingerprint"
 	PermContext            = "model.context"
+	PermWorkspaceEvents    = "workspace.events"
+	PermChatTurns          = "chat.turns"
+)
+
+// Hook kinds: how the host calls a hook, and which interface serves it.
+const (
+	KindInspect = "inspect" // synchronous verdicts and stream observation (ModelHandler)
+	KindEvent   = "event"   // after-the-fact notifications (EventHandler)
 )
 
 // Binding selectors: what an administrator may scope an extension to. An
@@ -83,6 +95,7 @@ const (
 // to run for it to fire, and the selectors an administrator may scope it by.
 type HookSpec struct {
 	Name       string   `json:"name"`
+	Kind       string   `json:"kind"`
 	Permission string   `json:"permission"`
 	Group      string   `json:"group"`
 	Requires   string   `json:"requires,omitempty"`
@@ -90,11 +103,13 @@ type HookSpec struct {
 }
 
 var hooks = []HookSpec{
-	{Name: HookModelRequest, Permission: PermRequestFingerprint, Group: "model", Requires: RequiresModelGateway, Bindings: []string{BindAccount}},
-	{Name: HookModelStream, Permission: PermStreamText, Group: "model", Requires: RequiresModelGateway, Bindings: []string{BindAccount}},
+	{Name: HookModelRequest, Kind: KindInspect, Permission: PermRequestFingerprint, Group: "model", Requires: RequiresModelGateway, Bindings: []string{BindAccount}},
+	{Name: HookModelStream, Kind: KindInspect, Permission: PermStreamText, Group: "model", Requires: RequiresModelGateway, Bindings: []string{BindAccount}},
+	{Name: HookWorkspaceLifecycle, Kind: KindEvent, Permission: PermWorkspaceEvents, Group: "workspace", Bindings: []string{BindAccount, BindUser}},
+	{Name: HookChatTurnEnded, Kind: KindEvent, Permission: PermChatTurns, Group: "chat", Bindings: []string{BindAccount, BindUser}},
 }
 
-var permissions = []string{PermRequestFingerprint, PermStreamText, PermContext}
+var permissions = []string{PermRequestFingerprint, PermStreamText, PermContext, PermWorkspaceEvents, PermChatTurns}
 
 // Hooks returns the hook registry in display order.
 func Hooks() []HookSpec {
@@ -260,6 +275,64 @@ type AbortResult struct {
 	Reason  string `json:"reason,omitempty"` // closed | superseded
 }
 
+// EventParams is one event hook notification. Exactly the field matching
+// Hook is set. Events carry identifiers, names and numbers, never prompts,
+// replies, files or credentials.
+type EventParams struct {
+	Hook      string          `json:"hook"`
+	ID        string          `json:"id"`
+	Time      time.Time       `json:"time"`
+	Workspace *WorkspaceEvent `json:"workspace,omitempty"`
+	Turn      *TurnEvent      `json:"turn,omitempty"`
+}
+
+// WorkspaceRef identifies the workspace an event is about. Name is the
+// owner's own label for it.
+type WorkspaceRef struct {
+	ID      string `json:"id"`
+	Name    string `json:"name,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+	Account string `json:"account,omitempty"`
+	User    string `json:"user,omitempty"`
+}
+
+// Workspace lifecycle actions.
+const (
+	WorkspaceCreated = "created"
+	WorkspaceStarted = "started"
+	WorkspaceStopped = "stopped"
+	WorkspaceDeleted = "deleted"
+)
+
+// WorkspaceEvent is a workspace.lifecycle notification. Reason explains a
+// stop the user did not ask for ("idle").
+type WorkspaceEvent struct {
+	Action    string       `json:"action"`
+	Reason    string       `json:"reason,omitempty"`
+	Workspace WorkspaceRef `json:"workspace"`
+}
+
+// Turn outcomes.
+const (
+	TurnCompleted   = "completed"
+	TurnFailed      = "failed"
+	TurnInterrupted = "interrupted"
+)
+
+// TurnEvent is a chat.turn.ended notification for a web chat turn. Code is
+// the error code of a failed turn; cost is in micro-USD as booked so far.
+type TurnEvent struct {
+	Workspace    WorkspaceRef `json:"workspace"`
+	Thread       string       `json:"thread,omitempty"`
+	Turn         string       `json:"turn"`
+	Status       string       `json:"status"`
+	Code         string       `json:"code,omitempty"`
+	Model        string       `json:"model,omitempty"`
+	DurationMS   int64        `json:"duration_ms"`
+	CostMicroUSD int64        `json:"cost_micro_usd"`
+	CostSource   string       `json:"cost_source,omitempty"`
+}
+
 type StatusReport struct {
 	State   string             `json:"state"` // ok | degraded
 	Metrics map[string]float64 `json:"metrics,omitempty"`
@@ -289,6 +362,15 @@ type ModelHandler interface {
 	StreamOpen(p StreamOpenParams)
 	StreamDelta(p StreamDeltaParams)
 	StreamClose(p StreamCloseParams)
+}
+
+// EventHandler serves the event hooks (workspace.lifecycle,
+// chat.turn.ended). Events are notifications after the fact: the extension
+// cannot block or change what happened. Event must return promptly; an
+// extension that does slow work (network calls) queues it itself.
+type EventHandler interface {
+	Handler
+	Event(p EventParams)
 }
 
 // Host is what every extension may call. It is safe for concurrent use.

@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"agentbox/internal/chat"
 	"agentbox/internal/config"
 	"agentbox/internal/store"
+	"agentbox/pkg/extspi"
 )
 
 const gatewayTestBind = "127.0.0.1:18082"
@@ -94,10 +96,13 @@ func TestExtensionAdminAPIAndEnvRewrite(t *testing.T) {
 	s, sess := extensionTestServer(t, "https://relay.example.com/api")
 	w := extensionRequest(s, "root", "GET", "/api/extensions", "", s.handleExtensions, "")
 	var list extensionsResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil || len(list.Extensions) != 1 {
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil || len(list.Extensions) != 2 {
 		t.Fatalf("list: %v %s", err, w.Body.String())
 	}
 	lg := list.Extensions[0]
+	if wh := list.Extensions[1]; wh.ID != "agentbox.webhook" || len(wh.Requires) != 0 || wh.Errors == nil || len(wh.Bindings) != 2 {
+		t.Fatalf("webhook view: %+v", wh)
+	}
 	if lg.ID != "agentbox.loop-guard" || lg.Setting.Enabled || lg.Status.State != "disabled" || lg.Setting.Bindings.Mode != "none" ||
 		len(lg.Setting.Permissions) != 2 || !lg.Builtin || lg.FailurePolicy != "fail_open" {
 		t.Fatalf("loop guard view: %+v", lg)
@@ -113,9 +118,9 @@ func TestExtensionAdminAPIAndEnvRewrite(t *testing.T) {
 		t.Fatalf("gateway view before any model hook is enabled: %+v", gw)
 	}
 
-	// Enabling requires the permissions the hooks need.
+	// Enabling requires approving at least one hook's permission.
 	w = extensionRequest(s, "root", "PUT", "/api/extensions/agentbox.loop-guard",
-		`{"expected_revision":0,"enabled":true,"permissions":["model.stream.text"],"bindings":{"mode":"all"}}`, s.handleUpdateExtension, "agentbox.loop-guard")
+		`{"expected_revision":0,"enabled":true,"permissions":[],"bindings":{"mode":"all"}}`, s.handleUpdateExtension, "agentbox.loop-guard")
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("enabled without permissions: %d", w.Code)
 	}
@@ -431,5 +436,84 @@ func TestModelGatewayDedicatedConnections(t *testing.T) {
 	// Other settings writes leave it alone.
 	if err := s.cfg.ApplySettings(config.SettingsPatch{ModelGateway: &config.ModelGatewayPatch{}}); err != nil || !s.cfg.GetModelGateway().DedicatedConnections {
 		t.Fatalf("patch without the field reset the connection mode: %v", err)
+	}
+}
+
+// The webhook extension needs no gateway: bound to a user, it receives that
+// user's workspace lifecycle and turn events and nobody else's, the gateway
+// never starts, and deleting the user prunes the binding.
+func TestExtensionEventHooksReachWebhook(t *testing.T) {
+	type got struct {
+		Hook      string                 `json:"hook"`
+		Text      string                 `json:"text"`
+		Workspace *extspi.WorkspaceEvent `json:"workspace"`
+		Turn      *extspi.TurnEvent      `json:"turn"`
+	}
+	events := make(chan got, 16)
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var g got
+		_ = json.NewDecoder(r.Body).Decode(&g)
+		events <- g
+	}))
+	defer receiver.Close()
+	s, sess := extensionTestServer(t, "https://relay.example.com")
+	put := func(body string) *httptest.ResponseRecorder {
+		return extensionRequest(s, "root", "PUT", "/api/extensions/agentbox.webhook", body, s.handleUpdateExtension, "agentbox.webhook")
+	}
+	if w := put(`{"expected_revision":0,"enabled":true,"permissions":["workspace.events","chat.turns"],"bindings":{"mode":"selected","users":["ghost"]}}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("unknown user accepted: %d", w.Code)
+	}
+	w := put(`{"expected_revision":0,"enabled":true,"config":{"url":"` + receiver.URL + `","turns":"all"},"permissions":["workspace.events","chat.turns"],"bindings":{"mode":"selected","users":["alice"]}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("enable webhook: %d %s", w.Code, w.Body.String())
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for s.extensions.Status("agentbox.webhook").State != "running" {
+		if time.Now().After(deadline) {
+			t.Fatalf("webhook did not start: %+v", s.extensions.Status("agentbox.webhook"))
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if s.modelGatewayView().Needed {
+		t.Fatal("an extension without model hooks needs the gateway")
+	}
+	if env, _ := s.execEnv(sess); envValue(env, envAnthropicBaseURL) != "https://relay.example.com" {
+		t.Fatal("an event extension rerouted model traffic")
+	}
+	next := func() got {
+		t.Helper()
+		select {
+		case g := <-events:
+			return g
+		case <-time.After(5 * time.Second):
+			t.Fatal("no event delivered")
+		}
+		return got{}
+	}
+
+	s.emitWorkspaceLifecycle("stopped", "idle", sess)
+	if g := next(); g.Hook != extspi.HookWorkspaceLifecycle || g.Workspace.Action != "stopped" || g.Workspace.Workspace.User != "alice" || !strings.Contains(g.Text, "空闲休眠") {
+		t.Fatalf("lifecycle event: %+v", g)
+	}
+	// Another user's workspace is outside the binding.
+	s.emitWorkspaceLifecycle("started", "", store.Session{ID: "s9", User: "root", AccountID: "relay"})
+	s.emitTurnEnded(chat.TurnOutcome{SessionID: sess.ID, ThreadID: "th", TurnID: "tu", Model: "claude-opus-5", Status: chat.OutcomeFailed, Code: "chat_failed", Duration: 3 * time.Second})
+	if g := next(); g.Hook != extspi.HookChatTurnEnded || g.Turn.Status != "failed" || g.Turn.Code != "chat_failed" || g.Turn.Workspace.Name != "demo" || g.Turn.DurationMS != 3000 {
+		t.Fatalf("turn event (or another user's event leaked): %+v", g)
+	}
+	select {
+	case g := <-events:
+		t.Fatalf("unexpected event: %+v", g)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	if w := extensionRequest(s, "root", "DELETE", "/api/users/alice", "", func(w http.ResponseWriter, r *http.Request) {
+		r.SetPathValue("name", "alice")
+		s.handleUserDelete(w, r)
+	}, ""); w.Code != http.StatusOK {
+		t.Fatalf("delete user: %d %s", w.Code, w.Body.String())
+	}
+	if item := s.cfg.GetExtensions().Items["agentbox.webhook"]; len(item.Bindings.Users) != 0 || item.Revision != 2 {
+		t.Fatalf("user binding not pruned: %+v", item.Bindings)
 	}
 }

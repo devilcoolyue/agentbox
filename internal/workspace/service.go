@@ -42,6 +42,7 @@ type Runtime interface {
 // Service owns workspace lifecycle, activity and per-session serialization.
 // Account resolution/synchronization are injected until credentials extraction.
 type Service struct {
+	lifecycle       func(action, reason string, sess store.Session)
 	mcp             func(context.Context, store.Session) error
 	network         func(context.Context, store.Session) error
 	connection      func(context.Context, store.Session, config.Account) error
@@ -238,6 +239,7 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	if err != nil {
 		return store.Session{}, err
 	}
+	s.notify(LifecycleStarted, "", cur)
 	if s.network != nil {
 		if err := s.network(ctx, cur); err != nil {
 			return store.Session{}, err
@@ -247,6 +249,14 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	return cur, nil
 }
 
+// Lifecycle actions reported to SetLifecycleHook.
+const (
+	LifecycleCreated = "created"
+	LifecycleStarted = "started"
+	LifecycleStopped = "stopped"
+	LifecycleDeleted = "deleted"
+)
+
 func (s *Service) Create(sess store.Session) error {
 	return s.CreateWithGitConnection(sess, "")
 }
@@ -255,7 +265,11 @@ func (s *Service) CreateWithGitConnection(sess store.Session, connection string)
 	if err := s.prepareDirectories(sess); err != nil {
 		return err
 	}
-	return s.store.PutWithGitDefault(sess, connection)
+	if err := s.store.PutWithGitDefault(sess, connection); err != nil {
+		return err
+	}
+	s.notify(LifecycleCreated, "", sess)
+	return nil
 }
 
 // CreateWorker returns the owner's hidden worker workspace for an account,
@@ -325,7 +339,11 @@ func (s *Service) stop(ctx context.Context, id, reason string) (store.Session, e
 			return store.Session{}, err
 		}
 	}
-	return s.store.Update(id, func(x *store.Session) { x.Status = store.StatusStopped; x.StopReason = reason })
+	out, err := s.store.Update(id, func(x *store.Session) { x.Status = store.StatusStopped; x.StopReason = reason })
+	if err == nil && sess.Status == store.StatusRunning {
+		s.notify(LifecycleStopped, reason, out)
+	}
+	return out, err
 }
 func (s *Service) Delete(ctx context.Context, id string, purge bool) error {
 	l := s.lock(id)
@@ -349,10 +367,15 @@ func (s *Service) Delete(ctx context.Context, id string, purge bool) error {
 			return err
 		}
 	}
+	// A hidden worker is not reported; look that up before the record goes.
+	_, worker, _ := s.store.DelegationOwner(id)
 	if err := s.store.Delete(id); err != nil {
 		return err
 	}
 	s.activity.Forget(id)
+	if !worker && s.lifecycle != nil {
+		s.lifecycle(LifecycleDeleted, "", sess)
+	}
 	if purge {
 		root, err := safefs.Open(s.cfg.DataDir)
 		if err != nil {
@@ -476,6 +499,24 @@ func (s *Service) UseRunning(ctx context.Context, id string, fn func(store.Sessi
 		return errors.New("工作空间未运行")
 	}
 	return fn(sess)
+}
+
+// SetLifecycleHook installs an observer for user-visible workspaces being
+// created, started (a container actually coming up), stopped and deleted.
+// Hidden delegation workers are not reported. It runs under the session lock
+// and must not block. Call it before the service is shared.
+func (s *Service) SetLifecycleHook(hook func(action, reason string, sess store.Session)) {
+	s.lifecycle = hook
+}
+
+func (s *Service) notify(action, reason string, sess store.Session) {
+	if s.lifecycle == nil {
+		return
+	}
+	if _, worker, err := s.store.DelegationOwner(sess.ID); err != nil || worker {
+		return
+	}
+	s.lifecycle(action, reason, sess)
 }
 
 // SetConnectionHook installs the per-start connection adjustment (the Codex

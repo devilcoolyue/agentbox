@@ -159,6 +159,7 @@ func (a chatRuntime) Executor(sess store.Session) chat.Executor {
 }
 func (a chatRuntime) Permission() string              { return a.room.srv.cfg.GetPermissionMode() }
 func (a chatRuntime) PublishCost(thread, turn string) { a.room.publishTurnCost(thread, turn) }
+func (a chatRuntime) TurnEnded(o chat.TurnOutcome)    { a.room.srv.emitTurnEnded(o) }
 func (a chatRuntime) Title(thread, text string) {
 	a.room.srv.spawn(func() { a.room.generateTitle(thread, text) })
 }

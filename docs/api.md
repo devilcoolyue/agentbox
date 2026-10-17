@@ -209,6 +209,8 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `GET /api/extensions/{id}/logs?since=` | 扩展日志（内存环形缓冲，最近 200 条），返回 `seq` 大于 `since` 的条目 |
 | `GET /api/extensions/{id}/events` | 最近的中断与拒绝（内存，最近 200 条，重启清空，不含提示词与回复内容） |
 
+事件钩子（`workspace.lifecycle`、`chat.turn.ended`）只通知、不等待扩展处理，不经过模型网关；`chat.turn.ended` 在回合用量入账之后发出，带状态、错误码、模型、耗时和已入账费用，不含对话内容。
+
 模型网关的状态与连接方式在设置接口里：`GET /api/settings` 的 `model_gateway`（`bind`、`host`、`dedicated_connections`、`active`、`needed` 表示是否有启用的扩展用到模型钩子、`error`），`PUT /api/settings` 只接受 `{"model_gateway":{"dedicated_connections":bool}}`，新请求立即使用，已在进行的流不受影响。网关本身不在主 HTTP 端口上：它监听 `model_gateway.bind`（默认 `172.17.0.1:1083`），只供容器访问，路径为 `/x/<空间 ID>/<MAC>/<原 API 路径>`，MAC 由 `auth_token` 派生。网关自身的错误码以 `model_gateway_` 开头，扩展拒绝或中断时使用清单声明的错误码（如 `model_output_loop`），失效策略为拦截时使用 `extension_unavailable` / `extension_overloaded`。响应头 `X-Agentbox-Extensions` 为 `monitoring` 或 `not-inspected`。
 
 ## 界面主题

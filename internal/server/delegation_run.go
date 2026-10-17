@@ -414,4 +414,7 @@ func (r delegationRuntime) Question(agent.Question) (<-chan agent.Answer, func()
 	return nil, func() {}
 }
 func (r delegationRuntime) PublishCost(string, string) {}
+
+// TurnEnded: a worker turn is part of the main agent's turn, which reports.
+func (r delegationRuntime) TurnEnded(chat.TurnOutcome) {}
 func (r delegationRuntime) Title(string, string)       {}

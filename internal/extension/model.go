@@ -28,17 +28,6 @@ var detailKeyRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 // modelHooks are the hooks served by this file.
 var modelHooks = []string{extspi.HookModelRequest, extspi.HookModelStream}
 
-// implementsHook reports whether handler implements the interface a hook
-// needs. Hook groups without an interface yet are rejected.
-func implementsHook(handler extspi.Handler, spec extspi.HookSpec) bool {
-	switch spec.Group {
-	case "model":
-		_, ok := handler.(extspi.ModelHandler)
-		return ok
-	}
-	return false
-}
-
 // modelState is what an instance keeps for the model hooks: the salt for
 // request fingerprints and the streams it currently watches. Guarded by the
 // instance's mutex.

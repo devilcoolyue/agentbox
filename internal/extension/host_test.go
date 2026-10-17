@@ -424,3 +424,58 @@ func TestStreamNoticesCoalesce(t *testing.T) {
 		t.Fatal("over-budget batch accepted")
 	}
 }
+
+// eventRecorder is an event-only extension.
+type eventRecorder struct {
+	extspi.BaseHandler
+	got chan extspi.EventParams
+}
+
+func (e *eventRecorder) Initialize(context.Context, extspi.InitializeParams, extspi.Host) (extspi.InitializeResult, error) {
+	return extspi.InitializeResult{SPIVersion: extspi.Version, Hooks: []string{extspi.HookChatTurnEnded}}, nil
+}
+func (e *eventRecorder) Event(p extspi.EventParams) { e.got <- p }
+
+const eventManifest = `{
+  "id": "agentbox.test-events", "version": "0.1.0", "spi": "1.0", "publisher": "test",
+  "name": {"en": "Events"}, "description": {"en": "Records events."},
+  "runtime": {"type": "builtin"},
+  "hooks": ["chat.turn.ended"], "permissions": ["chat.turns"],
+  "bindings": ["account", "user"], "failure_policy": "fail_open",
+  "config_schema": {"type": "object"}
+}`
+
+// Events reach a bound extension through the real NDJSON transport, only for
+// targets its bindings select, and never reach the model inspector.
+func TestEventsReachBoundExtensionsOverTransport(t *testing.T) {
+	rec := &eventRecorder{got: make(chan extspi.EventParams, 4)}
+	h, err := NewHost(Options{Builtins: []builtin.Entry{{Manifest: []byte(eventManifest), New: func() extspi.Handler { return rec }}}, PipeBuiltins: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close(context.Background())
+	h.Apply(map[string]config.ExtensionSetting{"agentbox.test-events": {Enabled: true, Revision: 1, Permissions: []string{extspi.PermChatTurns},
+		Bindings: config.ExtensionBindings{Mode: "selected", Users: []string{"alice"}}}})
+	waitFor(t, "running", func() bool { return h.Status("agentbox.test-events").State == "running" })
+	if h.Inspector(StreamContext{Account: "relay", User: "alice"}) != nil || h.Uses(modelHooks...) {
+		t.Fatal("an event extension joined the model hooks")
+	}
+	turn := &extspi.TurnEvent{Workspace: extspi.WorkspaceRef{ID: "s1", User: "bob"}, Turn: "t0", Status: extspi.TurnCompleted}
+	h.Emit(extspi.HookChatTurnEnded, config.BindingTarget{User: "bob"}, extspi.EventParams{Turn: turn})
+	h.Emit(extspi.HookWorkspaceLifecycle, config.BindingTarget{User: "alice"}, extspi.EventParams{Workspace: &extspi.WorkspaceEvent{Action: "started"}})
+	turn = &extspi.TurnEvent{Workspace: extspi.WorkspaceRef{ID: "s2", User: "alice"}, Turn: "t1", Status: extspi.TurnFailed, Code: "chat_failed"}
+	h.Emit(extspi.HookChatTurnEnded, config.BindingTarget{User: "alice"}, extspi.EventParams{Turn: turn})
+	select {
+	case p := <-rec.got:
+		if p.Hook != extspi.HookChatTurnEnded || p.Turn == nil || p.Turn.Turn != "t1" || p.Turn.Code != "chat_failed" || !strings.HasPrefix(p.ID, "evt_") || p.Time.IsZero() {
+			t.Fatalf("event: %+v", p)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("event not delivered")
+	}
+	select {
+	case p := <-rec.got:
+		t.Fatalf("unbound or unsubscribed event delivered: %+v", p)
+	case <-time.After(100 * time.Millisecond):
+	}
+}

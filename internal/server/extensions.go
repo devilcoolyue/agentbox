@@ -56,20 +56,20 @@ func (s *Server) applyExtensions() {
 // --- admin API ---
 
 type extensionView struct {
-	ID            string                   `json:"id"`
-	Version       string                   `json:"version"`
-	Publisher     string                   `json:"publisher"`
-	Name          extension.Text           `json:"name"`
-	Description   extension.Text           `json:"description"`
-	License       string                   `json:"license,omitempty"`
-	Homepage      string                   `json:"homepage,omitempty"`
-	Builtin       bool                     `json:"builtin"`
-	Runtime       string                   `json:"runtime"`
-	Hooks         []string                 `json:"hooks"`
-	Permissions   []string                 `json:"permissions"`
+	ID          string         `json:"id"`
+	Version     string         `json:"version"`
+	Publisher   string         `json:"publisher"`
+	Name        extension.Text `json:"name"`
+	Description extension.Text `json:"description"`
+	License     string         `json:"license,omitempty"`
+	Homepage    string         `json:"homepage,omitempty"`
+	Builtin     bool           `json:"builtin"`
+	Runtime     string         `json:"runtime"`
+	Hooks       []string       `json:"hooks"`
+	Permissions []string       `json:"permissions"`
 	// Bindings are the selectors the extension can be scoped by (account,
 	// user); none means it is either off or on everywhere.
-	Bindings []string `json:"bindings"`
+	Bindings      []string                 `json:"bindings"`
 	FailurePolicy string                   `json:"failure_policy"`
 	ConfigSchema  extension.ConfigSchema   `json:"config_schema"`
 	Errors        []extension.ErrorDef     `json:"errors"`
@@ -132,6 +132,9 @@ func (s *Server) extensionView(p extension.Package, items map[string]config.Exte
 	}
 	if v.Metrics == nil {
 		v.Metrics = []extension.MetricDef{}
+	}
+	if v.Errors == nil {
+		v.Errors = []extension.ErrorDef{}
 	}
 	if v.Bindings == nil {
 		v.Bindings = []string{}
@@ -211,13 +214,14 @@ func (s *Server) handleUpdateExtension(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if setting.Enabled {
-		for _, hook := range p.Manifest.Hooks {
-			if spec, _ := extspi.LookupHook(hook); !slices.Contains(setting.Permissions, spec.Permission) {
-				writeErr(w, http.StatusBadRequest, "启用前需要批准扩展运行所需的权限："+spec.Permission)
-				return
-			}
-		}
+	// Approving only some permissions is allowed: the hooks without theirs
+	// never fire. With none approved the extension could do nothing.
+	if setting.Enabled && !slices.ContainsFunc(p.Manifest.Hooks, func(hook string) bool {
+		spec, _ := extspi.LookupHook(hook)
+		return slices.Contains(setting.Permissions, spec.Permission)
+	}) {
+		writeErr(w, http.StatusBadRequest, "启用前至少要批准一个钩子所需的权限")
+		return
 	}
 	if _, err := s.cfg.SetExtension(id, setting, *req.ExpectedRevision); err != nil {
 		status := http.StatusBadRequest

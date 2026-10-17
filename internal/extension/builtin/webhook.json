@@ -1,0 +1,45 @@
+{
+  "id": "agentbox.webhook",
+  "version": "1.0.0",
+  "spi": "1.0",
+  "publisher": "agentbox",
+  "name": {"zh-CN": "Webhook 通知", "zh-TW": "Webhook 通知", "en": "Webhook notifications"},
+  "description": {
+    "zh-CN": "把空间的创建、启动、停止、删除和对话回合的结果推送到你指定的地址，支持通用 JSON 与飞书、钉钉、企业微信机器人。只发送编号、名称、状态、模型、耗时和费用，不发送对话内容、文件或凭证。",
+    "zh-TW": "把空間的建立、啟動、停止、刪除和對話回合的結果推送到你指定的位址，支援通用 JSON 與飛書、釘釘、企業微信機器人。只傳送編號、名稱、狀態、模型、耗時和費用，不傳送對話內容、檔案或憑證。",
+    "en": "Posts workspace creation, start, stop and deletion, and chat turn results to an address you choose, as plain JSON or a Feishu, DingTalk or WeCom bot message. Only IDs, names, status, model, duration and cost are sent; never conversation content, files or credentials."
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/devilcoolyue/agentbox/blob/main/docs/architecture/extensions-spi.md",
+  "runtime": {"type": "builtin"},
+  "hooks": ["workspace.lifecycle", "chat.turn.ended"],
+  "permissions": ["workspace.events", "chat.turns"],
+  "bindings": ["account", "user"],
+  "failure_policy": "fail_open",
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "url": {"type": "string", "maxLength": 1024,
+        "title": {"zh-CN": "推送地址", "zh-TW": "推送位址", "en": "Webhook URL"},
+        "description": {"zh-CN": "http 或 https 地址。机器人地址里带着密钥，只有管理员能看到。", "zh-TW": "http 或 https 位址。機器人位址中帶有金鑰，只有管理員看得到。", "en": "An http or https address. Bot URLs contain a secret and are only shown to administrators."}},
+      "format": {"type": "enum", "enum": ["json", "feishu", "dingtalk", "wecom"], "default": "json",
+        "title": {"zh-CN": "消息格式", "zh-TW": "訊息格式", "en": "Message format"},
+        "description": {"zh-CN": "json：POST 事件原文并附 text 摘要；feishu / dingtalk / wecom：对应机器人的文本消息。", "zh-TW": "json：POST 事件原文並附 text 摘要；feishu / dingtalk / wecom：對應機器人的文字訊息。", "en": "json posts the event with a text summary; feishu / dingtalk / wecom post a text message for that bot."}},
+      "turns": {"type": "enum", "enum": ["failed", "all", "none"], "default": "failed",
+        "title": {"zh-CN": "对话回合", "zh-TW": "對話回合", "en": "Chat turns"},
+        "description": {"zh-CN": "failed：只推送失败和中断的回合；all：每个回合都推送；none：不推送。", "zh-TW": "failed：只推送失敗和中斷的回合；all：每個回合都推送；none：不推送。", "en": "failed: only failed and interrupted turns; all: every turn; none: no turns."}},
+      "workspaces": {"type": "enum", "enum": ["all", "none"], "default": "all",
+        "title": {"zh-CN": "空间启停", "zh-TW": "空間啟停", "en": "Workspace lifecycle"},
+        "description": {"zh-CN": "all：推送创建、启动、停止（含空闲休眠）和删除；none：不推送。", "zh-TW": "all：推送建立、啟動、停止（含閒置休眠）和刪除；none：不推送。", "en": "all: creation, start, stop (including idle sleep) and deletion; none: nothing."}},
+      "language": {"type": "enum", "enum": ["zh-CN", "zh-TW", "en"], "default": "zh-CN",
+        "title": {"zh-CN": "消息语言", "zh-TW": "訊息語言", "en": "Message language"}}
+    }
+  },
+  "status": {
+    "metrics": [
+      {"name": "sent", "title": {"zh-CN": "已送达", "zh-TW": "已送達", "en": "Delivered"}},
+      {"name": "failed", "title": {"zh-CN": "送达失败", "zh-TW": "送達失敗", "en": "Failed"}},
+      {"name": "dropped", "title": {"zh-CN": "积压丢弃", "zh-TW": "積壓丟棄", "en": "Dropped (backlog)"}}
+    ]
+  }
+}

@@ -15,8 +15,14 @@ const PERMISSIONS = {
     "model.stream.text": { label: () => i18nText("读取模型回复文字"), risk: () => i18nText("能读到模型回复与推理的文字增量，可能包含代码或密钥片段。") },
     "model.request.fingerprint": { label: () => i18nText("请求指纹"), risk: () => i18nText("只能判断两次请求是否相同，拿不到提示词原文。") },
     "model.context": { label: () => i18nText("空间与用户标识"), risk: () => i18nText("能把流量关联到具体空间、账号和用户。") },
+    "workspace.events": { label: () => i18nText("空间启停事件"), risk: () => i18nText("能知道哪些空间何时创建、启动、停止、删除，以及空间名称、账号和属主。") },
+    "chat.turns": { label: () => i18nText("对话回合结果"), risk: () => i18nText("能知道每个回合的状态、模型、耗时和费用，以及所属空间和用户；拿不到对话内容。") },
 };
-const HOOK_PERMISSION = { "model.request": "model.request.fingerprint", "model.stream": "model.stream.text" };
+/** 钩子 → 它需要的权限；与服务端 extspi.Hooks() 一致 */
+const HOOK_PERMISSION = {
+    "model.request": "model.request.fingerprint", "model.stream": "model.stream.text",
+    "workspace.lifecycle": "workspace.events", "chat.turn.ended": "chat.turns",
+};
 const STATES = {
     disabled: () => i18nText("未启用"), invalid: () => i18nText("配置无效"), starting: () => i18nText("启动中"),
     running: () => i18nText("运行中"), degraded: () => i18nText("降级"), restarting: () => i18nText("重启中"),
@@ -165,7 +171,8 @@ export function initExtensionsPage() {
         if (!ext || !liveStatus || !liveActivity)
             return;
         liveStatus.replaceChildren(statusCard(ext));
-        liveActivity.replaceChildren(eventsCard(), logsCard());
+        // 中断与拒绝只有检查模型流量的扩展才有
+        liveActivity.replaceChildren(...(routesModel(ext) ? [eventsCard()] : []), logsCard());
     }
     function overviewCard(ext) {
         const card = el("section", "card ext-overview");
@@ -216,7 +223,8 @@ export function initExtensionsPage() {
         const grid = el("dl", "ext-stats");
         const stat = (label, value) => { grid.append(el("dt", "", label), el("dd", "mono", value)); };
         stat(() => i18nText("状态"), STATES[st.state]?.() || st.state);
-        stat(() => i18nText("检查中的流"), String(st.active_streams));
+        if (routesModel(ext))
+            stat(() => i18nText("检查中的流"), String(st.active_streams));
         stat(() => i18nText("重启次数"), String(st.restarts));
         if (st.started_at)
             stat(() => i18nText("启动时间"), fmtDateTime(st.started_at));
@@ -296,10 +304,13 @@ export function initExtensionsPage() {
         const enabledRow = el("label", "check ext-enable");
         enabledRow.append(enabled, el("span", "", () => i18nText("启用这个扩展")));
         card.append(enabledRow);
-        // Permissions: approved one by one; the ones hooks need are marked.
+        // Permissions: approved one by one. One that a hook needs is marked; the
+        // hook stays off without it, and at least one must be approved to enable.
         const required = new Set(ext.hooks.map(h => HOOK_PERMISSION[h]).filter(Boolean));
         const permBox = el("fieldset", "ext-perms");
         permBox.append(el("legend", "", () => i18nText("批准的权限")));
+        if (required.size > 1)
+            permBox.append(el("p", "hint", () => i18nText("可以只批准一部分：没批准的那类钩子不会调用。")));
         const permInputs = new Map();
         for (const perm of ext.permissions) {
             const row = el("label", "check ext-perm");
@@ -312,7 +323,7 @@ export function initExtensionsPage() {
             const info = PERMISSIONS[perm];
             text.append(el("b", "", info ? info.label : () => perm), el("code", "", perm));
             if (required.has(perm))
-                text.append(el("span", "tag", () => i18nText("必需")));
+                text.append(el("span", "tag", () => required.size > 1 ? i18nText("开启对应钩子") : i18nText("必需")));
             text.append(el("span", "hint", info ? info.risk : () => ""));
             row.append(input, text);
             permBox.append(row);
@@ -394,7 +405,9 @@ export function initExtensionsPage() {
         policy.value = s.failure_policy || "";
         policy.addEventListener("change", () => { dirty = true; });
         policyField.append(policy, el("span", "hint", () => i18nText("扩展未运行、回答超时或检查跟不上时怎么处理。放行时扩展页会标出降级。")));
-        card.append(policyField);
+        // 只发通知的扩展挡不住任何东西，失效策略对它没有意义
+        if (routesModel(ext))
+            card.append(policyField);
         const fields = new Map();
         const props = Object.entries(ext.config_schema.properties || {}).sort(([a], [b]) => a.localeCompare(b));
         if (props.length) {
@@ -410,7 +423,7 @@ export function initExtensionsPage() {
             card.append(cfgBox);
         }
         const foot = el("div", "card-foot");
-        foot.append(el("span", "note", () => i18nText("保存后扩展会重启，内存里的冷却记录随之清空。")));
+        foot.append(el("span", "note", () => i18nText("保存后扩展会按新设置重启，它在内存里的状态随之清空。")));
         const save = el("button", "btn btn-primary btn-sm");
         save.type = "button";
         buttonLabel(save, () => i18nText("保存"), "check");

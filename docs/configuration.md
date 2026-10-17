@@ -146,6 +146,11 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 | `items.<id>.failure_policy` | 空 = 清单默认 | `fail_open` 放行或 `fail_closed` 拦截；循环保护默认放行 |
 | `items.<id>.revision` | 服务端维护 | 每次保存加一；网页提交时用它防止覆盖他人的修改 |
 
+内置扩展：
+
+- `agentbox.loop-guard`（循环保护）：检查模型流量，依赖模型网关，只能按账号绑定。参数见 [loop-guard.md](loop-guard.md)。
+- `agentbox.webhook`（Webhook 通知）：把空间的创建、启动、停止、删除和对话回合结果推送出去，不依赖模型网关，可按账号或用户绑定。`config` 字段：`url`（http / https，机器人地址里的密钥只有管理员看得到，日志里不会出现）、`format`（`json` 推送事件原文并附 `text` 摘要；`feishu` / `dingtalk` / `wecom` 推送对应机器人的文本消息）、`turns`（`failed` 只推失败和中断的回合，默认；`all`；`none`）、`workspaces`（`all` 默认 / `none`）、`language`（`zh-CN` 默认 / `zh-TW` / `en`）。权限 `workspace.events` 与 `chat.turns` 可以只批准一个，只接收那一类事件。发送失败重试一次（网络错误、429、5xx），之后计入「送达失败」并写扩展日志；积压超过 256 条时丢弃并计数。机器人自己的关键词、加签等安全设置需要在机器人那边按「关键词」配置（消息都以 `agentbox ·` 开头），v1 不支持加签密钥。
+
 建议在「扩展」页修改，不必手写；网页保存会校验清单并立即生效（扩展重启、冷却记录清空）。删除账号或用户时会同时把它从各扩展的绑定中移除。带模型钩子的扩展绑定后，新开的对话与终端执行改走模型网关，已打开的终端窗口需新开窗口。
 
 ## 终端提示语

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -310,5 +311,41 @@ func TestConnectionHookRunsOnEveryStartAfterSeeding(t *testing.T) {
 	fail = errors.New("synthetic endpoint failure")
 	if _, err := s.Start(t.Context(), sess.ID); !errors.Is(err, ErrCredentials) || !errors.Is(err, fail) {
 		t.Fatalf("hook failure did not block the start: %v", err)
+	}
+}
+
+// The lifecycle hook reports transitions only: a start that finds the
+// container running, or a stop of a stopped workspace, is not an event.
+func TestLifecycleHookReportsTransitions(t *testing.T) {
+	s, runtime, sess := fixture(t)
+	var got []string
+	s.SetLifecycleHook(func(action, reason string, x store.Session) {
+		got = append(got, action+":"+reason+":"+x.ID)
+	})
+	if _, err := s.Start(t.Context(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Stop(t.Context(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Stop(t.Context(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(s.HomeDir(sess), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Start(t.Context(), sess.ID); err != nil || runtime.starts != 1 {
+		t.Fatalf("cold start: %v", err)
+	}
+	created := store.Session{ID: "s2", User: "alice", Agent: config.AgentCodex, AccountID: "acct"}
+	if err := s.Create(created); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete(t.Context(), created.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"stopped::s1", "started::s1", "created::s2", "deleted::s2"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("events %v, want %v", got, want)
 	}
 }

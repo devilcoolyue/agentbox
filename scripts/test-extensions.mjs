@@ -25,6 +25,17 @@ export async function extensionsSmoke(page, base, setSessions) {
   accounts:[{id:'relay',label:'Relay',type:'claude',eligible:true},{id:'sub',label:'Subscription',type:'claude',eligible:false},
    {id:'ds4',label:'ds4-1f',type:'codex',eligible:true},{id:'gpt',label:'ChatGPT login',type:'codex',eligible:false}],
  };
+ // An event-only extension: no gateway, bound by account or user.
+ const webhook = {
+  id:'agentbox.webhook',version:'1.0.0',publisher:'agentbox',builtin:true,runtime:'builtin',
+  name:{'zh-CN':'Webhook 通知','zh-TW':'Webhook 通知',en:'Webhook notifications'},description:t('推送空间与对话事件。'),
+  hooks:['workspace.lifecycle','chat.turn.ended'],permissions:['workspace.events','chat.turns'],bindings:['account','user'],failure_policy:'fail_open',
+  config_schema:{type:'object',properties:{url:{type:'string',maxLength:1024,title:t('推送地址')},format:{type:'enum',enum:['json','feishu'],default:'json',title:t('消息格式')}}},
+  errors:[],metrics:[{name:'sent',title:t('已送达')}],
+  setting:{enabled:false,order:0,config:{format:'json'},permissions:['chat.turns','workspace.events'],bindings:{mode:'none'},failure_policy:'',revision:0},
+  status:{state:'disabled',restarts:0,active_streams:0},requires:[],
+  accounts:[{id:'relay',label:'Relay',type:'claude',eligible:true},{id:'sub',label:'Subscription',type:'claude',eligible:true}],
+ };
  const puts = []; let conflictNext = false;
  const events = [{seq:1,time:new Date().toISOString(),extension:view.id,kind:'abort',code:'model_output_loop',session:'fixture-space',account:'relay',user:'fixture',detail:{window:256,distinct:12}}];
  const logs = [{seq:1,time:new Date().toISOString(),level:'info',message:'interrupted <b>a</b> repeating text stream'}];
@@ -42,12 +53,12 @@ export async function extensionsSmoke(page, base, setSessions) {
    view.status = body.enabled ? {state:'running',restarts:0,active_streams:0,started_at:new Date().toISOString(),metrics:{trips:1},hooks:view.hooks} : {state:'disabled',restarts:0,active_streams:0};
    return route.fulfill({json:view});
   }
-  if (path === '/api/extensions') return route.fulfill({json:{extensions:[view]}});
+  if (path === '/api/extensions') return route.fulfill({json:{extensions:[view,webhook]}});
   return route.fulfill({json:view});
  });
  try {
   await page.evaluate(()=>location.hash='#/extensions');
-  const card = page.locator('#ext-list .ext-card');
+  const card = page.locator('#ext-list .ext-card', {hasText:'循环保护'});
   await card.waitFor();
   assert.equal(await page.locator('#btn-extensions').isVisible(), true, 'admin sees the 扩展 entry');
   assert.equal(await page.locator('#btn-extensions').getAttribute('aria-current'), 'page');
@@ -130,6 +141,21 @@ export async function extensionsSmoke(page, base, setSessions) {
   await page.locator('.card', {has:gwState}).screenshot({path:'output/playwright/extensions-model-gateway.png',animations:'disabled'});
   await page.evaluate(()=>location.hash='#/extensions');
   await card.waitFor();
+  // An event extension: no gateway line, no failure policy or interruption
+  // log, every account selectable and a user picker next to them.
+  await page.locator('#ext-list .ext-card', {hasText:'Webhook 通知'}).click();
+  await page.waitForFunction(()=>location.hash==='#/extensions/agentbox.webhook');
+  await detail.locator('.ext-settings').waitFor();
+  assert.equal(await detail.locator('.ext-require').count(), 0);
+  assert.equal(await detail.locator('.ext-events').count(), 0);
+  assert.doesNotMatch(await detail.innerText(), /扩展失效时|检查中的流|网关/);
+  assert.deepEqual(await detail.locator('.ext-bindings select option').allInnerTexts(), ['暂不生效','指定账号或用户','全部（含以后新增的）']);
+  await detail.locator('.ext-bindings select').evaluate(sel=>{sel.value='selected';sel.dispatchEvent(new Event('change',{bubbles:true}));});
+  await detail.locator('.ext-users .user-picker').waitFor();
+  assert.equal(await detail.locator('.ext-accounts input:disabled').count(), 0, 'event hooks take any account');
+  await page.screenshot({path:'output/playwright/extensions-webhook.png',animations:'disabled'});
+  await detail.locator('.ext-back').click();
+  await card.waitFor();
   // Users see which extensions inspect their workspace.
   setSessions([{id:'fixture-space',name:'Fixture workspace',agent:'claude',account_id:'relay',account_label:'Relay',status:'stopped',default_model:'fixture',
    extensions:[{id:'agentbox.loop-guard',name:{'zh-CN':'循环保护','zh-TW':'循環保護',en:'Loop guard'}}]}]);
@@ -138,7 +164,7 @@ export async function extensionsSmoke(page, base, setSessions) {
   const badge = page.locator('#wb-ext');
   await badge.waitFor();
   assert.match(await badge.innerText(), /循环保护/);
-  console.log('Extensions: list/detail without gateway, model gateway dependency and settings card, permission approval, Claude and Codex API key binding with ineligible subscription/ChatGPT accounts, schema form, revisioned save and conflict reload, plain-text manifest strings, events/logs and workspace badge passed');
+  console.log('Extensions: list/detail without gateway, event-only webhook detail with user picker, model gateway dependency and settings card, permission approval, Claude and Codex API key binding with ineligible subscription/ChatGPT accounts, schema form, revisioned save and conflict reload, plain-text manifest strings, events/logs and workspace badge passed');
   await page.screenshot({path:'output/playwright/extensions-workspace.png',animations:'disabled',clip:{x:0,y:0,width:1280,height:160}});
   assert.match(await badge.getAttribute('aria-label'), /循环保护 正在检查本空间的模型输出/);
  } finally {
