@@ -730,13 +730,14 @@ data/
 ### 扩展（Extensions）
 
 - 设计、已定决策与 P1 实施记录见 `docs/architecture/extensions-spi.md`。界面叫「扩展」；「插件」专指 Claude Code 插件市场（`market.go`），不要混用。内网隧道刻意保持内嵌，不是扩展。
+- SPI 核心（`extspi.Handler` / `Host`）不认识任何具体功能：钩子统一登记在 `extspi.Hooks()`（所需权限、分组、依赖的基础设施、可用的绑定方式），清单校验、启用检查、`requires` 与网关启动条件都从登记表读。宿主 `instance.go` 是与钩子无关的生命周期和通知队列（`notice`），模型钩子的分发、中断与流状态都在 `model.go`。
 - 第三方代码不进服务端进程，不用 Go `plugin`。`runtime=builtin` 只给 `agentbox.*` 官方扩展；container 运行时与市场在 P3/P4，清单校验目前直接拒绝。
 - 网络这一跳归宿主：扩展只拿授权数据（文字增量、加盐指纹），只能放行/拒绝/中断，错误码必须在清单 `errors` 里声明；协议错误由 `modelgw` 写，扩展不能拼 SSE。拒绝不带 `Retry-After`（Codex 会等冷却后重发）。不做自动续跑（已定）。
 - 模型网关（`internal/server/modelgateway.go`，配置 `model_gateway`）是 `model.request` / `model.stream` 钩子的基础设施，不是扩展框架的一部分：只有已启用、且批准了模型钩子权限的扩展存在时才监听（`Host.Uses`），状态与独占连接开关在「系统设置 → IP 代理 → 模型网关」（`settingsView.ModelGateway` / `SettingsPatch.ModelGateway`）；扩展详情页只通过 `requires` 显示依赖状态。旧配置的 `extensions.gateway` 在 Load 时迁到 `model_gateway`。
 - 只改道 Claude 与 Codex 的 API Key / 中转账号（`gatewayEligible`；Codex 由 `credentials.CodexUpstream` 从账号池判断并解析真实上游），Claude 订阅与 ChatGPT 登录不改道（已定）。`execEnv` 末尾 `modelGatewayEnv` 给两种 Agent 的 `NO_PROXY` 补网关主机，只给 Claude 改写 `ANTHROPIC_BASE_URL`；`modelGatewayEnvNames` 在 `tmuxEnvSync` 的清除列表里，解绑后新窗口不残留网关地址。Codex 的 base_url 在空间 `.codex/config.toml`：`credentials.codexSessionConfig` 在 `codexConnectionConfig` 之后换成网关地址（内置 `openai` provider 换成自定义 `agentbox`），写入点是 workspace 连接钩子（种子与 `SeedDefaultModel` 之后、运行中每次准入）、凭证播发、`applyExtensions` 后台对齐；credsync 只同步 `auth.json`。账号池文件绝不能写进按空间生成的网关地址。
 - 网关路径 `/x/<空间>/<MAC>/<原路径>`，MAC 由 `auth_token` 派生（HMAC 域串仍是 `agentbox-extension-gateway`，改了会让运行中 CLI 持有的地址失效）；每个请求重查 `sessionAccount`，上游按当前账号解析，出口与 `acctClient` 同规则（绑定代理不可用 → 502，不回落直连）。默认 `172.17.0.1:1083`，与隧道 1080、代理桥 1081、透明网络控制 1082 错开，`validateModelGateway` 拒绝冲突。网关起来后不随停用关闭：老 CLI 还拿着地址，此时只转发不检查。`model_gateway.dedicated_connections` 让每次上游请求独占 HTTP/1.1 连接（`modelgw.DedicatedTransport`），传输缓存键含此开关。错误码前缀 `model_gateway_`。
 - 失效策略默认放行（已定），必须在扩展页可见；`fail_closed` 时网关没起来也照样改写，让请求失败而不是绕过检查。中断/拒绝记录 P1 只在内存（最近 200 条）。
-- 设置走 `Host.Normalize` → `Config.SetExtension(expected_revision)` → `applyExtensions`；`extensions` 段必须随 mutate/persist 保留。新增官方扩展：`internal/extension/builtin` 加清单 JSON 与 `extspi.Handler`（并发安全）并登记进 `All()`，清单过 `ParseManifest`，测试里用 `PipeBuiltins` 再跑一遍 NDJSON 一致性。
+- 设置走 `Host.Normalize` → `Config.SetExtension(expected_revision)` → `applyExtensions`；`extensions` 段必须随 mutate/persist 保留。新增官方扩展：`internal/extension/builtin` 加清单 JSON 与 `extspi.Handler`（并发安全；订阅了哪组钩子就实现对应接口，如 `extspi.ModelHandler`，宿主在 initialize 时核对）并登记进 `All()`，清单过 `ParseManifest`，测试里用 `PipeBuiltins` 再跑一遍 NDJSON 一致性。
 - 回归：`go test ./pkg/modelgw ./pkg/extspi ./pkg/loopguard ./internal/extension/... ./internal/config`、`go test ./internal/server -run 'Extension|ModelGateway'`、`race.extensions`、`browser.browser`（含 `scripts/test-extensions.mjs`）。真实 Claude Code / Codex 走带路径前缀的 base URL 与容器到网关的可达性尚未验收。从独立 `abox-loop-guard` 迁移的步骤见 `docs/loop-guard.md`。
 
 ## 代码约定与注意事项

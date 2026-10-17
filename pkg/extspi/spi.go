@@ -2,6 +2,12 @@
 // between the extension host and an extension, the Handler an extension
 // implements, and an NDJSON JSON-RPC 2.0 transport over stdio.
 //
+// The core of the SPI (Handler, Host) knows nothing about any particular part
+// of agentbox. What an extension can observe comes from hooks, registered in
+// Hooks: each names the permission it needs and the host infrastructure that
+// produces it. An extension implements the optional interface for the hooks it
+// subscribes to (ModelHandler for model.*).
+//
 // The same Handler runs in-process for builtin extensions and behind Serve for
 // out-of-process ones; Pipe connects the two for conformance tests. The design
 // is documented in docs/architecture/extensions-spi.md.
@@ -48,10 +54,63 @@ const (
 	PermContext            = "model.context"
 )
 
-// HookPermission is the permission a hook cannot run without.
-var HookPermission = map[string]string{
-	HookModelRequest: PermRequestFingerprint,
-	HookModelStream:  PermStreamText,
+// Binding selectors: what an administrator may scope an extension to.
+const (
+	BindAccount = "account"
+)
+
+// Host infrastructure a hook may depend on.
+const (
+	RequiresModelGateway = "model_gateway"
+)
+
+// HookSpec describes one hook: the permission it cannot run without, the
+// area of agentbox it observes (for display), the host infrastructure that has
+// to run for it to fire, and the selectors an administrator may scope it by.
+type HookSpec struct {
+	Name       string   `json:"name"`
+	Permission string   `json:"permission"`
+	Group      string   `json:"group"`
+	Requires   string   `json:"requires,omitempty"`
+	Bindings   []string `json:"bindings"`
+}
+
+var hooks = []HookSpec{
+	{Name: HookModelRequest, Permission: PermRequestFingerprint, Group: "model", Requires: RequiresModelGateway, Bindings: []string{BindAccount}},
+	{Name: HookModelStream, Permission: PermStreamText, Group: "model", Requires: RequiresModelGateway, Bindings: []string{BindAccount}},
+}
+
+var permissions = []string{PermRequestFingerprint, PermStreamText, PermContext}
+
+// Hooks returns the hook registry in display order.
+func Hooks() []HookSpec {
+	out := make([]HookSpec, len(hooks))
+	for i, h := range hooks {
+		h.Bindings = append([]string(nil), h.Bindings...)
+		out[i] = h
+	}
+	return out
+}
+
+// LookupHook returns the spec of a registered hook.
+func LookupHook(name string) (HookSpec, bool) {
+	for _, h := range hooks {
+		if h.Name == name {
+			h.Bindings = append([]string(nil), h.Bindings...)
+			return h, true
+		}
+	}
+	return HookSpec{}, false
+}
+
+// KnownPermission reports whether p is a permission the host can grant.
+func KnownPermission(p string) bool {
+	for _, known := range permissions {
+		if known == p {
+			return true
+		}
+	}
+	return false
 }
 
 // Request verdict actions.
@@ -197,32 +256,51 @@ type LogParams struct {
 	Message string `json:"message"`
 }
 
-// Handler is implemented by an extension. Stream notifications for one stream
-// arrive in order; handlers must return promptly and must not block on model
-// traffic. Embed BaseHandler to inherit no-op defaults.
+// Handler is implemented by every extension. Initialize returns the hooks it
+// subscribes to; for each, the handler must also implement that hook's
+// interface (ModelHandler for model.*). Embed BaseHandler for a no-op
+// Shutdown.
 type Handler interface {
 	Initialize(ctx context.Context, p InitializeParams, host Host) (InitializeResult, error)
+	Shutdown(ctx context.Context) error
+}
+
+// ModelHandler serves the model.request and model.stream hooks. Stream
+// notifications for one stream arrive in order; handlers must return
+// promptly and must not block on model traffic. Embed BaseModelHandler to
+// inherit defaults that allow every request and ignore every notification.
+type ModelHandler interface {
+	Handler
 	ModelRequest(ctx context.Context, p ModelRequestParams) (RequestVerdict, error)
 	StreamOpen(p StreamOpenParams)
 	StreamDelta(p StreamDeltaParams)
 	StreamClose(p StreamCloseParams)
-	Shutdown(ctx context.Context) error
 }
 
-// Host is what an extension may call. It is safe for concurrent use.
+// Host is what every extension may call. It is safe for concurrent use.
 type Host interface {
-	Abort(ctx context.Context, p AbortParams) (AbortResult, error)
 	ReportStatus(p StatusReport)
 	Log(p LogParams)
 }
 
-// BaseHandler allows every request and ignores every notification.
+// ModelHost is the Host an extension subscribed to model hooks receives: it
+// may also interrupt a stream it watches.
+type ModelHost interface {
+	Host
+	Abort(ctx context.Context, p AbortParams) (AbortResult, error)
+}
+
+// BaseHandler has a no-op Shutdown.
 type BaseHandler struct{}
 
-func (BaseHandler) ModelRequest(context.Context, ModelRequestParams) (RequestVerdict, error) {
+func (BaseHandler) Shutdown(context.Context) error { return nil }
+
+// BaseModelHandler allows every request and ignores every notification.
+type BaseModelHandler struct{ BaseHandler }
+
+func (BaseModelHandler) ModelRequest(context.Context, ModelRequestParams) (RequestVerdict, error) {
 	return RequestVerdict{Action: ActionAllow}, nil
 }
-func (BaseHandler) StreamOpen(StreamOpenParams)    {}
-func (BaseHandler) StreamDelta(StreamDeltaParams)  {}
-func (BaseHandler) StreamClose(StreamCloseParams)  {}
-func (BaseHandler) Shutdown(context.Context) error { return nil }
+func (BaseModelHandler) StreamOpen(StreamOpenParams)   {}
+func (BaseModelHandler) StreamDelta(StreamDeltaParams) {}
+func (BaseModelHandler) StreamClose(StreamCloseParams) {}

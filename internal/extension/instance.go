@@ -2,14 +2,10 @@ package extension
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"slices"
 	"sync"
 	"time"
@@ -20,7 +16,7 @@ import (
 )
 
 const (
-	queueBudget     = 4 << 20 // bytes of delta text waiting for one instance
+	queueBudget     = 4 << 20 // bytes of notification payload waiting for one instance
 	initTimeout     = 5 * time.Second
 	shutdownTimeout = 2 * time.Second
 	pingInterval    = 30 * time.Second
@@ -30,28 +26,19 @@ const (
 	recentClosed    = 256
 )
 
-var (
-	errUnavailable = errors.New("extension unavailable")
-	detailKeyRe    = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
-)
+var errUnavailable = errors.New("extension unavailable")
 
-type workKind int
-
-const (
-	workOpen workKind = iota
-	workDelta
-	workClose
-)
-
-type work struct {
-	kind   workKind
-	stream string
-	open   extspi.StreamOpenParams
-	deltas []extspi.Delta
-	ended  []string
-	close  extspi.StreamCloseParams
-	bytes  int
-	seq    int64
+// notice is one queued notification for an instance, delivered in order by
+// the instance's dispatcher. Hook surfaces define their own notices (see
+// model.go).
+type notice interface {
+	// size is counted against the queue budget; 0 always fits.
+	size() int
+	// absorb merges the next queued notice into this one, so a slow
+	// extension catches up instead of lagging. It reports false when the two
+	// cannot merge.
+	absorb(next notice) bool
+	deliver(h extspi.Handler)
 }
 
 type enqueueResult int
@@ -62,16 +49,15 @@ const (
 	overBudget
 )
 
-// instance is one running extension. Stream notifications go through an
-// ordered queue served by a single dispatcher goroutine; model/request calls
-// run on the caller's goroutine with a deadline.
+// instance is one running extension. Notifications go through an ordered
+// queue served by a single dispatcher goroutine; synchronous hook calls (such
+// as model/request) run on the caller's goroutine with a deadline.
 type instance struct {
 	h       *Host
 	pkg     *Package
 	setting config.ExtensionSetting
 	policy  string
 	granted map[string]bool
-	salt    [32]byte
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -89,11 +75,9 @@ type instance struct {
 	hooks       map[string]bool
 	reported    string
 	metrics     map[string]float64
-	streams     map[string]*hostStream
-	closedIDs   []string
-	queue       []work
+	queue       []notice
 	queuedBytes int
-	seq         map[string]int64
+	model       modelState // model.* hook state, see model.go
 	logs        ring[LogLine]
 	events      ring[Event]
 	logSecond   int64
@@ -105,11 +89,11 @@ func newInstance(h *Host, p *Package, s config.ExtensionSetting, policy string) 
 	ctx, cancel := context.WithCancel(context.Background())
 	inst := &instance{h: h, pkg: p, setting: s.Clone(), policy: policy, granted: map[string]bool{},
 		ctx: ctx, cancel: cancel, done: make(chan struct{}), wake: make(chan struct{}, 1),
-		state: "starting", metrics: map[string]float64{}, streams: map[string]*hostStream{}, seq: map[string]int64{}}
+		state: "starting", metrics: map[string]float64{}, model: modelState{streams: map[string]*hostStream{}}}
 	for _, perm := range s.Permissions {
 		inst.granted[perm] = true
 	}
-	_, _ = rand.Read(inst.salt[:])
+	_, _ = rand.Read(inst.model.salt[:])
 	return inst
 }
 
@@ -131,7 +115,7 @@ func (in *instance) run() {
 	defer func() {
 		in.mu.Lock()
 		in.state = "stopped"
-		in.detachAllLocked(false)
+		in.dropStreamsLocked(false)
 		in.queue, in.queuedBytes = nil, 0
 		in.mu.Unlock()
 	}()
@@ -206,8 +190,12 @@ func (in *instance) start() (err error) {
 	}
 	hooks := map[string]bool{}
 	for _, hook := range res.Hooks {
-		if !in.pkg.Manifest.HasHook(hook) || !in.granted[extspi.HookPermission[hook]] {
+		spec, ok := extspi.LookupHook(hook)
+		if !ok || !in.pkg.Manifest.HasHook(hook) || !in.granted[spec.Permission] {
 			return fmt.Errorf("initialize subscribed to undeclared or ungranted hook %q", hook)
+		}
+		if !implementsHook(handler, spec) {
+			return fmt.Errorf("initialize subscribed to %q without implementing its interface", hook)
 		}
 		hooks[hook] = true
 	}
@@ -279,78 +267,50 @@ func (in *instance) shutdown(handler extspi.Handler) {
 	}()
 }
 
-// pop takes the next notification, merging consecutive delta batches of the
-// same stream into one so a slow extension catches up instead of lagging.
-func (in *instance) pop() (work, bool) {
+// pop takes the next notification, merging the ones queued behind it that
+// it can absorb.
+func (in *instance) pop() (notice, bool) {
 	in.mu.Lock()
 	defer in.mu.Unlock()
 	if len(in.queue) == 0 {
-		return work{}, false
+		return nil, false
 	}
-	item := in.queue[0]
-	n := 1
-	if item.kind == workDelta && len(item.ended) == 0 {
-		for n < len(in.queue) {
-			next := in.queue[n]
-			if next.kind != workDelta || next.stream != item.stream {
-				break
-			}
-			item.deltas = append(item.deltas, next.deltas...)
-			item.ended = next.ended
-			item.bytes += next.bytes
-			n++
-			if len(item.ended) != 0 {
-				break
-			}
-		}
+	item, n := in.queue[0], 1
+	bytes := item.size()
+	for n < len(in.queue) && item.absorb(in.queue[n]) {
+		bytes += in.queue[n].size()
+		n++
 	}
+	clear(in.queue[:n])
 	in.queue = in.queue[n:]
-	in.queuedBytes -= item.bytes
-	switch item.kind {
-	case workDelta:
-		in.seq[item.stream]++
-		item.seq = in.seq[item.stream]
-	case workClose:
-		delete(in.seq, item.stream)
-	}
+	in.queuedBytes -= bytes
 	return item, true
 }
 
-func (in *instance) deliver(handler extspi.Handler, item work) (err error) {
+func (in *instance) deliver(handler extspi.Handler, item notice) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			err = fmt.Errorf("extension handler panicked")
 		}
 	}()
-	switch item.kind {
-	case workOpen:
-		handler.StreamOpen(item.open)
-	case workDelta:
-		handler.StreamDelta(extspi.StreamDeltaParams{Stream: item.stream, Seq: item.seq, Deltas: item.deltas, EndedParts: item.ended})
-	case workClose:
-		handler.StreamClose(item.close)
-	}
+	item.deliver(handler)
 	return nil
 }
 
-// enqueue adds a notification unless the instance is not running. Delta
-// batches respect the byte budget; open and close always fit.
-func (in *instance) enqueue(item work) enqueueResult {
+// enqueue adds a notification unless the instance is not running or the
+// queue budget is exhausted (notices of size 0 always fit).
+func (in *instance) enqueue(item notice) enqueueResult {
 	in.mu.Lock()
 	defer in.mu.Unlock()
 	if in.state != "running" && in.state != "degraded" {
 		return notRunning
 	}
-	if item.kind == workDelta {
-		for _, d := range item.deltas {
-			item.bytes += len(d.Text)
-		}
-		if in.queuedBytes+item.bytes > queueBudget {
-			return overBudget
-		}
+	n := item.size()
+	if n > 0 && in.queuedBytes+n > queueBudget {
+		return overBudget
 	}
 	in.queue = append(in.queue, item)
-	in.queuedBytes += item.bytes
+	in.queuedBytes += n
 	in.signal()
 	return queued
 }
@@ -375,36 +335,10 @@ func (in *instance) crash(gen int, err error) {
 		in.state = "failed"
 	}
 	in.queue, in.queuedBytes = nil, 0
-	in.seq = map[string]int64{}
-	streams := in.detachAllLocked(true)
+	streams := in.dropStreamsLocked(true)
 	in.mu.Unlock()
 	in.h.opts.Logf("extension %s: %s (%s)", in.id(), in.lastError, in.state)
-	for _, s := range streams {
-		if in.policy == FailClosed {
-			s.hostAbort(in, "extension_unavailable", "The extension that inspects this request stopped responding; this reply was interrupted.")
-		}
-	}
-}
-
-// detachAllLocked forgets every stream this instance watches and returns them.
-func (in *instance) detachAllLocked(remember bool) []*hostStream {
-	out := make([]*hostStream, 0, len(in.streams))
-	for id, s := range in.streams {
-		out = append(out, s)
-		s.detach(in)
-		if remember {
-			in.rememberClosedLocked(id)
-		}
-	}
-	in.streams = map[string]*hostStream{}
-	return out
-}
-
-func (in *instance) rememberClosedLocked(id string) {
-	in.closedIDs = append(in.closedIDs, id)
-	if len(in.closedIDs) > recentClosed {
-		in.closedIDs = in.closedIDs[len(in.closedIDs)-recentClosed:]
-	}
+	in.failStreams(streams)
 }
 
 // running returns the handler if it can take a request now.
@@ -417,49 +351,10 @@ func (in *instance) running() (extspi.Handler, int, map[string]bool, bool) {
 	return in.handler, in.gen, in.hooks, true
 }
 
-// request runs model/request with the host deadline. A panic is a crash.
-func (in *instance) request(ctx context.Context, p extspi.ModelRequestParams) (extspi.RequestVerdict, error) {
-	handler, gen, _, ok := in.running()
-	if !ok {
-		return extspi.RequestVerdict{}, errUnavailable
-	}
-	ctx, cancel := context.WithTimeout(ctx, in.h.opts.RequestTimeout)
-	defer cancel()
-	type result struct {
-		v   extspi.RequestVerdict
-		err error
-	}
-	ch := make(chan result, 1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				ch <- result{err: errors.New("model/request panicked")}
-				in.crash(gen, errors.New("model/request handler panicked"))
-			}
-		}()
-		v, err := handler.ModelRequest(ctx, p)
-		ch <- result{v, err}
-	}()
-	select {
-	case r := <-ch:
-		return r.v, r.err
-	case <-ctx.Done():
-		return extspi.RequestVerdict{}, ctx.Err()
-	}
-}
-
-// fingerprint salts the gateway fingerprint per instance so extensions cannot
-// correlate requests with each other or test guesses against known prompts.
-func (in *instance) fingerprint(fp [32]byte) string {
-	mac := hmac.New(sha256.New, in.salt[:])
-	mac.Write(fp[:])
-	return hex.EncodeToString(mac.Sum(nil))
-}
-
 func (in *instance) status() StatusView {
 	in.mu.Lock()
 	defer in.mu.Unlock()
-	v := StatusView{State: in.state, Error: in.lastError, Restarts: in.restarts, ActiveStreams: len(in.streams), DroppedLogs: in.droppedLogs}
+	v := StatusView{State: in.state, Error: in.lastError, Restarts: in.restarts, ActiveStreams: len(in.model.streams), DroppedLogs: in.droppedLogs}
 	if v.State == "running" && in.reported == "degraded" {
 		v.State = "degraded"
 	}
@@ -496,50 +391,14 @@ func (in *instance) log(level, message string) {
 	in.logs.add(LogLine{Seq: in.logs.next, Time: time.Now().UTC(), Level: level, Message: sanitizeLine(message, 1024)})
 }
 
-// instanceHost is the extspi.Host one handler generation sees.
+// instanceHost is the host one handler generation sees. It implements
+// extspi.ModelHost; Abort (model.go) refuses extensions not watching streams.
 type instanceHost struct {
 	in  *instance
 	gen int
 }
 
 func (ih *instanceHost) current() bool { return ih.in.currentGen() == ih.gen }
-
-func (ih *instanceHost) Abort(_ context.Context, p extspi.AbortParams) (extspi.AbortResult, error) {
-	in := ih.in
-	if !ih.current() {
-		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidRequest, Message: "handler is no longer active"}
-	}
-	if _, ok := in.pkg.Manifest.ErrorDef(p.Code); !ok {
-		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidVerdict, Message: "error code is not declared in the manifest"}
-	}
-	if err := plainText(p.Message, 500, false); err != nil {
-		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidVerdict, Message: "message " + err.Error()}
-	}
-	if len(p.Detail) > 16 {
-		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidVerdict, Message: "detail has more than 16 keys"}
-	}
-	for k, v := range p.Detail {
-		if !detailKeyRe.MatchString(k) || math.IsNaN(v) || math.IsInf(v, 0) {
-			return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidVerdict, Message: "detail must map short names to finite numbers"}
-		}
-	}
-	in.mu.Lock()
-	s := in.streams[p.Stream]
-	known := s != nil || slices.Contains(in.closedIDs, p.Stream)
-	in.mu.Unlock()
-	if s == nil {
-		if known {
-			return extspi.AbortResult{Applied: false, Reason: "closed"}, nil
-		}
-		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeUnknownStream, Message: "unknown stream"}
-	}
-	outcome := s.abortBy(in, p.Code, p.Message)
-	if outcome == "applied" {
-		in.h.record(in, Event{Kind: "abort", Code: p.Code, Stream: p.Stream, Session: s.sc.Session, Account: s.sc.Account, User: s.sc.User, Detail: p.Detail})
-		return extspi.AbortResult{Applied: true}, nil
-	}
-	return extspi.AbortResult{Applied: false, Reason: outcome}, nil
-}
 
 func (ih *instanceHost) ReportStatus(p extspi.StatusReport) {
 	if !ih.current() {

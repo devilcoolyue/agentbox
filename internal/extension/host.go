@@ -35,7 +35,9 @@ type Package struct {
 	newHandler func() extspi.Handler
 }
 
-// Host runs extension instances and serves their hooks to the model gateway.
+// Host runs extension instances and dispatches hooks to them. The parts of
+// agentbox a hook observes call in through that hook's surface (Inspector for
+// the model hooks); the host itself is not tied to any of them.
 type Host struct {
 	opts     Options
 	packages []*Package
@@ -210,27 +212,37 @@ func (h *Host) Uses(hooks ...string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for id, s := range h.settings {
-		if !s.Enabled {
-			continue
-		}
-		m := h.byID[id].Manifest
-		for _, hook := range hooks {
-			if m.HasHook(hook) && slices.Contains(s.Permissions, extspi.HookPermission[hook]) {
-				return true
-			}
+		if s.Enabled && grantsHook(h.byID[id].Manifest, s.Permissions, hooks) {
+			return true
 		}
 	}
 	return false
 }
 
-// Bound lists enabled extensions whose bindings include the account, in
-// dispatch order, with their effective failure policy.
-func (h *Host) Bound(account string) []BoundExtension {
+// grantsHook reports whether the manifest declares one of hooks and the
+// permission that hook needs is in granted.
+func grantsHook(m Manifest, granted []string, hooks []string) bool {
+	for _, hook := range hooks {
+		if spec, ok := extspi.LookupHook(hook); ok && m.HasHook(hook) && slices.Contains(granted, spec.Permission) {
+			return true
+		}
+	}
+	return false
+}
+
+// uses reports whether the instance may run one of hooks.
+func (in *instance) uses(hooks []string) bool {
+	return grantsHook(in.pkg.Manifest, in.setting.Permissions, hooks)
+}
+
+// Bound lists enabled extensions with one of hooks whose bindings include
+// the account, in dispatch order, with their effective failure policy.
+func (h *Host) Bound(account string, hooks ...string) []BoundExtension {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var out []BoundExtension
 	for _, inst := range h.orderedLocked() {
-		if inst.setting.Binds(account) {
+		if inst.uses(hooks) && inst.setting.Binds(account) {
 			out = append(out, BoundExtension{ID: inst.pkg.Manifest.ID, Name: inst.pkg.Manifest.Name, Policy: inst.policy})
 		}
 	}

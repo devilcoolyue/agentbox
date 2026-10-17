@@ -20,7 +20,7 @@ const maxTracked = 4096
 // abox-loop-guard detector and cooldown behind the SPI.
 type LoopGuard struct {
 	extspi.BaseHandler
-	host     extspi.Host
+	host     extspi.ModelHost
 	window   int
 	distinct int
 	ttl      time.Duration
@@ -52,7 +52,11 @@ func (g *LoopGuard) Initialize(_ context.Context, p extspi.InitializeParams, hos
 			return extspi.InitializeResult{}, &extspi.Error{Code: extspi.CodeInvalidParams, Message: "invalid config"}
 		}
 	}
-	g.host, g.window, g.distinct = host, cfg.Window, cfg.DistinctLimit
+	mh, ok := host.(extspi.ModelHost)
+	if !ok {
+		return extspi.InitializeResult{}, &extspi.Error{Code: extspi.CodeInternalError, Message: "host cannot interrupt streams"}
+	}
+	g.host, g.window, g.distinct = mh, cfg.Window, cfg.DistinctLimit
 	g.ttl = time.Duration(cfg.CooldownSeconds) * time.Second
 	g.cooldown = loopguard.NewCooldown(g.ttl)
 	g.pending, g.streams = map[string][32]byte{}, map[string]*lgStream{}

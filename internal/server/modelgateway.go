@@ -43,8 +43,18 @@ import (
 
 const defaultAnthropicBaseURL = "https://api.anthropic.com"
 
-// modelHooks are the extension hooks served by the gateway.
-var modelHooks = []string{extspi.HookModelRequest, extspi.HookModelStream}
+// modelHooks are the extension hooks that depend on the gateway.
+var modelHooks = hooksRequiring(extspi.RequiresModelGateway)
+
+func hooksRequiring(infra string) []string {
+	var out []string
+	for _, h := range extspi.Hooks() {
+		if h.Requires == infra {
+			out = append(out, h.Name)
+		}
+	}
+	return out
+}
 
 // modelGatewayEnvNames are rewritten by the gateway. Listed for tmuxEnvSync so
 // a URL injected for an account without one is cleared again after unbinding.
@@ -198,7 +208,7 @@ func (s *Server) inspectingExtensions(sess store.Session, acct config.Account) (
 	}
 	// Bindings first: they are in memory, while Codex eligibility reads the
 	// account pool and the workspace list asks for every session.
-	bound := s.extensions.Bound(acct.ID)
+	bound := s.extensions.Bound(acct.ID, modelHooks...)
 	if len(bound) == 0 || !gatewayEligible(acct) {
 		return nil, false
 	}

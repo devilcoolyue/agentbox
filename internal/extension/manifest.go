@@ -1,7 +1,8 @@
 // Package extension is the Agentbox extension host: it validates extension
-// manifests, runs one instance per enabled extension, and dispatches model
-// gateway hooks to them over the SPI in pkg/extspi. The design is documented
-// in docs/architecture/extensions-spi.md.
+// manifests, runs one instance per enabled extension, and dispatches hooks to
+// them over the SPI in pkg/extspi. instance.go is the hook-independent
+// lifecycle; each hook surface (model.go) adds its own dispatch. The design is
+// documented in docs/architecture/extensions-spi.md.
 package extension
 
 import (
@@ -123,9 +124,6 @@ type Manifest struct {
 	Status        StatusDefs   `json:"status"`
 }
 
-var knownHooks = []string{extspi.HookModelRequest, extspi.HookModelStream}
-var knownPermissions = []string{extspi.PermStreamText, extspi.PermRequestFingerprint, extspi.PermContext}
-
 // FailurePolicies are the allowed failure_policy values.
 const (
 	FailOpen   = "fail_open"
@@ -191,15 +189,15 @@ func (m *Manifest) validate(builtin bool) error {
 	if len(m.Hooks) == 0 {
 		return fmt.Errorf("at least one hook is required")
 	}
-	if err := uniqueKnown("hooks", m.Hooks, knownHooks); err != nil {
+	if err := unique("hooks", m.Hooks, func(h string) bool { _, ok := extspi.LookupHook(h); return ok }); err != nil {
 		return err
 	}
-	if err := uniqueKnown("permissions", m.Permissions, knownPermissions); err != nil {
+	if err := unique("permissions", m.Permissions, extspi.KnownPermission); err != nil {
 		return err
 	}
 	for _, hook := range m.Hooks {
-		if need := extspi.HookPermission[hook]; !slices.Contains(m.Permissions, need) {
-			return fmt.Errorf("hook %s requires permission %s", hook, need)
+		if spec, _ := extspi.LookupHook(hook); !slices.Contains(m.Permissions, spec.Permission) {
+			return fmt.Errorf("hook %s requires permission %s", hook, spec.Permission)
 		}
 	}
 	if len(m.Bindings) != 1 || m.Bindings[0] != "account" {
@@ -211,8 +209,9 @@ func (m *Manifest) validate(builtin bool) error {
 	if err := m.ConfigSchema.validate(); err != nil {
 		return fmt.Errorf("config_schema: %w", err)
 	}
-	if len(m.Errors) == 0 || len(m.Errors) > 32 {
-		return fmt.Errorf("errors must declare 1..32 codes")
+	// Only hooks that can reject or interrupt need error codes.
+	if len(m.Errors) > 32 {
+		return fmt.Errorf("errors must declare at most 32 codes")
 	}
 	seen := map[string]bool{}
 	for _, e := range m.Errors {
@@ -240,10 +239,10 @@ func (m *Manifest) validate(builtin bool) error {
 	return nil
 }
 
-func uniqueKnown(field string, values, known []string) error {
+func unique(field string, values []string, known func(string) bool) error {
 	seen := map[string]bool{}
 	for _, v := range values {
-		if !slices.Contains(known, v) || seen[v] {
+		if !known(v) || seen[v] {
 			return fmt.Errorf("%s: unknown or duplicate %q", field, v)
 		}
 		seen[v] = true

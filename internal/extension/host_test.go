@@ -172,8 +172,11 @@ func TestUnboundAccountAndDisable(t *testing.T) {
 	if h.Inspector(StreamContext{Account: "other"}) != nil {
 		t.Fatal("unbound account inspected")
 	}
-	if len(h.Bound("relay-a")) != 1 || len(h.Bound("other")) != 0 {
+	if len(h.Bound("relay-a", modelHooks...)) != 1 || len(h.Bound("other", modelHooks...)) != 0 {
 		t.Fatal("bound list wrong")
+	}
+	if len(h.Bound("relay-a")) != 0 || !h.Uses(modelHooks...) || h.Uses() {
+		t.Fatal("hook filter ignored")
 	}
 	off := loopSetting("relay-a")
 	off.Enabled, off.Revision = false, 2
@@ -225,10 +228,15 @@ func TestManifestValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	mutate := func(from, to string) []byte { return []byte(strings.Replace(testManifest, from, to, 1)) }
+	// Error codes are only needed by extensions that reject or interrupt.
+	if _, err := ParseManifest(mutate(`"errors": [{"code": "test_stop", "message": {"en": "Stopped."}}]`, `"errors": []`), true); err != nil {
+		t.Fatalf("manifest without error codes: %v", err)
+	}
 	cases := map[string][]byte{
 		"third party with official prefix": []byte(testManifest),
 		"bad id":                           mutate(`"agentbox.test-ext"`, `"Agentbox.Test"`),
 		"unknown field":                    mutate(`"publisher": "test",`, `"publisher": "test", "scripts": "x",`),
+		"unknown hook":                     mutate(`"hooks": ["model.request", "model.stream"]`, `"hooks": ["model.request", "files.write"]`),
 		"hook without permission":          mutate(`"permissions": ["model.request.fingerprint", "model.stream.text", "model.context"]`, `"permissions": ["model.stream.text"]`),
 		"unsupported spi":                  mutate(`"spi": "1.0"`, `"spi": "2.0"`),
 		"newer spi minor":                  mutate(`"spi": "1.0"`, `"spi": "1.9"`),
@@ -247,7 +255,7 @@ func TestManifestValidation(t *testing.T) {
 
 // panicky crashes on its first delta and can stall model/request.
 type panicky struct {
-	extspi.BaseHandler
+	extspi.BaseModelHandler
 	stall bool
 }
 
@@ -311,6 +319,25 @@ func TestCrashFollowsFailurePolicy(t *testing.T) {
 	}
 }
 
+// noModel subscribes to model hooks without implementing ModelHandler.
+type noModel struct{ extspi.BaseHandler }
+
+func (noModel) Initialize(context.Context, extspi.InitializeParams, extspi.Host) (extspi.InitializeResult, error) {
+	return extspi.InitializeResult{SPIVersion: extspi.Version, Hooks: []string{extspi.HookModelStream}}, nil
+}
+
+func TestSubscriptionNeedsHookInterface(t *testing.T) {
+	h := testHost(t, noModel{})
+	h.Apply(map[string]config.ExtensionSetting{"agentbox.test-ext": testSetting(FailOpen)})
+	waitFor(t, "start failure", func() bool {
+		st := h.Status("agentbox.test-ext")
+		return st.State != "running" && strings.Contains(st.Error, "without implementing")
+	})
+	if h.Inspector(StreamContext{Account: "any"}) == nil {
+		t.Fatal("inspector should still apply the failure policy while the extension is down")
+	}
+}
+
 func TestUnavailableAndTimeoutPolicies(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -331,5 +358,64 @@ func TestUnavailableAndTimeoutPolicies(t *testing.T) {
 				t.Fatalf("timeout allowed fail_closed: %d %s", resp.StatusCode, body)
 			}
 		})
+	}
+}
+
+// recordingModel records delta batches as delivered.
+type recordingModel struct {
+	extspi.BaseModelHandler
+	got []extspi.StreamDeltaParams
+}
+
+func (r *recordingModel) Initialize(context.Context, extspi.InitializeParams, extspi.Host) (extspi.InitializeResult, error) {
+	return extspi.InitializeResult{SPIVersion: extspi.Version}, nil
+}
+func (r *recordingModel) StreamDelta(p extspi.StreamDeltaParams) { r.got = append(r.got, p) }
+
+// Queued delta batches of one stream coalesce up to the batch that ends a
+// part, are numbered per delivered batch, never write into the batch slice
+// shared with other instances, and count against the queue budget.
+func TestStreamNoticesCoalesce(t *testing.T) {
+	in := newInstance(&Host{}, &Package{}, config.ExtensionSetting{}, FailOpen)
+	in.state = "running"
+	part := &participant{in: in, stream: true}
+	shared := []extspi.Delta{{Part: "0", Channel: "text", Text: "ab"}}
+	for _, n := range []notice{
+		&streamOpen{p: extspi.StreamOpenParams{Stream: "s"}},
+		&streamDelta{part: part, stream: "s", deltas: shared},
+		&streamDelta{part: part, stream: "s", deltas: []extspi.Delta{{Part: "0", Channel: "text", Text: "cd"}}, ended: []string{"0"}},
+		&streamDelta{part: part, stream: "s", deltas: []extspi.Delta{{Part: "1", Channel: "text", Text: "ef"}}},
+		&streamClose{p: extspi.StreamCloseParams{Stream: "s", Reason: extspi.CloseCompleted}},
+	} {
+		if in.enqueue(n) != queued {
+			t.Fatal("enqueue refused")
+		}
+	}
+	if in.queuedBytes != 6 {
+		t.Fatalf("queued bytes %d", in.queuedBytes)
+	}
+	rec := &recordingModel{}
+	for {
+		item, ok := in.pop()
+		if !ok {
+			break
+		}
+		if err := in.deliver(rec, item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if in.queuedBytes != 0 || len(rec.got) != 2 {
+		t.Fatalf("bytes %d, batches %+v", in.queuedBytes, rec.got)
+	}
+	first, second := rec.got[0], rec.got[1]
+	if first.Seq != 1 || len(first.Deltas) != 2 || first.EndedParts[0] != "0" || second.Seq != 2 || second.Deltas[0].Text != "ef" {
+		t.Fatalf("batches: %+v", rec.got)
+	}
+	if len(shared) != 1 || cap(shared) != 1 {
+		t.Fatal("shared batch modified")
+	}
+	big := &streamDelta{part: part, stream: "s", deltas: []extspi.Delta{{Text: strings.Repeat("x", queueBudget+1)}}}
+	if in.enqueue(big) != overBudget {
+		t.Fatal("over-budget batch accepted")
 	}
 }

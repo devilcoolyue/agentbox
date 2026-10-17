@@ -47,35 +47,16 @@ func Serve(ctx context.Context, r io.Reader, w io.Writer, h Handler) error {
 			return nil, nil
 		case MethodPing:
 			return struct{}{}, nil
-		case MethodModelRequest:
-			var p ModelRequestParams
-			if err := decode(params, &p); err != nil {
-				return nil, err
-			}
-			return h.ModelRequest(ctx, p)
-		case MethodStreamOpen:
-			var p StreamOpenParams
-			if decode(params, &p) == nil {
-				h.StreamOpen(p)
-			}
-			return nil, nil
-		case MethodStreamDelta:
-			var p StreamDeltaParams
-			if decode(params, &p) == nil {
-				h.StreamDelta(p)
-			}
-			return nil, nil
-		case MethodStreamClose:
-			var p StreamCloseParams
-			if decode(params, &p) == nil {
-				h.StreamClose(p)
-			}
-			return nil, nil
 		case MethodShutdown:
 			return struct{}{}, h.Shutdown(ctx)
 		case MethodExit:
 			once.Do(func() { close(exited) })
 			return nil, nil
+		}
+		if mh, ok := h.(ModelHandler); ok {
+			if result, handled, err := serveModel(ctx, mh, method, params); handled {
+				return result, err
+			}
 		}
 		if notify {
 			return nil, nil
@@ -92,8 +73,41 @@ func Serve(ctx context.Context, r io.Reader, w io.Writer, h Handler) error {
 	return nil
 }
 
-// Client is the host side of a transport. It implements Handler, so the host
-// drives builtin and out-of-process extensions the same way.
+// serveModel dispatches the model.* hook methods to a ModelHandler.
+func serveModel(ctx context.Context, h ModelHandler, method string, params json.RawMessage) (any, bool, error) {
+	switch method {
+	case MethodModelRequest:
+		var p ModelRequestParams
+		if err := decode(params, &p); err != nil {
+			return nil, true, err
+		}
+		v, err := h.ModelRequest(ctx, p)
+		return v, true, err
+	case MethodStreamOpen:
+		var p StreamOpenParams
+		if decode(params, &p) == nil {
+			h.StreamOpen(p)
+		}
+		return nil, true, nil
+	case MethodStreamDelta:
+		var p StreamDeltaParams
+		if decode(params, &p) == nil {
+			h.StreamDelta(p)
+		}
+		return nil, true, nil
+	case MethodStreamClose:
+		var p StreamCloseParams
+		if decode(params, &p) == nil {
+			h.StreamClose(p)
+		}
+		return nil, true, nil
+	}
+	return nil, false, nil
+}
+
+// Client is the host side of a transport. It implements Handler and every
+// hook interface, so the host drives builtin and out-of-process extensions
+// the same way; the extension's initialize result says which hooks it serves.
 type Client struct {
 	c    *conn
 	mu   sync.Mutex
@@ -118,11 +132,15 @@ func (cl *Client) dispatch(ctx context.Context, method string, params json.RawMe
 	}
 	switch method {
 	case MethodStreamAbort:
+		mh, ok := host.(ModelHost)
+		if !ok {
+			return nil, &Error{Code: CodePermissionDenied, Message: "not subscribed to model hooks"}
+		}
 		var p AbortParams
 		if err := decode(params, &p); err != nil {
 			return nil, err
 		}
-		return host.Abort(ctx, p)
+		return mh.Abort(ctx, p)
 	case MethodStatusReport:
 		var p StatusReport
 		if decode(params, &p) == nil {

@@ -2,14 +2,163 @@ package extension
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"math"
+	"regexp"
+	"slices"
 	"sync"
 	"sync/atomic"
 
 	"agentbox/pkg/extspi"
 	"agentbox/pkg/modelgw"
 )
+
+// The model.request / model.stream hooks. They fire for requests passing
+// through the model gateway (internal/server/modelgateway.go), which hands
+// each one to Inspector; everything here is specific to those hooks, the
+// instance lifecycle in instance.go is not.
+
+var detailKeyRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+
+// modelHooks are the hooks served by this file.
+var modelHooks = []string{extspi.HookModelRequest, extspi.HookModelStream}
+
+// implementsHook reports whether handler implements the interface a hook
+// needs. Hook groups without an interface yet are rejected.
+func implementsHook(handler extspi.Handler, spec extspi.HookSpec) bool {
+	switch spec.Group {
+	case "model":
+		_, ok := handler.(extspi.ModelHandler)
+		return ok
+	}
+	return false
+}
+
+// modelState is what an instance keeps for the model hooks: the salt for
+// request fingerprints and the streams it currently watches. Guarded by the
+// instance's mutex.
+type modelState struct {
+	salt      [32]byte
+	streams   map[string]*hostStream
+	closedIDs []string // recently closed, so a late abort is "closed" rather than unknown
+}
+
+// dropStreamsLocked forgets every stream the instance watches and returns
+// them.
+func (in *instance) dropStreamsLocked(remember bool) []*hostStream {
+	out := make([]*hostStream, 0, len(in.model.streams))
+	for id, s := range in.model.streams {
+		out = append(out, s)
+		s.detach(in)
+		if remember {
+			in.rememberClosedLocked(id)
+		}
+	}
+	in.model.streams = map[string]*hostStream{}
+	return out
+}
+
+func (in *instance) rememberClosedLocked(id string) {
+	in.model.closedIDs = append(in.model.closedIDs, id)
+	if len(in.model.closedIDs) > recentClosed {
+		in.model.closedIDs = in.model.closedIDs[len(in.model.closedIDs)-recentClosed:]
+	}
+}
+
+// failStreams applies the failure policy to streams a crashed instance was
+// watching: fail_closed interrupts them.
+func (in *instance) failStreams(streams []*hostStream) {
+	if in.policy != FailClosed {
+		return
+	}
+	for _, s := range streams {
+		s.hostAbort(in, "extension_unavailable", "The extension that inspects this request stopped responding; this reply was interrupted.")
+	}
+}
+
+// modelRequest runs model/request with the host deadline. A panic is a crash.
+func (in *instance) modelRequest(ctx context.Context, p extspi.ModelRequestParams) (extspi.RequestVerdict, error) {
+	handler, gen, _, ok := in.running()
+	mh, isModel := handler.(extspi.ModelHandler)
+	if !ok || !isModel {
+		return extspi.RequestVerdict{}, errUnavailable
+	}
+	ctx, cancel := context.WithTimeout(ctx, in.h.opts.RequestTimeout)
+	defer cancel()
+	type result struct {
+		v   extspi.RequestVerdict
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- result{err: errors.New("model/request panicked")}
+				in.crash(gen, errors.New("model/request handler panicked"))
+			}
+		}()
+		v, err := mh.ModelRequest(ctx, p)
+		ch <- result{v, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.v, r.err
+	case <-ctx.Done():
+		return extspi.RequestVerdict{}, ctx.Err()
+	}
+}
+
+// fingerprint salts the gateway fingerprint per instance so extensions cannot
+// correlate requests with each other or test guesses against known prompts.
+func (in *instance) fingerprint(fp [32]byte) string {
+	mac := hmac.New(sha256.New, in.model.salt[:])
+	mac.Write(fp[:])
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func (ih *instanceHost) Abort(_ context.Context, p extspi.AbortParams) (extspi.AbortResult, error) {
+	in := ih.in
+	if !ih.current() {
+		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidRequest, Message: "handler is no longer active"}
+	}
+	if _, _, hooks, _ := in.running(); !hooks[extspi.HookModelStream] {
+		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodePermissionDenied, Message: "not subscribed to model.stream"}
+	}
+	if _, ok := in.pkg.Manifest.ErrorDef(p.Code); !ok {
+		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidVerdict, Message: "error code is not declared in the manifest"}
+	}
+	if err := plainText(p.Message, 500, false); err != nil {
+		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidVerdict, Message: "message " + err.Error()}
+	}
+	if len(p.Detail) > 16 {
+		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidVerdict, Message: "detail has more than 16 keys"}
+	}
+	for k, v := range p.Detail {
+		if !detailKeyRe.MatchString(k) || math.IsNaN(v) || math.IsInf(v, 0) {
+			return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeInvalidVerdict, Message: "detail must map short names to finite numbers"}
+		}
+	}
+	in.mu.Lock()
+	s := in.model.streams[p.Stream]
+	known := s != nil || slices.Contains(in.model.closedIDs, p.Stream)
+	in.mu.Unlock()
+	if s == nil {
+		if known {
+			return extspi.AbortResult{Applied: false, Reason: "closed"}, nil
+		}
+		return extspi.AbortResult{}, &extspi.Error{Code: extspi.CodeUnknownStream, Message: "unknown stream"}
+	}
+	outcome := s.abortBy(in, p.Code, p.Message)
+	if outcome == "applied" {
+		in.h.record(in, Event{Kind: "abort", Code: p.Code, Stream: p.Stream, Session: s.sc.Session, Account: s.sc.Account, User: s.sc.User, Detail: p.Detail})
+		return extspi.AbortResult{Applied: true}, nil
+	}
+	return extspi.AbortResult{Applied: false, Reason: outcome}, nil
+}
 
 // StreamContext identifies whose model traffic a gateway request carries.
 type StreamContext struct {
@@ -27,13 +176,13 @@ func (sc StreamContext) spiContext() *extspi.Context {
 }
 
 // Inspector returns the inspector for one request's account, or nil when no
-// enabled extension is bound to it.
+// enabled extension with a model hook is bound to it.
 func (h *Host) Inspector(sc StreamContext) modelgw.Inspector {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var list []*instance
 	for _, inst := range h.orderedLocked() {
-		if inst.setting.Binds(sc.Account) {
+		if inst.uses(modelHooks) && inst.setting.Binds(sc.Account) {
 			list = append(list, inst)
 		}
 	}
@@ -66,7 +215,7 @@ func (x *inspector) Begin(ctx context.Context, req modelgw.Request) (modelgw.Str
 	var requested []*instance
 	reject := func(code, message string) (modelgw.Stream, *modelgw.Verdict) {
 		for _, in := range requested {
-			in.enqueue(work{kind: workClose, stream: s.id, close: extspi.StreamCloseParams{Stream: s.id, Reason: extspi.CloseRejected}})
+			in.enqueue(&streamClose{p: extspi.StreamCloseParams{Stream: s.id, Reason: extspi.CloseRejected}})
 		}
 		return nil, &modelgw.Verdict{Code: code, Message: message}
 	}
@@ -91,7 +240,7 @@ func (x *inspector) Begin(ctx context.Context, req modelgw.Request) (modelgw.Str
 			if in.granted[extspi.PermContext] {
 				params.Context = x.sc.spiContext()
 			}
-			v, err := in.request(ctx, params)
+			v, err := in.modelRequest(ctx, params)
 			sentRequest = true
 			requested = append(requested, in)
 			if err == nil {
@@ -136,6 +285,7 @@ type participant struct {
 	in       *instance
 	stream   bool // subscribed to model.stream; otherwise only gets close
 	detached atomic.Bool
+	seq      int64 // last delta batch delivered; only the instance's dispatcher touches it
 }
 
 // hostStream fans one gateway stream out to the participating instances.
@@ -159,15 +309,15 @@ func (in *instance) register(s *hostStream) bool {
 	if in.state != "running" && in.state != "degraded" {
 		return false
 	}
-	in.streams[s.id] = s
+	in.model.streams[s.id] = s
 	return true
 }
 
 func (in *instance) unregister(id string) {
 	in.mu.Lock()
 	defer in.mu.Unlock()
-	if _, ok := in.streams[id]; ok {
-		delete(in.streams, id)
+	if _, ok := in.model.streams[id]; ok {
+		delete(in.model.streams, id)
 		in.rememberClosedLocked(id)
 	}
 }
@@ -190,7 +340,7 @@ func (s *hostStream) Open() {
 		if p.in.granted[extspi.PermContext] {
 			open.Context = s.sc.spiContext()
 		}
-		if p.in.enqueue(work{kind: workOpen, stream: s.id, open: open}) == notRunning {
+		if p.in.enqueue(&streamOpen{p: open}) == notRunning {
 			p.detached.Store(true)
 		}
 	}
@@ -207,7 +357,7 @@ func (s *hostStream) Observe(deltas []modelgw.Delta, ended []string) *modelgw.Ve
 		if !p.stream || p.detached.Load() {
 			continue
 		}
-		switch p.in.enqueue(work{kind: workDelta, stream: s.id, deltas: batch, ended: ended}) {
+		switch p.in.enqueue(&streamDelta{part: p, stream: s.id, deltas: batch, ended: ended}) {
 		case notRunning:
 			p.detached.Store(true)
 		case overBudget:
@@ -220,7 +370,7 @@ func (s *hostStream) Observe(deltas []modelgw.Delta, ended []string) *modelgw.Ve
 func (s *hostStream) overflow(p *participant) {
 	p.detached.Store(true)
 	p.in.unregister(s.id)
-	p.in.enqueue(work{kind: workClose, stream: s.id, close: extspi.StreamCloseParams{Stream: s.id, Reason: extspi.CloseOverflow}})
+	p.in.enqueue(&streamClose{p: extspi.StreamCloseParams{Stream: s.id, Reason: extspi.CloseOverflow}})
 	p.in.log("warn", "stream inspection fell behind and was dropped")
 	if p.in.policy == FailClosed {
 		s.hostAbort(p.in, "extension_overloaded", "The extension that inspects this reply fell behind; this reply was interrupted.")
@@ -242,7 +392,7 @@ func (s *hostStream) Close(c modelgw.Close) {
 			continue
 		}
 		p.in.unregister(s.id)
-		p.in.enqueue(work{kind: workClose, stream: s.id, close: params})
+		p.in.enqueue(&streamClose{p: params})
 	}
 }
 
@@ -262,4 +412,60 @@ func (s *hostStream) hostAbort(in *instance, code, message string) {
 	if s.abortBy(in, code, message) == string(modelgw.AbortApplied) {
 		s.h.record(in, Event{Kind: "unavailable", Code: code, Stream: s.id, Session: s.sc.Session, Account: s.sc.Account, User: s.sc.User})
 	}
+}
+
+// Stream notices. Consecutive delta batches of one stream coalesce until a
+// batch ends a part, so a slow extension catches up instead of lagging.
+
+type streamOpen struct{ p extspi.StreamOpenParams }
+
+func (n *streamOpen) size() int                { return 0 }
+func (n *streamOpen) absorb(notice) bool       { return false }
+func (n *streamOpen) deliver(h extspi.Handler) { h.(extspi.ModelHandler).StreamOpen(n.p) }
+
+type streamClose struct{ p extspi.StreamCloseParams }
+
+func (n *streamClose) size() int                { return 0 }
+func (n *streamClose) absorb(notice) bool       { return false }
+func (n *streamClose) deliver(h extspi.Handler) { h.(extspi.ModelHandler).StreamClose(n.p) }
+
+type streamDelta struct {
+	part   *participant
+	stream string
+	deltas []extspi.Delta
+	ended  []string
+	owned  bool // deltas is this notice's own copy, safe to append to
+	bytes  int
+}
+
+func (n *streamDelta) size() int {
+	if n.bytes == 0 {
+		for _, d := range n.deltas {
+			n.bytes += len(d.Text)
+		}
+	}
+	return n.bytes
+}
+
+func (n *streamDelta) absorb(next notice) bool {
+	d, ok := next.(*streamDelta)
+	if !ok || d.stream != n.stream || len(n.ended) != 0 {
+		return false
+	}
+	if !n.owned {
+		// The batch slice is shared with the other instances watching the
+		// stream; never append into it.
+		n.deltas = append(make([]extspi.Delta, 0, len(n.deltas)+len(d.deltas)), n.deltas...)
+		n.owned = true
+	}
+	n.size()
+	n.deltas = append(n.deltas, d.deltas...)
+	n.ended = d.ended
+	n.bytes += d.size()
+	return true
+}
+
+func (n *streamDelta) deliver(h extspi.Handler) {
+	n.part.seq++
+	h.(extspi.ModelHandler).StreamDelta(extspi.StreamDeltaParams{Stream: n.stream, Seq: n.part.seq, Deltas: n.deltas, EndedParts: n.ended})
 }

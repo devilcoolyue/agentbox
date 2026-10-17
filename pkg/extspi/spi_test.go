@@ -34,8 +34,8 @@ func (h *recordingHost) Log(p LogParams) { h.mu.Lock(); h.logs = append(h.logs, 
 // echoHandler rejects requests whose path contains "deny" and aborts a stream
 // from inside its delta handler, which must not deadlock the transport.
 type echoHandler struct {
-	BaseHandler
-	host   Host
+	BaseModelHandler
+	host   ModelHost
 	mu     sync.Mutex
 	seqs   []int64
 	closed []string
@@ -43,7 +43,7 @@ type echoHandler struct {
 }
 
 func (e *echoHandler) Initialize(_ context.Context, p InitializeParams, host Host) (InitializeResult, error) {
-	e.host, e.config = host, p.Config
+	e.host, e.config = host.(ModelHost), p.Config
 	return InitializeResult{SPIVersion: Version, Hooks: []string{HookModelRequest, HookModelStream}}, nil
 }
 
@@ -161,6 +161,57 @@ func TestUnknownMethodAndOversizedMessage(t *testing.T) {
 	}
 	if err := cl.Ping(ctx); err == nil {
 		t.Fatal("call on closed connection succeeded")
+	}
+}
+
+// plainHandler subscribes to no hooks and implements no hook interface.
+type plainHandler struct{ BaseHandler }
+
+func (plainHandler) Initialize(context.Context, InitializeParams, Host) (InitializeResult, error) {
+	return InitializeResult{SPIVersion: Version}, nil
+}
+
+// The core SPI carries no hook methods: an extension without ModelHandler
+// answers model calls with method not found and cannot abort streams.
+func TestHandlerWithoutHookInterfaces(t *testing.T) {
+	cl := Pipe(plainHandler{})
+	defer cl.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := cl.Initialize(ctx, InitializeParams{SPIVersions: []string{Version}}, logOnlyHost{}); err != nil {
+		t.Fatal(err)
+	}
+	var rpcErr *Error
+	if _, err := cl.ModelRequest(ctx, ModelRequestParams{Stream: "s1"}); !errors.As(err, &rpcErr) || rpcErr.Code != CodeMethodNotFound {
+		t.Fatalf("model/request on a plain handler: %v", err)
+	}
+	if _, err := cl.dispatch(ctx, MethodStreamAbort, json.RawMessage(`{"stream":"s1","code":"x","message":"m"}`), false); !errors.As(err, &rpcErr) || rpcErr.Code != CodePermissionDenied {
+		t.Fatalf("abort through a host without model hooks: %v", err)
+	}
+}
+
+type logOnlyHost struct{}
+
+func (logOnlyHost) ReportStatus(StatusReport) {}
+func (logOnlyHost) Log(LogParams)             {}
+
+func TestHookRegistry(t *testing.T) {
+	for _, h := range Hooks() {
+		if !KnownPermission(h.Permission) || h.Group == "" || len(h.Bindings) == 0 {
+			t.Errorf("incomplete hook spec: %+v", h)
+		}
+		if got, ok := LookupHook(h.Name); !ok || got.Permission != h.Permission {
+			t.Errorf("lookup %s: %+v", h.Name, got)
+		}
+	}
+	if _, ok := LookupHook("no.such"); ok {
+		t.Error("unknown hook found")
+	}
+	// Callers cannot mutate the registry through returned specs.
+	h, _ := LookupHook(HookModelStream)
+	h.Bindings[0] = "mutated"
+	if again, _ := LookupHook(HookModelStream); again.Bindings[0] == "mutated" {
+		t.Error("registry shares its slices")
 	}
 }
 

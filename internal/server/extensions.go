@@ -79,8 +79,8 @@ type extensionView struct {
 	Requires []extensionRequirement `json:"requires"`
 }
 
-// extensionRequirement is infrastructure an extension depends on; only the
-// model gateway exists today (id model_gateway, for the model.* hooks).
+// extensionRequirement is host infrastructure an extension's hooks depend on
+// (extspi.HookSpec.Requires); only the model gateway exists today.
 type extensionRequirement struct {
 	ID     string `json:"id"`
 	Bind   string `json:"bind"`
@@ -116,9 +116,16 @@ func (s *Server) extensionView(p extension.Package, items map[string]config.Exte
 		Homepage: m.Homepage, Builtin: p.Builtin, Runtime: m.Runtime.Type, Hooks: m.Hooks, Permissions: m.Permissions,
 		FailurePolicy: m.FailurePolicy, ConfigSchema: m.ConfigSchema, Errors: m.Errors, Metrics: m.Status.Metrics,
 		Setting: setting, Status: s.extensions.Status(m.ID), Accounts: []extensionAccountChoice{}, Requires: []extensionRequirement{}}
-	if slices.ContainsFunc(modelHooks, m.HasHook) {
-		gw := s.modelGatewayView()
-		v.Requires = append(v.Requires, extensionRequirement{ID: "model_gateway", Bind: gw.Bind, Active: gw.Active, Error: gw.Error})
+	for _, hook := range m.Hooks {
+		spec, _ := extspi.LookupHook(hook)
+		if spec.Requires == "" || slices.ContainsFunc(v.Requires, func(r extensionRequirement) bool { return r.ID == spec.Requires }) {
+			continue
+		}
+		switch spec.Requires {
+		case extspi.RequiresModelGateway:
+			gw := s.modelGatewayView()
+			v.Requires = append(v.Requires, extensionRequirement{ID: spec.Requires, Bind: gw.Bind, Active: gw.Active, Error: gw.Error})
+		}
 	}
 	if v.Metrics == nil {
 		v.Metrics = []extension.MetricDef{}
@@ -189,8 +196,8 @@ func (s *Server) handleUpdateExtension(w http.ResponseWriter, r *http.Request) {
 	}
 	if setting.Enabled {
 		for _, hook := range p.Manifest.Hooks {
-			if need := extspi.HookPermission[hook]; !slices.Contains(setting.Permissions, need) {
-				writeErr(w, http.StatusBadRequest, "启用前需要批准扩展运行所需的权限："+need)
+			if spec, _ := extspi.LookupHook(hook); !slices.Contains(setting.Permissions, spec.Permission) {
+				writeErr(w, http.StatusBadRequest, "启用前需要批准扩展运行所需的权限："+spec.Permission)
 				return
 			}
 		}
