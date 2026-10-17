@@ -494,6 +494,8 @@ export function createSettingsController() {
         $("set-tunnel-host").value = (st.tunnel && st.tunnel.proxy_host) || "";
         $("set-bridge-bind").value = (st.proxy_bridge && st.proxy_bridge.bind) || "";
         $("set-bridge-host").value = (st.proxy_bridge && st.proxy_bridge.host) || "";
+        $("set-mgw-dedicated").checked = !!st.model_gateway?.dedicated_connections;
+        renderModelGateway(st);
         setTextRender($("tunnel-note"), () => st.tunnel && st.tunnel.enabled
             ? (st.tunnel_active ? i18nText("隧道已启用，SOCKS5 代理监听中") : i18nText("隧道已启用，但代理未在监听（检查绑定地址）"))
             : i18nText("默认绑定 docker 网桥网关 172.17.0.1，仅容器与本机可达"));
@@ -503,6 +505,23 @@ export function createSettingsController() {
         setSelectValue($("set-tips-anim"), tips.animation || "scroll");
         renderModels();
         rebaseline();
+    }
+    /* 模型网关只服务检查模型流量的扩展：没有这类扩展启用时不监听，这里如实说明。 */
+    function renderModelGateway(st) {
+        const box = $("mgw-state");
+        const g = st.model_gateway;
+        if (!g) {
+            box.textContent = "";
+            return;
+        }
+        setTextRender(box, () => g.active
+            ? i18nText("{addr} · 运行中", { addr: g.bind })
+            : g.error
+                ? i18nText("{addr} 未运行：{error}", { addr: g.bind, error: g.error })
+                : g.needed
+                    ? i18nText("{addr} · 未运行", { addr: g.bind })
+                    : i18nText("{addr} · 没有启用检查模型流量的扩展，未监听", { addr: g.bind }));
+        box.dataset.state = g.active ? "on" : g.error ? "error" : "off";
     }
     async function putSettings(patch, btn, okMsg, keepDirty = true) {
         const scope = requests;
@@ -819,6 +838,9 @@ export function createSettingsController() {
             { id: "bridge", get label() { return i18nText("代理桥接地址"); }, fields: ["set-bridge-bind", "set-bridge-host"],
                 patch: () => ({ proxy_bridge: { bind: inputVal("set-bridge-bind").trim(), host: inputVal("set-bridge-host").trim() } }),
                 done: () => openProxiesSection() }, // 重绑结果（成功/失败）由列表接口回报
+            { id: "model_gateway", get label() { return i18nText("模型网关"); }, fields: ["set-mgw-dedicated"],
+                patch: () => ({ model_gateway: { dedicated_connections: $("set-mgw-dedicated").checked } }),
+                done: (st) => renderModelGateway(st) },
         ]);
         bindSaveBar($("set-content"), signal, () => void saveDirty(async (patch, okMsg) => await putSettings(patch, $("set-save"), okMsg, false) ? settingsState.value : null), () => { fillSettingsForms(); toast(i18nText("已放弃未保存的修改")); });
         bus.addEventListener("view-changed", () => {

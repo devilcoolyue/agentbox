@@ -41,6 +41,7 @@ type settingsView struct {
 	TunnelActive          bool                            `json:"tunnel_active"`          // SOCKS 代理是否真的监听中
 	TunnelError           string                          `json:"tunnel_error,omitempty"` // 最近一次启停失败的原因
 	ProxyBridge           config.ProxyBridgeConfig        `json:"proxy_bridge"`
+	ModelGateway          modelGatewayView                `json:"model_gateway"`
 	// Pricing 是「按 token 折算费用」的价目表，键是模型 id 或 agent 名。
 	// 只发给管理员——设置页本来就是 admin 才进得来。
 	Pricing         map[string]config.ModelPrice `json:"pricing"`
@@ -68,6 +69,7 @@ func (s *Server) settingsView() settingsView {
 		Tunnel:                s.cfg.GetTunnel(),
 		TunnelActive:          s.tunnels.proxyUp.Load(),
 		ProxyBridge:           s.cfg.GetProxyBridge(),
+		ModelGateway:          s.modelGatewayView(),
 		Pricing:               s.cfg.GetPricing(),
 		RestartRequired:       s.cfg.GetListen() != s.bootListen,
 	}

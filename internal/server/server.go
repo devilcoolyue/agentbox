@@ -135,8 +135,8 @@ type Server struct {
 	bridgeBind string       // bind address bridgeLn was created with
 	bridgeUp   atomic.Bool  // set while the bridge is actually bound
 
-	extensions *extension.Host       // extension host; see extensions.go
-	extGW      extensionGatewayState // model gateway for extension-bound accounts
+	extensions *extension.Host   // extension host; see extensions.go
+	modelGW    modelGatewayState // model gateway behind the model.* hooks; see modelgateway.go
 
 	upgrader websocket.Upgrader
 
@@ -409,7 +409,6 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/extensions", s.admin(http.HandlerFunc(s.handleExtensions)))
 	mux.Handle("GET /api/extensions/{id}", s.admin(http.HandlerFunc(s.handleExtension)))
 	mux.Handle("PUT /api/extensions/{id}", s.admin(http.HandlerFunc(s.handleUpdateExtension)))
-	mux.Handle("PUT /api/extensions/gateway", s.admin(http.HandlerFunc(s.handleUpdateExtensionGateway)))
 	mux.Handle("GET /api/extensions/{id}/logs", s.admin(http.HandlerFunc(s.handleExtensionLogs)))
 	mux.Handle("GET /api/extensions/{id}/events", s.admin(http.HandlerFunc(s.handleExtensionEvents)))
 	mux.Handle("PUT /api/settings", s.admin(http.HandlerFunc(s.handlePutSettings)))
@@ -834,7 +833,7 @@ func (s *Server) execEnv(sess store.Session) ([]string, error) {
 		env = append(filtered, "ANTHROPIC_MODEL="+model)
 	}
 	env = append(env, s.tunnelEnvList(sess)...)
-	return s.extensionEnv(sess, acct, env), nil
+	return s.modelGatewayEnv(sess, acct, env), nil
 }
 
 // accountSessionCounts counts sessions per account across all users (guards

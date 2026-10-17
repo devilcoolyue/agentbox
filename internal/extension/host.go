@@ -203,6 +203,26 @@ func (h *Host) Close(ctx context.Context) {
 	}
 }
 
+// Uses reports whether an enabled extension declares one of hooks and holds
+// the permission it needs, i.e. whether the infrastructure behind those hooks
+// has to run.
+func (h *Host) Uses(hooks ...string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for id, s := range h.settings {
+		if !s.Enabled {
+			continue
+		}
+		m := h.byID[id].Manifest
+		for _, hook := range hooks {
+			if m.HasHook(hook) && slices.Contains(s.Permissions, extspi.HookPermission[hook]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Bound lists enabled extensions whose bindings include the account, in
 // dispatch order, with their effective failure policy.
 func (h *Host) Bound(account string) []BoundExtension {

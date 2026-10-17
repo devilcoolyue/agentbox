@@ -479,7 +479,7 @@ func (s *Service) UseRunning(ctx context.Context, id string, fn func(store.Sessi
 }
 
 // SetConnectionHook installs the per-start connection adjustment (the Codex
-// extension gateway endpoint). Call it before the service is shared.
+// model gateway endpoint). Call it before the service is shared.
 func (s *Service) SetConnectionHook(hook func(context.Context, store.Session, config.Account) error) {
 	s.connection = hook
 }

@@ -203,14 +203,13 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 
 | 方法与路径 | 请求 / 返回用途 |
 | --- | --- |
-| `GET /api/extensions` | `gateway`（监听地址、是否运行、绑定失败原因）与已安装扩展列表；每项含清单字段、`setting`（保存的设置与 `revision`）、`status`（状态、指标、检查中的流、重启次数）和 `accounts`（可选账号及 `eligible`，只有 Claude / Codex 的 API Key / 中转账号可绑定）；`gateway` 另含 `dedicated_connections` 与 `revision` |
+| `GET /api/extensions` | 已安装扩展列表；每项含清单字段、`setting`（保存的设置与 `revision`）、`status`（状态、指标、检查中的流、重启次数）、`accounts`（可选账号及 `eligible`，只有 Claude / Codex 的 API Key / 中转账号可绑定）和 `requires`（钩子依赖的基础设施及状态，目前只有带模型钩子时的 `model_gateway`：`bind`、`active`、`error`） |
 | `GET /api/extensions/{id}` | 单个扩展，字段同上 |
 | `PUT /api/extensions/{id}` | `{expected_revision, enabled, order, config, permissions, bindings:{mode, accounts}, failure_policy}`；`config` 按清单的 `config_schema` 校验并补默认值，启用时必须批准钩子所需权限；修订不符返回 409。保存后扩展按新设置重启 |
-| `PUT /api/extensions/gateway` | `{expected_revision, dedicated_connections}`：切换网关的独占连接，返回网关视图；修订不符返回 409。新请求立即使用，已在进行的流不受影响 |
 | `GET /api/extensions/{id}/logs?since=` | 扩展日志（内存环形缓冲，最近 200 条），返回 `seq` 大于 `since` 的条目 |
 | `GET /api/extensions/{id}/events` | 最近的中断与拒绝（内存，最近 200 条，重启清空，不含提示词与回复内容） |
 
-模型网关不在主 HTTP 端口上：它监听 `extensions.gateway.bind`（默认 `172.17.0.1:1083`），只供容器访问，路径为 `/x/<空间 ID>/<MAC>/<原 API 路径>`，MAC 由 `auth_token` 派生。网关自身的错误码以 `extension_gateway_` 开头，扩展拒绝或中断时使用清单声明的错误码（如 `model_output_loop`），失效策略为拦截时使用 `extension_unavailable` / `extension_overloaded`。响应头 `X-Agentbox-Extensions` 为 `monitoring` 或 `not-inspected`。
+模型网关的状态与连接方式在设置接口里：`GET /api/settings` 的 `model_gateway`（`bind`、`host`、`dedicated_connections`、`active`、`needed` 表示是否有启用的扩展用到模型钩子、`error`），`PUT /api/settings` 只接受 `{"model_gateway":{"dedicated_connections":bool}}`，新请求立即使用，已在进行的流不受影响。网关本身不在主 HTTP 端口上：它监听 `model_gateway.bind`（默认 `172.17.0.1:1083`），只供容器访问，路径为 `/x/<空间 ID>/<MAC>/<原 API 路径>`，MAC 由 `auth_token` 派生。网关自身的错误码以 `model_gateway_` 开头，扩展拒绝或中断时使用清单声明的错误码（如 `model_output_loop`），失效策略为拦截时使用 `extension_unavailable` / `extension_overloaded`。响应头 `X-Agentbox-Extensions` 为 `monitoring` 或 `not-inspected`。
 
 ## 界面主题
 

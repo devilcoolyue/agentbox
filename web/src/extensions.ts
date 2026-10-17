@@ -6,7 +6,7 @@ import { $, fmtDateTime, toast } from "./util.js";
 import { showView } from "./shell.js";
 import { buttonLabel } from "./icons.js";
 import { enhanceSelects } from "./select.js";
-import type { ExtensionEvent, ExtensionGateway, ExtensionLogLine, ExtensionSchemaProp, ExtensionsResponse, ExtensionView, LocalText } from "./types.js";
+import type { ExtensionEvent, ExtensionLogLine, ExtensionSchemaProp, ExtensionsResponse, ExtensionView, LocalText } from "./types.js";
 
 /* extensions：管理员的「扩展」页（docs/architecture/extensions-spi.md）。
  * 列表 → 详情（概览与权限、设置、事件、日志）。扩展提供的名称、说明、错误文案
@@ -76,13 +76,12 @@ export function initExtensionsPage() {
     try {
       const next = await api<ExtensionsResponse>("/extensions", { signal });
       if (mine !== gen || signal.aborted) return;
-      data = { gateway: next.gateway || { bind: "", host: "", active: false, dedicated_connections: false, revision: 0 }, extensions: next.extensions || [] };
+      data = { extensions: (next.extensions || []).map(e => ({ ...e, requires: e.requires || [] })) };
     } catch (err) {
       if (signal.aborted || mine !== gen) return;
-      if (!data) $("ext-gateway").textContent = (err as Error).message;
+      if (!data) $("ext-list").replaceChildren(el("p", "ext-error", (err as Error).message));
       return;
     }
-    renderGateway();
     renderList();
     const ext = selected();
     if (ext) {
@@ -107,61 +106,9 @@ export function initExtensionsPage() {
     } catch { /* keep the previous activity on a transient failure */ }
   }
 
-  function renderGateway() {
-    const g = data!.gateway;
-    setTextRender($("ext-gateway"), () => g.active
-      ? i18nText("模型网关 {addr} · 运行中", { addr: g.bind })
-      : g.error
-        ? i18nText("模型网关 {addr} 未运行：{error}", { addr: g.bind, error: g.error })
-        : i18nText("模型网关 {addr} · 启用扩展后开始监听", { addr: g.bind }));
-    $("ext-gateway").dataset.state = g.active ? "on" : g.error ? "error" : "off";
-    renderGatewayOptions();
-  }
-
-  /* Gateway options apply to every routed account, so they sit on the list
-   * view. The single switch saves at once; a refresh does not redraw it
-   * mid-save. */
-  let gatewaySaving = false;
-  function renderGatewayOptions() {
-    const box = $("ext-gateway-opts");
-    box.classList.toggle("hidden", !!S.extSel);
-    if (gatewaySaving || !data) return;
-    const g = data.gateway;
-    const row = el("label", "check");
-    const input = el("input");
-    input.type = "checkbox";
-    input.checked = g.dedicated_connections;
-    input.addEventListener("change", () => void saveGateway(g, input));
-    row.append(input, el("span", "", () => i18nText("每次请求独占一条连接")));
-    box.replaceChildren(row, el("p", "hint", () => i18nText("只用 HTTP/1.1、不复用连接：中断回复时直接关掉这次请求的连接，而不只是重置共享连接上的一条流。代价是每次请求重新握手；只管得到网关到上游这一跳，中转站到供应商的连接不受控制。")));
-  }
-
-  async function saveGateway(g: ExtensionGateway, input: HTMLInputElement) {
-    if (gatewaySaving) return;
-    gatewaySaving = true;
-    input.disabled = true;
-    try {
-      const saved = await api<ExtensionGateway>("/extensions/gateway", { method: "PUT", body: JSON.stringify({ expected_revision: g.revision, dedicated_connections: input.checked }), signal });
-      if (signal.aborted) return;
-      if (data) data.gateway = saved;
-      toast(i18nText("网关连接设置已保存"));
-    } catch (err) {
-      if (signal.aborted) return;
-      input.checked = g.dedicated_connections;
-      toast(err instanceof APIError && err.status === 409 ? i18nText("扩展设置已被其他人修改，已重新载入") : (err as Error).message, true);
-    } finally {
-      gatewaySaving = false;
-      if (!signal.aborted && data) {
-        renderGatewayOptions();
-        void load(false);
-      }
-    }
-  }
-
   function renderList() {
     const list = $("ext-list");
     list.classList.toggle("hidden", !!S.extSel);
-    $("ext-gateway-opts").classList.toggle("hidden", !!S.extSel);
     list.replaceChildren();
     for (const ext of data?.extensions || []) {
       const card = el("button", "card ext-card");
@@ -231,10 +178,27 @@ export function initExtensionsPage() {
     return card;
   }
 
+  /* Infrastructure the hooks run on (today only the model gateway for
+   * model.* hooks). Its settings live on the settings page. */
+  function requirementLine(req: ExtensionView["requires"][number]) {
+    const row = el("div", "ext-require");
+    const line = el("p", "gw-state", () => req.active
+      ? i18nText("依赖模型网关 {addr} · 运行中", { addr: req.bind })
+      : req.error
+        ? i18nText("依赖模型网关 {addr}，未运行：{error}", { addr: req.bind, error: req.error })
+        : i18nText("依赖模型网关 {addr} · 启用后开始监听", { addr: req.bind }));
+    line.dataset.state = req.active ? "on" : req.error ? "error" : "off";
+    const link = el("a", "ext-link", () => i18nText("网关设置"));
+    link.href = "#/settings/proxies";
+    row.append(line, link);
+    return row;
+  }
+
   function statusCard(ext: ExtensionView) {
     const st = ext.status;
     const card = el("section", "card ext-status");
     card.append(el("h3", "", () => i18nText("运行状态")));
+    for (const req of ext.requires) if (req.id === "model_gateway") card.append(requirementLine(req));
     const grid = el("dl", "ext-stats");
     const stat = (label: () => string, value: string) => { grid.append(el("dt", "", label), el("dd", "mono", value)); };
     stat(() => i18nText("状态"), STATES[st.state]?.() || st.state);
@@ -506,7 +470,7 @@ export function initExtensionsPage() {
 
   btn.addEventListener("click", () => openExtension(""), { signal });
   bus.addEventListener("open-extensions", e => openExtension((e as CustomEvent<string>).detail || ""), { signal });
-  window.addEventListener("agentbox-language-change", () => { if (data) { renderGateway(); renderList(); renderLive(); } }, { signal });
+  window.addEventListener("agentbox-language-change", () => { if (data) { renderList(); renderLive(); } }, { signal });
   const timer = setInterval(() => {
     if (onPage() && !saving && document.visibilityState === "visible") void load(false);
   }, 5000);
@@ -521,8 +485,6 @@ export function initExtensionsPage() {
     S.extSel = "";
     $("ext-list").replaceChildren();
     $("ext-detail").replaceChildren();
-    $("ext-gateway").textContent = "";
-    $("ext-gateway-opts").replaceChildren();
     btn.classList.add("hidden");
   };
 }

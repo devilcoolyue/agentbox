@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net"
 	"regexp"
 	"slices"
 )
@@ -14,31 +13,16 @@ import (
 // ErrExtensionRevision rejects a write based on a stale extension setting.
 var ErrExtensionRevision = errors.New("扩展设置已变化，请刷新后重试")
 
-// defaultExtensionGatewayBind sits on the docker bridge gateway next to the
-// tunnel SOCKS proxy (1080), the account proxy bridge (1081) and the
-// transparent network control listener (1082).
-const defaultExtensionGatewayBind = "172.17.0.1:1083"
-
 var extensionIDRe = regexp.MustCompile(`^[a-z0-9]+(\.[a-z0-9-]+)+$`)
 
-// ExtensionsConfig holds the model gateway address and the administrator's
-// per-extension settings. Settings are validated structurally here; the
-// extension host validates them against each manifest before they are saved.
+// ExtensionsConfig holds the administrator's per-extension settings. They are
+// validated structurally here; the extension host validates them against each
+// manifest before they are saved.
 type ExtensionsConfig struct {
-	Gateway ExtensionGateway            `json:"gateway"`
-	Items   map[string]ExtensionSetting `json:"items,omitempty"`
-}
-
-// ExtensionGateway is where the model gateway listens (reachable from
-// containers) and the host advertised to them (defaults to Bind's host).
-// DedicatedConnections gives every upstream request its own HTTP/1.1 TCP/TLS
-// connection, so an interruption closes that connection instead of only
-// resetting one HTTP/2 stream. Revision guards the administrator's edits.
-type ExtensionGateway struct {
-	Bind                 string `json:"bind,omitempty"`
-	Host                 string `json:"host,omitempty"`
-	DedicatedConnections bool   `json:"dedicated_connections,omitempty"`
-	Revision             int64  `json:"revision,omitempty"`
+	Items map[string]ExtensionSetting `json:"items,omitempty"`
+	// LegacyGateway is the pre-2026-10-17 home of model_gateway. Load moves it
+	// there and clears it; it is never written back.
+	LegacyGateway *ModelGatewayConfig `json:"gateway,omitempty"`
 }
 
 type ExtensionSetting struct {
@@ -90,7 +74,7 @@ func (e *ExtensionsConfig) compactConfigs() {
 }
 
 func (e ExtensionsConfig) Clone() ExtensionsConfig {
-	out := ExtensionsConfig{Gateway: e.Gateway}
+	out := ExtensionsConfig{}
 	if e.Items != nil {
 		out.Items = make(map[string]ExtensionSetting, len(e.Items))
 		for id, s := range e.Items {
@@ -102,38 +86,6 @@ func (e ExtensionsConfig) Clone() ExtensionsConfig {
 
 func (c *Config) validateExtensions() error {
 	e := c.Extensions
-	if e.Gateway.Bind != "" {
-		host, _, err := net.SplitHostPort(e.Gateway.Bind)
-		if err != nil {
-			return fmt.Errorf("extensions.gateway.bind %q invalid (want host:port): %w", e.Gateway.Bind, err)
-		}
-		if e.Gateway.Host == "" && (host == "" || net.ParseIP(host).IsUnspecified()) {
-			return fmt.Errorf("extensions.gateway.host is required when the bind host is empty or a wildcard")
-		}
-	}
-	if e.Gateway.Revision < 0 || e.Gateway.Revision == math.MaxInt64 {
-		return fmt.Errorf("extensions.gateway.revision invalid")
-	}
-	bind := e.Gateway.Bind
-	if bind == "" {
-		bind = defaultExtensionGatewayBind
-	}
-	// The other container-facing listeners share the bridge gateway host.
-	others := map[string]string{"proxy_bridge.bind": c.ProxyBridge.Bind}
-	if c.Tunnel.Enabled || c.Tunnel.Transparent {
-		others["tunnel.proxy_bind"] = c.Tunnel.ProxyBind
-		network := c.Tunnel.NetworkBind
-		if network == "" {
-			host, _, _ := net.SplitHostPort(c.Tunnel.ProxyBind)
-			network = net.JoinHostPort(host, "1082")
-		}
-		others["tunnel.network_bind"] = network
-	}
-	for field, addr := range others {
-		if addr != "" && addr == bind {
-			return fmt.Errorf("extensions.gateway.bind %s collides with %s", bind, field)
-		}
-	}
 	accounts := map[string]bool{}
 	for _, a := range c.Accounts {
 		accounts[a.ID] = true
@@ -179,20 +131,11 @@ func (c *Config) validateExtensions() error {
 	return nil
 }
 
-// GetExtensions returns a deep copy with the gateway defaults filled in.
+// GetExtensions returns a deep copy of the extension settings.
 func (c *Config) GetExtensions() ExtensionsConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	out := c.Extensions.Clone()
-	if out.Gateway.Bind == "" {
-		out.Gateway.Bind = defaultExtensionGatewayBind
-	}
-	if out.Gateway.Host == "" {
-		if host, _, err := net.SplitHostPort(out.Gateway.Bind); err == nil {
-			out.Gateway.Host = host
-		}
-	}
-	return out
+	return c.Extensions.Clone()
 }
 
 // SetExtension replaces one extension's setting if expectedRevision matches
@@ -214,23 +157,6 @@ func (c *Config) SetExtension(id string, s ExtensionSetting, expectedRevision in
 		items[id] = next
 		w.Extensions.Items = items
 		out = next.Clone()
-		return nil
-	})
-	return out, err
-}
-
-// SetExtensionGatewayOptions changes the administrator-editable gateway
-// options if expectedRevision matches. Bind and host stay operator settings in
-// config.json: moving the listener changes the URL every routed CLI holds.
-func (c *Config) SetExtensionGatewayOptions(dedicated bool, expectedRevision int64) (ExtensionGateway, error) {
-	var out ExtensionGateway
-	err := c.mutate(func(w *Config) error {
-		if w.Extensions.Gateway.Revision != expectedRevision {
-			return ErrExtensionRevision
-		}
-		w.Extensions.Gateway.DedicatedConnections = dedicated
-		w.Extensions.Gateway.Revision++
-		out = w.Extensions.Gateway
 		return nil
 	})
 	return out, err

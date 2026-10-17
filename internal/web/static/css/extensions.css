@@ -7,23 +7,20 @@
   padding: 18px 28px 40px;
   display: flex; flex-direction: column; gap: 12px;
 }
-.ext-gateway {
+/* 状态点行：设置页的模型网关状态、扩展详情里的依赖状态 */
+.gw-state {
   margin: 0; font-size: 12.5px; color: var(--muted);
   display: flex; align-items: center; gap: 8px;
   overflow-wrap: anywhere;
 }
-.ext-gateway::before {
+.gw-state::before {
   content: ""; flex: none;
   width: 8px; height: 8px; border-radius: var(--radius-pill);
   background: var(--muted);
 }
-.ext-gateway[data-state="on"]::before { background: var(--green); }
-.ext-gateway[data-state="error"]::before { background: var(--red); }
-.ext-gateway:empty { display: none; }
-.ext-gateway-opts { display: flex; flex-direction: column; gap: 2px; }
-.ext-gateway-opts:empty { display: none; }
-.ext-gateway-opts .check { color: var(--text); font-size: 13px; }
-.ext-gateway-opts .hint { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; max-width: 72ch; }
+.gw-state[data-state="on"]::before { background: var(--green); }
+.gw-state[data-state="error"]::before { background: var(--red); }
+.gw-state:empty { display: none; }
 
 .ext-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .ext-card {
@@ -104,3 +101,5 @@
   .ext-table td { display: flex; justify-content: space-between; gap: 12px; border: 0; padding: 3px 0; text-align: right; }
   .ext-table td::before { content: attr(data-l); color: var(--muted); text-align: left; flex: none; }
 }
+.ext-require { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 10px; }
+.ext-require .ext-link { align-self: center; }

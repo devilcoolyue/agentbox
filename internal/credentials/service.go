@@ -30,7 +30,7 @@ type Service struct {
 	clientID string
 	tokenURL func() string
 	locks    sync.Map
-	// codexEndpoint returns a session's extension gateway URL ("" = direct).
+	// codexEndpoint returns a session's model gateway URL ("" = direct).
 	codexEndpoint func(config.Account, store.Session) string
 }
 

@@ -40,18 +40,26 @@ export interface SessionExtension {
 }
 
 /** GET /api/extensions（server.extensionsResponse）。 */
-export interface ExtensionGateway {
-  bind: string;
-  host: string;
-  active: boolean;
-  error?: string;
-  dedicated_connections: boolean;
-  revision: number;
+export interface ExtensionsResponse {
+  extensions: ExtensionView[];
 }
 
-export interface ExtensionsResponse {
-  gateway: ExtensionGateway;
-  extensions: ExtensionView[];
+/** 扩展钩子依赖的基础设施（server.extensionRequirement）；目前只有模型网关。 */
+export interface ExtensionRequirement {
+  id: "model_gateway";
+  bind: string;
+  active: boolean;
+  error?: string;
+}
+
+/** 系统设置里的模型网关（server.modelGatewayView）。 */
+export interface ModelGatewayView {
+  bind: string;
+  host: string;
+  dedicated_connections: boolean;
+  active: boolean;
+  needed: boolean;
+  error?: string;
 }
 
 export interface ExtensionSchemaProp {
@@ -106,6 +114,7 @@ export interface ExtensionView {
   setting: ExtensionSetting;
   status: ExtensionStatus;
   accounts: { id: string; label: string; type: string; eligible: boolean }[];
+  requires: ExtensionRequirement[];
 }
 
 export interface ExtensionLogLine { seq: number; time: string; level: string; message: string }
@@ -708,6 +717,8 @@ export interface Settings {
   tunnel_error?: string;
   /** 账号出口代理的本地 HTTP 桥接监听配置 */
   proxy_bridge: ProxyBridgeConfig;
+  /** 旧服务端没有 */
+  model_gateway?: ModelGatewayView;
   /** 按 token 折算费用的价目表，键是模型 ID 或 agent 名 */
   pricing: Record<string, ModelPrice>;
   /** listen 改过但未重启 */

@@ -100,12 +100,29 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 
 这些是容器侧服务端口，日常部署不需要把它们开放到公网。用户电脑通过 HTTPS / WSS 连接 agentbox 即可。配置和使用步骤见[网络手册](networking.md)。
 
+## 模型网关
+
+```json
+{
+  "model_gateway": {"bind": "172.17.0.1:1083", "host": "", "dedicated_connections": false}
+}
+```
+
+模型网关是「检查模型流量」这类扩展（如循环保护）依赖的基础设施，不属于扩展框架本身：只有启用了带 `model.request` / `model.stream` 钩子的扩展时才监听，其他扩展用不到它。
+
+| 字段 | 默认值 / 格式 | 说明 |
+| --- | --- | --- |
+| `model_gateway.bind` | `172.17.0.1:1083` | 监听地址，须容器可达；不能与 `proxy_bridge.bind`、`tunnel.proxy_bind`、`tunnel.network_bind` 相同。改动需重启服务，已在运行的 CLI 持有旧地址 |
+| `model_gateway.host` | 从 bind 提取主机 | 写进容器 base URL 的主机；bind 为通配地址时必须填写 |
+| `model_gateway.dedicated_connections` | `false` | 每次上游请求独占一条 HTTP/1.1 连接、不复用，中断时关掉这条连接（同独立网关的 `-dedicated-connections`）。代价是每次请求重新握手。可在「系统设置 → IP 代理 → 模型网关」切换，即时生效 |
+
+2026-10-17 之前这一段写在 `extensions.gateway` 下；旧配置加载时自动迁移到 `model_gateway`，下次保存配置时写成新位置。
+
 ## 扩展
 
 ```json
 {
   "extensions": {
-    "gateway": {"bind": "172.17.0.1:1083", "host": "", "dedicated_connections": false},
     "items": {
       "agentbox.loop-guard": {
         "enabled": true,
@@ -122,9 +139,6 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 
 | 字段 | 默认值 / 格式 | 说明 |
 | --- | --- | --- |
-| `extensions.gateway.bind` | `172.17.0.1:1083` | 模型网关监听地址，须容器可达；不能与 `proxy_bridge.bind`、`tunnel.proxy_bind`、`tunnel.network_bind` 相同。有扩展启用时才开始监听 |
-| `extensions.gateway.host` | 从 bind 提取主机 | 写进容器 base URL 的主机；bind 为通配地址时必须填写 |
-| `extensions.gateway.dedicated_connections` | `false` | 每次上游请求独占一条 HTTP/1.1 连接、不复用，中断时关掉这条连接（同独立网关的 `-dedicated-connections`）。代价是每次请求重新握手。扩展页可直接切换，`gateway.revision` 由服务端维护 |
 | `items.<id>.enabled` | `false` | 是否运行该扩展 |
 | `items.<id>.config` | 清单默认值 | 按扩展清单的 `config_schema` 校验，未知键会被拒绝 |
 | `items.<id>.permissions` | 空 | 管理员批准的权限，只能是清单申请过的；缺少钩子所需权限时不能启用 |
@@ -132,7 +146,7 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 | `items.<id>.failure_policy` | 空 = 清单默认 | `fail_open` 放行或 `fail_closed` 拦截；循环保护默认放行 |
 | `items.<id>.revision` | 服务端维护 | 每次保存加一；网页提交时用它防止覆盖他人的修改 |
 
-建议在「扩展」页修改，不必手写；网页保存会校验清单并立即生效（扩展重启、冷却记录清空）。删除账号时会同时把它从各扩展的绑定中移除。绑定后新开的对话与终端执行改走网关，已打开的终端窗口需新开窗口。
+建议在「扩展」页修改，不必手写；网页保存会校验清单并立即生效（扩展重启、冷却记录清空）。删除账号时会同时把它从各扩展的绑定中移除。带模型钩子的扩展绑定后，新开的对话与终端执行改走模型网关，已打开的终端窗口需新开窗口。
 
 ## 终端提示语
 

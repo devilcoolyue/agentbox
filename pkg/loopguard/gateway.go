@@ -4,7 +4,6 @@ import (
 	"agentbox/pkg/modelgw"
 	"context"
 	"crypto/subtle"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -68,7 +67,7 @@ func New(cfg Config) (*Gateway, error) {
 		if !ok {
 			return nil, errors.New("dedicated connections require an http.Transport")
 		}
-		transport = DedicatedTransport(t)
+		transport = modelgw.DedicatedTransport(t)
 	}
 	g := &Gateway{upstream: u, token: cfg.Token, tokenHeader: header, transport: transport, onTrip: cfg.OnTrip,
 		cooldown: NewCooldown(retryCooldown)}
@@ -77,25 +76,6 @@ func New(cfg Config) (*Gateway, error) {
 		return nil, err
 	}
 	return g, nil
-}
-
-// DedicatedTransport returns a copy of t that opens a separate HTTP/1.1
-// TCP/TLS connection per request, so cancellation closes the connection
-// itself. The caller's transport is not modified.
-func DedicatedTransport(t *http.Transport) *http.Transport {
-	t = t.Clone()
-	t.Protocols = new(http.Protocols)
-	t.Protocols.SetHTTP1(true)
-	t.ForceAttemptHTTP2 = false
-	t.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
-	if t.TLSClientConfig == nil {
-		t.TLSClientConfig = &tls.Config{}
-	} else {
-		t.TLSClientConfig = t.TLSClientConfig.Clone()
-	}
-	t.TLSClientConfig.NextProtos = []string{"http/1.1"}
-	t.DisableKeepAlives = true
-	return t
 }
 
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) { g.proxy.ServeHTTP(w, r) }

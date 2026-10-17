@@ -346,6 +346,7 @@ type Config struct {
 	Container             ContainerLimits          `json:"container"`
 	Tunnel                TunnelConfig             `json:"tunnel"`
 	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
+	ModelGateway          ModelGatewayConfig       `json:"model_gateway"`
 	Extensions            ExtensionsConfig         `json:"extensions"`
 	Accounts              []Account                `json:"accounts"`
 	Proxies               []Proxy                  `json:"proxies,omitempty"`
@@ -416,6 +417,7 @@ func Load(path string) (*Config, error) {
 	cfg.initDefaultModels()
 	cfg.Decision = cfg.Decision.normalized()
 	cfg.Extensions.compactConfigs()
+	cfg.migrateModelGateway()
 
 	// 未配置 terminal_tips（老配置文件里没这一块）时，补上原来的单条提示，
 	// 避免终端页顶栏空掉。已显式配置的（哪怕 interval 为 0）尊重原样。
@@ -488,6 +490,9 @@ func (c *Config) validateLocked() error {
 		return err
 	}
 	if err := c.validatePricing(); err != nil {
+		return err
+	}
+	if err := c.validateModelGateway(); err != nil {
 		return err
 	}
 	if err := c.validateExtensions(); err != nil {
@@ -706,6 +711,7 @@ type persistConfig struct {
 	Container             ContainerLimits          `json:"container"`
 	Tunnel                TunnelConfig             `json:"tunnel"`
 	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
+	ModelGateway          ModelGatewayConfig       `json:"model_gateway,omitzero"`
 	Extensions            ExtensionsConfig         `json:"extensions"`
 	Accounts              []persistAccount         `json:"accounts"`
 	Proxies               []Proxy                  `json:"proxies,omitempty"`
@@ -743,6 +749,7 @@ func (c *Config) saveLocked() error {
 		Container:             c.Container,
 		Tunnel:                c.Tunnel,
 		ProxyBridge:           c.ProxyBridge,
+		ModelGateway:          c.ModelGateway,
 		Extensions:            c.Extensions.Clone(),
 		Accounts:              make([]persistAccount, 0, len(c.Accounts)),
 		Proxies:               c.Proxies,
@@ -1085,6 +1092,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Container:             c.Container,
 		Tunnel:                c.Tunnel,
 		ProxyBridge:           c.ProxyBridge,
+		ModelGateway:          c.ModelGateway,
 		Extensions:            c.Extensions.Clone(),
 		Accounts:              append([]Account(nil), c.Accounts...),
 		Proxies:               append([]Proxy(nil), c.Proxies...),
@@ -1138,6 +1146,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.StoragePolicy = work.StoragePolicy.Clone()
 	c.Tunnel = work.Tunnel
 	c.ProxyBridge = work.ProxyBridge
+	c.ModelGateway = work.ModelGateway
 	c.Extensions = work.Extensions
 	c.Accounts = work.Accounts
 	c.Proxies = work.Proxies
@@ -1172,6 +1181,7 @@ type SettingsPatch struct {
 	DefaultModels         map[string]string        `json:"default_models"`
 	Tunnel                *TunnelConfig            `json:"tunnel"`
 	ProxyBridge           *ProxyBridgeConfig       `json:"proxy_bridge"`
+	ModelGateway          *ModelGatewayPatch       `json:"model_gateway"`
 	TerminalTips          *TerminalTips            `json:"terminal_tips"`
 	// Pricing 整表替换（不是逐键合并）：价目表是一张要整体校对的表，
 	// 前端改完把完整的表发回来，删行才有办法表达。
@@ -1241,6 +1251,9 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 			if w.ProxyBridge.Bind == "" {
 				w.ProxyBridge.Bind = defaultProxyBridgeBind // same default as Load
 			}
+		}
+		if p.ModelGateway != nil && p.ModelGateway.DedicatedConnections != nil {
+			w.ModelGateway.DedicatedConnections = *p.ModelGateway.DedicatedConnections
 		}
 		if p.TerminalTips != nil {
 			w.TerminalTips = sanitizeTips(*p.TerminalTips)

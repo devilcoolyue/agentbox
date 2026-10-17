@@ -794,6 +794,16 @@
                   <span class="note" data-i18n-text="[&quot;代理池非空时自动启动；绑定失败只影响代理功能，不影响服务&quot;]">代理池非空时自动启动；绑定失败只影响代理功能，不影响服务</span>
                 </div>
               </div>
+              <div class="card">
+                <h3 data-i18n-text="[&quot;模型网关&quot;]">模型网关</h3>
+                <p class="card-desc" data-i18n-text="[&quot;检查模型流量的扩展（例如循环保护）通过它转发所绑定账号的请求。只在这类扩展启用后监听，与其他扩展无关。&quot;]">检查模型流量的扩展（例如循环保护）通过它转发所绑定账号的请求。只在这类扩展启用后监听，与其他扩展无关。</p>
+                <p id="mgw-state" class="gw-state" role="status"></p>
+                <label class="check"><input id="set-mgw-dedicated" type="checkbox"><span data-i18n="每次请求独占一条连接">每次请求独占一条连接</span> <span class="tag live" data-i18n-text="[&quot;即时生效&quot;]">即时生效</span></label>
+                <p class="field-hint" data-i18n-text="[&quot;只用 HTTP/1.1、不复用连接：中断回复时直接关掉这次请求的连接，而不只是重置共享连接上的一条流。代价是每次请求重新握手；只管得到网关到上游这一跳，中转站到供应商的连接不受控制。&quot;]">只用 HTTP/1.1、不复用连接：中断回复时直接关掉这次请求的连接，而不只是重置共享连接上的一条流。代价是每次请求重新握手；只管得到网关到上游这一跳，中转站到供应商的连接不受控制。</p>
+                <div class="card-foot">
+                  <span class="note" data-i18n-text="[&quot;监听地址在 config.json 的 model_gateway 里修改，重启服务后生效&quot;]">监听地址在 config.json 的 model_gateway 里修改，重启服务后生效</span>
+                </div>
+              </div>
             </section>
 
             <!-- 容器与资源 -->
@@ -1489,11 +1499,9 @@
       <div id="view-extensions" class="view hidden">
         <header class="set-head">
           <h1 data-i18n-text="[&quot;扩展&quot;]">扩展</h1>
-          <p data-i18n-text="[&quot;扩展在模型请求经过网关时检查流量，例如打断复读的回复。只对绑定的 Claude / Codex API Key 与中转账号生效。&quot;]">扩展在模型请求经过网关时检查流量，例如打断复读的回复。只对绑定的 Claude / Codex API Key 与中转账号生效。</p>
+          <p data-i18n-text="[&quot;扩展为 agentbox 增加可选功能，由管理员启用并决定作用范围。每个扩展只能拿到你批准的数据。&quot;]">扩展为 agentbox 增加可选功能，由管理员启用并决定作用范围。每个扩展只能拿到你批准的数据。</p>
         </header>
         <div class="ext-body">
-          <p id="ext-gateway" class="ext-gateway" role="status"></p>
-          <div id="ext-gateway-opts" class="ext-gateway-opts"></div>
           <div id="ext-list" class="ext-list"></div>
           <div id="ext-detail" class="ext-detail hidden"></div>
         </div>

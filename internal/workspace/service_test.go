@@ -280,7 +280,7 @@ func TestWorkerWorkspaceMountsOwnerFilesAndLeavesWithOwner(t *testing.T) {
 	}
 }
 
-// The connection hook (Codex extension gateway endpoint) runs on every start:
+// The connection hook (Codex model gateway endpoint) runs on every start:
 // a running container's next CLI rereads its config, and a fresh start applies
 // it after seeding so the pool copy cannot overwrite it. Its failure blocks the
 // start instead of letting the CLI bypass the gateway.

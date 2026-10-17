@@ -24,7 +24,7 @@ func extensionTestServer(t *testing.T, upstream string) (*Server, store.Session)
 	s, sess := newTestServer(t)
 	path := filepath.Join(t.TempDir(), "config.json")
 	raw, _ := json.Marshal(map[string]any{"data_dir": s.cfg.DataDir, "auth_token": "test-token-long-enough", "agent_image": "test",
-		"extensions": map[string]any{"gateway": map[string]any{"bind": gatewayTestBind}},
+		"model_gateway": map[string]any{"bind": gatewayTestBind},
 		"accounts": []config.Account{
 			{ID: "relay", Label: "Relay", Type: config.AgentClaude, Env: map[string]string{envAnthropicBaseURL: upstream, envAnthropicToken: "relay-token"}},
 			{ID: "oauth", Label: "Subscription", Type: config.AgentClaude},
@@ -78,7 +78,7 @@ func enableLoopGuard(t *testing.T, s *Server, expected int64, accounts ...string
 		t.Fatalf("enable: %d %s", w.Code, w.Body.String())
 	}
 	// Tests do not bind the listener; mark the gateway up as Run would.
-	s.extGW.up.Store(true)
+	s.modelGW.up.Store(true)
 }
 
 func envValue(env []string, key string) string {
@@ -109,8 +109,8 @@ func TestExtensionAdminAPIAndEnvRewrite(t *testing.T) {
 	if !eligible["relay"] || eligible["oauth"] || eligible["codex"] {
 		t.Fatalf("eligibility: %+v", lg.Accounts)
 	}
-	if list.Gateway.Bind != gatewayTestBind || list.Gateway.Host != "127.0.0.1" {
-		t.Fatalf("gateway view: %+v", list.Gateway)
+	if gw := s.modelGatewayView(); gw.Bind != gatewayTestBind || gw.Host != "127.0.0.1" || gw.Needed || gw.Active {
+		t.Fatalf("gateway view before any model hook is enabled: %+v", gw)
 	}
 
 	// Enabling requires the permissions the hooks need.
@@ -124,6 +124,9 @@ func TestExtensionAdminAPIAndEnvRewrite(t *testing.T) {
 		t.Fatalf("out-of-range config accepted: %d", w.Code)
 	}
 	enableLoopGuard(t, s, 0, "relay")
+	if gw := s.modelGatewayView(); !gw.Needed {
+		t.Fatalf("loop guard's model hooks do not require the gateway: %+v", gw)
+	}
 	if w = extensionRequest(s, "root", "PUT", "/api/extensions/agentbox.loop-guard",
 		`{"expected_revision":0,"enabled":false,"bindings":{"mode":"none"}}`, s.handleUpdateExtension, "agentbox.loop-guard"); w.Code != http.StatusConflict {
 		t.Fatalf("stale revision: %d", w.Code)
@@ -136,7 +139,7 @@ func TestExtensionAdminAPIAndEnvRewrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "http://127.0.0.1:18082/x/s1/" + s.extensionMAC("s1")
+	want := "http://127.0.0.1:18082/x/s1/" + s.modelGatewayMAC("s1")
 	if envValue(env, envAnthropicBaseURL) != want || envValue(env, envAnthropicToken) != "relay-token" {
 		t.Fatalf("base URL not rewritten: %v", env)
 	}
@@ -155,7 +158,7 @@ func TestExtensionAdminAPIAndEnvRewrite(t *testing.T) {
 	}
 
 	// A gateway that is down leaves fail_open traffic direct, and says so.
-	s.extGW.up.Store(false)
+	s.modelGW.up.Store(false)
 	if env, _ := s.execEnv(sess); envValue(env, envAnthropicBaseURL) != "https://relay.example.com/api" || len(s.view(sess).Extensions) != 0 {
 		t.Fatal("fail_open rewrite to a gateway that is down")
 	}
@@ -170,7 +173,7 @@ func TestExtensionAdminAPIAndEnvRewrite(t *testing.T) {
 	}
 }
 
-func TestExtensionGatewayRoutesAndInterrupts(t *testing.T) {
+func TestModelGatewayRoutesAndInterrupts(t *testing.T) {
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -195,7 +198,7 @@ func TestExtensionGatewayRoutesAndInterrupts(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	gw := httptest.NewServer(s.extGW.proxy)
+	gw := httptest.NewServer(s.modelGW.proxy)
 	defer gw.Close()
 	post := func(path, body string) (*http.Response, string) {
 		req, _ := http.NewRequest("POST", gw.URL+path, strings.NewReader(body))
@@ -208,7 +211,7 @@ func TestExtensionGatewayRoutesAndInterrupts(t *testing.T) {
 		resp.Body.Close()
 		return resp, string(b)
 	}
-	base := "/x/" + sess.ID + "/" + s.extensionMAC(sess.ID)
+	base := "/x/" + sess.ID + "/" + s.modelGatewayMAC(sess.ID)
 	resp, body := post(base+"/v1/messages", `{"stream":true}`)
 	if resp.Header.Get("X-Agentbox-Extensions") != "monitoring" || !strings.Contains(body, "model_output_loop") {
 		t.Fatalf("not interrupted: %s %.200s", resp.Header.Get("X-Agentbox-Extensions"), body)
@@ -221,8 +224,8 @@ func TestExtensionGatewayRoutesAndInterrupts(t *testing.T) {
 		t.Fatalf("events: %+v", events)
 	}
 	for path, status := range map[string]int{
-		"/x/" + sess.ID + "/wrong-mac/v1/messages":                 http.StatusForbidden,
-		"/x/missing/" + s.extensionMAC("missing") + "/v1/messages": http.StatusNotFound,
+		"/x/" + sess.ID + "/wrong-mac/v1/messages":                    http.StatusForbidden,
+		"/x/missing/" + s.modelGatewayMAC("missing") + "/v1/messages": http.StatusNotFound,
 		"/v1/messages": http.StatusNotFound,
 	} {
 		if resp, _ := post(path, `{}`); resp.StatusCode != status {
@@ -249,15 +252,15 @@ func TestExtensionEnvNoProxyAndTmuxCleanup(t *testing.T) {
 	}
 	s.applyExtensions()
 	defer func() {
-		s.extGW.mu.Lock()
-		if s.extGW.ln != nil {
-			s.extGW.ln.Close()
+		s.modelGW.mu.Lock()
+		if s.modelGW.ln != nil {
+			s.modelGW.ln.Close()
 		}
-		s.extGW.mu.Unlock()
+		s.modelGW.mu.Unlock()
 	}()
-	s.extGW.up.Store(true)
+	s.modelGW.up.Store(true)
 	acct, _ := s.cfg.Account("relay")
-	env := s.extensionEnv(sess, acct, []string{"NO_PROXY=localhost,127.0.0.2", "no_proxy=localhost,127.0.0.1", envAnthropicBaseURL + "=https://relay.example.com"})
+	env := s.modelGatewayEnv(sess, acct, []string{"NO_PROXY=localhost,127.0.0.2", "no_proxy=localhost,127.0.0.1", envAnthropicBaseURL + "=https://relay.example.com"})
 	if envValue(env, "NO_PROXY") != "localhost,127.0.0.2,127.0.0.1" || envValue(env, "no_proxy") != "localhost,127.0.0.1" {
 		t.Fatalf("NO_PROXY not extended: %v", env)
 	}
@@ -337,7 +340,7 @@ func TestExtensionCodexRelayThroughSessionConfig(t *testing.T) {
 	}
 
 	enableLoopGuard(t, s, 0, "codex")
-	gatewayURL := s.extensionGatewayURL(sess.ID)
+	gatewayURL := s.modelGatewayURL(sess.ID)
 	// applyExtensions reconciled the seeded session in the background; a
 	// workspace start would apply the same through the connection hook.
 	waitForFile(t, sessionConfig, gatewayURL)
@@ -350,7 +353,7 @@ func TestExtensionCodexRelayThroughSessionConfig(t *testing.T) {
 	if !gatewayEligible(acct) {
 		t.Fatal("Codex API key account not eligible")
 	}
-	env := s.extensionEnv(sess, acct, []string{"NO_PROXY=localhost"})
+	env := s.modelGatewayEnv(sess, acct, []string{"NO_PROXY=localhost"})
 	if envValue(env, "NO_PROXY") != "localhost,127.0.0.1" || envValue(env, envAnthropicBaseURL) != "" {
 		t.Fatalf("Codex env: %v", env)
 	}
@@ -365,9 +368,9 @@ func TestExtensionCodexRelayThroughSessionConfig(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	gw := httptest.NewServer(s.extGW.proxy)
+	gw := httptest.NewServer(s.modelGW.proxy)
 	defer gw.Close()
-	req, _ := http.NewRequest("POST", gw.URL+"/x/"+sess.ID+"/"+s.extensionMAC(sess.ID)+"/responses", strings.NewReader(`{"stream":true,"input":"x"}`))
+	req, _ := http.NewRequest("POST", gw.URL+"/x/"+sess.ID+"/"+s.modelGatewayMAC(sess.ID)+"/responses", strings.NewReader(`{"stream":true,"input":"x"}`))
 	req.Header.Set("Authorization", "Bearer codex-key")
 	resp, err := gw.Client().Do(req)
 	if err != nil {
@@ -396,30 +399,29 @@ func TestExtensionCodexRelayThroughSessionConfig(t *testing.T) {
 	}
 }
 
-func TestExtensionGatewayDedicatedConnections(t *testing.T) {
+// The connection mode is a model gateway setting on the settings page, not
+// part of any extension.
+func TestModelGatewayDedicatedConnections(t *testing.T) {
 	s, _ := extensionTestServer(t, "https://relay.example.com")
 	acct, _ := s.cfg.Account("relay")
-	rt, err := s.extensionTransport(acct)
+	rt, err := s.modelGatewayTransport(acct)
 	if err != nil || rt.(*http.Transport).DisableKeepAlives {
 		t.Fatalf("default transport: %v", err)
 	}
-	put := func(body string) *httptest.ResponseRecorder {
-		return extensionRequest(s, "root", "PUT", "/api/extensions/gateway", body, s.handleUpdateExtensionGateway, "")
+	on := true
+	if err := s.cfg.ApplySettings(config.SettingsPatch{ModelGateway: &config.ModelGatewayPatch{DedicatedConnections: &on}}); err != nil {
+		t.Fatal(err)
 	}
-	if w := put(`{"dedicated_connections":true}`); w.Code != http.StatusBadRequest {
-		t.Fatalf("missing revision accepted: %d", w.Code)
+	if !s.modelGatewayView().DedicatedConnections {
+		t.Fatal("view does not report dedicated connections")
 	}
-	w := put(`{"expected_revision":0,"dedicated_connections":true}`)
-	var gw extensionGatewayView
-	if err := json.Unmarshal(w.Body.Bytes(), &gw); w.Code != http.StatusOK || err != nil || !gw.DedicatedConnections || gw.Revision != 1 {
-		t.Fatalf("enable dedicated: %d %s", w.Code, w.Body.String())
-	}
-	if w := put(`{"expected_revision":0,"dedicated_connections":false}`); w.Code != http.StatusConflict {
-		t.Fatalf("stale revision: %d", w.Code)
-	}
-	rt, err = s.extensionTransport(acct)
+	rt, err = s.modelGatewayTransport(acct)
 	tr := rt.(*http.Transport)
 	if err != nil || !tr.DisableKeepAlives || tr.ForceAttemptHTTP2 || !tr.DisableCompression || tr.ResponseHeaderTimeout == 0 {
 		t.Fatalf("dedicated transport not applied: %+v %v", tr, err)
+	}
+	// Other settings writes leave it alone.
+	if err := s.cfg.ApplySettings(config.SettingsPatch{ModelGateway: &config.ModelGatewayPatch{}}); err != nil || !s.cfg.GetModelGateway().DedicatedConnections {
+		t.Fatalf("patch without the field reset the connection mode: %v", err)
 	}
 }

@@ -4,6 +4,11 @@ export default {
   "仅影响当前账号在此浏览器的输入与待确认内容，修改后即时生效。": "Only affects the current account’s drafts and unconfirmed messages in this browser. Changes apply immediately.",
   "账号池、服务端配置与此浏览器的个人偏好。需要重启的项会单独标出。": "Account pool, server configuration and personal preferences for this browser. Settings that require a restart are marked.",
   "此浏览器的个人偏好，修改后即时生效。": "Personal preferences for this browser. Changes apply immediately.",
+  "扩展为 agentbox 增加可选功能，由管理员启用并决定作用范围。每个扩展只能拿到你批准的数据。": "Extensions add optional features to agentbox. Administrators enable them and choose where they apply; each extension only receives the data you approve.",
+  "模型网关": "Model gateway",
+  "检查模型流量的扩展（例如循环保护）通过它转发所绑定账号的请求。只在这类扩展启用后监听，与其他扩展无关。": "Extensions that inspect model traffic (such as Loop guard) forward their bound accounts' requests through it. It only listens while such an extension is enabled and is unrelated to other extensions.",
+  "只用 HTTP/1.1、不复用连接：中断回复时直接关掉这次请求的连接，而不只是重置共享连接上的一条流。代价是每次请求重新握手；只管得到网关到上游这一跳，中转站到供应商的连接不受控制。": "HTTP/1.1 only, no connection reuse: interrupting a reply closes that request's connection instead of only resetting one stream on a shared connection. Every request does a new handshake, and only the hop from the gateway to the upstream is covered; a relay's own connection to the provider is out of our hands.",
+  "监听地址在 config.json 的 model_gateway 里修改，重启服务后生效": "Change the listen address under model_gateway in config.json; it applies after a service restart",
   "普通用户只能访问自己的工作空间和本机偏好，无法查看服务端配置。删除用户会一并移除其工作空间和容器，文件仍保留在服务器磁盘上。": "Users can only access their own workspaces and local preferences, not server configuration. Deleting a user also removes their workspaces and containers; files remain on the server disk.",
 
   "普通对话": "Regular chat",
@@ -807,5 +812,4 @@ export default {
   "复制到剪贴板": "Copy to clipboard",
   "扩展": "Extensions",
   "扩展：循环保护等官方维护的功能": "Extensions: officially maintained features such as Loop guard",
-  "扩展在模型请求经过网关时检查流量，例如打断复读的回复。只对绑定的 Claude / Codex API Key 与中转账号生效。": "Extensions inspect model traffic as it passes through the gateway, for example to interrupt a reply that keeps repeating itself. They only apply to bound Claude / Codex API key and relay accounts."
 } satisfies Record<string, string>;

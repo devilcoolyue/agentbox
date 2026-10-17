@@ -3,7 +3,8 @@ import { mkdir } from 'node:fs/promises';
 
 // Exercise the 扩展 page against a synthetic admin API: list, detail, saving
 // with a revision, conflict reload, plain-text rendering of manifest strings,
-// and the workspace badge that tells users their model output is inspected.
+// the workspace badge that tells users their model output is inspected, and
+// the model gateway living on the settings page instead of the 扩展 page.
 export async function extensionsSmoke(page, base, setSessions) {
  const t = text => ({'zh-CN':text,en:text,'zh-TW':text});
  const view = {
@@ -20,33 +21,28 @@ export async function extensionsSmoke(page, base, setSessions) {
   metrics:[{name:'trips',title:t('中断次数')}],
   setting:{enabled:false,order:0,config:{cooldown_seconds:30,window:256},permissions:['model.request.fingerprint','model.stream.text'],bindings:{mode:'none'},failure_policy:'',revision:0},
   status:{state:'disabled',restarts:0,active_streams:0},
+  requires:[{id:'model_gateway',bind:'172.17.0.1:1083',active:false}],
   accounts:[{id:'relay',label:'Relay',type:'claude',eligible:true},{id:'sub',label:'Subscription',type:'claude',eligible:false},
    {id:'ds4',label:'ds4-1f',type:'codex',eligible:true},{id:'gpt',label:'ChatGPT login',type:'codex',eligible:false}],
  };
- const puts = [], gatewayPuts = []; let conflictNext = false;
- let gateway = {bind:'172.17.0.1:1083',host:'172.17.0.1',dedicated_connections:false,revision:0};
+ const puts = []; let conflictNext = false;
  const events = [{seq:1,time:new Date().toISOString(),extension:view.id,kind:'abort',code:'model_output_loop',session:'fixture-space',account:'relay',user:'fixture',detail:{window:256,distinct:12}}];
  const logs = [{seq:1,time:new Date().toISOString(),level:'info',message:'interrupted <b>a</b> repeating text stream'}];
  await page.route('**/api/extensions**', async route => {
   const req = route.request(), path = new URL(req.url()).pathname;
   if (path.endsWith('/events')) return route.fulfill({json:{events}});
   if (path.endsWith('/logs')) return route.fulfill({json:{logs:new URL(req.url()).searchParams.get('since')==='0'?logs:[]}});
-  if (req.method() === 'PUT' && path === '/api/extensions/gateway') {
-   const body = req.postDataJSON(); gatewayPuts.push(body);
-   assert.equal(body.expected_revision, gateway.revision, 'stale gateway revision sent');
-   gateway = {...gateway, dedicated_connections:body.dedicated_connections, revision:gateway.revision+1};
-   return route.fulfill({json:{...gateway,active:view.setting.enabled}});
-  }
   if (req.method() === 'PUT') {
    const body = req.postDataJSON(); puts.push(body);
    if (conflictNext) { conflictNext=false; return route.fulfill({status:409,json:{error:'扩展设置已变化，请刷新后重试'}}); }
    assert.equal(body.expected_revision, view.setting.revision, 'stale revision sent');
    view.setting = {...body, version:'1.0.0', revision:view.setting.revision+1};
    delete view.setting.expected_revision;
+   view.requires = [{id:'model_gateway',bind:'172.17.0.1:1083',active:body.enabled}];
    view.status = body.enabled ? {state:'running',restarts:0,active_streams:0,started_at:new Date().toISOString(),metrics:{trips:1},hooks:view.hooks} : {state:'disabled',restarts:0,active_streams:0};
    return route.fulfill({json:view});
   }
-  if (path === '/api/extensions') return route.fulfill({json:{gateway:{...gateway,active:view.setting.enabled},extensions:[view]}});
+  if (path === '/api/extensions') return route.fulfill({json:{extensions:[view]}});
   return route.fulfill({json:view});
  });
  try {
@@ -55,15 +51,10 @@ export async function extensionsSmoke(page, base, setSessions) {
   await card.waitFor();
   assert.equal(await page.locator('#btn-extensions').isVisible(), true, 'admin sees the 扩展 entry');
   assert.equal(await page.locator('#btn-extensions').getAttribute('aria-current'), 'page');
-  assert.match(await page.locator('#ext-gateway').innerText(), /172\.17\.0\.1:1083/);
   assert.match(await card.innerText(), /循环保护[\s\S]*未启用/);
-  // The gateway's dedicated-connection switch saves at once with its revision.
-  const dedicated = page.locator('#ext-gateway-opts input[type=checkbox]');
-  assert.equal(await dedicated.isChecked(), false);
-  await dedicated.check();
-  await page.locator('#toast').filter({hasText:'网关连接设置已保存'}).waitFor();
-  assert.deepEqual(gatewayPuts, [{expected_revision:0,dedicated_connections:true}]);
-  await page.waitForFunction(()=>document.querySelector('#ext-gateway-opts input')?.checked===true && !document.querySelector('#ext-gateway-opts input').disabled);
+  // The list is about extensions only: no gateway banner or switch.
+  const listPage = await page.locator('#view-extensions').innerText();
+  assert.doesNotMatch(listPage, /172\.17\.0\.1|网关/, 'the 扩展 page names the model gateway');
   await mkdir('output/playwright',{recursive:true});
   await page.screenshot({path:'output/playwright/extensions-list.png',animations:'disabled'});
   await card.click();
@@ -90,7 +81,6 @@ export async function extensionsSmoke(page, base, setSessions) {
   // Codex API key / relay accounts are eligible; ChatGPT logins are not.
   assert.equal(await accountBox.locator('label', {hasText:'ds4-1f'}).locator('input').isDisabled(), false);
   assert.equal(await accountBox.locator('label', {hasText:'ChatGPT login'}).locator('input').isDisabled(), true);
-  assert.equal(await page.locator('#ext-gateway-opts').isVisible(), false, 'gateway options stay on the list view');
   await relay.check();
   await accountBox.locator('label', {hasText:'ds4-1f'}).locator('input').check();
   await detail.locator('.ext-config [data-key="window"] input').fill('120');
@@ -103,6 +93,9 @@ export async function extensionsSmoke(page, base, setSessions) {
   await page.setViewportSize({width:1280,height:900});
   await detail.locator('.ext-settings .card-foot button').click();
   await page.waitForFunction(()=>document.querySelector('#ext-detail .ext-state')?.dataset.state==='running');
+  // Only extensions with model hooks name the gateway, on their own page.
+  await page.waitForFunction(()=>document.querySelector('#ext-detail .ext-require .gw-state')?.dataset.state==='on');
+  assert.match(await detail.locator('.ext-require').innerText(), /依赖模型网关 172\.17\.0\.1:1083 · 运行中/);
   const saved = puts.at(-1);
   assert.equal(saved.enabled, true);
   assert.deepEqual(saved.permissions, ['model.request.fingerprint','model.stream.text']);
@@ -116,8 +109,23 @@ export async function extensionsSmoke(page, base, setSessions) {
   await page.locator('#toast').filter({hasText:'已被其他人修改'}).waitFor();
   await page.waitForFunction(()=>document.querySelector('#ext-detail .ext-enable input')?.checked===true);
   assert.equal(puts.at(-1).expected_revision, 1);
-  await detail.locator('.ext-back').click();
-  await page.waitForFunction(()=>location.hash==='#/extensions');
+  // The dependency links to the gateway card in 系统设置 → IP 代理, which
+  // owns the connection mode and saves it with the other settings.
+  await detail.locator('.ext-require a').click();
+  await page.waitForFunction(()=>location.hash==='#/settings/proxies');
+  const gwState = page.locator('#mgw-state');
+  await gwState.waitFor();
+  assert.match(await gwState.innerText(), /172\.17\.0\.1:1083 · 没有启用检查模型流量的扩展，未监听/);
+  const dedicated = page.locator('#set-mgw-dedicated');
+  assert.equal(await dedicated.isChecked(), false);
+  await dedicated.check();
+  const settingsPut = page.waitForRequest(r=>r.method()==='PUT' && new URL(r.url()).pathname==='/api/settings');
+  await page.locator('#set-save').click();
+  assert.deepEqual((await settingsPut).postDataJSON(), {model_gateway:{dedicated_connections:true}});
+  await page.waitForFunction(()=>document.querySelector('#set-savebar')?.hidden===true);
+  assert.equal(await dedicated.isChecked(), true);
+  await page.locator('.card', {has:gwState}).screenshot({path:'output/playwright/extensions-model-gateway.png',animations:'disabled'});
+  await page.evaluate(()=>location.hash='#/extensions');
   await card.waitFor();
   // Users see which extensions inspect their workspace.
   setSessions([{id:'fixture-space',name:'Fixture workspace',agent:'claude',account_id:'relay',account_label:'Relay',status:'stopped',default_model:'fixture',
@@ -127,7 +135,7 @@ export async function extensionsSmoke(page, base, setSessions) {
   const badge = page.locator('#wb-ext');
   await badge.waitFor();
   assert.match(await badge.innerText(), /循环保护/);
-  console.log('Extensions: list/detail, gateway dedicated-connection switch, permission approval, Claude and Codex API key binding with ineligible subscription/ChatGPT accounts, schema form, revisioned save and conflict reload, plain-text manifest strings, events/logs and workspace badge passed');
+  console.log('Extensions: list/detail without gateway, model gateway dependency and settings card, permission approval, Claude and Codex API key binding with ineligible subscription/ChatGPT accounts, schema form, revisioned save and conflict reload, plain-text manifest strings, events/logs and workspace badge passed');
   await page.screenshot({path:'output/playwright/extensions-workspace.png',animations:'disabled',clip:{x:0,y:0,width:1280,height:160}});
   assert.match(await badge.getAttribute('aria-label'), /循环保护 正在检查本空间的模型输出/);
  } finally {

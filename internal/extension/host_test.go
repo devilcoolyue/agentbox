@@ -60,7 +60,7 @@ func gateway(t *testing.T, h *Host, upstream string, sc StreamContext) *httptest
 			route.Inspector = in
 		}
 		return route, nil
-	}, StatusHeader: "X-Agentbox-Extensions", CodePrefix: "extension_gateway"})
+	}, StatusHeader: "X-Agentbox-Extensions", CodePrefix: "model_gateway"})
 	if err != nil {
 		t.Fatal(err)
 	}

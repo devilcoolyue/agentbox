@@ -12,7 +12,11 @@ import { $, askConfirm } from "../../util.js";
 import { setSelectValue } from "../../select.js";
 import { userPickerFor } from "../../user-picker.js";
 
-export type SettingsPatch = Partial<Omit<Settings, "decision">> & { decision?: DecisionSettingsPatch; expected_agent_image?: string };
+export type SettingsPatch = Partial<Omit<Settings, "decision" | "model_gateway">> & {
+  decision?: DecisionSettingsPatch; expected_agent_image?: string;
+  /** 模型网关只有连接方式可在页面上改，监听地址留在 config.json */
+  model_gateway?: { dedicated_connections: boolean };
+};
 
 export interface SaveGroup {
   id: string;

@@ -366,13 +366,13 @@ OAuth 订阅账号（Claude 订阅、ChatGPT 登录）不能绑定。账号从�
 
 ### 8.2 网关地址与鉴权
 
-- 监听地址配置在 `extensions.gateway.bind` / `host`，形式同 `proxy_bridge`，默认 `172.17.0.1:1083`。只要有扩展启用就监听，生命周期挂在服务端上。
+- 监听地址配置在顶层 `model_gateway.bind` / `host`（2026-10-17 前在 `extensions.gateway`，加载时自动迁移），形式同 `proxy_bridge`，默认 `172.17.0.1:1083`。只有启用了带模型钩子（且批准了对应权限）的扩展时才监听，生命周期挂在服务端上。
 - 改写后的 base URL：`http://<host>:<port>/x/<session_id>/<mac>`，其中 `mac = base64url(HMAC-SHA256(auth_token, "agentbox-extension-gateway\x00" + session_id))` 的前 32 个字符。轮换 `auth_token` 后旧地址全部失效，与 `proxySecret` 相同。
 - 每个请求都重新检查：MAC 正确、空间存在、`sessionAccount` 仍然允许属主使用该账号。撤销授权后返回 403。
 - 上游**在每次请求时**根据空间当前绑定的账号解析：Claude 用账号 env 里的 `ANTHROPIC_BASE_URL`（缺省为官方地址），Codex 用账号池 `config.toml` 里所选 provider 的 `base_url`。修改账号后立即生效，不用重建容器。
 - 认证头（`Authorization`、`x-api-key` 等）由容器里的 CLI 带上，宿主原样转给上游，**从不交给扩展**。
 - 上游连接走账号的出口（与 `acctClient` / `dialThrough` 相同，fail-closed）：绑定的代理不可用时直接返回 502，不退回直连。
-- `extensions.gateway.dedicated_connections` 开启后，每次上游请求独占一条 HTTP/1.1 连接、不复用（同独立网关的 `-dedicated-connections`，`loopguard.DedicatedTransport`）：中断时关掉这次请求的 TCP/TLS 连接，而不只是在共享的 HTTP/2 连接上重置一条流。只管得到网关到上游这一跳，中转站到供应商的连接不受控制。默认关闭，管理员在扩展页切换，带修订号；新请求立即生效，已经在跑的流沿用原连接。
+- `model_gateway.dedicated_connections` 开启后，每次上游请求独占一条 HTTP/1.1 连接、不复用（同独立网关的 `-dedicated-connections`，`loopguard.DedicatedTransport`）：中断时关掉这次请求的 TCP/TLS 连接，而不只是在共享的 HTTP/2 连接上重置一条流。只管得到网关到上游这一跳，中转站到供应商的连接不受控制。默认关闭，管理员在「系统设置 → IP 代理 → 模型网关」切换（随设置一起保存）；新请求立即生效，已经在跑的流沿用原连接。
 - 其余限制沿用 loop-guard：正文最大 32 MiB、单个 SSE 事件最大 1 MiB、单请求最长 30 分钟、强制 `Accept-Encoding: identity`、不跟随重定向、不支持 WebSocket / CONNECT。响应头 `X-Agentbox-Extensions` 标记 `monitoring` 或 `not-inspected`。
 
 ### 8.3 base URL 改写的位置
@@ -423,7 +423,6 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
 
   ```json
   "extensions": {
-    "gateway": {"bind": "172.17.0.1:1083", "host": "", "dedicated_connections": false, "revision": 1},
     "items": {
       "agentbox.loop-guard": {
         "enabled": true,
@@ -439,7 +438,7 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
   }
   ```
 
-  所有写入都带 `expected_revision`，防止并发覆盖。`gateway.bind` / `host` 只在 `config.json` 里改（改了会换掉所有 CLI 持有的地址）；`dedicated_connections` 由扩展页修改，用 `gateway.revision` 防并发覆盖。
+  所有写入都带 `expected_revision`，防止并发覆盖。模型网关在独立的顶层 `model_gateway` 段：`bind` / `host` 只在 `config.json` 里改（改了会换掉所有 CLI 持有的地址），`dedicated_connections` 经设置接口修改。
 - 安装的扩展包放在 `data/extensions/<id>/<version>/`（只保存清单和镜像 digest）。builtin 的清单嵌在二进制里，不落盘。
 - `extension_events` 表通过下一个 schema 版本迁移（当前为 19），遵守 `migrations.go` 的连续迁移规则。
 - 系统备份包含 `extensions` 配置与数据库。以后的 `storage` 目录进入系统备份。
@@ -451,7 +450,6 @@ v1 的网关地址按空间生成，所以能确定是哪个空间，但不能�
 | `GET /api/extensions` | admin | 已安装扩展、版本、状态、绑定数量 |
 | `GET /api/extensions/{id}` | admin | 清单、配置、批准的权限、状态指标 |
 | `PUT /api/extensions/{id}` | admin | 启停、配置、权限、绑定、故障策略、顺序；带 `expected_revision` |
-| `PUT /api/extensions/gateway` | admin | 网关连接方式：`{"expected_revision":n,"dedicated_connections":bool}`，返回网关视图；修订号过期回 409 |
 | `GET /api/extensions/{id}/logs?since=` | admin | 日志环形缓冲 |
 | `GET /api/extensions/{id}/events` | admin | 中断与拒绝记录。P1 返回内存里最近 200 条，P2 改为数据库分页 |
 | `GET /api/sessions`、`GET /api/sessions/{id}`（新增字段） | auth + withSession | `extensions: [{id, name}]`：哪些扩展正在检查本空间的模型流量（已定决策：对用户可见） |

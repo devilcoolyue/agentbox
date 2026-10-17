@@ -63,7 +63,8 @@ export async function smoke(page) {
  let settings = { listen:'127.0.0.1:8180', agent_image:'fixture', permission_mode:'bypassPermissions', max_upload_mb:10,
   idle_timeout_min:30, timezone:'UTC', container:{memory_mb:512,cpus:1,pids_limit:128,network:'none'},
   resources:{max_running:2,max_running_per_user:1,min_free_bytes:0},models:{claude:[],codex:[{id:'fixture',label:'Fixture',reasoning:{support:'supported',control:'effort',levels:['low','high','xhigh']}},{id:'fixture-lite',label:'Fixture Lite',reasoning:{support:'supported',control:'effort',levels:['low','high']}},{id:'fixture-none',label:'No adjustment',reasoning:{support:'unsupported'}},{id:'fixture-custom',label:'Custom'}]}, default_models:{claude:'fixture',codex:'fixture'},
-  terminal_tips:{tips:['fixture'],interval_sec:4,animation:'scroll'},tunnel:{enabled:false},proxy_bridge:{bind:'127.0.0.1:1081'},pricing:{} };
+  terminal_tips:{tips:['fixture'],interval_sec:4,animation:'scroll'},tunnel:{enabled:false},proxy_bridge:{bind:'127.0.0.1:1081'},
+  model_gateway:{bind:'172.17.0.1:1083',host:'172.17.0.1',dedicated_connections:false,active:false,needed:false},pricing:{} };
  const me = {user:'fixture',role:'admin',timezone:'UTC',models:{claude:[],codex:[]},quota:{metered:false}};
  Object.defineProperty(me,'chat_history_timeout_sec',{enumerable:true,get:()=>settings.chat_history_timeout_sec});
  let sessions = [{id:'fixture-space',name:'Fixture workspace',agent:'codex',account_id:'fixture',account_label:'Fixture',status:'stopped',default_model:'fixture'}];
@@ -131,7 +132,7 @@ export async function smoke(page) {
   } else if(['/api/proxies','/api/users','/api/tunnel/clients'].includes(path) || path.endsWith('/files')) body=[];
   else if(path.endsWith('/history')) body={entries:historyEntries,thread:historyThread,costs:historyCosts};
   else if(path === '/api/settings') {
-   if(route.request().method()==='PUT'){settingsWrites++;settings={...settings,...route.request().postDataJSON()};}
+   if(route.request().method()==='PUT'){settingsWrites++;const patch=route.request().postDataJSON();settings={...settings,...patch,...(patch.model_gateway?{model_gateway:{...settings.model_gateway,...patch.model_gateway}}:{})};}
    body=settings;
   } else if(path==='/api/monitor') {
    monitorCalls++;
