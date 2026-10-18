@@ -13,6 +13,12 @@ export async function motionSmoke(page, fixture) {
  try {
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--dur').trim()), '180ms');
   const overlay = await page.evaluate(() => CSS.supports('overlay', 'auto'));
+  // The scenario before this one ends with a viewport resize. ink.ts places the underline on the
+  // frame after a resize, and a tab switch ahead of that frame is placed directly instead of slid.
+  await page.waitForFunction(() => {
+   const ink = document.querySelector('.tabs > .ink')?.getBoundingClientRect(), tab = document.querySelector('.tab.active')?.getBoundingClientRect();
+   return !!ink && !!tab && Math.abs(ink.left - tab.left) < 1 && Math.abs(ink.width - tab.width) < 1;
+  }, null, {polling: 'raf'});
 
   // Tab switch: the new pane fades in from @starting-style and the underline slides to the tab.
   const tabSwitch = await page.evaluate(async () => {

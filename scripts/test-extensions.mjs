@@ -168,8 +168,10 @@ export async function extensionsSmoke(page, base, setSessions) {
   setSessions([{id:'fixture-space',name:'Fixture workspace',agent:'claude',account_id:'relay',account_label:'Relay',status:'stopped',default_model:'fixture',
    extensions:[{id:'agentbox.loop-guard',name:{'zh-CN':'循环保护','zh-TW':'循環保護',en:'Loop guard'},groups:['model']},
     {id:'agentbox.webhook',name:{'zh-CN':'Webhook 通知','zh-TW':'Webhook 通知',en:'Webhook notifications'},groups:['workspace','chat']}]}]);
+  // Reload before routing: the page still holds the earlier session list, so a hash change to
+  // this workspace first would be redirected home (WebKit does so before the reload starts).
+  await page.reload();
   await page.goto(base + '/#/sessions/fixture-space/chat');
-  await page.reload(); // pick up the replaced session list
   const badge = page.locator('#wb-ext');
   await badge.waitFor();
   assert.match(await badge.innerText(), /循环保护、Webhook 通知/);

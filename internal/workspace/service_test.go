@@ -286,6 +286,9 @@ func TestWorkerWorkspaceMountsOwnerFilesAndLeavesWithOwner(t *testing.T) {
 // it after seeding so the pool copy cannot overwrite it. Its failure blocks the
 // start instead of letting the CLI bypass the gateway.
 func TestConnectionHookRunsOnEveryStartAfterSeeding(t *testing.T) {
+	if uid := os.Geteuid(); uid != 0 && uid != 1000 {
+		t.Skip("requires chown to container UID; exercised in Linux container suite")
+	}
 	s, runtime, sess := fixture(t)
 	var calls int
 	var fail error
@@ -317,6 +320,9 @@ func TestConnectionHookRunsOnEveryStartAfterSeeding(t *testing.T) {
 // The lifecycle hook reports transitions only: a start that finds the
 // container running, or a stop of a stopped workspace, is not an event.
 func TestLifecycleHookReportsTransitions(t *testing.T) {
+	if uid := os.Geteuid(); uid != 0 && uid != 1000 {
+		t.Skip("requires chown to container UID; exercised in Linux container suite")
+	}
 	s, runtime, sess := fixture(t)
 	var got []string
 	s.SetLifecycleHook(func(action, reason string, x store.Session) {
