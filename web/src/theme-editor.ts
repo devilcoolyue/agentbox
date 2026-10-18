@@ -49,6 +49,8 @@ interface State {
   serverError: string;
   jsonError: string;
   issues: string;
+  /** 「已复制」这类操作结果，留到下一次修改草稿；晚到的校验结果不能把它冲掉 */
+  notice: string;
   saving: boolean;
   validateSeq: number;
   validateTimer?: ReturnType<typeof setTimeout>;
@@ -102,6 +104,7 @@ function draftTheme(): CustomTheme {
 function changed(source: "form" | "json" | "meta") {
   const s = state!;
   s.dirty = true;
+  s.notice = "";
   if (!s.frame) s.frame = requestAnimationFrame(() => {
     if (!state) return;
     state.frame = 0;
@@ -151,12 +154,13 @@ async function validate() {
   renderStatus();
 }
 
-function renderStatus(notice = "") {
+function renderStatus(notice?: string) {
   const s = state!, el = $("te-status");
+  if (notice !== undefined) s.notice = notice;
   const error = s.jsonError || clientError() || s.serverError;
-  const text = error || notice || (s.issues ? i18nText("对比度偏低：{p0}", { p0: s.issues }) : "");
+  const text = error || s.notice || (s.issues ? i18nText("对比度偏低：{p0}", { p0: s.issues }) : "");
   el.textContent = text;
-  el.className = "themes-status " + (error ? "error" : notice ? "ok" : "warn");
+  el.className = "themes-status " + (error ? "error" : s.notice ? "ok" : "warn");
   el.classList.toggle("hidden", !text);
   $<HTMLButtonElement>("te-save").disabled = s.saving || !!error;
 }
@@ -394,7 +398,7 @@ export function openThemeEditor(opts: EditorOptions) {
   if (state) finish();
   state = {
     opts, originalId: opts.manifest.id, scope: opts.scope, draft: clone(opts.manifest),
-    mode: effectiveTheme(), tab: "core", dirty: false, serverError: "", jsonError: "", issues: "",
+    mode: effectiveTheme(), tab: "core", dirty: false, serverError: "", jsonError: "", issues: "", notice: "",
     saving: false, validateSeq: 0, frame: 0, baseCache: new Map(),
   };
   $<HTMLTextAreaElement>("te-ai-fallback").classList.add("hidden");

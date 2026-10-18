@@ -54,6 +54,7 @@ function draftTheme() {
 function changed(source) {
     const s = state;
     s.dirty = true;
+    s.notice = "";
     if (!s.frame)
         s.frame = requestAnimationFrame(() => {
             if (!state)
@@ -108,12 +109,14 @@ async function validate() {
     s.issues = issues.map(i => i18nText("{p0} {p1} {p2}:1（建议至少 {p3}:1）", { p0: modeLabel(i.mode), p1: i.label, p2: String(i.ratio), p3: String(i.min) })).join("；");
     renderStatus();
 }
-function renderStatus(notice = "") {
+function renderStatus(notice) {
     const s = state, el = $("te-status");
+    if (notice !== undefined)
+        s.notice = notice;
     const error = s.jsonError || clientError() || s.serverError;
-    const text = error || notice || (s.issues ? i18nText("对比度偏低：{p0}", { p0: s.issues }) : "");
+    const text = error || s.notice || (s.issues ? i18nText("对比度偏低：{p0}", { p0: s.issues }) : "");
     el.textContent = text;
-    el.className = "themes-status " + (error ? "error" : notice ? "ok" : "warn");
+    el.className = "themes-status " + (error ? "error" : s.notice ? "ok" : "warn");
     el.classList.toggle("hidden", !text);
     $("te-save").disabled = s.saving || !!error;
 }
@@ -358,7 +361,7 @@ export function openThemeEditor(opts) {
         finish();
     state = {
         opts, originalId: opts.manifest.id, scope: opts.scope, draft: clone(opts.manifest),
-        mode: effectiveTheme(), tab: "core", dirty: false, serverError: "", jsonError: "", issues: "",
+        mode: effectiveTheme(), tab: "core", dirty: false, serverError: "", jsonError: "", issues: "", notice: "",
         saving: false, validateSeq: 0, frame: 0, baseCache: new Map(),
     };
     $("te-ai-fallback").classList.add("hidden");

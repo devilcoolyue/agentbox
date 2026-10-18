@@ -47,6 +47,7 @@ export async function themesSmoke(page) {
     if (url.pathname === '/api/themes/validate') {
       assert.equal(method, 'POST');
       state.validations++;
+      await state.holdValidation;
       const manifest = JSON.parse(request.postData());
       if (JSON.stringify(manifest).includes('url(')) await route.fulfill({ status: 400, json: { error: 'dark 里 --accent 的取值无效：不允许的函数 url()', theme_error: { code: 'bad_value', token: '--accent', section: 'dark' } } });
       else await route.fulfill({ json: { manifest } });
@@ -334,6 +335,10 @@ export async function themesSmoke(page) {
     await page.waitForFunction(() => /JSON 格式有误/.test(document.querySelector('#te-status').textContent));
     assert.equal(await page.locator('#te-save').isDisabled(), true);
     const pasted = { ...draft, name: '暮光紫', [previewMode]: { ...draft[previewMode], '--text': '#f5f0ff' } };
+    // Hold the paste's validation until after the copy below: its late result must not wipe the notice.
+    let releaseValidation;
+    state.holdValidation = new Promise(resolve => { releaseValidation = resolve; });
+    const pasteValidation = page.waitForRequest(r => new URL(r.url()).pathname === '/api/themes/validate' && r.postData()?.includes('暮光紫'));
     await page.locator('#te-json').fill(JSON.stringify(pasted, null, 2));
     await page.waitForFunction(() => document.querySelector('#te-name').value === '暮光紫');
     await nextFrame();
@@ -348,6 +353,13 @@ export async function themesSmoke(page) {
     const prompt = await page.evaluate(() => window.__copied[0]);
     for (const part of ['只输出修改后的完整 JSON', '规则：', '可用令牌：', '- --bg：页面背景', '- --radius-scale：圆角倍数，0 为直角', '"name": "暮光紫"', '我的要求：']) assert.ok(prompt.includes(part), `prompt lacks ${part}`);
     assert.match(await teStatus.innerText(), /^已复制/);
+    await pasteValidation;
+    const validated = page.waitForResponse(r => new URL(r.url()).pathname === '/api/themes/validate' && r.request().postData()?.includes('暮光紫'));
+    releaseValidation();
+    state.holdValidation = null;
+    await validated;
+    await page.evaluate(() => new Promise(done => requestAnimationFrame(() => setTimeout(done))));
+    assert.match(await teStatus.innerText(), /^已复制/, 'a late validation replaced the copy notice');
     await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('denied'); } } }));
     await page.locator('#te-ai').click();
     await page.locator('#te-ai-fallback').waitFor({ state: 'visible' });

@@ -64,8 +64,11 @@ export async function motionSmoke(page, fixture) {
   assert.deepEqual(snapped, {running: 0, dx: 0, dw: 0}, 'resize should place the tab underline without sliding');
 
   // The ⋯ menu slides in; a closing menu stays inert until it fades out, and focus returns.
-  await page.locator('#btn-wb-more').click();
-  assert.ok(await page.locator('.menu-pop').evaluate(el => el.getAnimations().length > 0), 'menu entered without motion');
+  // Opening and the check share one task too: the 120ms entry can end across a slow round trip.
+  assert.ok(await page.evaluate(() => {
+   document.querySelector('#btn-wb-more').click();
+   return document.querySelector('.menu-pop')?.getAnimations().length > 0;
+  }), 'menu entered without motion');
   // Escape and the check share one task so a slow runner cannot finish the exit in between.
   const closingMenu = await page.evaluate(() => {
    window.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
@@ -79,10 +82,18 @@ export async function motionSmoke(page, fixture) {
 
   // Dialogs fade and scale in; with overlay support they also fade out without blocking clicks.
   await page.locator('#btn-wb-more').focus();
-  const confirmed = page.evaluate(async () => (await import('/_v/{{BUILD}}/js/util.js')).askConfirm('motion fixture'));
+  // Read the entry in the task that opens the dialog (or, after a pending close, in the
+  // microtask that sees it open): a 180ms transition can end across a slow round trip.
+  const entry = await page.evaluate(async () => {
+   const {askConfirm} = await import('/_v/{{BUILD}}/js/util.js');
+   const el = document.querySelector('#dlg-ask');
+   window.__motionConfirm = askConfirm('motion fixture');
+   if (!el.open) await new Promise(open => new MutationObserver((_, o) => { if (el.open) { o.disconnect(); open(); } }).observe(el, {attributes: true, attributeFilter: ['open']}));
+   return el.getAnimations().map(a => a.transitionProperty);
+  });
+  const confirmed = page.evaluate(() => window.__motionConfirm.finally(() => { delete window.__motionConfirm; }));
   const dialog = page.locator('#dlg-ask');
-  await dialog.waitFor({state: 'visible'});
-  assert.ok((await dialog.evaluate(el => el.getAnimations().map(a => a.transitionProperty))).includes('opacity'), 'dialog entered without motion');
+  assert.ok(entry.includes('opacity'), 'dialog entered without motion: ' + entry);
   await settle(page);
   const closing = await dialog.evaluate(el => {
     // offset* ignore the exit transform, so any change here is a relayout rather than the scale-down.
