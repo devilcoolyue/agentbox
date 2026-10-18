@@ -72,4 +72,60 @@ export async function fileActionSmoke(page) {
   await page.locator('#tip.show').filter({hasText:'上传文件或代码包到当前目录'}).waitFor();
   assert.equal(await page.locator('#btn-upload').evaluate(el => getComputedStyle(el).outlineStyle), 'solid');
   await page.keyboard.press('Escape');
+  await uploadRecoverySmoke(page);
+}
+
+// Model a proxy losing the response before the staged archive reaches /workspace.
+async function uploadRecoverySmoke(page) {
+  let entries = [], reads = 0;
+  const pattern = '**/api/sessions/*/files?*';
+  await page.route(pattern, async route => {
+    reads++;
+    await route.fulfill({json: entries});
+  });
+  await page.evaluate(async () => {
+    const {S} = await import('/js/state.js');
+    S.fileScope = 'workspace'; S.filePath = '';
+    const files = await import('/js/files.js');
+    files.resetTree(); await files.loadFiles();
+    window.__originalUploadXHR = window.XMLHttpRequest;
+    window.__uploads = [];
+    window.XMLHttpRequest = class extends EventTarget {
+      upload = new EventTarget();
+      open(method, url) { this.url = url; }
+      setRequestHeader() {}
+      send() {
+        window.__uploads.push(this);
+        this.upload.dispatchEvent(new ProgressEvent('load'));
+      }
+    };
+  });
+  try {
+    await page.locator('#upload-input').setInputFiles({name:'project.zip',mimeType:'application/zip',buffer:Buffer.from('synthetic')});
+    await page.locator('#upload-progress-text').filter({hasText:'服务器正在处理文件'}).waitFor();
+    assert.doesNotMatch(await page.locator('#files-list').innerText(), /当前空间还没有文件/);
+    await page.setViewportSize({width:390,height:900});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth),true,'upload status must wrap on narrow screens');
+    // A simultaneous drop must not start another destructive upload.
+    await page.locator('#upload-input').setInputFiles({name:'duplicate.zip',mimeType:'application/zip',buffer:Buffer.from('synthetic')});
+    assert.equal(await page.evaluate(()=>window.__uploads.length),1);
+    await page.evaluate(()=>window.__uploads[0].dispatchEvent(new Event('error')));
+    await page.locator('#upload-progress-text').filter({hasText:'上传结果未确认'}).waitFor();
+    assert.equal(await page.locator('#btn-upload').isEnabled(),true);
+    assert.doesNotMatch(await page.locator('#files-list').innerText(), /当前空间还没有文件/);
+    const readsBefore = reads;
+    entries = [{name:'late-project',is_dir:true,size:4096,mode:'drwx------',mtime:'2026-10-18T00:00:00Z'}];
+    await page.locator('#files-list .flabel').filter({hasText:'late-project'}).waitFor({timeout:15000});
+    assert.ok(reads > readsBefore,'lost response must trigger a later directory read');
+    assert.equal(await page.evaluate(()=>window.__uploads.length),1,'recovery must never resend the upload');
+    assert.match(await page.locator('#upload-progress-text').innerText(), /上传结果未确认/,'directory contents do not prove upload completion');
+  } finally {
+    await page.evaluate(async()=>{
+      window.XMLHttpRequest=window.__originalUploadXHR;
+      delete window.__originalUploadXHR; delete window.__uploads;
+      (await import('/js/files.js')).resetTree();
+    });
+    await page.unroute(pattern);
+    await page.setViewportSize({width:1280,height:900});
+  }
 }

@@ -1,5 +1,13 @@
 // App-authored interface messages. Keys and interpolation placeholders remain stable.
 export default {
+  "上传已中断": "Upload interrupted",
+  "上传超时": "Upload timed out",
+  "正在上传，完成后会刷新文件列表。": "Uploading. The file list will refresh when processing finishes.",
+  "传输完成，服务器正在处理文件（压缩包需要解压），请稍候。": "Transfer complete. The server is processing files (archives need extraction); please wait.",
+  "{p0} 上传未确认：{p1}": "{p0}: upload not confirmed: {p1}",
+  "上传结果未确认，服务器可能仍在处理。正在刷新目录，请先检查文件，勿重复上传。": "Upload not confirmed; the server may still be processing it. Refreshing the directory. Check the files before uploading again.",
+  "上传结果未确认。请检查目录；若文件仍未出现，请稍后刷新后再决定是否重新上传。": "Upload not confirmed. Check the directory; if files are still missing, refresh again later before deciding whether to upload again.",
+
 
 
   "回放轨迹": "Replay trace",

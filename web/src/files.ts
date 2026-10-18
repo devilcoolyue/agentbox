@@ -22,8 +22,18 @@ const tree = {
   cache: new Map<string, FileEntry[]>(),
   gen: 0,
 };
+let uploading = false;
+let uploadMessage = () => "";
+let uploadView: (() => boolean) | undefined;
+let uploadRecovery = 0;
+let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function resetTree() {
+  tree.gen++;
+  uploadRecovery++;
+  clearTimeout(recoveryTimer);
+  if (!uploading) uploadView = undefined;
+  if (!uploadView?.()) $("upload-progress").classList.add("hidden");
   tree.expanded.clear();
   tree.cache.clear();
 }
@@ -65,7 +75,7 @@ function filesSkeleton() {
 function filesEmptyRow() {
   const p = document.createElement("p");
   p.className = "files-empty";
-  setTextRender(p, () => S.fileScope === "shared"
+  setTextRender(p, () => uploadView?.() ? uploadMessage() : S.fileScope === "shared"
     ? i18nText("共享目录为空。这里的文件供你名下的所有工作空间读写（/shared）。")
     : i18nText("当前空间还没有文件。上传代码包，或在对话中让 Agent 创建项目。"));
   return p;
@@ -763,23 +773,26 @@ async function confirmClearUpload(count: number) {
 
 /* fetch 拿不到上传进度，改用 XHR 手动带令牌与进度回调 */
 function uploadWithProgress(
-  url: string, formData: FormData, onProgress: (frac: number) => void,
+  url: string, token: string, formData: FormData, onProgress: (frac: number) => void,
 ): Promise<UploadSummary> {
   return new Promise<UploadSummary>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api" + url);
-    xhr.setRequestHeader("Authorization", "Bearer " + S.token);
+    xhr.setRequestHeader("Authorization", "Bearer " + token);
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) onProgress(e.loaded / e.total);
     });
+    xhr.upload.addEventListener("load", () => onProgress(1));
     xhr.addEventListener("load", () => {
-      if (xhr.status === 401) { emit("unauthorized"); reject(new Error("unauthorized")); return; }
+      if (xhr.status === 401) { if (S.token === token) emit("unauthorized"); reject(new Error("unauthorized")); return; }
       let data: Partial<UploadSummary> & { error?: string } = {};
       try { data = JSON.parse(xhr.responseText); } catch (_) { /* 非 JSON 保持空 */ }
       if (xhr.status >= 200 && xhr.status < 300) resolve(data as UploadSummary);
       else reject(new Error(data.error || xhr.statusText || i18nText("上传失败")));
     });
     xhr.addEventListener("error", () => reject(new Error(i18nText("网络错误"))));
+    xhr.addEventListener("abort", () => reject(new Error(i18nText("上传已中断"))));
+    xhr.addEventListener("timeout", () => reject(new Error(i18nText("上传超时"))));
     xhr.send(formData);
   });
 }
@@ -789,40 +802,81 @@ function setUploadFill(frac: number) {
 }
 
 async function uploadFiles(files: File[], clearFirst = false) {
-  if (!files.length || !S.current) return;
+  if (!files.length || !S.current || uploading) return;
+  uploading = true;
+  const recovery = ++uploadRecovery;
+  clearTimeout(recoveryTimer);
   const lock = ["btn-download", "scope-ws", "scope-shared", "btn-mkdir", "btn-files-more"];
   // 目标在开始时定下：上传过程中用户点进别的目录，后续文件也不会换地方
-  const dir = S.filePath, dirLabel = fullScopePath(S.fileScope, dir);
+  const dir = S.filePath, scope = S.fileScope, session = S.current.id, token = S.token;
+  const dirLabel = fullScopePath(scope, dir);
+  const sameView = () => S.token === token && S.current?.id === session && S.fileScope === scope && S.filePath === dir;
+  uploadView = sameView;
   $("upload-progress").classList.remove("hidden");
   btnBusy($("btn-upload"), () => i18nText("上传中…"));
   lock.forEach((id) => { $<HTMLButtonElement>(id).disabled = true; });
-  let plain = 0, archived = 0;
+  let plain = 0, archived = 0, failed = false;
   try {
     for (let i = 0; i < files.length; i++) {
+      if (S.token !== token) break;
       const file = files[i];
       const fd = new FormData();
       fd.append("file", file);
       if (clearFirst && i === 0) fd.append("clear", "1"); // 只让第一个清空，避免逐个清掉前一个
       $("upload-progress-text").textContent = `${file.name}（${i + 1}/${files.length}）`;
+      uploadMessage = () => i18nText("正在上传，完成后会刷新文件列表。");
+      if (sameView()) $("files-list").querySelectorAll(".files-empty").forEach(el => setTextRender(el, () => uploadMessage()));
       setUploadFill(0);
       try {
-        const res = await uploadWithProgress(`/sessions/${S.current!.id}/upload?path=${encodeURIComponent(dir)}${scopeQS()}`, fd, setUploadFill);
+        const res = await uploadWithProgress(`/sessions/${session}/upload?path=${encodeURIComponent(dir)}${scope === "shared" ? "&scope=shared" : ""}`, token, fd, frac => {
+          if (!sameView()) return;
+          setUploadFill(frac);
+          if (frac >= 1) {
+            uploadMessage = () => i18nText("传输完成，服务器正在处理文件（压缩包需要解压），请稍候。");
+            setTextRender($("upload-progress-text"), () => `${file.name}（${i + 1}/${files.length}） · ${uploadMessage()}`);
+            $("files-list").querySelectorAll(".files-empty").forEach(el => setTextRender(el, () => uploadMessage()));
+          }
+        });
         if (res.mode === "archive") archived += res.files || 0; else plain++;
       } catch (e) {
-        toast(i18nText("{p0} 上传失败：{p1}", { p0: String(file.name), p1: String((e as Error).message) }), true);
+        failed = true;
+        if (S.token === token) toast(i18nText("{p0} 上传未确认：{p1}", { p0: file.name, p1: (e as Error).message }), true);
+        break; // A lost response does not authorize another write.
       }
     }
     const parts = [];
     if (plain) parts.push(i18nText("{p0} 个文件", { p0: String(plain) }));
     if (archived) parts.push(i18nText("解压 {p0} 个文件", { p0: String(archived) }));
-    if (parts.length) toast(i18nText("已上传{p0}到 {p1}", { p0: String(parts.join("，")), p1: String(dirLabel) }));
-    loadFiles();
+    if (parts.length && S.token === token) toast(i18nText("已上传{p0}到 {p1}", { p0: String(parts.join("，")), p1: String(dirLabel) }));
   } finally {
-    $("upload-progress").classList.add("hidden");
+    uploading = false;
+    if (failed) uploadMessage = () => i18nText("上传结果未确认，服务器可能仍在处理。正在刷新目录，请先检查文件，勿重复上传。");
+    else uploadView = undefined;
+    $("upload-progress").classList.toggle("hidden", !failed || !sameView());
     setUploadFill(0);
     btnDone($("btn-upload"));
     updateFileLabels(); // btnDone 恢复的是点击时文案，断点可能已变
     lock.forEach((id) => { $<HTMLButtonElement>(id).disabled = false; });
+    if (sameView()) {
+      await loadFiles();
+      if (failed && recovery === uploadRecovery && sameView()) {
+        setText($("upload-progress-text"), "上传结果未确认，服务器可能仍在处理。正在刷新目录，请先检查文件，勿重复上传。");
+        // A proxy/client can disconnect while the server still merges the archive.
+        // Only read the original directory; never replay the upload or infer success.
+        const refresh = async (remaining: number) => {
+          if (recovery !== uploadRecovery || !sameView()) return;
+          await loadFiles();
+          if (recovery !== uploadRecovery || !sameView()) return;
+          if (remaining > 1) recoveryTimer = setTimeout(() => void refresh(remaining - 1), 10000);
+          else {
+            uploadMessage = () => i18nText("上传结果未确认。请检查目录；若文件仍未出现，请稍后刷新后再决定是否重新上传。");
+            setTextRender($("upload-progress-text"), () => uploadMessage());
+            $("files-list").querySelectorAll(".files-empty").forEach(el => setTextRender(el, () => uploadMessage()));
+          }
+        };
+        recoveryTimer = setTimeout(() => void refresh(6), 10000);
+      }
+    }
   }
 }
 
