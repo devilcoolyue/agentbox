@@ -160,6 +160,8 @@
 .answer-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .answer-model { color: var(--text); opacity: .72; }
 .answer-effort { white-space: nowrap; }
+.answer-duration { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.answer-duration[hidden] { display: none; }
 .answer-cost { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .answer-cost.priced { color: var(--text); font-family: var(--mono); font-size: 0.95em; }
 .answer-details {
@@ -652,6 +654,9 @@ details.think.streaming .think-body::after {
   animation: work-breathe 1.6s ease-in-out infinite;
 }
 @keyframes work-breathe { 50% { opacity: 0.45; } }
+/* 阶段文案右边是本轮已进行的时间，逐秒走；数字等宽，走时不抖 */
+.work-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.work-time { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 模型还在干活时，后台任务的计数挂在阶段文案下面 */
 .turn.working .turn-body { gap: 3px; }
 .work-bg { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }

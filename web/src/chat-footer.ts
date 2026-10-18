@@ -6,7 +6,7 @@ import { svgIcon } from "./icons.js";
 import { EFFORT_LABELS } from "./reasoning.js";
 import { S } from "./state.js";
 import { setTip } from "./tip.js";
-import { toast, fmtDateTime } from "./util.js";
+import { toast, fmtDateTime, fmtElapsed } from "./util.js";
 
 export interface AnswerContext {
   turn?: ChatTurnMetadata;
@@ -17,6 +17,8 @@ export interface AnswerContext {
   historical?: boolean;
   /** 斜杠命令的回合（CLI 报 num_turns=0）：/context 不请求模型，/compact 会 */
   local?: boolean;
+  /** 回合总耗时（服务端在最终 status 里记的墙钟时间） */
+  duration?: number;
 }
 
 
@@ -133,9 +135,11 @@ export function answerFooter(body: HTMLElement, context: AnswerContext) {
   info.className = "answer-context";
   const date = document.createElement("time");
   date.className = "answer-time";
+  const took = document.createElement("span");
+  took.className = "answer-duration";
   const cost = document.createElement("span");
   cost.className = "answer-cost";
-  info.append(date, cost);
+  info.append(date, took, cost);
   el.append(actions, info, details);
   copy.addEventListener("click", async () => {
     const source = [...body.querySelectorAll<HTMLElement>(".msg.agent")]
@@ -179,6 +183,12 @@ export function answerFooter(body: HTMLElement, context: AnswerContext) {
       setText(date, "时间未记录");
       date.removeAttribute("datetime");
       setTip(date, () => i18nText("这条回答未记录时间"));
+    }
+    took.hidden = !context.duration;
+    if (context.duration) {
+      const ms = context.duration;
+      setTextRender(took, () => i18nText("用时 {d}", { d: fmtElapsed(ms) }));
+      setTip(took, () => i18nText("本轮从开始到结束共用时 {d}", { d: fmtElapsed(ms) }));
     }
     const price = costView(context);
     setTextRender(cost, () => costView(context).label);

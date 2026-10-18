@@ -4,6 +4,7 @@ import { t as i18nText } from "./i18n.js";
 "use strict";
 
 import { responseError } from "./problems.js";
+import { beginRequest } from "./loading-bar.js";
 import { S, emit } from "./state.js";
 import type { FileScope } from "./state.js";
 import type { UploadResult } from "./types.js";
@@ -12,6 +13,11 @@ import type { UploadResult } from "./types.js";
  * 默认 unknown 而不是 any：忘了标注时，一用到返回值就会报错，逼着把接口形状
  * 写进 types.d.ts，而不是悄悄退化成无类型。 */
 export async function api<T = unknown>(path: string, opts: RequestInit = {}): Promise<T> {
+  const end = beginRequest();
+  try { return await request<T>(path, opts); } finally { end(); }
+}
+
+async function request<T>(path: string, opts: RequestInit): Promise<T> {
   const token = S.token;
   const res = await fetch("/api" + path, {
     ...opts,

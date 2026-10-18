@@ -349,6 +349,9 @@ func TestProblemsStartupThroughWorkspace(t *testing.T) {
 			if last.ProblemDetails == nil || last.Code != tc.code || !operationIDPattern.MatchString(last.OperationID) {
 				t.Fatalf("history lost error: %s", history.Body.String())
 			}
+			if last.DurationMS <= 0 {
+				t.Fatalf("final status lacks the turn duration: %s", history.Body.String())
+			}
 		})
 	}
 }

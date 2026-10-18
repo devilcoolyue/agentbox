@@ -36,11 +36,12 @@ export async function extensionsSmoke(page, base, setSessions) {
   status:{state:'disabled',restarts:0,active_streams:0},requires:[],
   accounts:[{id:'relay',label:'Relay',type:'claude',eligible:true},{id:'sub',label:'Subscription',type:'claude',eligible:true}],
  };
- const puts = []; let conflictNext = false;
+ const puts = []; let conflictNext = false, slowNext = false;
  const events = [{seq:1,time:new Date().toISOString(),extension:view.id,kind:'abort',code:'model_output_loop',session:'fixture-space',account:'relay',user:'fixture',detail:{window:256,distinct:12}}];
  const logs = [{seq:1,time:new Date().toISOString(),level:'info',message:'interrupted <b>a</b> repeating text stream'}];
  await page.route('**/api/extensions**', async route => {
   const req = route.request(), path = new URL(req.url()).pathname;
+  if (slowNext && req.method() === 'GET') { slowNext = false; await new Promise(r => setTimeout(r, 900)); }
   if (path.endsWith('/events')) return route.fulfill({json:{events}});
   if (path.endsWith('/logs')) return route.fulfill({json:{logs:new URL(req.url()).searchParams.get('since')==='0'?logs:[]}});
   if (req.method() === 'PUT') {
@@ -69,7 +70,13 @@ export async function extensionsSmoke(page, base, setSessions) {
   assert.doesNotMatch(listPage, /172\.17\.0\.1|网关/, 'the 扩展 page names the model gateway');
   await mkdir('output/playwright',{recursive:true});
   await page.screenshot({path:'output/playwright/extensions-list.png',animations:'disabled'});
+  // The sidebar entry is a puzzle piece, not the security shield.
+  assert.equal(await page.locator('#btn-extensions svg').getAttribute('data-icon-name'), 'puzzle');
+  // A slow request started by a click shows the top loading line until it completes.
+  slowNext = true;
   await card.click();
+  await page.locator('#top-loader.on').waitFor({timeout:2000});
+  await page.locator('#top-loader.on').waitFor({state:'detached',timeout:5000});
   await page.waitForFunction(()=>location.hash==='#/extensions/agentbox.loop-guard');
   const detail = page.locator('#ext-detail');
   await detail.locator('.ext-settings').waitFor();
@@ -166,7 +173,8 @@ export async function extensionsSmoke(page, base, setSessions) {
   const badge = page.locator('#wb-ext');
   await badge.waitFor();
   assert.match(await badge.innerText(), /循环保护、Webhook 通知/);
-  console.log('Extensions: list/detail without gateway, event-only webhook detail with user picker, model gateway dependency and settings card, permission approval, Claude and Codex API key binding with ineligible subscription/ChatGPT accounts, schema form, revisioned save and conflict reload, plain-text manifest strings, events/logs and workspace badge passed');
+  assert.equal(await badge.locator('svg').getAttribute('data-icon-name'), 'puzzle');
+  console.log('Extensions: list/detail without gateway, event-only webhook detail with user picker, model gateway dependency and settings card, permission approval, Claude and Codex API key binding with ineligible subscription/ChatGPT accounts, schema form, revisioned save and conflict reload, plain-text manifest strings, events/logs, puzzle icons, top loading line and workspace badge passed');
   await page.screenshot({path:'output/playwright/extensions-workspace.png',animations:'disabled',clip:{x:0,y:0,width:1280,height:160}});
   assert.equal(await badge.getAttribute('aria-label'), '循环保护 正在检查本空间的模型输出；Webhook 通知 会收到本空间的空间启停与对话结果通知');
  } finally {

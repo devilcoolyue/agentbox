@@ -1115,6 +1115,8 @@ export interface HistoryEntry extends APIProblem {
   error?: string;
   /** status：本地斜杠命令的回合（CLI 未请求模型），不计入起标题 */
   local?: boolean;
+  /** 回合最终 status（idle / error / interrupted）：从开始到结束的墙钟耗时 */
+  duration_ms?: number;
 }
 
 /** GET /api/sessions/{id}/history */
@@ -1377,6 +1379,10 @@ export interface ChatMessage extends APIProblem {
   turn?: ChatTurnMetadata;
   /** 参数校验失败，回合未提交；可由用户修改后重试。 */
   retry_text?: string;
+  /** status running（连接时下发）：本回合已进行的毫秒数，页面据此续上计时 */
+  elapsed_ms?: number;
+  /** 回合最终 status：本回合总耗时 */
+  duration_ms?: number;
   type: string;
   /** user_message / agent_raw 的文本 */
   text?: string;

@@ -83,6 +83,7 @@ export function replayHistory(writer: TurnWriter, entries: HistoryEntry[],
     }
     writer.context.historical = true;
     if (raw.kind === "status" && !writer.context.ts) writer.context.ts = raw.ts;
+    if (raw.kind === "status" && raw.duration_ms) writer.context.duration = raw.duration_ms;
     writer.footer?.update();
   }
   if (!latest && open.length) sealQuestions(open);

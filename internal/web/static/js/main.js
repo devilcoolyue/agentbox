@@ -7,6 +7,7 @@ import { decorateIcons } from "./icons.js";
 import { S } from "./state.js";
 import { enhanceSelects } from "./select.js";
 import { initInk } from "./ink.js";
+import { initLoadingBar } from "./loading-bar.js";
 import "./util.js";
 import "./tip.js";
 import "./theme.js";
@@ -38,6 +39,7 @@ for (const m of document.querySelectorAll("[data-theme-ico]"))
 decorateIcons();
 enhanceSelects();
 initInk();
+initLoadingBar();
 initApplication();
 if (S.token)
     tryEnter();

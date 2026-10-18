@@ -16,7 +16,7 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
   {kind:'event',ts:'2026-09-26T08:21:01Z',event:{type:'item.started',item:{type:'command_execution',command:'PRIVATE TOOL LOG'}}},
   {kind:'event',ts:'2026-09-26T08:22:00Z',event:{type:'item.completed',item:{type:'agent_message',text:answer}}},
   {kind:'event',ts:'2026-09-26T08:22:01Z',event:{type:'turn.completed',usage:{input_tokens:820,output_tokens:215}}},
-  {kind:'status',ts:'2026-09-26T08:22:02Z',state:'idle'},
+  {kind:'status',ts:'2026-09-26T08:22:02Z',state:'idle',duration_ms:83400},
  ];
  const reload = async () => { await page.reload(); await page.locator('.answer-footer').last().waitFor(); };
  setHistory(history,{saved:{turn_id:'saved',cost_micro_usd:31400,source:'table'}});
@@ -35,6 +35,10 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  assert.equal(await footers.last().locator('.answer-cost').innerText(),'$0.0314');
  assert.match(await footers.last().locator('.answer-cost').getAttribute('data-tip'),/按单价估算/);
  assert.equal(await footers.first().locator('.answer-cost').innerText(),'$0.0125');
+ // The turn's wall time stays in the footer; old turns without it show nothing.
+ assert.equal(await footers.last().locator('.answer-duration').innerText(),'用时 1 分 23 秒');
+ assert.match(await footers.last().locator('.answer-duration').getAttribute('data-tip'),/本轮从开始到结束共用时 1 分 23 秒/);
+ assert.equal(await footers.first().locator('.answer-duration').isVisible(),false);
  assert.match(await footers.first().locator('.answer-cost').getAttribute('data-tip'),/客户端上报/);
  await footers.last().getByRole('button',{name:'回答详情',exact:true}).click();
  assert.equal(await footers.last().locator('.chip.result').isVisible(),true);
@@ -133,12 +137,18 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  // Stream -> completed event must replace temporary text, not copy it twice.
  const emit = msg => send(msg);
  emit({type:'user_message',text:'live question',turn:makeTurn('live','requested-model','medium'),ts:'2026-09-26T10:00:00Z'});
- emit({type:'status',state:'running'});
+ // Joining mid-turn: the counter continues from what the server reports and ticks every second.
+ emit({type:'status',state:'running',elapsed_ms:65000});
+ const timer = page.locator('#chat-log .turn.working .work-time');
+ await timer.filter({hasText:/^1 分 0[5-6] 秒$/}).waitFor();
+ await timer.filter({hasText:/^1 分 0[7-9] 秒$/}).waitFor({timeout:4000});
  emit({type:'agent_event',event:{type:'stream_event',event:{type:'content_block_start',content_block:{type:'text'}}}});
  emit({type:'agent_event',ts:'2026-09-26T10:01:00Z',event:{type:'stream_event',event:{type:'content_block_delta',delta:{type:'text_delta',text:'live **answer**'}}}});
  emit({type:'agent_event',event:{type:'stream_event',event:{type:'content_block_stop'}}});
  emit({type:'agent_event',ts:'2026-09-26T10:01:00Z',event:{type:'assistant',message:{model:'reported-model',content:[{type:'text',text:'live **answer**'}]}}});
- emit({type:'status',state:'idle',ts:'2026-09-26T10:01:01Z'});
+ emit({type:'status',state:'idle',ts:'2026-09-26T10:01:01Z',duration_ms:68200});
+ await page.locator('#chat-log .turn.working').waitFor({state:'detached'});
+ await footers.last().locator('.answer-duration').filter({hasText:'用时 1 分 08 秒'}).waitFor();
  await footers.last().locator('.answer-details .ad-v').filter({hasText:'reported-model'}).waitFor({state:'attached'});
  assert.equal(await footers.last().locator('.answer-cost').innerText(),'费用待结算');
  emit({type:'turn_cost',cost:{turn_id:'other-thread',cost_micro_usd:999000,source:'table'}});
@@ -176,5 +186,5 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  setHistory([]);
  await page.reload();
  await page.locator('#chat-input').waitFor({state:'visible'});
- console.log('Answer footer: visible committed cost and sources, legacy CLI costs, unpriced/partial/zero cost, live settlement, persisted settings/time, history window, clipboard Markdown/failure, streaming replacement, exec replay, desktop/mobile light/dark passed');
+ console.log('Answer footer: visible committed cost and sources, legacy CLI costs, unpriced/partial/zero cost, live settlement, persisted settings/time, history window, turn timer and total duration, clipboard Markdown/failure, streaming replacement, exec replay, desktop/mobile light/dark passed');
 }

@@ -179,6 +179,15 @@ export function fmtUptime(ms: number) {
   return i18nText("{p0} 分钟", { p0: String(m) });
 }
 
+/* 耗时：12 秒 / 3 分 05 秒 / 1 小时 02 分；向下取整，计时器逐秒走时不会提前进位 */
+export function fmtElapsed(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  if (s < 60) return i18nText("{s} 秒", { s: String(s) });
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (s < 3600) return i18nText("{m} 分 {s} 秒", { m: String(Math.floor(s / 60)), s: pad(s % 60) });
+  return i18nText("{h} 小时 {m} 分", { h: String(Math.floor(s / 3600)), m: pad(Math.floor(s % 3600 / 60)) });
+}
+
 /* 延迟展示：<1ms 收成「<1」，个位数保留一位小数，其余取整 */
 export function fmtLatency(ms: number) {
   if (ms < 1) return "<1 ms";

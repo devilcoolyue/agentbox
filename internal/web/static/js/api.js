@@ -3,11 +3,21 @@
 import { t as i18nText } from "./i18n.js";
 "use strict";
 import { responseError } from "./problems.js";
+import { beginRequest } from "./loading-bar.js";
 import { S, emit } from "./state.js";
 /* api 的返回类型由调用点用类型参数指定，例如 api<Session[]>("/sessions")。
  * 默认 unknown 而不是 any：忘了标注时，一用到返回值就会报错，逼着把接口形状
  * 写进 types.d.ts，而不是悄悄退化成无类型。 */
 export async function api(path, opts = {}) {
+    const end = beginRequest();
+    try {
+        return await request(path, opts);
+    }
+    finally {
+        end();
+    }
+}
+async function request(path, opts) {
     const token = S.token;
     const res = await fetch("/api" + path, {
         ...opts,

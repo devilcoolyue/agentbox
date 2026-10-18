@@ -4,7 +4,7 @@ import { svgIcon } from "./icons.js";
 import { EFFORT_LABELS } from "./reasoning.js";
 import { S } from "./state.js";
 import { setTip } from "./tip.js";
-import { toast, fmtDateTime } from "./util.js";
+import { toast, fmtDateTime, fmtElapsed } from "./util.js";
 /** Old Claude logs can supply a model; missing effort remains unknown. */
 export function observeAnswer(context, ev, ts) {
     if (!ev || ev.parent_tool_use_id)
@@ -125,9 +125,11 @@ export function answerFooter(body, context) {
     info.className = "answer-context";
     const date = document.createElement("time");
     date.className = "answer-time";
+    const took = document.createElement("span");
+    took.className = "answer-duration";
     const cost = document.createElement("span");
     cost.className = "answer-cost";
-    info.append(date, cost);
+    info.append(date, took, cost);
     el.append(actions, info, details);
     copy.addEventListener("click", async () => {
         const source = [...body.querySelectorAll(".msg.agent")]
@@ -178,6 +180,12 @@ export function answerFooter(body, context) {
             setText(date, "时间未记录");
             date.removeAttribute("datetime");
             setTip(date, () => i18nText("这条回答未记录时间"));
+        }
+        took.hidden = !context.duration;
+        if (context.duration) {
+            const ms = context.duration;
+            setTextRender(took, () => i18nText("用时 {d}", { d: fmtElapsed(ms) }));
+            setTip(took, () => i18nText("本轮从开始到结束共用时 {d}", { d: fmtElapsed(ms) }));
         }
         const price = costView(context);
         setTextRender(cost, () => costView(context).label);

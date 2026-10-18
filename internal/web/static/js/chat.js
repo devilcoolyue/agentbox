@@ -4,7 +4,7 @@ import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js"
 "use strict";
 import { actionButton, buttonLabel } from "./icons.js";
 import { S, bus, emit } from "./state.js";
-import { $, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
+import { $, fmtElapsed, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
 import { chip, renderUserTurn, renderSteer, interruptedChip, svgIcon, USER_ATTACH_RE } from "./chat-render.js";
@@ -278,6 +278,19 @@ function handleChatMsg(msg) {
             outbox?.socketStatus(msg.state || "idle");
             if (!live.context.ts && msg.ts)
                 live.context.ts = msg.ts;
+            if (msg.state === "running") {
+                // 连接时服务端给出已进行多久（中途打开页面也接着计）；回合刚开始的那条不带，从现在起算
+                if (typeof msg.elapsed_ms === "number")
+                    turnStartedAt = Date.now() - Math.max(0, msg.elapsed_ms);
+                else if (!turnStartedAt)
+                    turnStartedAt = Date.now();
+            }
+            else
+                turnStartedAt = 0;
+            if (msg.duration_ms) {
+                live.context.duration = msg.duration_ms;
+                live.footer?.update();
+            }
             setChatStatus(msg.state, msg.error ? formatProblem(msg, i18nText) : undefined);
             if (msg.state === "error" && msg.retry_text && !outbox?.enabled) {
                 const input = $("chat-input");
@@ -1245,11 +1258,19 @@ function ensureWorking() {
         const bg = document.createElement("span");
         bg.className = "work-bg";
         bg.hidden = true;
-        body.append(label, bg);
+        // 本轮已进行的时间，逐秒走（同 CLI 状态行）；回合结束后改由回答底栏固定显示总耗时
+        const time = document.createElement("span");
+        time.className = "work-time";
+        const line = document.createElement("span");
+        line.className = "work-line";
+        line.append(label, time);
+        body.append(line, bg);
         turn.append(av, body);
         workingEl = turn;
         renderBackground();
         applyWorkingLabel();
+        tickWorking();
+        workTimer = window.setInterval(tickWorking, 1000);
     }
     $("chat-log").appendChild(workingEl); // 移到末尾（已在 DOM 中则只是重新排位）
 }
@@ -1272,6 +1293,19 @@ function clearWorking() {
         workingEl.remove();
     workingEl = null;
     workStage = "";
+    if (workTimer)
+        window.clearInterval(workTimer);
+    workTimer = 0;
+}
+/* 回合计时：起点来自 status 消息（见 case "status"），指示器每秒刷新一次 */
+let turnStartedAt = 0, workTimer = 0;
+function tickWorking() {
+    const el = workingEl?.querySelector(".work-time");
+    if (!el)
+        return;
+    if (!turnStartedAt)
+        turnStartedAt = Date.now();
+    setTextRender(el, () => fmtElapsed(Date.now() - turnStartedAt));
 }
 /* 阶段文案（思考 / 生成 / 运行工具…）；有进行中的任务时与 CLI 一样改说这项任务 */
 let workStage = "";

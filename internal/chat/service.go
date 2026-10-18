@@ -35,6 +35,10 @@ type Entry struct {
 	// Local marks the idle status of a slash command turn the CLI ran itself
 	// (/context, /compact…); it does not count toward the title.
 	Local bool `json:"local,omitempty"`
+	// DurationMS is the turn's wall time on its final status (idle, error,
+	// interrupted), measured from admission like the live counter's
+	// started_at, so the page can show how long the turn took.
+	DurationMS int64 `json:"duration_ms,omitempty"`
 }
 
 // Runtime is the adapter to workspace, authorization, history and live clients.
@@ -177,7 +181,11 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	clock := newTurnClock(timeout, func() { cancelTurn(context.DeadlineExceeded) })
 	defer func() { clock.stop(); cancelTurn(context.Canceled) }()
 	outcome := TurnOutcome{SessionID: in.SessionID, Status: OutcomeFailed}
+	var began time.Time // set once the turn is admitted; see below
 	record := func(e Entry, messageType, retryText string) error {
+		if e.Kind == "status" && e.State != "running" && !began.IsZero() {
+			e.DurationMS = max(time.Since(began).Milliseconds(), 1)
+		}
 		err := r.Record(e, messageType, retryText)
 		if receipt != nil && err != nil {
 			receipt.HistoryFailed()
@@ -209,7 +217,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		return
 	}
 	// Registered first so it runs last, after usage is flushed.
-	began := time.Now()
+	began = time.Now()
 	defer func() {
 		outcome.Model, outcome.Duration = model, time.Since(began)
 		r.TurnEnded(outcome)

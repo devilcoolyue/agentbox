@@ -119,7 +119,7 @@ export function renderHead() {
         ext.className = "wb-ext";
         const label = document.createElement("span");
         setTextRender(label, names);
-        ext.append(svgIcon("shield", 12), label);
+        ext.append(svgIcon("puzzle", 12), label);
         setAttrRender(ext, "aria-label", describe);
         setTip(ext, describe);
         meta.append(document.createTextNode(" · "), ext);

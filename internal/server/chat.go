@@ -65,6 +65,7 @@ type chatRoom struct {
 	mu              sync.Mutex
 	conns           map[*connWriter]bool
 	running         bool
+	startedAt       time.Time // when the running turn was admitted; drives the page's elapsed counter
 	turnDone        chan struct{}
 	stop            func() // 当前回合的优雅中断（app-server 回合设置）；nil 时走 SIGINT
 	requestID       string
@@ -115,12 +116,18 @@ func (r *chatRoom) detach(c *connWriter) {
 }
 
 func (r *chatRoom) state() string {
+	state, _ := r.status()
+	return state
+}
+
+// status is the room state plus, while running, when the turn began.
+func (r *chatRoom) status() (string, time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.running {
-		return "running"
+		return "running", r.startedAt
 	}
-	return "idle"
+	return "idle", time.Time{}
 }
 
 // tryBegin marks the room busy; returns false if a turn is already running.
@@ -143,7 +150,7 @@ func (r *chatRoom) begin() error {
 			return err
 		}
 	}
-	r.running = true
+	r.running, r.startedAt = true, time.Now()
 	r.requestID, r.userInterrupted = "", false
 	r.turnDone = make(chan struct{})
 	return nil
@@ -251,7 +258,15 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 		conn.Close()
 	}()
 
-	_ = cw.send(map[string]any{"type": "status", "state": room.state()})
+	// A page joining mid-turn gets how long the turn has run, not a start
+	// time, so its counter is right even when its clock is off.
+	status := map[string]any{"type": "status"}
+	state, started := room.status()
+	status["state"] = state
+	if !started.IsZero() {
+		status["elapsed_ms"] = time.Since(started).Milliseconds()
+	}
+	_ = cw.send(status)
 
 	conn.SetReadDeadline(time.Now().Add(wsPongWait))
 	conn.SetReadLimit(4 << 20)
