@@ -18,11 +18,13 @@ package usage
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -40,9 +42,18 @@ const (
 	// 这一趟管的是它漏掉或起不来的情况：watch 有内核上限、会话目录可能在两次对齐
 	// 之间才出现、进程重启后也得先补一轮。
 	termScanInterval = time.Minute
-	// termWatchSettle 是收到写入后等多久再扫。CLI 一个回合里会连着写很多行，
-	// 每行都扫一次纯属浪费；等它静一下再读，一次就把这段读完。
-	termWatchSettle = 700 * time.Millisecond
+	// termWatchSettle 是收到写入后等多久再扫。CLI 一次回复会连着写好几行（每个
+	// 内容块一行），等它静一下再读，一次把这段读完。扫描只读新增的行（见
+	// termFileState），代价很小，所以这里不必等太久。
+	termWatchSettle = 300 * time.Millisecond
+	// termParseIdle：文件这么久没动过，就丢掉它的续读状态（解析器与已写入行的
+	// 指纹），只留大小与修改时间。之后再有写入就从头读一遍，与重启后一样。
+	// 不丢的话，服务端会给每一份历史 transcript 都常驻一份解析状态。
+	termParseIdle = 30 * time.Minute
+	// termTailBytes 是续读点之前留作指纹的字节数，用来认出文件被改写过。
+	termTailBytes = 64
+	// termMaxLine 是单行上限；transcript 单行可以很大（含附件）。
+	termMaxLine = 32 << 20
 	// termWatchRefresh 是重新对齐监听目录的周期：会话新建/删除、CLI 第一次在某个
 	// cwd 下开工（新建 projects/<slug>/）都会改变该监听哪些目录。
 	termWatchRefresh = 30 * time.Second
@@ -100,20 +111,172 @@ func transcriptEffort(raw json.RawMessage) string {
 	}
 }
 
-// termScanner 扫描进度：路径 → 上次看到的大小与修改时间。文件没动过就整个跳过，
-// 免得每趟把所有 transcript 重读一遍。只在内存里，重启后重扫一轮——重扫是安全
-// 的（靠 req_id 去重），代价只是一次多余的读。
+// Scanner 记着每份 transcript 读到了哪里：路径 → 续读状态。文件没动过就整个跳过；
+// 动过就只读续读点之后新写完的行，再只把内容变了的行写库。状态只在内存里，重启
+// 后从头重扫一轮——重扫是安全的（靠 req_id 去重），代价只是一次多余的读。
 //
-// 定时器和「打开使用记录页」两条路都会触发扫描，所以状态要上锁；锁同时保证同一
-// 时刻只有一趟扫描在跑，两边撞上时后来的直接等前一趟的结果。
+// 定时器、inotify 和「打开使用记录页」几条路都会触发扫描，所以状态要上锁。
 type Scanner struct {
 	mu   sync.Mutex
-	seen map[string]termFileState
+	seen map[string]*termFileState
+	// gen 每趟全量扫描加一；扫到的文件记下当时的 gen，全量扫完后没被扫到的
+	// （文件或会话已删除）从 seen 里清掉。
+	gen uint64
 }
 
+func newScanner() *Scanner { return &Scanner{seen: map[string]*termFileState{}} }
+
 type termFileState struct {
-	size  int64
-	mtime time.Time
+	size    int64
+	mtime   time.Time
+	visited uint64
+	active  time.Time // 上次读到新内容的时刻；闲置久了丢掉下面的续读状态
+
+	// 续读状态；parser 为 nil 时下次从头读。
+	info    fs.FileInfo // 认出文件被换成了另一个（inode 变了）
+	offset  int64       // 已交给 parser 的字节数，总在一行的末尾
+	tail    []byte      // offset 之前最后 termTailBytes 个字节
+	parser  termParser
+	written map[string]termRowKey // 已落库的行：req_id → 写入时的内容
+}
+
+// termParser 逐行吃 transcript，rows 返回「把迄今吃下的内容整份解析一遍」会得到
+// 的全部行。续读与整份重读因此结果相同。
+type termParser interface {
+	line([]byte)
+	rows() []termTurn
+}
+
+// termRowKey 是一行落库内容的指纹：解析结果没变的行不必再写一遍。
+type termRowKey struct {
+	turnID, model, effort, effortControl string
+	ts                                   int64
+	input, output, cacheRead, cacheWrite int64
+}
+
+func (t termTurn) key() termRowKey {
+	return termRowKey{
+		turnID: t.ev.TurnID, model: t.model, effort: t.ev.Effort, effortControl: t.ev.EffortControl,
+		ts: t.ts.UnixNano(), input: t.ev.InputTokens, output: t.ev.OutputTokens,
+		cacheRead: t.ev.CacheReadTokens, cacheWrite: t.ev.CacheWriteTokens,
+	}
+}
+
+// advance 把文件里还没读过的完整行交给 parser，返回到目前为止的全部行。续读的
+// 前提是同一个文件、只追加过：换了 inode、比续读点还短、或者续读点之前的尾巴
+// 对不上（被整份重写过），都从头再读，已写入行的记录也一并作废、全部重写一遍。
+// 认不出的只有「原地、同长度、只改续读点之前较远处」这种改法——CLI 的 transcript
+// 只追加，不会这样写。
+func (st *termFileState) advance(f *os.File, fi fs.FileInfo, fresh func() termParser) ([]termTurn, error) {
+	if st.parser == nil || !st.continues(f, fi) {
+		st.parser, st.offset, st.tail, st.written = fresh(), 0, nil, map[string]termRowKey{}
+	}
+	st.info = fi
+	if _, err := f.Seek(st.offset, io.SeekStart); err != nil {
+		return nil, err
+	}
+	n, err := feedLines(f, st.parser)
+	if err != nil {
+		return nil, err
+	}
+	st.offset += n
+	st.tail = nil
+	if keep := min(st.offset, termTailBytes); keep > 0 {
+		st.tail = make([]byte, keep)
+		if _, err := f.ReadAt(st.tail, st.offset-keep); err != nil {
+			return nil, err
+		}
+	}
+	return st.parser.rows(), nil
+}
+
+func (st *termFileState) continues(f *os.File, fi fs.FileInfo) bool {
+	if st.info == nil || !os.SameFile(st.info, fi) || fi.Size() < st.offset {
+		return false
+	}
+	if len(st.tail) == 0 {
+		return st.offset == 0
+	}
+	buf := make([]byte, len(st.tail))
+	if _, err := f.ReadAt(buf, st.offset-int64(len(buf))); err != nil {
+		return false
+	}
+	return bytes.Equal(buf, st.tail)
+}
+
+// pending 挑出与上次写入时不同（或还没写过）的行。
+func (st *termFileState) pending(rows []termTurn) []termTurn {
+	var changed []termTurn
+	for _, t := range rows {
+		if old, ok := st.written[t.reqID]; !ok || old != t.key() {
+			changed = append(changed, t)
+		}
+	}
+	return changed
+}
+
+func (st *termFileState) drop() {
+	st.info, st.offset, st.tail, st.parser, st.written = nil, 0, nil, nil, nil
+}
+
+// sweep 在一趟完整的全量扫描之后清理：这趟没扫到的文件忘掉，闲置太久的文件
+// 丢掉续读状态。
+func (sc *Scanner) sweep(gen uint64, now time.Time) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	for path, st := range sc.seen {
+		if st.visited != gen {
+			delete(sc.seen, path)
+		} else if st.parser != nil && now.Sub(st.active) > termParseIdle {
+			st.drop()
+		}
+	}
+}
+
+// feedLines 把 r 里完整的行逐行交给 p，返回吃掉的字节数。没有换行结尾的最后一段
+// 只在它本身已是一条完整 JSON 时才吃：CLI 写一条记录是一次追加「JSON + 换行」，
+// 而 JSON 对象的真前缀不可能是合法 JSON，所以写到一半的行不会被当成整行；没吃的
+// 留到下一轮从这行开头再读。
+func feedLines(r io.Reader, p termParser) (int64, error) {
+	br := bufio.NewReaderSize(r, 64<<10)
+	var n int64
+	var long []byte
+	for {
+		chunk, err := br.ReadSlice('\n')
+		if err == bufio.ErrBufferFull {
+			if len(long)+len(chunk) > termMaxLine {
+				return n, bufio.ErrTooLong
+			}
+			long = append(long, chunk...)
+			continue
+		}
+		line := chunk
+		if long != nil {
+			line = append(long, chunk...)
+			long = nil
+		}
+		if err == io.EOF {
+			if len(line) > 0 && json.Valid(line) {
+				p.line(line)
+				n += int64(len(line))
+			}
+			return n, nil
+		}
+		if err != nil {
+			return n, err
+		}
+		if len(line) > termMaxLine {
+			return n, bufio.ErrTooLong
+		}
+		n += int64(len(line))
+		p.line(bytes.TrimSuffix(line[:len(line)-1], []byte{'\r'}))
+	}
+}
+
+// feedTranscript 把整份 transcript 交给 p。
+func feedTranscript(r io.Reader, p termParser) error {
+	_, err := feedLines(r, p)
+	return err
 }
 
 // termUsageLoop 常驻补记终端消耗。用户不看页面时也得记——终端消耗要能在报表里
@@ -142,12 +305,17 @@ func (s *Service) termUsageLoop() {
 // 只走库里存在的会话：磁盘上会留下已删除会话的目录，那些消耗归不到人头上，
 // 补了也只是往报表里塞孤儿行。
 func (s *Service) scanTerminalUsage(sc *Scanner) {
+	sc.mu.Lock()
+	sc.gen++
+	gen := sc.gen
+	sc.mu.Unlock()
 	for _, sess := range s.store.All() {
 		if s.workContext().Err() != nil {
 			return
 		}
 		s.scanSessionUsage(sc, sess)
 	}
+	sc.sweep(gen, time.Now())
 }
 
 // scanSessionUsage 补记一个会话的终端消耗。inotify 命中时只扫这一个会话，
@@ -159,11 +327,11 @@ func (s *Service) scanSessionUsage(sc *Scanner, sess store.Session) {
 	}
 	dir := filepath.Join(s.homeDir(sess), ".claude", "projects")
 	pattern := "*/*.jsonl"
-	parser := parseTerminalReader
+	fresh := func() termParser { return newClaudeTermParser() }
 	if sess.Agent == config.AgentCodex {
 		dir = filepath.Join(s.homeDir(sess), ".codex", "sessions")
 		pattern = "*/*/*/rollout-*.jsonl"
-		parser = parseCodexTerminal
+		fresh = func() termParser { return newCodexTermParser() }
 	}
 	root, err := s.openDataDir(dir)
 	if err != nil {
@@ -198,25 +366,33 @@ func (s *Service) scanSessionUsage(sc *Scanner, sess store.Session) {
 			f.Close()
 			continue
 		}
-		if st, ok := sc.seen[path]; ok && st.size == fi.Size() && st.mtime.Equal(fi.ModTime()) {
+		st := sc.seen[path]
+		if st == nil {
+			st = &termFileState{}
+			sc.seen[path] = st
+		}
+		st.visited = sc.gen
+		if st.size == fi.Size() && st.mtime.Equal(fi.ModTime()) {
 			f.Close()
 			continue
 		}
-		turns, err := parser(f)
+		turns, err := st.advance(f, fi, fresh)
 		f.Close()
 		if err != nil {
 			s.scanErrors.Add(1)
 			log.Printf("terminal usage %s: %v", path, err)
+			// 下一轮从头再读，不在读坏的地方接着读。
+			st.drop()
+			st.size, st.mtime = 0, time.Time{}
 			continue
 		}
-		// 先记下这次的状态：解析失败上面已经跳过，走到这里说明文件读完了，
-		// 下一轮没改动就不用再读。
-		sc.seen[path] = termFileState{size: fi.Size(), mtime: fi.ModTime()}
-		if len(turns) == 0 {
+		st.size, st.mtime, st.active = fi.Size(), fi.ModTime(), time.Now()
+		changed := st.pending(turns)
+		if len(changed) == 0 {
 			continue
 		}
-		evs := make([]store.UsageEvent, 0, len(turns))
-		for _, t := range turns {
+		evs := make([]store.UsageEvent, 0, len(changed))
+		for _, t := range changed {
 			ev := t.ev
 			ev.TS = t.ts
 			ev.User, ev.SessionID = sess.User, sess.ID
@@ -235,9 +411,13 @@ func (s *Service) scanSessionUsage(sc *Scanner, sess store.Session) {
 		if err := s.store.UpsertTerminalUsage(evs...); err != nil {
 			s.scanErrors.Add(1)
 			log.Printf("terminal usage %s: %v", path, err)
-			// 落库失败就把状态撤回，下一轮重试；不然这个文件要等到下次被改
-			// 动才会再看一眼，中间的消耗就永久漏了。
-			delete(sc.seen, path)
+			// 落库失败：读取进度留着，这几行不记成已写入，并让下一轮不跳过这个
+			// 文件——不然要等它下次被改动才重试，中间的消耗就漏了。
+			st.size = -1
+			continue
+		}
+		for _, t := range changed {
+			st.written[t.reqID] = t.key()
 		}
 	}
 }
@@ -369,7 +549,16 @@ func (s *Service) syncTermWatches(w *fsnotify.Watcher, watched map[string]string
 	}
 }
 
-// parseTerminalTranscript 从一个 transcript 文件里读出终端补记的行，一次请求一行。
+// parseTerminalReader 从一个 transcript 里读出终端补记的行，一次请求一行。
+func parseTerminalReader(f io.Reader) ([]termTurn, error) {
+	p := newClaudeTermParser()
+	if err := feedTranscript(f, p); err != nil {
+		return nil, err
+	}
+	return p.rows(), nil
+}
+
+// claudeTermParser 逐行解析 Claude Code 的 transcript。
 //
 // 遇到 user 记录就开一个新回合，其后的 assistant 记录各是一次请求。同一个
 // message.id 会在文件里出现多次，优先完整 stop_reason，同等完整度取 output
@@ -378,101 +567,101 @@ func (s *Service) syncTermWatches(w *fsnotify.Watcher, watched map[string]string
 // 去重键是这次请求的 requestId。旧版按 (回合, 模型) 合并成一行、键是该组第一个
 // requestId——正好等于新版该组第一次请求的键，所以重扫时第一次请求原地覆盖旧的
 // 合并行，其余请求新增成行，不会重复记账。
-func parseTerminalReader(f io.Reader) ([]termTurn, error) {
-	type key struct{ turn, model string }
-	// 同一消息选一份最终用量，读完文件后再逐条输出。
-	type reqUsage struct {
-		k       key
-		ev      store.UsageEvent
-		reqID   string
-		ts      time.Time
-		message claudeMessage
-	}
-	reqs := map[string]*reqUsage{}
-	var reqOrder []string
+type claudeTermParser struct {
+	reqs     map[string]*claudeTermRequest // message.id → 这次请求选定的那份用量
+	order    []string                      // message.id 首次出现的顺序
+	turnUUID string
+}
 
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 1<<20), 32<<20) // transcript 单行可以很大（含附件）
-	turnUUID := ""
-	for sc.Scan() {
-		line := sc.Bytes()
-		if len(line) == 0 || line[0] != '{' {
-			continue
-		}
-		var rec termTranscriptRec
-		if json.Unmarshal(line, &rec) != nil {
-			continue
-		}
-		if rec.Entrypoint != termEntrypointCLI {
-			continue // -p 发起的那些已经记过账了
-		}
-		switch rec.Type {
-		case "user":
-			// 一次提问开一个回合。user 记录一定有 uuid，promptId 在老版本 CLI 上
-			// 是 null，所以用 uuid 当回合键。
-			if rec.UUID != "" {
-				turnUUID = rec.UUID
-			}
-		case "assistant":
-			u := rec.Message.Usage
-			id := rec.Message.ID
-			if id == "" {
-				id = rec.RequestID
-			} // legacy transcript compatibility
-			if id == "" || strings.HasPrefix(rec.Message.Model, "<") {
-				continue
-			}
-			if u.Input == 0 && u.Output == 0 && u.CacheRead == 0 && u.CacheWrite == 0 {
-				continue
-			}
-			k := key{turn: turnUUID, model: rec.Message.Model}
-			message := claudeMessage{ID: id, Model: rec.Message.Model, StopReason: rec.Message.StopReason, Usage: claudeTokens{Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}}
-			r, ok := reqs[id]
-			if !ok {
-				r = &reqUsage{k: k, reqID: rec.RequestID}
-				if r.reqID == "" {
-					r.reqID = id
-				}
-				reqs[id] = r
-				reqOrder = append(reqOrder, id)
-			}
-			if ok && !preferClaudeMessage(message, r.message) {
-				continue
-			}
-			r.message = message
-			// Final snapshots win; a later placeholder cannot reduce usage.
-			r.ev = store.UsageEvent{
-				InputTokens: u.Input, OutputTokens: u.Output,
-				CacheReadTokens: u.CacheRead, CacheWriteTokens: u.CacheWrite,
-				Effort: transcriptEffort(rec.Effort),
-			}
-			r.k = k
-			// 时间相反，取最早那份：重复记录是同一次调用流式写了两遍，
-			// 这次调用真正发生的时刻是第一条。
-			if t, err := time.Parse(time.RFC3339Nano, rec.Timestamp); err == nil && r.ts.IsZero() {
-				r.ts = t
-			}
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return nil, err
-	}
+type claudeTermRequest struct {
+	turn, model string
+	reqID       string
+	ts          time.Time
+	effort      string
+	message     claudeMessage
+}
 
-	// 回合 ID 用这一回合最早出现的 requestId：同一回合的各行共享它，与对话行
-	// 「同回合共享 turn_id」的语义一致，报表里数回合才不会重复计数。
-	out := make([]termTurn, 0, len(reqOrder))
+func newClaudeTermParser() *claudeTermParser {
+	return &claudeTermParser{reqs: map[string]*claudeTermRequest{}}
+}
+
+func (p *claudeTermParser) line(line []byte) {
+	if len(line) == 0 || line[0] != '{' {
+		return
+	}
+	var rec termTranscriptRec
+	if json.Unmarshal(line, &rec) != nil {
+		return
+	}
+	if rec.Entrypoint != termEntrypointCLI {
+		return // -p 发起的那些已经记过账了
+	}
+	switch rec.Type {
+	case "user":
+		// 一次提问开一个回合。user 记录一定有 uuid，promptId 在老版本 CLI 上
+		// 是 null，所以用 uuid 当回合键。
+		if rec.UUID != "" {
+			p.turnUUID = rec.UUID
+		}
+	case "assistant":
+		u := rec.Message.Usage
+		id := rec.Message.ID
+		if id == "" {
+			id = rec.RequestID
+		} // legacy transcript compatibility
+		if id == "" || strings.HasPrefix(rec.Message.Model, "<") {
+			return
+		}
+		if u.Input == 0 && u.Output == 0 && u.CacheRead == 0 && u.CacheWrite == 0 {
+			return
+		}
+		message := claudeMessage{ID: id, Model: rec.Message.Model, StopReason: rec.Message.StopReason, Usage: claudeTokens{Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}}
+		r, ok := p.reqs[id]
+		if !ok {
+			r = &claudeTermRequest{reqID: rec.RequestID}
+			if r.reqID == "" {
+				r.reqID = id
+			}
+			p.reqs[id] = r
+			p.order = append(p.order, id)
+		}
+		if ok && !preferClaudeMessage(message, r.message) {
+			return
+		}
+		// Final snapshots win; a later placeholder cannot reduce usage.
+		r.message = message
+		r.effort = transcriptEffort(rec.Effort)
+		r.turn, r.model = p.turnUUID, rec.Message.Model
+		// 时间相反，取最早那份：重复记录是同一次调用流式写了两遍，
+		// 这次调用真正发生的时刻是第一条。
+		if t, err := time.Parse(time.RFC3339Nano, rec.Timestamp); err == nil && r.ts.IsZero() {
+			r.ts = t
+		}
+	}
+}
+
+// rows 按请求首次出现的顺序输出。回合 ID 用这一回合最早出现的 requestId：同一
+// 回合的各行共享它，与对话行「同回合共享 turn_id」的语义一致，报表里数回合才
+// 不会重复计数。
+func (p *claudeTermParser) rows() []termTurn {
+	out := make([]termTurn, 0, len(p.order))
 	firstReq := map[string]string{}
-	for _, id := range reqOrder {
-		r := reqs[id]
-		if _, ok := firstReq[r.k.turn]; !ok {
-			firstReq[r.k.turn] = r.reqID
+	for _, id := range p.order {
+		r := p.reqs[id]
+		if _, ok := firstReq[r.turn]; !ok {
+			firstReq[r.turn] = r.reqID
 		}
-		t := termTurn{reqID: r.reqID, model: r.k.model, ts: r.ts, ev: r.ev}
-		t.ev.TurnID = firstReq[r.k.turn]
+		u := r.message.Usage
+		t := termTurn{reqID: r.reqID, model: r.model, ts: r.ts, ev: store.UsageEvent{
+			TurnID:      firstReq[r.turn],
+			InputTokens: u.Input, OutputTokens: u.Output,
+			CacheReadTokens: u.CacheRead, CacheWriteTokens: u.CacheWrite,
+			Effort: r.effort,
+		}}
 		if t.ev.Effort != "" {
 			t.ev.EffortControl = "effort"
 		}
 		out = append(out, t)
 	}
-	return out, nil
+	return out
 }

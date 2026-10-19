@@ -157,6 +157,7 @@ type Server struct {
 
 	usageOnce sync.Once
 	usage     *usage.Service
+	usageLive *usageLiveHub
 }
 
 func New(cfg *config.Config) (*Server, error) { return NewContext(context.Background(), cfg) }
@@ -215,6 +216,7 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 		bootListen: cfg.GetListen(),
 		logins:     newLoginGuard(),
 		mon:        newMonState(),
+		usageLive:  newUsageLiveHub(),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  32 << 10,
 			WriteBufferSize: 32 << 10,
@@ -233,6 +235,7 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 		}
 		return toolstore.OwnerKey(instance, user.Name, user.CreatedAt.UTC().Format(time.RFC3339Nano)), nil
 	})
+	st.OnUsageWritten(s.usageLive.publish)
 	s.chat = newChatManager(s)
 	s.git = gitx.New(dock, s.prepareGitSession)
 	if err := s.initExtensions(); err != nil {
@@ -382,6 +385,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/users/{name}/credits", s.admin(http.HandlerFunc(s.handleCreditGrant)))
 	mux.Handle("GET /api/usage", s.auth(http.HandlerFunc(s.handleUsageReport)))
 	mux.Handle("GET /api/usage/events", s.auth(http.HandlerFunc(s.handleUsageEvents)))
+	mux.Handle("GET /api/usage/live", s.auth(http.HandlerFunc(s.handleUsageLive)))
 	mux.Handle("GET /api/accounts", s.auth(http.HandlerFunc(s.handleAccounts)))
 	mux.Handle("POST /api/accounts", s.admin(http.HandlerFunc(s.handleAccountCreate)))
 	mux.Handle("PATCH /api/accounts/{id}", s.admin(http.HandlerFunc(s.handleAccountPatch)))

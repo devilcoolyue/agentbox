@@ -71,6 +71,8 @@ export async function smoke(page) {
  const chatMessages = []; let chatSocket, historyEntries = [], historyCosts = {}, historyThread = null;
  let usageRows = [];
  await page.routeWebSocket('**/api/sessions/*/chat?*', ws => { chatSocket=ws; ws.onMessage(data => chatMessages.push(JSON.parse(data))); });
+ let usageLiveSocket;
+ await page.routeWebSocket('**/api/usage/live?*', ws => { usageLiveSocket = ws; });
  const terminalInput = []; let terminalSocket;
  await page.routeWebSocket('**/api/sessions/*/term?*', ws => {
   terminalSocket = ws;
@@ -186,6 +188,16 @@ export async function smoke(page) {
   // The reasoning effort a web turn was sent with sits under its model.
   assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['Extra High','Medium (13000)']);
   assert.match(await page.locator('#usage-rows tr').first().locator('.u-sub:has(.u-effort)').innerText(),/官方直连[\s\S]*Extra High/);
+  // A pushed usage notice reloads the page at once, without the refresh button or the poll.
+  for (let i=0; !usageLiveSocket && i<100; i++) await new Promise(r=>setTimeout(r,50));
+  assert.ok(usageLiveSocket,'usage page opened the live usage socket');
+  const liveRows=await page.locator('#usage-rows tr').count();
+  usageRows.unshift({...usageRows[0],id:99,turn_id:'turn-live',kind:'terminal'});
+  usageLiveSocket.send(JSON.stringify({type:'usage',sessions:['fixture-space']}));
+  await page.waitForFunction(n=>document.querySelectorAll('#usage-rows tr').length===n,liveRows+1);
+  usageRows.shift();
+  usageLiveSocket.send(JSON.stringify({type:'usage',sessions:null}));
+  await page.waitForFunction(n=>document.querySelectorAll('#usage-rows tr').length===n,liveRows);
   // Every type is an icon badge that still names itself for screen readers and tips.
   const kindBadges=page.locator('#usage-rows .u-kind');
   assert.deepEqual(await kindBadges.evaluateAll(els=>els.map(el=>[el.dataset.kind,el.querySelector('.ui-icon').dataset.iconName])),[['chat','message'],['title','type'],['chat','message']]);

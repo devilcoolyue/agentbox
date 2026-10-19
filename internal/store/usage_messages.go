@@ -50,5 +50,6 @@ func (s *Store) InsertUsageMessages(messages ...UsageEvent) (int, error) {
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
+	s.usageWritten(evs)
 	return len(evs), nil
 }

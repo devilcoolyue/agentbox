@@ -25,6 +25,7 @@ import { fmtUSD } from "./quota.js";
 import { agentIcon, agentName } from "./brand.js";
 import { setTip } from "./tip.js";
 import { ListMotion } from "./motion.js";
+import { watchUsageLive } from "./usage-live.js";
 const usageAgentName = (agent) => agent === "decision" ? i18nText("决策插件") : agentName(agent);
 const usageAgentIcon = (agent, size) => agent === "decision" ? svgIcon("sliders", size) : agentIcon(agent, size);
 let pageSize = 20;
@@ -868,10 +869,46 @@ setInterval(() => {
     if (S.view === "usage" && !document.hidden && dateRange.value().followNow)
         void load();
 }, 30000);
+/* 用量落库的推送（usage-live.ts）：使用记录页开着就连上，收到变更按当前筛选重读，
+ * 和轮询一样原地更新、保留滚动位置。连着来的通知至少隔一秒才重读一次；页面在
+ * 后台时只记下，切回来再读。轮询照旧保留：它还负责「跟随当前时刻」的时间窗前移。 */
+const LIVE_MIN_GAP_MS = 1000;
+let liveTimer = null;
+let liveAt = 0;
+let liveMissed = false;
+function liveReload() {
+    if (S.view !== "usage")
+        return;
+    if (document.hidden) {
+        liveMissed = true;
+        return;
+    }
+    if (liveTimer)
+        return;
+    liveTimer = setTimeout(() => {
+        liveTimer = null;
+        liveAt = Date.now();
+        if (S.view === "usage")
+            void load();
+    }, Math.max(0, liveAt + LIVE_MIN_GAP_MS - Date.now()));
+}
+bus.addEventListener("view-changed", () => watchUsageLive("usage", S.view === "usage"));
+bus.addEventListener("usage-changed", liveReload);
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && liveMissed) {
+        liveMissed = false;
+        liveReload();
+    }
+});
 // Discard account-owned display snapshots on logout/page teardown. Language
 // changes never trigger API reads, mutate filters, or reopen a closed dialog.
 function clearUsageDisplay() {
     usageGeneration++;
+    if (liveTimer) {
+        clearTimeout(liveTimer);
+        liveTimer = null;
+    }
+    liveMissed = false;
     last = null;
     activeCost = null;
     loadPending = false;

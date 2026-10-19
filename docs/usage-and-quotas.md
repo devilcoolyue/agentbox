@@ -29,7 +29,7 @@
 | Claude 终端 | 扫描 CLI transcript，每次请求补记一行 | 按价目表折算 | **不扣减** |
 | Codex 终端 | 扫描 codex-tui rollout，每次请求补记一行 | 价目表折算 | 不扣减 |
 
-终端记录通常会在文件变更后很快出现，另有每分钟扫描和查询页面时请求的异步补扫作为补充。页面请求不等待扫描完成，扫描状态只反映补记进度，不表示 CLI 已写完全部用量。长回合可能先显示部分消耗，再更新同一行；这不是实时请求账单。
+终端记录通常在 CLI 写完一次回复后约 1 秒内入账；使用记录页和终端顶栏「本空间已花」开着时，服务端在用量入账后推送变更，页面随即刷新，推送断开时退回定时刷新。另有每分钟扫描和查询页面时请求的异步补扫作为补充。页面请求不等待扫描完成，扫描状态只反映补记进度，不表示 CLI 已写完全部用量。长回合可能先显示部分消耗，再更新同一行；这不是实时请求账单。
 
 使用记录与 CSV 的思考强度来自当时的记录：网页对话读取聊天回执；Claude 终端读取 assistant transcript 的 `effort`，Codex 终端读取 `turn_context.payload.effort`。终端强度随用量保存，不使用当前账号或 CLI 配置倒推历史。同一回合、同一模型的调用若缺少强度或出现不同档位，该行不显示单一强度；起标题和缺少回执的旧网页记录也留空。
 
@@ -167,7 +167,7 @@ Codex 的用量事件可能没有模型名，`codex` 兜底价格应与实际使
 
 ### Codex 终端补记
 
-扫描 `<home>/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`，仅接受 `session_meta.originator=codex-tui`，排除 exec/app-server；来源字段存在时需为 cli/tui；独立的 subagent rollout 不作为主终端流水纳入，避免将来源不明的后台记录重复计入。以 task_started/turn_started 或 turn_context 的 turn_id 归并，按模型分行。利用累计 token 差值跳过重复的 token_count/额度通知；缓存输入从总输入中扣除，reasoning 不再次加到 output。缺少可信来源、回合 ID 或累计用量的记录不猜测补账。
+扫描 `<home>/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`，仅接受 `session_meta.originator=codex-tui`，排除 exec/app-server；来源字段存在时需为 cli/tui，或 0.160 起 TUI 改跑在 app-server 上后写的 vscode（网页对话同样写 vscode，但 originator 是 agentbox，不会混入）；独立的 subagent rollout 不作为主终端流水纳入，避免将来源不明的后台记录重复计入。以 task_started/turn_started 或 turn_context 的 turn_id 归并，按模型分行。利用累计 token 差值跳过重复的 token_count/额度通知；缓存输入从总输入中扣除，reasoning 不再次加到 output。缺少可信来源、回合 ID 或累计用量的记录不猜测补账。
 
 watch 覆盖日期目录，周期全量扫描兜底；扫描同一个文件、进程重启或记录继续增长不会新增重复回合。去重键含工作空间、provider thread、turn 和 model，复制到另一个空间不会覆盖原空间记录。终端记录首次入账保存价格规则，续写按该规则重算该行；无价的首次快照仍保持未定价。历史无快照的终端行，未变化时保留原费用，增长时继续按旧规则折算并标明参考价。
 

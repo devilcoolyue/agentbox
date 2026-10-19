@@ -15,6 +15,7 @@ import { attachTouchScroll } from "./term-touch.js";
 import { attachTermClipboard, resetTermClipboard } from "./term-clipboard.js";
 import { menuJustDismissed, openMenuAt } from "./menu.js";
 import { enter, leave } from "./motion.js";
+import { usageLiveConnected, watchUsageLive } from "./usage-live.js";
 const TerminalClass = window.Terminal && (window.Terminal.Terminal || window.Terminal);
 const FitAddonClass = window.FitAddon && (window.FitAddon.FitAddon || window.FitAddon);
 const WebglAddonClass = window.WebglAddon && (window.WebglAddon.WebglAddon || window.WebglAddon);
@@ -653,17 +654,45 @@ async function loadSpend() {
         + i18nText("金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗计入这里但不扣额度。"));
     box.classList.remove("hidden");
 }
-/** 进出终端页时开关轮询：不在终端页就没必要一直问。 */
+/** 进出终端页时开关刷新：不在终端页就没必要一直问。终端里刚花掉的量靠用量推送
+ * （usage-live.ts）即时刷新；推送连着时轮询停手，断了才照旧每 15 秒问一次。 */
 export function termSpendPolling(on) {
     if (spendTimer) {
         clearInterval(spendTimer);
         spendTimer = null;
     }
+    watchUsageLive("term-spend", on);
     if (!on)
         return;
-    void loadSpend();
-    spendTimer = setInterval(() => void loadSpend(), SPEND_POLL_MS);
+    void refreshSpend();
+    spendTimer = setInterval(() => { if (!usageLiveConnected())
+        void refreshSpend(); }, SPEND_POLL_MS);
 }
+/* 推送与轮询都走这里：同一时刻只读一次，读的途中又有变更就读完再补一次。 */
+let spendLoading = false;
+let spendAgain = false;
+async function refreshSpend() {
+    if (spendLoading) {
+        spendAgain = true;
+        return;
+    }
+    spendLoading = true;
+    try {
+        await loadSpend();
+    }
+    finally {
+        spendLoading = false;
+        const again = spendAgain;
+        spendAgain = false;
+        if (again && spendTimer)
+            void refreshSpend();
+    }
+}
+bus.addEventListener("usage-changed", e => {
+    const { sessions } = e.detail;
+    if (spendTimer && S.current && (!sessions || sessions.includes(S.current.id)))
+        void refreshSpend();
+});
 /* 终端粘贴图片：上传后把容器内路径写入 PTY（capture 阶段拦截，避免 xterm 处理）。
  * 上传期间整个终端页盖遮罩转圈，并通过 disableStdin 禁止键入，防止用户不知道发生了什么。 */
 const termUpload = { total: 0, done: 0 };

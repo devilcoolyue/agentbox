@@ -163,7 +163,7 @@ func TestScanTerminalUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sc := &Scanner{seen: map[string]termFileState{}}
+	sc := newScanner()
 	s.scanTerminalUsage(sc)
 
 	rows := s.store.ListUsage(store.UsageFilter{Kind: store.UsageKindTerminal})
@@ -239,7 +239,7 @@ func TestTerminalMergedRowsConvertInPlace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "abc.jsonl"), []byte(termFixture), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s.scanTerminalUsage(&Scanner{seen: map[string]termFileState{}})
+	s.scanTerminalUsage(newScanner())
 	var sonnet []store.UsageEvent
 	for _, r := range s.store.ListUsage(store.UsageFilter{Kind: store.UsageKindTerminal, Asc: true}) {
 		if r.Model == "claude-sonnet-5" {

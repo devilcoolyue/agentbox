@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -68,6 +69,9 @@ type Session struct {
 
 type Store struct {
 	db *sql.DB
+	// usageHook is told which workspaces a committed usage write touched; see
+	// OnUsageWritten.
+	usageHook atomic.Pointer[func([]UsageWrite)]
 }
 
 func Open(path string) (*Store, error) {
@@ -624,7 +628,11 @@ func (s *Store) InsertUsage(evs ...UsageEvent) error {
 	if err := insertUsageTx(tx, evs); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.usageWritten(evs)
+	return nil
 }
 
 func insertUsageTx(tx *sql.Tx, evs []UsageEvent) error {
@@ -778,7 +786,11 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 			return fmt.Errorf("upsert terminal usage %s/%s: %w", e.SessionID, e.ReqID, err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.usageWritten(evs)
+	return nil
 }
 
 const usageCols = `id, ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,

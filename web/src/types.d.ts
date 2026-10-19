@@ -397,6 +397,13 @@ export interface UsageEvents {
   timezone: string;
 }
 
+/** GET /api/usage/live 推送的一条用量变更通知（usageLiveNotice）。只带空间 ID；
+ *  sessions 为 null 表示变更太多、没有逐个列出。 */
+export interface UsageLiveNotice {
+  type: "usage";
+  sessions: string[] | null;
+}
+
 /* ---------------- Claude 订阅额度 ---------------- */
 
 /** 一条限额窗口（5 小时 / 本周 / 本周 Opus…）。percent 是 0-100 的使用率。 */

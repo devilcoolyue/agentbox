@@ -488,8 +488,16 @@ data/
     哪怕是 claude 也只能标「价目表 / 未定价」，不能标「官方报价」。
   - 扫描按 (size, mtime) 跳过没动过的文件；只遍历库里存在的会话，磁盘上已删除会话的
     残留目录不补（补了也是归不到人头上的孤儿行）。
+  - **动过的文件只续读**（照 cc-switch 的字节游标）：`termFileState` 记着读到的字节偏移、
+    续读点前 64 字节与文件身份（inode），新写完的行交给有状态的解析器
+    （`claudeTermParser` / `codexTermParser`，`rows()` 必须等于整份解析的结果，
+    `TestTerminalIncrementalMatchesFullParse` 按各种切法核对），只把内容指纹变了的行
+    upsert——没有新用量的写入不碰库、不发推送。换了 inode、比续读点短、续读点前的尾巴
+    对不上都从头读；没有换行结尾的最后一段只在它本身是完整 JSON 时才吃（JSON 对象的
+    真前缀不可能合法），写到一半的行留到下一轮。闲置 30 分钟丢掉解析状态、全量扫描后
+    忘掉已删除的文件，之后再写从头读，与重启后一样。状态只在内存，不落库。
   - 触发有三条路，都汇到 `usage.Service` 的扫描器（扫描进度上锁，同一时刻只有一趟在跑）：
-    **inotify**（`termWatchLoop`，主力，实测写入到落库 ~700ms）、`termUsageLoop`
+    **inotify**（`termWatchLoop`，主力，写入后攒 300ms 再扫）、`termUsageLoop`
     每分钟的全量兜底、以及 `handleUsageEvents` 进来时先补一趟。
   - **inotify 能收到容器里的写入**：会话 home 是 bind mount，容器与宿主机是同一个
     inode，写操作走同一个内核 VFS（实测 CREATE/WRITE/REMOVE 都到）。监听的是
@@ -501,8 +509,19 @@ data/
     回合进行中扫到的是半截，upsert 保证下一轮补齐同一行。
 - 终端页顶栏的「本会话已花」（`term.ts` 的 `termSpendPolling`）直接复用
   `GET /api/usage/events?session=<id>&limit=1` 的 `total`，没有单独的接口——那个 total
-  本来就是「按筛选条件算、与翻页无关」，正好是这个数。只在终端页轮询（15 秒）。
-- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源，每个非零累计差值是一次请求、一行（键见上）；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；仍只记账不扣额度。
+  本来就是「按筛选条件算、与翻页无关」，正好是这个数。只在终端页刷新：收到本空间的
+  用量推送就读，推送断开时才退回 15 秒轮询。
+- **用量变更推送**（`server/usage_live.go` + `web/src/usage-live.ts`，照 cc-switch 的
+  `usage-log-recorded`）：store 在 `InsertUsage` / `InsertUsageMessages` /
+  `UpsertTerminalUsage` 提交后调 `OnUsageWritten` 钩子（只给用户与空间 ID），推送中心按
+  连接合并 200ms，经 `GET /api/usage/live`（WS，`s.auth`）发 `{type:"usage",sessions:[…]}`，
+  超过 64 个空间发 `null`。普通用户只收自己的，管理员收全部；30 秒心跳复查令牌与角色，
+  失效以 4001 关闭、前端不重连。推送只带 ID、不带金额或行数据，页面照常走
+  `/usage/events` 重读，可见范围仍由那边判断——别往推送里塞数据绕过它。前端只在使用记录页
+  或终端页开着时连（`watchUsageLive` 按界面计数），重连成功后补发一次 `sessions=null`；
+  使用记录页连续通知至少隔 1 秒重读、后台标签页回到前台再读。轮询都保留作兜底：使用记录页
+  「跟随当前时刻」仍每 30 秒前移时间窗。
+- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源（认 `originator`；`source` 0.154 前是 `cli`，0.160 起 TUI 跑在 app-server 上写 `vscode`，与网页对话的 `agentbox`+`vscode` 靠 originator 区分），每个非零累计差值是一次请求、一行（键见上）；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；仍只记账不扣额度。
 - 终端推理强度只读历史日志：Claude assistant 顶层 `effort`（不回退 `perTurnEffort`），Codex `turn_context.payload.effort`；schema 17 的 `usage_events.effort/effort_control` 随原行 upsert，每次请求取它自己记录的档位，缺失留空。重启后重扫现存日志可补历史强度，不拆分原去重键、不替换价格快照、不扣余额；禁止用当前账号配置推断历史。网页强度仍取冻结聊天回执，起标题不借用网页回合强度。升级前保留 schema 16 兼容备份，回退使用匹配旧版本恢复到新目录。
 
 ### 终端

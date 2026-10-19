@@ -35,7 +35,7 @@ type Service struct {
 }
 
 func New(ctx context.Context, cfg *config.Config, st Store) *Service {
-	return &Service{request: make(chan struct{}, 1), ctx: ctx, cfg: cfg, store: st, termScan: &Scanner{seen: map[string]termFileState{}}}
+	return &Service{request: make(chan struct{}, 1), ctx: ctx, cfg: cfg, store: st, termScan: newScanner()}
 }
 func (s *Service) workContext() context.Context { return s.ctx }
 func (s *Service) homeDir(sess store.Session) string {

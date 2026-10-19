@@ -54,6 +54,29 @@ func TestCodexTerminalDeduplicatesAndGroupsModels(t *testing.T) {
 		}
 	}
 }
+
+// codex-tui 从 0.160 起跑在 app-server 上，rollout 的 source 写 "vscode"（实测
+// 0.160.1 / 0.161.0）；它仍是终端里手敲的会话。agentbox 自己的网页对话同样写
+// "vscode"，但 originator 是 "agentbox"；exec、subagent 依旧排除。
+func TestCodexTerminalSourceAcrossVersions(t *testing.T) {
+	for _, c := range []struct {
+		originator, source string
+		want               bool
+	}{
+		{"codex-tui", `"cli"`, true},
+		{"codex-tui", `"vscode"`, true},
+		{"agentbox", `"vscode"`, false},
+		{"codex_exec", `"exec"`, false},
+		{"codex-tui", `"exec"`, false},
+		{"codex-tui", `{"subagent":{"thread_spawn":{"parent_thread_id":"p"}}}`, false},
+	} {
+		raw := strings.Replace(codexFixture(t), `"originator": "codex-tui", "source": "cli"`, `"originator": "`+c.originator+`", "source": `+c.source, 1)
+		rows, err := parseCodexTerminal(strings.NewReader(raw))
+		if err != nil || (len(rows) == 4) != c.want || (!c.want && len(rows) != 0) {
+			t.Fatalf("%s/%s: %d rows, %v", c.originator, c.source, len(rows), err)
+		}
+	}
+}
 func TestCodexTerminalScanUpdatesWithoutChargingAndKeepsSnapshot(t *testing.T) {
 	s, sess := newTestServer(t)
 	sess.Agent = "codex"
