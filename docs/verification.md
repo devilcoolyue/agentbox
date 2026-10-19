@@ -60,6 +60,7 @@ python3 scripts/verify.py run desktop-unit
 | `browser-webkit` | 主控制台、首次使用、草稿、待确认发送四个场景在 Playwright WebKit 中执行；断言与 Chromium 组相同 | 真实 Safari/iOS、触屏与实机；Linux 需先装 WebKit 系统依赖（`npx playwright install --with-deps webkit`） |
 | `--step integration.chat` | 本机真实 Go 服务/SQLite/API/WS＋浏览器；执行端为合成 Docker/CLI | 非 root macOS 成功附件上传不适用（验证真实 chown 拒绝），由 Linux 矩阵覆盖 |
 | `--step docker.chat-reliability` | 独立 Linux 服务进程/卷＋真实浏览器，崩溃/重启、确认丢失、附件及账本 | 合成执行端，不运行真实 CLI/provider，不挂 Docker socket；需显式本地测试镜像 |
+| `--step cli.model-gateway` | 本机已安装的 `claude` 与 `codex`（exec、app-server）经真实服务端模型网关（`/x/<空间>/<MAC>` 前缀）访问合成上游：正常回复、复读中断、CLI 重试（含 Claude 的非流式兜底）被冷却挡在网关；需两个 CLI 都在 PATH，缺一即失败 | 真实提供方/账号、容器网络与终端 TUI；不在任何组里 |
 | `--step docker.cli-candidate` | 同生产候选门槛，真实本地 CLI＋合成上游；network=none，清理本次容器 | 真实提供方/账号、npm 安装或修改当前镜像 |
 | `--step ui.image-update-gate` | 候选状态/更新/回退专项，含诊断/错误前置场景、三语/窄屏；合成 API | Docker/实际更新 |
 | `docker-core` | 文件系统/播种/服务端 Linux 回归、管理员恢复/PTY | 生产卷；测试镜像构建可能需依赖网络，运行容器禁外网 |

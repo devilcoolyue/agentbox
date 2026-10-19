@@ -53,6 +53,15 @@ func TestFingerprintJSONNormalization(t *testing.T) {
 			t.Fatal("malformed input modified")
 		}
 	}
+	// Claude Code's non-streaming fallback for a failed stream is the same request.
+	streamed := []byte(`{"model":"m","messages":[{"role":"user","content":"x","max_tokens":1}],"stream":true,"max_tokens":128000}`)
+	fallback := []byte(`{"model":"m","messages":[{"role":"user","content":"x","max_tokens":1}],"stream":false,"max_tokens":64000}`)
+	if string(FingerprintBody(streamed)) != string(FingerprintBody(fallback)) {
+		t.Fatal("non-streaming fallback bypasses cooldown")
+	}
+	if nested := []byte(`{"model":"m","messages":[{"role":"user","content":"x","max_tokens":2}],"stream":true}`); string(FingerprintBody(streamed)) == string(FingerprintBody(nested)) {
+		t.Fatal("only top-level delivery fields may be ignored")
+	}
 	r1 := httptest.NewRequest("POST", "/v1/messages", nil)
 	r1.Header.Set("X-Api-Key", "one")
 	r2 := httptest.NewRequest("POST", "/v1/messages", nil)

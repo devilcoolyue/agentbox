@@ -49,10 +49,18 @@ func ReadEvent(r *bufio.Reader) ([]byte, error) {
 	}
 }
 
+// deliveryFields choose how and how much of a reply is sent, not what the
+// request asks. Claude Code (2.1.302) retries a stream that failed mid-way as
+// a non-streaming request with half the max_tokens; without ignoring these
+// that fallback would escape the cooldown, and a non-streaming reply is never
+// inspected, so a loop could then run to the token limit.
+var deliveryFields = []string{"stream", "stream_options", "max_tokens", "max_output_tokens", "max_completion_tokens"}
+
 // FingerprintBody hashes JSON structurally because Codex reserializes nested
-// objects in a different key order on reconnect. The original bytes are still
-// what goes upstream. UseNumber preserves large integers without float64
-// rounding collisions. Non-JSON input is returned unchanged.
+// objects in a different key order on reconnect, and without the top-level
+// deliveryFields. The original bytes are still what goes upstream. UseNumber
+// preserves large integers without float64 rounding collisions. Non-JSON
+// input is returned unchanged.
 func FingerprintBody(body []byte) []byte {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
@@ -63,6 +71,11 @@ func FingerprintBody(body []byte) []byte {
 	var extra any
 	if decoder.Decode(&extra) != io.EOF {
 		return body
+	}
+	if object, ok := value.(map[string]any); ok {
+		for _, k := range deliveryFields {
+			delete(object, k)
+		}
 	}
 	normalized, err := json.Marshal(value)
 	if err != nil {

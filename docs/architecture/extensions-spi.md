@@ -1,6 +1,6 @@
 # 扩展与 SPI 协议设计
 
-日期：2026-10-16，2026-10-17 解耦（§19）。状态：**设计已评审；P1 已实现**（「扩展」菜单、循环保护、Webhook 通知）。真实 Claude Code 与 Linux Docker 链路尚未验收，见 §17。SPI 1.0 冻结前（见 §15 P3）字段和方法名可能调整，不承诺兼容。
+日期：2026-10-16，2026-10-17 解耦（§19）。状态：**设计已评审；P1 已实现**（「扩展」菜单、循环保护、Webhook 通知）。真实 Claude Code / Codex 经网关与生产容器布局已于 2026-10-19 验收，见 §20。SPI 1.0 冻结前（见 §15 P3）字段和方法名可能调整，不承诺兼容。
 
 **已定决策（2026-10-16）**
 
@@ -240,7 +240,7 @@
 
 - `protocol`：`responses` / `chat` / `anthropic` / `gemini`，由路径判断，规则同现在的 `protocolFor`。
 - `path` 不含查询串（Gemini 可能把 key 放在 `?key=` 里）。
-- `fingerprint`：沿用 loop-guard 的算法（请求 URI、三个认证头、按键序归一化后的 JSON 正文），再以**每个扩展实例独立的随机盐**做 HMAC-SHA256，输出十六进制。加盐后，不同扩展之间无法关联同一请求，也无法拿已知提示词做字典比对。宿主重启后盐会变，这和冷却表本来就不跨重启一致。
+- `fingerprint`：沿用 loop-guard 的算法（请求 URI、三个认证头、按键序归一化并去掉顶层投递字段 `stream` / `max_tokens` 等的 JSON 正文，见 `docs/loop-guard.md`），再以**每个扩展实例独立的随机盐**做 HMAC-SHA256，输出十六进制。加盐后，不同扩展之间无法关联同一请求，也无法拿已知提示词做字典比对。宿主重启后盐会变，这和冷却表本来就不跨重启一致。
 - `context` 只有授予 `model.context` 时才出现。`source` 为 `chat` / `terminal` / `unknown`（见 §8.4）。
 - v1 不提供请求正文。
 
@@ -514,7 +514,7 @@ P1 已按下表完成：
 | 阶段 | 内容 | 验证 |
 |---|---|---|
 | P0 | 本文评审 | — |
-| P1（已实现） | SPI 1.0-draft 类型与 `pkg/extspi`；宿主核心（仅 builtin）；`pkg/modelgw`；循环保护扩展；管理 API 与「扩展」菜单；Claude 与 Codex 的 API Key / 中转账号；网关独占连接 | 已完成：Go 单元与竞态测试、合成 API 的浏览器回归。**未完成**：合成上游 + 真实 Claude / Codex CLI 的 Docker 回归（见 §17） |
+| P1（已实现） | SPI 1.0-draft 类型与 `pkg/extspi`；宿主核心（仅 builtin）；`pkg/modelgw`；循环保护扩展；管理 API 与「扩展」菜单；Claude 与 Codex 的 API Key / 中转账号；网关独占连接 | 已完成：Go 单元与竞态测试、合成 API 的浏览器回归。真实 Claude / Codex CLI 经网关打合成上游（`cli.model-gateway`）与生产布局可达性见 §20 |
 | P2 | `extension_events` 表与回执里的中断说明；按回合归属（若 §16 验证通过） | 同上 |
 | P3 | container 运行时；一致性测试工具；**冻结 SPI 1.0** | 沙箱隔离实测（network=none、只读根、资源限额、标签清理） |
 | P4 | 市场；`storage` | 另行设计 |
@@ -523,9 +523,10 @@ P1 已按下表完成：
 
 ## 16. 待验证与待决问题
 
-- **带路径前缀的 base URL**：Claude Code 对 `http://host/x/<session>/<mac>` 这种地址能否正确拼接 API 路径，需要用真实 CLI 实测；不行就改为在请求头里传令牌（Claude 的自定义请求头 env）。Codex 的 provider `base_url` 本来就常带路径（如 `https://relay/v1`），按字符串拼接 `/responses`，风险较低，但同样需要实测。
-- **透明网络**：开启透明网络的空间能否访问网关端口，需要和代理桥一起核对。
-- **Codex 的 WebSocket 传输**：较新的 Codex 可能对 Responses 使用 WebSocket，网关不支持；需要确认所用 provider 配置不会启用它。
+- ~~**带路径前缀的 base URL**~~：2026-10-19 已用真实 Claude Code 2.1.302 与 Codex 0.163.0 验证，见 §20。
+- ~~**透明网络**~~：2026-10-19 在生产「默认网桥 + 透明网络辅助容器」布局的空间里实测可达，见 §20。
+- ~~**Codex 的 WebSocket 传输**~~：Codex 0.163.0 对自定义 provider 只发 HTTP POST `/responses`（§20 的 exec 与 app-server 两条路径均如此）；升级 Codex 后用 `cli.model-gateway` 复查。
+- **非流式请求不检查**：网关只解析 SSE；客户端一开始就发非流式请求时，上游复读会一直生成到 token 上限。被中断后的非流式兜底由冷却挡住（§20），首发即非流式的情况目前没有保护。
 - **用户级开关**：是否允许普通用户为自己的空间选择不检查（v1 不提供，由管理员按账号决定）。
 
 ## 17. P1 实施记录（2026-10-16）
@@ -546,7 +547,7 @@ P1 已按下表完成：
 - 服务端测试覆盖管理 API、修订冲突、启用前的权限要求、base URL 改写、订阅账号不改道、网关不可用时放行策略不改写、MAC 错误 403、未知空间 404、撤权 403、删除账号解绑。
 - 浏览器回归 `scripts/test-extensions.mjs`（并入 `browser.browser`）：合成 API 下的列表、详情、保存、冲突、纯文本渲染（含 HTML 片段的说明不被解析）、事件与日志、空间头部标记、普通用户看不到入口；完整浏览器回归通过。
 
-**尚未验证（启用到生产前必须补）**
+**尚未验证（启用到生产前必须补）**——2026-10-19 已补，见 §20；下列原文保留。
 
 - 真实 Claude Code 能否使用带路径前缀的 base URL（`http://172.17.0.1:1083/x/<空间>/<MAC>`）正确拼接 `/v1/messages` 等路径；本环境没有 Docker，没有跑真实 CLI。若不能，改为在请求头里传令牌（§16）。
 - 容器到网关端口的可达性（默认网桥、透明网络两种布局）。
@@ -569,7 +570,7 @@ P1 已按下表完成：
 
 **已验证**：`internal/credentials` 的改写、解绑恢复、播发保留网关、未播种空间不创建、账号池不被写入；`internal/workspace` 的钩子在运行中与全新启动都执行、失败阻止启动；服务端用合成 Responses 上游（推理摘要复读）跑通：绑定后后台改写空间配置、账号池不变、请求经网关转到账号池的真实上游并被中断（`response.failed` + `model_output_loop`）、事件记录、解绑后恢复上游；独占连接接口的修订号与传输生效；浏览器回归覆盖 Codex 账号可选与开关保存。Go 测试均在 `-race` 下通过。
 
-**尚未验证**：真实 Codex CLI 在容器里使用改写后的 `config.toml` 走网关（含 app-server 与 exec 两条路径、终端）；生产网桥与防火墙对 1083 端口的放行。迁移时先绑定、再改账号地址，期间请求会依次经过两层网关，保护不中断。
+**尚未验证**（2026-10-19 已补，见 §20）：真实 Codex CLI 在容器里使用改写后的 `config.toml` 走网关（含 app-server 与 exec 两条路径、终端）；生产网桥与防火墙对 1083 端口的放行。迁移时先绑定、再改账号地址，期间请求会依次经过两层网关，保护不中断。
 
 ## 19. 扩展与模型网关解耦（2026-10-17）
 
@@ -582,3 +583,19 @@ P1 已按下表完成：
 5. **界面**：卡片显示钩子分组，空间头部列出所有作用于本空间的扩展。
 
 外置进程运行时（§5.2、§5.3）仍按原计划在 P3 做；本次改动让 SPI 不再假设扩展处理模型流量，container 扩展可以只订阅事件。
+
+## 20. 真实 CLI 与生产布局验收（2026-10-19）
+
+**入口**：`AGENTBOX_GATEWAY_CLI_TEST=1 go test -run TestModelGatewayCLILive ./internal/server`，即 `python3 scripts/verify.py run --step cli.model-gateway`。本机已安装的 `claude` 与 `codex` 用产品的聊天 argv（去掉写容器 PID 文件的外壳）、产品 `execEnv` 给出的环境和绑定后改写的空间 `config.toml`，经服务端真实监听的模型网关访问合成上游；干净的临时 HOME，不用账号、不调模型、不起容器。版本：Claude Code 2.1.302、Codex 0.163.0（与生产 Agent 镜像相同）。
+
+| 路径 | 正常回复 | 复读 |
+| --- | --- | --- |
+| Claude（`ANTHROPIC_BASE_URL=http://…/x/<空间>/<MAC>`） | 上游收到 `/api/v1/messages`（账号地址 `…/api` 加上 CLI 拼的 `/v1/messages`），`Bearer` 令牌原样 | 第一次流被中断；CLI 随即改发 `stream:false`、`max_tokens` 128000→64000 的兜底请求。修复前指纹不同，兜底到达上游；修复后被冷却以 422 拒绝，回合结果为 `API Error: 422 An identical request recently looped…[agentbox.loop-guard]` |
+| Codex exec（空间 `config.toml` 的 `base_url` 为网关地址） | 上游收到 `/v1/responses` | 中断一次；CLI 重连 5 次全被冷却拒绝、不到上游，`turn.failed` 带同一说明 |
+| Codex app-server（`RunCodexTurn`） | 同上 | 同上 |
+
+**修复**：`pkg/modelgw.FingerprintBody` 去掉顶层投递字段（`stream`、`stream_options`、`max_tokens`、`max_output_tokens`、`max_completion_tokens`），扩展与独立 `abox-loop-guard` 共用。生产当时只绑定了 Codex 中转账号，未受这个缺口影响。
+
+**生产布局**：从生产「Agentbox开发」空间（`net=bridge`，同时有透明网络辅助容器 `agentbox-net-*`）访问 `172.17.0.1:1083`：错误 MAC 返回 403 `model_gateway_forbidden`，未知路径 404，说明网桥与透明网络规则都放行网关端口。生产绑定的 Codex 中转账号空间，其 `config.toml` 已改写为网关地址，10-17 有多轮真实对话正常入账。
+
+**仍未覆盖**：终端里的交互式 TUI（与上面同一 CLI 与 HTTP 客户端，环境来自 tmux 同步，只有单元测试）；真实供应商在中断后的行为；首发即非流式的请求（§16）。

@@ -743,7 +743,7 @@ data/
 - 事件钩子：`workspace.lifecycle` 由 `workspace.Service.SetLifecycleHook` 报告（只报真实状态变化：冷启动才算 started，停止前须在运行；隐藏的委派跑腿空间不报，钩子在空间锁内调用、不能阻塞），`chat.turn.ended` 由 `chat.Runtime.TurnEnded` 在用量 flush 之后报告（委派跑腿回合不报）；服务端在 `extension_events.go` 转成 `Host.Emit`，宿主按订阅、权限与绑定投递，`eventNotice` 进实例队列，满了丢弃并写日志，没有失效策略。启用扩展只要求至少批准一个钩子的权限。`agentbox.webhook` 是官方内置、允许出站的扩展，URL 常含机器人密钥，日志与错误里不能出现 URL（`url.Error` 只保留原因）。
 - 失效策略默认放行（已定），必须在扩展页可见；`fail_closed` 时网关没起来也照样改写，让请求失败而不是绕过检查。中断/拒绝记录 P1 只在内存（最近 200 条）。
 - 设置走 `Host.Normalize` → `Config.SetExtension(expected_revision)` → `applyExtensions`；`extensions` 段必须随 mutate/persist 保留。新增官方扩展：`internal/extension/builtin` 加清单 JSON 与 `extspi.Handler`（并发安全；订阅了哪组钩子就实现对应接口，如 `extspi.ModelHandler`，宿主在 initialize 时核对）并登记进 `All()`，清单过 `ParseManifest`，测试里用 `PipeBuiltins` 再跑一遍 NDJSON 一致性。
-- 回归：`go test ./pkg/modelgw ./pkg/extspi ./pkg/loopguard ./internal/extension/... ./internal/config`、`go test ./internal/server -run 'Extension|ModelGateway'`、`race.extensions`、`browser.browser`（含 `scripts/test-extensions.mjs`）。真实 Claude Code / Codex 走带路径前缀的 base URL 与容器到网关的可达性尚未验收。从独立 `abox-loop-guard` 迁移的步骤见 `docs/loop-guard.md`。
+- 回归：`go test ./pkg/modelgw ./pkg/extspi ./pkg/loopguard ./internal/extension/... ./internal/config`、`go test ./internal/server -run 'Extension|ModelGateway'`、`race.extensions`、`browser.browser`（含 `scripts/test-extensions.mjs`）。真实 CLI 验收是 `cli.model-gateway`（`AGENTBOX_GATEWAY_CLI_TEST=1`，本机 claude/codex 经真实网关打合成上游）；指纹不计顶层 `stream`/`max_tokens` 等投递字段，否则 Claude Code 中断后的非流式兜底会绕过冷却，改指纹规则须重跑它。从独立 `abox-loop-guard` 迁移的步骤见 `docs/loop-guard.md`。
 
 ## 代码约定与注意事项
 
