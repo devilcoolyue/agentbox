@@ -173,7 +173,7 @@ sudo ./agentbox -config config.json
 
 ### 交付之前，看清每一处改动
 
-浏览文件列表和 diff，确认后提交当前仓库的改动。支持 HTTPS Token、SSH 及已配置的 GitHub / GitLab OAuth 连接，可在网页获取、拉取、预览推送并创建 PR / MR。
+浏览文件列表和 diff，确认后提交当前仓库的改动。支持 HTTPS Token（只提供 HTTP 的内网服务须经内网隧道）、SSH 及已配置的 GitHub / GitLab OAuth 连接，可在网页获取、拉取、预览推送并创建 PR / MR。
 
 [![Git 变更：文件列表与逐行差异审查](docs/images/changes.png)](docs/images/changes.png)
 

@@ -173,7 +173,7 @@ Switch to a Shell, Claude Code, or Codex CLI terminal. Run tests, install depend
 
 ### Review what changed before you ship
 
-Inspect the file list and diffs, then commit the repository’s changes. Connect repositories with HTTPS tokens, SSH, or configured GitHub / GitLab OAuth; fetch, pull, preview a push, and create a PR / MR from the Web UI.
+Inspect the file list and diffs, then commit the repository’s changes. Connect repositories with HTTPS tokens (plain-HTTP intranet servers only through your intranet tunnel), SSH, or configured GitHub / GitLab OAuth; fetch, pull, preview a push, and create a PR / MR from the Web UI.
 
 [![Git changes with a file list and line-by-line diff](docs/images/changes.png)](docs/images/changes.png)
 

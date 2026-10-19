@@ -130,7 +130,7 @@ func (s *Server) handleGitConnections(w http.ResponseWriter, r *http.Request) {
 		}
 		base, err = gitaccess.SSHBaseURL(req.BaseURL, req.Username)
 	} else {
-		base, err = gitaccess.BaseURL(req.BaseURL)
+		base, err = gitaccess.ConnectionBaseURL(req.BaseURL, req.Network)
 	}
 	if err != nil {
 		writeErr(w, 400, err.Error())
@@ -143,7 +143,7 @@ func (s *Server) handleGitConnections(w http.ResponseWriter, r *http.Request) {
 		case "gitlab":
 			req.Username = "oauth2"
 		default:
-			writeErr(w, 400, "通用 HTTPS Git 连接需要用户名")
+			writeErr(w, 400, "通用 Git Token 连接需要用户名")
 			return
 		}
 	}

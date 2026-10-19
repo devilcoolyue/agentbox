@@ -358,7 +358,7 @@ POST   /api/sessions/{id}/git/push         {repo, remote, ref, expected_head, ex
 
 创建空间新增可选 `git_connection_id`：省略采用用户默认，显式空串不绑定，非空必须是当前用户可用连接。默认连接作为绑定表单的建议值，不会授权用户未选中的仓库。绑定时校验仓库真实 remote 与连接地址，操作时再次核对；地址变化返回 409 要求重新绑定。
 
-`base_url` 限 HTTPS，支持服务子路径，不接受 userinfo/query/fragment。连接创建后 provider/base_url/username 不可改；换服务需新建连接。GitHub 缺省 username 为 x-access-token，GitLab 为 oauth2，通用服务需填写。缺省 read_only=true；这只是 Agentbox 的限制，上游仍需赋予对应权限。
+`base_url` 限 HTTPS，支持服务子路径；只提供 HTTP 的内网服务可填 `http://`，但必须同时选择 `network.route=tunnel` 且不带 CA，服务端直连一律拒绝 HTTP，仓库地址的协议须与连接一致，不接受 userinfo/query/fragment。连接创建后 provider/base_url/username 不可改；换服务需新建连接。GitHub 缺省 username 为 x-access-token，GitLab 为 oauth2，通用服务需填写。缺省 read_only=true；这只是 Agentbox 的限制，上游仍需赋予对应权限。
 
 push-preview 返回目标 URL、连接标签、完整 ref、本地和远程 SHA 以及最多 20 条提交摘要；push 必须带回三个校验值。当前仅推送当前分支到远程同名分支，禁止强推、删除、多 ref 和隐式标签推送。远端提前推进或本地 HEAD 变化返回 409。网络中断后结果可能未知，应重新核对远端，而非重复本地提交。
 

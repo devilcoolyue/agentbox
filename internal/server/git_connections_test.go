@@ -295,3 +295,60 @@ func TestGitHTTPSFetchAndExplicitPush(t *testing.T) {
 		t.Fatal("no upstream requests")
 	}
 }
+
+func TestGitHTTPConnectionRequiresTunnel(t *testing.T) {
+	s, sess := newTestServer(t)
+	if _, ok := s.store.GetUser(sess.User); !ok {
+		if err := s.store.CreateUser(store.User{Name: sess.User, Role: store.RoleUser, PassHash: "fixture"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if u, p, ok := r.BasicAuth(); !ok || u != "fixture" || p != "synthetic-secret" || r.URL.Path != "/gitlab/team/repo.git/info/refs" {
+			w.WriteHeader(401)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
+		_, _ = w.Write([]byte("001e# service=git-upload-pack\n0000"))
+	}))
+	defer upstream.Close()
+	s.gitHTTPClient = func(_ context.Context, c store.GitConnection) (*http.Client, func(), error) {
+		if c.Network.Route != "tunnel" {
+			t.Errorf("HTTP connection routed %q", c.Network.Route)
+		}
+		return upstream.Client(), func() {}, nil
+	}
+	create := func(network map[string]string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]any{"label": "LAN GitLab", "provider": "gitlab", "base_url": upstream.URL + "/gitlab/", "username": "fixture", "token": "synthetic-secret", "network": network})
+		w := httptest.NewRecorder()
+		s.handleGitConnections(w, accessRequest(sess.User, "POST", "/git/connections", string(body)))
+		return w
+	}
+	for _, network := range []map[string]string{{}, {"route": "direct"}} {
+		if w := create(network); w.Code != 400 || !strings.Contains(w.Body.String(), "内网隧道") {
+			t.Fatalf("HTTP over %v: %d %s", network, w.Code, w.Body.String())
+		}
+	}
+	w := create(map[string]string{"route": "tunnel"})
+	if w.Code != 201 {
+		t.Fatalf("tunnel create: %d %s", w.Code, w.Body.String())
+	}
+	var c store.GitConnection
+	if err := json.Unmarshal(w.Body.Bytes(), &c); err != nil || c.BaseURL != upstream.URL+"/gitlab" {
+		t.Fatalf("stored base %q %v", c.BaseURL, err)
+	}
+	probe := func(repo string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]string{"url": repo})
+		r := accessRequest(sess.User, "POST", "/git/connections/"+c.ID+"/test", string(body))
+		r.SetPathValue("connection", c.ID)
+		w := httptest.NewRecorder()
+		s.handleGitConnectionTest(w, r)
+		return w
+	}
+	if w := probe(upstream.URL + "/gitlab/team/repo.git"); w.Code != 200 {
+		t.Fatalf("probe: %d %s", w.Code, w.Body.String())
+	}
+	if w := probe(strings.Replace(upstream.URL, "http://", "https://", 1) + "/gitlab/team/repo.git"); w.Code != 400 {
+		t.Fatalf("scheme change: %d %s", w.Code, w.Body.String())
+	}
+}

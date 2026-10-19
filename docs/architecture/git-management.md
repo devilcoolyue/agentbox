@@ -30,7 +30,7 @@
 - Git status 改用 porcelain v2 -z，正确保留中文、空格、引号、换行、重命名路径。网页 commit/discard 以仓库锁串行；终端/Agent 仍可能并发更改仓库，不能宣称隔离事务。
 - SQLite schema 4 增加 git_profiles。旧身份不迁移为上游认证；删除用户同时清理该身份。备份已包含数据库，新库不可交给只支持 schema 3 的旧二进制。
 - 阶段 4 已接入：用户私有 HTTPS PAT 连接、AES-GCM 密文存储、独立主密钥、备份/恢复解密校验、修订控制、停用/删除、用户默认、创建空间选择默认、remote 绑定、clone、独立仓库读取探测、fetch、ff-only pull、push-preview/显式 push、基础审计落库。
-- 长效 Token 保留在服务端，由按次 Git smart HTTP grant 转发；推送校验 old/new/ref，只读 grant 不支持 receive-pack。上游拒绝重定向；缺省服务端直连 HTTPS，可选用户隧道与公司 CA；网桥复用 proxy_bridge 主机配置并分配临时端口。
+- 长效 Token 保留在服务端，由按次 Git smart HTTP grant 转发；推送校验 old/new/ref，只读 grant 不支持 receive-pack。上游拒绝重定向；缺省服务端直连 HTTPS，可选用户隧道与公司 CA；只提供 HTTP 的内网服务仅可经用户隧道连接（路由保存后不可改，Token 不会从服务端以明文发往公网），仓库地址协议必须与连接一致；网桥复用 proxy_bridge 主机配置并分配临时端口。
 - SQLite schema 5 增加 connections/bindings/defaults/operations；不可由旧二进制打开。主密钥位于 data/git-secrets/master.key，0600，目录不挂进空间。不可单独丢弃密钥文件；系统备份与恢复都验证数据库密文能解密。
 - 阶段 4 的主密钥轮换、终端复用授权已补齐（见下节）。自定义远程管理（添加、改址、删除）已接入，先解绑再改址。用户审计查询、主动取消/阶段与字节进度、workspace 默认编辑已接入。
 - 阶段 5 已接入 GitHub/GitLab OAuth 应用配置、state/PKCE/Cookie/原会话绑定、回调、续期、保留连接 ID 的重新授权与撤销。应用 Client Secret 经 Config.mutate 保存密文，配置/连接密钥均在备份恢复时校验。模拟提供方验证不等于真实注册应用授权验收。

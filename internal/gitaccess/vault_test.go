@@ -68,9 +68,40 @@ func TestEndpointValidation(t *testing.T) {
 	if _, err = RepositoryURL("https://git.example.com/gitlab/team/repo.git", base); err != nil {
 		t.Fatal(err)
 	}
-	for _, raw := range []string{"https://git.example.com/gitlab-other/repo", "https://evil.example.com/gitlab/repo", "https://git.example.com/gitlab"} {
+	for _, raw := range []string{"https://git.example.com/gitlab-other/repo", "https://evil.example.com/gitlab/repo", "https://git.example.com/gitlab", "http://git.example.com/gitlab/team/repo.git"} {
 		if _, err = RepositoryURL(raw, base); err == nil {
 			t.Errorf("outside base accepted %q", raw)
 		}
+	}
+}
+
+func TestHTTPEndpointRequiresTunnel(t *testing.T) {
+	for _, p := range []NetworkPolicy{{}, {Route: "direct"}, {Route: "tunnel", CAPEM: "x"}} {
+		if _, err := ConnectionBaseURL("http://192.168.2.66:7077/gitlab", p); err == nil {
+			t.Errorf("HTTP accepted with %+v", p)
+		}
+	}
+	tunnel := NetworkPolicy{Route: "tunnel"}
+	for _, raw := range []string{"http://user:pw@git.lan", "http://git.lan?x=1", "http://git.lan/a/../b", "ftp://git.lan"} {
+		if _, err := ConnectionBaseURL(raw, tunnel); err == nil {
+			t.Errorf("accepted %q", raw)
+		}
+	}
+	if got, err := ConnectionBaseURL("https://git.example.com:443", NetworkPolicy{}); err != nil || got != "https://git.example.com" {
+		t.Fatalf("https direct: %q %v", got, err)
+	}
+	base, err := ConnectionBaseURL("http://Git.LAN:80/gitlab/", tunnel)
+	if err != nil || base != "http://git.lan/gitlab" {
+		t.Fatalf("normalize %q %v", base, err)
+	}
+	if got, err := RepositoryURL("http://git.lan:80/gitlab/team/sub/repo.git", base); err != nil || got != "http://git.lan/gitlab/team/sub/repo.git" {
+		t.Fatalf("repository %q %v", got, err)
+	}
+	if _, err = RepositoryURL("https://git.lan/gitlab/team/repo.git", base); err == nil {
+		t.Error("scheme change accepted")
+	}
+	base, err = ConnectionBaseURL("http://192.168.2.66:7077/gitlab", tunnel)
+	if err != nil || base != "http://192.168.2.66:7077/gitlab" {
+		t.Fatalf("intranet %q %v", base, err)
 	}
 }
