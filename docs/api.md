@@ -362,7 +362,7 @@ POST   /api/sessions/{id}/git/push         {repo, remote, ref, expected_head, ex
 
 push-preview 返回目标 URL、连接标签、完整 ref、本地和远程 SHA 以及最多 20 条提交摘要；push 必须带回三个校验值。当前仅推送当前分支到远程同名分支，禁止强推、删除、多 ref 和隐式标签推送。远端提前推进或本地 HEAD 变化返回 409。网络中断后结果可能未知，应重新核对远端，而非重复本地提交。
 
-网络传输通过按次的网桥 HTTP grant 转发，只允许所选仓库的 upload-pack 或 receive-pack。长效 Token 留在服务端，receive-pack 校验 ref/old/new；拒绝重定向，不把调用方 Cookie 或任意 Header 发往上游。Git 仍在容器运行，单条网络命令最长 120 秒。网桥使用 `proxy_bridge.bind` 的监听主机及动态端口，容器通过 `proxy_bridge.host` 访问，需允许容器到该网桥的连接。上游缺省由服务端直连 HTTPS；可按下文配置公司 CA、用户隧道或 SSH。
+网络传输通过按次的网桥 HTTP grant 转发，只允许所选仓库的 upload-pack 或 receive-pack。长效 Token 留在服务端，receive-pack 校验 ref/old/new；拒绝重定向，不把调用方 Cookie 或任意 Header 发往上游。Git 仍在容器运行，单条网络命令最长 30 分钟（`gitx.NetworkTimeout`，经内网隧道的大仓库可能要几分钟）。网桥使用 `proxy_bridge.bind` 的监听主机及动态端口，容器通过 `proxy_bridge.host` 访问，需允许容器到该网桥的连接。上游缺省由服务端直连 HTTPS；可按下文配置公司 CA、用户隧道或 SSH。
 
 连接、绑定、默认值及 fetch/pull/push 写入 `git_operations` 审计（不记录 Token 和原始网络错误）。个人 Git 连接中的「操作记录」可查询并取消活动操作。正在传输的请求无法撤回；停用/修改连接会拒绝后续 grant 请求。
 
@@ -370,7 +370,11 @@ push-preview 返回目标 URL、连接标签、完整 ref、本地和远程 SHA 
 
 `GET /api/git/operations?before=<id>` 返回当前用户的 `{rows, active, next_before}`，每页 50 条，使用 ID 游标。管理员也不因此看到他人私有 Git 操作。历史包含启动/结束时间、空间/仓库、操作类型、目标和结果；不记录 Token、提交信息或原始远程错误。
 
-前端可在 Git 操作 POST 中传 `X-Git-Request-ID`（16–80 位字母、数字、`_`、`-`）；活动列表中的 request_id 可用于 `POST /api/git/operations/{operation}/cancel`。同时最多 4 个活动操作/用户；活动列表提供阶段、耗时和实际传输字节，不伪造完成百分比。取消请求返回 202，最终结果仍来自原操作响应/历史。远程已接受的推送不能回滚，`cancelled_unknown` / `interrupted_unknown` 必须重新核对远程。
+前端可在 Git 操作 POST 中传 `X-Git-Request-ID`（16–80 位字母、数字、`_`、`-`）；活动列表中的 request_id 可用于 `POST /api/git/operations/{operation}/cancel`。同时最多 4 个活动操作/用户；活动列表提供阶段、耗时和实际传输字节，不伪造完成百分比。取消请求返回 202，最终结果仍来自原操作响应/历史。
+
+POST 同时带 `X-Git-Async: 1` 时（网页一律如此）服务端在后台执行该操作并立即返回 `202 {"request_id", "async": true}`；`GET /api/git/operations/{operation}` 执行中返回 `{state:"running", operation}`（同活动列表的实时进度），结束后返回 `{state:"done", status, response, operation}`，`status`/`response` 是原处理器的状态码与 JSON 响应体。查询本身总是 200，反向代理（如 Cloudflare 约 100 秒的响应上限、替换源站 502/504 正文）不会截断或改写结果。结果只在内存保留 30 分钟、每用户最多 32 条，服务重启后以历史记录为准；已结束的 request_id 不能再次发起。不带该头的调用（旧客户端、终端授权网桥）仍同步返回。新建空间的 Git 导入（`POST /api/session-creations/{request}/git`）带该头时同样后台执行，先返回 202 与 `running` 回执，创建回执在服务端持有导入期间报告 running、结束后给出最终状态。
+
+Git 上游、平台 API 或其网络路由失败返回 424（不用 502/503，避免被反向代理替换掉原因与操作编号）。GitLab 连接的仓库地址缺少 `.git` 时自动补上：GitLab 对项目页地址的 Git 请求会重定向到 `.git` 地址，而网桥不跟随重定向。远程已接受的推送不能回滚，`cancelled_unknown` / `interrupted_unknown` 必须重新核对远程。
 
 服务重启将残留 running 行标记 interrupted_unknown。SQLite schema 6 增加 finished_at，历史没有结束时间的不伪造。status 的 `last_fetch` 为最近成功网页 fetch/pull 的 `{target,at}`；不代表终端最近的 fetch 时间。
 

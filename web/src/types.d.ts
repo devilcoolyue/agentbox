@@ -1429,6 +1429,10 @@ export interface GitLiveOperation {
  stage?:string; stage_percent?:number; stage_done?:number; stage_total?:number;
 }
 export interface GitOperationPage {rows:GitOperation[]; active:GitLiveOperation[]; next_before:number;}
+/** 带 X-Git-Async: 1 的 Git 操作立即返回的回执（gitOperation 后台执行） */
+export interface GitAsyncStart {request_id:string; async:true;}
+/** GET /git/operations/{id}：执行中带实时进度；结束后带原处理器的状态码与 JSON 响应体 */
+export interface GitOperationResult {state:"running"|"done"; operation:GitLiveOperation; status?:number; response?:unknown;}
 
 export interface GitNetworkPolicy {route?:""|"direct"|"tunnel";ca_pem?:string;}
 export interface GitOAuthApp {network?:GitNetworkPolicy;id:string;label:string;provider:"github"|"gitlab";base_url:string;enabled:boolean;client_id?:string;redirect_url?:string;revision?:number;}

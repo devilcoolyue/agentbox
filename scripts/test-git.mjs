@@ -32,7 +32,7 @@ export async function smoke(page) {
  let shareWrites=0;let shares=[];
  let reviewCreates=0;const reviews=[];
  let branchActions=0;const branchRows=[{name:'main',head:'1'.repeat(40),upstream:'origin/main',current:true,remote:false},{name:'origin/main',head:'1'.repeat(40),upstream:'',current:false,remote:true}];
- let previewRequests=0, holdNextFetch=false, activeGit=[], finishCancelled;
+ let previewRequests=0, holdNextFetch=false, activeGit=[], finishCancelled, cloneAttempts=0;const asyncGit=new Map();
  const state={is_repo:true,repo:'project',repos:['project'],branch:'main',head:'1'.repeat(40),upstream:'origin/main',ahead:2,behind:1,tracking_known:true,remotes:[{name:'origin',url:'https://git.example.com/team/project.git',push:false}],files:[{path:'example.txt',status:' M',untracked:false}]};
  await page.routeWebSocket('**/api/sessions/*/chat?*',()=>{});
  await page.route('**/api/**', async route=>{
@@ -88,12 +88,24 @@ export async function smoke(page) {
    body=bindings;
   }
   else if(path.endsWith('/git/clone')) {
+   // Current servers run Git network operations in the background: 202 now, outcome from GET /git/operations/{id}.
+   assert.equal(route.request().headers()['x-git-async'],'1');
    assert.deepEqual(route.request().postDataJSON(),{connection_id:'git-fixture',url:'https://git.example.com/team/clone.git',directory:'cloned-project'});
-   state.repo='cloned-project';state.repos=['project','cloned-project'];body={ok:true,repo:'cloned-project',warning:''};
+   const id=route.request().headers()['x-git-request-id'];cloneAttempts++;asyncGit.set(id,{polls:0,fail:cloneAttempts===1});
+   await route.fulfill({status:202,json:{request_id:id,async:true}});return;
   }
   else if(path==='/api/git/operations') body={rows:[{id:1,started_at:new Date().toISOString(),finished_at:new Date().toISOString(),actor:'fixture',session_id:'fixture',repo:'project',connection_id:'git-fixture',operation:'fetch',target:'origin <script>literal</script>',result:'success'}],active:activeGit,next_before:0};
   else if(path.startsWith('/api/git/operations/') && path.endsWith('/cancel')) {
    activeGit[0].cancel_requested=true;finishCancelled();body={cancel_requested:true};
+  }
+  else if(path.startsWith('/api/git/operations/')) {
+   const id=path.split('/').pop(),op=asyncGit.get(id);
+   if(!op){await route.fulfill({status:404,json:{error:'missing operation'}});return;}
+   const view={request_id:id,id:7,operation:'clone',session_id:'fixture',started_at:new Date().toISOString(),elapsed_ms:1500,phase:'transferring',received_bytes:4096,sent_bytes:0,cancel_requested:false,stage:'receiving',stage_percent:40,stage_done:4,stage_total:10};
+   if(op.polls++<2) body={state:'running',operation:view};
+   // 424, not 502: the outcome travels inside a 200 poll, so a proxy cannot replace the reason.
+   else if(op.fail) body={state:'done',status:424,response:{error:'克隆失败：synthetic upstream refused'},operation:view};
+   else {state.repo='cloned-project';state.repos=['project','cloned-project'];body={state:'done',status:201,response:{ok:true,repo:'cloned-project',warning:''},operation:view};}
   }
   else if(path.endsWith('/git/terminal')) {
    if(route.request().method()==='POST'){
@@ -345,7 +357,11 @@ export async function smoke(page) {
   await cloneDialog.locator('[type=submit]:not([disabled])').waitFor();
   await cloneDialog.locator('[name=url]').fill('https://git.example.com/team/clone.git');
   await cloneDialog.locator('[name=directory]').fill('cloned-project');
-  await cloneDialog.locator('[type=submit]').click();await cloneDialog.waitFor({state:'detached'});
+  await cloneDialog.locator('[type=submit]').click();
+  await cloneDialog.locator('.git-operation-progress').filter({hasText:'接收对象 4/10'}).waitFor();
+  await cloneDialog.locator('[role=alert]').filter({hasText:'克隆失败：synthetic upstream refused'}).waitFor();
+  await cloneDialog.locator('[type=submit]:not([disabled])').click();await cloneDialog.waitFor({state:'detached'});
+  assert.equal(cloneAttempts,2);
   await page.waitForFunction(()=>document.querySelector('#changes-repo').value==='cloned-project');
   failProfile=true;
   if (await page.locator('#changes-more').isVisible()) await page.locator('#changes-more').click();

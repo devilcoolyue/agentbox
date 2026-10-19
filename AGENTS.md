@@ -668,6 +668,7 @@ data/
 - 分支动作必须核对 expected_head/expected_branch/target_head，创建/切换要求工作区干净；删除先检查目标是当前 HEAD 祖先，再用 branch -d，禁止 force 删除或自动 stash/rebase。分支列表取 for-each-ref，最多 500 条，纯本地不 fetch。
 
 - PR/MR 客户端只根据已绑定仓库构造 GitHub/GitLab API URL，不跟随 redirect；查询/预览不创建，确认再 POST，未知结果不得自动重试。GitLab API scope 由用户单独勾选，SSH 需同平台 HTTPS API 连接。当前只支持同仓库分支，服务端重新核对 HEAD/目标 SHA 和重复请求。
+- 网页 Git 网络操作走后台：POST 带 `X-Git-Async: 1` 时 `gitOperation` 在 `spawn` 里跑原处理器（`WithoutCancel` + `workContext`，可经 cancel 接口取消），回 202，结果由 `GET /api/git/operations/{id}` 取（查询恒为 200）；Git 导入同理并持有 `creationWork`。原因：经隧道的内网大仓库要几分钟，而 Cloudflare 单次响应约 100 秒且会替换源站 502/504 正文。所以上游失败用 `gitUpstreamStatus`（424），别改回 502；终端网桥与旧客户端仍同步。单条网络命令上限 `gitx.NetworkTimeout`（30 分钟），容器 `timeout`、HTTP/SSH 网桥与处理器期限要一起改。GitLab 连接的仓库地址由 `gitRepositoryURL` 补 `.git`（项目页地址会被重定向，网桥不跟随）。
 - Git 共享 ACL（schema 8）仅管理员自己的 PAT/SSH，可按用户只读/写；OAuth 私有。使用入口走 GitConnectionFor，管理仍走所有者 GitConnection；不得因为 admin 角色绕过私有账号。共享执行 actor 和凭证 owner 分开，路由/审计按 actor，AEAD 身份按 owner。撤权增修订、清默认但保留失效绑定；删除用户清名单，重建同名不继承。
 
 ### 附件与清理

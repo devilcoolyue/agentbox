@@ -142,10 +142,10 @@ export function initWorkspaceCreation(){
   if(!S.sessions.some(s=>s.id===session.id))S.sessions.push(session);
   location.hash=`#/sessions/${encodeURIComponent(session.id)}/${tab}`;
  };
- const perform=async(action:(signal:AbortSignal)=>Promise<void>)=>{
+ const perform=async(action:(signal:AbortSignal)=>Promise<void>,limit=180000)=>{
   if(!current()||busy||loading)return;
   controller?.abort();const request=controller=new AbortController();busy=true;render();btnBusy(submit,()=>t("处理中…"));$("new-error").classList.add("hidden");
-  const timer=setTimeout(()=>request.abort(),180000);
+  const timer=setTimeout(()=>request.abort(),limit);
   try{await action(request.signal);}
   catch(error){if(current()&&dialog.open){showError((error as Error).message);try{await flow.reconcile(AbortSignal.timeout(8000));}catch{/* keep pending pointer; next action queries again */}}}
   finally{clearTimeout(timer);busy=false;if(current()){btnDone(submit);render();}}
@@ -192,7 +192,7 @@ export function initWorkspaceCreation(){
    emit("workspace-created",{session,source:spec.source,directory:spec.directory});
    $<HTMLInputElement>("new-name").value="";files.value="";repository.value="";
    await showWorkspace(session,spec.source==="empty"?"chat":spec.source==="git"?"changes":"files");
-  });
+  },spec.source==="git"?35*60000:180000); // 服务端单次 Git 传输上限 30 分钟
  },options);
  return ()=>{
   lifetime.abort();++epoch;controller?.abort();accounts=[];setup=undefined;$("new-config-summary").replaceChildren();

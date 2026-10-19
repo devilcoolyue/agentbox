@@ -360,6 +360,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/git/connections/{connection}/revoke", s.auth(s.gitOperation("oauth.revoke", http.HandlerFunc(s.handleGitOAuthRevoke))))
 	mux.HandleFunc("GET /api/git/oauth/callback", s.handleGitOAuthCallback)
 	mux.Handle("GET /api/git/operations", s.auth(http.HandlerFunc(s.handleGitOperations)))
+	mux.Handle("GET /api/git/operations/{operation}", s.auth(http.HandlerFunc(s.handleGitOperation)))
 	mux.Handle("POST /api/git/operations/{operation}/cancel", s.auth(http.HandlerFunc(s.handleGitOperationCancel)))
 	mux.Handle("POST /api/git/connections", s.auth(http.HandlerFunc(s.handleGitConnections)))
 	mux.Handle("PATCH /api/git/connections/{connection}", s.auth(http.HandlerFunc(s.handleGitConnection)))

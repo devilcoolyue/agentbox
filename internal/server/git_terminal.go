@@ -179,7 +179,7 @@ func (s *Server) handleGitTerminal(w http.ResponseWriter, r *http.Request, sess 
 		writeFileOpErr(w, err)
 		return
 	}
-	hs := &http.Server{Handler: s.admit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.serveGitTerminal(g, w, r) })), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 180 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8 << 10, BaseContext: func(net.Listener) context.Context { return grantCtx }}
+	hs := &http.Server{Handler: s.admit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.serveGitTerminal(g, w, r) })), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: gitTransferDeadline, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8 << 10, BaseContext: func(net.Listener) context.Context { return grantCtx }}
 	release, ok := s.track(func() { cancelGrant(); hs.Close(); ln.Close() })
 	if !ok {
 		writeErr(w, 503, "服务正在停止")

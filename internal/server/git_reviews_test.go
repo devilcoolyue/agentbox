@@ -154,7 +154,7 @@ func TestGitReviewProvidersPreviewCreateAndDuplicate(t *testing.T) {
 				t.Fatalf("duplicate: %d %s", w.Code, w.Body.String())
 			}
 			permissionDenied = true
-			if w = call(true); w.Code != 502 || strings.Contains(w.Body.String(), "synthetic-secret") {
+			if w = call(true); w.Code != gitUpstreamStatus || strings.Contains(w.Body.String(), "synthetic-secret") {
 				t.Fatalf("raw API error leaked: %s", w.Body.String())
 			}
 			permissionDenied = false

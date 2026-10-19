@@ -9,8 +9,10 @@ import (
 	"errors"
 	"io"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var ErrUnavailable = errors.New("Git 容器执行服务不可用")
@@ -128,6 +130,12 @@ func (r *Runner) Archive(ctx context.Context, sessionID, repo, commit string, ds
 	return exec.ExecOutput(ctx, id, cmd, dst, maxBytes)
 }
 
+// NetworkTimeout bounds one Git network command in the container. Intranet
+// remotes reached through a user's tunnel can be slow (a few hundred KB/s), so
+// a clone of a few dozen MB legitimately takes minutes. Browsers wait for
+// these operations asynchronously, never on one long HTTP response.
+const NetworkTimeout = 30 * time.Minute
+
 // RunNetwork uses a longer in-container timeout for bounded network transfers.
 // The URL must be an operation-scoped transport grant, never a provider token.
 func (r *Runner) RunNetwork(ctx context.Context, sessionID, repo string, args ...string) (string, error) {
@@ -143,7 +151,7 @@ func (r *Runner) run(ctx context.Context, sessionID, repo string, network bool, 
 		return "", err
 	}
 	if network {
-		cmd[3] = "120s"
+		cmd[3] = strconv.Itoa(int(NetworkTimeout/time.Second)) + "s"
 	}
 	containerID, release, err := r.prepare(ctx, sessionID)
 	if err != nil {

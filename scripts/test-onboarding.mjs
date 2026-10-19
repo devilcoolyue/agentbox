@@ -35,7 +35,7 @@ try{
   await page.addInitScript(locale=>{if(window===window.top&&/^https?:$/.test(location.protocol))localStorage.setItem('agentbox.language',locale);},locale);
   const errors=[];page.on('pageerror',e=>{errors.push(e.stack||e.message);console.error('Onboarding page error:',e.stack||e.message);});
   let accounts=[],spaces=[],created=0,modelTurns=0,accountFailure=false,setupFailure=false,holdAccounts=false;
-  let loseCreateAck=false,loseImportAck=false,uncertainImport=false,failUpload=false,failGit=false,uploadCalls=0,gitCalls=0;
+  let loseCreateAck=false,loseImportAck=false,uncertainImport=false,failUpload=false,failGit=false,uploadCalls=0,gitCalls=0,gitBackground=0,pendingImport=null;
   const creations=new Map();
   const pendingAccountReads=[];const releaseAccounts=()=>pendingAccountReads.splice(0).forEach(release=>release());
   const models={claude:[{id:'claude-fixture',label:'Claude fixture'}],codex:[{id:'codex-first',label:'First'},{id:'codex-second',label:'Second'}]};
@@ -80,11 +80,19 @@ try{
         const prior=receipt.imports.find(i=>i.attempt_id===input.attempt_id);
         if(prior)body=prior;
         else{const failed=upload?failUpload:failGit;failUpload=false;failGit=false;
-          body={attempt_id:input.attempt_id,kind:upload?'upload':'git',directory:input.directory,state:uncertainImport?'uncertain':failed?'failed':'succeeded',result:{directory:input.directory,files:1},created_at:new Date().toISOString()};receipt.imports.unshift(body);uncertainImport=false;}
-        if(body.state==='succeeded'&&loseImportAck){loseImportAck=false;await route.abort();return;}
+          const final=uncertainImport?'uncertain':failed?'failed':'succeeded';
+          // Current servers clone in the background: 202 running now, the receipt reports the result later.
+          const background=!upload&&route.request().headers()['x-git-async']==='1';
+          body={attempt_id:input.attempt_id,kind:upload?'upload':'git',directory:input.directory,state:background?'running':final,result:{directory:input.directory,files:1},created_at:new Date().toISOString()};receipt.imports.unshift(body);uncertainImport=false;
+          if(background){gitBackground++;receipt.busy=true;pendingImport={receipt,item:body,final,polls:2};}}
+        if((body.state==='succeeded'||pendingImport?.item===body&&pendingImport.final==='succeeded')&&loseImportAck){loseImportAck=false;await route.abort();return;}
+        if(body.state==='running'){await route.fulfill({status:202,json:body});return;}
       }
       else if(method==='POST'){const action=route.request().postDataJSON().action;if(action==='review')receipt.imports[0].state='reviewed';else receipt.state=action==='finish'?'complete':'abandoned';body={ok:true};}
-      else body=receipt;
+      else{
+        if(pendingImport?.receipt===receipt&&--pendingImport.polls<=0){pendingImport.item.state=pendingImport.final;receipt.busy=false;pendingImport=null;}
+        body=receipt;
+      }
     }else if(path==='/api/accounts'){
       if(method==='POST'){const a={...route.request().postDataJSON(),cred_status:'missing',sessions:0};accounts.push(a);body=a;}
       else{
@@ -264,6 +272,7 @@ try{
     assert.equal(await page.locator('#new-git-url').inputValue(),'','Git URL must not be kept in browser storage');
     await page.locator('#new-ok').click();await page.waitForFunction(()=>location.hash.includes('/sessions/created-3/changes'));
     assert.equal(created,3);assert.equal(gitCalls,2,'successful import was executed again after reload');
+    assert.equal(gitBackground,2,'Git imports did not use the background protocol');
     // Unknown publication stays blocked until the user inspects and reviews it.
     await page.locator('#btn-new').click();await page.locator('#new-name').fill('Review project');
     await choose('new-source-kind','upload');await choose('new-upload-mode','files');

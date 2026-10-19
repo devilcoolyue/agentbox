@@ -219,7 +219,7 @@ export function initWorkspaceCreation() {
             S.sessions.push(session);
         location.hash = `#/sessions/${encodeURIComponent(session.id)}/${tab}`;
     };
-    const perform = async (action) => {
+    const perform = async (action, limit = 180000) => {
         if (!current() || busy || loading)
             return;
         controller?.abort();
@@ -228,7 +228,7 @@ export function initWorkspaceCreation() {
         render();
         btnBusy(submit, () => t("处理中…"));
         $("new-error").classList.add("hidden");
-        const timer = setTimeout(() => request.abort(), 180000);
+        const timer = setTimeout(() => request.abort(), limit);
         try {
             await action(request.signal);
         }
@@ -320,7 +320,7 @@ export function initWorkspaceCreation() {
             files.value = "";
             repository.value = "";
             await showWorkspace(session, spec.source === "empty" ? "chat" : spec.source === "git" ? "changes" : "files");
-        });
+        }, spec.source === "git" ? 35 * 60000 : 180000); // 服务端单次 Git 传输上限 30 分钟
     }, options);
     return () => {
         lifetime.abort();

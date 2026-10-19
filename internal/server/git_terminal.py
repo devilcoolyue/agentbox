@@ -30,7 +30,8 @@ def main():
             data=json.dumps(body).encode(), method="POST",
             headers={"Authorization": "Bearer " + config["token"], "Content-Type": "application/json"})
         try:
-            with client.open(req, timeout=180) as response:
+            # Slow intranet transfers may take up to the server's 30 minute limit.
+            with client.open(req, timeout=1900) as response:
                 return json.load(response)
         except urllib.error.HTTPError as error:
             try:

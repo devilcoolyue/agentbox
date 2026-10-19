@@ -6,6 +6,12 @@ import type {GitLiveOperation,GitOperationPage,WorkspaceCreateSpec,WorkspaceCrea
 /** 导入进度：上传按字节；上传完服务端还要校验、解压；Git 导入轮询同一个操作编号的实时状态 */
 export type ImportProgress={kind:"upload";loaded:number;total:number}|{kind:"processing"}|{kind:"git";op?:GitLiveOperation};
 
+const wait=(ms:number,signal:AbortSignal)=>new Promise<void>((resolve,reject)=>{
+  signal.throwIfAborted();
+  const stop=()=>{clearTimeout(timer);reject(signal.reason);};
+  const timer=setTimeout(()=>{signal.removeEventListener("abort",stop);resolve();},ms);
+  signal.addEventListener("abort",stop,{once:true});
+});
 const id=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,"0")).join("");
 interface Pending {id:string;spec:WorkspaceCreateSpec;attempt?:string;}
 
@@ -87,7 +93,20 @@ export class CreationFlow {
         }
       };
       onProgress?.({kind:"git"});void poll();
-      try{result=await api<WorkspaceImport>(this.path()+"/git",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({attempt_id:attempt,connection_id:connection,url,directory}),signal});}
+      try{
+        result=await api<WorkspaceImport>(this.path()+"/git",{method:"POST",headers:{"Content-Type":"application/json","X-Git-Async":"1"},body:JSON.stringify({attempt_id:attempt,connection_id:connection,url,directory}),signal});
+        // 新服务端在后台克隆、先回执 running：查询创建回执直到出结果（经内网隧道的大仓库可能要几分钟）。
+        // 回执里的 running 只在服务端仍持有这次导入时出现，否则会被报成 uncertain，循环不会空转。
+        let failures=0;
+        while(result.state==="running"){
+          await wait(1000,signal);
+          try{await this.reconcile(signal);failures=0;}
+          catch(error){if(error instanceof APIError||signal.aborted||++failures>=60)throw error;continue;}
+          const current=this.view?.imports.find(item=>item.attempt_id===attempt);
+          if(!current)throw new Error(t("导入结果待核对，请先查看已有文件并确认。"));
+          result=current;
+        }
+      }
       finally{polling=false;}
     }
     await this.reconcile(signal);

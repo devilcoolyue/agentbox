@@ -3,6 +3,7 @@ import { createGitSurface } from "./git-surface.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { fmtBytes, fmtTime } from "./util.js";
+import { APIError } from "./problems.js";
 import { actionButton } from "./icons.js";
 import { ProgressBar, RateMeter } from "./progress.js";
 import { skelRows } from "./skeleton.js";
@@ -81,7 +82,10 @@ function requestID() {
 }
 /** Run a request with a separate cancellation handle. Do not abort the HTTP
  * response: it carries the final outcome, which can still be success if remote
- * accepted a push just before cancellation. Poll only while this request lives. */
+ * accepted a push just before cancellation. Current servers run the operation
+ * in the background (X-Git-Async) and keep the outcome for GET
+ * /git/operations/{id}, so a slow intranet transfer is not cut off by a reverse
+ * proxy's ~100 second response limit; older servers answer synchronously. */
 export async function gitRequest(path, body, host) {
     const id = requestID(), token = S.token;
     const view = progressView(), { box, label, cancel, meta } = view;
@@ -89,7 +93,7 @@ export async function gitRequest(path, body, host) {
     cancel.disabled = true;
     // 弹窗里挂在正文下方（固定不随正文滚动），页内面板直接接在末尾
     host.append(box);
-    let ended = false, requested = false, timer;
+    let ended = false, requested = false, background = false, timer;
     const cancelRequest = async () => {
         if (ended || token !== S.token)
             return;
@@ -107,25 +111,30 @@ export async function gitRequest(path, body, host) {
         }
     };
     cancel.addEventListener("click", () => void cancelRequest());
+    const show = (op) => { if (!requested)
+        view.update(op); cancel.disabled = requested || op.cancel_requested; };
+    // 同步执行的旧服务端：只在请求未返回时读列表里的实时进度
     const poll = async () => {
         try {
             const page = await api("/git/operations", { signal: AbortSignal.timeout(5000) });
-            if (ended || token !== S.token)
+            if (ended || background || token !== S.token)
                 return;
             const op = page.active.find(op => op.request_id === id);
-            if (op) {
-                if (!requested)
-                    view.update(op);
-                cancel.disabled = requested || op.cancel_requested;
-            }
+            if (op)
+                show(op);
         }
         catch { /* Keep the operation response authoritative if status polling fails. */ }
-        if (!ended && token === S.token)
+        if (!ended && !background && token === S.token)
             timer = setTimeout(() => void poll(), 700);
     };
     timer = setTimeout(() => void poll(), 150);
     try {
-        return await api(path, { method: "POST", headers: { "X-Git-Request-ID": id }, body: JSON.stringify(body) });
+        const first = await api(path, { method: "POST", headers: { "X-Git-Request-ID": id, "X-Git-Async": "1" }, body: JSON.stringify(body) });
+        if (!asyncStart(first, id))
+            return first;
+        background = true;
+        clearTimeout(timer);
+        return await gitResult(id, token, show);
     }
     catch (e) {
         if (requested)
@@ -136,6 +145,42 @@ export async function gitRequest(path, body, host) {
         ended = true;
         clearTimeout(timer);
         box.remove();
+    }
+}
+function asyncStart(value, id) {
+    return typeof value === "object" && value !== null && value.async === true && value.request_id === id;
+}
+/** 轮询后台 Git 操作直到结束，按原处理器的状态码还原结果或错误。
+ * 轮询本身的网络抖动只重试；连续 3 分钟查不到才放弃（操作仍在服务端继续）。 */
+async function gitResult(id, token, show) {
+    let failingSince = 0;
+    for (;;) {
+        await new Promise(resolve => setTimeout(resolve, 700));
+        if (token !== S.token)
+            throw new Error(i18nText("登录状态已变化"));
+        let result;
+        try {
+            result = await api(`/git/operations/${id}`, { signal: AbortSignal.timeout(10000) });
+            failingSince = 0;
+        }
+        catch (e) {
+            if (e instanceof APIError || token !== S.token)
+                throw e;
+            if (!failingSince)
+                failingSince = Date.now();
+            if (Date.now() - failingSince > 180000)
+                throw new Error(i18nText("Git 操作结果暂时无法查询，请稍后在 Git 操作记录中核实结果。"));
+            continue;
+        }
+        if (result.state === "running") {
+            show(result.operation);
+            continue;
+        }
+        const status = result.status ?? 500;
+        if (status >= 200 && status < 300)
+            return result.response;
+        const problem = result.response && typeof result.response === "object" && !Array.isArray(result.response) ? result.response : {};
+        throw new APIError(problem, status, i18nText, i18nText("服务暂时无法完成操作"));
     }
 }
 let activeDialog = null;

@@ -1,6 +1,12 @@
 import { api, apiUpload } from "../../api.js";
 import { APIError } from "../../problems.js";
 import { t } from "../../i18n.js";
+const wait = (ms, signal) => new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const stop = () => { clearTimeout(timer); reject(signal.reason); };
+    const timer = setTimeout(() => { signal.removeEventListener("abort", stop); resolve(); }, ms);
+    signal.addEventListener("abort", stop, { once: true });
+});
 const id = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
 /** Durable server receipts plus a small per-tab, per-identity pending pointer.
  * No file bytes, Git URL, token or password is stored in the browser. */
@@ -125,7 +131,26 @@ export class CreationFlow {
             onProgress?.({ kind: "git" });
             void poll();
             try {
-                result = await api(this.path() + "/git", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attempt_id: attempt, connection_id: connection, url, directory }), signal });
+                result = await api(this.path() + "/git", { method: "POST", headers: { "Content-Type": "application/json", "X-Git-Async": "1" }, body: JSON.stringify({ attempt_id: attempt, connection_id: connection, url, directory }), signal });
+                // 新服务端在后台克隆、先回执 running：查询创建回执直到出结果（经内网隧道的大仓库可能要几分钟）。
+                // 回执里的 running 只在服务端仍持有这次导入时出现，否则会被报成 uncertain，循环不会空转。
+                let failures = 0;
+                while (result.state === "running") {
+                    await wait(1000, signal);
+                    try {
+                        await this.reconcile(signal);
+                        failures = 0;
+                    }
+                    catch (error) {
+                        if (error instanceof APIError || signal.aborted || ++failures >= 60)
+                            throw error;
+                        continue;
+                    }
+                    const current = this.view?.imports.find(item => item.attempt_id === attempt);
+                    if (!current)
+                        throw new Error(t("导入结果待核对，请先查看已有文件并确认。"));
+                    result = current;
+                }
             }
             finally {
                 polling = false;

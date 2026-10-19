@@ -93,12 +93,12 @@ func (s *Server) handleGitReviews(w http.ResponseWriter, r *http.Request, sess s
 	defer func() { s.finishGitOperation(ctx, op, result) }()
 	rows, more, err := forge.Reviews(ctx, "", "", page)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	defaultBranch, err := forge.DefaultBranch(ctx)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	branch, err := s.runGit(ctx, sess, dir, "symbolic-ref", "--short", "--quiet", "HEAD")
@@ -193,7 +193,7 @@ func (s *Server) gitReviewWrite(w http.ResponseWriter, r *http.Request, sess sto
 	defer func() { s.finishGitOperation(ctx, op, result) }()
 	source, err := forge.Branch(ctx, input.Source)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	if source.SHA != input.ExpectedHead {
@@ -202,7 +202,7 @@ func (s *Server) gitReviewWrite(w http.ResponseWriter, r *http.Request, sess sto
 	}
 	target, err := forge.Branch(ctx, input.Target)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	if !preview && target.SHA != input.ExpectedTarget {
@@ -215,7 +215,7 @@ func (s *Server) gitReviewWrite(w http.ResponseWriter, r *http.Request, sess sto
 	}
 	existing, _, err := forge.Reviews(ctx, input.Source, input.Target, 1)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	if preview {
@@ -238,12 +238,12 @@ func (s *Server) gitReviewWrite(w http.ResponseWriter, r *http.Request, sess sto
 	review, err := forge.CreateReview(ctx, gitaccess.ReviewInput{Title: input.Title, Body: input.Body, Source: input.Source, Target: input.Target, Draft: input.Draft})
 	if err != nil {
 		result = "failed_unknown"
-		writeErr(w, 502, err.Error()+"；创建结果可能未知，请先刷新平台列表核实")
+		writeErr(w, gitUpstreamStatus, err.Error()+"；创建结果可能未知，请先刷新平台列表核实")
 		return
 	}
 	if review.Number <= 0 || review.URL == "" {
 		result = "failed_unknown"
-		writeErr(w, 502, "平台可能已创建请求，但返回信息不完整，请刷新列表核实")
+		writeErr(w, gitUpstreamStatus, "平台可能已创建请求，但返回信息不完整，请刷新列表核实")
 		return
 	}
 	result = "success"

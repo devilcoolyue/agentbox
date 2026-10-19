@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"agentbox/internal/gitaccess"
+	"agentbox/internal/gitx"
 	"agentbox/internal/store"
 )
 
@@ -22,7 +23,14 @@ func gitRepositoryURL(raw string, c store.GitConnection) (string, error) {
 	if c.AuthType == "ssh" {
 		return gitaccess.SSHRepositoryURL(raw, c.BaseURL, c.Username)
 	}
-	return gitaccess.RepositoryURL(raw, c.BaseURL)
+	canonical, err := gitaccess.RepositoryURL(raw, c.BaseURL)
+	if err != nil || c.Provider != "gitlab" || strings.HasSuffix(canonical, ".git") {
+		return canonical, err
+	}
+	// GitLab answers Git requests for a project page URL (the browser address
+	// bar) with a redirect to "<project>.git", which the transport refuses so
+	// tokens never follow redirects. Use the target GitLab would redirect to.
+	return canonical + ".git", nil
 }
 func (s *Server) openGitSSH(ctx context.Context, c store.GitConnection, repository string, write, v2 bool) (*gitaccess.SSHStream, error) {
 	if err := s.checkGitTerminalScope(ctx, c, repository, write); err != nil {
@@ -85,7 +93,7 @@ func (s *Server) gitSSHTransport(ctx context.Context, c store.GitConnection, rep
 				defer conn.Close()
 				stop := context.AfterFunc(grantCtx, func() { conn.Close() })
 				defer stop()
-				_ = conn.SetDeadline(time.Now().Add(120 * time.Second))
+				_ = conn.SetDeadline(time.Now().Add(gitx.NetworkTimeout))
 				version2, err := gitaccess.ReadGitRequest(conn, ticket, write)
 				if err != nil {
 					return
@@ -152,7 +160,7 @@ func (s *Server) testGitSSH(w http.ResponseWriter, r *http.Request, c store.GitC
 	defer func() { s.finishGitOperation(ctx, op, result) }()
 	stream, err := s.openGitSSH(ctx, c, repository, false, false)
 	if err != nil {
-		writeErr(w, 502, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	defer stream.Close()
@@ -160,22 +168,22 @@ func (s *Server) testGitSSH(w http.ResponseWriter, r *http.Request, c store.GitC
 	// the empty repository's zero ID). Do not retain/log refs or protocol bytes.
 	var header [4]byte
 	if _, err = io.ReadFull(stream, header[:]); err != nil {
-		writeErr(w, 502, "SSH 仓库未返回 Git 引用")
+		writeErr(w, gitUpstreamStatus, "SSH 仓库未返回 Git 引用")
 		return
 	}
 	n, err := parseGitPacketLength(header[:])
 	if err != nil || n < 4 {
-		writeErr(w, 502, "SSH Git 协议响应无效")
+		writeErr(w, gitUpstreamStatus, "SSH Git 协议响应无效")
 		return
 	}
 	data := make([]byte, n-4)
 	if _, err = io.ReadFull(stream, data); err != nil {
-		writeErr(w, 502, "SSH Git 协议读取失败")
+		writeErr(w, gitUpstreamStatus, "SSH Git 协议读取失败")
 		return
 	}
 	oid, _, hasRef := strings.Cut(string(data), " ")
 	if !hasRef || !gitOID(oid) {
-		writeErr(w, 502, "目标不是可读取的 SSH Git 仓库")
+		writeErr(w, gitUpstreamStatus, "目标不是可读取的 SSH Git 仓库")
 		return
 	}
 	result = "success"

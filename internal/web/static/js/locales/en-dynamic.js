@@ -895,6 +895,7 @@ export default {
     "取消 Git 操作": "Cancel Git operation",
     "正在取消并等待收尾；已到达远程的提交不会回滚。": "Canceling and waiting for completion; commits that have reached the remote will not be rolled back.",
     "操作已请求取消；请刷新操作记录与远程状态确认最终结果。": "The operation has been requested to be canceled; please refresh the operation record and remote status to confirm the final result.",
+    "Git 操作结果暂时无法查询，请稍后在 Git 操作记录中核实结果。": "The Git operation result cannot be queried right now. Check the result in the Git operation history later.",
     "Git 操作记录": "Git operation history",
     "仅显示你发起的操作。中断或未确认不代表远程回滚，需核对仓库状态。活动操作每秒刷新。": "Only operations initiated by you are displayed. Interruption or unconfirmation does not mean remote rollback, and the repository status needs to be checked. Active operations are refreshed every second.",
     "回到最新 Git 操作记录": "Return to the latest Git operation record",

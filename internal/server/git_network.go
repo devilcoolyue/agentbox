@@ -21,6 +21,15 @@ import (
 	"agentbox/internal/store"
 )
 
+// gitUpstreamStatus reports failures of the Git remote, platform API or the
+// route to them. Not 502/504: reverse proxies such as Cloudflare replace those
+// origin responses with their own page, hiding the reason and operation ID.
+const gitUpstreamStatus = http.StatusFailedDependency
+
+// gitTransferDeadline bounds a whole network operation: the in-container
+// transfer limit plus the local checks, checkout and receipt that follow it.
+const gitTransferDeadline = gitx.NetworkTimeout + time.Minute
+
 func (s *Server) gitClient(ctx context.Context, c store.GitConnection) (*http.Client, func(), error) {
 	if s.gitHTTPClient != nil {
 		return s.gitHTTPClient(ctx, c)
@@ -106,7 +115,7 @@ func (s *Server) gitTransport(ctx context.Context, c store.GitConnection, reposi
 		defer handlers.Done()
 		grant.ServeHTTP(w, r)
 	})
-	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 120 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8 << 10, BaseContext: func(net.Listener) context.Context { return grantCtx }}
+	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: gitx.NetworkTimeout, WriteTimeout: gitx.NetworkTimeout, IdleTimeout: 5 * time.Second, MaxHeaderBytes: 8 << 10, BaseContext: func(net.Listener) context.Context { return grantCtx }}
 	done := make(chan struct{})
 	go func() { defer close(done); _ = server.Serve(ln) }()
 	stop := context.AfterFunc(ctx, func() { _ = server.Close() })
@@ -217,7 +226,7 @@ func (s *Server) handleGitFetch(w http.ResponseWriter, r *http.Request, sess sto
 	if !ok {
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 125*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), gitTransferDeadline)
 	defer cancel()
 	unlock, err := s.lockGit(ctx, sess, dir)
 	if err != nil {
@@ -239,7 +248,7 @@ func (s *Server) handleGitFetch(w http.ResponseWriter, r *http.Request, sess sto
 	defer func() { s.finishGitOperation(ctx, op, result) }()
 	transport, closeFn, err := s.gitTransport(ctx, c, b.URL, false, "", "", "")
 	if err != nil {
-		writeErr(w, 503, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	defer closeFn()
@@ -248,7 +257,7 @@ func (s *Server) handleGitFetch(w http.ResponseWriter, r *http.Request, sess sto
 		if ctx.Err() != nil {
 			result = "cancelled_unknown"
 		}
-		writeErr(w, 502, "获取失败：请检查连接权限、Token、网络及仓库地址；本地文件未合并更新")
+		writeErr(w, gitUpstreamStatus, "获取失败：请检查连接权限、Token、网络及仓库地址；本地文件未合并更新")
 		return
 	}
 	result = "success"
@@ -285,7 +294,7 @@ func (s *Server) gitPush(w http.ResponseWriter, r *http.Request, sess store.Sess
 	if !ok {
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 125*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), gitTransferDeadline)
 	defer cancel()
 	unlock, err := s.lockGit(ctx, sess, dir)
 	if err != nil {
@@ -323,13 +332,13 @@ func (s *Server) gitPush(w http.ResponseWriter, r *http.Request, sess store.Sess
 	defer func() { s.finishGitOperation(ctx, op, result) }()
 	transport, closeFn, err := s.gitTransport(ctx, c, b.URL, false, "", "", "")
 	if err != nil {
-		writeErr(w, 503, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	remoteOut, err := s.runGitNetwork(ctx, sess, dir, "ls-remote", "--refs", "--", transport, ref)
 	closeFn()
 	if err != nil {
-		writeErr(w, 502, "无法读取远程分支，请检查连接权限、Token 和网络")
+		writeErr(w, gitUpstreamStatus, "无法读取远程分支，请检查连接权限、Token 和网络")
 		return
 	}
 	remoteHead := strings.Repeat("0", len(head))
@@ -337,7 +346,7 @@ func (s *Server) gitPush(w http.ResponseWriter, r *http.Request, sess store.Sess
 		fields := strings.Fields(line)
 		if len(fields) == 2 && fields[1] == ref {
 			if !gitOID(fields[0]) {
-				writeErr(w, 502, "远程分支返回无效提交编号")
+				writeErr(w, gitUpstreamStatus, "远程分支返回无效提交编号")
 				return
 			}
 			remoteHead = fields[0]
@@ -374,14 +383,14 @@ func (s *Server) gitPush(w http.ResponseWriter, r *http.Request, sess store.Sess
 	}
 	transport, closeFn, err = s.gitTransport(ctx, c, b.URL, true, ref, remoteHead, head)
 	if err != nil {
-		writeErr(w, 503, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	defer closeFn()
 	_, err = s.runGitNetwork(ctx, sess, dir, "-c", "push.followTags=false", "-c", "push.gpgSign=false", "push", "--porcelain", "--progress", "--no-verify", "--no-follow-tags", "--", transport, head+":"+ref)
 	if err != nil {
 		result = "failed_unknown"
-		writeErr(w, 502, "推送未确认成功：远程可能拒绝了权限、保护分支或并发更新；请重新预览核实远程状态，已有本地提交保留")
+		writeErr(w, gitUpstreamStatus, "推送未确认成功：远程可能拒绝了权限、保护分支或并发更新；请重新预览核实远程状态，已有本地提交保留")
 		return
 	}
 	result = "success"
@@ -402,7 +411,7 @@ func (s *Server) handleGitPull(w http.ResponseWriter, r *http.Request, sess stor
 	if !ok {
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), gitTransferDeadline)
 	defer cancel()
 	unlock, err := s.lockGit(ctx, sess, dir)
 	if err != nil {
@@ -449,13 +458,13 @@ func (s *Server) handleGitPull(w http.ResponseWriter, r *http.Request, sess stor
 	defer func() { s.finishGitOperation(ctx, op, result) }()
 	transport, closeFn, err := s.gitTransport(ctx, c, b.URL, false, "", "", "")
 	if err != nil {
-		writeErr(w, 503, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	defer closeFn()
 	tracking := "refs/remotes/" + b.Remote + "/" + strings.TrimPrefix(upstreamRef, "refs/heads/")
 	if _, err = s.runGitNetwork(ctx, sess, dir, "fetch", "--progress", "--no-tags", "--no-recurse-submodules", "--no-write-fetch-head", "--", transport, "+"+upstreamRef+":"+tracking); err != nil {
-		writeErr(w, 502, "获取上游分支失败，工作文件未合并更新")
+		writeErr(w, gitUpstreamStatus, "获取上游分支失败，工作文件未合并更新")
 		return
 	}
 	gitPhase(ctx, "checking")
@@ -530,7 +539,7 @@ func (s *Server) handleGitClone(w http.ResponseWriter, r *http.Request, sess sto
 		writeFileOpErr(w, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 150*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), gitTransferDeadline)
 	defer cancel()
 	unlock, err := s.git.Lock(ctx, sess.ID, name)
 	if err != nil {
@@ -547,7 +556,7 @@ func (s *Server) handleGitClone(w http.ResponseWriter, r *http.Request, sess sto
 	defer func() { s.finishGitOperation(ctx, op, result) }()
 	transport, closeFn, err := s.gitTransport(ctx, c, repository, false, "", "", "")
 	if err != nil {
-		writeErr(w, 503, err.Error())
+		writeErr(w, gitUpstreamStatus, err.Error())
 		return
 	}
 	defer closeFn()
@@ -555,7 +564,7 @@ func (s *Server) handleGitClone(w http.ResponseWriter, r *http.Request, sess sto
 	defer root.RemoveAll(temp)
 	_, err = s.runGitNetwork(ctx, sess, s.workspaceDir(sess), "clone", "--progress", "--no-checkout", "--no-tags", "--no-recurse-submodules", "--", transport, "/workspace/"+temp)
 	if err != nil {
-		writeErr(w, 502, "克隆失败：请检查连接权限、Token、网络或仓库地址，目标文件夹未发布")
+		writeErr(w, gitUpstreamStatus, "克隆失败：请检查连接权限、Token、网络或仓库地址，目标文件夹未发布")
 		return
 	}
 	gitPhase(ctx, "checkout")
@@ -626,7 +635,7 @@ func (s *Server) handleGitConnectionTest(w http.ResponseWriter, r *http.Request)
 	defer cancel()
 	client, closeClient, err := s.gitClient(ctx, c)
 	if err != nil {
-		writeErr(w, 503, "Git 网络路由不可用")
+		writeErr(w, gitUpstreamStatus, "Git 网络路由不可用")
 		return
 	}
 	defer closeClient()
@@ -649,17 +658,17 @@ func (s *Server) handleGitConnectionTest(w http.ResponseWriter, r *http.Request)
 	req.Header.Set("User-Agent", "agentbox-git")
 	resp, err := safeClient.Do(req)
 	if err != nil {
-		writeErr(w, 502, "无法连接 Git 服务，请检查地址、网络和 TLS 证书")
+		writeErr(w, gitUpstreamStatus, "无法连接 Git 服务，请检查地址、网络和 TLS 证书")
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		writeErr(w, 502, fmt.Sprintf("Git 服务拒绝读取（HTTP %d），请检查 Token 与仓库权限", resp.StatusCode))
+		writeErr(w, gitUpstreamStatus, fmt.Sprintf("Git 服务拒绝读取（HTTP %d），请检查 Token 与仓库权限", resp.StatusCode))
 		return
 	}
 	prefix, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if err != nil || strings.Split(resp.Header.Get("Content-Type"), ";")[0] != "application/x-git-upload-pack-advertisement" || !strings.Contains(string(prefix), "# service=git-upload-pack\n") {
-		writeErr(w, 502, "目标没有返回有效的 Git smart HTTP 仓库信息")
+		writeErr(w, gitUpstreamStatus, "目标没有返回有效的 Git smart HTTP 仓库信息")
 		return
 	}
 	result = "success"

@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -313,7 +315,12 @@ func (s *Server) handleProjectGit(w http.ResponseWriter, r *http.Request) {
 		writeCreationError(w, r, store.ErrImportPending)
 		return
 	}
-	defer s.endCreationWork(sess.ID)
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			s.endCreationWork(sess.ID)
+		}
+	}()
 	if _, err := s.sessionAccount(sess); err != nil {
 		writeCreationError(w, r, err)
 		return
@@ -354,37 +361,76 @@ func (s *Server) handleProjectGit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := json.Marshal(map[string]string{"connection_id": connection.ID, "url": repository, "directory": input.Directory})
-	copy := r.Clone(r.Context())
-	copy.Body = io.NopCloser(bytes.NewReader(body))
-	copy.ContentLength = int64(len(body))
-	copy.Header = copy.Header.Clone()
-	copy.Header.Set("X-Git-Request-ID", input.AttemptID)
-	copy.SetPathValue("id", sess.ID)
-	captured := &importResponse{}
-	s.gitOperation("clone", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.handleGitClone(w, r, sess) })).ServeHTTP(captured, copy)
-	result := projectImportResult{Directory: input.Directory}
-	state := "failed"
-	if captured.status >= 200 && captured.status < 300 && !captured.overflow {
-		var response struct{ Repo, Warning string }
-		if json.Unmarshal(captured.body.Bytes(), &response) == nil && response.Repo == input.Directory {
-			state = "succeeded"
-			if response.Warning != "" {
-				result.Warning = "仓库已导入，请在 Git 设置中检查连接绑定。"
-			}
-		} else {
-			state = "uncertain"
-		}
-	} else {
-		root, err := s.openDataDir(s.workspaceDir(sess))
-		if err != nil {
-			state = "uncertain"
-		} else {
-			_, err = root.Lstat(input.Directory)
-			root.Close()
-			if !errors.Is(err, fs.ErrNotExist) {
+	prepare := func(ctx context.Context) *http.Request {
+		copy := r.Clone(ctx)
+		copy.Body = io.NopCloser(bytes.NewReader(body))
+		copy.ContentLength = int64(len(body))
+		copy.Header = copy.Header.Clone()
+		copy.Header.Set("X-Git-Request-ID", input.AttemptID)
+		// The clone runs in this request (or its background job), never as a
+		// second background job whose receipt nobody would persist.
+		copy.Header.Del("X-Git-Async")
+		copy.SetPathValue("id", sess.ID)
+		return copy
+	}
+	clone := func(copy *http.Request) (string, projectImportResult) {
+		captured := &importResponse{}
+		s.gitOperation("clone", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.handleGitClone(w, r, sess) })).ServeHTTP(captured, copy)
+		result := projectImportResult{Directory: input.Directory}
+		state := "failed"
+		if captured.status >= 200 && captured.status < 300 && !captured.overflow {
+			var response struct{ Repo, Warning string }
+			if json.Unmarshal(captured.body.Bytes(), &response) == nil && response.Repo == input.Directory {
+				state = "succeeded"
+				if response.Warning != "" {
+					result.Warning = "仓库已导入，请在 Git 设置中检查连接绑定。"
+				}
+			} else {
 				state = "uncertain"
 			}
+		} else {
+			root, err := s.openDataDir(s.workspaceDir(sess))
+			if err != nil {
+				state = "uncertain"
+			} else {
+				_, err = root.Lstat(input.Directory)
+				root.Close()
+				if !errors.Is(err, fs.ErrNotExist) {
+					state = "uncertain"
+				}
+			}
 		}
+		return state, result
 	}
-	s.finishProjectImport(w, r, c, attempt, state, result)
+	if r.Header.Get("X-Git-Async") != "1" {
+		state, result := clone(prepare(r.Context()))
+		s.finishProjectImport(w, r, c, attempt, state, result)
+		return
+	}
+	// Large repositories over a user's intranet tunnel can take minutes. Reply
+	// with the running receipt; the creation view reports it as running while
+	// creationWork is held and the page polls it until the final state.
+	ctx, cancel := context.WithCancel(context.WithoutCancel(r.Context()))
+	background := prepare(ctx)
+	work := s.workContext()
+	user := reqUser(r)
+	if !s.spawn(func() {
+		defer s.endCreationWork(sess.ID)
+		defer cancel()
+		stop := context.AfterFunc(work, cancel)
+		defer stop()
+		state, result := clone(background)
+		raw, _ := json.Marshal(result)
+		if err := s.store.FinishWorkspaceImport(user, c.RequestID, attempt.AttemptID, state, raw); err != nil {
+			// Left running in the database; the view and the next start report
+			// it as uncertain, which asks the user to inspect the files.
+			log.Printf("project import %s: could not persist final state %s: %v", attempt.AttemptID, state, err)
+		}
+	}) {
+		cancel()
+		s.finishProjectImport(w, r, c, attempt, "failed", projectImportResult{Directory: input.Directory})
+		return
+	}
+	handedOff = true
+	writeJSON(w, 202, attempt)
 }

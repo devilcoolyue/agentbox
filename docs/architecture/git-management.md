@@ -86,3 +86,5 @@ OAuth 参数依据：[GitHub OAuth Apps 授权文档](https://docs.github.com/en
 第六批验证：密钥轮换覆盖独占锁、legacy/版本化密钥、混合版本、保留旧密钥、缺失/损坏密钥拒绝覆盖、取消/恢复与 SQLite 事务回滚；系统备份恢复覆盖 V1/V2。终端授权覆盖真实 HTTP 控制请求、Python helper、固定参数、只读拒绝、登录/解绑/停用失效和显式撤销；浏览器覆盖创建、命令展示、撤销及 390px 布局。
 
 `TestGitBridgeContainerLive` 已在 Linux Docker daemon 上通过 HTTPS 与 SSH 两条真实容器链路：合成远程、公司 CA/主机 pin、容器 clone/fetch/ff-only pull、网页 push-preview/push、容器内 Python 的 status/fetch/push-preview/push。测试容器没有宿主挂载，宿主目录发现使用临时占位目录，容器由测试 fixture 启动；不把此测试表述为完整生产启动/挂载验收。真实平台注册应用、企业 SSO 和公司内网的现场联调仍需部署环境配置。
+
+后台网络操作：网页的 Git POST 带 `X-Git-Async: 1`，`gitOperation` 先读完请求体，在 `spawn` 中以 `context.WithoutCancel` + `workContext` 执行原处理器并截获响应，`GET /api/git/operations/{id}` 轮询进度与原状态码/正文；新建空间的 Git 导入同理，`creationWork` 保持到后台结束。单条网络命令上限 30 分钟（容器内 `timeout`、HTTP/SSH 网桥与处理器期限一致），终端授权网桥仍同步、超时同步放宽。上游失败统一 424，GitLab 地址自动补 `.git`。验证：`TestGitAsync*`、`TestProjectGitAsyncImportReportsRunningThenResult`、`scripts/test-git.mjs`（异步失败原因与重试）、`scripts/test-onboarding.mjs`（后台导入与丢失回执）。生产实测：经 Cloudflare 的后台克隆可超过 100 秒并取回 424 原因，GitLab 项目页地址自动补 `.git`；但 36 MB 内网仓库经网桥传输约 160 秒（26.5 MB）时仍失败，同一隧道下容器内直接 git clone 可完成，原因待查。

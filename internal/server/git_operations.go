@@ -1,8 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"regexp"
@@ -21,9 +24,27 @@ var errGitCancelled = errors.New("Git operation cancelled by user")
 var gitRequestIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{16,80}$`)
 
 type gitOperationRegistry struct {
-	mu     sync.Mutex
-	active map[string]*gitLiveOperation
+	mu       sync.Mutex
+	active   map[string]*gitLiveOperation
+	finished map[string]*gitFinishedOperation
 }
+
+// gitFinishedOperation keeps the response of a background operation until
+// the browser collects it. It is memory only: after a restart the audit row
+// (interrupted_unknown or the final result) is the record.
+type gitFinishedOperation struct {
+	actor    string
+	view     gitOperationView
+	status   int
+	body     json.RawMessage
+	finished time.Time
+}
+
+const (
+	gitFinishedRetention = 30 * time.Minute
+	gitFinishedPerActor  = 32
+)
+
 type gitLiveOperation struct {
 	id        string
 	actor     string
@@ -142,8 +163,12 @@ func (s *Server) finishGitOperation(ctx context.Context, id int64, result string
 	}
 }
 
-// Keep requests synchronous, but expose an independently authenticated status
-// and cancellation handle. No detached jobs survive the server lifecycle.
+// Requests stay synchronous unless the browser sends X-Git-Async: 1. Then the
+// handler runs in the background and the response is collected later from
+// GET /api/git/operations/{id}: a slow intranet clone outlives the ~100 second
+// limit reverse proxies such as Cloudflare put on one response. Background
+// work is started with spawn and tied to workContext, so no detached job
+// survives the server lifecycle.
 func (s *Server) gitOperation(name string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		actor := reqUser(r).Name
@@ -155,8 +180,20 @@ func (s *Server) gitOperation(name string, next http.Handler) http.Handler {
 			writeErr(w, 400, "Git 操作标识无效")
 			return
 		}
-		ctx, cancel := context.WithCancelCause(r.Context())
-		defer cancel(nil)
+		async := r.Method == http.MethodPost && r.Header.Get("X-Git-Async") == "1"
+		var body []byte
+		if async {
+			var err error
+			if body, err = io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20)); err != nil {
+				writeErr(w, 400, "Git 请求内容无效")
+				return
+			}
+		}
+		base := r.Context()
+		if async {
+			base = context.WithoutCancel(base)
+		}
+		ctx, cancel := context.WithCancelCause(base)
 		op := &gitLiveOperation{id: id, actor: actor, session: r.PathValue("id"), operation: name, started: time.Now(), cancel: cancel, phase: "preparing"}
 		key := actor + "\x00" + id
 		s.gitOperations.mu.Lock()
@@ -169,17 +206,119 @@ func (s *Server) gitOperation(name string, next http.Handler) http.Handler {
 				n++
 			}
 		}
-		if _, exists := s.gitOperations.active[key]; exists || n >= 4 {
+		_, done := s.gitOperations.finished[key]
+		if _, exists := s.gitOperations.active[key]; exists || done || n >= 4 {
 			s.gitOperations.mu.Unlock()
+			cancel(nil)
 			writeErr(w, 409, "Git 操作正在进行或已达并发上限，请等待或取消现有操作")
 			return
 		}
 		s.gitOperations.active[key] = op
 		s.gitOperations.mu.Unlock()
-		defer func() { s.gitOperations.mu.Lock(); delete(s.gitOperations.active, key); s.gitOperations.mu.Unlock() }()
 		w.Header().Set("X-Git-Request-ID", id)
-		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, gitOperationContextKey{}, op)))
+		if !async {
+			defer cancel(nil)
+			defer func() { s.gitOperations.mu.Lock(); delete(s.gitOperations.active, key); s.gitOperations.mu.Unlock() }()
+			next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, gitOperationContextKey{}, op)))
+			return
+		}
+		background := r.Clone(context.WithValue(ctx, gitOperationContextKey{}, op))
+		background.Body = io.NopCloser(bytes.NewReader(body))
+		background.ContentLength = int64(len(body))
+		work := s.workContext()
+		started := s.spawn(func() {
+			defer cancel(nil)
+			stop := context.AfterFunc(work, func() { cancel(context.Cause(work)) })
+			defer stop()
+			captured := &importResponse{}
+			func() {
+				defer func() {
+					if v := recover(); v != nil {
+						log.Printf("git operation %s panicked: %v", name, v)
+						captured = &importResponse{status: 500}
+					}
+				}()
+				next.ServeHTTP(captured, background)
+			}()
+			s.finishGitAsync(key, op, captured)
+		})
+		if !started {
+			cancel(nil)
+			s.gitOperations.mu.Lock()
+			delete(s.gitOperations.active, key)
+			s.gitOperations.mu.Unlock()
+			writeProblem(w, r, "git.operation", "server_stopping")
+			return
+		}
+		writeJSON(w, 202, map[string]any{"request_id": id, "async": true})
 	})
+}
+
+// finishGitAsync moves a background operation from active to finished with
+// its captured response. Responses are small JSON documents; anything else is
+// reported as an unknown result rather than guessed.
+func (s *Server) finishGitAsync(key string, op *gitLiveOperation, captured *importResponse) {
+	status := captured.status
+	if status == 0 {
+		status = 500
+	}
+	body := json.RawMessage(bytes.Clone(captured.body.Bytes()))
+	if captured.overflow || !json.Valid(body) {
+		body, _ = json.Marshal(map[string]string{"error": "Git 操作已结束，但结果无法读取，请刷新操作记录与仓库状态核实"})
+	}
+	now := time.Now()
+	s.gitOperations.mu.Lock()
+	defer s.gitOperations.mu.Unlock()
+	delete(s.gitOperations.active, key)
+	s.pruneGitFinishedLocked(now)
+	if s.gitOperations.finished == nil {
+		s.gitOperations.finished = map[string]*gitFinishedOperation{}
+	}
+	var oldest string
+	count := 0
+	for k, f := range s.gitOperations.finished {
+		if f.actor == op.actor {
+			count++
+			if oldest == "" || f.finished.Before(s.gitOperations.finished[oldest].finished) {
+				oldest = k
+			}
+		}
+	}
+	if count >= gitFinishedPerActor {
+		delete(s.gitOperations.finished, oldest)
+	}
+	s.gitOperations.finished[key] = &gitFinishedOperation{actor: op.actor, view: op.view(), status: status, body: body, finished: now}
+}
+func (s *Server) pruneGitFinishedLocked(now time.Time) {
+	for k, f := range s.gitOperations.finished {
+		if now.Sub(f.finished) > gitFinishedRetention {
+			delete(s.gitOperations.finished, k)
+		}
+	}
+}
+
+// handleGitOperation reports one operation of the caller: still running with
+// its live progress, or finished with the handler's original status and body.
+// The poll itself is always 200 so proxies never rewrite the outcome.
+func (s *Server) handleGitOperation(w http.ResponseWriter, r *http.Request) {
+	key := reqUser(r).Name + "\x00" + r.PathValue("operation")
+	s.gitOperations.mu.Lock()
+	s.pruneGitFinishedLocked(time.Now())
+	if op := s.gitOperations.active[key]; op != nil {
+		view := op.view()
+		s.gitOperations.mu.Unlock()
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, 200, map[string]any{"state": "running", "operation": view})
+		return
+	}
+	f := s.gitOperations.finished[key]
+	s.gitOperations.mu.Unlock()
+	if f == nil {
+		writeErr(w, 404, "操作已经结束或不存在，请刷新记录核实结果")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, 200, map[string]any{"state": "done", "status": f.status, "response": f.body, "operation": f.view})
 }
 func (s *Server) handleGitOperations(w http.ResponseWriter, r *http.Request) {
 	var before int64
