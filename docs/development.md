@@ -232,10 +232,11 @@ Playwright 安装方法见下节，截图保存在 `output/playwright/`。这项
 
 ## 文档截图
 
-README 的图片与录屏由 [`scripts/capture-readme.mjs`](../scripts/capture-readme.mjs) 操作当前
-`internal/web/static/` 的真实浏览器界面生成。临时 HTTP 服务只监听本机，API / WebSocket
-均使用合成数据，外部请求会阻断；不连接生产、不调用模型、不需要 Docker。项目、对话、
-命令输出和费用都用于展示界面，不代表实际模型效果、性能或收费。
+README 的截图、动图与演示视频由 [`scripts/capture-readme.mjs`](../scripts/capture-readme.mjs) 操作当前
+`internal/web/static/` 的真实浏览器界面生成，英文与简体中文各一套。临时 HTTP 服务只监听本机，
+API / WebSocket 均使用合成数据（包括 Claude 的 stream-json 事件流、`/context` 结果、终端输出与用量明细），
+外部请求会阻断；不连接生产、不调用模型、不需要 Docker。项目、对话、命令输出和费用都用于展示界面，
+不代表实际模型效果、性能或收费。
 
 依赖放在仓库外，不修改项目依赖：
 
@@ -244,38 +245,51 @@ npm install --prefix /tmp/agentbox-docs-browser playwright
 /tmp/agentbox-docs-browser/node_modules/.bin/playwright install chromium
 export AGENTBOX_PLAYWRIGHT_MODULE=/tmp/agentbox-docs-browser/node_modules/playwright/index.mjs
 
-# 只生成高清截图
+# 两种语言的高清截图（--lang en 或 zh-CN 只生成一种）
 node scripts/capture-readme.mjs
 
-# 或同时生成截图和完整浏览器录屏
+# 同时录制演示（Chrome 屏幕广播逐帧采集）
 node scripts/capture-readme.mjs --video
 
-# 需要 ffmpeg（含 libx264）：合成章节说明、MP4 和 GIF，并复制高清截图到 docs/images
+# 合成章节栏、MP4 与 GIF，并把截图复制到 docs/images/<语言>/
+# 需要带 libx264 的 ffmpeg；不在 PATH 里时用 FFMPEG=/path/to/ffmpeg 指定
 node scripts/render-readme-tour.mjs
 
 # 无额外依赖：重新生成中英文矢量架构图
 python3 scripts/render-architecture.py
 ```
 
-也可以设置 `AGENTBOX_BROWSER_CHANNEL=chrome` 使用本机 Chrome。需要可显示中文的字体；
-没有 CJK 字体的 Linux 环境先安装 Noto Sans CJK 等字体。录制前如修改了 TypeScript，先执行
-`npm run build`，因为浏览器读取的是编译后的静态资源。
+也可以设置 `AGENTBOX_BROWSER_CHANNEL=chrome` 使用本机 Chrome。需要可显示中文的字体；没有 CJK 字体的
+Linux 环境先安装 Noto Sans CJK 等字体。录制前如修改了 TypeScript，先执行 `npm run build`，因为浏览器
+读取的是编译后的静态资源。
 
-截图采用 **2 倍像素密度**：桌面逻辑视口 1440 × 960，输出 **2880 × 1920** PNG；手机
-逻辑视口 390 × 844，输出 **780 × 1688** PNG。涵盖对话两种主题、手机、终端、Git、文件、
-Markdown 预览、技能、MCP、用量、账号与隧道，共 12 张。脚本等待字体就绪，并检查浏览器
-异常和未定义 API 响应。截图暂存在 `output/playwright/readme/`，不要手工修改界面内容。
+同一段脚本驱动截图与录屏：带 `--video` 时按真实节奏执行（打字、`@` 菜单、流式回复、终端逐行输出、
+风格切换），并用页面内的演示光标显示指针；不带时缩短等待，在检查点截图。截图采用 **2 倍像素密度**：
+桌面逻辑视口 1440 × 960，输出 **2880 × 1920** PNG；手机逻辑视口 390 × 844，输出 **780 × 1688** PNG。
+每种语言 16 张：对话完成态（深色 / 浅色）、运行中、`/context`、手机、终端、变更、文件、预览、使用记录、
+技能、MCP、账号池、内网隧道、扩展，以及六种风格拼图 `styles.png`。脚本等待字体就绪，并检查浏览器
+异常和未定义的 API 响应；中间产物在 `output/playwright/readme/<语言>/`，不要手工修改界面内容。
+无头 Chromium 下 xterm 的 WebGL 渲染器不出字（缓冲区有内容、画布空白），脚本因此屏蔽 `WebglAddon`，
+让终端走控制台在 WebGL 不可用时本来就有的 DOM 渲染回退；没装 JetBrains Mono 的机器上，通用 monospace
+回退字体和更高的中文回退字体会让 DOM 行里的字被截掉，脚本把这个字体名指向本机已装的等宽字体
+（优先 Noto Sans Mono CJK SC）。检查截图时确认终端里的中英文字都完整。
 
-视频使用真实浏览器录屏，展示八个操作阶段；顶部独立区域附中英文章节说明，并标注演示
-数据。`render-readme-tour.mjs` 输出无声 H.264 MP4（1440 × 1072，含说明区，faststart），
-以及前四段的 960px 宽循环 GIF。GitHub README 使用 GIF 展示动态预览，点击可下载更清晰
-的完整 MP4；不依赖 GitHub 会过滤的自定义视频 HTML。视频用于解释界面流程，不代替
-服务端或真实模型端到端验收。
+录屏以 2 倍像素密度渲染、缩放到 1920 像素宽采集，按帧时间戳拼接，顶部加 144 像素的章节栏
+（标注「合成演示数据」）和进度线。`render-readme-tour.mjs` 为每种语言输出：
 
-最终文件放在 `docs/images/` 和 `docs/media/`；生成脚本写入
-[`docs/media/capture.json`](media/capture.json)，记录界面源码提交、像素尺寸、时长与章节。
-发布前逐张检查原图、视频各章节及 GIF，确认没有截断文字、真实账号或私有地址，再与
-README 一起提交。图片内时间使用生成当天，保持与“当天”用量筛选一致。
+| 文件 | 内容 |
+| --- | --- |
+| `docs/media/agentbox-tour-<语言>.mp4` | 全部 7 个章节，1920 × 1424，30 fps，无声 H.264 / yuv420p，faststart |
+| `docs/images/<语言>/tour.gif` | 前 4 个章节（任务 → 命令 → 终端 → 变更），1200 像素宽、10 fps 循环动图 |
+| `docs/images/<语言>/*.png` | 上述 16 张截图 |
+
+GitHub README 不能内嵌播放仓库里的视频文件，所以首页用 GIF 展示动态预览，点击打开更清晰的完整 MP4。
+GIF 分两遍生成调色板，避免一次把所有帧读进内存（容器内存较小时 `split` + `palettegen` 会被 OOM）。
+生成脚本写入 [`docs/media/capture.json`](media/capture.json)，记录界面源码提交、像素尺寸、时长与章节。
+视频用于解释界面流程，不代替服务端或真实模型端到端验收。
+
+发布前逐张检查原图、视频各章节及 GIF，确认没有截断文字、真实账号或私有地址，再与 README 一起提交。
+图片内时间使用生成当天，保持与「当天」用量筛选一致。
 
 ## Git 密钥维护与容器网桥验收
 

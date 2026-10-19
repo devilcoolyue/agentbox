@@ -1,6 +1,4 @@
 {
-  "source_revision": "eb845db59e45ed042b1af9df44dae96f104bf43b",
-  "generated_at": "2026-10-04T13:51:09.496Z",
   "data": "Synthetic fixtures; no model calls, real accounts or production access.",
   "screenshot_css_viewport": {
     "width": 1440,
@@ -12,65 +10,145 @@
     "height": 844
   },
   "video": {
-    "width": 1440,
-    "height": 1072,
-    "duration_seconds": 33.84,
+    "width": 1920,
+    "height": 1424,
+    "fps": 30,
     "format": "H.264 / yuv420p, silent, faststart",
-    "chapters": [
-      {
-        "start_seconds": 0,
-        "en": "01  Assign a task",
-        "zh_CN": "对话 · 在同一个空间继续工作"
-      },
-      {
-        "start_seconds": 4.2,
-        "en": "02  Use the original terminal",
-        "zh_CN": "终端 · 运行命令，检查测试结果"
-      },
-      {
-        "start_seconds": 8.47,
-        "en": "03  Review the changes",
-        "zh_CN": "变更 · 逐文件检查 Git diff"
-      },
-      {
-        "start_seconds": 12.72,
-        "en": "04  Browse and preview files",
-        "zh_CN": "文件 · 阅读成果，再决定如何交付"
-      },
-      {
-        "start_seconds": 17.05,
-        "en": "05  Reuse skills and templates",
-        "zh_CN": "技能 · 把工作方法复用到新空间"
-      },
-      {
-        "start_seconds": 21.32,
-        "en": "06  Connect tools with MCP",
-        "zh_CN": "MCP · 用户默认配置与空间覆盖"
-      },
-      {
-        "start_seconds": 25.55,
-        "en": "07  Understand usage and costs",
-        "zh_CN": "用量 · 查看模型、费用与延迟"
-      },
-      {
-        "start_seconds": 29.77,
-        "en": "08  Reach your private services",
-        "zh_CN": "内网 · abox-link 按白名单连接"
-      }
-    ]
+    "capture": "Chrome screencast at 2x pixel density, scaled to 1920 px"
   },
-  "screenshots": [
-    "docs/images/chat-dark.png",
-    "docs/images/chat-light.png",
-    "docs/images/chat-mobile.png",
-    "docs/images/terminal.png",
-    "docs/images/changes.png",
-    "docs/images/files.png",
-    "docs/images/preview.png",
-    "docs/images/skills.png",
-    "docs/images/mcp.png",
-    "docs/images/usage.png",
-    "docs/images/accounts.png",
-    "docs/images/tunnel.png"
+  "gif": {
+    "width": 1200,
+    "fps": 10,
+    "chapters": 4
+  },
+  "tours": [
+    {
+      "lang": "en",
+      "mp4": "docs/media/agentbox-tour-en.mp4",
+      "gif": "docs/images/en/tour.gif",
+      "seconds": 69.7,
+      "gif_seconds": 41.6,
+      "chapters": [
+        {
+          "start_seconds": 0,
+          "title": "Hand off a task",
+          "subtitle": "Chat with Claude Code or Codex · @ files · live tool calls and tasks"
+        },
+        {
+          "start_seconds": 22.78,
+          "title": "Run CLI commands",
+          "subtitle": "Type / for the workspace’s real Claude Code commands · /context needs no model call"
+        },
+        {
+          "start_seconds": 29.08,
+          "title": "Use the original terminal",
+          "subtitle": "Shell, Claude Code or Codex in a tmux session that survives reconnects"
+        },
+        {
+          "start_seconds": 36.98,
+          "title": "Review every change",
+          "subtitle": "Git diff per file · commit, push and open a PR / MR from the browser"
+        },
+        {
+          "start_seconds": 41.59,
+          "title": "Browse and preview files",
+          "subtitle": "Edit, upload and download · rendered Markdown and HTML"
+        },
+        {
+          "start_seconds": 46.65,
+          "title": "Know what every request costs",
+          "subtitle": "One row per model request · tokens, cache, latency, effort and price snapshot"
+        },
+        {
+          "start_seconds": 51.17,
+          "title": "Make it yours",
+          "subtitle": "Six built-in styles × light / dark · custom themes · 简体 · 繁體 · English"
+        }
+      ],
+      "screenshots": [
+        "docs/images/en/chat-dark.png",
+        "docs/images/en/chat-light.png",
+        "docs/images/en/chat-live.png",
+        "docs/images/en/chat-context.png",
+        "docs/images/en/chat-mobile.png",
+        "docs/images/en/terminal.png",
+        "docs/images/en/changes.png",
+        "docs/images/en/files.png",
+        "docs/images/en/preview.png",
+        "docs/images/en/usage.png",
+        "docs/images/en/skills.png",
+        "docs/images/en/mcp.png",
+        "docs/images/en/accounts.png",
+        "docs/images/en/tunnel.png",
+        "docs/images/en/extensions.png",
+        "docs/images/en/styles.png"
+      ],
+      "source_revision": "c23c800bee7ff34ee5fb38fefd63e9191e015cb0",
+      "generated_at": "2026-10-19T09:32:22.005Z"
+    },
+    {
+      "lang": "zh-CN",
+      "mp4": "docs/media/agentbox-tour-zh-CN.mp4",
+      "gif": "docs/images/zh-CN/tour.gif",
+      "seconds": 64.63,
+      "gif_seconds": 37.6,
+      "chapters": [
+        {
+          "start_seconds": 0,
+          "title": "下达任务",
+          "subtitle": "与 Claude Code / Codex 对话 · @ 引用文件 · 工具调用与任务实时可见"
+        },
+        {
+          "start_seconds": 18.86,
+          "title": "使用 CLI 命令",
+          "subtitle": "输入 / 列出空间里 Claude Code 的真实命令 · /context 不调用模型"
+        },
+        {
+          "start_seconds": 25.28,
+          "title": "使用原生终端",
+          "subtitle": "Shell、Claude Code、Codex 跑在持久 tmux 里，断线重连不丢"
+        },
+        {
+          "start_seconds": 33.08,
+          "title": "逐行审查改动",
+          "subtitle": "按文件查看 Git diff · 在网页里提交、推送、发起 PR / MR"
+        },
+        {
+          "start_seconds": 37.59,
+          "title": "浏览与预览文件",
+          "subtitle": "编辑、上传、下载 · Markdown 与 HTML 渲染预览"
+        },
+        {
+          "start_seconds": 42.44,
+          "title": "看清每次请求的花费",
+          "subtitle": "每次模型请求一行 · token、缓存、延迟、推理强度与价格快照"
+        },
+        {
+          "start_seconds": 46.88,
+          "title": "换上你喜欢的风格",
+          "subtitle": "六种内置风格 × 浅色 / 深色 · 自定义主题 · 简体 · 繁體 · English"
+        }
+      ],
+      "screenshots": [
+        "docs/images/zh-CN/chat-dark.png",
+        "docs/images/zh-CN/chat-light.png",
+        "docs/images/zh-CN/chat-live.png",
+        "docs/images/zh-CN/chat-context.png",
+        "docs/images/zh-CN/chat-mobile.png",
+        "docs/images/zh-CN/terminal.png",
+        "docs/images/zh-CN/changes.png",
+        "docs/images/zh-CN/files.png",
+        "docs/images/zh-CN/preview.png",
+        "docs/images/zh-CN/usage.png",
+        "docs/images/zh-CN/skills.png",
+        "docs/images/zh-CN/mcp.png",
+        "docs/images/zh-CN/accounts.png",
+        "docs/images/zh-CN/tunnel.png",
+        "docs/images/zh-CN/extensions.png",
+        "docs/images/zh-CN/styles.png"
+      ],
+      "source_revision": "c23c800bee7ff34ee5fb38fefd63e9191e015cb0",
+      "generated_at": "2026-10-19T09:32:22.006Z"
+    }
   ]
 }

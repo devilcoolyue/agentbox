@@ -8,7 +8,7 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 
 | 你的目标 | 建议阅读顺序 |
 | --- | --- |
-| 先看界面 | [截图与功能概览](../README_CN.md#界面预览) |
+| 先看界面 | [操作演示](../README_CN.md#操作演示) → [功能亮点](../README_CN.md#功能亮点) → [界面截图](../README_CN.md#界面预览) |
 | 第一次部署 | [快速开始](../README_CN.md#快速开始) → [账号与模型](accounts-and-models.md) → [部署与运维](../deploy/README.md) |
 | 使用已有实例 | [工作空间使用指南](user-guide.md) → [创建与项目导入](project-creation.md) → [技能与 MCP](skills-and-mcp.md) → [使用记录](usage-and-quotas.md) |
 | 换一套界面配色 | [界面主题](themes.md)（导入、导出模板、全站与个人主题） |
@@ -16,7 +16,7 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 | 接入持久聊天接收与结果查询 | [聊天协议 v1](chat-protocol.md)（v0.1.11 起；网页发送与显式核对） |
 | 管理用户和成本 | [配置参考](configuration.md) → [账号与模型](accounts-and-models.md) → [额度与价目表](usage-and-quotas.md) |
 | 为不同 Agent 打断模型复读 | [独立循环保护网关](loop-guard.md)（开发预览；Responses / Chat / Anthropic / Gemini SSE） |
-| 启用或开发扩展 | [扩展与 SPI 协议](architecture/extensions-spi.md)（P1：管理员「扩展」菜单 + 循环保护，作用于 Claude API Key / 中转账号） |
+| 启用或开发扩展 | [扩展与 SPI 协议](architecture/extensions-spi.md)（管理员「扩展」菜单；官方扩展「循环保护」作用于 Claude / Codex 的 API Key 与中转账号，「Webhook 通知」推送空间与回合事件） |
 | 区分服务端、镜像和桌面更新 | [三类更新与生效范围](update-components.md) → [兼容矩阵](compatibility.md) → [升级与回退](releases.md) |
 | 访问本地数据库或公司内网 | [出口代理与内网隧道](networking.md) |
 | 接入脚本或参与开发 | [API 参考](api.md) → [开发指南](development.md) → [统一验证](verification.md) |
@@ -34,9 +34,10 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 README.md                        界面截图、功能、快速开始、能力边界
 docs/
   README.md                      当前文档导航
-  user-guide.md                  工作空间、对话、终端、文件与 Git
+  user-guide.md                  工作空间、对话（任务列表、@ 引用、/ 命令、提问与跟进）、终端、文件与 Git
   accounts-and-models.md          账号接入、凭证与默认模型
-  images/                        README 界面截图（合成数据）
+  images/                        README 截图与动图：en/、zh-CN/ 各一套（合成数据）；架构图 SVG
+  media/                         README 演示视频（MP4）与 capture.json 采集记录
   configuration.md               配置字段、默认值与数据目录
   skills-and-mcp.md               技能、市场、home 模板与 MCP
   usage-and-quotas.md              使用记录、价格、额度与结算

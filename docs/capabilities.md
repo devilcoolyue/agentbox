@@ -1,14 +1,14 @@
 # 当前能力、版本与验证清单
 
-维护日期：2026-10-09。这是服务端 / 网页 v0.1.12 正式版与当前 `main` 的导航与范围清单；发布内容、自动化通过和外部待验收分别标明。后续排期以[第二轮里程碑 M6～M11](roadmap-2.md)为准，进展见 [M6 记录](milestones/m6.md)；第一轮范围见[里程碑](roadmap.md)和[实施单元](milestones/backlog.md)，实施证据见 [M1 记录](milestones/m1.md)。本文不把旧记录当成本轮重新执行。
+维护日期：2026-10-19。这是服务端 / 网页 v0.1.16 正式版与当前 `main` 的导航与范围清单；发布内容、自动化通过和外部待验收分别标明。后续排期以[第二轮里程碑 M6～M11](roadmap-2.md)为准，进展见 [M6 记录](milestones/m6.md)；第一轮范围见[里程碑](roadmap.md)和[实施单元](milestones/backlog.md)，实施证据见 [M1 记录](milestones/m1.md)。本文不把旧记录当成本轮重新执行。
 
 ## 当前版本口径
 
 | 对象 | 当前依据 | 不能混淆的边界 |
 | --- | --- | --- |
-| 服务端 / abox-link 正式版 | [v0.1.12](releases.md)（2026-10-09，构建提交 `2c7502b`），主仓库与 `agentbox-releases` 同步相同附件与 SHA256SUMS | 第一轮 M1～M5 的服务端与网页改动自 v0.1.11 起包含在内；v0.1.12 增加账号可用模型、空间切换账号、界面风格、动效与 Go 安全更新。生产实例已在线升级到 v0.1.12 正式包。发布不等于真实用户、设备、签名和恢复目标等外部验收完成 |
-| 服务端数据库 | v0.1.11 起 schema 12，v0.1.12 无迁移 | 11 新增创建/导入收据，12 新增聊天回执；v0.1.12 回退 v0.1.11 不涉及数据库，但需保留配置备份（见[兼容矩阵](compatibility.md#从-v0112-回退到-v0111)）；v0.1.10 及更早只支持 ≤10，回退须恢复兼容备份到新目录，演练见 [M6 记录](milestones/m6.md#m6-07-回滚演练) |
-| 托管 CI | `2c7502b` 上 CI（web、web-webkit、build-test、source-audit、chat-reliability、govulncheck）与 Release candidate（含 `docker.cli-candidate`、真实 systemd `docker.recovery-drill`、部署迁移/回退）通过；`desktop.yml` 于 `7848194` 通过 | `verification-stability.yml` 与 `desktop-release.yml` 尚未在托管 runner 运行；20 次稳定性采样仍是本机 runner 记录 |
+| 服务端 / abox-link 正式版 | [v0.1.16](releases.md)（2026-10-19，标签提交 `c23c800`）；兼容镜像 `agentbox-releases` 的同版本附件由维护者另行同步 | 第一轮 M1～M5 的服务端与网页改动自 v0.1.11 起包含在内；v0.1.12 增加账号可用模型、切换账号与界面风格；v0.1.13 增加主管委派预览、主题编辑器、共享工具与本地容量管理；v0.1.14 增加 Agent 提问、跟进消息、`/` 命令、`@` 引用、上下文占用、任务列表与逐次请求计费；v0.1.15 为 HTTP 访问修复；v0.1.16 增加扩展（循环保护、Webhook 通知）、回合计时与后台 Git 网络操作。发布不等于真实用户、设备、签名和恢复目标等外部验收完成 |
+| 服务端数据库 | v0.1.14 起 schema 19（v0.1.13 为 18，v0.1.11/12 为 12），v0.1.15/16 无迁移 | 11 新增创建/导入收据，12 新增聊天回执，13～16 为已删除的旧协作预览，17 记录终端推理强度，18 换成主管委派表，19 支持排队与引导消息；旧二进制不能打开新库，跨迁移回退须恢复兼容备份到新目录（见[迁移明细](architecture/database-migrations.md)、[兼容矩阵](compatibility.md)），演练见 [M6 记录](milestones/m6.md#m6-07-回滚演练)。v0.1.16 新增的 `extensions`、`model_gateway` 配置段会被旧版忽略并在再次保存时丢失 |
+| 托管 CI | v0.1.16 标签提交 `c23c800` 上 CI 与 Release candidate 均通过；`desktop.yml` 最近于 2026-10-15（`2f0f6f2`）通过 | `verification-stability.yml` 与 `desktop-release.yml` 尚未在托管 runner 运行；20 次稳定性采样仍是本机 runner 记录 |
 | 桌面公开测试版 | 已公开版本 0.1.2；[对应历史 CI/安装证据](architecture/desktop-client-acceptance.md) | 公开测试版未正式签名/公证；源码为 0.1.3-dev（三语、错误解释），尚未公开发布，仅有本地 macOS arm64 测试 ZIP 和旧包替换验收；旧安装包不会自动更新 |
 | Agent 镜像基线 | `images/agent/versions.env`：Claude 2.1.280、Codex 0.145.0、Node 22.23.2 与固定 digest | `latest` 是可变标签；后续在线更新版本不自动成为已验证基线 |
 | 构建工具 | `go.mod`：Go 1.26.9；网页 CI Node 22；包管理版本见 lockfile | 本机 Node、Go 及平台实际值以验证报告为准，不把本机结果当固定 runner 指标 |
@@ -31,7 +31,11 @@
 | 文件、归档、预览与模板 | 受限目录、拒绝链接逃逸、原子写入与上传边界 | Go safefs/archivex/server；browser.preview；docker.filesystem | 所有磁盘/文件系统/浏览器组合和超大项目体验 |
 | Git、远程连接与变更审查 | Git 在容器执行；凭证受控网桥；不降级宿主 Git | Go gitx/gitaccess/server；browser.git；现有 Linux Git CI | 企业 SSO、真实私有远程和所有托管平台组合 |
 | 技能、MCP、远程浏览器 | 已有模板/官方目录、Claude MCP 管理与可选浏览器镜像 | browser 主场景；docker.mcp / mcp-server / remote-browser / browser-proxy | 任意第三方 MCP、真实 OAuth 页面与网站兼容性 |
-| 用量与额度 | 整数微美元、持久去重、账本同事务；终端只记不扣 | Go usage/store/server；价格/费用浏览器回归；合成修复脚本 | 未知上游事件形状；真实计费端对端不由本轮替代 |
+| 用量与额度 | 整数微美元、持久去重、账本同事务；v0.1.14 起一次模型请求一行（含 Codex 回合内各次请求与 Claude Code 不逐条上报的请求对账）；终端只记不扣 | Go usage/store/server；价格/费用浏览器回归；合成修复脚本 | 未知上游事件形状；真实计费端对端不由本轮替代 |
+| 对话交互（v0.1.14～v0.1.16） | Agent 提问、排队/引导跟进、下一步提示、`/` 命令与 `/context`/`/usage` 卡片、`@` 引用文件、上下文占用、任务列表、回合计时；提问/引导/提示按容器内 Claude Code 参数探测启用 | browser.chat-questions / chat-followups / chat-suggestions 与主浏览器套件里的命令、引用、上下文、任务场景；Go chat/server；候选镜像门槛含提问检查 | 合成事件流不代表所有 CLI 版本、模型与中转站的真实行为；真实账号下的提示费用与提问体验未系统验收 |
+| 主管委派（开发预览，v0.1.13） | Claude Code 主 Agent 经平台工具把子任务交给跑腿模型；按能力标签与可选 Jev 路由；跑腿用量记在原空间 | Go delegation/decision/store/workspace、server `TestDelegation*`；browser.chat-delegation | 真实主 Agent 委派意愿、跑腿质量与费用收益需真实账号另行验收 |
+| 扩展与模型网关（v0.1.16） | 管理员逐项启用、批准权限、按账号/用户绑定；循环保护经模型网关作用于 Claude/Codex API Key 与中转账号，Webhook 推送空间与回合事件；失效默认放行 | race.extensions；Go `Extension\|ModelGateway`；browser.browser（含扩展页）；cli.model-gateway（真实 Claude Code 2.1.302 / Codex 0.163.0 经网关打合成上游） | 真实供应商、终端交互界面与中转站断连后继续读上游的情况；中断记录仅在内存 |
+| 本地存储容量（v0.1.13，默认关闭） | 挂载校验、用户项目配额、多盘监控、可重建缓存回收与发布保留；需离线准备 | linux.storage-quota（临时 loop ext4）；Go storage 相关回归 | 生产磁盘上的启用与长期运行 |
 | 账号出口与 abox-link | 外网出口代理；透明 IPv4/TCP 默认；兼容代理/映射保留 | Go linkapp/netaccess/tunnel；browser.link-i18n；docker.transparent | 任意公司内网、所有代理软件或 UDP/ICMP/IPv6 隧道 |
 | 备份、恢复与部署 | 系统/完整备份有不同范围；版本目录与旧源码布局分开 | Go backup/app；backup、policy、release 组；M4 docker.recovery-drill 真实 systemd 系统/完整恢复、规模/计时/账本/文件核验（托管 Release candidate 已运行）；M6-07 真实 v0.1.11 → v0.1.10 发布包回滚演练 | 当前生产数据的恢复演练、实例自己的 RTO/RPO |
 | 候选 Agent 行为验证 | **v0.1.11 发布**（M4-04）；11 项真实 CLI＋合成上游检查，验证后才切换不可变 ID | docker.cli-candidate、ui.image-update-gate；Go/策略/race；[M4 证据](milestones/m4.md) | 无真实 provider 调用；候选不自动成为固定基线；托管 Release candidate 已对固定镜像运行门槛 |

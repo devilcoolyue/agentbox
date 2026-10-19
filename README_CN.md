@@ -12,18 +12,17 @@
 
 [English](README.md) | **简体中文**
 
-[快速开始](#快速开始) · [操作演示](#操作演示) · [界面预览](#界面预览) · [整体架构](#整体架构) · [使用文档](#使用文档)
+[操作演示](#操作演示) · [功能亮点](#功能亮点) · [界面预览](#界面预览) · [快速开始](#快速开始) · [整体架构](#整体架构) · [使用文档](#使用文档)
 
 </div>
 
-<a href="docs/images/chat-dark.png">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/images/chat-light.png" />
-    <img src="docs/images/chat-dark.png" alt="agentbox 工作台：空间列表、AI 编码对话、工具结果与回合费用" width="1440" />
-  </picture>
-</a>
+## 操作演示
 
-<p align="center"><sub>一个工作空间，完成整项任务。点击任意截图可查看原始分辨率大图。</sub></p>
+<a href="docs/media/agentbox-tour-zh-CN.mp4?raw=1"><img src="docs/images/zh-CN/tour.gif" alt="操作动图：用 @ 引用文件下达任务，思考、工具调用与任务列表实时出现；/context 画出上下文格子图；终端跑测试；逐行审查 diff" width="100%" /></a>
+
+<p align="center"><a href="docs/media/agentbox-tour-zh-CN.mp4?raw=1"><strong>▶ 观看 1920 像素完整版（MP4，65 秒）</strong></a> —— 另含文件预览、使用记录与六种界面风格切换 · <a href="#界面预览">界面截图</a></p>
+
+<sub>录自真实网页控制台，项目、对话、命令输出和用量均为合成演示数据，没有调用模型；用于说明界面，不代表模型效果或速度。</sub>
 
 ## 为什么使用 agentbox？
 
@@ -35,46 +34,79 @@
 | **使用熟悉的 Agent** | Claude Code 与 Codex CLI，支持网页流式对话和原版交互式终端 |
 | **在一个地方完成交付** | 上传或克隆 → 对话 → 运行与预览 → 审查 diff → 提交、推送或下载 |
 | **复用自己的环境** | 用户级共享目录、分层 home 模板、Claude 技能与支持空间覆盖的 MCP 配置 |
-| **让可信团队统一使用** | 集中账号池、按用户授权、用量明细、历史价格快照与可选额度管理 |
+| **让可信团队统一使用** | 集中账号池、按用户授权、逐次请求的用量明细、价格快照与可选额度 |
 | **连接自己的服务** | 可选 abox-link 隧道，访问白名单内的代码仓库、数据库与其他内网服务 |
 
 你准备服务器，以及自己的 Claude / Codex 订阅、API Key 或兼容中转账号。Agentbox 提供工作空间和管理能力，模型调用遵循对应服务商的条款与计费。
 
-**主管委派（开发预览）**让强模型带着便宜模型干活：在 Claude Code 空间的输入框旁打开「委派」并勾选跑腿模型，主 Agent（例如 Opus）照常对话、定方案、写关键代码，遇到规则明确的子任务（批量修改、按接口实现、补测试等）时通过平台工具交给 Sonnet、Codex 模型或挂在 Claude Code / Codex 账号下的中转模型去做。跑腿直接修改当前空间的文件，主 Agent 查看平台实测的改动后再汇报。管理员给每个账号模型标注能接的任务类型和不接的风险，路由按标签过滤，并可选让 Jev 判断交给哪个跑腿或由主 Agent 自己做。跑腿费用记在原空间下。该预览需要 schema 18，替换并删除了旧的多 Agent 协作，不承诺省钱比例。[设计与边界 →](docs/architecture/delegation-supervisor.md)
+## 功能亮点
 
-**扩展**是管理员在侧栏「扩展」里按需启用的服务端功能，各自独立，用统一的 SPI 协议接入。官方扩展目前有两个：「循环保护」检查模型流量，在模型反复说同样的短句时中断这次回复，并在冷却期内拒绝相同的重试，不读取提示词、工具参数和凭证（只作用于 Claude 与 Codex 的 API Key / 中转账号，经系统设置里的模型网关转发，网关只在有扩展需要时启动）；「Webhook 通知」把空间的创建、启动、停止、删除和对话回合结果推送到通用 JSON 地址或飞书、钉钉、企业微信机器人，不含对话内容。管理员逐项批准权限，按账号、用户或全部选择作用范围；作用于某个空间的扩展会在空间头部显示拼图图标和名称。[设计与边界 →](docs/architecture/extensions-spi.md)
+### 跟得上命令行的网页对话
 
-**下一步提示**沿用 Claude Code 命令行的做法：Claude 空间每轮结束后，空输入框里以灰字显示预测的下一句，按 Tab（手机点「填入」）放进输入框，确认后再发送。生成提示会多调用一次模型，费用计入额度并在使用记录里单独列为「下一步提示」；可在「系统设置 → 界面与提示」里按浏览器关闭。需要 Agent 镜像内的 Claude Code 支持 `--prompt-suggestions`，旧镜像不显示提示。
+- **看得见 Agent 在做什么。** 回复流式输出，附思考摘要和每一次工具调用；输入框上方是 Agent 的任务列表（「任务 2/3 · 正在运行测试」），回合计时逐秒走，圆环显示上下文窗口占用，与命令行状态栏一致。
+- **`@` 引用文件，`/` 调用命令。** 敲 `@` 按名字搜索工作区文件并填入路径；敲 `/` 列出空间里 Claude Code 实际可用的命令。`/context` 画成与终端一样的彩色格子图，订阅账号的 `/usage` 显示为额度进度条，都在本地作答、不调用模型。
+- **随时插话。** Claude 执行中提问时，在卡片里作答，同一轮带着回答继续；Agent 干活时可以接着发消息，排到下一轮或引导进当前回合；每轮结束后，预测的下一句以灰字等你按 Tab。（提问、引导与下一步提示仅限 Claude 空间。）
+- **不丢消息。** 未发送的草稿、发送前冻结的副本和逐条回执在刷新、断线和服务重启后仍可恢复；结果不确定时交给你核对，不会自动重跑。
 
-**Agent 提问**同样来自命令行：Claude 执行中需要你拿主意时（它的 AskUserQuestion 工具），这一轮会停下来，对话里出现一张卡片，列出问题和选项（单选或多选，另有「其他」可自由填写）。提交后同一轮带着你的回答继续；点「跳过」或 10 分钟内没人回答，Agent 会按自己的判断继续并说明它的假设。多个页面同时打开时只认第一份回答，中断会撤回提问，等待的时间不计入回合时限。只有 Claude 空间会提问，而且只在能显示卡片的页面发出的消息里；需要 Agent 镜像内的 Claude Code 支持 stream-json 输入与 `--permission-prompt-tool stdio`。
+### 原版 CLI、文件与 Git
 
-**任务运行中继续发消息**：Agent 干活时可以接着打字。「排队」（默认）在这一轮结束后把消息作为新一轮执行；「引导」把消息插进正在跑的 Claude 这一轮，在当前这一步（比如正在跑的命令）结束后生效，并显示在 Agent 实际接收它的位置。Ctrl/⌘+Enter 对单条消息用另一种方式，默认方式在「系统设置 → 界面与提示」里按浏览器设置。排队的消息保存在服务端，关页面、服务重启后照常按顺序执行，遇到「结果不确定」的任务会等你核对后再开始，也可以撤回到输入框。Codex 空间和即将结束的回合一律排队。
+- **终端：** Shell、Claude Code 或 Codex 跑在持久 tmux 会话里，断线重连不丢；支持触屏滚动、长按粘贴和复制到本机剪贴板。
+- **文件：** 在项目与 `/shared` 中浏览、编辑、上传压缩包和下载；Markdown 与 HTML 可切换为渲染预览。
+- **Git：** 逐文件查看 diff 并提交；通过 HTTPS Token、SSH 或 GitHub / GitLab OAuth 获取、拉取、预览推送并创建 PR / MR，耗时的网络操作在后台执行。
 
-**上下文占用**对应命令行状态栏（claude-hud）的上下文条：Claude 空间的输入框右下角用圆环和百分比显示当前对话占了多少上下文窗口，70% 起变黄、85% 起变红，悬停可看具体 token 数。数值取主对话最近一次模型请求的输入 + 缓存，随每次请求更新；子 Agent 和跑腿的上下文不算在内，压缩后显示压缩后的规模（旧版 Claude Code 不报时显示「—」直到下一次请求）。窗口大小以 Claude Code 每轮结束时报告的为准，新对话第一轮结束前只显示 token 数。Codex 空间同样显示，算法与 Codex 终端的「context left」一致（扣除约 12K 的固定开销后计算，所以和直接相除略有不同）；Codex 回退到 `codex exec` 时没有窗口信息，不显示。
+### 为可信团队准备
 
-**任务列表**对应命令行里 Agent 干活时列出的待办：Agent 把工作拆成几项时，输入框上方出现一行「任务 2/5 · 正在做的那项」，点开列出全部（已完成的划掉，进行中的高亮，被其他任务挡着的标「等待 #2」）。回合运行中默认展开、空闲时收起，全部完成且回合结束后自动隐藏（做完的计划在之后的回合里不再出现，新的计划单独显示）；有进行中的任务时，对话里的执行指示也改说这项任务。Claude Code 只对较早的模型（Claude 3.x、Opus / Sonnet 4.0～4.7、Haiku 4.5）默认启用任务列表，Claude 5 系列默认不用，这与命令行一致；想让 Claude 5 也列任务，在「系统设置 → 界面与提示」勾选「Claude 5 也使用任务列表」（按浏览器保存，从下一条消息起生效），每次请求会多带任务工具、模型也会多几次调用来更新任务，可能多花一些 token。列表从空间里 Claude Code 自己保存的任务文件读取，刷新页面、空间停着都能看到。Codex 的计划（update_plan）同样显示，只算当前这一轮。
+- **账号：** 订阅、API Key 与中转账号集中在账号池，按用户授权，逐账号配置可用模型与推理强度；空间可切换到同类型的其他账号。
+- **用量与费用：** 每次模型请求一条记录，含 token、缓存、延迟、推理强度及入账时的价格快照；终端用量同样记录。可选额度余额与 CSV 导出。
+- **复用：** Claude 技能（含官方市场）、分层 home 模板，以及用户默认 + 空间覆盖的 MCP 配置。
+- **内网：** 配对 abox-link 访问白名单内的内网服务；每个账号可走自己的出口代理。
 
-`/compact` 与自动压缩的那次摘要请求、WebFetch 处理网页内容等 Claude Code 自己发出的请求不会逐条出现在输出里，服务端按 Claude Code 自己的累计用量对账后补记，照常计费。
+### 扩展、委派与个性化
 
-**斜杠命令**可以直接在 Claude 空间的对话里发。输入框里敲 `/` 会像命令行一样列出可用命令及说明（内置命令、技能、插件和项目自己的命令，读自空间里的 Claude Code，不请求模型），↑↓ 选择、Tab 填入、Enter 填入并发送、Esc 收起；只能在终端里用的命令不列出。`/clear`（及 `/new`、`/reset`）在网页里新建对话，`/model`、`/effort` 打开模型与推理强度选择，这三个在 Codex 空间同样可用。`/context` 由 Claude Code 在本地作答、不请求模型也不扣费，结果画成和终端里一样的格子图（按类别着色，附 MCP 工具、记忆文件、技能明细），回答底部标「未调用模型」。订阅账号发 `/usage` 同样在本地作答，画成各额度窗口（当前会话、本周等）的进度条，重置时间按系统时区显示，下面列出用量构成。`/compact` 与自动压缩期间显示「正在压缩上下文…」，完成后对话里标出压缩前后的规模；压缩会请求一次模型，照常计费。这些命令都不会拿来给对话起标题，开着委派时也照样生效。
+- **扩展**由管理员逐个启用：「循环保护」在模型反复说同样的短句时中断回复（API Key 与中转账号），「Webhook 通知」把空间和回合事件推送到飞书、钉钉、企业微信或任意 JSON 地址。[设计 →](docs/architecture/extensions-spi.md)
+- **主管委派（开发预览）：** 强模型主 Agent 把规则明确的子任务交给更便宜的跑腿模型，在同一个空间里完成。[设计 →](docs/architecture/delegation-supervisor.md)
+- **风格与语言：** 六种内置风格 × 浅色 / 深色，可实时预览的自定义主题编辑器，简体中文 · 繁體中文 · English，以及手机布局。[界面主题 →](docs/themes.md)
 
-**用 `@` 引用文件**和命令行一样：在开头或空格后敲 `@`，边输入边按名字搜工作区里的文件和文件夹，对上的字加粗显示；↑↓ 选择、Tab 或 Enter 填入路径（不发送）、Esc 收起，选中文件夹会填入 `@文件夹/` 并接着列出里面的内容。路径相对工作区，含空格的写成 `@"my dir/a b.txt"`；Claude Code 会自己把文件内容（文件夹则是目录列表）带进这一轮。Codex 空间填入的是不带 `@` 的路径（与 Codex 自带的选择一致），由模型自己去读。文件名由服务端直接读工作区，空间停着也能搜；遵守各目录的 `.gitignore`，跳过 `.git`、`node_modules` 等目录。工作区特别大时只搜靠上的几层，列表里会注明。输入框里开头的命令、`@` 路径和粘贴图片或上传附件留下的 `[Image #1]` 占位显示成蓝底蓝字，附件占位填入后自动空一格。附件占位和写完的 `@` 路径按一个整体删除：退格或 Delete 碰到它就整块删掉，删附件占位时附件一起移除（撤销可恢复）；正在输入的 `@` 路径仍逐字删除。发出去以后，命令消息换成命令样式（等宽字、带提示符），`@` 路径显示成文件标签，和普通提问区分开。
+各项对话功能的细节（以及哪些需要较新的 Agent 镜像）见[工作空间指南](docs/user-guide.md#对话)。
 
-## 操作演示
+## 界面预览
 
-**对话 → 终端 → Git 审查 → 文件预览。** 动图先看核心工作台；34 秒 MP4 还展示技能、MCP、用量与内网连接。
+截图均为 2 倍像素密度的 PNG，点击可查看原图。
 
-[![agentbox 工作空间操作动图](docs/images/tour.gif)](docs/media/agentbox-tour.mp4?raw=1)
+<a href="docs/images/zh-CN/chat-dark.png"><picture><source media="(prefers-color-scheme: light)" srcset="docs/images/zh-CN/chat-light.png" /><img src="docs/images/zh-CN/chat-dark.png" alt="完成的任务：工具调用、含代码的 Markdown 回答、回合用时与费用，以及输入框里的下一步提示" width="100%" /></picture></a>
 
-<p align="center"><a href="docs/media/agentbox-tour.mp4?raw=1"><strong>下载高清完整版 MP4</strong></a> · <a href="#界面预览">查看高清界面截图</a></p>
+<table>
+<tr>
+<td width="50%" valign="top"><a href="docs/images/zh-CN/chat-live.png"><img src="docs/images/zh-CN/chat-live.png" alt="运行中的回合：工具调用、展开的任务列表与回合计时" /></a><br /><strong>回合进行中</strong><br /><sub>工具调用实时出现，附任务列表、回合计时和上下文占用。</sub></td>
+<td width="50%" valign="top"><a href="docs/images/zh-CN/chat-context.png"><img src="docs/images/zh-CN/chat-context.png" alt="/context 的回答画成按类别着色的格子图" /></a><br /><strong>不调用模型的 <code>/context</code></strong><br /><sub>斜杠命令来自空间里的 Claude Code，上下文占用画得与终端一致。</sub></td>
+</tr>
+<tr>
+<td valign="top"><a href="docs/images/zh-CN/terminal.png"><img src="docs/images/zh-CN/terminal.png" alt="浏览器终端运行类型检查与测试" /></a><br /><strong>原版终端</strong><br /><sub>持久 tmux 会话，运行 Shell 或 Agent 自己的 CLI。</sub></td>
+<td valign="top"><a href="docs/images/zh-CN/changes.png"><img src="docs/images/zh-CN/changes.png" alt="Git 变更：文件列表与逐行差异" /></a><br /><strong>逐行审查改动</strong><br /><sub>提交、推送或创建 PR / MR 之前，按文件查看 diff。</sub></td>
+</tr>
+<tr>
+<td valign="top"><a href="docs/images/zh-CN/files.png"><img src="docs/images/zh-CN/files.png" alt="文件浏览：项目目录与文件" /></a><br /><strong>文件</strong><br /><sub>项目与共享目录：编辑、上传、下载。</sub></td>
+<td valign="top"><a href="docs/images/zh-CN/preview.png"><img src="docs/images/zh-CN/preview.png" alt="项目 README 的 Markdown 渲染预览" /></a><br /><strong>渲染预览</strong><br /><sub>源码与渲染后的 Markdown / HTML 一键切换。</sub></td>
+</tr>
+<tr>
+<td valign="top"><a href="docs/images/zh-CN/usage.png"><img src="docs/images/zh-CN/usage.png" alt="使用记录：每次模型请求一行，含 token、缓存命中率、费用与延迟" /></a><br /><strong>逐次请求的使用记录</strong><br /><sub>筛选、合计、缓存命中率、推理强度、延迟与 CSV 导出。</sub></td>
+<td valign="top"><a href="docs/images/zh-CN/accounts.png"><img src="docs/images/zh-CN/accounts.png" alt="账号池：Claude 与 Codex 账号及使用范围" /></a><br /><strong>账号池</strong><br /><sub>订阅、API Key 与中转账号，附使用范围与可用模型。</sub></td>
+</tr>
+<tr>
+<td valign="top"><a href="docs/images/zh-CN/skills.png"><img src="docs/images/zh-CN/skills.png" alt="空间与用户模板里的 Claude 技能" /></a><br /><strong>技能</strong><br /><sub>装到当前空间或用户模板，逐个文件查看。</sub></td>
+<td valign="top"><a href="docs/images/zh-CN/mcp.png"><img src="docs/images/zh-CN/mcp.png" alt="MCP 服务：用户默认配置与空间覆盖" /></a><br /><strong>MCP 服务</strong><br /><sub>用户默认、空间覆盖、JSON 导入与连接检测。</sub></td>
+</tr>
+<tr>
+<td valign="top"><a href="docs/images/zh-CN/extensions.png"><img src="docs/images/zh-CN/extensions.png" alt="扩展页：循环保护与 Webhook 通知正在运行" /></a><br /><strong>扩展</strong><br /><sub>逐项批准权限，选择作用于哪些账号或用户。</sub></td>
+<td valign="top"><a href="docs/images/zh-CN/tunnel.png"><img src="docs/images/zh-CN/tunnel.png" alt="内网隧道：连接状态与白名单目标" /></a><br /><strong>内网隧道</strong><br /><sub>abox-link 状态、白名单与客户端下载。</sub></td>
+</tr>
+</table>
 
-<sub>截图按 2 倍像素密度采集；截图与演示来自实际浏览器界面，使用合成项目、对话、命令输出和用量记录，不代表模型实测效果。素材采集于多语言接入前，展示中文界面；v0.1.10 另支持繁体中文和英文。</sub>
+<a href="docs/images/zh-CN/styles.png"><img src="docs/images/zh-CN/styles.png" alt="同一页对话的六种界面风格：琥珀、液态玻璃、赛博朋克、石墨极简、青野绿意、工程蓝图" width="100%" /></a>
 
-## 界面语言
+<p align="center"><sub>六种内置风格，各有浅色与深色；自定义主题以其中一种为底子。</sub></p>
 
-**网页控制台与 abox-link v0.1.10** 支持 **简体中文 · 繁體中文 · English**。可在登录页、网页用户菜单或 abox-link 面板顶部切换。默认跟随浏览器／系统语言，不支持时回退英文；主动选择后保存在当前设备。
-
-切换即时生效，保留编辑草稿与终端连接。用户内容、模型回复、终端输出和服务端原始诊断保持原文。[语言规则与桌面支持范围 →](docs/i18n.md)
+<p align="center"><a href="docs/images/zh-CN/chat-mobile.png"><img src="docs/images/zh-CN/chat-mobile.png" alt="手机上的 agentbox 对话" width="300" /></a><br /><sub>同一个空间在手机上的样子。</sub></p>
 
 ## 快速开始
 
@@ -89,25 +121,18 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 - **运行环境：** Linux x86_64 / arm64、systemd 与本机 Docker Engine。Ubuntu 22.04+ / Debian 12+ 会自动安装缺失依赖；其他发行版见[安装前提](deploy/README.md#一键安装)。
 - **打开登录：** 访问 `http://服务器IP:8180`，使用安装完成时显示的 `boxadmin` 和随机密码。直接远程访问需放行 TCP 8180；公网长期使用请配置 [HTTPS](deploy/README.md#https-与-websocket-反向代理)。
 - **服务端正式版：** [v0.1.16](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.16)。命令默认安装最新正式版；末尾加 `-s -- --version v0.1.16` 可固定版本，加 `-s -- --listen 127.0.0.1:8180` 可限制为仅本机监听。
-- **已有部署：** 使用控制台更新入口或[升级指南](docs/releases.md#升级与回退)。安装器会保留已有部署，不覆盖安装。
+- **已有部署：** 使用控制台「关于与更新」或[升级指南](docs/releases.md#升级与回退)。安装器会保留已有部署，不覆盖安装。
 
 配置位于 `/etc/agentbox`，数据位于 `/var/lib/agentbox`。每个空间默认限制 2 GiB 内存、2 CPU，请按并发空间数准备资源。完整选项与失败恢复见[安装说明](deploy/README.md#一键安装)。
 
 ### 完成第一个任务
 
-工作台采用首次出现的三步浮层引导，可跳过并从“更多操作 → 使用指引”重看；不再常驻大面板。空间筛选压成一行。草稿本机保存设置位于「系统设置 → 界面与提示」，管理员和普通用户均可设置，仅对当前身份在此浏览器内生效。
+首次登录时，按角色出现使用指南：管理员检查环境、接入账号、确认默认模型；普通用户查看自己可用的账号。
 
-v0.1.11 新增按角色展示的首次使用指南：管理员检查环境、接入账号、确认默认模型；普通用户查看授权账号。创建窗口会刷新权限，无账号时不能提交。进展见 [M2 记录](docs/milestones/m2.md)，本版已接入空项目、上传和 Git 来源及持久收据恢复，见[项目导入](docs/project-creation.md)；创建收据由 schema 11 引入，本版包含后续 schema 12 聊天回执。
-
-本版还提供空间配置确认和可编辑首任务示例。「关于与更新」区分服务端、Agent 镜像和桌面应用，说明版本观察范围与重启要求，见[三类更新](docs/update-components.md)。桌面界面改动需独立发布桌面包。
-
-v0.1.11 已接入未发送聊天草稿的隔离恢复与附件检查，同时引入服务端 schema 12，并将版本化聊天回执 API 接入原执行器，提供 ID 去重、状态查询和重启恢复。浏览器现已接入发送前冻结副本、丢确认后按原编号查询和显式结果核对，未发送草稿与待确认内容分开；可关闭本机保存，旧服务端保留旧发送路径并提示能力限制。升级前须备份；schema 10/11 的旧二进制不能打开 12。见[草稿恢复](docs/chat-recovery.md)与 [M3 进展](docs/milestones/m3.md)。
-
-1. **添加账号：** 在「系统设置 → 账号池」选择 Claude 或 Codex，接入订阅或 API / 中转账号。认证后从上游读取模型，勾选这个账号能用的模型并按模型设置思考强度；中转站、API Key 读不到模型列表或没有强度信息时，可改用官方模型目录（Agent 镜像里 Claude Code / Codex CLI 自带的目录，无需订阅登录）；不常用的模型可在「系统设置 → 模型管理」关闭显示，不必从账号移除。[账号配置 →](docs/accounts-and-models.md)
-2. **创建空间：** 选择 Agent 和对应账号；之后可在空间 ⋯ 菜单「切换账号」改用同类型的其他账号。
-3. **带入项目：** 上传文件，或在「终端」中将仓库克隆到 `/workspace`。
-4. **发送任务：** 在「对话」描述目标，随时切到文件页查看或终端执行命令；它们操作同一份项目文件。
-5. **审查并交付：** 在「变更」查看 diff，再提交代码。可以直接下载产物，也可以配置 Git 连接后推送并创建 PR / MR。[操作指南 →](docs/user-guide.md)
+1. **添加账号：** 在「系统设置 → 账号池」选择 Claude 或 Codex，接入订阅或 API / 中转账号。从上游读取模型，保留这个账号能用的模型并按模型设置推理强度；中转站读不到模型列表时，可从 Agent 镜像内 CLI 自带的官方目录开始。[账号配置 →](docs/accounts-and-models.md)
+2. **创建空间：** 从空项目、上传的压缩包或 Git 仓库创建，选择 Agent 和账号；之后可在空间 ⋯ 菜单「切换账号」改用同类型的其他账号。[项目导入 →](docs/project-creation.md)
+3. **在对话里描述任务：** 用 `@` 引用文件，在「终端」执行命令，在「文件」查看结果；它们操作同一份项目文件。
+4. **审查并交付：** 在「变更」查看 diff，再提交代码。可以直接下载产物，也可以配置 Git 连接后推送并创建 PR / MR。[操作指南 →](docs/user-guide.md)
 
 <details>
 <summary><strong>希望从源码构建？</strong></summary>
@@ -139,9 +164,7 @@ openssl rand -hex 24
 sudo ./agentbox -config config.json
 ```
 
-服务器本机打开 `http://127.0.0.1:8180`；远程使用可在自己的电脑运行 `ssh -N -L 8180:127.0.0.1:8180 user@your-server`，再打开同一地址。使用 `boxadmin` 和配置中的 `auth_token` 登录。首次启动后密码保存在数据库，修改 `auth_token` 不会重置它。
-
-忘记管理员密码时，v0.1.11 起可用 `agentbox admin-reset-password --config /配置路径/config.json --user boxadmin`：先停服并验证备份，再在终端隐藏输入两次新密码。命令撤销该管理员的登录令牌，保留空间与账本。完整步骤见[密码恢复](docs/troubleshooting.md#忘记密码或改了-auth_token-仍不能登录)；v0.1.10 及更早的发布包不含此命令。
+服务器本机打开 `http://127.0.0.1:8180`；远程使用可在自己的电脑运行 `ssh -N -L 8180:127.0.0.1:8180 user@your-server`，再打开同一地址。使用 `boxadmin` 和配置中的 `auth_token` 登录。首次启动后密码保存在数据库，修改 `auth_token` 不会重置它；忘记时先停服，再运行 `agentbox admin-reset-password --config /配置路径/config.json --user boxadmin`（见[密码恢复](docs/troubleshooting.md#忘记密码或改了-auth_token-仍不能登录)）。
 
 服务端需要 Docker 访问权，以及为挂载目录设置 `1000:1000` 属主的权限。结束前台试跑后，执行 `sudo ./deploy/install.sh` 和 `sudo ./deploy/deploy.sh`，以源码目录方式交给 systemd 托管。详见[部署手册](deploy/README.md)、[配置参考](docs/configuration.md)和[开发指南](docs/development.md)。
 
@@ -156,78 +179,12 @@ sudo ./agentbox -config config.json
 | 层次 | 负责什么 |
 | --- | --- |
 | **浏览器 / 可选桌面端** | 连接服务端，进入自己的工作空间 |
-| **Agentbox 服务端** | 登录鉴权、账号授权、空间生命周期、HTTP / WebSocket、Git 操作、用量和额度 |
+| **Agentbox 服务端** | 登录鉴权、账号授权、空间生命周期、HTTP / WebSocket、Git 操作、用量和额度、扩展 |
 | **工作空间容器** | 运行 Claude Code / Codex CLI 和项目工具，连接配置的模型服务商 |
 | **持久存储** | SQLite 状态与账本、项目文件、home 目录、共享文件与 JSONL 聊天历史 |
 | **可选 abox-link** | 通过明确的白名单，连接本机可达的内网服务 |
 
-对话与终端共享文件，**不会自动共享对话上下文**。一个空间可有多条对话线程，同一时刻运行一个网页对话回合；长对话先显示最新内容，向上滚动时逐页加载更早的记录。每位用户的 `/shared` 可供其所有空间使用。停止容器后文件与历史保留，但容器内进程会结束。
-
-## 界面预览
-
-### 需要直接控制时，切回熟悉的 CLI
-
-打开 Shell、Claude Code 或 Codex CLI 终端，运行测试、安装依赖。只要容器仍在运行，网络断开后可重新连接原来的 tmux 会话。在 Claude Code 里选中文字会直接复制到本机剪贴板；浏览器不允许自动写入时（如 Safari），终端底部会出现「复制到剪贴板」按钮。
-
-[![浏览器终端：项目 Shell 与测试输出](docs/images/terminal.png)](docs/images/terminal.png)
-
-### 交付之前，看清每一处改动
-
-浏览文件列表和 diff，确认后提交当前仓库的改动。支持 HTTPS Token（只提供 HTTP 的内网服务须经内网隧道）、SSH 及已配置的 GitHub / GitLab OAuth 连接，可在网页获取、拉取、预览推送并创建 PR / MR。
-
-[![Git 变更：文件列表与逐行差异审查](docs/images/changes.png)](docs/images/changes.png)
-
-### 用量和费用，有据可查
-
-按时间、用户、Agent 和模型筛选，查看 token、入账费用、价格快照、推理强度与响应延迟，支持导出 CSV。Claude Code 和 Codex CLI 终端记录会读取日志中同回合一致的实际强度，并通过重扫保留的日志补齐旧记录；缺失或冲突的值保持未指定。管理员可以维护价目表和用户余额。
-
-[![使用记录：筛选、费用、token 与延迟](docs/images/usage.png)](docs/images/usage.png)
-
-<details>
-<summary><strong>文件管理与文档预览</strong></summary>
-
-在项目和共享目录中浏览、编辑、上传与下载。源码视图提供语法着色、行号与全屏；可在源码与 Markdown / HTML 渲染预览之间切换，检查生成的文档和页面。
-
-[![文件浏览：项目目录与文件](docs/images/files.png)](docs/images/files.png)
-
-[![工作空间中的 Markdown 文档预览](docs/images/preview.png)](docs/images/preview.png)
-
-</details>
-
-<details>
-<summary><strong>可复用的技能与 MCP 工具</strong></summary>
-
-将 Claude 技能安装到当前空间或用户模板。MCP 支持用户默认配置、空间覆盖、JSON 导入和容器内连接检测；Codex 的技能与 MCP 通过 CLI 配置。
-
-[![Claude 技能管理与可复用模板](docs/images/skills.png)](docs/images/skills.png)
-
-[![MCP 服务配置与连接检测](docs/images/mcp.png)](docs/images/mcp.png)
-
-</details>
-
-<details>
-<summary><strong>账号池与内网访问</strong></summary>
-
-集中维护订阅、API Key 与中转账号，并指定使用范围。需要访问本地或公司内网时，通过 abox-link 配对，仅开放允许访问的目标。
-
-[![账号池：Agent 类型与使用范围](docs/images/accounts.png)](docs/images/accounts.png)
-
-[![内网隧道：连接状态与白名单](docs/images/tunnel.png)](docs/images/tunnel.png)
-
-</details>
-
-<details>
-<summary><strong>主题风格与手机访问</strong></summary>
-
-支持浅色、深色和跟随系统，并可在用户菜单切换界面风格：琥珀（默认）、液态玻璃、赛博朋克、石墨极简、青野绿意、工程蓝图。风格与明暗互不影响，都保存在当前浏览器。也可以制作自定义主题：以内置风格为底子、改写颜色、圆角和字体令牌，在编辑器里实时预览，或复制说明交给 AI 修改后粘贴回来；管理员发布的全站主题所有用户可选，个人主题只给自己用，见[界面主题](docs/themes.md)。手机布局提供抽屉导航、触屏终端快捷键栏、滚动与长按粘贴。
-
-[![浅色主题下的 Agentbox](docs/images/chat-light.png)](docs/images/chat-light.png)
-
-<img src="docs/images/chat-mobile.png" alt="手机上的 Agentbox 对话与输入框" width="390" />
-
-</details>
-
-如何使用演示数据复现截图和视频，见[截图录制说明](docs/development.md#文档截图)。
+对话与终端共享文件，**不会自动共享对话上下文**。一个空间可有多条对话线程，同一时刻运行一个网页对话回合（之后的消息排队）；长对话先显示最新内容，向上滚动时逐页加载更早的记录。每位用户的 `/shared` 可供其所有空间使用。停止容器后文件与历史保留，但容器内进程会结束。
 
 ## 选择适合你的入口
 
@@ -238,19 +195,15 @@ sudo ./agentbox -config config.json
 | **abox-link** | 让云端空间访问白名单内的内网服务 | 可选工具；Windows、macOS、Linux 本机面板或无头命令行 |
 | **HTTP / WebSocket API** | 脚本管理空间、查询用量 | [API 文档](docs/api.md) |
 
-桌面应用提供 Mac Apple Silicon、Mac Intel 和 Windows x64 安装包，连接已有服务端，不替代或升级服务端。v0.1.8 服务端提供基础模式；v0.1.9 增加项目终端、配对和同步后端。**同步默认关闭，需管理员显式启用。** 桌面 0.1.2 需手动下载安装，macOS 未公证、Windows 未签名，尚未启用自动更新。本次服务端发布不更新桌面安装包：已发布的 Desktop 0.1.2 不含多语言界面，当前桌面源码已接入。源码、配置和验收范围见[桌面指南](desktop/README.md)。
+桌面应用连接已有服务端，不替代或升级服务端。**同步默认关闭，需管理员显式启用。** 桌面 0.1.2 需手动下载安装（macOS 未公证、Windows 未签名、没有自动更新），早于桌面源码现已接入的多语言界面。见[桌面指南](desktop/README.md)。
 
-可选的[远程浏览器镜像](docs/remote-browser.md)还能在空间中提供完整浏览器桌面，保留网站登录状态，支持剪贴板和下载。网页登录与 CLI 授权独立，需要管理员选用带浏览器的镜像。
-
-Agent 镜像更新使用固定底座，避免 CLI 每次升级叠加旧层。存量镜像会在后台做同版本迁移，保留浏览器和定制配置，不中断运行中的空间；空间不足时保留原镜像，旧层按引用和七天保留期延迟回收。见[镜像维护](docs/agent-image-validation.md#固定底座与存量镜像维护)。
-
-可选的[共享工具库](docs/shared-tools.md)把 Go SDK 和浏览器安装文件放到公共只读目录，Go/npm 等可写缓存仅在同一用户的空间间复用；支持数据盘路径，运行中的空间不重建。
+可选的服务端功能：[远程浏览器镜像](docs/remote-browser.md)为空间提供保留网站登录的完整浏览器桌面；[共享工具库](docs/shared-tools.md)提供只读的 Go SDK 与浏览器，并按用户隔离缓存；[本地存储容量管理](docs/storage-capacity.md)提供用户项目配额与缓存回收。Agent 镜像更新基于固定底座，验证通过后才切换（见[镜像维护](docs/agent-image-validation.md)）。
 
 ## 使用前了解这些边界
 
 - **账号共享面向可信用户。** 凭证会交给容器内 CLI，有终端权限的用户可以读取。账号范围控制新操作准入；撤权不会回收已交付凭证或终止已有进程，见[账号授权](docs/accounts-and-models.md#账号使用范围)。
 - **文件持久化不等于进程一直运行。** 长期文件请放在 `/workspace`、`/home/agent` 或 `/shared`。停止、重建和空闲休眠会终止容器进程；关闭浏览器不会立即停止容器。
-- **额度不是实时消费硬上限。** 网页对话在回合结束时结算，最后获准的一轮可能超支；支持的终端用量仅记录、不扣余额，见[用量与额度](docs/usage-and-quotas.md)。
+- **额度不是实时消费硬上限。** 网页对话在回合结束时结算，最后获准的一轮可能超支；终端用量仅记录、不扣余额，见[用量与额度](docs/usage-and-quotas.md)。
 - **用户文件需要完整备份。** 默认系统备份包含配置、凭证、数据库、模板与 MCP 管理状态，不包含工作区文件与聊天历史；完整备份需停止服务和相关容器，见[备份与恢复](deploy/README.md#备份与恢复)。
 - **由可信管理员维护服务器。** 当前使用本机 Docker，同一数据目录只能运行一个服务进程。Agent 默认以 `bypassPermissions` 执行代码，容器使用非 root 用户和资源限制。服务部署会短暂断开连接。
 - **提交与推送是两步。** 网页提交不执行 hook 或签名，也不自动推送；需要这些提交行为时使用终端，见 [Git 管理](docs/architecture/git-management.md)。
@@ -263,40 +216,34 @@ Agent 镜像更新使用固定底座，避免 CLI 每次升级叠加旧层。存
 | --- | --- |
 | 使用对话、终端、文件、预览与 Git | [工作空间指南](docs/user-guide.md) |
 | 接入账号、选择模型 | [账号与模型](docs/accounts-and-models.md) |
-| 为不同 Agent 打断模型复读 | [扩展：循环保护](docs/architecture/extensions-spi.md) · [独立循环保护网关（开发预览）](docs/loop-guard.md) |
 | 复用技能、模板与 MCP 工具 | [技能、插件与 MCP](docs/skills-and-mcp.md) |
 | 查看或管理成本 | [用量与额度](docs/usage-and-quotas.md) · [价格目录](docs/pricing-catalog.md) |
+| 启用扩展、打断模型复读 | [扩展与 SPI](docs/architecture/extensions-spi.md) · [独立循环保护网关（开发预览）](docs/loop-guard.md) |
+| 让强模型带便宜模型干活 | [主管委派](docs/architecture/delegation-supervisor.md) |
 | 访问内网服务 | [代理与 abox-link](docs/networking.md) |
 | 安装、升级、备份与恢复 | [部署手册](deploy/README.md) · [版本发布](docs/releases.md) · [CLI 兼容性](docs/compatibility.md) |
 | 配置服务端或接入脚本 | [配置参考](docs/configuration.md) · [API 文档](docs/api.md) |
-| 选择界面语言 | [语言与偏好](docs/i18n.md) |
-| 导入或制作界面主题 | [界面主题](docs/themes.md) |
-| 排查错误 | [常见问题](docs/troubleshooting.md) |
+| 选择界面语言或制作主题 | [语言与偏好](docs/i18n.md) · [界面主题](docs/themes.md) |
+| 排查错误 | [常见问题](docs/troubleshooting.md) · [错误码](docs/errors.md) · [分层诊断](docs/diagnostics.md) |
+| 了解版本变化 | [更新记录](CHANGELOG.md) · [能力与验证清单](docs/capabilities.md) |
 | 参与开发 | [开发指南](docs/development.md) · [贡献说明](CONTRIBUTING.md) |
 
 ## 开发里程碑
 
-v0.1.13 新增[本地存储容量管理](docs/storage-capacity.md)：数据盘挂载校验、用户项目配额、多盘监控、可重建缓存回收与发布保留。默认关闭，Linux 需先完成离线准备；S3 备份与空间冷归档仍在[存储专项计划](docs/milestones/storage.md)中。
+当前服务端正式版为 **v0.1.16**（2026-10-19）。最近几个版本新增了主管委派、主题编辑器与本地存储容量管理（v0.1.13），Agent 提问、跟进消息、`/` 命令、`@` 引用、上下文占用、任务列表与逐次请求计费（v0.1.14），以及扩展、Webhook 通知、回合计时和后台执行的 Git 网络操作（v0.1.16）。详见[更新记录](CHANGELOG.md)。
 
-第一轮 M1～M5 的服务端与网页改动已纳入 v0.1.11 正式版，但真实用户观察、性能阈值、恢复目标、桌面签名等外部验收仍未落实；详情见[第一轮记录](docs/milestones/backlog.md)。第二轮 M6～M11 从 2026-10-06 起接续：先把开发版收口为正式发布（v0.1.11 已于 2026-10-08 发布，M6 进展见[记录](docs/milestones/m6.md)），再补真实使用验收与指标采集，之后按真实反馈改进日常效率、降低上游追新与安装成本，视证书到位情况交付桌面稳定版，最后有门槛地接入更多 Agent。范围、依赖和验收见[第二轮计划](docs/roadmap-2.md)。
-
-v0.1.11 起，网页为登录、空间启动与聊天错误提供三语处理建议和操作编号，保留旧客户端使用的 `error` 字段。覆盖范围及限制见[错误契约](docs/errors.md)。 管理员可主动检查实例，普通用户可检查自己的空间；结果区分通过、失败、未检查，不把本地配置存在当作模型可用。见[分层环境诊断](docs/diagnostics.md)。
+第一轮 M1～M5（故障定位、首次使用、日常可靠性、维护质量、多端一致性）已随 v0.1.11 发布，真实用户观察、性能阈值、恢复目标、桌面签名等外部验收仍未完成（[记录](docs/milestones/backlog.md)）。第二轮接续：
 
 | 里程碑 | 计划重点 |
 | --- | --- |
-| **M1 · 故障定位与维护基线** | 统一错误码与操作关联 ID、扩展环境诊断、管理员密码恢复、整理文档与测试入口 |
-| **M2 · 首次使用与项目导入** | 按角色引导配置，串联空间创建、文件上传和 Git 导入，说明版本与更新生效范围 |
-| **M3 · 日常任务可靠性** | 聊天草稿与接收确认、幂等接收、断线后的任务状态核对、空间搜索与筛选 |
-| **M4 · 持续维护与升级质量** | 继续拆分复杂模块、完善接口契约与分层 CI、验证 CLI 协议兼容和升级恢复 |
-| **M5 · 桌面稳定版与多端一致性** | 正式签名与公证、实机和旧包升级验收、桌面三语版本、小范围同步试用 |
-| **M6 · 收口与正式发布** | 提交开发工作树、托管 CI 跑通、发布 v0.1.11 正式版与桌面 0.1.3 测试版、校准文档版本口径 |
-| **M7 · 真实使用验收与指标基线** | 实例内聚合指标与脱敏导出、真实任务观察、性能阈值与恢复目标约定、生产数据恢复演练 |
+| **M6 · 收口与正式发布** | 提交开发工作树、托管 CI 跑通、发布 v0.1.11、校准文档版本口径（[记录](docs/milestones/m6.md)） |
+| **M7 · 真实使用验收与指标基线** | 实例内聚合指标与脱敏导出、真实任务观察、性能阈值与恢复目标约定 |
 | **M8 · 反馈驱动的日常效率** | 按观察结果修复高频阻断；候选：空间归档、任务完成通知、长对话渲染 |
 | **M9 · 上游追新与安装成本** | 预构建 Agent 镜像、CLI 基线推进、依赖升级例行、契约生成扩展 |
 | **M10 · 桌面稳定版** | 正式签名与公证、最低系统与实机、同步试用完整周期；缺证书则降级为测试版 |
-| **M11 · 多 Agent 接入** | Provider 注册表与 ACP 传输，镜像可选安装 Agent；首个新增 Kimi Code CLI，dsh / Antigravity 按协议成熟度候选 |
+| **M11 · 多 Agent 接入** | Provider 注册表与 ACP 传输，镜像可选安装 Agent；首个新增 Kimi Code CLI |
 
-每期暂按 **3 周**规划，具体顺序和范围根据用户反馈、维护资源与验收结果调整，不作为版本发布日期承诺。第一轮范围见[维护与用户体验迭代计划](docs/roadmap.md)，第二轮范围、外部资源轨道与开工清单见[第二轮计划](docs/roadmap-2.md)。欢迎通过 Issue 提供具体使用场景和改进建议。
+每期暂按约 **3 周**规划，顺序和范围根据用户反馈与验收结果调整，不作为版本发布日期承诺。范围、依赖和验收见[第二轮计划](docs/roadmap-2.md)与已封存的[第一轮计划](docs/roadmap.md)。欢迎通过 Issue 提供具体使用场景。
 
 ## 开发与贡献
 
@@ -314,7 +261,7 @@ npm run check
 npm run build
 ```
 
-修改 `web/src/` 后，一并提交生成的 `internal/web/static/js/`。完整容器验证以 Linux 为准，macOS 构建和单元测试不能替代它。
+修改 `web/src/` 后，一并提交生成的 `internal/web/static/js/`。完整容器验证以 Linux 为准，macOS 构建和单元测试不能替代它。上方截图与演示由 `scripts/capture-readme.mjs` 和 `scripts/render-readme-tour.mjs` 从实际界面重新生成（见[截图录制说明](docs/development.md#文档截图)）。
 
 欢迎提交具体问题、使用建议与聚焦改动的 PR。反馈附上复现步骤和脱敏日志；安全漏洞通过 [SECURITY.md](SECURITY.md) 私密报告。如果 agentbox 对你有用，点一个 **Star**，让更多开发者发现它。
 
