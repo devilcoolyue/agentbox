@@ -45,6 +45,8 @@ v0.1.13 从 v0.1.12/schema 12 迁移至 schema 18，增加主管委派及用量�
 
 v0.1.14 从 schema 18 迁移至 19（从 v0.1.12 及更早升级连续执行到 19），增加对话排队与引导；v0.1.13 及更早的二进制不能直接打开新库，回退须恢复升级前兼容备份到新目录，升级后排队而尚未执行的消息不会保留。下一步提示、Agent 提问与引导按容器内 Claude Code 的 `--help` 探测启用（提示需 `--prompt-suggestions`；提问与引导需 `--input-format`、`--permission-prompt-tool` 与 `--replay-user-messages`）；默认固定镜像 Claude Code 2.1.280 均已支持；更旧的镜像不显示提示、不提问，运行中发送的消息只能排队，Codex 空间不受影响。旧网页不发送新字段，按原方式执行。Agent 镜像候选验证新增 `claude_question` 必检项，Claude Code 不支持该控制协议的候选镜像不会被切换。
 
+v0.1.16 沿用 schema 19 与 `compatibility_epoch` 1，现有网页、abox-link、聊天、终端和配对接口不变；新增配置段 `extensions` 与 `model_gateway`。回退到 v0.1.15 不涉及数据库，但旧版忽略这两段、再次保存配置会丢掉它们，回退前保留配置备份。循环保护绑定的 Codex 账号会把空间 `.codex/config.toml` 的 `base_url` 改成模型网关地址，旧版不监听网关，回退前先在扩展页解绑或停用；Claude 的网关地址只在每次执行时注入，新开的 CLI 自动恢复原地址。循环保护的真实 CLI 验证为 Claude Code 2.1.302、Codex 0.163.0（`cli.model-gateway`）。Desktop 0.1.2 能力不变、同步默认关闭，本次不发布新桌面包。
+
 客户端按能力发现显示扩展入口，旧服务端返回 404 或页面时进入基础模式；鉴权错误、网络故障和无效响应不会冒充基础模式。新桌面包不会自动升级服务端。
 
 v0.1.9 的 schema 10 只新增项目和终端元数据，不移动空间文件。升级前保存并验证配套备份；v0.1.8 不能直接打开已迁移数据库，回退必须恢复兼容备份到新目录，并保全升级后的文件变化。桌面本地状态另使用 schema 5，不与服务端 schema 混用。详见[数据库迁移与回退](architecture/database-migrations.md)。

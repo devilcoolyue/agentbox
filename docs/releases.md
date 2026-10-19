@@ -8,7 +8,13 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.15](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.15)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.16](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.16)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.16：扩展、Webhook 通知与后台 Git 操作
+
+新增管理员「扩展」菜单与扩展 SPI：官方扩展「循环保护」经模型网关检查 Claude / Codex 的 API Key 与中转账号，在模型反复说同样的短句时中断回复并冷却相同的重试；「Webhook 通知」把空间生命周期和对话回合结果推送到 JSON 地址或飞书、钉钉、企业微信机器人。扩展按账号、用户或全部选择作用范围，权限逐项批准；模型网关在「系统设置 → IP 代理」，只在有扩展需要时启动。对话显示回合计时与总用时，页面顶部有加载条。网页 Git 克隆、获取、拉取、推送与导入改为后台执行，不再受反向代理单次响应时限限制，GitLab 项目页地址自动补 `.git`；Git 连接可以经内网隧道使用 HTTP 内网服务器。分项内容见 [CHANGELOG](../CHANGELOG.md)。
+
+数据库仍为 schema 19，无需更新 Agent 镜像，未启用扩展时行为不变。新增配置段 `extensions`、`model_gateway`；回退到 v0.1.15 前保留配置备份，并先解绑 Codex 账号让空间配置恢复原上游，详见[包内升级说明](../deploy/downloads/README.md#升级至-v0116)。循环保护已用真实 Claude Code 2.1.302 与 Codex 0.163.0 经网关和合成上游验证，真实供应商与终端交互界面未纳入；本次发布两个 Linux 服务端包、五个平台 abox-link、`release.json` 与 `SHA256SUMS`，不发布新桌面包。
 
 ### v0.1.15：修复 HTTP 下设置入口失效
 
