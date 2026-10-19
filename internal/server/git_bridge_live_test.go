@@ -84,8 +84,10 @@ func TestGitBridgeContainerLive(t *testing.T) {
 			if err = os.Mkdir(filepath.Join(s.workspaceDir(sess), ".git"), 0755); err != nil {
 				t.Fatal(err)
 			}
-			remote := t.TempDir()
-			gitCmd(t, remote, "init", "--bare", "-q", "-b", "main")
+			// GitLab serves "<project>.git"; the HTTPS case uses the project page
+			// URL so the bridge must reach it through gitRepositoryURL's suffix.
+			remote := filepath.Join(t.TempDir(), "repo.git")
+			gitCmd(t, filepath.Dir(remote), "init", "--bare", "-q", "-b", "main", remote)
 			var conn store.GitConnection
 			var repository string
 			if protocol == "https" {
@@ -112,7 +114,7 @@ func TestGitBridgeContainerLive(t *testing.T) {
 					t.Fatal(w.Body.String())
 				}
 				json.Unmarshal(w.Body.Bytes(), &conn)
-				repository = upstream.URL + "/" + filepath.Base(remote)
+				repository = upstream.URL + "/" + strings.TrimSuffix(filepath.Base(remote), ".git")
 			} else {
 				signer, key := sshFixtureKey(t)
 				base, hostKey := startGitSSHFixture(t, remote, signer.PublicKey())

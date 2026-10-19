@@ -60,7 +60,14 @@ export async function motionSmoke(page, fixture) {
    })();
    frames(4);
   }));
+  // The page sees the restored size as a resize (and possibly scroll) event on a later frame, and
+  // menu.ts closes an open menu on either without returning focus. Let both land before the menu.
+  await page.evaluate(width => { window.__motionResize = new Promise(done => {
+   const seen = () => { if (innerWidth !== width) return; removeEventListener('resize', seen); requestAnimationFrame(() => requestAnimationFrame(done)); };
+   addEventListener('resize', seen);
+  }); }, desktop.width);
   await page.setViewportSize(desktop);
+  await page.evaluate(() => window.__motionResize.finally(() => { delete window.__motionResize; }));
   assert.deepEqual(snapped, {running: 0, dx: 0, dw: 0}, 'resize should place the tab underline without sliding');
 
   // The ⋯ menu slides in; a closing menu stays inert until it fades out, and focus returns.
