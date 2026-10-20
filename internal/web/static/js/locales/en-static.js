@@ -305,6 +305,7 @@ export default {
     "应用": "Apply",
     "应用所选模型的候选价格": "Apply candidate prices to selected models",
     "延迟": "Latency",
+    "输出速度": "Output speed",
     "开启 — 每日检查并应用": "On — check and apply daily",
     "开启自动跟随后，每日检查会更新已选模型；单价变化超过 25%、零价格或长上下文规则变化留待手动核对。自定义价格、新模型和目录里没有的模型不会自动修改。": "Daily checks update selected models when automatic tracking is enabled. Price changes over 25%, zero prices and long-context rule changes require review. Custom prices, new models and models absent from the catalog are not changed automatically.",
     "当前使用记录时区": "Current usage timezone",

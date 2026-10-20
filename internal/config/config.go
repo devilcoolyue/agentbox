@@ -347,6 +347,7 @@ type Config struct {
 	Tunnel                TunnelConfig             `json:"tunnel"`
 	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
 	ModelGateway          ModelGatewayConfig       `json:"model_gateway"`
+	UsageTelemetry        UsageTelemetryConfig     `json:"usage_telemetry"`
 	Extensions            ExtensionsConfig         `json:"extensions"`
 	Accounts              []Account                `json:"accounts"`
 	Proxies               []Proxy                  `json:"proxies,omitempty"`
@@ -493,6 +494,9 @@ func (c *Config) validateLocked() error {
 		return err
 	}
 	if err := c.validateModelGateway(); err != nil {
+		return err
+	}
+	if err := c.validateUsageTelemetry(); err != nil {
 		return err
 	}
 	if err := c.validateExtensions(); err != nil {
@@ -712,6 +716,7 @@ type persistConfig struct {
 	Tunnel                TunnelConfig             `json:"tunnel"`
 	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
 	ModelGateway          ModelGatewayConfig       `json:"model_gateway,omitzero"`
+	UsageTelemetry        UsageTelemetryConfig     `json:"usage_telemetry,omitzero"`
 	Extensions            ExtensionsConfig         `json:"extensions"`
 	Accounts              []persistAccount         `json:"accounts"`
 	Proxies               []Proxy                  `json:"proxies,omitempty"`
@@ -750,6 +755,7 @@ func (c *Config) saveLocked() error {
 		Tunnel:                c.Tunnel,
 		ProxyBridge:           c.ProxyBridge,
 		ModelGateway:          c.ModelGateway,
+		UsageTelemetry:        c.UsageTelemetry,
 		Extensions:            c.Extensions.Clone(),
 		Accounts:              make([]persistAccount, 0, len(c.Accounts)),
 		Proxies:               c.Proxies,
@@ -1093,6 +1099,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Tunnel:                c.Tunnel,
 		ProxyBridge:           c.ProxyBridge,
 		ModelGateway:          c.ModelGateway,
+		UsageTelemetry:        c.UsageTelemetry,
 		Extensions:            c.Extensions.Clone(),
 		Accounts:              append([]Account(nil), c.Accounts...),
 		Proxies:               append([]Proxy(nil), c.Proxies...),
@@ -1147,6 +1154,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.Tunnel = work.Tunnel
 	c.ProxyBridge = work.ProxyBridge
 	c.ModelGateway = work.ModelGateway
+	c.UsageTelemetry = work.UsageTelemetry
 	c.Extensions = work.Extensions
 	c.Accounts = work.Accounts
 	c.Proxies = work.Proxies

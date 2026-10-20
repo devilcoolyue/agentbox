@@ -11,7 +11,8 @@ package server
 // Claude 来自按 message.id 去重的消息流与 transcript，Codex 来自 app-server 的累计
 // 用量差值（见 usage/requests.go）。一个回合内部 CLI 每调一次工具就多打一次接口、
 // 每次重发整段上下文，所以同回合会连着好几行，行上的 turn_seq/turn_requests 标出
-// 「第几次 / 共几次」。回合级的首字与总耗时只记在回合第一次请求上。
+// 「第几次 / 共几次」。回合级的首字与总耗时只记在回合第一次请求上；终端行例外，
+// 每行带这一次请求按 CLI 日志时间戳估的耗时与首字（见 usage.termTiming）。
 //
 // 例外：升级前的 Claude 对话行按回合合并保存（merged_requests 是合并的次数），
 // 账本已按整行扣款，不再拆开；Codex exec 回退和更早的记录同样只有合计。终端
@@ -86,6 +87,10 @@ type usageRowView struct {
 	DurationMS       int64 `json:"duration_ms"`
 	WallMS           int64 `json:"wall_ms"`
 	TTFTMs           int64 `json:"ttft_ms"`
+	// APITTFTMs / APIDurationMS 是 CLI 自己量的这一次请求（遥测 api_request）：
+	// 发出请求到流的第一个事件 / 到流结束。每行各一份，0 = 没收到遥测。
+	APITTFTMs     int64 `json:"api_ttft_ms,omitempty"`
+	APIDurationMS int64 `json:"api_duration_ms,omitempty"`
 	// TurnSeq/TurnRequests：这次请求是同回合、同类型的第几次 / 共几次（按时间）。
 	// 只有一次时省略。
 	TurnSeq      int `json:"turn_seq,omitempty"`
@@ -304,6 +309,8 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 			DurationMS:       e.DurationMS,
 			WallMS:           e.WallMS,
 			TTFTMs:           e.TTFTMs,
+			APITTFTMs:        e.APITTFTMs,
+			APIDurationMS:    e.APIDurationMS,
 			MergedRequests:   usage.MergedRequests(e),
 			Rate:             s.rateFor(e),
 		})

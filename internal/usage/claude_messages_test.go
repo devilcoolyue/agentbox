@@ -114,7 +114,10 @@ func TestClaudeTranscriptCompletesOnlyCurrentTurnAndModels(t *testing.T) {
 	observe(&tally, "one", `{"type":"system","session_id":"provider-session"}`, messageLine("new", "opus", "", 2, 2, 0, 0))
 	appendTranscript(t, main, messageLine("new", "opus", "end_turn", 2, 200, 0, 0), messageLine("new", "opus", "", 2, 1, 0, 0),
 		`{"type":"assistant","entrypoint":"cli","message":{"id":"terminal","model":"opus","usage":{"output_tokens":9999}}}`)
-	appendTranscript(t, filepath.Join(root, "provider-session", "subagents", "agent-a.jsonl"), messageLine("child", "haiku", "end_turn", 3, 20, 0, 0))
+	// Subagent requests reach us only through their transcript; its requestId
+	// is what the CLI's telemetry names.
+	child := strings.Replace(messageLine("child", "haiku", "end_turn", 3, 20, 0, 0), `"entrypoint":"sdk-cli",`, `"entrypoint":"sdk-cli","requestId":"req_child",`, 1)
+	appendTranscript(t, filepath.Join(root, "provider-session", "subagents", "agent-a.jsonl"), child)
 	appendTranscript(t, filepath.Join(root, "unrelated.jsonl"), messageLine("other", "opus", "end_turn", 3, 100000, 0, 0))
 	if n := s.Flush(&tally, time.Second); n != 2 {
 		t.Fatal(n)
@@ -126,6 +129,9 @@ func TestClaudeTranscriptCompletesOnlyCurrentTurnAndModels(t *testing.T) {
 		cost += r.CostMicroUSD
 		if r.Price == nil || r.Price.Source != "table" {
 			t.Fatal("missing pricing semantics")
+		}
+		if want := map[string]string{"haiku": "req_child", "opus": ""}[r.Model]; r.APIRequestID != want {
+			t.Fatalf("%s api request id = %q, want %q", r.Model, r.APIRequestID, want)
 		}
 	}
 	if output != 220 || cost != 440 {
@@ -177,6 +183,42 @@ func TestClaudeTerminalMessageIDWinsOverRequestIDAndPlaceholders(t *testing.T) {
 	turns, err := parseTerminalReader(strings.NewReader(strings.Join(lines, "\n")))
 	if err != nil || len(turns) != 1 || turns[0].ev.OutputTokens != 50 || turns[0].ev.CacheReadTokens != 100 {
 		t.Fatalf("turns=%+v err=%v", turns, err)
+	}
+	// Without a requestId the message id is only a dedup key, not something
+	// the CLI's telemetry could ever name.
+	if turns[0].ev.APIRequestID != "" {
+		t.Fatalf("api request id from a message id: %q", turns[0].ev.APIRequestID)
+	}
+}
+
+// Web chat rows keep the request id from the stream (or the transcript), so
+// the CLI's per-request timing finds them whichever arrives first.
+func TestClaudeChatRowsTakeTelemetryTiming(t *testing.T) {
+	s, _ := newTestServer(t)
+	tally := s.NewTally()
+	withReq := func(line, req string) string {
+		return strings.Replace(line, `{"type":"assistant",`, `{"type":"assistant","request_id":"`+req+`",`, 1)
+	}
+	if _, err := s.store.RecordRequestTimings([]store.RequestTiming{{User: "alice", SessionID: "s1", RequestID: "req_one", TTFTMs: 1500, DurationMS: 12700}}); err != nil {
+		t.Fatal(err)
+	}
+	observe(&tally, "turn",
+		withReq(messageLine("msg-one", "opus", "tool_use", 2, 1097, 100, 0), "req_one"),
+		// A later snapshot without the id must not erase it.
+		messageLine("msg-one", "opus", "tool_use", 2, 1097, 100, 0),
+		withReq(messageLine("msg-two", "opus", "end_turn", 2, 33, 200, 0), "req_two"))
+	if n := s.Flush(&tally, time.Second); n != 2 {
+		t.Fatal(n)
+	}
+	if _, err := s.store.RecordRequestTimings([]store.RequestTiming{{User: "alice", SessionID: "s1", RequestID: "req_two", TTFTMs: 1990, DurationMS: 2009}}); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][2]int64{}
+	for _, e := range s.store.ListUsage(store.UsageFilter{User: "alice"}) {
+		got[e.APIRequestID] = [2]int64{e.APITTFTMs, e.APIDurationMS}
+	}
+	if got["req_one"] != [2]int64{1500, 12700} || got["req_two"] != [2]int64{1990, 2009} {
+		t.Fatalf("timings = %v", got)
 	}
 }
 

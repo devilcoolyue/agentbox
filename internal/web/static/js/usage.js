@@ -1,7 +1,7 @@
 import { t as i18nText, setText, setTextRender, setAttrRender } from "./i18n.js";
 import { svgIcon } from "./icons.js";
 import { BUDGETS, EFFORT_LABELS } from "./reasoning.js";
-import { cacheHitText, fmtTokens } from "./usage-math.js";
+import { cacheHitText, fmtSpeed, fmtTokens, outputSpeed } from "./usage-math.js";
 /* usage：使用记录（消耗流水明细）。
  *
  * **一行是什么**：一次 provider 请求（一条 API 响应）。容器里的 CLI 一个回合内部
@@ -446,14 +446,21 @@ function renderRows(data) {
         billing.appendChild(bchip);
         costv.appendChild(billing);
         tr.appendChild(cost);
-        // 首字 + 总耗时，两个数同源（都走我们自己的表：容器就绪 → 首个输出 / 进程退出），
-        // 所以首字必然 ≤ 总耗时。provider 自报的模型侧耗时不上表——它不含 CLI 启动那两秒，
-        // 跟首字不是一个口径，摆在一起会出现「首字 3.1s / 耗时 2.3s」这种看着不可能的行。
+        // 有 CLI 实测计时的行（任何种类）显示这一次请求的首字与耗时，见 requestLatency；
+        // 没有的终端行显示日志估算，见 terminalLatency。
         //
-        // 两个数都是回合级的，同回合拆成多行时每行重复——所以标题里点明，免得有人
-        // 把一列加起来当总时长。
+        // 其余网页对话行：首字 + 总耗时，两个数同源（都走我们自己的表：容器就绪 → 首个输出 /
+        // 进程退出），所以首字必然 ≤ 总耗时。provider 自报的模型侧耗时不上表——它不含 CLI 启动
+        // 那两秒，跟首字不是一个口径，摆在一起会出现「首字 3.1s / 耗时 2.3s」这种看着不可能的行。
+        // 两个数都是回合级的，只记在回合第一次请求上，悬停说明里点明，免得有人把一列加起来当总时长。
         const { td: lat, v: latv } = cellEl(() => i18nText("延迟"), "num u-lat");
-        if (!r.ttft_ms && !r.wall_ms && !r.duration_ms) {
+        if (r.api_duration_ms) {
+            requestLatency(r, lat, latv);
+        }
+        else if (r.kind === "terminal") {
+            terminalLatency(r, lat, latv);
+        }
+        else if (!r.ttft_ms && !r.wall_ms && !r.duration_ms) {
             // 回合里后续的请求：耗时只在回合第一次请求上量一次。
             latv.textContent = "—";
             setTip(lat, () => i18nText("首字与总耗时按回合测量，记在这一回合的第一次请求上"));
@@ -472,6 +479,7 @@ function renderRows(data) {
                 + i18nText("都是回合级指标：只记在回合的第一次请求上，总耗时是整个回合的耗时"));
         }
         tr.appendChild(lat);
+        tr.appendChild(speedCell(r));
         const { td: time, v: timev } = cellEl(() => i18nText("时间"), "num u-time");
         // 同回合的请求相隔几秒，主行精确到秒。
         const stamp = fmtUsageTime(r.ts, true);
@@ -484,6 +492,77 @@ function renderRows(data) {
         rowMotion.play(tr, String(r.id));
     }
     $("usage-empty").classList.toggle("hidden", data.rows.length > 0);
+}
+/* CLI 自己量的这一次请求（Claude Code 遥测的 api_request，按 request id 对上这一行）：
+ * 首字 = 发出请求 → 流的第一个事件，耗时 = 发出请求 → 流结束。终端行与网页对话行都按它
+ * 显示、不带「≈」；网页对话原有的回合级首字与总耗时挪进悬停说明。 */
+function requestLatency(r, lat, latv) {
+    const lines = [];
+    if (r.api_ttft_ms)
+        lines.push(() => i18nText("首字 ") + fmtDur(r.api_ttft_ms || 0));
+    lines.push(() => i18nText("耗时 ") + fmtDur(r.api_duration_ms || 0));
+    lines.forEach((render, i) => {
+        const line = document.createElement("div");
+        if (i)
+            line.className = "u-sub";
+        setTextRender(line, render);
+        latv.appendChild(line);
+    });
+    setTip(lat, () => {
+        let tip = i18nText("Claude Code 自己量的这一次请求：首字是从发出请求到收到流的第一个事件，耗时是从发出请求到流结束；失败重试只算最后一次。");
+        if (r.kind !== "terminal" && r.wall_ms) {
+            tip += r.ttft_ms
+                ? i18nText("这一回合从容器就绪算起（含 CLI 启动与工具执行）：首字 {p0}，总耗时 {p1}", { p0: fmtDur(r.ttft_ms), p1: fmtDur(r.wall_ms) })
+                : i18nText("这一回合从容器就绪算起（含 CLI 启动与工具执行）总耗时 {p0}", { p0: fmtDur(r.wall_ms) });
+        }
+        return tip;
+    });
+}
+/* 终端行的延迟：每行是一次请求，耗时与首字是服务端按 CLI 日志的时间戳估的
+ * （usage.termTiming），都带「≈」，与对话行那两个我们自己掐表的回合级数分开说。 */
+function terminalLatency(r, lat, latv) {
+    if (!r.wall_ms) {
+        latv.textContent = "—";
+        setTip(lat, () => i18nText("终端日志推不出这次请求的耗时：回复还没写完，或日志里找不到它从哪儿开始"));
+        return;
+    }
+    const lines = [];
+    if (r.ttft_ms)
+        lines.push(() => i18nText("首字 ≈{p0}", { p0: fmtDur(r.ttft_ms) }));
+    lines.push(() => i18nText("耗时 ≈{p0}", { p0: fmtDur(r.wall_ms) }));
+    lines.forEach((render, i) => {
+        const line = document.createElement("div");
+        if (i)
+            line.className = "u-sub";
+        setTextRender(line, render);
+        latv.appendChild(line);
+    });
+    setTip(lat, () => i18nText("按 CLI 日志的时间戳估算这一次请求：从发出请求到回复写完（较旧的 Claude Code 不记发出时刻，取上一条消息或工具结果写下的时刻）。")
+        + i18nText("首字只在日志记下了开始输出的时刻时才有：Claude 的回复以思考开头，或 Codex 记了思考/回复项的开始时刻。"));
+}
+/* 输出速度 = 输出 ÷（耗时 − 首字），口径见 usage-math.ts 的 outputSpeed。CLI 实测的
+ * 不带「≈」，按终端日志估的带「≈」；算不出的显示「—」，悬停说明为什么。 */
+function speedCell(r) {
+    const { td, v } = cellEl(() => i18nText("输出速度"), "num u-speed");
+    const speed = outputSpeed(r);
+    if (speed.tps === null) {
+        const why = speed.why;
+        v.textContent = "—";
+        setTip(td, () => why === "turn" ? i18nText("网页对话的耗时覆盖整个回合（含工具执行与 CLI 启动），算不出单次请求的输出速度")
+            : why === "untimed" ? i18nText("这次请求缺首字或耗时，算不出输出速度")
+                : i18nText("输出太少或生成用时太短：几十个 token 常常一下子到齐，算出来的速度说明不了快慢"));
+        return td;
+    }
+    // 单位另起一行：这一列只有数字那么宽，表格在 1280 宽的屏上才放得下。
+    const unit = document.createElement("div");
+    unit.className = "u-sub";
+    unit.textContent = "tok/s";
+    const basis = speed.basis;
+    v.append(document.createTextNode((basis === "measured" ? "" : "≈") + fmtSpeed(speed.tps)), unit);
+    setTip(td, () => basis === "measured" ? i18nText("输出 token ÷（耗时 − 首字），首字与耗时是 Claude Code 自己量的；输出含思考的 token")
+        : basis === "log" ? i18nText("输出 token ÷（耗时 − 首字），首字与耗时按 CLI 日志的时间戳估算；输出含思考的 token")
+            : i18nText("输出 token ÷ 耗时（含首字等待，偏低），耗时按 CLI 日志的时间戳估算"));
+    return td;
 }
 /* ---------------- 费用明细 ---------------- */
 /* 「这一行为什么是这个数」：四个 token 桶各自 × 单价摊开，末尾对上实收金额。
@@ -799,7 +878,7 @@ async function exportCSV() {
         }
         const head = [i18nText("时间（{p0}）", { p0: String(usageTimeZone) }), i18nText("用户"), i18nText("工作空间"), i18nText("工作空间ID"), i18nText("账号"), "Agent", i18nText("模型"), i18nText("思考强度"), i18nText("类型"), i18nText("计费"),
             i18nText("输入"), i18nText("输出"), i18nText("缓存读取"), i18nText("缓存写入"), i18nText("缓存命中率"), i18nText("合计Token"), i18nText("回合内序号"), i18nText("合并请求数"), i18nText("费用USD"),
-            i18nText("首字ms"), i18nText("总耗时ms"), i18nText("模型耗时ms"), i18nText("回合ID"), i18nText("委派ID")];
+            i18nText("首字ms"), i18nText("总耗时ms"), i18nText("模型耗时ms"), i18nText("请求首字ms"), i18nText("请求耗时ms"), i18nText("输出速度tok/s"), i18nText("回合ID"), i18nText("委派ID")];
         const lines = [head.join(",")];
         for (const r of data.rows) {
             lines.push([
@@ -812,7 +891,7 @@ async function exportCSV() {
                 r.merged_requests || "",
                 // 导出给人算账，这里才把微美元换成美元；六位小数才装得下一次便宜回合。
                 (r.cost_micro_usd / 1e6).toFixed(6),
-                r.ttft_ms, r.wall_ms, r.duration_ms, r.turn_id, r.delegation_id || "",
+                r.ttft_ms, r.wall_ms, r.duration_ms, r.api_ttft_ms || "", r.api_duration_ms || "", csvSpeed(r), r.turn_id, r.delegation_id || "",
             ].map(csvCell).join(","));
         }
         // BOM：没有它 Excel 会把 UTF-8 中文认成乱码。
@@ -827,6 +906,11 @@ async function exportCSV() {
     finally {
         btn.disabled = false;
     }
+}
+/* 导出给人算账，速度留一位小数、不带「≈」（实测与否看「请求耗时ms」有没有值）；算不出留空。 */
+function csvSpeed(r) {
+    const { tps } = outputSpeed(r);
+    return tps === null ? "" : tps.toFixed(1);
 }
 /* CSV 转义：逗号/引号/换行都要包起来，引号本身翻倍。 */
 function csvCell(v) {

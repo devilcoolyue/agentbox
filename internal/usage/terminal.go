@@ -71,17 +71,82 @@ type termTranscriptRec struct {
 	RequestID  string          `json:"requestId"`
 	Timestamp  string          `json:"timestamp"`
 	Effort     json.RawMessage `json:"effort"`
-	Message    struct {
+	// 计时线索（见 claudeTermParser.requestStart）：父行、api-request 行的 id 与
+	// assistant 行指回它的 requestRef、内容块序号、思考块的时长。都是可有可无的
+	// 字段，用宽松类型：哪天 CLI 改了它们的类型，丢的只是计时，不是这一行的用量。
+	ParentUUID         looseString `json:"parentUuid"`
+	ID                 looseString `json:"id"`
+	RequestRef         looseString `json:"requestRef"`
+	APIBlockIndex      *looseInt   `json:"apiBlockIndex"`
+	ThinkingDurationMs looseInt    `json:"thinkingDurationMs"`
+	Message            struct {
 		ID         string `json:"id"`
 		Model      string `json:"model"`
 		StopReason string `json:"stop_reason"`
-		Usage      struct {
+		// 用户消息的 content 是字符串，assistant 的是块数组；留原文按需解，
+		// 免得类型不符让整行解析失败。
+		Content json.RawMessage `json:"content"`
+		Usage   struct {
 			Input      int64 `json:"input_tokens"`
 			Output     int64 `json:"output_tokens"`
 			CacheRead  int64 `json:"cache_read_input_tokens"`
 			CacheWrite int64 `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
 	} `json:"message"`
+}
+
+// looseString / looseInt 解不出来就当没有，不报错。
+type looseString string
+
+func (v *looseString) UnmarshalJSON(b []byte) error {
+	var s string
+	if json.Unmarshal(b, &s) == nil {
+		*v = looseString(s)
+	}
+	return nil
+}
+
+type looseInt int64
+
+func (v *looseInt) UnmarshalJSON(b []byte) error {
+	var f float64
+	if json.Unmarshal(b, &f) == nil {
+		*v = looseInt(f)
+	}
+	return nil
+}
+
+// 终端行的耗时与首字是按 CLI 日志的时间戳估的（照 cc-switch 的 session_usage）：
+// 日志里没有请求级计时，只能拿「发出请求」「开始输出」「回复写完」几个时刻相减。
+// 估出来的数落在合理范围之外就不要，宁可显示「—」。
+const (
+	termMinLatencyMS = 100            // 比这还快多半是起点取错了
+	termMaxLatencyMS = 60 * 60 * 1000 // 比这还慢多半夹了休眠或重试等待
+)
+
+// termTiming 把起点、首字、结束三个时刻（Unix 毫秒，0 = 不知道）换算成一行的
+// 耗时与首字；估不出来的项为 0。首字必须落在 (0, 耗时] 之间。
+func termTiming(start, first, end int64) (wall, ttft int64) {
+	if start == 0 || end == 0 {
+		return 0, 0
+	}
+	wall = end - start
+	if wall < termMinLatencyMS || wall > termMaxLatencyMS {
+		return 0, 0
+	}
+	if first > start && first-start <= wall {
+		ttft = first - start
+	}
+	return wall, ttft
+}
+
+// termMillis 解析日志行的时间戳，解析不了为 0。
+func termMillis(ts string) int64 {
+	t, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		return 0
+	}
+	return t.UnixMilli()
 }
 
 // termTurn 是补记的单位：终端里的一次提问及其后续所有 API 调用，按模型分开。
@@ -152,6 +217,8 @@ type termRowKey struct {
 	turnID, model, effort, effortControl string
 	ts                                   int64
 	input, output, cacheRead, cacheWrite int64
+	wall, ttft                           int64
+	apiRequestID                         string
 }
 
 func (t termTurn) key() termRowKey {
@@ -159,6 +226,7 @@ func (t termTurn) key() termRowKey {
 		turnID: t.ev.TurnID, model: t.model, effort: t.ev.Effort, effortControl: t.ev.EffortControl,
 		ts: t.ts.UnixNano(), input: t.ev.InputTokens, output: t.ev.OutputTokens,
 		cacheRead: t.ev.CacheReadTokens, cacheWrite: t.ev.CacheWriteTokens,
+		wall: t.ev.WallMS, ttft: t.ev.TTFTMs, apiRequestID: t.ev.APIRequestID,
 	}
 }
 
@@ -571,7 +639,25 @@ type claudeTermParser struct {
 	reqs     map[string]*claudeTermRequest // message.id → 这次请求选定的那份用量
 	order    []string                      // message.id 首次出现的顺序
 	turnUUID string
+
+	// 计时线索，只留最近的若干条：回复的起点总在它前面不远处。
+	sent  recentMap[int64]           // api-request 的 id → 发出的时刻
+	chain recentMap[claudeChainNode] // 行 uuid → 它在对话链上的位置
 }
+
+// claudeChainNode 是一行在对话链上的位置，只留找请求起点用得到的几样。
+type claudeChainNode struct {
+	parent string
+	at     int64
+	// attachment 行的时间戳不可靠（有的是回复开始后才补记的），找起点时跳过。
+	attachment bool
+}
+
+const (
+	claudeChainKeep = 4096 // 对话链只留最近这么多行
+	claudeSentKeep  = 1024 // api-request 只留最近这么多次
+	claudeChainHops = 32   // 沿父链往上最多走这么多行
+)
 
 type claudeTermRequest struct {
 	turn, model string
@@ -579,10 +665,66 @@ type claudeTermRequest struct {
 	ts          time.Time
 	effort      string
 	message     claudeMessage
+
+	// 计时（Unix 毫秒，0 = 不知道）：发出请求、开始输出、最后一块写完。
+	start, first, end int64
 }
 
 func newClaudeTermParser() *claudeTermParser {
-	return &claudeTermParser{reqs: map[string]*claudeTermRequest{}}
+	return &claudeTermParser{
+		reqs:  map[string]*claudeTermRequest{},
+		sent:  newRecentMap[int64](claudeSentKeep),
+		chain: newRecentMap[claudeChainNode](claudeChainKeep),
+	}
+}
+
+// requestStart 估一次请求是什么时候发出的，rec 是这条回复在文件里最先出现的一块。
+//
+// Claude Code 2.1.302 起在发请求时写一行 api-request，回复用 requestRef 指回它，
+// 这个时刻是准的。更早的版本没有，退回 cc-switch 的做法：从回复第一块的父行往上，
+// 跳过 attachment，第一个别的行（用户消息、工具结果、出错重试的 system 行）写下
+// 的时刻——比真正发出早一点（实测几十到一百多毫秒，CLI 组装请求的时间）。
+//
+// 最先出现的一块不是第一块（apiBlockIndex 不为 0）时不估：前面的块没看到，
+// 父行对不上这次请求。旧版日志没有 apiBlockIndex，按是第一块处理。
+func (p *claudeTermParser) requestStart(rec *termTranscriptRec) int64 {
+	if rec.APIBlockIndex != nil && *rec.APIBlockIndex != 0 {
+		return 0
+	}
+	if rec.RequestRef != "" {
+		if at, ok := p.sent.get(string(rec.RequestRef)); ok {
+			return at
+		}
+	}
+	cursor := string(rec.ParentUUID)
+	for range claudeChainHops {
+		node, ok := p.chain.get(cursor)
+		if cursor == "" || !ok {
+			return 0
+		}
+		if !node.attachment {
+			return node.at
+		}
+		cursor = node.parent
+	}
+	return 0
+}
+
+// firstOutput 是回复开始输出的时刻，即首字。块的时间戳只是它写完的时刻，推不出
+// 开始；只有第一块是思考块时，能用它写完的时刻减去 Claude Code 记的
+// thinkingDurationMs（这一块从 content_block_start 到 content_block_stop）。
+// 第一块是文字或工具调用时返回 0。
+func firstOutput(rec *termTranscriptRec, at int64) int64 {
+	if at == 0 || rec.ThinkingDurationMs <= 0 || (rec.APIBlockIndex != nil && *rec.APIBlockIndex != 0) {
+		return 0
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(rec.Message.Content, &blocks) != nil || len(blocks) == 0 || blocks[0].Type != "thinking" {
+		return 0
+	}
+	return at - int64(rec.ThinkingDurationMs)
 }
 
 func (p *claudeTermParser) line(line []byte) {
@@ -592,6 +734,17 @@ func (p *claudeTermParser) line(line []byte) {
 	var rec termTranscriptRec
 	if json.Unmarshal(line, &rec) != nil {
 		return
+	}
+	at := termMillis(rec.Timestamp)
+	// 计时线索不看 entrypoint：api-request 行根本不带这个字段。
+	if rec.Type == "api-request" {
+		if rec.ID != "" && at != 0 {
+			p.sent.put(string(rec.ID), at)
+		}
+		return
+	}
+	if rec.UUID != "" {
+		p.chain.put(rec.UUID, claudeChainNode{parent: string(rec.ParentUUID), at: at, attachment: rec.Type == "attachment"})
 	}
 	if rec.Entrypoint != termEntrypointCLI {
 		return // -p 发起的那些已经记过账了
@@ -622,9 +775,12 @@ func (p *claudeTermParser) line(line []byte) {
 			if r.reqID == "" {
 				r.reqID = id
 			}
+			r.start, r.first = p.requestStart(&rec), firstOutput(&rec, at)
 			p.reqs[id] = r
 			p.order = append(p.order, id)
 		}
+		// 各块时刻里最晚的一个是回复结束；不管这一份用量选不选用都要算上。
+		r.end = max(r.end, at)
 		if ok && !preferClaudeMessage(message, r.message) {
 			return
 		}
@@ -661,7 +817,45 @@ func (p *claudeTermParser) rows() []termTurn {
 		if t.ev.Effort != "" {
 			t.ev.EffortControl = "effort"
 		}
+		// CLI 遥测里的实测计时按 requestId 对上这一行；缺 requestId 的老日志
+		// 用消息 ID 当键，那不是请求 ID，不拿去对。
+		if r.reqID != id {
+			t.ev.APIRequestID = r.reqID
+		}
+		// 只给写完整了的回复估耗时：没有 stop_reason 的还在半路，结束时刻不作数。
+		if r.message.StopReason != "" {
+			t.ev.WallMS, t.ev.TTFTMs = termTiming(r.start, r.first, r.end)
+		}
 		out = append(out, t)
 	}
 	return out
+}
+
+// recentMap 是只留最近 n 个键的映射：放进第 n+1 个新键时丢掉最早放进的那个。
+// 计时线索只需要回看不远的几行，整份 transcript 都留着会让长会话常驻一大块内存。
+// 淘汰只看放入顺序，与文件分几段读无关，续读与整份重读的结果仍然相同。
+type recentMap[V any] struct {
+	n     int
+	m     map[string]V
+	order []string
+}
+
+func newRecentMap[V any](n int) recentMap[V] {
+	return recentMap[V]{n: n, m: map[string]V{}}
+}
+
+func (r *recentMap[V]) put(k string, v V) {
+	if _, ok := r.m[k]; !ok {
+		if len(r.order) >= r.n {
+			delete(r.m, r.order[0])
+			r.order = r.order[1:]
+		}
+		r.order = append(r.order, k)
+	}
+	r.m[k] = v
+}
+
+func (r *recentMap[V]) get(k string) (V, bool) {
+	v, ok := r.m[k]
+	return v, ok
 }

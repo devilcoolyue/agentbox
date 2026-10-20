@@ -356,6 +356,35 @@ data/
 - `duration_ms` / `wall_ms` / `ttft_ms` 都是**回合级**指标：新记录只放在回合第一次请求
   那一行，其余行为 0；升级前按模型拆的旧行在同回合各行上重复。聚合时只能按 `turn_id`
   取 MAX，绝不能 SUM。`store.UsageTotals` 因此故意不含这几项。
+- **终端行例外**：`wall_ms` / `ttft_ms` 是这一次请求按 CLI 日志时间戳估的耗时与首字
+  （`usage.termTiming`，照 cc-switch 的 session_usage），每行各有一份，`duration_ms` 恒为 0。
+  Claude 起点优先 2.1.302 起的 `api-request` 行（assistant 的 `requestRef` 指回它），没有时
+  沿 `parentUuid` 往上跳过 attachment 取上一行；首字只在第一块是思考时用写完时刻减
+  `thinkingDurationMs`；没有 `stop_reason`、最先出现的不是第 0 块都不估。计时线索用
+  `recentMap` 只留最近几千行，淘汰只看放入顺序，续读与整份重读结果仍相同。Codex 的
+  `codexTimer` 照 cc-switch 的 RequestTimer：结束优先 `token_usage_record`（用量须与
+  `last_token_usage` 对上），首字取 `item_completed` 里思考/回复项的 `started_at_ms`，
+  重发的 token_count 不结算。估不出或越界（<100ms、>1h、首字不在耗时内）记 0，
+  `UpsertTerminalUsage` 的 ON CONFLICT 会把后补的计时写到同一行。没有实测计时的终端行在网页上显示
+  「首字 ≈ / 耗时 ≈」。
+- **每次请求的实测计时（CLI 遥测，schema 20）**：`api_ttft_ms` / `api_duration_ms` 是 Claude Code 自己在
+  实时流上量的这一次请求（OTel 日志的 `api_request` 事件：发出 → `message_start` / → 流结束，重试只算
+  最后一次；2.1.303 实测与流事件到达时刻差几十毫秒），对话行与终端行都有，按 `api_request_id`（provider
+  requestId：终端取 transcript 的 `requestId`，网页取流里 assistant 的 `request_id` 或 transcript）对上。
+  接收端 `server/usage_telemetry.go` 监听 `usage_telemetry.bind`（默认 `172.17.0.1:1084`，启动时绑定一次），
+  路径 `/otel/<空间>/<MAC>/v1/logs`（MAC 由 `auth_token` 派生），只收 OTLP/HTTP JSON，只取请求 ID 与两个数，
+  同批其他事件解析后丢弃、不落库不写日志。`execEnv` 末尾 `usageTelemetryEnv` 只给 Claude 空间注入
+  `CLAUDE_CODE_ENABLE_TELEMETRY` 等变量（接收端没起来不注入；账号 env 已有 `OTEL_*` /
+  `CLAUDE_CODE_ENABLE_TELEMETRY` 时尊重管理员自己的收集器、不注入），并把主机补进 `NO_PROXY`；变量名在
+  `usageTelemetryEnvNames`，`tmuxEnvSync` 据此清除。已开着的终端 shell 是旧环境，新开 tmux 窗口或重启空间后
+  才上报。`store.RecordRequestTimings` 按 (用户, 请求 ID) 匹配——跑腿在隐藏空间跑但记在属主空间，所以不按
+  空间；行还没写就暂存 `request_timings`，`insertUsageTx` / `UpsertTerminalUsage` 写行时 `claimRequestTimingTx`
+  取走；首个计时为准，终端重扫的 upsert 只会从无到有、不会冲掉；暂存每用户上限 2 万条、72 小时清理。
+  网页上有实测计时的行一律显示单次请求的「首字 / 耗时」（不带「≈」），对话行的回合级数挪进悬停说明。
+  输出速度（`usage-math.ts` 的 `outputSpeed`）= 输出 ÷（耗时 − 首字）：实测的不带「≈」；终端估算有首字时同
+  算法带「≈」，两者输出 <100 或生成 <0.5s 不算（几十个 token 常在首个事件后一下子到齐）；估算没有首字时退回
+  输出 ÷ 整个耗时（含首字等待，<200 或 <1s 不估）；没有实测的对话行跨整回合，不算速度。CSV 另有「请求首字ms」
+  「请求耗时ms」。Codex 尚未接遥测。
 
 ### 价格目录维护
 
@@ -904,7 +933,7 @@ data/
 
 - `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度，终端 UpsertTerminalUsage 绝不扣额度。
 - 新行 `PriceSnapshot` 包含来源、价格键、普通/长上下文档和阈值。终端 upsert 在同一事务读取首份快照，续写不能改用新价；旧行没有快照时不要伪造历史单价。Claude 0 费用按表补算时保存 table 来源。
-- 当前开发工作树 SQLite schema=19（17 补终端推理强度；18 删除旧协作表并新增主管委派表与 `usage_events.delegation_id`；19 重建 chat_requests 加 `queued` 状态与 `merged_into`；迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
+- 当前开发工作树 SQLite schema=20（17 补终端推理强度；18 删除旧协作表并新增主管委派表与 `usage_events.delegation_id`；19 重建 chat_requests 加 `queued` 状态与 `merged_into`；20 加每次请求的实测计时列与 `request_timings`；迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
 - `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。
 - 协议样本放在 agent/usage 的 testdata，全部为合成脱敏数据。Linux 测试脚本必须复制这些 testdata；禁止读取真实用户 rollout 当测试夹具。
 

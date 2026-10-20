@@ -57,7 +57,7 @@ You bring the server and your own Claude / Codex subscription, API key, or compa
 ### Built for a trusted team
 
 - **Accounts:** subscription, API key and relay accounts in one pool, scoped per user, with the models and reasoning effort each account offers. A workspace can switch to another account of the same agent.
-- **Usage and cost:** one record per model request with tokens, cache, latency, reasoning effort and the price snapshot it was billed at; terminal usage is recorded too. Optional credit balances and CSV export.
+- **Usage and cost:** one record per model request with tokens, cache, latency, reasoning effort and the price snapshot it was billed at; terminal usage is recorded too. Claude Code reports each request's first-token time and duration itself, which gives a measured latency and output speed (tok/s) per request; requests without that report fall back to estimates from the CLI logs. Optional credit balances and CSV export.
 - **Reuse:** Claude skills (including the official marketplace), layered home templates, and MCP servers as user defaults with per-workspace overrides.
 - **Private networks:** pair abox-link to reach allowlisted services on your own network; route each account through its own egress proxy.
 

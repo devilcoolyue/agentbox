@@ -18,3 +18,63 @@ export function fmtTokens(n: number): string {
   }
   return v.toFixed(1) + units[i];
 }
+
+// Output speed of one request: output tokens ÷ the time from the first token
+// to the end of the stream. The output count includes thinking, so this is
+// how fast the model generated, not how fast visible text appeared.
+//
+//   measured       the CLI's own timing for this request (api_ttft_ms /
+//                  api_duration_ms from Claude Code's telemetry), any row kind;
+//   log            a terminal row timed from CLI log timestamps that also
+//                  pinned the first token (a reply that opens with thinking);
+//   log-with-wait  a terminal row whose log gave only the whole duration, so
+//                  the first-token wait is in the divisor and the number reads
+//                  low (cc-switch's session-log rule).
+//
+// Short windows say nothing: a few dozen tokens often arrive in one burst
+// right after the first event. Below SPEED_MIN_OUTPUT_TOKENS output or
+// SPEED_MIN_WINDOW_MS of generation there is no speed; log-with-wait keeps
+// cc-switch's stricter 200 tokens / 1 s, since the wait would dominate.
+// Chat rows without the CLI's timing carry turn-level numbers that span tool
+// runs, so they never get one.
+const SPEED_MIN_OUTPUT_TOKENS = 100;
+const SPEED_MIN_WINDOW_MS = 500;
+const WAIT_MIN_OUTPUT_TOKENS = 200;
+const WAIT_MIN_DURATION_MS = 1000;
+
+export type OutputSpeed =
+  | { tps: number; basis: "measured" | "log" | "log-with-wait" }
+  | { tps: null; why: "short" | "untimed" | "turn" };
+
+interface SpeedRow {
+  kind: string;
+  output_tokens: number;
+  wall_ms: number;
+  ttft_ms: number;
+  api_ttft_ms?: number;
+  api_duration_ms?: number;
+}
+
+export function outputSpeed(row: SpeedRow): OutputSpeed {
+  const out = row.output_tokens;
+  const dur = row.api_duration_ms || 0;
+  if (dur > 0) {
+    const ttft = row.api_ttft_ms || 0;
+    if (!ttft) return { tps: null, why: "untimed" };
+    return rate(out, dur - ttft, SPEED_MIN_OUTPUT_TOKENS, SPEED_MIN_WINDOW_MS, "measured");
+  }
+  if (row.kind !== "terminal") return { tps: null, why: "turn" };
+  if (!row.wall_ms) return { tps: null, why: "untimed" };
+  if (row.ttft_ms) return rate(out, row.wall_ms - row.ttft_ms, SPEED_MIN_OUTPUT_TOKENS, SPEED_MIN_WINDOW_MS, "log");
+  return rate(out, row.wall_ms, WAIT_MIN_OUTPUT_TOKENS, WAIT_MIN_DURATION_MS, "log-with-wait");
+}
+
+function rate(out: number, ms: number, minOut: number, minMs: number, basis: "measured" | "log" | "log-with-wait"): OutputSpeed {
+  if (out < minOut || ms < minMs) return { tps: null, why: "short" };
+  return { tps: out / (ms / 1000), basis };
+}
+
+// tok/s: whole numbers from 1 up, one decimal below.
+export function fmtSpeed(tps: number): string {
+  return tps >= 1 ? String(Math.round(tps)) : tps.toFixed(1);
+}

@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,15 @@ func codexFixture(t *testing.T) string {
 	}
 	return string(raw)
 }
+func codexTimingFixture(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile("testdata/codex-terminal-0.163.0.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
 func TestCodexTerminalDeduplicatesAndGroupsModels(t *testing.T) {
 	rows, err := parseCodexTerminal(strings.NewReader(codexFixture(t)))
 	if err != nil {
@@ -199,5 +209,85 @@ func TestCodexCopiesInDifferentWorkspacesDoNotOverwrite(t *testing.T) {
 	rows := s.store.ListUsage(store.UsageFilter{Kind: store.UsageKindTerminal})
 	if len(rows) != 8 {
 		t.Fatalf("workspace identity lost: %d rows", len(rows))
+	}
+}
+
+// 0.163 的 rollout 在响应结束时写 token_usage_record，item_completed 给思考和回复
+// 记了开始生成的时刻（started_at_ms），耗时与首字都由它们定。样本照实际事件顺序
+// 合成：developer/user 消息与 turn_context 是起点，工具结果晚于用量记录写出，
+// 限额刷新时重发的 token_count 不是一次请求。
+func TestCodexTerminalTiming(t *testing.T) {
+	rows, err := parseCodexTerminal(strings.NewReader(codexTimingFixture(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][2]int64{
+		{3810, 3790}, // 用户消息 00.040 → 用量记录 03.850；回复从 03.830 开始
+		{2680, 1480}, // 10.020 → 12.700（工具结果 12.800 晚于响应结束）
+		{3797, 2797}, // 上一次的 token_count 12.803 → 16.600；思考 15.600
+		{5398, 3448}, // 16.652 → 22.050；17.000 的重发快照不挪起点
+	}
+	if len(rows) != len(want) {
+		t.Fatalf("rows = %+v", rows)
+	}
+	for i, w := range want {
+		if rows[i].ev.WallMS != w[0] || rows[i].ev.TTFTMs != w[1] {
+			t.Errorf("row %d wall/ttft = %d/%d, want %v", i, rows[i].ev.WallMS, rows[i].ev.TTFTMs, w)
+		}
+	}
+}
+
+// 没有 token_usage_record 的旧布局（照 cc-switch 的回归样本）：
+//   - token_count 等工具跑完才写：结束取最后一个输出项；
+//   - 2025 年的布局把输出项补写在自己那次的 token_count 之后：不算下一次的起点，
+//     用户隔了很久才发下一条时耗时不能把空闲算进去。
+func TestCodexTerminalTimingWithoutUsageRecord(t *testing.T) {
+	head := `{"timestamp":"%[1]s:00.000Z","type":"session_meta","payload":{"id":"th","originator":"codex-tui","source":"cli"}}
+{"timestamp":"%[1]s:00.000Z","type":"event_msg","payload":{"type":"task_started","turn_id":"t"}}
+`
+	tc := func(ts string, in, out, lastIn, lastOut int) string {
+		return fmt.Sprintf(`{"timestamp":"%s","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":%d,"output_tokens":%d},"last_token_usage":{"input_tokens":%d,"output_tokens":%d}}}}`+"\n", ts, in, out, lastIn, lastOut)
+	}
+	item := func(ts, payload string) string {
+		return fmt.Sprintf(`{"timestamp":"%s","type":"response_item","payload":%s}`+"\n", ts, payload)
+	}
+	const user, reasoning, assistant = `{"type":"message","role":"user"}`, `{"type":"reasoning"}`, `{"type":"message","role":"assistant"}`
+	const call, output = `{"type":"custom_tool_call","call_id":"c"}`, `{"type":"custom_tool_call_output","call_id":"c"}`
+	for name, c := range map[string]struct {
+		raw  string
+		want []int64
+	}{
+		"token_count after tools": {fmt.Sprintf(head, "2026-08-03T03:00") +
+			item("2026-08-03T03:00:01.000Z", user) +
+			item("2026-08-03T03:00:06.000Z", call) +
+			item("2026-08-03T03:00:16.000Z", output) +
+			tc("2026-08-03T03:00:16.001Z", 100, 600, 100, 600) +
+			tc("2026-08-03T03:00:17.000Z", 100, 600, 100, 600) +
+			item("2026-08-03T03:00:20.000Z", reasoning) +
+			item("2026-08-03T03:00:22.000Z", assistant) +
+			tc("2026-08-03T03:00:22.100Z", 300, 1300, 200, 700),
+			[]int64{5000, 6099}},
+		"items after token_count": {fmt.Sprintf(head, "2025-10-30T08:00") +
+			item("2025-10-30T08:00:01.000Z", user) +
+			tc("2025-10-30T08:00:08.000Z", 100, 600, 100, 600) +
+			item("2025-10-30T08:00:08.000Z", reasoning) +
+			item("2025-10-30T08:00:08.001Z", call) +
+			item("2025-10-30T08:00:08.001Z", output) +
+			`{"timestamp":"2025-10-30T08:00:08.002Z","type":"turn_context","payload":{"turn_id":"t","model":"gpt-5"}}` + "\n" +
+			item("2025-10-30T08:01:40.000Z", user) +
+			tc("2025-10-30T08:01:50.000Z", 300, 1300, 200, 700),
+			[]int64{7000, 10000}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rows, err := parseCodexTerminal(strings.NewReader(c.raw))
+			if err != nil || len(rows) != len(c.want) {
+				t.Fatalf("rows = %+v, %v", rows, err)
+			}
+			for i, w := range c.want {
+				if rows[i].ev.WallMS != w || rows[i].ev.TTFTMs != 0 {
+					t.Errorf("row %d wall/ttft = %d/%d, want %d/0", i, rows[i].ev.WallMS, rows[i].ev.TTFTMs, w)
+				}
+			}
+		})
 	}
 }

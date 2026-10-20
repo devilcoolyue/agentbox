@@ -72,6 +72,9 @@ type Store struct {
 	// usageHook is told which workspaces a committed usage write touched; see
 	// OnUsageWritten.
 	usageHook atomic.Pointer[func([]UsageWrite)]
+	// timingPruned is when RecordRequestTimings last dropped stale entries
+	// (Unix ns), so the sweep runs at most hourly.
+	timingPruned atomic.Int64
 }
 
 func Open(path string) (*Store, error) {
@@ -389,6 +392,9 @@ func (s *Store) DeleteUser(name string) error {
 	if _, err := tx.Exec("DELETE FROM quotas WHERE user = ?", name); err != nil {
 		return err
 	}
+	if _, err := tx.Exec("DELETE FROM request_timings WHERE user = ?", name); err != nil {
+		return err
+	}
 	if _, err := tx.Exec("DELETE FROM git_profiles WHERE user = ?", name); err != nil {
 		return err
 	}
@@ -586,7 +592,25 @@ type UsageEvent struct {
 	// provider: from the container being ready to the turn's first model output
 	// event. Turn-level like WallMS — same aggregation caveat. 0 means not
 	// measured (title turns, or a turn that produced no output event).
+	//
+	// Terminal rows are the exception for both WallMS and TTFTMs: each row is
+	// one request, and the two values are that request's latency and first
+	// token estimated from the CLI log's timestamps (see usage.termTiming), set
+	// on every row. 0 there means the log could not support an estimate.
 	TTFTMs int64 `json:"ttft_ms"`
+	// APIRequestID is the provider's id for this one request (Claude's
+	// requestId), the key per-request timing from the CLI's telemetry is
+	// matched on. Empty when the source did not say (Codex, CLI-hidden
+	// requests, rows from before the column existed).
+	APIRequestID string `json:"api_request_id,omitempty"`
+	// APITTFTMs / APIDurationMS are what the CLI itself measured for this one
+	// request (Claude Code's OpenTelemetry api_request event): from sending it
+	// to the first stream event, and to the end of the stream; a retried
+	// request counts its last attempt only. Unlike WallMS/TTFTMs they are per
+	// request on every kind of row. APIDurationMS 0 means no telemetry arrived;
+	// APITTFTMs 0 with a duration means the CLI did not see a first event.
+	APITTFTMs     int64 `json:"api_ttft_ms,omitempty"`
+	APIDurationMS int64 `json:"api_duration_ms,omitempty"`
 	// Provider is what the provider says served the turn ("firstParty" from
 	// Claude's modelUsage). Empty when the event does not say — Codex never
 	// does, so an empty value is not evidence of anything.
@@ -648,15 +672,20 @@ func insertUsageTx(tx *sql.Tx, evs []UsageEvent) error {
 		if err != nil {
 			return err
 		}
+		if err := claimRequestTimingTx(tx, &e); err != nil {
+			return err
+		}
 		res, err := tx.Exec(`INSERT INTO usage_events
 			(ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control, delegation_id)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control, delegation_id,
+			 api_request_id, api_ttft_ms, api_duration_ms)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			usageTimestamp(e.TS), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, e.Kind,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
-			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot, e.Effort, e.EffortControl, e.DelegationID)
+			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot, e.Effort, e.EffortControl, e.DelegationID,
+			e.APIRequestID, e.APITTFTMs, e.APIDurationMS)
 		if err != nil {
 			return fmt.Errorf("insert usage %s/%s: %w", e.SessionID, e.TurnID, err)
 		}
@@ -765,24 +794,34 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 		if err != nil {
 			return err
 		}
+		if err := claimRequestTimingTx(tx, &e); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`INSERT INTO usage_events
 			(ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 			 input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control,
+			 api_request_id, api_ttft_ms, api_duration_ms)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			-- 冲突目标必须把部分索引的 WHERE 原样带上，否则 SQLite 认不出
 			-- 这条唯一约束，直接报 "does not match any PRIMARY KEY or UNIQUE"。
+			-- CLI 实测的计时只会从无到有：已经记上的不被后来没带计时的重扫冲掉。
 			ON CONFLICT(req_id) WHERE req_id != '' DO UPDATE SET
 				ts = excluded.ts, model = excluded.model,
 				input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
 				cache_read_tokens = excluded.cache_read_tokens,
 				cache_write_tokens = excluded.cache_write_tokens,
 				cost_micro_usd = excluded.cost_micro_usd, price_snapshot = excluded.price_snapshot,
-				effort = excluded.effort, effort_control = excluded.effort_control`,
+				effort = excluded.effort, effort_control = excluded.effort_control,
+				wall_ms = excluded.wall_ms, ttft_ms = excluded.ttft_ms,
+				api_request_id = excluded.api_request_id,
+				api_ttft_ms = CASE WHEN excluded.api_duration_ms > 0 THEN excluded.api_ttft_ms ELSE usage_events.api_ttft_ms END,
+				api_duration_ms = CASE WHEN excluded.api_duration_ms > 0 THEN excluded.api_duration_ms ELSE usage_events.api_duration_ms END`,
 			usageTimestamp(e.TS), e.User, e.SessionID, e.ThreadID, e.TurnID,
 			e.Agent, e.AccountID, e.Model, UsageKindTerminal,
 			e.InputTokens, e.OutputTokens, e.CacheReadTokens, e.CacheWriteTokens,
-			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot, e.Effort, e.EffortControl); err != nil {
+			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot, e.Effort, e.EffortControl,
+			e.APIRequestID, e.APITTFTMs, e.APIDurationMS); err != nil {
 			return fmt.Errorf("upsert terminal usage %s/%s: %w", e.SessionID, e.ReqID, err)
 		}
 	}
@@ -795,7 +834,8 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 
 const usageCols = `id, ts, user, session_id, thread_id, turn_id, agent, account_id, model, kind,
 	input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control, delegation_id`
+	cost_micro_usd, duration_ms, wall_ms, ttft_ms, provider, req_id, raw, price_snapshot, effort, effort_control, delegation_id,
+	api_request_id, api_ttft_ms, api_duration_ms`
 
 // Fixed-width UTC text preserves chronological ordering in SQLite's ts index.
 func usageTimestamp(t time.Time) string {
@@ -907,7 +947,8 @@ func scanUsage(row interface{ Scan(...any) error }) (UsageEvent, error) {
 		&e.Agent, &e.AccountID, &e.Model, &e.Kind,
 		&e.InputTokens, &e.OutputTokens, &e.CacheReadTokens, &e.CacheWriteTokens,
 		&e.CostMicroUSD, &e.DurationMS, &e.WallMS, &e.TTFTMs, &e.Provider,
-		&e.ReqID, &e.Raw, &snapshot, &e.Effort, &e.EffortControl, &e.DelegationID); err != nil {
+		&e.ReqID, &e.Raw, &snapshot, &e.Effort, &e.EffortControl, &e.DelegationID,
+		&e.APIRequestID, &e.APITTFTMs, &e.APIDurationMS); err != nil {
 		return e, err
 	}
 	if snapshot != "" {

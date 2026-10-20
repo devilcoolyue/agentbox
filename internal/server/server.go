@@ -135,8 +135,9 @@ type Server struct {
 	bridgeBind string       // bind address bridgeLn was created with
 	bridgeUp   atomic.Bool  // set while the bridge is actually bound
 
-	extensions *extension.Host   // extension host; see extensions.go
-	modelGW    modelGatewayState // model gateway behind the model.* hooks; see modelgateway.go
+	extensions *extension.Host     // extension host; see extensions.go
+	modelGW    modelGatewayState   // model gateway behind the model.* hooks; see modelgateway.go
+	usageTel   usageTelemetryState // per-request timing from the CLIs; see usage_telemetry.go
 
 	upgrader websocket.Upgrader
 
@@ -581,6 +582,9 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	if err := s.applyProxyBridge(); err != nil {
 		log.Printf("account proxy bridge disabled: %v", err)
 	}
+	if err := s.startUsageTelemetry(); err != nil {
+		log.Printf("usage telemetry disabled: %v", err)
+	}
 	if _, ok := s.track(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
@@ -838,7 +842,7 @@ func (s *Server) execEnv(sess store.Session) ([]string, error) {
 		env = append(filtered, "ANTHROPIC_MODEL="+model)
 	}
 	env = append(env, s.tunnelEnvList(sess)...)
-	return s.modelGatewayEnv(sess, acct, env), nil
+	return s.usageTelemetryEnv(sess, s.modelGatewayEnv(sess, acct, env)), nil
 }
 
 // accountSessionCounts counts sessions per account across all users (guards

@@ -169,7 +169,7 @@
 .u-model { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .u-model > span { display: block; max-width: 235px; overflow: hidden; text-overflow: ellipsis; }
 .u-model + .u-sub { padding-left: 21px; }
-.u-time, .u-lat, .u-tok, .u-hit { font-family: var(--mono); font-size: 12px; }
+.u-time, .u-lat, .u-speed, .u-tok, .u-hit { font-family: var(--mono); font-size: 12px; }
 .u-cost { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); }
 .u-cost.zero { color: var(--muted); }
 .u-billing { margin-top: 4px; font-family: var(--sans); font-weight: 400; }
@@ -321,7 +321,12 @@
   .uf-fields:has(#uf-user-wrap.hidden) .uf-date { grid-column: auto; }
   .us-item { padding: 0 12px; }
   .us-value { font-size: 17px; }
-  .usage-table td, .usage-table th { padding-left: 12px; padding-right: 12px; }
+  /* 十列在 1280 宽的屏上刚好放下，列间距只能收到这么紧 */
+  .usage-table td, .usage-table th { padding-left: 8px; padding-right: 8px; }
+}
+
+@media (max-width: 1500px) and (min-width: 1321px) {
+  .usage-table td, .usage-table th { padding-left: 10px; padding-right: 10px; }
 }
 
 @media (max-width: 1100px) and (min-width: 761px) {
@@ -402,6 +407,8 @@
   .u-model + .u-sub { padding-left: 0; }
 
   .usage-table td.u-tok .u-v { justify-content: flex-end; }
+  /* 卡片里地方够，速度的单位跟在数字后面 */
+  .usage-table td.u-speed .u-sub { display: inline; margin-left: 4px; }
 
   /* 卡片里有地方写字，也没有悬停：图标旁直接写类型名 */
   .u-kind { width: auto; height: auto; padding: 2px 8px; }

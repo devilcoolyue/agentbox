@@ -252,19 +252,44 @@ export async function smoke(page) {
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===6);
   // Terminal effort comes from the transcript, and survives display and CSV export.
   usageRows.push(
-    {...usageRows[0],id:7,kind:'terminal',agent:'codex',provider:'',effort:'high',effort_control:'effort'},
-    {...usageRows[0],id:8,kind:'terminal',agent:'claude',provider:'',effort:'max',effort_control:'effort'},
+    {...usageRows[0],id:7,kind:'terminal',agent:'codex',provider:'',effort:'high',effort_control:'effort',ttft_ms:0,wall_ms:0,duration_ms:0},
+    {...usageRows[0],id:8,kind:'terminal',agent:'claude',provider:'',effort:'max',effort_control:'effort',ttft_ms:620,wall_ms:4000,duration_ms:0},
+    // Timed by the CLI itself (telemetry): exact, and preferred over the log estimate.
+    {...usageRows[0],id:9,kind:'terminal',agent:'claude',provider:'',effort:'max',effort_control:'effort',ttft_ms:0,wall_ms:12600,duration_ms:0,api_ttft_ms:1502,api_duration_ms:12696},
+    {...usageRows[0],id:10,kind:'terminal',agent:'claude',provider:'',effort:'max',effort_control:'effort',output_tokens:78,ttft_ms:0,wall_ms:5100,duration_ms:0,api_ttft_ms:4758,api_duration_ms:5252},
   );
   await page.locator('#uf-kind').selectOption('terminal',{force:true});
-  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===2);
-  assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['High','Max']);
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===4);
+  assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['High','Max','Max','Max']);
+  // Terminal rows carry one request's timing: measured by the CLI when its
+  // telemetry arrived, otherwise estimated from the CLI log (marked ≈). Speed is
+  // output ÷ (duration − first token); a short burst or an untimed row stays blank.
+  assert.deepEqual(await page.locator('#usage-rows .u-lat .u-v').allInnerTexts(),['—','首字 ≈620 ms\n耗时 ≈4.0 s','首字 1.5 s\n耗时 12.7 s','首字 4.8 s\n耗时 5.3 s']);
+  assert.deepEqual(await page.locator('#usage-rows .u-speed .u-v').allInnerTexts(),['—','≈296\ntok/s','89\ntok/s','—']);
+  assert.equal(await page.locator('#usage-rows .u-speed').first().getAttribute('data-l'),'输出速度');
+  assert.match(await page.locator('#usage-rows .u-lat').nth(2).getAttribute('data-tip'),/^Claude Code 自己量的这一次请求/);
+  assert.match(await page.locator('#usage-rows .u-speed').nth(3).getAttribute('data-tip'),/^输出太少或生成用时太短/);
   const terminalDownload=page.waitForEvent('download');
   await page.locator('#uf-export').click();
   const terminalCSV=await readFile(await(await terminalDownload).path(),'utf8');
   const terminalLines=terminalCSV.trim().split('\r\n').map(line=>line.split(','));
   const terminalEffortColumn=terminalLines[0].indexOf('思考强度');
   assert.ok(terminalEffortColumn>=0);
-  assert.deepEqual(terminalLines.slice(1).map(row=>row[terminalEffortColumn]),['High','Max']);
+  assert.deepEqual(terminalLines.slice(1).map(row=>row[terminalEffortColumn]),['High','Max','Max','Max']);
+  const terminalSpeedColumn=terminalLines[0].indexOf('输出速度tok/s');
+  assert.deepEqual(terminalLines.slice(1).map(row=>row[terminalSpeedColumn]),['','295.9','89.3','']);
+  const requestTTFTColumn=terminalLines[0].indexOf('请求首字ms'),requestDurationColumn=terminalLines[0].indexOf('请求耗时ms');
+  assert.deepEqual(terminalLines.slice(1).map(row=>[row[requestTTFTColumn],row[requestDurationColumn]]),[['',''],['',''],['1502','12696'],['4758','5252']]);
+  // A web chat row the CLI timed shows that request, with the turn's own numbers in the tip.
+  usageRows.push({...usageRows[0],id:11,api_ttft_ms:1990,api_duration_ms:4009,ttft_ms:3100,wall_ms:9000});
+  await page.locator('#uf-kind').selectOption('chat',{force:true});
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===3);
+  const timedChat=page.locator('#usage-rows tr').nth(2);
+  assert.equal(await timedChat.locator('.u-lat .u-v').innerText(),'首字 2.0 s\n耗时 4.0 s');
+  assert.match(await timedChat.locator('.u-lat').getAttribute('data-tip'),/这一回合从容器就绪算起（含 CLI 启动与工具执行）：首字 3\.1 s，总耗时 9\.0 s$/);
+  assert.equal(await timedChat.locator('.u-speed .u-v').innerText(),'495\ntok/s');
+  assert.equal(await page.locator('#usage-rows tr').first().locator('.u-speed .u-v').innerText(),'—','turn-level chat timings give no speed');
+  usageRows=usageRows.filter(row=>row.id<9);
   await page.locator('#uf-kind').selectOption('',{force:true});
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===8);
   // One row per provider request, drawn like sub2api: arrows for input/output,

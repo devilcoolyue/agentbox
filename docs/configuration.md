@@ -118,6 +118,24 @@ docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}'
 
 2026-10-17 之前这一段写在 `extensions.gateway` 下；旧配置加载时自动迁移到 `model_gateway`，下次保存配置时写成新位置。
 
+## 请求计时遥测
+
+```json
+{
+  "usage_telemetry": {"bind": "172.17.0.1:1084", "host": "", "disabled": false}
+}
+```
+
+Claude 空间的 CLI 经 OpenTelemetry（OTLP/HTTP JSON）把每次 API 请求的首字与耗时报到这里，使用记录据此显示每次请求的实测延迟与输出速度（见[用量与额度](usage-and-quotas.md#每次请求的实测计时claude-code)）。默认开启，只接收容器的上报，不需要开放到公网。
+
+| 字段 | 默认值 / 格式 | 说明 |
+| --- | --- | --- |
+| `usage_telemetry.bind` | `172.17.0.1:1084` | 监听地址，须容器可达；不能与 `proxy_bridge.bind`、`model_gateway.bind`、`tunnel.proxy_bind`、`tunnel.network_bind` 相同。改动需重启服务；已在运行的 CLI 持有旧地址，重启 CLI 后才用新地址 |
+| `usage_telemetry.host` | 从 bind 提取主机 | 写进容器上报地址的主机；bind 为通配地址时必须填写 |
+| `usage_telemetry.disabled` | `false` | 设为 `true` 时不监听，也不再给新启动的 CLI 注入遥测环境变量，使用记录只显示日志估算的延迟 |
+
+监听失败（地址被占用、网桥不存在）只记一条日志，服务照常运行，此时也不注入遥测环境变量。上报路径为 `/otel/<空间 ID>/<MAC>/v1/logs`，MAC 由 `auth_token` 派生，轮换 `auth_token` 后已在运行的 CLI 上报会被拒绝，重启 CLI 即恢复。
+
 ## 扩展
 
 ```json

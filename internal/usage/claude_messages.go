@@ -3,6 +3,7 @@ package usage
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,8 +35,12 @@ type claudeMessage struct {
 	// TS is when the response first showed up (Unix ms): the stream's arrival
 	// time or the transcript timestamp, whichever is earlier. Provider message
 	// objects carry no such field, so only we set it; old rows lack it.
-	TS   int64  `json:"ts,omitempty"`
-	kind string // empty is the turn's own chat spend
+	TS int64 `json:"ts,omitempty"`
+	// RequestID is the provider's id for the request (the stream's and the
+	// transcript's request id, outside the message object). Per-request timing
+	// from the CLI's telemetry is matched on it.
+	RequestID string `json:"request_id,omitempty"`
+	kind      string // empty is the turn's own chat spend
 }
 
 // claudeTotal is one model's cumulative counters in result.modelUsage and the
@@ -113,11 +118,11 @@ func (c *claudeMeter) add(m claudeMessage) {
 		c.messages[m.ID] = m
 		return
 	}
-	ts := earliest(old.TS, m.TS)
+	ts, req := earliest(old.TS, m.TS), cmp.Or(old.RequestID, m.RequestID)
 	if preferClaudeMessage(m, old) {
 		old = m
 	}
-	old.TS = ts
+	old.TS, old.RequestID = ts, req
 	c.messages[m.ID] = old
 }
 
@@ -137,6 +142,7 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 		Subtype   string        `json:"subtype"`
 		SessionID string        `json:"session_id"`
 		Parent    string        `json:"parent_tool_use_id"`
+		RequestID string        `json:"request_id"`
 		Message   claudeMessage `json:"message"`
 		Event     struct {
 			Type    string          `json:"type"`
@@ -160,7 +166,7 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 			c.compacted = true
 		}
 	case "assistant":
-		e.Message.TS = now
+		e.Message.TS, e.Message.RequestID = now, e.RequestID
 		c.add(e.Message)
 	case "result":
 		var r claudeResult
@@ -321,6 +327,7 @@ func (c *claudeMeter) readTranscript(f *os.File, before fs.FileInfo, child bool)
 			Type       string                 `json:"type"`
 			Entrypoint string                 `json:"entrypoint"`
 			Timestamp  string                 `json:"timestamp"`
+			RequestID  string                 `json:"requestId"`
 			Message    claudeMessage          `json:"message"`
 			StartTime  int64                  `json:"startTime"`
 			ModelUsage map[string]claudeTotal `json:"modelUsage"`
@@ -339,7 +346,7 @@ func (c *claudeMeter) readTranscript(f *os.File, before fs.FileInfo, child bool)
 		if rec.Entrypoint != "sdk-cli" && !(child && rec.Entrypoint == "") {
 			continue
 		}
-		rec.Message.TS = 0
+		rec.Message.TS, rec.Message.RequestID = 0, rec.RequestID
 		if ts, err := time.Parse(time.RFC3339Nano, rec.Timestamp); err == nil {
 			rec.Message.TS = ts.UnixMilli()
 		}
@@ -532,6 +539,7 @@ func (s *Service) flushClaudeMessages(t *Tally, wall time.Duration) int {
 		e := c.base
 		e.Model = m.Model
 		e.ReqID = id
+		e.APIRequestID = m.RequestID
 		e.InputTokens = m.Usage.Input
 		e.OutputTokens = m.Usage.Output
 		e.CacheReadTokens = m.Usage.CacheRead

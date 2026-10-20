@@ -15,8 +15,8 @@ import (
 func termRowsSnapshot(st *store.Store) []string {
 	var out []string
 	for _, r := range st.ListUsage(store.UsageFilter{Kind: store.UsageKindTerminal}) {
-		out = append(out, fmt.Sprintf("%s|%s|%s|%s|%d/%d/%d/%d|%s", r.ReqID, r.TurnID, r.Model, r.TS.UTC().Format("15:04:05.000"),
-			r.InputTokens, r.OutputTokens, r.CacheReadTokens, r.CacheWriteTokens, r.Effort))
+		out = append(out, fmt.Sprintf("%s|%s|%s|%s|%d/%d/%d/%d|%s|%d/%d", r.ReqID, r.TurnID, r.Model, r.TS.UTC().Format("15:04:05.000"),
+			r.InputTokens, r.OutputTokens, r.CacheReadTokens, r.CacheWriteTokens, r.Effort, r.WallMS, r.TTFTMs))
 	}
 	sort.Strings(out)
 	return out
@@ -39,12 +39,13 @@ func TestTerminalIncrementalMatchesFullParse(t *testing.T) {
 	claude += `{"type":"user","entrypoint":"cli","uuid":"u3","timestamp":"2026-08-11T10:03:00.000Z","message":{"role":"user"}}
 {"type":"assistant","entrypoint":"cli","requestId":"req_E","timestamp":"2026-08-11T10:03:01.000Z","message":{"id":"msg_5","model":"claude-sonnet-5","usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":10}}}
 {"type":"assistant","entrypoint":"cli","requestId":"req_E","timestamp":"2026-08-11T10:03:04.000Z","message":{"id":"msg_5","model":"claude-sonnet-5","stop_reason":"end_turn","usage":{"input_tokens":3,"output_tokens":80,"cache_read_input_tokens":10}}}
-`
+` + termTimingFixture
 	cases := []struct {
 		agent, rel, raw string
 	}{
 		{"claude", filepath.Join(".claude", "projects", "-workspace", "abc.jsonl"), claude},
 		{"codex", filepath.Join(".codex", "sessions", "2026", "09", "23", "rollout-fixture.jsonl"), codexFixture(t)},
+		{"codex", filepath.Join(".codex", "sessions", "2026", "09", "30", "rollout-timing.jsonl"), codexTimingFixture(t)},
 	}
 	for _, c := range cases {
 		t.Run(c.agent, func(t *testing.T) {

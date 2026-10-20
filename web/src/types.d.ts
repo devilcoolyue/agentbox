@@ -342,6 +342,10 @@ export interface UsageEventRow {
   wall_ms: number;
   /** 首字延迟，同上；0 = 没量到 */
   ttft_ms: number;
+  /** CLI 自己量的这一次请求（Claude Code 遥测）：发出请求 → 流的第一个事件；没收到遥测或没有首个事件时没有 */
+  api_ttft_ms?: number;
+  /** 同上：发出请求 → 流结束（重试只算最后一次）；没收到遥测时没有 */
+  api_duration_ms?: number;
   /** 这一行的入账单价快照；旧数据回退当前参考单价，用来把费用逐项摊开；查不到价时没有这个字段 */
   rate?: UsageRate;
   /** 同回合、同类型的第几次请求（按时间，1 起）；回合只有一次请求时没有 */

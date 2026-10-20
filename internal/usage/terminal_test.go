@@ -112,6 +112,89 @@ func TestParseTerminalTranscript(t *testing.T) {
 	}
 }
 
+// 计时样本（字段形状照 Claude Code 2.1.302～2.1.303 的 transcript，内容是合成的）：
+//   - msg_t1：新版 CLI 发请求时写 api-request，回复用 requestRef 指回它；第一块是
+//     思考，首字 = 写完时刻 − thinkingDurationMs。父链上的 attachment 不能当起点。
+//   - msg_t2：旧版没有 requestRef 与 apiBlockIndex，起点沿父链取工具结果，跳过
+//     时间戳晚于回复开始的 attachment；第一块是工具调用，推不出首字。
+//   - msg_t3：还没写完（没有 stop_reason），不估。
+//   - msg_t4：最先出现的是第二块，前面的没看到，起点对不上，不估。
+const termTimingFixture = `{"type":"user","entrypoint":"cli","uuid":"tu1","parentUuid":null,"timestamp":"2026-08-11T11:00:00.000Z","message":{"role":"user","content":"hi"}}
+{"type":"attachment","entrypoint":"cli","uuid":"tat1","parentUuid":"tu1","timestamp":"2026-08-11T11:00:00.050Z"}
+{"type":"api-request","id":"rq1","timestamp":"2026-08-11T11:00:00.120Z","querySource":"repl_main_thread"}
+{"type":"assistant","entrypoint":"cli","uuid":"ta1","parentUuid":"tat1","requestId":"req_t1","requestRef":"rq1","apiBlockIndex":0,"thinkingDurationMs":1500,"timestamp":"2026-08-11T11:00:02.120Z","message":{"id":"msg_t1","model":"claude-sonnet-5","stop_reason":"tool_use","content":[{"type":"thinking","thinking":""}],"usage":{"input_tokens":3,"output_tokens":400,"cache_read_input_tokens":100}}}
+{"type":"assistant","entrypoint":"cli","uuid":"ta1b","parentUuid":"ta1","requestId":"req_t1","requestRef":"rq1","apiBlockIndex":1,"timestamp":"2026-08-11T11:00:04.120Z","message":{"id":"msg_t1","model":"claude-sonnet-5","stop_reason":"tool_use","content":[{"type":"tool_use"}],"usage":{"input_tokens":3,"output_tokens":400,"cache_read_input_tokens":100}}}
+{"type":"user","entrypoint":"cli","uuid":"tr1","parentUuid":"ta1b","timestamp":"2026-08-11T11:00:04.300Z","message":{"role":"user","content":[{"type":"tool_result"}]}}
+{"type":"attachment","entrypoint":"cli","uuid":"tat2","parentUuid":"tr1","timestamp":"2026-08-11T11:00:07.300Z"}
+{"type":"assistant","entrypoint":"cli","uuid":"ta2","parentUuid":"tat2","requestId":"req_t2","timestamp":"2026-08-11T11:00:07.300Z","message":{"id":"msg_t2","model":"claude-sonnet-5","stop_reason":"tool_use","content":[{"type":"tool_use"}],"usage":{"input_tokens":2,"output_tokens":120,"cache_read_input_tokens":500}}}
+{"type":"user","entrypoint":"cli","uuid":"tr2","parentUuid":"ta2","timestamp":"2026-08-11T11:00:07.500Z","message":{"role":"user","content":[{"type":"tool_result"}]}}
+{"type":"assistant","entrypoint":"cli","uuid":"ta3","parentUuid":"tr2","requestId":"req_t3","apiBlockIndex":0,"thinkingDurationMs":800,"timestamp":"2026-08-11T11:00:09.000Z","message":{"id":"msg_t3","model":"claude-sonnet-5","content":[{"type":"thinking","thinking":""}],"usage":{"input_tokens":2,"output_tokens":2,"cache_read_input_tokens":600}}}
+{"type":"assistant","entrypoint":"cli","uuid":"ta4","parentUuid":"ta3","requestId":"req_t4","apiBlockIndex":1,"timestamp":"2026-08-11T11:00:10.000Z","message":{"id":"msg_t4","model":"claude-sonnet-5","stop_reason":"end_turn","content":[{"type":"text","text":""}],"usage":{"input_tokens":2,"output_tokens":50,"cache_read_input_tokens":700}}}
+`
+
+func TestClaudeTerminalTiming(t *testing.T) {
+	rows, err := parseTerminalReader(strings.NewReader(termTimingFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct {
+		req        string
+		wall, ttft int64
+	}{
+		{"req_t1", 4000, 500}, // 11:00:00.120 → 04.120；思考从 00.620 开始
+		{"req_t2", 3000, 0},   // 工具结果 04.300 → 07.300
+		{"req_t3", 0, 0},
+		{"req_t4", 0, 0},
+	}
+	if len(rows) != len(want) {
+		t.Fatalf("rows = %+v", rows)
+	}
+	for i, w := range want {
+		if rows[i].reqID != w.req || rows[i].ev.WallMS != w.wall || rows[i].ev.TTFTMs != w.ttft {
+			t.Errorf("row %d = %s wall %d ttft %d, want %+v", i, rows[i].reqID, rows[i].ev.WallMS, rows[i].ev.TTFTMs, w)
+		}
+		// The CLI's telemetry names the same request id.
+		if rows[i].ev.APIRequestID != w.req {
+			t.Errorf("row %d api request id = %q", i, rows[i].ev.APIRequestID)
+		}
+	}
+}
+
+func TestTermTimingRejectsImplausibleValues(t *testing.T) {
+	for _, c := range []struct {
+		start, first, end, wall, ttft int64
+	}{
+		{1000, 0, 4000, 3000, 0},
+		{1000, 1500, 4000, 3000, 500},
+		{1000, 900, 4000, 3000, 0},        // 首字早于起点：起点取错了，只留耗时
+		{1000, 5000, 4000, 3000, 0},       // 首字晚于结束
+		{1000, 0, 1050, 0, 0},             // 不到 100ms
+		{1000, 0, 1000 + 3_600_001, 0, 0}, // 超过一小时
+		{0, 0, 4000, 0, 0},
+	} {
+		if wall, ttft := termTiming(c.start, c.first, c.end); wall != c.wall || ttft != c.ttft {
+			t.Errorf("termTiming(%d,%d,%d) = %d,%d, want %d,%d", c.start, c.first, c.end, wall, ttft, c.wall, c.ttft)
+		}
+	}
+}
+
+// 回复写完之前扫到的行没有计时，写完之后要把耗时补到同一行上。
+func TestUpsertTerminalUsageFillsTiming(t *testing.T) {
+	s, _ := newTestServer(t)
+	row := store.UsageEvent{User: "alice", SessionID: "s1", TurnID: "req_A", ReqID: "req_A", Agent: "claude", Model: "claude-sonnet-5", InputTokens: 4, OutputTokens: 2}
+	if err := s.store.UpsertTerminalUsage(row); err != nil {
+		t.Fatal(err)
+	}
+	row.OutputTokens, row.WallMS, row.TTFTMs = 300, 4000, 500
+	if err := s.store.UpsertTerminalUsage(row); err != nil {
+		t.Fatal(err)
+	}
+	rows := s.store.ListUsage(store.UsageFilter{User: "alice"})
+	if len(rows) != 1 || rows[0].WallMS != 4000 || rows[0].TTFTMs != 500 || rows[0].OutputTokens != 300 {
+		t.Fatalf("rows = %+v", rows)
+	}
+}
+
 // 扫描是反复跑的：文件没变也好、变长了也好，同一个回合只能有一行，
 // 而且续写进来的新调用要能加到已有那行上。
 func TestUpsertTerminalUsageIsIdempotent(t *testing.T) {
@@ -251,5 +334,18 @@ func TestTerminalMergedRowsConvertInPlace(t *testing.T) {
 	}
 	if sonnet[0].Price.Standard.Input != 1 || sonnet[1].Price.Standard.Input != 1 || sonnet[0].CostMicroUSD+sonnet[1].CostMicroUSD != merged.CostMicroUSD {
 		t.Fatalf("conversion repriced: %d + %d != %d", sonnet[0].CostMicroUSD, sonnet[1].CostMicroUSD, merged.CostMicroUSD)
+	}
+}
+
+// 计时字段换了类型时只丢计时，这一行的用量照记。
+func TestClaudeTerminalTimingFieldsNeverDropUsage(t *testing.T) {
+	raw := strings.NewReplacer(`"apiBlockIndex":0`, `"apiBlockIndex":"first"`, `"thinkingDurationMs":1500`, `"thinkingDurationMs":{"ms":1500}`,
+		`"requestRef":"rq1"`, `"requestRef":7`, `"parentUuid":"tat2"`, `"parentUuid":["tat2"]`).Replace(termTimingFixture)
+	rows, err := parseTerminalReader(strings.NewReader(raw))
+	if err != nil || len(rows) != 4 || rows[0].ev.OutputTokens != 400 || rows[1].ev.OutputTokens != 120 {
+		t.Fatalf("rows = %+v, %v", rows, err)
+	}
+	if rows[0].ev.TTFTMs != 0 || rows[1].ev.WallMS != 0 {
+		t.Fatalf("timing guessed from malformed fields: %+v / %+v", rows[0].ev, rows[1].ev)
 	}
 }
