@@ -134,7 +134,7 @@ func TestRunCodexTurnStrictResumeNeverStartsReplacement(t *testing.T) {
 func TestCodexTranslationPreservesFinalAnswerPhase(t *testing.T) {
 	var output []byte
 	c := &appServerConn{emit: func(raw []byte) { output = raw }}
-	c.translateItem(true, asItem{Type: "agentMessage", Text: "final", Phase: "final_answer", ID: "message-1"})
+	c.translateItem(true, rawItem{"type": json.RawMessage(`"agentMessage"`), "text": json.RawMessage(`"final"`), "phase": json.RawMessage(`"final_answer"`), "id": json.RawMessage(`"message-1"`)})
 	if !strings.Contains(string(output), `"phase":"final_answer"`) || !strings.Contains(string(output), `"id":"message-1"`) {
 		t.Fatal(string(output))
 	}
@@ -272,5 +272,157 @@ func TestRunCodexTurnForwardsPlanAndContext(t *testing.T) {
 	context := `{"info":{"last_token_usage":{"cached_input_tokens":100,"input_tokens":900,"output_tokens":30,"reasoning_output_tokens":5,"total_tokens":930},"model_context_window":272000},"type":"token_count"}`
 	if strings.Count(joined, context) != 1 {
 		t.Fatalf("上下文事件应恰好一条（重发的不再发）\n%s", joined)
+	}
+}
+
+// 命令、改动与各类工具条目带上 CLI 显示所需的富字段；输出与 diff 有界落盘，
+// 实时输出只走不落盘的 stream_event。
+func TestRunCodexTurnRichItems(t *testing.T) {
+	long := strings.Repeat("line\n", 100)
+	out, _ := json.Marshal(long)
+	diff := "--- a/x.go\n+++ b/x.go\n@@ -1,2 +1,2 @@\n-old\n+new\n+more\n ctx\n"
+	diffJSON, _ := json.Marshal(diff)
+	script := `{"id":1,"result":{}}
+{"id":3,"result":{"thread":{"id":"T1"}}}
+{"id":4,"result":{"turn":{"id":"U1"}}}
+{"method":"item/started","params":{"item":{"type":"commandExecution","id":"c1","command":"/bin/bash -lc 'sed -n 1,9p a.go'","cwd":"file:///workspace","status":"inProgress","commandActions":[{"type":"read","command":"sed -n 1,9p a.go","name":"a.go","path":"/workspace/a.go"}]}}}
+{"method":"item/commandExecution/outputDelta","params":{"itemId":"c1","delta":"line\n"}}
+{"method":"item/completed","params":{"item":{"type":"commandExecution","id":"c1","command":"/bin/bash -lc 'sed -n 1,9p a.go'","status":"failed","exitCode":2,"durationMs":1234,"aggregatedOutput":` + string(out) + `,"commandActions":[{"type":"read","command":"sed -n 1,9p a.go","name":"a.go","path":"/workspace/a.go"}],"cwd":{"unexpected":"object"}}}}
+{"method":"item/completed","params":{"item":{"type":"commandExecution","id":"c2","command":"true","status":"completed","exitCode":0,"aggregatedOutput":""}}}
+{"method":"item/completed","params":{"item":{"type":"commandExecution","id":"c3","command":"true","status":"completed","exitCode":0,"aggregatedOutput":null}}}
+{"method":"item/completed","params":{"item":{"type":"fileChange","id":"f1","status":"completed","changes":[{"path":"/workspace/x.go","kind":{"type":"update","move_path":null},"diff":` + string(diffJSON) + `}]}}}
+{"method":"item/started","params":{"item":{"type":"mcpToolCall","id":"m1","server":"docs","tool":"search","status":"inProgress","arguments":{"q":"hi"}}}}
+{"method":"item/mcpToolCall/progress","params":{"itemId":"m1","message":"half way"}}
+{"method":"item/completed","params":{"item":{"type":"mcpToolCall","id":"m1","server":"docs","tool":"search","status":"failed","arguments":{"q":"hi"},"durationMs":20,"error":{"message":"boom"},"result":{"content":[{"type":"text","text":"partial"},{"type":"image","data":"…"}]}}}}
+{"method":"item/completed","params":{"item":{"type":"webSearch","id":"w1","query":"codex cli","action":{"type":"search","queries":["codex cli","codex tui"]},"results":[{"title":"Codex","url":"https://example.com","domain":"example.com","snippet":"x"}]}}}
+{"method":"item/completed","params":{"item":{"type":"imageView","id":"i1","path":"file:///shared/.images/a.png"}}}
+{"method":"item/completed","params":{"item":{"type":"userMessage","id":"u1","content":[]}}}
+{"method":"warning","params":{"message":"heads up"}}
+{"method":"model/rerouted","params":{"fromModel":"a","toModel":"b","reason":"highRiskCyberActivity","threadId":"T1","turnId":"U1"}}
+{"method":"error","params":{"error":{"message":"reconnecting"},"willRetry":true,"threadId":"T1","turnId":"U1"}}
+{"method":"turn/completed","params":{"turn":{"id":"U1","status":"completed"}}}
+`
+	var events []map[string]any
+	err := RunCodexTurn(context.Background(), io.Discard, strings.NewReader(script), func() {}, nil,
+		CodexTurn{Prompt: "x", Cwd: "/workspace"}, func(line []byte) {
+			var ev map[string]any
+			if err := json.Unmarshal(line, &ev); err != nil {
+				t.Fatalf("非法事件 %s", line)
+			}
+			events = append(events, ev)
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	find := func(typ, itemType string) map[string]any {
+		for _, ev := range events {
+			if ev["type"] != typ {
+				continue
+			}
+			if itemType == "" {
+				return ev
+			}
+			if it, _ := ev["item"].(map[string]any); it["type"] == itemType {
+				return it
+			}
+		}
+		t.Fatalf("缺少 %s/%s: %v", typ, itemType, events)
+		return nil
+	}
+
+	started := find("item.started", "command_execution")
+	if started["id"] != "c1" || started["cwd"] != "/workspace" || started["status"] != nil {
+		t.Fatalf("started 命令: %v", started)
+	}
+	acts, _ := started["actions"].([]any)
+	if len(acts) != 1 || acts[0].(map[string]any)["type"] != "read" || acts[0].(map[string]any)["name"] != "a.go" {
+		t.Fatalf("命令归类: %v", started["actions"])
+	}
+	delta := find("stream_event", "")["event"].(map[string]any)
+	if delta["type"] != "item_output_delta" || delta["item_id"] != "c1" || delta["delta"] != "line\n" {
+		t.Fatalf("实时输出: %v", delta)
+	}
+	cmd := find("item.completed", "command_execution")
+	// cwd 换了类型只丢这一个字段，条目照常落盘
+	if cmd["status"] != "failed" || cmd["exit_code"] != 2.0 || cmd["duration_ms"] != 1234.0 || cmd["cwd"] != nil {
+		t.Fatalf("完成命令: %v", cmd)
+	}
+	head, tail := cmd["aggregated_output"].(string), cmd["output_tail"].(string)
+	if cmd["output_lines"] != 100.0 || cmd["output_truncated"] != true ||
+		strings.Count(head, "line") != outputSideLines || strings.Count(tail, "line") != outputSideLines {
+		t.Fatalf("输出预览: lines=%v head=%q tail=%q", cmd["output_lines"], head, tail)
+	}
+
+	for _, ev := range events {
+		it, _ := ev["item"].(map[string]any)
+		if ev["type"] != "item.completed" || it["type"] != "command_execution" {
+			continue
+		}
+		switch _, has := it["output_lines"]; it["id"] {
+		case "c2": // 确实没输出
+			if it["output_lines"] != 0.0 || it["aggregated_output"] != nil {
+				t.Fatalf("空输出: %v", it)
+			}
+		case "c3": // 没给输出，不能说成「无输出」
+			if has {
+				t.Fatalf("缺输出: %v", it)
+			}
+		}
+	}
+
+	fc := find("item.completed", "file_change")
+	ch := fc["changes"].([]any)[0].(map[string]any)
+	if ch["path"] != "/workspace/x.go" || ch["kind"] != "update" || ch["added"] != 2.0 || ch["removed"] != 1.0 || ch["diff"] != diff || ch["move_path"] != nil {
+		t.Fatalf("改动: %v", ch)
+	}
+
+	if m := find("item.started", "mcp_tool_call"); m["server"] != "docs" || m["arguments"] != `{"q":"hi"}` {
+		t.Fatalf("MCP started: %v", m)
+	}
+	mcp := find("item.completed", "mcp_tool_call")
+	if mcp["status"] != "failed" || mcp["result_text"] != "partial\n[image]" || mcp["error"].(map[string]any)["message"] != "boom" {
+		t.Fatalf("MCP: %v", mcp)
+	}
+	ws := find("item.completed", "web_search")
+	if ws["query"] != "codex cli" || ws["result_count"] != 1.0 || ws["action"].(map[string]any)["type"] != "search" ||
+		len(ws["results"].([]any)) != 1 || ws["results"].([]any)[0].(map[string]any)["snippet"] != nil {
+		t.Fatalf("网页搜索: %v", ws)
+	}
+	if iv := find("item.completed", "image_view"); iv["path"] != "/shared/.images/a.png" {
+		t.Fatalf("看图: %v", iv)
+	}
+	if w := find("warning", ""); w["message"] != "heads up" {
+		t.Fatalf("警告: %v", w)
+	}
+	if r := find("model_rerouted", ""); r["to_model"] != "b" || r["reason"] != "high_risk_cyber_activity" {
+		t.Fatalf("改道: %v", r)
+	}
+	if e := find("error", ""); e["will_retry"] != true {
+		t.Fatalf("重试中的错误: %v", e)
+	}
+	for _, ev := range events {
+		if it, _ := ev["item"].(map[string]any); it != nil && it["type"] == "userMessage" {
+			t.Fatalf("用户消息回显不该落盘: %v", ev)
+		}
+	}
+}
+
+func TestCodexLiveOutputIsBounded(t *testing.T) {
+	var sent int
+	c := &appServerConn{emit: func(raw []byte) {
+		var ev struct {
+			Event struct {
+				Delta string `json:"delta"`
+			} `json:"event"`
+		}
+		json.Unmarshal(raw, &ev)
+		sent += len(ev.Event.Delta)
+	}}
+	chunk, _ := json.Marshal(map[string]string{"itemId": "c1", "delta": strings.Repeat("日", 10000)})
+	for range 5 {
+		c.outputDelta(chunk)
+	}
+	if sent > liveOutputBytes || sent < liveOutputBytes-3 {
+		t.Fatalf("实时输出转发了 %d 字节，上限 %d", sent, liveOutputBytes)
 	}
 }

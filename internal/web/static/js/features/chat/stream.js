@@ -1,5 +1,6 @@
 import { liveNode, renderEvent, formatText, answerSources } from "../../chat-render.js";
 import { t as i18nText } from "../../i18n.js";
+import { codexStreamEvent, codexWorkLabel, resetCodexItems } from "./codex-items.js";
 export function createChatStream(hooks) {
     /* ---------------- 流式增量渲染 ----------------
      * Claude：--include-partial-messages 下，完整 assistant 事件之前会先收到
@@ -145,6 +146,7 @@ export function createChatStream(hooks) {
     /* 丢弃回放状态：切线程 / 切会话时调用，对话流马上要整体重建 */
     function replayReset() {
         replayQueue = [];
+        resetCodexItems();
         // Both real streaming and exec replay belong to the old view. Never let a
         // pending frame use the next thread's footer or scroll position.
         if (liveBlock?.raf)
@@ -163,8 +165,10 @@ export function createChatStream(hooks) {
                 }
             }
         }
-        else if (ev.type === "item.started" && ev.item && ev.item.type === "command_execution") {
-            hooks.working(() => i18nText("执行命令…"));
+        else if (ev.type === "item.started" && ev.item) {
+            const label = codexWorkLabel(ev);
+            if (label)
+                hooks.working(label);
         }
         else if (ev.type === "item.completed" && ev.item && ev.item.type === "reasoning") {
             hooks.working(() => i18nText("推理中…"));
@@ -180,6 +184,12 @@ export function createChatStream(hooks) {
     function handleStreamEvent(e) {
         if (!e || typeof e !== "object")
             return;
+        const log = hooks.log(), stick = hooks.nearBottom(log);
+        if (codexStreamEvent(e)) {
+            if (stick)
+                log.scrollTop = log.scrollHeight;
+            return;
+        } // Codex 命令的实时输出、MCP 进度
         switch (e.type) {
             case "message_start":
                 // 正常流程上一条已被完整事件清掉（此处空转）；若断连错过了完整

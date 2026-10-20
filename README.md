@@ -43,7 +43,7 @@ You bring the server and your own Claude / Codex subscription, API key, or compa
 
 ### A chat that keeps up with the CLI
 
-- **Watch the work, not a spinner.** Replies stream with thinking summaries and every tool call. The agent's task list sits above the message box ("Tasks 2/3 · Running the tests"), a timer counts the turn, and a ring shows how full the context window is, like the CLI status line.
+- **Watch the work, not a spinner.** Replies stream with thinking summaries and every tool call; Codex commands are named the way its CLI shows them (Read, Search, Shell, Edit) with exit status and duration, and their output and diffs are a click away. The agent's task list sits above the message box ("Tasks 2/3 · Running the tests"), a timer counts the turn, and a ring shows how full the context window is, like the CLI status line.
 - **`@` files and `/` commands.** Type `@` to search workspace files by name and insert the path. Type `/` to list the workspace's real Claude Code commands. `/context` is drawn as the CLI's colored grid and, on subscription accounts, `/usage` as limit bars; both are answered locally without a model call.
 - **Stay in the loop.** When Claude asks a question mid-task, answer it in a card and the same turn continues. Keep typing while it works: messages queue for the next turn, or steer the running one. After a turn, the predicted next prompt waits in grey for Tab. (Questions, steering and suggestions are for Claude workspaces.)
 - **Nothing gets lost.** Unsent drafts, frozen outgoing copies and per-message receipts survive reloads, disconnects and server restarts; an uncertain result is shown for review instead of being re-run.

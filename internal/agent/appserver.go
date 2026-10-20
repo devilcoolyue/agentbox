@@ -76,10 +76,11 @@ type appServerConn struct {
 	sc   *bufio.Scanner
 	emit func(line []byte)
 
-	block    string     // 当前流式块："" | "text" | "thinking"
-	sawDelta bool       // 当前 thinking 块内是否已有内容（summary 分段用分隔符续接）
-	meter    codexMeter // 本回合每次模型请求的用量，收尾事件时带出
-	context  string     // 上一次发出的上下文占用，限流更新原样重发时不再发
+	block    string         // 当前流式块："" | "text" | "thinking"
+	sawDelta bool           // 当前 thinking 块内是否已有内容（summary 分段用分隔符续接）
+	meter    codexMeter     // 本回合每次模型请求的用量，收尾事件时带出
+	context  string         // 上一次发出的上下文占用，限流更新原样重发时不再发
+	liveOut  map[string]int // 各命令已实时转发的输出字节数
 
 	mu     sync.Mutex // 保护 turnID（interrupt 协程读）
 	thread string
@@ -326,32 +327,38 @@ func (c *appServerConn) emitJSON(v any) {
 
 // --- 通知 → 事件翻译 ---
 
-type asItem struct {
-	Type     string `json:"type"`
-	Text     string `json:"text"`
-	Phase    string `json:"phase"`
-	ID       string `json:"id"`
-	Command  string `json:"command"`
-	ExitCode *int   `json:"exitCode"`
-	Status   string `json:"status"`
-	Query    string `json:"query"`
-	Summary  []any  `json:"summary"`
-	Changes  []struct {
-		Path string `json:"path"`
-	} `json:"changes"`
-}
-
 // handleNotification 翻译一条服务端通知；回合结束返回 true。
 func (c *appServerConn) handleNotification(method string, params json.RawMessage) bool {
 	switch method {
 	case "item/started", "item/completed":
 		var p struct {
-			Item asItem `json:"item"`
+			Item rawItem `json:"item"`
 		}
 		if json.Unmarshal(params, &p) != nil {
 			return false
 		}
 		c.translateItem(method == "item/completed", p.Item)
+	case "item/commandExecution/outputDelta":
+		c.outputDelta(params)
+	case "item/mcpToolCall/progress":
+		c.toolProgress(params)
+	case "warning":
+		var p struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(params, &p) == nil && p.Message != "" {
+			c.emitJSON(map[string]any{"type": "warning", "message": p.Message})
+		}
+	case "model/rerouted":
+		var p struct {
+			FromModel string `json:"fromModel"`
+			ToModel   string `json:"toModel"`
+			Reason    string `json:"reason"`
+		}
+		if json.Unmarshal(params, &p) == nil && p.ToModel != "" {
+			c.emitJSON(map[string]any{"type": "model_rerouted", "from_model": p.FromModel,
+				"to_model": p.ToModel, "reason": snakeCase(p.Reason)})
+		}
 	case "item/agentMessage/delta":
 		c.openBlock("text")
 		c.emitDelta("text_delta", "text", deltaOf(params))
@@ -406,6 +413,7 @@ func (c *appServerConn) handleNotification(method string, params json.RawMessage
 			Error   struct {
 				Message string `json:"message"`
 			} `json:"error"`
+			WillRetry bool `json:"willRetry"`
 		}
 		json.Unmarshal(params, &p)
 		msg := p.Message
@@ -413,29 +421,30 @@ func (c *appServerConn) handleNotification(method string, params json.RawMessage
 			msg = p.Error.Message
 		}
 		if msg != "" {
-			c.emitJSON(map[string]any{"type": "error", "message": msg})
+			ev := map[string]any{"type": "error", "message": msg}
+			if p.WillRetry { // 连接抖动后 CLI 自己重试，回合还在继续，网页按提示而非失败显示
+				ev["will_retry"] = true
+			}
+			c.emitJSON(ev)
 		}
 	}
 	return false
 }
 
-// translateItem 把 v2 的 thread item 映射为 exec --json 的 item.* 事件形状。
-func (c *appServerConn) translateItem(completed bool, it asItem) {
-	switch it.Type {
+// translateItem 把 v2 的 thread item 映射为 exec --json 的 item.* 事件形状，
+// 文字与思考之外的条目带上富字段（见 appserver_items.go）。
+func (c *appServerConn) translateItem(completed bool, it rawItem) {
+	switch typ := it.str("type"); typ {
 	case "agentMessage":
 		if !completed {
 			c.openBlock("text") // 光标先亮起来，delta 随后就到
 			return
 		}
 		c.closeBlock()
-		if it.Text != "" {
-			item := map[string]any{"type": "agent_message", "text": it.Text}
-			if it.Phase != "" {
-				item["phase"] = it.Phase
-			}
-			if it.ID != "" {
-				item["id"] = it.ID
-			}
+		if text := it.str("text"); text != "" {
+			item := map[string]any{"type": "agent_message", "text": text}
+			set(item, "phase", it.str("phase"))
+			set(item, "id", it.str("id"))
 			c.emitJSON(map[string]any{"type": "item.completed",
 				"item": item})
 		}
@@ -445,36 +454,23 @@ func (c *appServerConn) translateItem(completed bool, it asItem) {
 			return
 		}
 		c.closeBlock()
-		if text := joinSummary(it.Summary); text != "" {
+		var summary []any
+		json.Unmarshal(it["summary"], &summary)
+		if text := joinSummary(summary); text != "" {
 			c.emitJSON(map[string]any{"type": "item.completed",
 				"item": map[string]any{"type": "reasoning", "text": text}})
 		}
-	case "commandExecution":
-		if !completed {
-			c.emitJSON(map[string]any{"type": "item.started",
-				"item": map[string]any{"type": "command_execution", "command": it.Command}})
+	default:
+		ev := c.richItem(completed, typ, it)
+		if ev == nil {
 			return
 		}
-		ev := map[string]any{"type": "command_execution", "command": it.Command, "status": it.Status}
-		if it.ExitCode != nil {
-			ev["exit_code"] = *it.ExitCode
+		kind := "item.started"
+		if completed {
+			kind = "item.completed"
+			delete(c.liveOut, it.str("id"))
 		}
-		c.emitJSON(map[string]any{"type": "item.completed", "item": ev})
-	case "fileChange":
-		if !completed {
-			return
-		}
-		changes := make([]map[string]any, 0, len(it.Changes))
-		for _, ch := range it.Changes {
-			changes = append(changes, map[string]any{"path": ch.Path})
-		}
-		c.emitJSON(map[string]any{"type": "item.completed",
-			"item": map[string]any{"type": "file_change", "changes": changes}})
-	case "webSearch":
-		if completed && it.Query != "" {
-			c.emitJSON(map[string]any{"type": "item.completed",
-				"item": map[string]any{"type": "web_search", "query": it.Query}})
-		}
+		c.emitJSON(map[string]any{"type": kind, "item": ev})
 	}
 }
 

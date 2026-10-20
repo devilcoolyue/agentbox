@@ -3,6 +3,7 @@
  * 跑腿模型的完整过程单独保存，点「查看跑腿过程」时按需读取，不进主对话的历史。 */
 import { api } from "../../api.js";
 import { renderEvent, formatText } from "../../chat-render.js";
+import { settleCodexItems } from "../chat/codex-items.js";
 import { buttonLabel } from "../../icons.js";
 import { setText, setTextRender, t } from "../../i18n.js";
 import { S } from "../../state.js";
@@ -230,6 +231,7 @@ async function openLog(view) {
         if (!nodes.length)
             nodes.push(Object.assign(document.createElement("p"), { className: "muted", textContent: t("没有可显示的过程记录") }));
         body.replaceChildren(...nodes);
+        settleCodexItems(body); // 过程记录是事后回看，没收尾的工具行不再转圈
     }
     catch (error) {
         body.replaceChildren(Object.assign(document.createElement("p"), { className: "dg-error", textContent: t("读取跑腿过程失败：") + error.message }));

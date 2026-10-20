@@ -372,6 +372,96 @@
   border: 1px solid var(--warn-line);
 }
 
+/* ---- Codex 工具行（features/chat/codex-items.ts）：外观同上面的工具细行，行尾挂
+ * 耗时 / 退出码 / 增删行数，有详情时整行是 <summary>，点开看命令、输出首尾或 diff ---- */
+.tool-call { max-width: 100%; min-width: 0; }
+.tool-call .chip.tool { display: flex; align-items: center; }
+.tool-call .chip.tool .name { flex: none; }
+.tool-call .chip.tool .sum { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tool-call summary.chip { cursor: pointer; list-style: none; border-radius: calc(6px * var(--radius-scale)); }
+.tool-call summary.chip::-webkit-details-marker { display: none; }
+.tool-call summary.chip::after {
+  content: "›"; flex: none; margin-left: 8px;
+  color: var(--muted); opacity: 0;
+  transition: transform var(--dur-fast) var(--ease-out, ease), opacity var(--dur-fast) ease;
+}
+.tool-call summary.chip:hover .name, .tool-call summary.chip:hover .sum { color: var(--text-hi, var(--text)); }
+.tool-call summary.chip:hover::after, .tool-call summary.chip:focus-visible::after,
+.tool-call details[open] > summary.chip::after { opacity: 1; }
+.tool-call details[open] > summary.chip::after { transform: rotate(90deg); }
+.tc-meta, .tc-badge, .tc-stat { flex: none; margin-left: 10px; }
+.tc-meta { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0.85; }
+.tc-badge {
+  font-family: var(--sans); font-size: 11px; line-height: 16px;
+  padding: 0 7px; border-radius: var(--radius-pill);
+}
+.tc-badge.err { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
+.tc-badge.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.tc-stat { display: inline-flex; gap: 6px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.tc-stat .add { color: var(--green); }
+.tc-stat .del { color: var(--red); }
+/* 进行中：图标换成转圈，下面跟着命令输出的最后几行 */
+.tc-spin {
+  display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: -0.5px;
+  border: 1.5px solid var(--amber); border-right-color: transparent; border-radius: 50%;
+  animation: tc-spin 0.8s linear infinite;
+}
+@keyframes tc-spin { to { transform: rotate(360deg); } }
+.tool-call[data-status="running"] .chip.tool .name { color: var(--amber); }
+.tc-live {
+  margin: 1px 0 3px 7px; padding: 0 0 0 12px;
+  border-left: 2px solid color-mix(in srgb, var(--amber) 35%, transparent);
+  font-size: 11px; line-height: 1.5; color: var(--muted);
+  white-space: pre-wrap; word-break: break-all;
+  max-height: 6em; overflow: hidden; opacity: 0.85;
+}
+.tc-live:empty { display: none; }
+.tc-body {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 4px 0 8px 7px; padding: 4px 0 4px 12px;
+  border-left: 2px solid var(--line);
+  font-size: 12px; color: var(--muted); min-width: 0;
+}
+.tc-cmd { color: var(--text); white-space: pre-wrap; word-break: break-all; font-size: 12px; line-height: 1.6; margin: 0; }
+.tc-prompt { color: var(--amber); margin-right: 7px; user-select: none; }
+.tc-out, .tc-diff {
+  margin: 0; padding: 8px 11px;
+  background: var(--code-bg); border: 1px solid var(--line);
+  border-radius: calc(8px * var(--radius-scale));
+  font-size: 11.5px; line-height: 1.55; color: var(--text);
+  white-space: pre; overflow: auto; max-height: 320px;
+}
+.tc-out.err { color: var(--red); white-space: pre-wrap; }
+.tc-diff .dl { display: inline-block; min-width: 100%; }
+.tc-diff .dl.add { color: var(--green); background: color-mix(in srgb, var(--green) 9%, transparent); }
+.tc-diff .dl.del { color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }
+.tc-diff .dl.hunk { color: var(--info); }
+.tc-diff .dl.file { color: var(--muted); }
+.tc-gap, .tc-note { font-family: var(--sans); font-size: 11.5px; color: var(--muted); }
+.tc-gap { font-style: italic; }
+.tc-results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-family: var(--sans); }
+.tc-results li { display: flex; gap: 8px; min-width: 0; align-items: baseline; }
+.tc-results a, .tc-results li > span:first-child { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tc-results a:hover { color: var(--amber); }
+.tc-domain { flex: none; font-size: 11px; color: var(--muted); }
+.tc-image {
+  max-width: min(100%, 360px); max-height: 260px; object-fit: contain;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
+  cursor: zoom-in; align-self: flex-start;
+}
+.chip.tc-note-chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 12px; white-space: normal; }
+.chip.tc-note-chip svg { flex: none; }
+/* Codex 计划模式的方案 */
+.codex-plan { display: flex; flex-direction: column; gap: 4px; }
+.codex-plan-head { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--amber); }
+/* Codex 的推理摘要：折叠时标题后带第一行 */
+details.think summary .think-peek {
+  min-width: 0; max-width: 64ch;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-style: italic; opacity: 0.85;
+}
+details.think[open] summary .think-peek { display: none; }
+
 details.raw { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 details.raw summary { cursor: pointer; }
 details.raw pre { max-height: 240px; overflow: auto; margin: 6px 0 0; }
@@ -1163,6 +1253,8 @@ details.think.streaming .think-body::after {
   .msg.live-text.streaming:empty::after,
   .msg.live-text.streaming > :last-child::after,
   details.think.streaming .think-body::after { animation: none; }
+  .tc-spin { animation: none; }
+  .tool-call summary.chip::after { transition: none; }
   .send-btn, .composer, .hero-pill, .cb-caret, .chat-scroll-bottom { transition: none; }
   .thread-panel, .tp-scrim { transition: none; }
 }

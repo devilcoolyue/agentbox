@@ -19,6 +19,7 @@ import { contextCard, contextUsageOf } from "./features/chat/context-card.js";
 import { usageCard, usageReportOf } from "./features/chat/usage-card.js";
 import { syntaxMarks, type SyntaxMark } from "./features/chat/syntax.js";
 import { fmtTokens } from "./usage-math.js";
+import { codexItemNodes } from "./features/chat/codex-items.js";
 
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
 
@@ -245,6 +246,19 @@ function agentText(text: string) {
   d.appendChild(formatText(text));
   answerSources.set(d, text);
   return d;
+}
+
+/* Codex 计划模式给出的方案：正文照常渲染，上方标一行「计划」 */
+function planBlock(text: string) {
+  const box = document.createElement("div");
+  box.className = "codex-plan";
+  const head = document.createElement("div");
+  head.className = "codex-plan-head";
+  const label = document.createElement("span");
+  setText(label, "计划");
+  head.append(svgIcon("list-check", 13), label);
+  box.append(head, agentText(text));
+  return box;
 }
 
 /* ================= 轻量 Markdown =================
@@ -803,10 +817,18 @@ export function liveNode(kind: string): LiveNode {
   return { el: d, body: d };
 }
 
-function thinkBlock(text: string) {
+/* peek：Codex 的推理摘要常是一句话（CLI 直接显示在对话里），折叠时把第一行带在标题后面 */
+function thinkBlock(text: string, peek = false) {
   const { el, body } = liveNode("thinking");
   (el as HTMLDetailsElement).open = false;
   body.textContent = text;
+  const first = peek ? text.trim().split("\n")[0].replace(/^\*\*(.+?)\*\*$/, "$1").trim() : "";
+  if (first) {
+    const s = document.createElement("span");
+    s.className = "think-peek";
+    s.textContent = first;
+    el.querySelector("summary")!.append(s);
+  }
   return el;
 }
 
@@ -925,25 +947,18 @@ export function renderEvent(ev: AgentEvent | undefined) {
   if (ev.type === "thread.started") {
     return out; // 同 Claude init：会话就绪属 system 信息，不展示
   }
-  if (ev.type === "item.started" && ev.item) {
-    if (ev.item.type === "command_execution") {
-      out.push(toolChip("exec", String(ev.item.command || "").slice(0, 100)));
-    }
-    return out;
+  if (ev.item && (ev.type === "item.started" || ev.type === "item.completed" || ev.type === "item.updated")) {
+    const tools = codexItemNodes(ev); // 命令、改动、MCP、网页搜索等（features/chat/codex-items.ts）
+    if (tools) return tools;
   }
-  if ((ev.type === "item.completed" || ev.type === "item.updated") && ev.item) {
+  if (ev.type === "item.completed" && ev.item) {
     const it = ev.item;
-    if (ev.type === "item.completed") {
-      if (it.type === "agent_message" && it.text) out.push(agentText(it.text));
-      else if (it.type === "reasoning" && it.text) out.push(thinkBlock(it.text));
-      else if (it.type === "file_change" && Array.isArray(it.changes)) {
-        // 一次改了好几个文件时不猜要预览哪个，只有单个 HTML 才给入口
-        const only = it.changes.length === 1 ? htmlOutputPath(it.changes[0]) : "";
-        out.push(toolChip("edit", it.changes.map((c) => c.path).join(" ").slice(0, 100), only));
-      } else if (it.type === "web_search" && it.query) out.push(toolChip("search", it.query));
-    }
+    if (it.type === "agent_message" && it.text) out.push(agentText(it.text));
+    else if (it.type === "reasoning" && it.text) out.push(thinkBlock(it.text, true));
+    else if (it.type === "plan" && it.text) out.push(planBlock(it.text));
     return out;
   }
+  if (ev.type === "item.started" || ev.type === "item.updated") return out;
   if (ev.type === "turn.started") return out;
   if (ev.type === "turn.completed") {
     const u = ev.usage || {};
@@ -956,7 +971,19 @@ export function renderEvent(ev: AgentEvent | undefined) {
     return out;
   }
   if (ev.type === "error" && ev.message) {
-    out.push(chip("✗ " + ev.message, "err"));
+    // will_retry：连接抖动，CLI 自己在重连，回合没失败
+    if (ev.will_retry) out.push(chip(i18nText("连接中断，正在重试：{p0}", { p0: String(ev.message) }), "warn"));
+    else out.push(chip("✗ " + ev.message, "err"));
+    return out;
+  }
+  if (ev.type === "warning" && typeof ev.message === "string" && ev.message) {
+    out.push(chip("⚠ " + ev.message, "warn"));
+    return out;
+  }
+  if (ev.type === "model_rerouted" && typeof ev.to_model === "string") {
+    const from = typeof ev.from_model === "string" ? ev.from_model : "";
+    const why = ev.reason === "high_risk_cyber_activity" ? i18nText("请求被判定为高风险网络安全内容") : "";
+    out.push(chip(["⚠ " + (from ? i18nText("本轮已由 {p0} 改用 {p1}", { p0: from, p1: ev.to_model }) : i18nText("本轮已改用 {p0}", { p0: ev.to_model })), why].filter(Boolean).join(" · "), "warn"));
     return out;
   }
 
