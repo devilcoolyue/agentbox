@@ -270,6 +270,9 @@ func (s *Server) recordCodexBackground(sess store.Session, reqs []codexBackgroun
 // codexBackgroundRow builds a background request's row. Its id names the
 // request by session, conversation, completion time and tokens: a resent
 // export finds it again, two warm-ups of one conversation do not collide.
+// A request other than a warm-up also carries its usage.CodexRequestKey, so
+// the timing the same export reports for it finds the row already timed
+// instead of waiting for one; warm-ups report no timing.
 func codexBackgroundRow(src, owner store.Session, r codexBackground) store.UsageEvent {
 	id := "codex-telemetry:" + src.ID + ":" + r.Conversation + ":" + strconv.FormatInt(r.AtMS, 10) + ":" +
 		strconv.FormatInt(r.Input, 10) + ":" + strconv.FormatInt(r.Output, 10)
@@ -289,6 +292,9 @@ func codexBackgroundRow(src, owner store.Session, r codexBackground) store.Usage
 	}
 	if r.Effort != "" {
 		ev.Effort, ev.EffortControl = r.Effort, "effort"
+	}
+	if key := usage.CodexRequestKey(r.Conversation, r.Input, r.Cached, r.Output); !r.Warmup && apiRequestIDRE.MatchString(key) {
+		ev.APIRequestID = key
 	}
 	return ev
 }

@@ -184,9 +184,25 @@ func TestUsageTelemetryCodexBackgroundRows(t *testing.T) {
 	if n := len(background()); n != 2+5+1 {
 		t.Fatalf("terminal conversation with a rollout rows = %d", n)
 	}
+	sideKey := codexTiming("01a1584a-0000-7000-8000-0000000051de", 14353, 12288, 167, 0, 0).RequestID
 	for _, r := range background() {
-		if strings.Contains(r.Raw, "51de") && r.OutputTokens == 167 && (r.APITTFTMs != 2845 || r.APIDurationMS != 8558 || r.Effort != "medium") {
+		if strings.Contains(r.Raw, "51de") && r.OutputTokens == 167 &&
+			(r.APITTFTMs != 2845 || r.APIDurationMS != 8558 || r.Effort != "medium" || r.APIRequestID != sideKey) {
 			t.Fatalf("side request row %+v", r)
+		}
+		if strings.Contains(r.Raw, `"warmup":true`) && r.APIRequestID != "" {
+			t.Fatalf("warm-up row names a request: %+v", r)
+		}
+	}
+	// The side request's row carries its timing, so none waits for a row: a
+	// later row under the same key finds nothing to claim.
+	if err := s.store.UpsertTerminalUsage(store.UsageEvent{User: sess.User, SessionID: sess.ID, TurnID: "t", Agent: "codex",
+		ReqID: "codex-terminal:probe", APIRequestID: sideKey, TS: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range s.store.ListUsage(store.UsageFilter{User: sess.User, Kind: store.UsageKindTerminal}) {
+		if r.ReqID == "codex-terminal:probe" && r.APIDurationMS != 0 {
+			t.Fatalf("the side request's timing waited for a row: %+v", r)
 		}
 	}
 	if q, _ := s.store.GetQuota(sess.User); q.BalanceMicroUSD != 1_000_000 {

@@ -414,7 +414,8 @@ data/
   且会话在空间 home 里**没有** rollout 的请求（TUI 用小模型另开的小会话）。其余一律不从遥测造行：网页行要到回合结束才写，接收时
   无从查重；有 rollout 的会话归终端补记 / 网页结算 / 起标题。rollout 是否存在由 `usage.CodexRolloutExists` glob，查不清按「存在」
   处理（宁可少记不重记），肯定结果缓存在 `codexRollouts`。req_id 为「来源空间:会话:完成时刻:输入:输出」，重发的导出不重复；同一会话
-  每轮预热的 token 相同，不能用 `CodexRequestKey` 当键。隐藏跑腿空间的行记到属主空间。前端「后台请求」用 cpu 图标、最浅墨色。
+  每轮预热的 token 相同，不能用 `CodexRequestKey` 当键。非预热行另把 `CodexRequestKey` 写进 `api_request_id`：同一批导出里它的
+  计时随后进 `RecordRequestTimings`，见行已有计时就不进暂存表（预热没有计时，不带）。隐藏跑腿空间的行记到属主空间。前端「后台请求」用 cpu 图标、最浅墨色。
 
 ### 价格目录维护
 
