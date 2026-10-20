@@ -16,6 +16,7 @@ import (
 
 	"agentbox/internal/agent"
 	"agentbox/internal/chat"
+	"agentbox/internal/config"
 	"agentbox/internal/delegation"
 	"agentbox/internal/store"
 )
@@ -433,7 +434,8 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	if s.quotaBlock(sess.User) != "" {
 		return
 	}
-	if _, err := s.sessionAccount(sess); err != nil {
+	acct, err := s.sessionAccount(sess)
+	if err != nil {
 		return
 	}
 	adapter, err := agent.Lookup(sess.Agent)
@@ -460,10 +462,7 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 	raw, usage := adapter.ParseTitle(out)
 	// 先记账再管标题：钱已经花掉了，标题为空或被并发抢先都不改变这一点。
 	if len(usage) > 0 {
-		titleTally.Observe(store.UsageEvent{
-			User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: store.NewID(),
-			Agent: sess.Agent, AccountID: sess.AccountID, Kind: store.UsageKindTitle,
-		}, usage)
+		titleTally.Observe(titleUsageBase(sess, acct, tid), usage)
 		r.flushUsage(&titleTally, time.Since(titleStart))
 	}
 	title := sanitizeTitle(raw)
@@ -483,6 +482,22 @@ func (r *chatRoom) generateTitle(tid, firstMsg string) {
 		return
 	}
 	r.broadcast(map[string]any{"type": "thread_title", "id": tid, "title": title})
+}
+
+// titleUsageBase attributes a title run's usage. Codex's turn.completed names
+// no model: its title command passes no -m, so it ran on the model in the
+// session's config.toml — the session default SeedDefaultModel wrote there.
+// Recording it prices the row by that model instead of the agent fallback.
+// Claude's model comes from the result's modelUsage.
+func titleUsageBase(sess store.Session, acct config.Account, tid string) store.UsageEvent {
+	base := store.UsageEvent{
+		User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: store.NewID(),
+		Agent: sess.Agent, AccountID: sess.AccountID, Kind: store.UsageKindTitle,
+	}
+	if sess.Agent == config.AgentCodex {
+		base.Model = acct.ResolveModel(sess.DefaultModel)
+	}
+	return base
 }
 
 // titlePrompt wraps the opening message with instructions to produce a concise

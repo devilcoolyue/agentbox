@@ -2,6 +2,7 @@ package usage
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,25 @@ func TestCodexRequestsBecomeRows(t *testing.T) {
 	}
 	if first.TurnID != "one" || second.TurnID != "one" || first.Price.PerRequest || MergedRequests(first) != 0 {
 		t.Fatalf("rows %+v / %+v", first, second)
+	}
+	if first.APIRequestID != "" || second.APIRequestID != "" {
+		t.Fatalf("keyed without a thread: %q / %q", first.APIRequestID, second.APIRequestID)
+	}
+}
+
+// 收尾事件带线程 id 时，每次请求按「线程 + 这次的 token 数」记下对照键，等
+// Codex 遥测的实测计时来对（输入含缓存命中，与遥测同口径）。
+func TestCodexRequestsKeyedByThread(t *testing.T) {
+	s, _ := newTestServer(t)
+	tally := s.NewTally()
+	tally.Observe(codexBase("one"), []byte(strings.Replace(codexMultiRequest, `"requests"`, `"thread_id":"01a1581b-c0de","requests"`, 1)))
+	s.Flush(&tally, time.Second)
+	rows := rowsOldestFirst(s)
+	if len(rows) != 2 || rows[0].APIRequestID != "codex:01a1581b-c0de:150000:100000:10" || rows[1].APIRequestID != CodexRequestKey("01a1581b-c0de", 250000, 200000, 20) {
+		t.Fatalf("%+v", rows)
+	}
+	if CodexRequestKey("", 1, 0, 1) != "" || CodexRequestKey("t", -1, 0, 1) != "" {
+		t.Fatal("bad key accepted")
 	}
 }
 

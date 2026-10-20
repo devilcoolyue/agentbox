@@ -51,6 +51,14 @@ func TestCodexTerminalDeduplicatesAndGroupsModels(t *testing.T) {
 	if rows[3].ev.InputTokens != 10 || rows[3].ev.OutputTokens != 3 || rows[3].ev.TurnID == rows[0].ev.TurnID {
 		t.Fatal(rows[3])
 	}
+	// Each request is keyed by session and its own tokens (input including
+	// cached) for the CLI's telemetry.
+	for i, row := range rows {
+		want := CodexRequestKey("fixture-thread", row.ev.InputTokens+row.ev.CacheReadTokens, row.ev.CacheReadTokens, row.ev.OutputTokens)
+		if row.ev.APIRequestID != want || want == "" {
+			t.Fatalf("row %d key %q, want %q", i, row.ev.APIRequestID, want)
+		}
+	}
 	for i, want := range []string{"high", "high", "medium", ""} {
 		if rows[i].ev.Effort != want || (want != "" && rows[i].ev.EffortControl != "effort") {
 			t.Fatalf("row %d effort = %+v, want %q", i, rows[i].ev, want)

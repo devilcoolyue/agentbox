@@ -169,6 +169,9 @@ type Tally struct {
 	evs           []store.UsageEvent
 	claude        *claudeMeter
 	settlementErr error
+	// Codex 网页对话：会话 home 与压缩过的回合，结算时补远程压缩请求。
+	codexHome  string
+	codexTurns []codexTurnEnd
 }
 
 // MeterSuggestion also bills the prompt-suggestion request a Claude chat turn
@@ -192,6 +195,9 @@ func (t *Tally) Observe(base store.UsageEvent, line []byte) {
 		}
 		t.claude.observe(base, line)
 		return
+	}
+	if t.codexHome != "" {
+		t.observeCodexTurnEnd(base, line)
 	}
 	evs, cumulative := ParseUsage(line, base)
 	if len(evs) == 0 {

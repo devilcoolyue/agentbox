@@ -791,6 +791,7 @@ export default {
   "升级步骤": "Upgrade steps",
   "委派给跑腿模型": "Delegate to worker models",
   "委派跑腿": "Delegated work",
+  "后台请求": "Background request",
   "对话开启「委派」时，Jev 可在标签规则之后判断交给哪个跑腿模型，或建议主 Agent 自己做。关闭后仍按跑腿标签路由。": "When “Delegate” is on in a chat, Jev can decide after the tag rules which worker model should take a subtask, or suggest the main agent do it. When off, routing still follows the worker tags.",
   "填入": "Insert",
   "填入下一步提示": "Insert the suggested next prompt",

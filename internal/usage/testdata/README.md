@@ -21,6 +21,16 @@ the tool output, and `item_completed` carries `started_at_ms` for Reasoning and
 AgentMessage items. It drives the terminal latency / first-token estimates; a
 repeated token_count is not a request and must not move the next start.
 
+`codex-terminal-0.163.0-compaction.jsonl` copies the shape of a codex-cli 0.163.0
+codex-tui rollout where a ChatGPT login ran `/compact` (remote compaction): the
+`compacted` record's `latest_token_usage_record.usage` is the compaction
+request, which never enters `total_token_usage` (the next token_count repeats
+the total with a zero `last_token_usage`). An API key / relay account compacts
+locally with an ordinary request that does enter the totals right before its
+`compacted` record (codex-cli 0.163.0 against a synthetic provider); the tests
+build that case inline. Only key names, line order and token counts were
+inspected; all values here are synthetic.
+
 Claude terminal parser tests use synthetic assistant records with the top-level
 `effort` and `perTurnEffort` keys observed in Claude Code 2.1.278–2.1.296 CLI
 transcripts (only metadata shapes were inspected; no conversation was copied).

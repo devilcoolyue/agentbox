@@ -314,7 +314,7 @@ func (s *Server) handleUsageEvents(w http.ResponseWriter, r *http.Request) {
 			MergedRequests:   usage.MergedRequests(e),
 			Rate:             s.rateFor(e),
 		})
-		if e.Kind == store.UsageKindTerminal {
+		if e.Kind == store.UsageKindTerminal || e.Kind == store.UsageKindBackground {
 			rows[len(rows)-1].Effort, rows[len(rows)-1].EffortControl = e.Effort, e.EffortControl
 		}
 	}

@@ -23,7 +23,7 @@ func (s *Service) Flush(t *Tally, wall time.Duration) int {
 	if t.claude != nil {
 		return s.flushClaudeMessages(t, wall)
 	}
-	if len(t.evs) == 0 {
+	if len(t.evs) == 0 && len(t.codexTurns) == 0 {
 		return 0
 	}
 	now := time.Now()
@@ -43,7 +43,17 @@ func (s *Service) Flush(t *Tally, wall time.Duration) int {
 			evs = append(evs, priceWith(*plan, row))
 		}
 	}
-	t.evs = nil // 防重复落库：同一个 tally 再 flush 一次不该再扣钱
+	// 远程压缩那次请求不在收尾事件的用量里，从会话记录补（见 codex_compaction.go）。
+	for _, row := range s.compactionRows(t, evs) {
+		if row.TS.IsZero() {
+			row.TS = now
+		}
+		evs = append(evs, priceWith(*plan, row))
+	}
+	t.evs, t.codexTurns = nil, nil // 防重复落库：同一个 tally 再 flush 一次不该再扣钱
+	if len(evs) == 0 {
+		return 0
+	}
 	if err := s.store.InsertUsage(evs...); err != nil {
 		t.settlementErr = err
 		log.Printf("record usage %s: %v", evs[0].SessionID, err)

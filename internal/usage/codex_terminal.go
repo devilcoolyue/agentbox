@@ -53,6 +53,10 @@ type codexTermParser struct {
 	seq                          map[string]int
 	out                          []termTurn
 	timer                        codexTimer
+	// lastRequest 是最近一次请求的用量，认出已经进了累计的本地压缩；compacted
+	// 是刚从 compacted 记录补过的远程压缩，下一次累计若把它也算进来，不能再记一遍。
+	lastRequest *codexTokens
+	compacted   *codexTokens
 }
 
 // codexTimer 按事件顺序估每次请求的耗时与首字，照 cc-switch 的 RequestTimer
@@ -216,6 +220,8 @@ func (p *codexTermParser) line(line []byte) {
 	ts, _ := time.Parse(time.RFC3339Nano, rec.Timestamp)
 	p.observe(rec.Type, rec.Payload, termMillis(rec.Timestamp))
 	switch rec.Type {
+	case "compacted":
+		p.compaction(rec.Payload, ts)
 	case "session_meta":
 		var meta struct {
 			ID         string          `json:"id"`
@@ -267,6 +273,42 @@ func (p *codexTermParser) line(line []byte) {
 	}
 }
 
+// compaction 记下 ChatGPT 登录远程压缩的那次请求（见 codex_compaction.go）：
+// 与紧挨着的上一次请求相同就是已进累计的本地压缩，不再记。
+func (p *codexTermParser) compaction(payload json.RawMessage, ts time.Time) {
+	var rec codexCompactionRecord
+	if json.Unmarshal(payload, &rec) != nil {
+		return
+	}
+	turn, response, u, ok := rec.usage()
+	if !ok || p.lastRequest != nil && sameRequest(*p.lastRequest, u) {
+		return
+	}
+	p.compacted = &u
+	if turn == "" {
+		turn = p.turn
+	}
+	if !p.allowed || p.session == "" || turn == "" {
+		return
+	}
+	if response == "" {
+		response = ts.Format(time.RFC3339Nano)
+	}
+	sum := sha256.Sum256([]byte(p.session + "\x00compaction\x00" + response))
+	turnSum := sha256.Sum256([]byte(p.session + "\x00" + turn))
+	row := termTurn{reqID: "codex-terminal:" + hex.EncodeToString(sum[:]), model: p.model, ts: ts,
+		ev: store.UsageEvent{TurnID: "codex-terminal:" + hex.EncodeToString(turnSum[:]), Effort: p.effort}}
+	if p.effort != "" {
+		row.ev.EffortControl = "effort"
+	}
+	row.ev.InputTokens = max(u.Input-u.Cached, 0)
+	row.ev.CacheReadTokens = u.Cached
+	row.ev.OutputTokens = u.Output
+	row.ev.CacheWriteTokens = u.CacheWrite
+	row.ev.APIRequestID = CodexRequestKey(p.session, u.Input, u.Cached, u.Output)
+	p.out = append(p.out, row)
+}
+
 func (p *codexTermParser) tokenCount(info *codexTokenInfo, ts time.Time) {
 	if info == nil || info.Total == nil {
 		return
@@ -295,6 +337,18 @@ func (p *codexTermParser) tokenCount(info *codexTokenInfo, ts time.Time) {
 	if delta.Input == 0 && delta.Cached == 0 && delta.Output == 0 && delta.CacheWrite == 0 {
 		return // 限额刷新时重发的快照不是一次请求，也不参与计时
 	}
+	if c := p.compacted; c != nil {
+		p.compacted = nil
+		if sameRequest(delta, *c) {
+			p.lastRequest = &delta
+			return // 补过的压缩请求后来进了累计
+		}
+		if l := info.Last; l != nil && !sameRequest(delta, *l) && delta.Input >= l.Input && delta.Cached >= l.Cached &&
+			delta.Output >= l.Output && delta.CacheWrite >= l.CacheWrite && (l.Input > 0 || l.Output > 0) {
+			delta = *l // 累计里多出来的是那次压缩
+		}
+	}
+	p.lastRequest = &delta
 	var at int64
 	if !ts.IsZero() {
 		at = ts.UnixMilli()
@@ -323,5 +377,7 @@ func (p *codexTermParser) tokenCount(info *codexTokenInfo, ts time.Time) {
 	row.ev.CacheReadTokens = delta.Cached
 	row.ev.OutputTokens = delta.Output
 	row.ev.CacheWriteTokens = delta.CacheWrite
+	// 遥测里的实测计时按会话 + 这次请求的 token 数对上这一行。
+	row.ev.APIRequestID = CodexRequestKey(p.session, delta.Input, delta.Cached, delta.Output)
 	p.out = append(p.out, row)
 }

@@ -219,19 +219,20 @@ function effortText(r) {
     const label = EFFORT_LABELS[r.effort] || r.effort;
     return r.effort_control === "budget" && BUDGETS[r.effort] ? `${label} (${BUDGETS[r.effort]})` : label;
 }
-const KIND_LABEL = { get chat() { return i18nText("对话"); }, get delegation() { return i18nText("委派跑腿"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); }, get decision() { return i18nText("决策调用"); }, get suggestion() { return i18nText("下一步提示"); } };
+const KIND_LABEL = { get chat() { return i18nText("对话"); }, get delegation() { return i18nText("委派跑腿"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); }, get decision() { return i18nText("决策调用"); }, get suggestion() { return i18nText("下一步提示"); }, get background() { return i18nText("后台请求"); } };
 const KIND_HINT = {
     get delegation() { return i18nText("主 Agent 把子任务交给跑腿模型时，跑腿模型花的量；与主 Agent 的回合分开记账"); },
     get decision() { return i18nText("委派时由 Jev 判断交给哪个跑腿的那次调用"); },
     get terminal() { return i18nText("用户在「终端」页签里手敲 CLI 花的量，事后从 CLI 自己的记录里补记；只记账不扣额度"); },
     get title() { return i18nText("服务端自动为新对话生成标题的那趟消耗，不是用户发起的"); },
     get suggestion() { return i18nText("对话回合结束后预测你下一句输入的那次调用；可在「系统设置 → 界面与提示」里关闭"); },
+    get background() { return i18nText("Codex 自己在后台发的请求：每次启动先发的预热、终端里为会话另开的小请求。对话和终端里都看不到，按 CLI 遥测补记；只记账不扣额度"); },
 };
 /* 类型列写名称，前面一枚图标帮着扫读「这笔钱是谁按下去的」；不套框，免得和计费
  * 标签抢眼。悬停给名称与说明。墨色深浅沿用原来的分档：对话是主体最重，终端次之，
  * 服务端自发的调用最轻——不加色相，旁边的 Token 与计费列已经用了好几种颜色。 */
-const KIND_ICON = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network" };
-const KIND_TONE = { chat: "chat", delegation: "chat", suggestion: "chat", terminal: "term", title: "title", decision: "title" };
+const KIND_ICON = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network", background: "cpu" };
+const KIND_TONE = { chat: "chat", delegation: "chat", suggestion: "chat", terminal: "term", title: "title", decision: "title", background: "title" };
 function kindBadge(kind) {
     const badge = document.createElement("span");
     badge.className = "u-kind" + (KIND_TONE[kind] ? " " + KIND_TONE[kind] : "");
@@ -456,6 +457,10 @@ function renderRows(data) {
         if (r.api_duration_ms) {
             requestLatency(r, lat, latv);
         }
+        else if (r.kind === "background") {
+            latv.textContent = "—";
+            setTip(lat, () => i18nText("遥测里没有这次请求的发出时刻，算不出耗时"));
+        }
         else if (r.kind === "terminal") {
             terminalLatency(r, lat, latv);
         }
@@ -492,9 +497,10 @@ function renderRows(data) {
     }
     $("usage-empty").classList.toggle("hidden", data.rows.length > 0);
 }
-/* CLI 自己量的这一次请求（Claude Code 遥测的 api_request，按 request id 对上这一行）：
- * 首字 = 发出请求 → 流的第一个事件，耗时 = 发出请求 → 流结束。终端行与网页对话行都按它
- * 显示、不带「≈」；网页对话原有的回合级首字与总耗时挪进悬停说明。 */
+/* CLI 遥测报的这一次请求：Claude Code 的 api_request 按 request id 对上这一行，首字 =
+ * 发出请求 → 流的第一个事件，耗时 = 发出请求 → 流结束；Codex 按会话与 token 数对上，首字 =
+ * 发出请求 → 第一个输出项，耗时 = 发出请求 → 完成事件。终端行与网页对话行都按它显示、
+ * 不带「≈」；网页对话原有的回合级首字与总耗时挪进悬停说明。 */
 function requestLatency(r, lat, latv) {
     const lines = [];
     if (r.api_ttft_ms)
@@ -508,7 +514,9 @@ function requestLatency(r, lat, latv) {
         latv.appendChild(line);
     });
     setTip(lat, () => {
-        let tip = i18nText("Claude Code 自己量的这一次请求：首字是从发出请求到收到流的第一个事件，耗时是从发出请求到流结束；失败重试只算最后一次。");
+        let tip = r.agent === "codex"
+            ? i18nText("Codex 遥测报的这一次请求：首字是从发出请求到第一个输出项（含思考），耗时是从发出请求到收到完成事件。")
+            : i18nText("Claude Code 自己量的这一次请求：首字是从发出请求到收到流的第一个事件，耗时是从发出请求到流结束；失败重试只算最后一次。");
         if (r.kind !== "terminal" && r.wall_ms) {
             tip += r.ttft_ms
                 ? i18nText("这一回合从容器就绪算起（含 CLI 启动与工具执行）：首字 {p0}，总耗时 {p1}", { p0: fmtDur(r.ttft_ms), p1: fmtDur(r.wall_ms) })
@@ -558,7 +566,9 @@ function speedCell(r) {
     unit.textContent = "tok/s";
     const basis = speed.basis;
     v.append(document.createTextNode((basis === "measured" ? "" : "≈") + fmtSpeed(speed.tps)), unit);
-    setTip(td, () => basis === "measured" ? i18nText("输出 token ÷（耗时 − 首字），首字与耗时是 Claude Code 自己量的；输出含思考的 token")
+    setTip(td, () => basis === "measured" ? (r.agent === "codex"
+        ? i18nText("输出 token ÷（耗时 − 首字），首字与耗时来自 Codex 的遥测；输出含思考的 token")
+        : i18nText("输出 token ÷（耗时 − 首字），首字与耗时是 Claude Code 自己量的；输出含思考的 token"))
         : basis === "log" ? i18nText("输出 token ÷（耗时 − 首字），首字与耗时按 CLI 日志的时间戳估算；输出含思考的 token")
             : i18nText("输出 token ÷ 耗时（含首字等待，偏低），耗时按 CLI 日志的时间戳估算"));
     return td;

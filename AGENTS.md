@@ -324,6 +324,17 @@ data/
     「未命中缓存输入」语义；
   - `reasoning_output_tokens` 已经含在 `output_tokens` 里（实测 output=150 /
     reasoning=143 而答案只有几个字），**再加一遍就是重复计费**。
+- **Codex 压缩上下文那次请求**（`usage/codex_compaction.go`，0.163 实测）：会话记录（rollout）的 `compacted` 记录里
+  `latest_token_usage_record.usage` 就是它，带 `turn_id`。API Key / 中转的本地压缩是普通 `/responses` 请求，照常进
+  tokenUsage / token_count 累计，紧挨在 `compacted` 前的那次请求就是它；ChatGPT 登录的远程压缩**不进累计**（之后累计不变、
+  last 为 0），不补就整次漏掉。所以 `compacted` 的用量与本回合已记的某次请求完全相同时不补。网页：app-server 见到
+  `contextCompaction` 完成就计数，收尾事件带 `turn_id`/`compactions`（`attachUsage`），`NewChatTally` 给 Codex 记下会话 home，
+  `Flush` 按线程 glob `rollout-*-<线程>.jsonl` 读该回合的 `compacted` 补 `codex.compaction` 行（chat、照常扣额度、按对照键等遥测；
+  压缩完被中断、用量全零的回合也补）。终端：`codexTermParser.compaction` 补一行（req_id 用 response_id 哈希），并防以后版本把
+  压缩算进累计——下一次差值等于它就跳过、大于 last 就只认 last。WebSocket 每次进程启动的预热请求与终端 TUI 另开的小会话只有遥测里
+  有，记成 `background` 行（见下「Codex 的实测计时」）；中途中断没有完成事件的请求哪里都没有用量，记不到。
+- Codex 起标题不带 `-m`，用空间 config.toml 的模型；`titleUsageBase` 记成 `ResolveModel(sess.DefaultModel)`，否则行上没有模型、
+  只能按 agent 兜底价折算。起标题行没有线程 id，不带遥测对照键（改起标题输出格式的风险见下）。
 - 费用一律存整数微美元（USD × 1e6），不进 float——报表是上万行累加，float 会漂。
   原始事件存在 `raw`（每回合一份），归一化判断错了可据此重算。
 - `kind` 列分开「用户的对话」(`chat`) 与「服务端自动起标题」(`title`)。两者都可能
@@ -384,7 +395,26 @@ data/
   输出速度（`usage-math.ts` 的 `outputSpeed`）= 输出 ÷（耗时 − 首字）：实测的不带「≈」；终端估算有首字时同
   算法带「≈」，两者输出 <100 或生成 <0.5s 不算（几十个 token 常在首个事件后一下子到齐）；估算没有首字时退回
   输出 ÷ 整个耗时（含首字等待，<200 或 <1s 不估）；没有实测的对话行跨整回合，不算速度。CSV 另有「请求首字ms」
-  「请求耗时ms」。Codex 尚未接遥测。
+  「请求耗时ms」。
+- **Codex 的实测计时**（`server/usage_telemetry_codex.go`）：Codex 没有遥测 env 开关，`credentials.codexTelemetryConfig`
+  在 `codexSessionConfig` 末尾给空间 `.codex/config.toml` 写 `[otel]`（otlp-http + json，`log_user_prompt=false`；只写空间副本，
+  不进账号池），接收端没起来时删掉；按 endpoint 含 `/otel/<空间>/` 认自己的段（Codex/TUI 会把它改写成展开表），指向别处的
+  `[otel]` 是管理员的收集器、不动。`usageTelemetryEnv` 对 Codex 只把接收端主机补进 `NO_PROXY`。Codex 的一次请求是两条记录、
+  没有请求 ID：发出时 `codex.websocket_request`（订阅/WebSocket，duration=发送用时）或 endpoint `/responses` 的
+  `codex.api_request`（API Key/HTTP，duration=到响应头），结束时 `codex.sse_event` 的 `response.completed`（带 token 数与
+  `ttft_ms`，后者从请求记录写下那刻算，所以首字要加上请求记录的 duration）；耗时 = 完成记录时间 −（请求记录时间 − duration）。
+  `codexPairing` 按 (空间, conversation.id) 记住在途请求（两条常在不同批次），预热请求（无 ttft_ms）与中断（没有完成记录、
+  被下一次请求覆盖）不出计时。对行键 `usage.CodexRequestKey`（`codex:<会话>:<含缓存的输入>:<缓存>:<输出>`）：app-server 收尾
+  事件带 `thread_id`（`attachUsage`，只在有 requests 时）由 `expandCodexRequests` 写进每行，终端补记用 rollout 的
+  session_meta id；exec 回退与起标题没有线程 id，不带键。HTTP 下 Codex 每个流事件一条日志，接收端解码时就只留
+  `telemetryKeys` 里的属性（账号 ID、邮箱等不进内存结构）。实测与回归见 `TestCodexTelemetryPairs`。
+- **Codex 后台请求**（`kind=background`，`recordCodexBackground` + `store.InsertBackgroundUsage`）：只在遥测里出现、别处都不记的
+  请求由完成记录直接成行，只记账不扣额度（同终端补记），关掉遥测就没有。两类：① 预热（完成记录无 `ttft_ms` 且 output 0）——0.163
+  实测网页 tokenUsage、终端 rollout 的 token_count、起标题的 turn.completed 都不含它，所以不论会话一律记；② `originator=codex-tui`
+  且会话在空间 home 里**没有** rollout 的请求（TUI 用小模型另开的小会话）。其余一律不从遥测造行：网页行要到回合结束才写，接收时
+  无从查重；有 rollout 的会话归终端补记 / 网页结算 / 起标题。rollout 是否存在由 `usage.CodexRolloutExists` glob，查不清按「存在」
+  处理（宁可少记不重记），肯定结果缓存在 `codexRollouts`。req_id 为「来源空间:会话:完成时刻:输入:输出」，重发的导出不重复；同一会话
+  每轮预热的 token 相同，不能用 `CodexRequestKey` 当键。隐藏跑腿空间的行记到属主空间。前端「后台请求」用 cpu 图标、最浅墨色。
 
 ### 价格目录维护
 
@@ -551,7 +581,7 @@ data/
   或终端页开着时连（`watchUsageLive` 按界面计数），重连成功后补发一次 `sessions=null`；
   使用记录页连续通知至少隔 1 秒重读、后台标签页回到前台再读。轮询都保留作兜底：使用记录页
   「跟随当前时刻」仍每 30 秒前移时间窗。
-- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源（认 `originator`；`source` 0.154 前是 `cli`，0.160 起 TUI 跑在 app-server 上写 `vscode`，与网页对话的 `agentbox`+`vscode` 靠 originator 区分），每个非零累计差值是一次请求、一行（键见上）；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；仍只记账不扣额度。
+- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源（认 `originator`；`source` 0.154 前是 `cli`，0.160 起 TUI 跑在 app-server 上写 `vscode`，与网页对话的 `agentbox`+`vscode` 靠 originator 区分），每个非零累计差值是一次请求、一行（键见上）；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；仍只记账不扣额度。远程压缩的那次请求从 `compacted` 记录补（见上「Codex 压缩上下文那次请求」）。
 - 终端推理强度只读历史日志：Claude assistant 顶层 `effort`（不回退 `perTurnEffort`），Codex `turn_context.payload.effort`；schema 17 的 `usage_events.effort/effort_control` 随原行 upsert，每次请求取它自己记录的档位，缺失留空。重启后重扫现存日志可补历史强度，不拆分原去重键、不替换价格快照、不扣余额；禁止用当前账号配置推断历史。网页强度仍取冻结聊天回执，起标题不借用网页回合强度。升级前保留 schema 16 兼容备份，回退使用匹配旧版本恢复到新目录。
 
 ### 终端

@@ -32,6 +32,8 @@ type Service struct {
 	locks    sync.Map
 	// codexEndpoint returns a session's model gateway URL ("" = direct).
 	codexEndpoint func(config.Account, store.Session) string
+	// codexTelemetry returns a session's usage telemetry export URL ("" = off).
+	codexTelemetry func(store.Session) string
 }
 
 func New(cfg *config.Config, sessions Sessions, client func(config.Account, time.Duration) (*http.Client, error), clientID string, tokenURL func() string) *Service {

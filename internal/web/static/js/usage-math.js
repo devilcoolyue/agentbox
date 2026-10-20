@@ -23,7 +23,8 @@ export function fmtTokens(n) {
 // how fast the model generated, not how fast visible text appeared.
 //
 //   measured       the CLI's own timing for this request (api_ttft_ms /
-//                  api_duration_ms from Claude Code's telemetry), any row kind;
+//                  api_duration_ms from Claude Code's or Codex's telemetry),
+//                  any row kind;
 //   log            a terminal row timed from CLI log timestamps that also
 //                  pinned the first token (a reply that opens with thinking);
 //   log-with-wait  a terminal row whose log gave only the whole duration, so
@@ -49,6 +50,8 @@ export function outputSpeed(row) {
             return { tps: null, why: "untimed" };
         return rate(out, dur - ttft, SPEED_MIN_OUTPUT_TOKENS, SPEED_MIN_WINDOW_MS, "measured");
     }
+    if (row.kind === "background")
+        return { tps: null, why: "untimed" };
     if (row.kind !== "terminal")
         return { tps: null, why: "turn" };
     if (!row.wall_ms)

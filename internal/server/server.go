@@ -139,6 +139,9 @@ type Server struct {
 	modelGW    modelGatewayState   // model gateway behind the model.* hooks; see modelgateway.go
 	usageTel   usageTelemetryState // per-request timing from the CLIs; see usage_telemetry.go
 
+	codexPairs    codexPairing  // Codex requests waiting for their completion record
+	codexRollouts codexRollouts // Codex conversations known to keep a rollout
+
 	upgrader websocket.Upgrader
 
 	startedAt  time.Time

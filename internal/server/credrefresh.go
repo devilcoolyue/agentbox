@@ -14,6 +14,7 @@ func (s *Server) credentialService() *credentials.Service {
 	s.credentialsOnce.Do(func() {
 		s.credentials = credentials.New(s.cfg, s.store, s.acctClient, claudeOAuthClientID, func() string { return claudeOAuthToken })
 		s.credentials.SetCodexEndpoint(s.codexEndpoint)
+		s.credentials.SetCodexTelemetry(s.codexTelemetryEndpoint)
 	})
 	return s.credentials
 }

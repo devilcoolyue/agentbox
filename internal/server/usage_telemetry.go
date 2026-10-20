@@ -29,17 +29,20 @@ import (
 // request on the live stream — from sending it to the first stream event
 // (ttft_ms) and to the end of the stream (duration_ms) — and reports both in
 // the api_request event of its OpenTelemetry logs, together with the request
-// id its transcript records too. The server points each Claude session's CLI
-// at a small OTLP/HTTP JSON receiver on the docker bridge, keeps only that
-// event's numbers and matches them to usage rows by request id
+// id its transcript records too. Codex reports the same request in two records
+// with no request id (see usage_telemetry_codex.go). The server points each
+// session's CLI at a small OTLP/HTTP JSON receiver on the docker bridge — env
+// for Claude, the session's config.toml for Codex — keeps only those events'
+// numbers and matches them to usage rows by request id
 // (store.RecordRequestTimings). Everything else in the export — prompt
-// lengths, tool decisions, account attributes — is decoded and dropped, never
-// stored or logged.
+// lengths, tool decisions, account attributes such as the user's email — is
+// decoded and dropped, never stored or logged.
 //
-// The env reaches a CLI only when it starts: a terminal shell opened before
-// the server began injecting it keeps exporting nothing until the user opens
-// a new tmux window or the workspace restarts. Rows without telemetry keep the
-// log-based estimates.
+// The settings reach a CLI only when it starts: a terminal shell opened before
+// the server began injecting the env keeps exporting nothing until the user
+// opens a new tmux window or the workspace restarts, and a Codex already
+// running keeps its config. Rows without telemetry keep the log-based
+// estimates.
 
 // usageTelemetryEnvNames are injected for Claude sessions. Listed for
 // tmuxEnvSync so a disabled receiver stops being advertised to new windows.
@@ -125,12 +128,42 @@ func (s *Server) usageTelemetryMAC(sessionID string) string {
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))[:32]
 }
 
+// usageTelemetryEndpoint is the export URL a session's CLI is pointed at, or
+// "" while the receiver is down: a CLI exporting into nothing would only slow
+// its own exit.
+func (s *Server) usageTelemetryEndpoint(sessionID string) string {
+	if !s.usageTel.up.Load() {
+		return ""
+	}
+	tc := s.cfg.GetUsageTelemetry()
+	_, port, _ := net.SplitHostPort(tc.Bind)
+	return "http://" + net.JoinHostPort(tc.Host, port) + "/otel/" + sessionID + "/" + s.usageTelemetryMAC(sessionID) + "/v1/logs"
+}
+
+// codexTelemetryEndpoint is the credentials service's view of the receiver:
+// the export URL a Codex session's config.toml should name, or "".
+func (s *Server) codexTelemetryEndpoint(sess store.Session) string {
+	if sess.Agent != config.AgentCodex {
+		return ""
+	}
+	return s.usageTelemetryEndpoint(sess.ID)
+}
+
 // usageTelemetryEnv points a Claude session's CLI at the receiver. Nothing is
-// injected while the receiver is down — a CLI exporting into nothing would
-// only slow its own exit — or when the account's env already configures
-// telemetry for the operator's own collector, which we leave alone.
+// injected while the receiver is down, or when the account's env already
+// configures telemetry for the operator's own collector, which we leave alone.
+// A Codex session reads the URL from its config.toml (codexTelemetryEndpoint)
+// and only needs the receiver kept out of a bound account proxy.
 func (s *Server) usageTelemetryEnv(sess store.Session, env []string) []string {
-	if sess.Agent != config.AgentClaude || !s.usageTel.up.Load() {
+	endpoint := s.usageTelemetryEndpoint(sess.ID)
+	if endpoint == "" {
+		return env
+	}
+	switch sess.Agent {
+	case config.AgentClaude:
+	case config.AgentCodex:
+		return telemetryNoProxy(env, s.cfg.GetUsageTelemetry().Host)
+	default:
 		return env
 	}
 	for _, kv := range env {
@@ -139,29 +172,7 @@ func (s *Server) usageTelemetryEnv(sess store.Session, env []string) []string {
 			return env
 		}
 	}
-	tc := s.cfg.GetUsageTelemetry()
-	_, port, _ := net.SplitHostPort(tc.Bind)
-	endpoint := "http://" + net.JoinHostPort(tc.Host, port) + "/otel/" + sess.ID + "/" + s.usageTelemetryMAC(sess.ID) + "/v1/logs"
-	out := make([]string, 0, len(env)+len(usageTelemetryEnvNames)+2)
-	proxied, bypass := false, false
-	for _, kv := range env {
-		k, v, _ := strings.Cut(kv, "=")
-		switch strings.ToUpper(k) {
-		case "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY":
-			proxied = true
-		case "NO_PROXY":
-			// A bound account proxy must not carry the export.
-			bypass = true
-			if !hostListed(v, tc.Host) {
-				kv = k + "=" + v + "," + tc.Host
-			}
-		}
-		out = append(out, kv)
-	}
-	if proxied && !bypass {
-		out = append(out, "NO_PROXY="+tc.Host, "no_proxy="+tc.Host)
-	}
-	return append(out,
+	return append(telemetryNoProxy(env, s.cfg.GetUsageTelemetry().Host),
 		"CLAUDE_CODE_ENABLE_TELEMETRY=1",
 		"OTEL_LOGS_EXPORTER=otlp",
 		"OTEL_METRICS_EXPORTER=none",
@@ -172,6 +183,31 @@ func (s *Server) usageTelemetryEnv(sess store.Session, env []string) []string {
 		// Bounds how long an exiting CLI waits on the final flush.
 		"CLAUDE_CODE_OTEL_SHUTDOWN_TIMEOUT_MS=1000",
 	)
+}
+
+// telemetryNoProxy keeps the receiver host out of a bound account proxy: the
+// export goes straight to the docker bridge.
+func telemetryNoProxy(env []string, host string) []string {
+	out := make([]string, 0, len(env)+len(usageTelemetryEnvNames)+2)
+	proxied, bypass := false, false
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		switch strings.ToUpper(k) {
+		case "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY":
+			proxied = true
+		case "NO_PROXY":
+			// A bound account proxy must not carry the export.
+			bypass = true
+			if !hostListed(v, host) {
+				kv = k + "=" + v + "," + host
+			}
+		}
+		out = append(out, kv)
+	}
+	if proxied && !bypass {
+		out = append(out, "NO_PROXY="+host, "no_proxy="+host)
+	}
+	return out
 }
 
 // serveUsageTelemetry accepts POST /otel/<session>/<mac>/v1/logs in OTLP
@@ -209,10 +245,20 @@ func (s *Server) serveUsageTelemetry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unreadable export", status)
 		return
 	}
-	timings, err := parseAPIRequestTimings(body)
+	records, err := decodeTelemetry(body)
 	if err != nil {
 		http.Error(w, "malformed OTLP JSON", http.StatusBadRequest)
 		return
+	}
+	timings := apiRequestTimings(records)
+	if sess.Agent == config.AgentCodex {
+		pairs, background := s.codexPairs.feed(sess.ID, codexTelemetryEvents(records), time.Now())
+		timings = append(timings, pairs...)
+		if err := s.recordCodexBackground(sess, background); err != nil {
+			log.Printf("usage telemetry %s: %v", sess.ID, err)
+			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
 	}
 	for i := range timings {
 		timings[i].User, timings[i].SessionID = sess.User, sess.ID
@@ -256,6 +302,7 @@ type otlpValue struct {
 	StringValue *string         `json:"stringValue"`
 	IntValue    json.RawMessage `json:"intValue"`
 	DoubleValue *float64        `json:"doubleValue"`
+	BoolValue   *bool           `json:"boolValue"`
 }
 
 func (v otlpValue) int() (int64, bool) {
@@ -273,6 +320,18 @@ func (v otlpValue) int() (int64, bool) {
 	return 0, false
 }
 
+func (v otlpValue) str() string {
+	if v.StringValue != nil {
+		return *v.StringValue
+	}
+	return ""
+}
+
+// falsy reports an explicit false, sent as a bool or (Codex) as a string.
+func (v otlpValue) falsy() bool {
+	return v.BoolValue != nil && !*v.BoolValue || v.StringValue != nil && *v.StringValue == "false"
+}
+
 type otlpLogsExport struct {
 	ResourceLogs []struct {
 		ScopeLogs []struct {
@@ -286,44 +345,64 @@ type otlpLogsExport struct {
 	} `json:"resourceLogs"`
 }
 
-// parseAPIRequestTimings extracts Claude Code's api_request events: the
-// request id, duration_ms and, when the CLI saw a first stream event,
-// ttft_ms. Events that do not add up are skipped rather than stored.
-func parseAPIRequestTimings(body []byte) ([]store.RequestTiming, error) {
+// telemetryKeys are the only attributes kept from a log record; the rest
+// (prompt lengths, account ids, the user's email) is dropped while decoding.
+var telemetryKeys = map[string]bool{
+	"event.name": true, "event.timestamp": true, "event.kind": true, "conversation.id": true,
+	"request_id": true, "duration_ms": true, "ttft_ms": true, "endpoint": true, "success": true,
+	"http.response.status_code": true, "input_token_count": true, "cached_token_count": true, "output_token_count": true,
+	"model": true, "model_reasoning_effort": true, "originator": true,
+}
+
+// telemetryRecord is one log record reduced to telemetryKeys.
+type telemetryRecord map[string]otlpValue
+
+func decodeTelemetry(body []byte) ([]telemetryRecord, error) {
 	var export otlpLogsExport
 	if err := json.Unmarshal(body, &export); err != nil {
 		return nil, err
 	}
-	var out []store.RequestTiming
+	var out []telemetryRecord
 	for _, rl := range export.ResourceLogs {
 		for _, sl := range rl.ScopeLogs {
 			for _, rec := range sl.LogRecords {
-				var name, id string
-				var ttft, dur int64
-				var hasDur bool
+				r := telemetryRecord{}
 				for _, a := range rec.Attributes {
-					switch a.Key {
-					case "event.name":
-						if a.Value.StringValue != nil {
-							name = *a.Value.StringValue
-						}
-					case "request_id":
-						if a.Value.StringValue != nil {
-							id = *a.Value.StringValue
-						}
-					case "duration_ms":
-						dur, hasDur = a.Value.int()
-					case "ttft_ms":
-						ttft, _ = a.Value.int()
+					if telemetryKeys[a.Key] {
+						r[a.Key] = a.Value
 					}
 				}
-				if name != "api_request" || !apiRequestIDRE.MatchString(id) || !hasDur ||
-					dur <= 0 || dur > usageTelemetryMaxDuration.Milliseconds() || ttft < 0 || ttft > dur {
-					continue
-				}
-				out = append(out, store.RequestTiming{RequestID: id, TTFTMs: ttft, DurationMS: dur})
+				out = append(out, r)
 			}
 		}
 	}
 	return out, nil
+}
+
+// parseAPIRequestTimings extracts Claude Code's api_request events from an
+// export.
+func parseAPIRequestTimings(body []byte) ([]store.RequestTiming, error) {
+	records, err := decodeTelemetry(body)
+	if err != nil {
+		return nil, err
+	}
+	return apiRequestTimings(records), nil
+}
+
+// apiRequestTimings reads Claude Code's api_request events: the request id,
+// duration_ms and, when the CLI saw a first stream event, ttft_ms. Events that
+// do not add up are skipped rather than stored.
+func apiRequestTimings(records []telemetryRecord) []store.RequestTiming {
+	var out []store.RequestTiming
+	for _, r := range records {
+		id := r["request_id"].str()
+		dur, hasDur := r["duration_ms"].int()
+		ttft, _ := r["ttft_ms"].int()
+		if r["event.name"].str() != "api_request" || !apiRequestIDRE.MatchString(id) || !hasDur ||
+			dur <= 0 || dur > usageTelemetryMaxDuration.Milliseconds() || ttft < 0 || ttft > dur {
+			continue
+		}
+		out = append(out, store.RequestTiming{RequestID: id, TTFTMs: ttft, DurationMS: dur})
+	}
+	return out
 }

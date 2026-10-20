@@ -114,3 +114,21 @@ func TestChatCostMatchesSettlementLiveAndHistory(t *testing.T) {
 		})
 	}
 }
+
+func TestTitleUsageBaseNamesCodexModel(t *testing.T) {
+	acct := config.Account{ID: "sub", Type: config.AgentCodex, DefaultModel: "gpt-6.1-sol",
+		Models: []config.ModelOption{{ID: "gpt-6.1-sol"}, {ID: "gpt-6-luna"}}}
+	sess := store.Session{ID: "s1", User: "alice", Agent: config.AgentCodex, AccountID: "sub", DefaultModel: "gpt-6-luna"}
+	if got := titleUsageBase(sess, acct, "t1"); got.Model != "gpt-6-luna" || got.Kind != store.UsageKindTitle || got.ThreadID != "t1" || got.TurnID == "" {
+		t.Fatalf("codex title base %+v", got)
+	}
+	// A model the account no longer offers resolves like the CLI config does.
+	sess.DefaultModel = "gone"
+	if got := titleUsageBase(sess, acct, "t1"); got.Model != "gpt-6.1-sol" {
+		t.Fatalf("unresolved model %q", got.Model)
+	}
+	sess.Agent = config.AgentClaude
+	if got := titleUsageBase(sess, acct, "t1"); got.Model != "" {
+		t.Fatalf("claude title model %q", got.Model)
+	}
+}

@@ -2,6 +2,7 @@ package usage
 
 import (
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"agentbox/internal/store"
@@ -28,14 +29,28 @@ type codexRequest struct {
 	Reasoning  int64 `json:"reasoning_output_tokens,omitempty"`
 }
 
+// CodexRequestKey 是一次 Codex 请求在用量行与遥测之间的对照键。Codex 的遥测不带
+// 请求 ID，只有会话（线程）id 和这次请求的 token 数；同一线程里请求是一个接一个
+// 发的，每次都重发整段上下文、输入只增不减，三个数相同的两次请求实际碰不到。
+// input 含缓存命中（与 Codex 自己报的口径一致），output 含推理。
+func CodexRequestKey(conversation string, input, cached, output int64) string {
+	if conversation == "" || input < 0 || cached < 0 || output < 0 {
+		return ""
+	}
+	return "codex:" + conversation + ":" + strconv.FormatInt(input, 10) + ":" +
+		strconv.FormatInt(cached, 10) + ":" + strconv.FormatInt(output, 10)
+}
+
 // expandCodexRequests 把带 requests 的 Codex 收尾事件拆成逐次请求的行；没有
 // 逐次证据（exec 回退、起标题）时原样返回。回合级耗时只留在第一次请求上。
+// 收尾事件带着线程 id 时，每行记下 CodexRequestKey，等遥测的实测计时来对。
 func expandCodexRequests(ev store.UsageEvent) []store.UsageEvent {
 	if ev.Raw == "" || ev.Raw[0] != '{' {
 		return []store.UsageEvent{ev}
 	}
 	var turn struct {
 		Type     string         `json:"type"`
+		ThreadID string         `json:"thread_id"`
 		Requests []codexRequest `json:"requests"`
 	}
 	if json.Unmarshal([]byte(ev.Raw), &turn) != nil || len(turn.Requests) == 0 ||
@@ -58,6 +73,7 @@ func expandCodexRequests(ev store.UsageEvent) []store.UsageEvent {
 			codexRequest
 		}{"codex.request", q})
 		row.Raw = string(raw)
+		row.APIRequestID = CodexRequestKey(turn.ThreadID, q.Input, q.Cached, q.Output)
 		if i > 0 {
 			row.TTFTMs, row.DurationMS, row.WallMS = 0, 0, 0
 		}
@@ -76,12 +92,12 @@ func MergedRequests(e store.UsageEvent) int {
 	return n
 }
 
-// SingleRequest 报告这一行是不是一次 provider 请求：终端补记行、Codex 逐次行
-// （codex.request），以及 raw 是单条 Claude 消息的行。升级前「一个回合 × 一个
+// SingleRequest 报告这一行是不是一次 provider 请求：终端补记行、Codex 后台请求行、Codex 逐次行
+// （codex.request）与压缩请求行（codex.compaction），以及 raw 是单条 Claude 消息的行。升级前「一个回合 × 一个
 // 模型」的合计行（claude.messages、result，以及同回合只在首行存 raw 的其余行）
 // 不是，同回合按模型拆出的几行不能标成「第几次 / 共几次」。
 func SingleRequest(e store.UsageEvent) bool {
-	if e.Kind == store.UsageKindTerminal {
+	if e.Kind == store.UsageKindTerminal || e.Kind == store.UsageKindBackground {
 		return true
 	}
 	if e.Raw == "" || e.Raw[0] != '{' {
@@ -94,7 +110,7 @@ func SingleRequest(e store.UsageEvent) bool {
 	if json.Unmarshal([]byte(e.Raw), &r) != nil {
 		return false
 	}
-	return r.Type == "codex.request" || r.Type == "" && r.ID != ""
+	return r.Type == "codex.request" || r.Type == "codex.compaction" || r.Type == "" && r.ID != ""
 }
 
 func legacyShape(e store.UsageEvent) (string, int) {

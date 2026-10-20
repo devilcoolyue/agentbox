@@ -213,6 +213,9 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 // and avoids trusting timestamps or cumulative counters to identify requests.
 func (s *Service) NewChatTally(sess store.Session) Tally {
 	t := s.NewTally()
+	if sess.Agent == config.AgentCodex {
+		t.codexHome = s.homeDir(sess)
+	}
 	if sess.Agent != config.AgentClaude {
 		return t
 	}

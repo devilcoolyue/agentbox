@@ -116,6 +116,28 @@ func (m *codexMeter) attach(ev map[string]any) {
 	ev["requests"] = m.requests
 }
 
+// attachUsage 把本回合用量写进收尾事件，有逐次请求时再带上线程 id：用量行按
+// 「线程 + 这次请求的 token 数」对上 Codex 遥测报的这一次请求（usage.CodexRequestKey）。
+// 回合里压缩过上下文时另带回合 id 与次数：ChatGPT 登录的远程压缩那次请求不在
+// tokenUsage 里，结算时按回合 id 去会话记录（rollout 的 compacted）里找它的用量。
+func (c *appServerConn) attachUsage(ev map[string]any) {
+	c.meter.attach(ev)
+	_, requests := ev["requests"]
+	if !requests && c.compactions == 0 {
+		return
+	}
+	c.mu.Lock()
+	thread, turn := c.thread, c.turn
+	c.mu.Unlock()
+	if thread != "" {
+		ev["thread_id"] = thread
+	}
+	if c.compactions > 0 && turn != "" {
+		ev["turn_id"] = turn
+		ev["compactions"] = c.compactions
+	}
+}
+
 func (c *appServerConn) observeTokenUsage(params json.RawMessage) {
 	var p struct {
 		TurnID     string `json:"turnId"`

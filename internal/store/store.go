@@ -28,11 +28,17 @@ const (
 	// never move the user's balance (see UpsertTerminalUsage).
 	// UsageKindSuggestion is the extra request Claude Code makes after a web
 	// chat turn to predict the user's next prompt; it is charged like chat.
+	// UsageKindBackground is a request Codex makes on its own that neither its
+	// usage reports nor its session records carry (a warm-up at every start,
+	// side conversations of the terminal UI); it is known only from the CLI's
+	// telemetry and, like terminal rows, never moves the balance (see
+	// InsertBackgroundUsage).
 	UsageKindChat       = "chat"
 	UsageKindDecision   = "decision"
 	UsageKindTitle      = "title"
 	UsageKindTerminal   = "terminal"
 	UsageKindSuggestion = "suggestion"
+	UsageKindBackground = "background"
 
 	StatusStopped = "stopped"
 	StatusRunning = "running"

@@ -281,9 +281,28 @@ export async function smoke(page) {
   const requestTTFTColumn=terminalLines[0].indexOf('请求首字ms'),requestDurationColumn=terminalLines[0].indexOf('请求耗时ms');
   assert.deepEqual(terminalLines.slice(1).map(row=>[row[requestTTFTColumn],row[requestDurationColumn]]),[['',''],['',''],['1502','12696'],['4758','5252']]);
   // A web chat row the CLI timed shows that request, with the turn's own numbers in the tip.
-  usageRows.push({...usageRows[0],id:11,api_ttft_ms:1990,api_duration_ms:4009,ttft_ms:3100,wall_ms:9000});
+  usageRows.push({...usageRows[0],id:11,api_ttft_ms:1990,api_duration_ms:4009,ttft_ms:3100,wall_ms:9000},
+    // Codex reports its requests too (matched by thread and tokens), with its own wording.
+    {...usageRows[0],id:12,agent:'codex',model:'gpt-6.1-sol',output_tokens:167,api_ttft_ms:2845,api_duration_ms:8558,ttft_ms:5565,wall_ms:11411});
   await page.locator('#uf-kind').selectOption('chat',{force:true});
-  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===3);
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===4);
+  const timedCodex=page.locator('#usage-rows tr').nth(3);
+  assert.equal(await timedCodex.locator('.u-lat .u-v').innerText(),'首字 2.8 s\n耗时 8.6 s');
+  assert.match(await timedCodex.locator('.u-lat').getAttribute('data-tip'),/^Codex 遥测报的这一次请求.*首字 5\.6 s，总耗时 11\.4 s$/);
+  assert.equal(await timedCodex.locator('.u-speed .u-v').innerText(),'29\ntok/s');
+  assert.match(await timedCodex.locator('.u-speed').getAttribute('data-tip'),/来自 Codex 的遥测/);
+  // Codex background requests (warm-up, terminal side conversations) come from telemetry only.
+  usageRows.push({...usageRows[0],id:13,kind:'background',agent:'codex',model:'gpt-6.1-sol',input_tokens:12498,output_tokens:0,cache_read_tokens:0,ttft_ms:0,wall_ms:0,duration_ms:0,api_ttft_ms:0,api_duration_ms:591},
+    {...usageRows[0],id:14,kind:'background',agent:'codex',model:'gpt-5.6-luna',output_tokens:62,ttft_ms:0,wall_ms:0,duration_ms:0});
+  await page.locator('#uf-kind').selectOption('background',{force:true});
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===2);
+  assert.deepEqual(await page.locator('#usage-rows .u-kind').evaluateAll(els=>els.map(el=>[el.dataset.kind,el.querySelector('.ui-icon').dataset.iconName,el.innerText])),[['background','cpu','后台请求'],['background','cpu','后台请求']]);
+  assert.match(await page.locator('#usage-rows .u-kind').first().getAttribute('data-tip'),/^后台请求\nCodex 自己在后台发的请求/);
+  assert.deepEqual(await page.locator('#usage-rows .u-lat .u-v').allInnerTexts(),['耗时 591 ms','—']);
+  assert.match(await page.locator('#usage-rows .u-lat').nth(1).getAttribute('data-tip'),/算不出耗时/);
+  assert.match(await page.locator('#usage-rows .u-speed').nth(1).getAttribute('data-tip'),/^这次请求缺首字或耗时/);
+  await page.locator('#uf-kind').selectOption('chat',{force:true});
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===4);
   const timedChat=page.locator('#usage-rows tr').nth(2);
   assert.equal(await timedChat.locator('.u-lat .u-v').innerText(),'首字 2.0 s\n耗时 4.0 s');
   assert.match(await timedChat.locator('.u-lat').getAttribute('data-tip'),/这一回合从容器就绪算起（含 CLI 启动与工具执行）：首字 3\.1 s，总耗时 9\.0 s$/);

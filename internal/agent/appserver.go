@@ -82,6 +82,10 @@ type appServerConn struct {
 	context  string         // 上一次发出的上下文占用，限流更新原样重发时不再发
 	liveOut  map[string]int // 各命令已实时转发的输出字节数
 
+	// 本回合完成的上下文压缩次数。ChatGPT 登录的远程压缩不进 tokenUsage，
+	// 用量要从会话记录里补（见 usage 的 codexCompactions）。
+	compactions int
+
 	mu     sync.Mutex // 保护 turnID（interrupt 协程读）
 	thread string
 	turn   string
@@ -389,12 +393,12 @@ func (c *appServerConn) handleNotification(method string, params json.RawMessage
 		switch p.Turn.Status {
 		case "completed":
 			ev := map[string]any{"type": "turn.completed"}
-			c.meter.attach(ev)
+			c.attachUsage(ev)
 			c.emitJSON(ev)
 		case "interrupted":
 			ev := map[string]any{"type": "turn.failed", "status": "interrupted",
 				"error": map[string]any{"message": "回合已中断"}}
-			c.meter.attach(ev)
+			c.attachUsage(ev)
 			c.emitJSON(ev)
 		default:
 			msg := "回合失败"
@@ -403,7 +407,7 @@ func (c *appServerConn) handleNotification(method string, params json.RawMessage
 			}
 			ev := map[string]any{"type": "turn.failed",
 				"error": map[string]any{"message": msg}}
-			c.meter.attach(ev)
+			c.attachUsage(ev)
 			c.emitJSON(ev)
 		}
 		return true
@@ -461,6 +465,9 @@ func (c *appServerConn) translateItem(completed bool, it rawItem) {
 				"item": map[string]any{"type": "reasoning", "text": text}})
 		}
 	default:
+		if completed && typ == "contextCompaction" {
+			c.compactions++
+		}
 		ev := c.richItem(completed, typ, it)
 		if ev == nil {
 			return

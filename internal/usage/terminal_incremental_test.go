@@ -46,6 +46,7 @@ func TestTerminalIncrementalMatchesFullParse(t *testing.T) {
 		{"claude", filepath.Join(".claude", "projects", "-workspace", "abc.jsonl"), claude},
 		{"codex", filepath.Join(".codex", "sessions", "2026", "09", "23", "rollout-fixture.jsonl"), codexFixture(t)},
 		{"codex", filepath.Join(".codex", "sessions", "2026", "09", "30", "rollout-timing.jsonl"), codexTimingFixture(t)},
+		{"codex", filepath.Join(".codex", "sessions", "2026", "10", "20", "rollout-compaction.jsonl"), codexCompactionFixture(t)},
 	}
 	for _, c := range cases {
 		t.Run(c.agent, func(t *testing.T) {

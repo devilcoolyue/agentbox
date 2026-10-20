@@ -174,8 +174,9 @@ const multiRequestScript = `{"id":1,"result":{"userAgent":"codex"}}
 `
 
 type turnUsageEvent struct {
-	Type  string `json:"type"`
-	Usage struct {
+	Type     string `json:"type"`
+	ThreadID string `json:"thread_id"`
+	Usage    struct {
 		Input     int64 `json:"input_tokens"`
 		Cached    int64 `json:"cached_input_tokens"`
 		Output    int64 `json:"output_tokens"`
@@ -219,6 +220,48 @@ func TestRunCodexTurnMetersEveryRequest(t *testing.T) {
 	}
 	if first.TS == 0 || second.TS < first.TS {
 		t.Fatalf("请求时间 %d / %d", first.TS, second.TS)
+	}
+	// 线程 id 跟着请求明细走：用量行靠它对上 Codex 遥测里的这一次请求。
+	if ev.ThreadID == "" {
+		t.Fatal("收尾事件缺线程 id")
+	}
+}
+
+// 远程压缩不进 tokenUsage（0.163 实测：压缩后累计不变、last 为 0）。收尾事件
+// 带上回合 id 与压缩次数，结算时去会话记录里补那次请求；没压缩过的回合不带。
+func TestRunCodexTurnReportsCompactions(t *testing.T) {
+	script := strings.Replace(multiRequestScript, `{"method":"turn/completed"`,
+		`{"method":"item/started","params":{"item":{"type":"contextCompaction","id":"c1"}}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"T1","turnId":"U2","tokenUsage":{"total":{"inputTokens":1000,"cachedInputTokens":450,"outputTokens":39,"reasoningOutputTokens":4},"last":{"inputTokens":0,"cachedInputTokens":0,"outputTokens":0,"reasoningOutputTokens":0}}}}
+{"method":"item/completed","params":{"item":{"type":"contextCompaction","id":"c1"}}}
+{"method":"turn/completed"`, 1)
+	var last string
+	err := RunCodexTurn(context.Background(), io.Discard, strings.NewReader(strings.Replace(script, "%s", "completed", 1)),
+		func() {}, nil, CodexTurn{Prompt: "hi", ThreadID: "T1", Cwd: "/workspace"},
+		func(line []byte) { last = string(line) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ev struct {
+		ThreadID    string         `json:"thread_id"`
+		TurnID      string         `json:"turn_id"`
+		Compactions int            `json:"compactions"`
+		Requests    []codexRequest `json:"requests"`
+	}
+	if err := json.Unmarshal([]byte(last), &ev); err != nil {
+		t.Fatal(err)
+	}
+	if ev.ThreadID != "T1" || ev.TurnID != "U2" || ev.Compactions != 1 || len(ev.Requests) != 2 {
+		t.Fatalf("收尾事件 %s", last)
+	}
+	last = ""
+	if err := RunCodexTurn(context.Background(), io.Discard, strings.NewReader(strings.Replace(multiRequestScript, "%s", "completed", 1)),
+		func() {}, nil, CodexTurn{Prompt: "hi", ThreadID: "T1", Cwd: "/workspace"},
+		func(line []byte) { last = string(line) }); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(last, `"turn_id"`) || strings.Contains(last, `"compactions"`) || !strings.Contains(last, `"thread_id":"T1"`) {
+		t.Fatalf("没压缩的回合: %s", last)
 	}
 }
 

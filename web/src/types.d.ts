@@ -318,7 +318,7 @@ export interface UsageEventRow {
   account_id?: string;
   account_label?: string;
   model?: string;
-  /** "chat" 对话 | "delegation" 委派给跑腿模型 | "title" 起标题 | "terminal" 终端 | "decision" 决策插件调用 */
+  /** "chat" 对话 | "delegation" 委派给跑腿模型 | "title" 起标题 | "terminal" 终端 | "decision" 决策插件调用 | "suggestion" 下一步提示 | "background" Codex 后台请求（遥测补记） */
   kind: string;
   /** 跑腿模型或 Jev 路由的花费所属的委派。 */
   delegation_id?: string;

@@ -122,26 +122,38 @@ func (s *Service) SetCodexEndpoint(fn func(config.Account, store.Session) string
 
 // codexSessionConfig derives a session's config.toml: the pool's connection
 // settings over the session's own (model, MCP, profiles), then the gateway
-// override when the session is routed through it.
+// override when the session is routed through it, then the usage telemetry
+// export.
 func (s *Service) codexSessionConfig(acct config.Account, sess store.Session, homeRaw, poolRaw []byte) ([]byte, error) {
 	next, err := codexConnectionConfig(homeRaw, poolRaw)
 	if err != nil {
 		return nil, err
 	}
-	if s.codexEndpoint == nil {
+	if s.codexEndpoint != nil {
+		if gateway := s.codexEndpoint(acct, sess); gateway != "" {
+			if next, err = codexGatewayConfig(next, gateway); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if s.codexTelemetry == nil {
 		return next, nil
 	}
-	if gateway := s.codexEndpoint(acct, sess); gateway != "" {
-		return codexGatewayConfig(next, gateway)
-	}
-	return next, nil
+	return codexTelemetryConfig(next, s.codexTelemetry(sess), sess.ID)
+}
+
+// SetCodexTelemetry installs the function that returns the URL a session's
+// Codex exports its OpenTelemetry logs to, or "" while the receiver is off.
+// Call it before the service is shared.
+func (s *Service) SetCodexTelemetry(fn func(store.Session) string) {
+	s.codexTelemetry = fn
 }
 
 // ApplyCodexEndpoint brings one seeded session's Codex connection in line with
-// the current extension bindings: the gateway URL when bound, the pool's real
-// upstream otherwise. Unchanged files are not rewritten, so the CLI and the
-// mtime-based template merge see no churn. A session without a seeded config
-// is left alone.
+// the current extension bindings — the gateway URL when bound, the pool's real
+// upstream otherwise — and its telemetry export in line with the receiver.
+// Unchanged files are not rewritten, so the CLI and the mtime-based template
+// merge see no churn. A session without a seeded config is left alone.
 func (s *Service) ApplyCodexEndpoint(ctx context.Context, acct config.Account, sess store.Session) error {
 	if acct.Type != config.AgentCodex || sess.Agent != config.AgentCodex || acct.CredentialsDir == "" {
 		return nil
