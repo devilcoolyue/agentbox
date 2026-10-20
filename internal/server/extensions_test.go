@@ -56,6 +56,8 @@ func extensionTestServer(t *testing.T, upstream string) (*Server, store.Session)
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		s.extensions.Close(ctx)
+		// Release the gateway listener: the next test binds the same port.
+		_ = s.Close(ctx)
 	})
 	return s, sess
 }
@@ -81,6 +83,9 @@ func enableLoopGuard(t *testing.T, s *Server, expected int64, accounts ...string
 	}
 	// Tests do not bind the listener; mark the gateway up as Run would.
 	s.modelGW.up.Store(true)
+	// The update reconciled Codex session configs in the background, maybe
+	// before the gateway counted as up; settle them on the state tests assume.
+	s.reconcileCodexEndpoints(context.Background())
 }
 
 func envValue(env []string, key string) string {
