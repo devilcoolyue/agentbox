@@ -139,9 +139,17 @@ func TestBuildLimitsKeepTheTop(t *testing.T) {
 	if !ix.Truncated || ix.Len() != 10 || !got["top.txt"] || !got["a"] || !got["many"] {
 		t.Fatalf("breadth first walk should keep the top level: truncated=%v %v", ix.Truncated, got)
 	}
+	// Which names come first is the file system's directory order (hash order
+	// on ext4), so only the count is fixed.
 	ix = Build(context.Background(), root, Limits{MaxEntries: 1000, MaxDirEntries: 5, MaxDepth: 32})
-	if !ix.Truncated || indexed(ix)["many/fz"] {
-		t.Fatal("a directory past its entry limit marks the index truncated")
+	many := 0
+	for path := range indexed(ix) {
+		if strings.HasPrefix(path, "many/") {
+			many++
+		}
+	}
+	if !ix.Truncated || many != 5 {
+		t.Fatalf("a directory past its entry limit keeps that many names and marks the index truncated: truncated=%v, %d names", ix.Truncated, many)
 	}
 	ix = Build(context.Background(), root, Limits{MaxEntries: 1000, MaxDirEntries: 1000, MaxDepth: 2})
 	if got := indexed(ix); !got["a/b"] || got["a/b/c"] {
