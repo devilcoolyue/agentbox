@@ -202,24 +202,17 @@
 .u-effort { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
 .u-effort .ui-icon { color: var(--muted); }
 
-/* 类型：一枚图标，名称在里面（桌面只给读屏，窄屏卡片上直接显示）。墨色分档见 usage.ts 的 KIND_TONE */
+/* 类型：图标 + 名称，不加框。墨色分档见 usage.ts 的 KIND_TONE */
 .u-kind {
-  position: relative;
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  width: 28px; height: 28px;
-  border: 1px solid var(--line); border-radius: calc(7px * var(--radius-scale));
-  background: color-mix(in srgb, var(--panel-2) 45%, transparent);
+  display: inline-flex; align-items: center; gap: 5px;
   color: var(--muted);
+  white-space: nowrap;
   vertical-align: middle;
 }
 .u-kind .ui-icon { flex: none; }
 .u-kind.chat { color: var(--text-hi); }
 .u-kind.term { color: var(--text); }
 .u-kind.title { color: var(--muted); }
-.u-kind-label {
-  position: absolute; width: 1px; height: 1px;
-  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
-}
 
 /* 计费的小标签 */
 .u-chip {
@@ -410,9 +403,6 @@
   /* 卡片里地方够，速度的单位跟在数字后面 */
   .usage-table td.u-speed .u-sub { display: inline; margin-left: 4px; }
 
-  /* 卡片里有地方写字，也没有悬停：图标旁直接写类型名 */
-  .u-kind { width: auto; height: auto; padding: 2px 8px; }
-  .u-kind-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; font-size: 11.5px; }
   .u-tk-lines { justify-items: end; }
 }
 

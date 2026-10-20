@@ -199,13 +199,13 @@ export async function smoke(page) {
   usageRows.shift();
   usageLiveSocket.send(JSON.stringify({type:'usage',sessions:null}));
   await page.waitForFunction(n=>document.querySelectorAll('#usage-rows tr').length===n,liveRows);
-  // Every type is an icon badge that still names itself for screen readers and tips.
+  // Every type is its name with an icon in front, as plain text without a box.
   const kindBadges=page.locator('#usage-rows .u-kind');
   assert.deepEqual(await kindBadges.evaluateAll(els=>els.map(el=>[el.dataset.kind,el.querySelector('.ui-icon').dataset.iconName])),[['chat','message'],['title','type'],['chat','message']]);
   assert.equal(await kindBadges.nth(1).getAttribute('data-tip'),'起标题\n服务端自动为新对话生成标题的那趟消耗，不是用户发起的');
-  assert.equal(await kindBadges.nth(1).locator('.u-kind-label').isVisible(),true,'the type name stays in the accessibility tree');
-  const badgeBorder=i=>kindBadges.nth(i).evaluate(el=>getComputedStyle(el).borderTopColor);
-  assert.equal(await badgeBorder(1),await badgeBorder(0));
+  assert.deepEqual(await kindBadges.evaluateAll(els=>els.map(el=>el.querySelector('.u-kind-label').innerText)),['对话','起标题','对话']);
+  assert.equal(await kindBadges.nth(1).locator('.u-kind-label').isVisible(),true);
+  assert.equal(await kindBadges.nth(0).evaluate(el=>getComputedStyle(el).borderTopStyle),'none','the type is not boxed');
   // Actions stay on the filter title row and the token card sums all four buckets.
   assert.equal(await page.locator('.uf-head .uf-actions #uf-export').count(),1);
   assert.equal(await page.locator('#uf-fields .uf-actions').count(),0);

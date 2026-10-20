@@ -250,10 +250,9 @@ const KIND_HINT: Record<string, string> = {
   get title() { return i18nText("服务端自动为新对话生成标题的那趟消耗，不是用户发起的"); },
   get suggestion(){return i18nText("对话回合结束后预测你下一句输入的那次调用；可在「系统设置 → 界面与提示」里关闭");},
 };
-/* 类型列只画图标：这一列的用处是一眼看出「这笔钱是谁按下去的」，图形比两个字更快
- * 扫读。名称留在图标里（桌面只给读屏，窄屏卡片上图标旁直接显示），悬停给名称与说明。
- * 墨色深浅沿用原来的分档：对话是主体最重，终端次之，服务端自发的调用最轻——
- * 不加色相，旁边的 Token 与计费列已经用了好几种颜色。 */
+/* 类型列写名称，前面一枚图标帮着扫读「这笔钱是谁按下去的」；不套框，免得和计费
+ * 标签抢眼。悬停给名称与说明。墨色深浅沿用原来的分档：对话是主体最重，终端次之，
+ * 服务端自发的调用最轻——不加色相，旁边的 Token 与计费列已经用了好几种颜色。 */
 const KIND_ICON: Record<string, string> = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network" };
 const KIND_TONE: Record<string, string> = { chat: "chat", delegation: "chat", suggestion: "chat", terminal: "term", title: "title", decision: "title" };
 
@@ -264,7 +263,7 @@ function kindBadge(kind: string) {
   const label = document.createElement("span");
   label.className = "u-kind-label";
   setTextRender(label, () => KIND_LABEL[kind] || kind);
-  badge.append(svgIcon(KIND_ICON[kind] || "activity", 15), label);
+  badge.append(svgIcon(KIND_ICON[kind] || "activity", 14), label);
   setTip(badge, () => (KIND_LABEL[kind] || kind) + (KIND_HINT[kind] ? "\n" + KIND_HINT[kind] : ""));
   return badge;
 }
