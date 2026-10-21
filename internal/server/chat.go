@@ -67,6 +67,7 @@ type chatRoom struct {
 	conns           map[*connWriter]bool
 	running         bool
 	startedAt       time.Time // when the running turn was admitted; drives the page's elapsed counter
+	phase           string    // what the running turn waits on before its CLI runs (chatPhaseStarting), or ""
 	turnDone        chan struct{}
 	stop            func() // 当前回合的优雅中断（app-server 回合设置）；nil 时走 SIGINT
 	requestID       string
@@ -131,6 +132,23 @@ func (r *chatRoom) status() (string, time.Time) {
 	return "idle", time.Time{}
 }
 
+// chatPhaseStarting is the running turn starting its stopped workspace, which
+// takes a while before the user's message is even recorded.
+const chatPhaseStarting = "starting"
+
+// setPhase records what the running turn waits on and tells the pages, so a
+// turn that first starts its workspace says so instead of looking stuck.
+func (r *chatRoom) setPhase(phase string) {
+	r.mu.Lock()
+	if !r.running || r.phase == phase {
+		r.mu.Unlock()
+		return
+	}
+	r.phase = phase
+	r.mu.Unlock()
+	r.broadcast(map[string]any{"type": "status", "state": "running", "phase": phase})
+}
+
 // tryBegin marks the room busy; returns false if a turn is already running.
 func (r *chatRoom) tryBegin() bool {
 	return r.begin() == nil
@@ -151,7 +169,7 @@ func (r *chatRoom) begin() error {
 			return err
 		}
 	}
-	r.running, r.startedAt = true, time.Now()
+	r.running, r.startedAt, r.phase = true, time.Now(), ""
 	r.requestID, r.userInterrupted = "", false
 	r.turnDone = make(chan struct{})
 	return nil
@@ -167,7 +185,7 @@ func (r *chatRoom) release() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.running = false
-	r.requestID = ""
+	r.requestID, r.phase = "", ""
 	if r.turnDone != nil {
 		close(r.turnDone)
 		r.turnDone = nil
@@ -267,6 +285,11 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 	if !started.IsZero() {
 		status["elapsed_ms"] = time.Since(started).Milliseconds()
 	}
+	room.mu.Lock()
+	if room.running && room.phase != "" {
+		status["phase"] = room.phase
+	}
+	room.mu.Unlock()
 	_ = cw.send(status)
 
 	conn.SetReadDeadline(time.Now().Add(wsPongWait))

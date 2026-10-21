@@ -562,6 +562,16 @@ export function initChatOutbox(hooks) {
         catch {
             void refresh();
         } },
+        // The message this page is sending or the server is starting, until the
+        // server records it (a stopped workspace starts first): its text and turn.
+        pending() {
+            if (!owns() || !enabled || !context)
+                return;
+            const row = rows().find(r => r.thread === context?.thread && !!r.input && !r.input.delivery && (r.state === "unconfirmed" ? busy.has(key(r.session, r.id)) : ["accepted", "starting", "running"].includes(r.state)));
+            if (!row?.input)
+                return;
+            return { id: row.id, text: row.input.text, turn: known.get(key(row.session, row.id))?.turn_id || "" };
+        },
         interrupt() { if (!owns())
             return true; const row = rows().find(r => ["accepted", "starting", "running"].includes(r.state)); if (row) {
             void act(row, "interrupt");

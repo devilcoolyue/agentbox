@@ -213,6 +213,25 @@ try{
    await ready();assert.equal(await input.inputValue(),'');await state(transfer,'unconfirmed');
    assert.equal(await entry(transfer).getByRole('button',{name:await tr('重试'),exact:true,includeHidden:true}).isDisabled(),true);
    mode='normal';await action(transfer,'放弃发送');await confirm();await state(transfer,'abandoned');await action(transfer,'复制回输入框');await confirm();await page.waitForFunction(()=>document.querySelector('#chat-input').value==='Recover into another conversation');assert.equal(await input.inputValue(),'Recover into another conversation');assert.equal(puts.length,beforeThreadSwitch);await action(transfer,'从列表移除');
+   // A stopped workspace starts before the server records the message: the page
+   // shows the message at once, says the workspace is starting, and swaps in the
+   // recorded message in place.
+   mode='normal';await input.fill('Start the workspace first');await page.locator('#chat-send').click();
+   await page.locator('#chat-log .user-turn.pending').waitFor();
+   assert.equal(await page.locator('#chat-log .user-turn.pending .msg.user').innerText(),'Start the workspace first');
+   const starting=puts.at(-1).id;await state(starting,'running');
+   const label=()=>page.locator('#chat-log .turn.working .work-label').innerText();
+   emit('space-a',{type:'status',state:'running',phase:'starting'});
+   const startingLabel=await tr('正在启动工作空间')+'…';await page.waitForFunction(text=>document.querySelector('#chat-log .turn.working .work-label')?.textContent===text,startingLabel);
+   assert.equal(await page.evaluate(()=>{const p=document.querySelector('#chat-log .user-turn.pending'),w=document.querySelector('#chat-log .turn.working');return Boolean(p.compareDocumentPosition(w)&Node.DOCUMENT_POSITION_FOLLOWING);}),true,'the pending message sits above the working indicator');
+   emit('space-a',{type:'status',state:'running',phase:''});
+   const thinking=await tr('推理中…');await page.waitForFunction(text=>document.querySelector('#chat-log .turn.working .work-label')?.textContent===text,thinking);assert.equal(await label(),thinking);
+   emit('space-a',{type:'user_message',text:'Start the workspace first',ts:new Date().toISOString(),turn:{id:receipts.get(receiptKey('space-a',starting)).turn_id,model:'model-one',effort:'',control:''}});
+   await page.waitForFunction(()=>!document.querySelector('#chat-log .user-turn.pending'));
+   const sent=page.locator('#chat-log .user-turn').filter({hasText:'Start the workspace first'});
+   assert.equal(await sent.count(),1);assert.equal(await sent.evaluate(e=>e.classList.contains('from-pending')),true);
+   update('space-a',starting,'completed');await state(starting,'completed');await page.waitForTimeout(60);
+   assert.equal(await sent.count(),1,'the settled receipt brought the pending copy back');
    // Mobile state/action layout and logout/another-user isolation.
    mode='drop-before';await input.fill('Private pending before logout');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});
    await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);

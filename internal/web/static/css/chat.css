@@ -52,6 +52,12 @@
 @keyframes msg-in {
   from { opacity: 0; transform: translateY(4px); }
 }
+/* 发出后服务端还没记下（多半在启动工作空间）：先照常显示，过一秒还没记下才淡下去；
+ * 记下的那条原地换上，不再淡入。操作留给记下的那条 */
+.user-turn.pending .user-main { animation: user-pending 0.3s ease-out 1s both; }
+.user-turn.pending .user-actions { visibility: hidden; }
+.user-turn.from-pending { animation: none; }
+@keyframes user-pending { to { opacity: 0.6; } }
 
 /* ---- 用户消息：右对齐圆角气泡 + 右侧首字头像（与左侧 Agent 头像对称），
  * 气泡下方一行时间 / 复制 / 填回输入框，悬停或键盘获焦才显出来 ---- */

@@ -105,6 +105,12 @@ func (r *chatRoom) cliHelp(ctx context.Context, sess store.Session) (string, err
 }
 func (a chatRuntime) Start(ctx context.Context, sess store.Session) (store.Session, error) {
 	s := a.room.srv
+	if sess.Status != store.StatusRunning {
+		// The user's message is recorded only once the container is up;
+		// until then the page says the workspace is starting.
+		a.room.setPhase(chatPhaseStarting)
+		defer a.room.setPhase("")
+	}
 	sess, err := s.startSession(ctx, sess)
 	if err != nil {
 		return sess, err

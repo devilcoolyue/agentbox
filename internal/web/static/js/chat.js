@@ -218,7 +218,13 @@ function handleChatMsg(msg) {
             stream.flush(); // 上一回合的回放立刻放完，不让新消息插到它前面
             noteThreadTitle(msg.text);
             tasks.turnStarted();
-            appendChat(renderUserTurn(msg.text, msg.ts));
+            recordedTurn = msg.turn?.id || recordedTurn;
+            const shown = !!pendingUser;
+            dropPendingUser(true);
+            const userTurn = renderUserTurn(msg.text, msg.ts);
+            if (shown)
+                userTurn.classList.add("from-pending"); // 原地换上，不再淡入一次
+            appendChat(userTurn);
             live.context.turn = msg.turn;
             break;
         case "agent_event": {
@@ -292,6 +298,11 @@ function handleChatMsg(msg) {
                     turnStartedAt = Date.now() - Math.max(0, msg.elapsed_ms);
                 else if (!turnStartedAt)
                     turnStartedAt = Date.now();
+                // 空间没在跑时回合先启动容器，这段时间说清楚在等什么，别让人以为卡住了
+                if (msg.phase === "starting")
+                    setWorkingLabel(() => i18nText("正在启动工作空间") + "…");
+                else if (msg.phase === "")
+                    setWorkingLabel(thinkingLabel);
             }
             else
                 turnStartedAt = 0;
@@ -1172,6 +1183,7 @@ export async function loadHistory(opts = {}) {
         setThreadBar(thread ?? null);
         stream.reset();
         log.replaceChildren(); // 重连与首次加载都以服务端记录为准
+        pendingUser = null;
         live.reset();
         resetDelegationCards();
         resetQuestionCards();
@@ -1180,6 +1192,8 @@ export async function loadHistory(opts = {}) {
         settleCodexItems(log, S.chatState === "running" ? live.body : null);
         background.reset(); // 重连时仍在等后台任务的回合，从最新一页恢复
         for (const e of entries) {
+            if (e.kind === "user" && e.turn?.id)
+                recordedTurn = e.turn.id;
             if (e.kind === "user" || e.kind === "status")
                 background.reset();
             else if (e.kind === "event") {
@@ -1209,6 +1223,7 @@ export async function loadHistory(opts = {}) {
         S.histLoading = false;
         updateHero();
     }
+    syncPendingUser(); // 启动空间途中刷新页面：消息还没记下，照样先放着
     if (result.state === "loaded") {
         log.scrollTop = wasAtBottom || (keep && !kept) ? log.scrollHeight : prevScroll;
         updateScrollBottomButton();
@@ -1267,7 +1282,7 @@ function ensureWorking() {
         body.className = "turn-body";
         const label = document.createElement("span");
         label.className = "work-label";
-        setTextRender(label, () => agent === "codex" ? i18nText("推理中…") : i18nText("思考中…"));
+        setTextRender(label, thinkingLabel);
         const bg = document.createElement("span");
         bg.className = "work-bg";
         bg.hidden = true;
@@ -1322,6 +1337,36 @@ function tickWorking() {
 }
 /* 阶段文案（思考 / 生成 / 运行工具…）；有进行中的任务时与 CLI 一样改说这项任务 */
 let workStage = "";
+const thinkingLabel = () => sessionAgent() === "codex" ? i18nText("推理中…") : i18nText("思考中…");
+/* 发出的消息要等服务端记下才进对话（空间没在跑时得先等容器起来），这之前先放一份
+ * 同样的气泡（.pending），记下的那条到了就换掉；回合没记下就结束时随发送状态撤掉。 */
+let pendingUser = null;
+let consumedRequest = "", recordedTurn = ""; // 已换成正式消息的请求；最近一条已记下的消息所属回合
+function syncPendingUser() {
+    const p = outbox?.pending();
+    const log = $("chat-log");
+    if (!p || p.id === consumedRequest || (p.turn && p.turn === recordedTurn) || S.histLoading) {
+        dropPendingUser(false);
+        return;
+    }
+    if (pendingUser && pendingUser.dataset.request === p.id && log.contains(pendingUser))
+        return;
+    dropPendingUser(false);
+    const stick = nearBottom(log);
+    pendingUser = renderUserTurn(p.text);
+    pendingUser.classList.add("pending");
+    pendingUser.dataset.request = p.id;
+    log.insertBefore(pendingUser, workingEl && workingEl.parentNode === log ? workingEl : null);
+    updateHero();
+    if (stick)
+        log.scrollTop = log.scrollHeight;
+}
+function dropPendingUser(recorded) {
+    if (recorded && pendingUser)
+        consumedRequest = pendingUser.dataset.request || "";
+    pendingUser?.remove();
+    pendingUser = null;
+}
 function setWorkingLabel(text) {
     workStage = text;
     applyWorkingLabel();
@@ -1357,7 +1402,7 @@ export function initChat() {
         changed: () => { const state = outbox?.executionState(); if (state && S.chatState !== state)
             setChatStatus(state);
         else
-            updateHero(); },
+            updateHero(); syncPendingUser(); },
         move: expected => { if (draftFingerprint(composerDraft()) === draftFingerprint(expected))
             applyComposerDraft({ text: "", attachments: [] }); },
         restore: value => {

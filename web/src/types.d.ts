@@ -1439,6 +1439,8 @@ export interface ChatMessage extends APIProblem {
   retry_text?: string;
   /** status running（连接时下发）：本回合已进行的毫秒数，页面据此续上计时 */
   elapsed_ms?: number;
+  /** status running：回合在 CLI 开跑前等什么——"starting" 是在启动工作空间，"" 是等完了 */
+  phase?: string;
   /** 回合最终 status：本回合总耗时 */
   duration_ms?: number;
   type: string;
