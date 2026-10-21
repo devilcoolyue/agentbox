@@ -76,6 +76,7 @@ export async function keepaliveSmoke(page, base) {
     assert.deepEqual(await page.locator('.ka-plan-name').allInnerTexts(), ['对话「Refactor billing」', '终端 /workspace/app']);
     assert.match(await page.locator('.ka-plan-meta').first().innerText(), /^152.0K tokens · 下次 \d\d:\d\d · 已续 1\/3 次 · 每次约 \$0\.030$/);
 
+    assert.deepEqual(await page.locator('.ka-plan button').evaluateAll(els => els.map(el => el.classList.contains('btn-danger'))), [true, true]);
     await page.locator('.ka-plan').nth(1).getByRole('button', { name: '停止' }).click();
     await page.waitForFunction(() => document.querySelectorAll('.ka-plan').length === 1);
     assert.deepEqual(stops, [{ id: 'terminal:/workspace/app' }]);

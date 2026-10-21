@@ -102,7 +102,7 @@ function renderPlans(v) {
         text.append(name, meta);
         const stop = actionButton(document.createElement("button"), () => i18nText("停止"), "stop", () => i18nText("停止这条保活，下一次请求后再按设置排上"));
         stop.type = "button";
-        stop.className = "btn btn-sm";
+        stop.className = "btn btn-sm btn-danger"; // like the workspace's own 停止
         stop.addEventListener("click", () => void stopPlan(p.id, stop));
         row.append(icon, text, stop);
         return row;
