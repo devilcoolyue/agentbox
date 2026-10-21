@@ -27,6 +27,10 @@ func TestKeepaliveCommand(t *testing.T) {
 	if !strings.Contains(cmd[2], "export CLAUDE_CODE_ENABLE_TODO_TOOLS=1; ") {
 		t.Fatalf("task tools change the cached tool list and must follow the turn: %q", cmd[2])
 	}
+	// A resumed session must not attach its changed instruction files again.
+	if !strings.Contains(cmd[2], "export CLAUDE_CODE_DISABLE_CLAUDE_MDS='1'; ") {
+		t.Fatalf("instruction files would be attached again: %q", cmd[2])
+	}
 	for _, unwanted := range []string{"--prompt-suggestions", "--input-format", "bypassPermissions"} {
 		if strings.Contains(line, unwanted) {
 			t.Fatalf("unexpected %q: %q", unwanted, cmd)
