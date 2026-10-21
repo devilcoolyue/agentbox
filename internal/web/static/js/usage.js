@@ -232,7 +232,7 @@ const KIND_HINT = {
 /* 类型列写名称，前面一枚图标帮着扫读「这笔钱是谁按下去的」；不套框，免得和计费
  * 标签抢眼。悬停给名称与说明。墨色深浅沿用原来的分档：对话是主体最重，终端次之，
  * 服务端自发的调用最轻——不加色相，旁边的 Token 与计费列已经用了好几种颜色。 */
-const KIND_ICON = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network", background: "cpu", keepalive: "refresh" };
+const KIND_ICON = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network", background: "cpu", keepalive: "heart-pulse" };
 const KIND_TONE = { chat: "chat", delegation: "chat", suggestion: "chat", terminal: "term", title: "title", decision: "title", background: "title", keepalive: "title" };
 function kindBadge(kind) {
     const badge = document.createElement("span");

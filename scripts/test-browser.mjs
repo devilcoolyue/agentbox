@@ -302,6 +302,11 @@ export async function smoke(page) {
   assert.deepEqual(await page.locator('#usage-rows .u-lat .u-v').allInnerTexts(),['耗时 591 ms','—']);
   assert.match(await page.locator('#usage-rows .u-lat').nth(1).getAttribute('data-tip'),/算不出耗时/);
   assert.match(await page.locator('#usage-rows .u-speed').nth(1).getAttribute('data-tip'),/^这次请求缺首字或耗时/);
+  // Cache keepalive has its own filter entry and the heart-pulse icon of its menu entry.
+  usageRows.push({...usageRows[0],id:15,kind:'keepalive',input_tokens:3,output_tokens:2,cache_read_tokens:152000,ttft_ms:0,wall_ms:0,duration_ms:0});
+  await page.locator('#uf-kind').selectOption('keepalive',{force:true});
+  await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===1);
+  assert.deepEqual(await page.locator('#usage-rows .u-kind').evaluateAll(els=>els.map(el=>[el.dataset.kind,el.querySelector('.ui-icon').dataset.iconName,el.innerText])),[['keepalive','heart-pulse','缓存保活']]);
   await page.locator('#uf-kind').selectOption('chat',{force:true});
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===4);
   const timedChat=page.locator('#usage-rows tr').nth(2);
