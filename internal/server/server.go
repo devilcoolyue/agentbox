@@ -572,6 +572,8 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 	defer release()
 	defer srv.Close()
+	s.restoreKeepalive(filepath.Join(s.cfg.DataDir, keepaliveFile))
+	s.spawn(s.keepaliveSaver)
 	s.spawn(s.imageJanitor)
 	s.spawn(s.credSyncLoop)
 	s.spawn(s.idleReaper)

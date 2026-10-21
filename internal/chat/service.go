@@ -89,6 +89,8 @@ type TurnOutcome struct {
 	Status, Code                string
 	Duration                    time.Duration
 	// Cache is set when the turn left a prompt cache a later request can read.
+	// A failed turn has it too: a turn the server's shutdown interrupted fails,
+	// and its cache stays worth keeping.
 	Cache *CachePoint
 }
 
@@ -484,6 +486,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		if errors.Is(err, ErrOptions) {
 			code = "chat_options_invalid"
 		}
+		cachePoint() // for a turn the server's shutdown interrupted
 		fail(err, code)
 		return
 	}

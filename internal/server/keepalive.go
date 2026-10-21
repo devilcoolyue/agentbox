@@ -54,9 +54,10 @@ import (
 // stopped. The terminal's CLI stops with the container, but the user resumes
 // its session on return (`claude -c`, `--resume`), and that new process sends
 // the prefix the transcript recorded, so the cache is worth keeping for it
-// too (measured against 2.1.304). Keepalive requests are charged like titles (kind keepalive). Plans
-// live in memory: a restart forgets chat plans until the next turn, while the
-// first terminal scan reports the sessions again.
+// too (measured against 2.1.304). Keepalive requests are charged like titles
+// (kind keepalive). The points survive a restart (keepalive_store.go), and a
+// turn the server's own shutdown interrupts leaves its point like one the
+// user stopped.
 
 const (
 	keepaliveTimeout = 3 * time.Minute
@@ -123,10 +124,15 @@ type keepaliveState struct {
 	gen    uint64
 	points map[keepaliveKey]*keepalivePoint
 	plans  map[keepaliveKey]*keepalivePlan
+	// path is keepalive-points.json; dirty wakes keepaliveSaver.
+	path   string
+	dirty  chan struct{}
+	saveMu sync.Mutex
 }
 
 // note keeps p as the slot's latest point unless the slot knows a later one
-// (a terminal rescan reports old sessions too).
+// or this very request (a terminal rescan reports old sessions too, and the
+// one after a restart reports again what keepalive-points.json brought back).
 func (k *keepaliveState) note(key keepaliveKey, p keepalivePoint) bool {
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -139,13 +145,14 @@ func (k *keepaliveState) note(key keepaliveKey, p keepalivePoint) bool {
 			delete(k.points, other)
 		}
 	}
-	if old := k.points[key]; old != nil && old.at.After(p.at) {
+	if old := k.points[key]; old != nil && (old.at.After(p.at) || old.at.Equal(p.at) && old.point.Conversation == p.point.Conversation) {
 		return false
 	}
 	k.points[key] = &p
 	if p.source == keepaliveTerminal {
 		k.trimTerminalLocked(key.workspace)
 	}
+	k.changedLocked()
 	return true
 }
 
@@ -256,11 +263,14 @@ func (k *keepaliveState) current(key keepaliveKey, gen uint64) (keepalivePlan, b
 	return *p, true
 }
 
+// cancelLocked ends the slot's plan. Every change to points and plans comes
+// through here or note, which is where they are saved.
 func (k *keepaliveState) cancelLocked(key keepaliveKey) {
 	if p := k.plans[key]; p != nil {
 		p.timer.Stop()
 		delete(k.plans, key)
 	}
+	k.changedLocked()
 }
 
 // keepaliveConfig is what a workspace's keepalive comes to: its own setting
@@ -343,13 +353,16 @@ func (c keepaliveConfig) why(pt keepalivePoint, account string) string {
 // not block.
 func (s *Server) noteChatCache(o chat.TurnOutcome) {
 	key := chatSlot(o.SessionID)
+	// Close interrupts running turns, which then fail; what one sent is cached
+	// all the same, and the user resumes the conversation after the restart.
+	failed := o.Status == chat.OutcomeFailed && !s.stopping()
 	// A turn that sent no request (a local command such as /context) left the
 	// cache's hour where it was, and the plan with it.
-	if o.Cache != nil && o.Cache.Prompt.Prompt == 0 && o.Status != chat.OutcomeFailed {
+	if o.Cache != nil && o.Cache.Prompt.Prompt == 0 && !failed {
 		return
 	}
 	sess, ok := s.store.Get(o.SessionID)
-	if !ok || o.Cache == nil || o.Status == chat.OutcomeFailed || o.ThreadID == "" {
+	if !ok || o.Cache == nil || failed || o.ThreadID == "" {
 		s.keepalive.forget(key)
 		return
 	}

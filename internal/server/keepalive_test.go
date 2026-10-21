@@ -498,10 +498,12 @@ func TestKeepalivePlanRunsAgainUntilItsDeadline(t *testing.T) {
 	s.keepalive.note(key, plan.keepalivePoint)
 	s.keepalive.mu.Lock()
 	s.keepalive.armLocked(s, key, &plan)
+	first := plan.gen // the timer is due at once and rearms the plan
 	s.keepalive.mu.Unlock()
-	first := plan.gen
 	waitFor(t, func() bool {
-		p := planned(s, key)
+		s.keepalive.mu.Lock()
+		defer s.keepalive.mu.Unlock()
+		p := s.keepalive.plans[key]
 		return f.runs() == 1 && p != nil && p.gen != first
 	})
 	// Rescheduled for another round, the cache's hour counted from the read.
@@ -626,5 +628,116 @@ func TestTerminalScanPlansAfterLaterEnable(t *testing.T) {
 	s.usageService().Scan()
 	if p := planned(s, key); p == nil || time.Until(p.next) < 48*time.Minute {
 		t.Fatalf("the next request did not plan the session: %+v", p)
+	}
+}
+
+// The points outlive the process: a restart plans again what was kept, from
+// when its cache was last read and with the runs so far, and a terminal
+// session kept past its hour comes back although its last request is older.
+func TestKeepalivePointsSurviveARestart(t *testing.T) {
+	f := newKeepaliveFixture(t)
+	s := f.s
+	path := filepath.Join(t.TempDir(), keepaliveFile)
+	s.restoreKeepalive(path) // nothing saved yet
+	now := time.Now()
+	keptKey, recentKey, goneKey := terminalSlot(f.sess.ID, "/workspace/app"), terminalSlot(f.sess.ID, "/workspace/recent"), terminalSlot(f.sess.ID, "/workspace/gone")
+	point := f.plan().point
+	s.noteChatCache(chat.TurnOutcome{SessionID: f.sess.ID, ThreadID: f.thread, Status: chat.OutcomeCompleted, Cache: &point})
+	kept := f.terminalPlan().keepalivePoint
+	kept.at, kept.warm = now.Add(-2*time.Hour), now.Add(-10*time.Minute)
+	s.keepalive.note(keptKey, kept)
+	s.planKeepalive(f.sess, keptKey)
+	s.keepalive.mu.Lock()
+	s.keepalive.plans[keptKey].runs, s.keepalive.plans[keptKey].last = 2, usage.PromptCache{Prompt: 150000, Read: 149500, TTL: "1h"}
+	s.keepalive.mu.Unlock()
+	recent := usage.TerminalCache{Conversation: "T2", Cwd: "/workspace/recent", Model: "claude-opus-5",
+		Prompt: usage.PromptCache{Prompt: 120000, Read: 119000, TTL: "1h"}, At: now.Add(-20 * time.Minute)}
+	s.noteTerminalCache(f.sess, recent)
+	gone := f.terminalPlan().keepalivePoint
+	gone.cwd, gone.at = "/workspace/gone", now.Add(-90*time.Minute)
+	s.keepalive.note(goneKey, gone)
+	s.keepalive.note(chatSlot("deleted-workspace"), f.plan().keepalivePoint)
+	if err := s.keepalive.save(); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("saved file %v %v", info, err)
+	}
+	before := map[keepaliveKey]keepalivePlan{}
+	s.keepalive.mu.Lock()
+	for key, p := range s.keepalive.plans {
+		p.timer.Stop()
+		before[key] = *p
+	}
+	s.keepalive.mu.Unlock()
+	if len(before) != 3 {
+		t.Fatalf("plans before the restart: %v", before)
+	}
+
+	s.keepalive = keepaliveState{} // the next process
+	s.restoreKeepalive(path)
+	for key, was := range before {
+		p := planned(s, key)
+		if p == nil {
+			t.Fatalf("%s not planned after the restart", key)
+		}
+		if p.source != was.source || p.thread != was.thread || p.cwd != was.cwd || p.account != was.account || p.point != was.point ||
+			!p.at.Equal(was.at) || !p.warm.Equal(was.warm) || !p.next.Equal(was.next) || !p.until.Equal(was.until) || p.runs != was.runs || p.last != was.last {
+			t.Fatalf("%s restored as %+v, was %+v", key, p, was)
+		}
+	}
+	if _, ok := s.keepalive.point(goneKey); ok {
+		t.Fatal("restored a point whose cache is gone")
+	}
+	if _, ok := s.keepalive.point(chatSlot("deleted-workspace")); ok {
+		t.Fatal("restored a deleted workspace's point")
+	}
+	// The startup scan reports the recent session again: the plan stands.
+	gen := planned(s, recentKey).gen
+	s.noteTerminalCache(f.sess, recent)
+	if p := planned(s, recentKey); p == nil || p.gen != gen {
+		t.Fatalf("the scan's report replanned the restored session: %+v", p)
+	}
+}
+
+// Close interrupts running turns, which then fail; such a turn keeps its
+// cache like one the user stopped, and the last save on the way out has it,
+// while a turn that really failed still ends the plan.
+func TestShutdownKeepsTheCacheOfTheTurnItInterrupts(t *testing.T) {
+	f := newKeepaliveFixture(t)
+	s, key := f.s, chatSlot(f.sess.ID)
+	path := filepath.Join(t.TempDir(), keepaliveFile)
+	s.restoreKeepalive(path)
+	point := f.plan().point
+	failed := chat.TurnOutcome{SessionID: f.sess.ID, ThreadID: f.thread, Status: chat.OutcomeFailed, Cache: &point}
+	s.noteChatCache(failed)
+	if _, ok := s.keepalive.point(key); ok {
+		t.Fatal("a failed turn left its point")
+	}
+	room := s.chat.room(f.sess.ID)
+	if !room.tryBegin() {
+		t.Fatal("cannot begin fixture turn")
+	}
+	interrupted := make(chan struct{})
+	room.setStop(func() { close(interrupted) })
+	s.spawn(func() {
+		defer room.end()
+		<-interrupted
+		s.noteChatCache(failed)
+		nothing := failed // a later turn that never reached its first request
+		nothing.Cache = &chat.CachePoint{Conversation: "C1"}
+		s.noteChatCache(nothing)
+	})
+	closeTestServer(t, s)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved keepaliveRecords
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Points) != 1 || saved.Points[0].Slot != keepaliveChat || saved.Points[0].Point != point {
+		t.Fatalf("saved %s", raw)
 	}
 }

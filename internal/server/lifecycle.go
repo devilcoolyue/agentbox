@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -35,6 +36,14 @@ func (s *Server) runtime() *runtimeState {
 }
 
 func (s *Server) workContext() context.Context { return s.runtime().ctx }
+
+// stopping reports whether Close has begun.
+func (s *Server) stopping() bool {
+	l := s.runtime()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.stopping
+}
 
 func (l *runtimeState) begin() bool {
 	l.mu.Lock()
@@ -115,6 +124,10 @@ func (s *Server) Close(ctx context.Context) error {
 				s.tunnels.closeAll()
 			}
 			l.wg.Wait()
+			// The turns Close interrupted have noted their caches by now.
+			if err := s.keepalive.save(); err != nil {
+				log.Printf("cache keepalive: save: %v", err)
+			}
 			if s.dock != nil {
 				l.err = errors.Join(l.err, s.dock.Close())
 			}
