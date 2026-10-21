@@ -33,12 +33,16 @@ const (
 	// side conversations of the terminal UI); it is known only from the CLI's
 	// telemetry and, like terminal rows, never moves the balance (see
 	// InsertBackgroundUsage).
+	// UsageKindKeepalive is a request the server sends on its own while a web
+	// chat's user is away, only to read the conversation's prompt cache before
+	// it expires; it is charged like a title.
 	UsageKindChat       = "chat"
 	UsageKindDecision   = "decision"
 	UsageKindTitle      = "title"
 	UsageKindTerminal   = "terminal"
 	UsageKindSuggestion = "suggestion"
 	UsageKindBackground = "background"
+	UsageKindKeepalive  = "keepalive"
 
 	StatusStopped = "stopped"
 	StatusRunning = "running"
@@ -276,7 +280,7 @@ func (s *Store) Delete(id string) error {
 	}
 	// The server removes worker containers first; dropping their rows here as
 	// well keeps an owner deletion from ever resurfacing a worker as a space.
-	for _, query := range []string{"DELETE FROM sessions WHERE id IN (SELECT session_id FROM delegation_workers WHERE owner_session_id=?)", "DELETE FROM delegation_workers WHERE session_id=? OR owner_session_id=?", "DELETE FROM client_terminals WHERE session_id=?", "DELETE FROM client_projects WHERE session_id=?", "DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
+	for _, query := range []string{"DELETE FROM sessions WHERE id IN (SELECT session_id FROM delegation_workers WHERE owner_session_id=?)", "DELETE FROM delegation_workers WHERE session_id=? OR owner_session_id=?", "DELETE FROM client_terminals WHERE session_id=?", "DELETE FROM client_projects WHERE session_id=?", "DELETE FROM workspace_keepalive WHERE session_id=?", "DELETE FROM git_bindings WHERE session_id=?", "DELETE FROM git_defaults WHERE session_id=?", "DELETE FROM sessions WHERE id=?"} {
 		args := []any{id}
 		if strings.Count(query, "?") == 2 {
 			args = append(args, id)
@@ -387,6 +391,9 @@ func (s *Store) DeleteUser(name string) error {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM delegations WHERE user=?", name); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM workspace_keepalive WHERE session_id IN (SELECT id FROM sessions WHERE user=?)", name); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("UPDATE chat_requests SET state='deleted',request_json='null',revision=revision+1,updated_at=? WHERE user=? AND state!='deleted'", usageTimestamp(time.Now()), name); err != nil {

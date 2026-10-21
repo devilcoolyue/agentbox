@@ -355,3 +355,54 @@ func TestLifecycleHookReportsTransitions(t *testing.T) {
 		t.Fatalf("events %v, want %v", got, want)
 	}
 }
+
+// The keepalive wakes only what the reaper put to sleep, puts it back unless
+// someone used it meanwhile, and neither step is a lifecycle event.
+func TestWakeAndSleepStayUnreported(t *testing.T) {
+	if uid := os.Geteuid(); uid != 0 && uid != 1000 {
+		t.Skip("requires chown to container UID; exercised in Linux container suite")
+	}
+	s, runtime, sess := fixture(t)
+	var got []string
+	s.SetLifecycleHook(func(action, reason string, x store.Session) { got = append(got, action) })
+	if err := os.MkdirAll(s.HomeDir(sess), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, woke, err := s.Wake(t.Context(), sess.ID); err != nil || woke || runtime.starts != 0 {
+		t.Fatalf("running workspace: woke=%v %v", woke, err)
+	}
+	runtime.running = false
+	if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.Status = store.StatusStopped; x.StopReason = "" }); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Wake(t.Context(), sess.ID); !errors.Is(err, ErrNotAsleep) || runtime.starts != 0 {
+		t.Fatalf("woke a workspace the user stopped: %v", err)
+	}
+	if _, err := s.store.Update(sess.ID, func(x *store.Session) { x.StopReason = store.StopIdle }); err != nil {
+		t.Fatal(err)
+	}
+	cur, woke, err := s.Wake(t.Context(), sess.ID)
+	if err != nil || !woke || runtime.starts != 1 || cur.Status != store.StatusRunning {
+		t.Fatalf("wake: woke=%v %v %+v", woke, err, cur)
+	}
+	since := time.Now()
+	if err := s.Sleep(t.Context(), sess.ID, since); err != nil || runtime.stops != 1 {
+		t.Fatalf("sleep: %v", err)
+	}
+	if cur, _ = s.store.Get(sess.ID); cur.Status != store.StatusStopped || cur.StopReason != store.StopIdle {
+		t.Fatalf("not asleep again: %+v", cur)
+	}
+	// Someone opened the workspace while the keepalive ran: leave it running.
+	if _, _, err := s.Wake(t.Context(), sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	since = time.Now()
+	time.Sleep(2 * time.Millisecond)
+	s.activity.Touch(sess.ID)
+	if err := s.Sleep(t.Context(), sess.ID, since); err != nil || runtime.stops != 1 {
+		t.Fatalf("stopped a workspace in use: %v stops=%d", err, runtime.stops)
+	}
+	if len(got) != 0 {
+		t.Fatalf("keepalive reported lifecycle events %v", got)
+	}
+}

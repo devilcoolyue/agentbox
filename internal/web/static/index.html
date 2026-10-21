@@ -489,6 +489,10 @@
                     <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle class="ctx-track" cx="10" cy="10" r="7.5" pathLength="100"/><circle class="ctx-fill" cx="10" cy="10" r="7.5" pathLength="100"/></svg>
                     <span class="ctx-value"></span>
                   </span>
+                  <!-- 缓存保活状态（features/workspaces/keepalive.ts）：开着时常亮，没开但上下文值得续时灰着提示 -->
+                  <button id="chat-keepalive" type="button" class="keepalive-chip hidden" aria-haspopup="dialog" aria-controls="dlg-keepalive" data-tip-tap>
+                    <svg width="16" height="16" data-icon="refresh" aria-hidden="true"></svg>
+                  </button>
                   <div id="picker" class="picker">
                     <button id="btn-pick" class="pick-pill"></button>
                     <div id="pick-menu" class="pick-menu hidden"></div>
@@ -542,6 +546,10 @@
                 <svg class="term-tip-icon" width="15" height="15" data-icon="bulb" aria-hidden="true"></svg>
                 <div id="term-tips" class="term-tips" aria-live="off"></div>
               </div>
+              <!-- 终端会话的缓存保活：只在有计划时出现（features/workspaces/keepalive.ts） -->
+              <button id="term-keepalive" type="button" class="term-keepalive hidden" aria-haspopup="dialog" aria-controls="dlg-keepalive" data-tip-tap>
+                <svg width="14" height="14" data-icon="refresh" aria-hidden="true"></svg><span data-i18n="缓存保活">缓存保活</span>
+              </button>
               <!-- 本空间已花：对话 + 终端 + 起标题的总和，term.js 轮询 -->
               <div id="term-spend" class="term-spend hidden" role="status"></div>
               <!-- 右侧连接状态：状态点 + 文案 + 手动重连 -->
@@ -902,6 +910,20 @@
                 </label>
                 <div class="card-foot">
                   <span class="note" data-i18n-text="[&quot;即时生效，无需重启；0 表示永不自动停机&quot;]">即时生效，无需重启；0 表示永不自动停机</span>
+                </div>
+              </div>
+              <div class="card" id="set-keepalive">
+                <h3 data-i18n="对话缓存保活">对话缓存保活</h3>
+                <p class="card-desc" data-i18n="用户离开时，服务端定期读一遍 Claude 对话的提示缓存，回来继续聊不用整段重写。每个空间由用户在「⋯ → 缓存保活」里自己开启；这里决定是否允许，以及默认值和上限。">用户离开时，服务端定期读一遍 Claude 对话的提示缓存，回来继续聊不用整段重写。每个空间由用户在「⋯ → 缓存保活」里自己开启；这里决定是否允许，以及默认值和上限。</p>
+                <label class="check"><input id="set-ka-allowed" type="checkbox"><span data-i18n="允许用户开启缓存保活">允许用户开启缓存保活</span></label>
+                <div class="field-row">
+                  <label class="field"><span data-i18n="默认上下文门槛（token）">默认上下文门槛（token）</span><input id="set-ka-min" type="number" min="0" step="1000" required class="mono"></label>
+                  <label class="field"><span data-i18n="默认最长保活（小时）">默认最长保活（小时）</span><input id="set-ka-hours" type="number" min="1" max="24" step="1" required class="mono"></label>
+                  <label class="field"><span data-i18n="用户最长可设（小时）">用户最长可设（小时）</span><input id="set-ka-limit" type="number" min="1" max="24" step="1" required class="mono"></label>
+                  <label class="field"><span data-i18n="保活间隔（分钟）">保活间隔（分钟）</span><input id="set-ka-interval" type="number" min="30" max="55" step="1" required class="mono"></label>
+                </div>
+                <div class="card-foot">
+                  <span class="note" data-i18n="即时生效；取消允许后所有空间立即停止保活。间隔要小于缓存的 1 小时，可设 30–55 分钟。">即时生效；取消允许后所有空间立即停止保活。间隔要小于缓存的 1 小时，可设 30–55 分钟。</span>
                 </div>
               </div>
             </section>
@@ -2297,6 +2319,40 @@
 </dialog>
 
 <!-- 切换工作空间使用的账号 -->
+<!-- 缓存保活：按空间保存，features/workspaces/keepalive.ts -->
+<dialog id="dlg-keepalive" class="dlg-keepalive">
+  <form id="ka-form" method="dialog" novalidate>
+    <div class="dlg-head">
+      <div class="dlg-title-block">
+        <h2 data-i18n="缓存保活">缓存保活</h2>
+        <p class="field-hint dlg-desc" data-i18n="离开时保持对话缓存，回来继续聊时不用整段重写。">离开时保持对话缓存，回来继续聊时不用整段重写。</p>
+      </div>
+      <button type="button" id="ka-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;: &quot;关闭&quot;}"></button>
+    </div>
+    <div class="dlg-body">
+      <p id="ka-unavailable" class="dc-callout warn hidden"></p>
+      <label class="check"><input id="ka-enabled" type="checkbox"><span data-i18n="开启缓存保活">开启缓存保活</span></label>
+      <div id="ka-options" class="ka-options">
+        <label class="check"><input id="ka-terminal" type="checkbox"><span data-i18n="终端里的 Claude 会话也保活">终端里的 Claude 会话也保活</span></label>
+        <p class="note" data-i18n="只在空间运行时保活终端会话；空间休眠后终端里的 Claude 已经退出，不会唤醒。">只在空间运行时保活终端会话；空间休眠后终端里的 Claude 已经退出，不会唤醒。</p>
+        <div class="field-row">
+          <label class="field"><span data-i18n="上下文至少（token）">上下文至少（token）</span><input id="ka-min" type="number" min="0" max="2000000" step="1000" class="mono"></label>
+          <label class="field"><span id="ka-hours-label"></span><input id="ka-hours" type="number" min="1" step="1" class="mono"></label>
+        </div>
+        <p id="ka-defaults" class="note"></p>
+      </div>
+      <h3 class="ka-plans-title" data-i18n="当前计划">当前计划</h3>
+      <div id="ka-plans" class="ka-plans"></div>
+      <p class="note" data-i18n="每次保活约等于读一遍缓存的费用，计入额度，使用记录里单列为「缓存保活」。最后一次请求后最多续到设定的时长。">每次保活约等于读一遍缓存的费用，计入额度，使用记录里单列为「缓存保活」。最后一次请求后最多续到设定的时长。</p>
+      <p id="ka-error" class="login-error hidden" role="alert"></p>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" id="ka-cancel" class="btn btn-ghost" data-icon="close" data-i18n="关闭">关闭</button>
+      <button type="submit" id="ka-save" class="btn btn-primary" data-icon="save" data-i18n="保存">保存</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="dlg-switch-acct">
   <form id="switch-acct-form" method="dialog">
     <div class="dlg-head">

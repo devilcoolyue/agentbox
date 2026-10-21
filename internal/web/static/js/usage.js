@@ -219,7 +219,7 @@ function effortText(r) {
     const label = EFFORT_LABELS[r.effort] || r.effort;
     return r.effort_control === "budget" && BUDGETS[r.effort] ? `${label} (${BUDGETS[r.effort]})` : label;
 }
-const KIND_LABEL = { get chat() { return i18nText("对话"); }, get delegation() { return i18nText("委派跑腿"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); }, get decision() { return i18nText("决策调用"); }, get suggestion() { return i18nText("下一步提示"); }, get background() { return i18nText("后台请求"); } };
+const KIND_LABEL = { get chat() { return i18nText("对话"); }, get delegation() { return i18nText("委派跑腿"); }, get terminal() { return i18nText("终端"); }, get title() { return i18nText("起标题"); }, get decision() { return i18nText("决策调用"); }, get suggestion() { return i18nText("下一步提示"); }, get background() { return i18nText("后台请求"); }, get keepalive() { return i18nText("缓存保活"); } };
 const KIND_HINT = {
     get delegation() { return i18nText("主 Agent 把子任务交给跑腿模型时，跑腿模型花的量；与主 Agent 的回合分开记账"); },
     get decision() { return i18nText("委派时由 Jev 判断交给哪个跑腿的那次调用"); },
@@ -227,12 +227,13 @@ const KIND_HINT = {
     get title() { return i18nText("服务端自动为新对话生成标题的那趟消耗，不是用户发起的"); },
     get suggestion() { return i18nText("对话回合结束后预测你下一句输入的那次调用；可在「系统设置 → 界面与提示」里关闭"); },
     get background() { return i18nText("Codex 自己在后台发的请求：每次启动先发的预热、终端里为会话另开的小请求。对话和终端里都看不到，按 CLI 遥测补记；只记账不扣额度"); },
+    get keepalive() { return i18nText("你离开时，服务端为保住对话的提示缓存发的请求：只读一遍缓存、不进对话记录，比回来后整段重写缓存便宜得多"); },
 };
 /* 类型列写名称，前面一枚图标帮着扫读「这笔钱是谁按下去的」；不套框，免得和计费
  * 标签抢眼。悬停给名称与说明。墨色深浅沿用原来的分档：对话是主体最重，终端次之，
  * 服务端自发的调用最轻——不加色相，旁边的 Token 与计费列已经用了好几种颜色。 */
-const KIND_ICON = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network", background: "cpu" };
-const KIND_TONE = { chat: "chat", delegation: "chat", suggestion: "chat", terminal: "term", title: "title", decision: "title", background: "title" };
+const KIND_ICON = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network", background: "cpu", keepalive: "refresh" };
+const KIND_TONE = { chat: "chat", delegation: "chat", suggestion: "chat", terminal: "term", title: "title", decision: "title", background: "title", keepalive: "title" };
 function kindBadge(kind) {
     const badge = document.createElement("span");
     badge.className = "u-kind" + (KIND_TONE[kind] ? " " + KIND_TONE[kind] : "");

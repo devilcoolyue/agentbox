@@ -319,18 +319,8 @@ func (s *Server) syncMCPOnStart(ctx context.Context, sess store.Session) error {
 	if sess.Agent != "claude" {
 		return nil
 	}
-	if s.chat != nil {
-		s.chat.mu.Lock()
-		room := s.chat.rooms[sess.ID]
-		s.chat.mu.Unlock()
-		if room != nil {
-			room.mu.Lock()
-			running := room.running
-			room.mu.Unlock()
-			if running {
-				return nil
-			}
-		}
+	if s.chatTurnRunning(sess.ID) {
+		return nil
 	}
 	return s.syncMCP(ctx, sess)
 }

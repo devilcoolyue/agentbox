@@ -18,6 +18,7 @@ import { attachTermClipboard, resetTermClipboard } from "./term-clipboard.js";
 import { menuJustDismissed, openMenuAt } from "./menu.js";
 import { enter, leave } from "./motion.js";
 import { type UsageChange, usageLiveConnected, watchUsageLive } from "./usage-live.js";
+import { chipRefresher, openKeepalive, termChipState } from "./features/workspaces/keepalive.js";
 
 const TerminalClass = window.Terminal && (window.Terminal.Terminal || window.Terminal);
 const FitAddonClass = window.FitAddon && (window.FitAddon.FitAddon || window.FitAddon);
@@ -554,6 +555,8 @@ bus.addEventListener("tips-updated", initTermTips);
  * 价目表里没配 claude 而算不出钱——所以 token 也一并显示，金额为 0 时它才是唯一
  * 有信息量的那个数。 */
 const SPEND_POLL_MS = 15000;
+const termKeepalive = chipRefresher(() => $("term-keepalive"), termChipState);
+$("term-keepalive").addEventListener("click", () => void openKeepalive());
 let spendTimer: ReturnType<typeof setInterval> | null = null;
 let spendFor = ""; // 当前显示的是哪个工作空间的数，切工作空间时先清空免得串台
 
@@ -586,6 +589,8 @@ async function loadSpend() {
     className: "ts-tok", textContent: fmtTokens(tokens) + " tok", // 与使用记录同一套 K/M/B 缩写
   });
   box.replaceChildren(label, cost, tok);
+  // 终端里有了新请求（用量推送），补记扫描随后会给它排保活计划
+  termKeepalive.soon(3000);
   setTip(box, () => i18nText("{p0} 个回合 / {p1} 条记录，含网页对话、终端和起标题。", { p0: String(total.turns), p1: String(total.rows) })
     + i18nText("合计 {p0} tokens。", { p0: tokens.toLocaleString("en-US") })
     + i18nText("金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗计入这里但不扣额度。"));
@@ -597,7 +602,8 @@ async function loadSpend() {
 export function termSpendPolling(on: boolean) {
   if (spendTimer) { clearInterval(spendTimer); spendTimer = null; }
   watchUsageLive("term-spend", on);
-  if (!on) return;
+  if (!on) { termKeepalive.reset(); return; }
+  termKeepalive.soon(0);
   void refreshSpend();
   spendTimer = setInterval(() => { if (!usageLiveConnected()) void refreshSpend(); }, SPEND_POLL_MS);
 }

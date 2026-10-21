@@ -186,10 +186,22 @@ func (t *Tally) MeterSuggestion() {
 // settlement/retry path or changing the ledger transaction.
 func (t *Tally) SettlementError() error { return t.settlementErr }
 
+// PromptCache reports the main conversation's latest request of a Claude turn;
+// zero for other agents and before the first request.
+func (t *Tally) PromptCache() PromptCache {
+	if t.claude == nil {
+		return PromptCache{}
+	}
+	return t.claude.prompt
+}
+
 // observe 把一行事件并进汇总；不是用量事件就什么也不做。
+// Claude 的保活请求与对话同样逐条消息计量，只是种类保持 keepalive。
 func (t *Tally) Observe(base store.UsageEvent, line []byte) {
 	if base.Agent == config.AgentClaude && base.Kind != store.UsageKindTitle {
-		base.Kind = store.UsageKindChat
+		if base.Kind != store.UsageKindKeepalive {
+			base.Kind = store.UsageKindChat
+		}
 		if t.claude == nil {
 			t.claude = newClaudeMeter()
 		}

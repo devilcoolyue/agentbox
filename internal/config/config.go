@@ -348,6 +348,7 @@ type Config struct {
 	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
 	ModelGateway          ModelGatewayConfig       `json:"model_gateway"`
 	UsageTelemetry        UsageTelemetryConfig     `json:"usage_telemetry"`
+	CacheKeepalive        CacheKeepaliveConfig     `json:"cache_keepalive"`
 	Extensions            ExtensionsConfig         `json:"extensions"`
 	Accounts              []Account                `json:"accounts"`
 	Proxies               []Proxy                  `json:"proxies,omitempty"`
@@ -497,6 +498,9 @@ func (c *Config) validateLocked() error {
 		return err
 	}
 	if err := c.validateUsageTelemetry(); err != nil {
+		return err
+	}
+	if err := c.validateCacheKeepalive(); err != nil {
 		return err
 	}
 	if err := c.validateExtensions(); err != nil {
@@ -717,6 +721,7 @@ type persistConfig struct {
 	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
 	ModelGateway          ModelGatewayConfig       `json:"model_gateway,omitzero"`
 	UsageTelemetry        UsageTelemetryConfig     `json:"usage_telemetry,omitzero"`
+	CacheKeepalive        CacheKeepaliveConfig     `json:"cache_keepalive,omitzero"`
 	Extensions            ExtensionsConfig         `json:"extensions"`
 	Accounts              []persistAccount         `json:"accounts"`
 	Proxies               []Proxy                  `json:"proxies,omitempty"`
@@ -756,6 +761,7 @@ func (c *Config) saveLocked() error {
 		ProxyBridge:           c.ProxyBridge,
 		ModelGateway:          c.ModelGateway,
 		UsageTelemetry:        c.UsageTelemetry,
+		CacheKeepalive:        c.CacheKeepalive,
 		Extensions:            c.Extensions.Clone(),
 		Accounts:              make([]persistAccount, 0, len(c.Accounts)),
 		Proxies:               c.Proxies,
@@ -1100,6 +1106,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		ProxyBridge:           c.ProxyBridge,
 		ModelGateway:          c.ModelGateway,
 		UsageTelemetry:        c.UsageTelemetry,
+		CacheKeepalive:        c.CacheKeepalive,
 		Extensions:            c.Extensions.Clone(),
 		Accounts:              append([]Account(nil), c.Accounts...),
 		Proxies:               append([]Proxy(nil), c.Proxies...),
@@ -1155,6 +1162,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.ProxyBridge = work.ProxyBridge
 	c.ModelGateway = work.ModelGateway
 	c.UsageTelemetry = work.UsageTelemetry
+	c.CacheKeepalive = work.CacheKeepalive
 	c.Extensions = work.Extensions
 	c.Accounts = work.Accounts
 	c.Proxies = work.Proxies
@@ -1191,6 +1199,7 @@ type SettingsPatch struct {
 	ProxyBridge           *ProxyBridgeConfig       `json:"proxy_bridge"`
 	ModelGateway          *ModelGatewayPatch       `json:"model_gateway"`
 	TerminalTips          *TerminalTips            `json:"terminal_tips"`
+	CacheKeepalive        *CacheKeepaliveConfig    `json:"cache_keepalive"`
 	// Pricing 整表替换（不是逐键合并）：价目表是一张要整体校对的表，
 	// 前端改完把完整的表发回来，删行才有办法表达。
 	Pricing map[string]ModelPrice `json:"pricing"`
@@ -1265,6 +1274,9 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.TerminalTips != nil {
 			w.TerminalTips = sanitizeTips(*p.TerminalTips)
+		}
+		if p.CacheKeepalive != nil {
+			w.CacheKeepalive = *p.CacheKeepalive
 		}
 		if p.Pricing != nil {
 			clean, err := sanitizePricing(p.Pricing)

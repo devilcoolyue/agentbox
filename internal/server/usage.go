@@ -30,6 +30,9 @@ func (r *chatRoom) recordUsage(base store.UsageEvent, line []byte, wall time.Dur
 	return r.srv.usageService().Record(base, line, wall)
 }
 func (s *Server) usageService() *usage.Service {
-	s.usageOnce.Do(func() { s.usage = usage.New(s.workContext(), s.cfg, s.store) })
+	s.usageOnce.Do(func() {
+		s.usage = usage.New(s.workContext(), s.cfg, s.store)
+		s.usage.OnTerminalCache(s.noteTerminalCache)
+	})
 	return s.usage
 }

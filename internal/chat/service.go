@@ -2,6 +2,7 @@ package chat
 
 import (
 	"agentbox/internal/agent"
+	"agentbox/internal/config"
 	"agentbox/internal/protocol"
 	"agentbox/internal/store"
 	"agentbox/internal/usage"
@@ -87,6 +88,20 @@ type TurnOutcome struct {
 	Model                       string
 	Status, Code                string
 	Duration                    time.Duration
+	// Cache is set when the turn left a prompt cache a later request can read.
+	Cache *CachePoint
+}
+
+// CachePoint is what a later request needs to read the prompt cache a Claude
+// turn of the web chat left behind: the provider conversation, the options
+// that shape the cached prefix, and the size and lifetime of the last prompt.
+// A turn whose CLI got its own system prompt or tools (delegation) has none,
+// since nothing else can repeat them.
+type CachePoint struct {
+	Conversation           string
+	Model, Effort, Control string
+	TaskTools              bool
+	Prompt                 usage.PromptCache
 }
 type Observation interface {
 	Input() store.ChatRequest
@@ -152,6 +167,15 @@ type Input struct {
 	// the CLI leaves off; the user opted in to the extra tokens.
 	Tasks bool
 }
+
+// keepable reports whether a later request can read the cache a turn leaves:
+// only by repeating its prefix, which a delegating turn's per-turn system
+// prompt and tools rule out, as does a worker's conversation of its own.
+func keepable(agentType string, in Input, extras agent.ChatExtras) bool {
+	return agentType == config.AgentClaude && !in.Fresh && extras.MCPConfig == "" && extras.AppendSystemPrompt == "" &&
+		len(extras.AllowedTools) == 0 && len(extras.DisallowedTools) == 0
+}
+
 type Failure struct {
 	Code  string
 	Cause error
@@ -335,7 +359,12 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	// about (/compact's summary request is billed from the CLI's cost-state),
 	// and neither names the thread. Set by onLine from the CLI's own result.
 	local := false
+	var cache *CachePoint // set once the CLI ran; see below
 	defer func() {
+		if cache != nil {
+			cache.Prompt = tally.PromptCache()
+			outcome.Cache = cache
+		}
 		if s.Usage.Flush(&tally, time.Since(turnStart)) == 0 && !local {
 			log.Printf("usage: 会话 %s 回合结束但未记到用量（agent=%s），该回合消耗不会进报表", in.SessionID, sess.Agent)
 			if in.RequireUsage && receipt != nil {
@@ -433,6 +462,12 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		}
 	}
 
+	keep := keepable(sess.Agent, in, extras)
+	cachePoint := func() {
+		if keep && chatID != "" {
+			cache = &CachePoint{Conversation: chatID, Model: model, Effort: effort, Control: options.Control, TaskTools: extras.TaskTools}
+		}
+	}
 	if err := executor.Run(ctx, adapter, Turn{SessionID: sess.ID, ContainerID: sess.ContainerID,
 		Text: cliText(in, text), ChatID: chatID, Model: model, Effort: effort, Permission: r.Permission(), Options: options, StrictResume: in.StrictResume, RequireAppServer: in.RequireAppServer, Extras: extras}); err != nil {
 		var exited *ExitError
@@ -440,6 +475,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 			if receipt != nil {
 				receipt.Fail(err, "operation_cancelled")
 			}
+			cachePoint()
 			outcome.Status = OutcomeInterrupted
 			record(Entry{Kind: "status", State: "interrupted"}, "status", "")
 			return
@@ -455,6 +491,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if receipt != nil {
 		receipt.Completed(ctx)
 	}
+	cachePoint()
 	state := "idle"
 	outcome.Status = OutcomeCompleted
 	if terminal != "" && terminal != "completed" && userStopped() {

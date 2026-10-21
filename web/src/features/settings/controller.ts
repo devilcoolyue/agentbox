@@ -475,6 +475,15 @@ function fillSettingsForms() {
   $<HTMLInputElement>("set-user-running").value = String(st.resources?.max_running_per_user || 0);
   $<HTMLInputElement>("set-free-gib").value = String((st.resources?.min_free_bytes || 0) / (1024 ** 3));
   $<HTMLInputElement>("set-idle").value = String(st.idle_timeout_min);
+  const keep = st.cache_keepalive;
+  $("set-keepalive").classList.toggle("hidden", !keep); // 旧服务端没有这一项
+  if (keep) {
+    $<HTMLInputElement>("set-ka-allowed").checked = !keep.disabled;
+    $<HTMLInputElement>("set-ka-min").value = String(keep.min_context_tokens);
+    $<HTMLInputElement>("set-ka-hours").value = String(keep.max_hours);
+    $<HTMLInputElement>("set-ka-limit").value = String(keep.max_hours_limit);
+    $<HTMLInputElement>("set-ka-interval").value = String(keep.interval_minutes);
+  }
   const tz = $<HTMLSelectElement>("set-timezone");
   if (![...tz.options].some((o) => o.value === st.timezone)) {
     tz.appendChild(new Option(st.timezone + i18nText("（自定义）"), st.timezone));
@@ -797,6 +806,16 @@ function initSaveBar(signal: AbortSignal) {
       } : null },
     { id: "idle", get label() { return i18nText("空闲自动停机"); }, fields: ["set-idle"],
       patch: () => ({ idle_timeout_min: Number(inputVal("set-idle")) }) },
+    { id: "keepalive", get label() { return i18nText("对话缓存保活"); }, fields: ["set-ka-allowed", "set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval"],
+      patch: () => valid("set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval") ? {
+        cache_keepalive: {
+          disabled: !$<HTMLInputElement>("set-ka-allowed").checked,
+          min_context_tokens: Number(inputVal("set-ka-min")),
+          max_hours: Number(inputVal("set-ka-hours")),
+          max_hours_limit: Number(inputVal("set-ka-limit")),
+          interval_minutes: Number(inputVal("set-ka-interval")),
+        },
+      } : null },
     { id: "timezone", get label() { return i18nText("界面时区"); }, fields: ["set-timezone"],
       patch: () => ({ timezone: $<HTMLSelectElement>("set-timezone").value }) },
     { id: "tips", get label() { return i18nText("终端提示语"); }, fields: ["set-tips", "set-tips-interval", "set-tips-anim"],

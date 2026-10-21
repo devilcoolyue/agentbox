@@ -134,67 +134,109 @@ func (s *Service) EnsureSharedDir(user string) (string, error) {
 }
 
 func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
+	sess, _, err := s.start(ctx, id, false)
+	return sess, err
+}
+
+// ErrNotAsleep refuses to wake a workspace the idle reaper did not stop.
+var ErrNotAsleep = errors.New("workspace was not put to sleep by the idle reaper")
+
+// Wake starts a workspace the idle reaper put to sleep, for the server's own
+// bounded work (the chat cache keepalive), and reports whether this call
+// started its container; a running workspace is returned untouched. Nobody
+// used the workspace, so neither this start nor the matching Sleep reaches
+// the lifecycle hook, and a workspace stopped for any other reason stays
+// stopped.
+func (s *Service) Wake(ctx context.Context, id string) (store.Session, bool, error) {
+	return s.start(ctx, id, true)
+}
+
+// Sleep stops a workspace Wake started unless it was used since: a hold or
+// any activity after since leaves it to the reaper. Unreported, like Wake.
+func (s *Service) Sleep(ctx context.Context, id string, since time.Time) error {
+	l := s.lock(id)
+	if err := l.acquire(ctx); err != nil {
+		return err
+	}
+	defer l.release()
+	cur, ok := s.store.Get(id)
+	if !ok || cur.Status != store.StatusRunning || !s.activity.QuietSince(id, since) {
+		return nil
+	}
+	_, err := s.stop(ctx, id, store.StopIdle, false)
+	return err
+}
+
+func (s *Service) start(ctx context.Context, id string, wake bool) (store.Session, bool, error) {
 	lock := s.lock(id)
 	if err := lock.acquire(ctx); err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	}
 	defer lock.release()
 
 	// Re-read inside the lock: another caller may have finished the start.
 	cur, ok := s.store.Get(id)
 	if !ok {
-		return store.Session{}, ErrSessionGone
+		return store.Session{}, false, ErrSessionGone
+	}
+	if wake {
+		if cur.Status == store.StatusRunning {
+			return cur, false, nil
+		}
+		if cur.StopReason != store.StopIdle {
+			return store.Session{}, false, ErrNotAsleep
+		}
 	}
 	// A delegation worker runs its own account and home against the owner's
 	// files: /workspace is the owner's directory, everything else is its own.
 	workspaceDir := s.WorkspaceDir(cur)
 	if ownerID, worker, err := s.store.DelegationOwner(id); err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	} else if worker {
 		owner, ok := s.store.Get(ownerID)
 		if !ok || owner.User != cur.User {
-			return store.Session{}, ErrSessionGone
+			return store.Session{}, false, ErrSessionGone
 		}
 		workspaceDir = s.WorkspaceDir(owner)
 	}
 	acct, err := s.account(cur)
 	if err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	}
 	// 每次拉起（含每轮对话、终端连接）前先与账号池对齐 OAuth 令牌链，
 	// 会话里刷新出的新令牌得以写回，池子的新令牌也播发进会话。
 	if acct.CredentialsDir != "" {
 		if err := s.syncCredentials(ctx, acct, cur); err != nil {
-			return store.Session{}, fmt.Errorf("%w: %w", ErrCredentials, err)
+			return store.Session{}, false, fmt.Errorf("%w: %w", ErrCredentials, err)
 		}
 	}
 	if cur.Status == store.StatusRunning && s.dock.RunningWithMount(ctx, cur.ContainerID, dockerx.SharedMount) {
 		if s.network != nil {
 			if err := s.network(ctx, cur); err != nil {
-				return store.Session{}, err
+				return store.Session{}, false, err
 			}
 		}
 		// Each chat turn and terminal starts a new CLI process, which rereads
 		// its connection; extension bindings changed since the last start
 		// apply without restarting the container.
 		if err := s.applyConnection(ctx, cur, acct); err != nil {
-			return store.Session{}, fmt.Errorf("%w: %w", ErrCredentials, err)
+			return store.Session{}, false, fmt.Errorf("%w: %w", ErrCredentials, err)
 		}
 		s.applyMCP(ctx, cur)
 		s.activity.Touch(cur.ID)
-		return cur, nil
+		return cur, false, nil
 	}
 
 	if err := ctx.Err(); err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	}
 
 	if err := s.starts.acquire(ctx); err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	}
 	defer s.starts.release()
 	if err := s.admit(ctx, cur); err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	}
 
 	// Before credentials: a stray credential file in the template must never
@@ -205,14 +247,14 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 		log.Printf("seed home template %s: %v", cur.ID, err)
 	}
 	if err := agent.SeedCredentials(cur.Agent, s.HomeDir(cur), acct.CredentialsDir, dockerx.AgentUID, dockerx.AgentGID); err != nil {
-		return store.Session{}, fmt.Errorf("%w: %w", ErrCredentials, err)
+		return store.Session{}, false, fmt.Errorf("%w: %w", ErrCredentials, err)
 	}
 	if err := agent.SeedDefaultModel(cur.Agent, s.HomeDir(cur), acct.ResolveModel(cur.DefaultModel), dockerx.AgentUID, dockerx.AgentGID); err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	}
 	// After seeding: the pool copy just written carries the real upstream.
 	if err := s.applyConnection(ctx, cur, acct); err != nil {
-		return store.Session{}, fmt.Errorf("%w: %w", ErrCredentials, err)
+		return store.Session{}, false, fmt.Errorf("%w: %w", ErrCredentials, err)
 	}
 	// Only advertise the intranet proxy to the agent when the feature is on;
 	// the hint keys off $AGENTBOX_INTRANET_PROXY so it stays inert if no tunnel
@@ -224,11 +266,11 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 	}
 	shared, err := s.EnsureSharedDir(cur.User)
 	if err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	}
 	cid, err := s.dock.EnsureRunning(ctx, cur, acct, workspaceDir, s.HomeDir(cur), shared)
 	if err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	}
 	s.activity.Touch(cur.ID)
 	cur, err = s.store.Update(cur.ID, func(x *store.Session) {
@@ -237,16 +279,18 @@ func (s *Service) Start(ctx context.Context, id string) (store.Session, error) {
 		x.StopReason = ""
 	})
 	if err != nil {
-		return store.Session{}, err
+		return store.Session{}, false, err
 	}
-	s.notify(LifecycleStarted, "", cur)
+	if !wake {
+		s.notify(LifecycleStarted, "", cur)
+	}
 	if s.network != nil {
 		if err := s.network(ctx, cur); err != nil {
-			return store.Session{}, err
+			return store.Session{}, false, err
 		}
 	}
 	s.applyMCP(ctx, cur)
-	return cur, nil
+	return cur, true, nil
 }
 
 // Lifecycle actions reported to SetLifecycleHook.
@@ -327,9 +371,9 @@ func (s *Service) Stop(ctx context.Context, id string) (store.Session, error) {
 		return store.Session{}, err
 	}
 	defer l.release()
-	return s.stop(ctx, id, "")
+	return s.stop(ctx, id, "", true)
 }
-func (s *Service) stop(ctx context.Context, id, reason string) (store.Session, error) {
+func (s *Service) stop(ctx context.Context, id, reason string, report bool) (store.Session, error) {
 	sess, ok := s.store.Get(id)
 	if !ok {
 		return store.Session{}, ErrSessionGone
@@ -340,7 +384,7 @@ func (s *Service) stop(ctx context.Context, id, reason string) (store.Session, e
 		}
 	}
 	out, err := s.store.Update(id, func(x *store.Session) { x.Status = store.StatusStopped; x.StopReason = reason })
-	if err == nil && sess.Status == store.StatusRunning {
+	if err == nil && report && sess.Status == store.StatusRunning {
 		s.notify(LifecycleStopped, reason, out)
 	}
 	return out, err
@@ -437,7 +481,7 @@ func (s *Service) Reap(ctx context.Context, d time.Duration) {
 		cur, ok := s.store.Get(sess.ID)
 		if ok && cur.Status == store.StatusRunning && s.activity.Reapable(cur.ID, d) {
 			stopCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			_, err := s.stop(stopCtx, cur.ID, store.StopIdle)
+			_, err := s.stop(stopCtx, cur.ID, store.StopIdle, true)
 			cancel()
 			if err != nil {
 				log.Printf("idle reaper stop %s: %v", cur.ID, err)

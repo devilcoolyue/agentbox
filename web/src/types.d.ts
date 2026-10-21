@@ -318,7 +318,7 @@ export interface UsageEventRow {
   account_id?: string;
   account_label?: string;
   model?: string;
-  /** "chat" 对话 | "delegation" 委派给跑腿模型 | "title" 起标题 | "terminal" 终端 | "decision" 决策插件调用 | "suggestion" 下一步提示 | "background" Codex 后台请求（遥测补记） */
+  /** "chat" 对话 | "delegation" 委派给跑腿模型 | "title" 起标题 | "terminal" 终端 | "decision" 决策插件调用 | "suggestion" 下一步提示 | "background" Codex 后台请求（遥测补记） | "keepalive" 离开期间的缓存保活 */
   kind: string;
   /** 跑腿模型或 Jev 路由的花费所属的委派。 */
   delegation_id?: string;
@@ -737,8 +737,55 @@ export interface Settings {
   model_gateway?: ModelGatewayView;
   /** 按 token 折算费用的价目表，键是模型 ID 或 agent 名 */
   pricing: Record<string, ModelPrice>;
+  /** 缓存保活的全站设置（默认值已填好）；旧服务端没有 */
+  cache_keepalive?: CacheKeepaliveSettings;
   /** listen 改过但未重启 */
   restart_required: boolean;
+}
+
+/** config.CacheKeepaliveConfig：是否允许、默认值、空间可设上限与间隔 */
+export interface CacheKeepaliveSettings {
+  disabled?: boolean;
+  max_hours: number;
+  max_hours_limit: number;
+  min_context_tokens: number;
+  interval_minutes: number;
+}
+
+/** server.keepaliveView：GET/PUT /api/sessions/{id}/keepalive */
+export interface KeepaliveView {
+  available: boolean;
+  /** 不可用的原因：disabled（管理员关闭）/ agent / account（API Key、中转只写 5 分钟缓存） */
+  reason?: string;
+  enabled: boolean;
+  terminal: boolean;
+  /** 空间自己的值；0 = 跟随默认 */
+  max_hours: number;
+  min_context_tokens: number;
+  defaults: { max_hours: number; min_context_tokens: number };
+  effective: { max_hours: number; min_context_tokens: number };
+  max_hours_limit: number;
+  interval_minutes: number;
+  /** 对话最近一次请求（缓存的一小时内） */
+  chat?: { prompt_tokens: number; ttl: string; at: number; keep_micro_usd: number; rewrite_micro_usd: number };
+  plans: KeepalivePlan[];
+}
+
+export interface KeepalivePlan {
+  /** "chat" 或 "terminal:<目录>"，停止时原样传回 */
+  id: string;
+  source: "chat" | "terminal";
+  thread?: string;
+  title?: string;
+  cwd?: string;
+  model: string;
+  prompt_tokens: number;
+  next_at: number;
+  until: number;
+  runs: number;
+  max_runs: number;
+  last_read?: number;
+  keep_micro_usd: number;
 }
 
 /** Admin price catalog API. Automatic application is explicitly opt-in. */

@@ -12,6 +12,7 @@ import { responsiveSmoke } from './test-responsive.mjs';
 import { skinsSmoke } from './test-skins.mjs';
 import { themesSmoke } from './test-themes.mjs';
 import { switchAccountSmoke } from './test-switch-account.mjs';
+import { keepaliveSmoke } from './test-keepalive.mjs';
 import { accountModelsSmoke } from './test-account-models.mjs';
 import { userPickerSmoke } from './test-user-picker.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
@@ -404,6 +405,7 @@ export async function smoke(page) {
   await diagnosticsSmoke(page,base);
   if (process.env.AGENTBOX_BROWSER_ONLY_DIAGNOSTICS === '1') { assert.deepEqual(errors,[]); return; }
   await switchAccountSmoke(page,base);
+  await keepaliveSmoke(page,base);
   if (process.env.AGENTBOX_BROWSER_ONLY_SWITCH_ACCOUNT === '1') { assert.deepEqual(errors,[]); return; }
   await accountModelsSmoke(page,base);
   if (process.env.AGENTBOX_BROWSER_ONLY_ACCOUNT_MODELS === '1') { assert.deepEqual(errors,[]); return; }

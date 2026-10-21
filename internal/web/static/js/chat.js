@@ -28,6 +28,7 @@ import { settleCodexItems } from "./features/chat/codex-items.js";
 import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { createBackground } from "./features/chat/background.js";
 import { createContextMeter } from "./features/chat/context-meter.js";
+import { chatChipState, chipRefresher, openKeepalive } from "./features/workspaces/keepalive.js";
 import { createTaskPanel, taskToolsEnabled, setTaskToolsEnabled } from "./features/chat/tasks.js";
 import { createCommandMenu } from "./features/chat/commands.js";
 import { createMentionMenu } from "./features/chat/mentions.js";
@@ -105,6 +106,8 @@ const stream = createChatStream({ append: appendChat, working: setWorkingLabel, 
     footer: () => live.footer, log: () => $("chat-log"), nearBottom });
 const background = createBackground(() => renderBackground());
 const contextMeter = createContextMeter({ el: () => $("chat-context"), agent: sessionAgent, session: () => S.current?.id });
+const keepaliveChip = chipRefresher(() => $("chat-keepalive"), chatChipState);
+$("chat-keepalive").addEventListener("click", () => void openKeepalive());
 // Agent 的任务列表（Claude 的任务文件、TodoWrite、Codex 的计划），进行中那项同时当执行指示的文案
 const tasks = createTaskPanel({ el: () => $("chat-tasks"), agent: sessionAgent, session: () => S.current?.id, running: () => S.chatState === "running",
     load: (id, thread, signal) => api(`/sessions/${id}/chat/tasks?thread=${encodeURIComponent(thread)}`, { signal }),
@@ -179,6 +182,7 @@ export function chatTeardown() {
     stream.reset();
     live.reset();
     contextMeter.reset();
+    keepaliveChip.reset();
     tasks.reset();
     setChatStatus("idle");
 }
@@ -224,6 +228,9 @@ function handleChatMsg(msg) {
             observeAnswer(live.context, msg.event, msg.ts);
             background.observe(msg.event);
             contextMeter.observe(msg.event);
+            // 回合结束时服务端才排保活计划，稍等再读
+            if (msg.event?.type === "result")
+                keepaliveChip.soon(1500);
             tasks.observe(msg.event);
             commandMenu.observe(msg.event);
             // The failed result a stop produces; the interrupted status says it instead.
@@ -1183,6 +1190,7 @@ export async function loadHistory(opts = {}) {
         renderBackground();
         contextMeter.reset(); // 新线程、换空间或重连补拉，都以最新一页为准
         contextMeter.replay(entries);
+        keepaliveChip.soon(0);
         suggestion.set(latestSuggestion(entries));
         const id = active_thread || thread?.id;
         tasks.reset();

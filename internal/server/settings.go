@@ -37,6 +37,7 @@ type settingsView struct {
 	Models                map[string][]config.ModelOption `json:"models"`
 	DefaultModels         map[string]string               `json:"default_models"`
 	TerminalTips          config.TerminalTips             `json:"terminal_tips"`
+	CacheKeepalive        config.CacheKeepaliveConfig     `json:"cache_keepalive"`
 	Tunnel                config.TunnelConfig             `json:"tunnel"`
 	TunnelActive          bool                            `json:"tunnel_active"`          // SOCKS 代理是否真的监听中
 	TunnelError           string                          `json:"tunnel_error,omitempty"` // 最近一次启停失败的原因
@@ -66,6 +67,7 @@ func (s *Server) settingsView() settingsView {
 		Models:                s.cfg.GetModels(),
 		DefaultModels:         s.cfg.GetDefaultModels(),
 		TerminalTips:          s.cfg.GetTerminalTips(),
+		CacheKeepalive:        s.cfg.GetCacheKeepalive(),
 		Tunnel:                s.cfg.GetTunnel(),
 		TunnelActive:          s.tunnels.proxyUp.Load(),
 		ProxyBridge:           s.cfg.GetProxyBridge(),
@@ -118,6 +120,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			view.TunnelError = err.Error()
 		}
 		view.TunnelActive = s.tunnels.proxyUp.Load()
+	}
+	if patch.CacheKeepalive != nil {
+		s.reconcileAllKeepalive()
 	}
 	if patch.ProxyBridge != nil {
 		// 换绑定地址同样热生效：重绑失败只记日志，代理列表接口里会显示当前状态。

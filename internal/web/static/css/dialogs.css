@@ -74,6 +74,23 @@ dialog input[type="text"], dialog input[type="number"], dialog input[type="passw
 dialog select, dialog .select-trigger, dialog textarea { width: 100%; }
 dialog textarea { resize: vertical; }
 .dlg-git-connections { width: min(720px, 94vw); }
+/* 缓存保活（features/workspaces/keepalive.ts） */
+.dlg-keepalive { width: min(580px, 94vw); }
+.ka-options { display: grid; gap: 8px; margin: 6px 0 0 26px; transition: opacity var(--dur-fast) var(--ease-out); }
+.ka-options.off { opacity: .55; }
+.ka-options .field-row { margin: 4px 0 0; }
+.ka-options .note { margin: 0; }
+.ka-plans-title { margin: 18px 0 8px; font-size: 13px; }
+.ka-plans { display: grid; gap: 6px; }
+.ka-plan {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
+}
+.ka-plan-ic { flex: none; color: var(--amber); }
+.ka-plan-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.ka-plan-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ka-plan-meta { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.ka-empty { margin: 0; }
 .dlg-git-connections p { overflow-wrap: anywhere; white-space: pre-line; }
 .dlg-git-connections input { width: 100%; }
 .dlg-git-connections input[type="checkbox"] { width: auto; }

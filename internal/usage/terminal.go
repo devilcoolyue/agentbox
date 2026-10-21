@@ -25,6 +25,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -71,6 +72,11 @@ type termTranscriptRec struct {
 	RequestID  string          `json:"requestId"`
 	Timestamp  string          `json:"timestamp"`
 	Effort     json.RawMessage `json:"effort"`
+	// 缓存保活要的：会话 id、CLI 的工作目录（--resume 按它找会话），以及这一行
+	// 是不是子 Agent 的支线（老版本把支线记在同一个文件里）。
+	SessionID   string `json:"sessionId"`
+	Cwd         string `json:"cwd"`
+	IsSidechain bool   `json:"isSidechain"`
 	// 计时线索（见 claudeTermParser.requestStart）：父行、api-request 行的 id 与
 	// assistant 行指回它的 requestRef、内容块序号、思考块的时长。都是可有可无的
 	// 字段，用宽松类型：哪天 CLI 改了它们的类型，丢的只是计时，不是这一行的用量。
@@ -91,6 +97,11 @@ type termTranscriptRec struct {
 			Output     int64 `json:"output_tokens"`
 			CacheRead  int64 `json:"cache_read_input_tokens"`
 			CacheWrite int64 `json:"cache_creation_input_tokens"`
+			// 写入缓存的两档时长，判断这次请求写的是 1 小时还是 5 分钟缓存。
+			CacheCreation struct {
+				FiveMinutes int64 `json:"ephemeral_5m_input_tokens"`
+				OneHour     int64 `json:"ephemeral_1h_input_tokens"`
+			} `json:"cache_creation"`
 		} `json:"usage"`
 	} `json:"message"`
 }
@@ -203,6 +214,7 @@ type termFileState struct {
 	tail    []byte      // offset 之前最后 termTailBytes 个字节
 	parser  termParser
 	written map[string]termRowKey // 已落库的行：req_id → 写入时的内容
+	cache   TerminalCache         // 上次报告给缓存保活的那一点
 }
 
 // termParser 逐行吃 transcript，rows 返回「把迄今吃下的内容整份解析一遍」会得到
@@ -455,6 +467,7 @@ func (s *Service) scanSessionUsage(sc *Scanner, sess store.Session) {
 			continue
 		}
 		st.size, st.mtime, st.active = fi.Size(), fi.ModTime(), time.Now()
+		s.noteTerminalCache(sess, rel, st)
 		changed := st.pending(turns)
 		if len(changed) == 0 {
 			continue
@@ -487,6 +500,27 @@ func (s *Service) scanSessionUsage(sc *Scanner, sess store.Session) {
 		for _, t := range changed {
 			st.written[t.reqID] = t.key()
 		}
+	}
+}
+
+// noteTerminalCache 把交互式会话主对话的最近一次请求交给缓存保活，与上次报告
+// 的一样就不报。会话 id 取文件名：--resume 认的就是它。
+func (s *Service) noteTerminalCache(sess store.Session, rel string, st *termFileState) {
+	cp, ok := st.parser.(interface{ cachePoint() (TerminalCache, bool) })
+	if !ok {
+		return
+	}
+	c, ok := cp.cachePoint()
+	if !ok {
+		return
+	}
+	c.Conversation = strings.TrimSuffix(path.Base(rel), ".jsonl")
+	if c == st.cache {
+		return
+	}
+	st.cache = c
+	if fn := s.terminalCache.Load(); fn != nil {
+		(*fn)(sess, c)
 	}
 }
 
@@ -643,6 +677,27 @@ type claudeTermParser struct {
 	// 计时线索，只留最近的若干条：回复的起点总在它前面不远处。
 	sent  recentMap[int64]           // api-request 的 id → 发出的时刻
 	chain recentMap[claudeChainNode] // 行 uuid → 它在对话链上的位置
+
+	// 主对话最近一次请求（见 TerminalCache），cacheID 是它的 message.id；
+	// ttl 是最近一次写缓存时要的时长，只读不写的请求沿用它。
+	cache   TerminalCache
+	cacheID string
+	ttl     string
+}
+
+// TerminalCache 是终端里交互式 Claude Code 会话主对话的最近一次请求，按
+// transcript 记的样子：缓存保活据它决定要不要续、用什么参数续。Exited 表示
+// CLI 在这次请求之后离开了会话（退出时写下 cost-state）。
+type TerminalCache struct {
+	Conversation, Cwd, Model, Effort string
+	Prompt                           PromptCache
+	At                               time.Time
+	Exited                           bool
+}
+
+// cachePoint 返回主对话最近一次请求；还没有时 ok 为 false。
+func (p *claudeTermParser) cachePoint() (TerminalCache, bool) {
+	return p.cache, p.cacheID != ""
 }
 
 // claudeChainNode 是一行在对话链上的位置，只留找请求起点用得到的几样。
@@ -746,6 +801,12 @@ func (p *claudeTermParser) line(line []byte) {
 	if rec.UUID != "" {
 		p.chain.put(rec.UUID, claudeChainNode{parent: string(rec.ParentUUID), at: at, attachment: rec.Type == "attachment"})
 	}
+	// cost-state 是进程退出时写的，不看 entrypoint：写在最近一次请求之后，
+	// 说明 CLI 已经离开了这个会话。
+	if rec.Type == "cost-state" {
+		p.cache.Exited = p.cacheID != ""
+		return
+	}
 	if rec.Entrypoint != termEntrypointCLI {
 		return // -p 发起的那些已经记过账了
 	}
@@ -793,7 +854,25 @@ func (p *claudeTermParser) line(line []byte) {
 		if t, err := time.Parse(time.RFC3339Nano, rec.Timestamp); err == nil && r.ts.IsZero() {
 			r.ts = t
 		}
+		if !rec.IsSidechain && (!ok || id == p.cacheID) {
+			p.noteCache(id, r, &rec)
+		}
 	}
+}
+
+// noteCache 记下主对话最新的一次请求：新出现的请求总是最新的，同一请求后来
+// 选用的那份用量也更新上去。
+func (p *claudeTermParser) noteCache(id string, r *claudeTermRequest, rec *termTranscriptRec) {
+	switch c := rec.Message.Usage.CacheCreation; {
+	case c.OneHour > 0:
+		p.ttl = "1h"
+	case c.FiveMinutes > 0:
+		p.ttl = "5m"
+	}
+	u := r.message.Usage
+	p.cacheID = id
+	p.cache = TerminalCache{Conversation: rec.SessionID, Cwd: rec.Cwd, Model: r.model, Effort: r.effort,
+		Prompt: PromptCache{Prompt: u.Input + u.CacheRead + u.CacheWrite, Read: u.CacheRead, TTL: p.ttl}, At: r.ts}
 }
 
 // rows 按请求首次出现的顺序输出。回合 ID 用这一回合最早出现的 requestId：同一

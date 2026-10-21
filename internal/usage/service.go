@@ -32,7 +32,16 @@ type Service struct {
 	cfg        *config.Config
 	store      Store
 	termScan   *Scanner
+	// terminalCache hears about the latest request of each interactive Claude
+	// session the terminal scan reads (see OnTerminalCache).
+	terminalCache atomic.Pointer[func(store.Session, TerminalCache)]
 }
+
+// OnTerminalCache registers fn for the latest main-conversation request of
+// each interactive Claude session in a workspace terminal, reported when it
+// changes and once per transcript after a restart. fn runs on the scan and
+// must not block.
+func (s *Service) OnTerminalCache(fn func(store.Session, TerminalCache)) { s.terminalCache.Store(&fn) }
 
 func New(ctx context.Context, cfg *config.Config, st Store) *Service {
 	return &Service{request: make(chan struct{}, 1), ctx: ctx, cfg: cfg, store: st, termScan: newScanner()}

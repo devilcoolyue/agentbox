@@ -62,6 +62,15 @@ func (a *Activity) Release(id string) {
 	e.lastSeen = time.Now()
 }
 
+// QuietSince reports whether id has had no use since t: nothing holds it and
+// nothing touched it after t.
+func (a *Activity) QuietSince(id string, t time.Time) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	e := a.seen[id]
+	return e == nil || e.holds == 0 && !e.lastSeen.After(t)
+}
+
 // forget drops a session's record (on delete) so the map doesn't leak.
 func (a *Activity) Forget(id string) {
 	a.mu.Lock()

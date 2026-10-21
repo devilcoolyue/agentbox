@@ -92,6 +92,17 @@ type claudeMeter struct {
 	restored   *costState
 	finalStart int64
 	compacted  bool
+	prompt     PromptCache
+}
+
+// PromptCache is the main conversation's latest request of a Claude turn as
+// the provider counted it: Prompt is every input token (uncached, read from
+// and written to the cache), Read the part served from cache, and TTL the
+// lifetime the turn's cache writes asked for ("1h" or "5m"; "" while the turn
+// wrote none). The chat cache keepalive is decided on it.
+type PromptCache struct {
+	Prompt, Read int64
+	TTL          string
 }
 
 // costState is the cumulative record the CLI appends to the transcript as a
@@ -187,6 +198,9 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 			c.streams[e.Parent] = e.Event.Message
 			c.live[e.Event.Message.ID] = true
 			c.add(e.Event.Message)
+			if e.Parent == "" {
+				c.notePrompt(line)
+			}
 		case "message_delta":
 			m, ok := c.streams[e.Parent]
 			if !ok {
@@ -205,6 +219,35 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 		case "message_stop":
 			delete(c.streams, e.Parent)
 		}
+	}
+}
+
+// notePrompt keeps the main conversation's latest request (see PromptCache).
+// message_start carries the whole prompt's counts, cache lifetimes included.
+func (c *claudeMeter) notePrompt(line []byte) {
+	var e struct {
+		Event struct {
+			Message struct {
+				Usage struct {
+					claudeTokens
+					CacheCreation struct {
+						FiveMinutes int64 `json:"ephemeral_5m_input_tokens"`
+						OneHour     int64 `json:"ephemeral_1h_input_tokens"`
+					} `json:"cache_creation"`
+				} `json:"usage"`
+			} `json:"message"`
+		} `json:"event"`
+	}
+	if json.Unmarshal(line, &e) != nil {
+		return
+	}
+	u := e.Event.Message.Usage
+	c.prompt.Prompt, c.prompt.Read = u.Input+u.CacheRead+u.CacheWrite, u.CacheRead
+	switch {
+	case u.CacheCreation.OneHour > 0:
+		c.prompt.TTL = "1h"
+	case u.CacheCreation.FiveMinutes > 0:
+		c.prompt.TTL = "5m"
 	}
 }
 

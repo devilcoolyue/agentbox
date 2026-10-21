@@ -466,3 +466,51 @@ func TestClaudeHiddenRequestsInNewSessionAndMismatches(t *testing.T) {
 		t.Fatalf("renamed model: %+v", rows)
 	}
 }
+
+func TestClaudePromptCacheAndKeepaliveRows(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.cfg.Pricing = map[string]config.ModelPrice{"claude": {TokenRates: config.TokenRates{Input: 5, Output: 25, CacheRead: 0.5, CacheWrite: 10}}}
+	if _, err := s.store.Grant("alice", 1000000, "seed", "", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	tally := s.NewTally()
+	if pc := tally.PromptCache(); pc != (PromptCache{}) {
+		t.Fatal(pc)
+	}
+	base := chatBase("keep")
+	base.Kind = store.UsageKindKeepalive
+	for _, line := range []string{
+		`{"type":"stream_event","event":{"type":"message_start","message":{"id":"m1","model":"claude","usage":{"input_tokens":2,"output_tokens":1,"cache_read_input_tokens":46000,"cache_creation_input_tokens":80,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":80}}}}}`,
+		// A subagent's request is not the conversation the keepalive resumes.
+		`{"type":"stream_event","parent_tool_use_id":"tool-a","event":{"type":"message_start","message":{"id":"child","model":"claude","usage":{"input_tokens":3,"output_tokens":1,"cache_creation_input_tokens":500,"cache_creation":{"ephemeral_5m_input_tokens":500}}}}}`,
+		`{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}}`,
+	} {
+		tally.Observe(base, []byte(line))
+	}
+	if pc := tally.PromptCache(); pc != (PromptCache{Prompt: 46082, Read: 46000, TTL: "1h"}) {
+		t.Fatal(pc)
+	}
+	if n := s.Flush(&tally, time.Second); n != 2 {
+		t.Fatal(n)
+	}
+	rows := s.store.ListUsage(store.UsageFilter{User: "alice"})
+	spent := int64(0)
+	for _, r := range rows {
+		if r.Kind != store.UsageKindKeepalive {
+			t.Fatalf("keepalive billed as %q", r.Kind)
+		}
+		spent += r.CostMicroUSD
+	}
+	if q, _ := s.store.GetQuota("alice"); spent == 0 || q.BalanceMicroUSD != 1000000-spent {
+		t.Fatalf("keepalive not charged: spent %d, %+v", spent, q)
+	}
+
+	// The lifetime is the turn's: a later request that wrote nothing keeps it.
+	turn := s.NewTally()
+	observe(&turn, "turn",
+		`{"type":"stream_event","event":{"type":"message_start","message":{"id":"t1","model":"claude","usage":{"input_tokens":2,"output_tokens":1,"cache_creation_input_tokens":900,"cache_creation":{"ephemeral_5m_input_tokens":900,"ephemeral_1h_input_tokens":0}}}}}`,
+		`{"type":"stream_event","event":{"type":"message_start","message":{"id":"t2","model":"claude","usage":{"input_tokens":2,"output_tokens":1,"cache_read_input_tokens":902}}}}`)
+	if pc := turn.PromptCache(); pc != (PromptCache{Prompt: 904, Read: 902, TTL: "5m"}) {
+		t.Fatal(pc)
+	}
+}

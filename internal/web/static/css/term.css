@@ -56,6 +56,15 @@
 .term-spend .ts-tok { color: var(--muted); font-family: var(--mono); }
 /* 已花之后，连接状态那组就不该再抢 auto 边距了 */
 .term-spend:not(.hidden) + .term-conn { margin-left: 0; }
+/* 终端会话的缓存保活：排在已花前面，出现时由它占 auto 边距 */
+.term-keepalive {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  margin-left: auto; padding: 2px 8px; border: none; border-radius: var(--radius-pill);
+  background: transparent; color: var(--amber); font-size: 12px; white-space: nowrap; cursor: pointer;
+}
+.term-keepalive:hover { background: var(--panel-2); }
+.term-keepalive:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.term-keepalive:not(.hidden) ~ .term-spend, .term-keepalive:not(.hidden) ~ .term-conn { margin-left: 0; }
 
 /* ---- 右侧连接状态：状态点 + 文案 + 手动重连按钮 ---- */
 .term-conn {

@@ -105,6 +105,16 @@ func (e Executor) Run(ctx context.Context, adapter agent.Adapter, turn Turn) err
 	return e.execTurn(ctx, turn, cmd)
 }
 
+// RunCommand runs a prepared one-shot CLI command the way a turn's exec path
+// does: Text on stdin, every output line to OnLine, the exit status as the
+// result. The chat cache keepalive sends its resumed request through it.
+func (e Executor) RunCommand(ctx context.Context, turn Turn, cmd []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return e.execTurn(ctx, turn, cmd)
+}
+
 // execTurn 跑传统的一次性 CLI 回合：stdin 喂提示词后关闭，stdout 收 JSONL
 // 事件直到进程退出。claude 一直走这里；codex 仅在 app-server 不可用时回退。
 func (e Executor) execTurn(ctx context.Context, turn Turn, cmd []string) error {

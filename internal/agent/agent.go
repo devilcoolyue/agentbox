@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -86,6 +87,9 @@ type ChatExtras struct {
 	// sent as a JSON user message. The CLI echoes each user message when it
 	// takes it, which places a steer where it actually applied.
 	Interactive bool
+	// Dir is where the CLI starts instead of the container's /workspace;
+	// Claude Code looks up a session to resume by its working directory.
+	Dir string
 }
 
 var pidFileRe = regexp.MustCompile(`^/tmp/\.agentbox-[a-z0-9-]{1,64}\.pid$`)
@@ -113,6 +117,12 @@ func (x ChatExtras) prelude() (string, error) {
 			return "", fmt.Errorf("extra environment %q invalid", key)
 		}
 		out += "export " + key + "=" + shellQuote(value) + "; "
+	}
+	if x.Dir != "" {
+		if !path.IsAbs(x.Dir) || len(x.Dir) > 4096 || strings.ContainsAny(x.Dir, "\x00\n\r") {
+			return "", fmt.Errorf("working directory %q invalid", x.Dir)
+		}
+		out += "cd " + shellQuote(x.Dir) + " || exit 1; "
 	}
 	return out, nil
 }

@@ -18,7 +18,7 @@ func (s *Store) InsertUsageMessages(messages ...UsageEvent) (int, error) {
 	defer tx.Rollback()
 	var evs []UsageEvent
 	for _, e := range messages {
-		if e.SessionID == "" || e.ReqID == "" || e.TurnID == "" || e.Agent != "claude" || e.Kind != UsageKindChat && e.Kind != UsageKindSuggestion || e.Price == nil {
+		if e.SessionID == "" || e.ReqID == "" || e.TurnID == "" || e.Agent != "claude" || e.Kind != UsageKindChat && e.Kind != UsageKindSuggestion && e.Kind != UsageKindKeepalive || e.Price == nil {
 			return 0, fmt.Errorf("invalid Claude message settlement")
 		}
 		// Validate even a duplicate: malformed snapshots must not be hidden.

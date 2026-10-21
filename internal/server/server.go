@@ -138,6 +138,7 @@ type Server struct {
 	extensions *extension.Host     // extension host; see extensions.go
 	modelGW    modelGatewayState   // model gateway behind the model.* hooks; see modelgateway.go
 	usageTel   usageTelemetryState // per-request timing from the CLIs; see usage_telemetry.go
+	keepalive  keepaliveState      // prompt caches kept warm while users are away; see keepalive.go
 
 	codexPairs    codexPairing  // Codex requests waiting for their completion record
 	codexRollouts codexRollouts // Codex conversations known to keep a rollout
@@ -446,6 +447,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/sessions/{id}/models", s.auth(s.withSession(s.handleSessionModels)))
 	mux.Handle("GET /api/sessions/{id}/commands", s.auth(s.withSession(s.handleSlashCommands)))
 	mux.Handle("GET /api/sessions/{id}/account/usage", s.auth(s.withSession(s.handleAccountUsage)))
+	mux.Handle("GET /api/sessions/{id}/keepalive", s.auth(s.withSession(s.handleGetKeepalive)))
+	mux.Handle("PUT /api/sessions/{id}/keepalive", s.auth(s.withSession(s.handlePutKeepalive)))
+	mux.Handle("POST /api/sessions/{id}/keepalive/stop", s.auth(s.withSession(s.handleStopKeepalive)))
 	mux.Handle("POST /api/sessions/{id}/upload", s.auth(s.withSession(s.handleUpload)))
 	mux.Handle("GET /api/sessions/{id}/archive", s.auth(s.withSession(s.handleArchive)))
 	mux.Handle("GET /api/sessions/{id}/files", s.auth(s.withSession(s.handleFiles)))
