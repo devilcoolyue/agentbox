@@ -1287,6 +1287,11 @@ export interface AgentEvent {
   rate_limit_info?: RateLimitInfo;
   /** Claude：prompt_suggestion 事件里预测的下一句输入 */
   suggestion?: string;
+  /** Claude：子 Agent 自己的消息与工具调用，指向发起它的 Agent 工具调用 */
+  parent_tool_use_id?: string | null;
+  /** Claude：user 事件里工具结果的结构化版本（Bash 的 stdout/stderr、Edit 的 structuredPatch…），
+   * 出错时是一句字符串（features/chat/claude-tools.ts） */
+  tool_use_result?: unknown;
   /** Claude：result 事件的耗时与计费 */
   duration_ms?: number;
   total_cost_usd?: number;

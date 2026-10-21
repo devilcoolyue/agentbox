@@ -24,7 +24,7 @@ import { ChatSender } from "./features/chat/sender.js";
 import { createChatStream } from "./features/chat/stream.js";
 import { ChatHistory } from "./features/chat/history.js";
 import { createOlderHistory } from "./features/chat/older.js";
-import { settleCodexItems } from "./features/chat/codex-items.js";
+import { settleToolRows } from "./features/chat/tool-rows.js";
 import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { createBackground } from "./features/chat/background.js";
 import { createContextMeter } from "./features/chat/context-meter.js";
@@ -357,7 +357,7 @@ export function setChatStatus(state, error) {
     if (S.chatState !== "running") {
         stream.settle();
         background.reset();
-        settleCodexItems($("chat-log"));
+        settleToolRows($("chat-log"));
     }
     const send = $("chat-send");
     if (state === "running") {
@@ -1132,7 +1132,7 @@ const older = createOlderHistory({
         const box = document.createElement("div");
         const writer = new TurnWriter(() => box, sessionAgent);
         replayHistory(writer, value.entries, value.costs, node => writer.place(node));
-        settleCodexItems(box);
+        settleToolRows(box);
         return box;
     },
     changed: updateScrollBottomButton,
@@ -1189,7 +1189,7 @@ export async function loadHistory(opts = {}) {
         resetQuestionCards();
         replayHistory(live, entries, costs, appendChat, true);
         // 只有正在跑的最后一个回合里的工具行还可能等到结束事件，其余停止转圈
-        settleCodexItems(log, S.chatState === "running" ? live.body : null);
+        settleToolRows(log, S.chatState === "running" ? live.body : null);
         background.reset(); // 重连时仍在等后台任务的回合，从最新一页恢复
         for (const e of entries) {
             if (e.kind === "user" && e.turn?.id)

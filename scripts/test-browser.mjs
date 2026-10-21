@@ -27,6 +27,7 @@ import { chatCommandsSmoke } from './test-chat-commands.mjs';
 import { chatMentionsSmoke } from './test-chat-mentions.mjs';
 import { chatTasksSmoke } from './test-chat-tasks.mjs';
 import { chatCodexItemsSmoke } from './test-chat-codex-items.mjs';
+import { chatClaudeToolsSmoke } from './test-chat-claude-tools.mjs';
 import { chatHistorySettingsSmoke, chatPagesSmoke } from './test-chat-pages.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
@@ -377,6 +378,7 @@ export async function smoke(page) {
    await chatMentionsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
    await chatTasksSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];},setThread:t=>{historyThread=t;}});
    await chatCodexItemsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
+   await chatClaudeToolsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
    assert.deepEqual(errors,[]); return;
   }
   if (process.env.AGENTBOX_BROWSER_ONLY_CHAT_PAGES === '1') {
@@ -861,6 +863,7 @@ export async function smoke(page) {
   await chatMentionsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},messages:()=>chatMessages,socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
   await chatTasksSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];},setThread:t=>{historyThread=t;}});
   await chatCodexItemsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
+  await chatClaudeToolsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
   await chatPagesSmoke(page,{session:'fixture-space',closeChat:()=>chatSocket.close()});
   await page.locator('.tab[data-tab="files"]').click();
   await at('#/sessions/fixture-space/files','#tab-files');

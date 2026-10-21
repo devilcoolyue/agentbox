@@ -92,8 +92,12 @@ func (s *Server) ensureActiveThread(sess store.Session) (string, error) {
 // --- legacy migration ---
 
 type histEntry struct {
-	raw  json.RawMessage
-	meta struct {
+	raw json.RawMessage
+	// tool is the slim copy of a Claude tool result a history page sends
+	// (slimToolResults), computed once on first use.
+	tool     json.RawMessage
+	toolDone bool
+	meta     struct {
 		TS    time.Time       `json:"ts"`
 		Kind  string          `json:"kind"`
 		Text  string          `json:"text"`
@@ -431,18 +435,19 @@ type historyLimits struct {
 	ReloadEntries, ReloadBytes int // a from= refresh larger than this returns the newest page
 }
 
-// Counted in rendered entries: Claude's tool results are neither sent nor
-// counted, they made up a third of a tool-heavy transcript.
+// Counted in rendered entries: Claude's tool results go out as slim copies that
+// count only toward the byte budget; they made up a third of a tool-heavy
+// transcript.
 var historyPage = historyLimits{
 	Entries: 800, Bytes: 4 << 20,
 	MaxEntries: 3000, MaxBytes: 16 << 20,
 	ReloadEntries: 12000, ReloadBytes: 64 << 20,
 }
 
-// historySent reports whether the web client renders anything from an entry.
-// Claude tool results ("user" events) only feed the CLI; they are often whole
-// file contents, so history leaves them on disk.
-func historySent(e histEntry) bool {
+// historySent reports whether an entry goes out as written and counts as a
+// rendered entry. Claude tool results ("user" events) are often whole file
+// contents; only their slim copy (historyTool) is sent.
+func historySent(e *histEntry) bool {
 	if e.meta.Kind != "event" {
 		return true
 	}
@@ -452,14 +457,27 @@ func historySent(e histEntry) bool {
 	return json.Unmarshal(e.meta.Event, &ev) != nil || ev.Type != "user"
 }
 
+// historyTool is the slim copy of a tool result entry, nil for other entries.
+func historyTool(e *histEntry) json.RawMessage {
+	if !e.toolDone {
+		e.toolDone = true
+		if e.meta.Kind == "event" {
+			e.tool = slimToolResults(e.meta.TS, e.meta.Event)
+		}
+	}
+	return e.tool
+}
+
 // historyStart picks the first index of the page ending before end.
 func historyStart(entries []histEntry, end int, limits historyLimits) int {
 	count, size, start := 0, 0, end
 	for start > 0 {
-		e := entries[start-1]
+		e := &entries[start-1]
 		if historySent(e) {
 			count++
 			size += len(e.raw)
+		} else {
+			size += len(historyTool(e))
 		}
 		start--
 		if count >= limits.MaxEntries || size >= limits.MaxBytes {
@@ -474,10 +492,13 @@ func historyStart(entries []histEntry, end int, limits historyLimits) int {
 
 func historyWithin(entries []histEntry, count, size int) bool {
 	n, total := 0, 0
-	for _, e := range entries {
+	for i := range entries {
+		e := &entries[i]
 		if historySent(e) {
 			n++
 			total += len(e.raw)
+		} else {
+			total += len(historyTool(e))
 		}
 		if n > count || total > size {
 			return false
@@ -591,9 +612,12 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 	if contextLine != nil {
 		lines = append(lines, contextLine)
 	}
-	for _, e := range entries[start:end] {
+	for i := start; i < end; i++ {
+		e := &entries[i]
 		if historySent(e) {
 			lines = append(lines, e.raw)
+		} else if tool := historyTool(e); tool != nil {
+			lines = append(lines, tool)
 		}
 	}
 	var turnIDs []string

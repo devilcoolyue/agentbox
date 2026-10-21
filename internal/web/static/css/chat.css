@@ -349,13 +349,6 @@
 .chip-open:hover, .chip-open:focus-visible {
   background: color-mix(in srgb, var(--amber) 12%, transparent); outline: none;
 }
-/* 工具行上的「后台」：run_in_background 的命令，结束时另有一行通知 */
-.chip .bg-tag {
-  margin-right: 9px; padding: 0 6px;
-  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
-  border-radius: var(--radius-pill);
-  color: var(--amber); font-family: var(--sans); font-size: 11px;
-}
 /* 用户停止的回合、后台任务结束：说明性的细行，不是错误 */
 .chip.stopped, .chip.bg-task {
   display: flex; align-items: center; gap: 6px;
@@ -462,6 +455,73 @@
 }
 .chip.tc-note-chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 12px; white-space: normal; }
 .chip.tc-note-chip svg { flex: none; }
+/* ---- Claude 工具行（features/chat/claude-tools.ts）：照 Claude Code 终端的写法——
+ * 「● 工具名(参数)」一行，下面「⎿」引出结果；连续的读/搜/命令折成一行摘要，点开是详细视图 ---- */
+.cc-tool, .cc-group {
+  min-width: 0; max-width: 100%;
+  font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--text);
+}
+.cc-head, .cc-gsum { display: flex; align-items: baseline; min-width: 0; white-space: nowrap; }
+.cc-dot { flex: none; width: 1.6em; font-size: 10px; color: var(--green); }
+.cc-tool[data-status="failed"] > .cc-head .cc-dot { color: var(--red); }
+.cc-tool[data-status="unfinished"] > .cc-head .cc-dot { color: var(--muted); }
+.cc-tool[data-status="running"] > .cc-head .cc-dot,
+.cc-group[data-status="running"] > .cc-gsum .cc-dot { color: var(--muted); animation: cc-blink 1.2s ease-in-out infinite; }
+/* 折叠组结束后与 CLI 一样不带圆点，只留缩进 */
+.cc-group:not([data-status="running"]) > .cc-gsum .cc-dot { visibility: hidden; }
+@keyframes cc-blink { 50% { opacity: 0.15; } }
+.cc-name { flex: none; font-weight: 600; }
+.cc-args { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cc-head .chip-open { flex: none; }
+.cc-toggle, .cc-gsum { cursor: pointer; border-radius: calc(4px * var(--radius-scale)); }
+.cc-toggle::after, .cc-gsum::after {
+  content: "›"; flex: none; margin-left: 8px; color: var(--muted); opacity: 0;
+  transition: transform var(--dur-fast) var(--ease-out, ease), opacity var(--dur-fast) ease;
+}
+.cc-toggle:hover::after, .cc-toggle:focus-visible::after, .cc-gsum:hover::after, .cc-gsum:focus-visible::after,
+.cc-toggle[aria-expanded="true"]::after, .cc-gsum[aria-expanded="true"]::after { opacity: 1; }
+.cc-toggle[aria-expanded="true"]::after, .cc-gsum[aria-expanded="true"]::after { transform: rotate(90deg); }
+.cc-toggle:focus-visible, .cc-gsum:focus-visible { outline: 1px solid var(--line); }
+.cc-gsum { color: var(--muted); }
+.cc-gsum:hover .cc-gtext { color: var(--text); }
+.cc-gtext { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cc-gerr { flex: none; color: var(--red); }
+.cc-res { display: flex; min-width: 0; padding-left: 0.5em; }
+.cc-hint[hidden] { display: none; }
+.cc-elbow { flex: none; width: 2.2em; color: var(--muted); }
+.cc-out { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cc-line { color: var(--muted); white-space: pre-wrap; word-break: break-word; }
+.cc-line.err, .cc-pre.err { color: var(--red); }
+.cc-line.warn { color: var(--warn); }
+.cc-label { color: var(--text); font-weight: 600; }
+.cc-pre {
+  margin: 0; font: inherit; color: var(--text);
+  white-space: pre; overflow-x: auto; max-width: 100%;
+}
+.cc-pre.cc-wrap { white-space: pre-wrap; word-break: break-word; }
+.cc-num .ln { color: var(--muted); user-select: none; }
+.cc-diff .dl { display: inline-block; min-width: calc(100% - 4ch); }
+.cc-diff .dl.add { background: color-mix(in srgb, var(--green) 14%, transparent); }
+.cc-diff .dl.del { background: color-mix(in srgb, var(--red) 13%, transparent); }
+.cc-more {
+  align-self: flex-start; padding: 0; border: 0; background: none;
+  font: inherit; color: var(--muted); cursor: pointer;
+}
+.cc-more:hover, .cc-more:focus-visible { color: var(--text); outline: none; text-decoration: underline; }
+/* 详细视图：折叠组的每一条、子 Agent 的每次调用，往里缩一格 */
+.cc-gitems { display: none; }
+.cc-group.cc-open > .cc-gitems { display: flex; flex-direction: column; gap: 4px; margin: 2px 0 6px 1.6em; }
+.cc-tool > .cc-tool { margin-left: 2.7em; }
+.cc-child b { font-weight: 600; }
+.cc-child .cc-args { color: var(--muted); }
+.cc-reply { margin: 2px 0; font-size: 13px; }
+.cc-links { list-style: none; margin: 0; padding: 0; }
+.cc-links a { color: var(--text); }
+.cc-links a:hover { color: var(--amber); }
+@media (prefers-reduced-motion: reduce) {
+  .cc-tool[data-status="running"] > .cc-head .cc-dot, .cc-group[data-status="running"] > .cc-gsum .cc-dot { animation: none; }
+  .cc-toggle::after, .cc-gsum::after { transition: none; }
+}
 /* Codex 计划模式的方案 */
 .codex-plan { display: flex; flex-direction: column; gap: 4px; }
 .codex-plan-head { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--amber); }

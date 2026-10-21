@@ -1,6 +1,8 @@
 import { liveNode, renderEvent, formatText, answerSources } from "../../chat-render.js";
 import { t as i18nText } from "../../i18n.js";
-import { codexStreamEvent, codexWorkLabel, resetCodexItems } from "./codex-items.js";
+import { codexStreamEvent, codexWorkLabel } from "./codex-items.js";
+import { resetToolRows } from "./tool-rows.js";
+import { claudeWorkLabel } from "./claude-tools.js";
 export function createChatStream(hooks) {
     /* ---------------- 流式增量渲染 ----------------
      * Claude：--include-partial-messages 下，完整 assistant 事件之前会先收到
@@ -54,7 +56,7 @@ export function createChatStream(hooks) {
         workLabelFromEvent(ev);
         if (replayFeed(ev))
             return; // codex 整段文本 → 打字机回放
-        for (const node of renderEvent(ev))
+        for (const node of renderEvent(ev, { live: true }))
             replayAppend(node);
     }
     /* ---- codex 整段回放队列 ---- */
@@ -146,7 +148,7 @@ export function createChatStream(hooks) {
     /* 丢弃回放状态：切线程 / 切会话时调用，对话流马上要整体重建 */
     function replayReset() {
         replayQueue = [];
-        resetCodexItems();
+        resetToolRows();
         // Both real streaming and exec replay belong to the old view. Never let a
         // pending frame use the next thread's footer or scroll position.
         if (liveBlock?.raf)
@@ -160,10 +162,19 @@ export function createChatStream(hooks) {
         if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
             for (const b of ev.message.content) {
                 if (b.type === "tool_use") {
-                    hooks.working(() => i18nText("运行工具 ") + b.name + "…");
+                    hooks.working(claudeWorkLabel(b));
                     return;
                 }
             }
+        }
+        else if (ev.type === "user" && !ev.parent_tool_use_id && Array.isArray(ev.message?.content) && ev.message.content.some(b => b.type === "tool_result")) {
+            hooks.working(() => i18nText("思考中…")); // 工具跑完，模型接着往下想
+        }
+        else if (ev.type === "system" && ev.subtype === "api_retry") {
+            // 与 CLI 一样：请求失败、CLI 自己在等待重试，回合没失败
+            const n = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+            const status = n(ev.error_status), wait = Math.ceil(n(ev.retry_delay_ms) / 1000), attempt = n(ev.attempt), max = n(ev.max_retries);
+            hooks.working(() => i18nText("API 请求失败{p0}，{p1} 秒后重试（第 {p2}/{p3} 次）…", { p0: status ? ` (${status})` : "", p1: String(wait), p2: String(attempt), p3: String(max) }));
         }
         else if (ev.type === "item.started" && ev.item) {
             const label = codexWorkLabel(ev);
@@ -210,7 +221,12 @@ export function createChatStream(hooks) {
                         liveAttach(liveBlock);
                 }
                 else {
-                    liveBlock = null; // tool_use 等交给完整事件渲染
+                    // tool_use 交给完整事件渲染；入参还在生成（大段 Write 要一会儿），先说一声在准备哪个工具
+                    if (t === "tool_use" && typeof e.content_block?.name === "string") {
+                        const name = e.content_block.name;
+                        hooks.working(() => i18nText("运行工具 ") + name + "…");
+                    }
+                    liveBlock = null;
                 }
                 break;
             }

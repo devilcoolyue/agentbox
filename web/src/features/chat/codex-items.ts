@@ -6,13 +6,14 @@
  * item.started 先画一行「进行中」（转圈 + 实时输出最后几行），同一 id 的
  * item.completed 到达时原地改成完成态，不另起一行；没有 id 的旧记录按命令串配对。
  * 字段来自 agent/appserver_items.go，exec --json 回退路径只有其中一部分，缺的就不显示。
- * 模型与命令输出一律走 textContent。 */
+ * 行结构、进行中登记与收尾在 tool-rows.ts，与 Claude 的工具行共用。 */
 import type { AgentEvent } from "../../types.js";
-import { buttonLabel, svgIcon } from "../../icons.js";
-import { setTip } from "../../tip.js";
+import { svgIcon } from "../../icons.js";
 import { setText, setTextRender, t as i18nText } from "../../i18n.js";
-import { S } from "../../state.js";
-import { openLightbox } from "../../util.js";
+import {
+  badge, base, clean, clipLabel, clipOutput, diffBlock, diffStat, el, fillRow, imageBody, newRow, num, oneLine,
+  outputBlocks, pendingRow, shortDuration, statusBadge, str, takeRow, textBlock, trackRow, type Row,
+} from "./tool-rows.js";
 
 type Item = NonNullable<AgentEvent["item"]>;
 interface Action { type?: string; command?: string; name?: string; path?: string; query?: string }
@@ -22,15 +23,9 @@ const TYPES = new Set(["command_execution", "file_change", "mcp_tool_call", "dyn
   "image_view", "image_generation", "context_compaction", "collab_agent_tool_call", "sub_agent_activity",
   "review_mode", "sleep"]);
 
-/* 进行中的条目：key → 行元素。完成时取出原地更新；上限防止中断的回合越攒越多 */
-const pending = new Map<string, HTMLElement>();
-const PENDING_MAX = 300;
 /* 实时输出缓冲（只留末尾），随行元素回收 */
 const liveText = new WeakMap<HTMLElement, string>();
 const LIVE_KEEP = 4096, LIVE_LINES = 4;
-
-const str = (v: unknown) => typeof v === "string" ? v : "";
-const num = (v: unknown) => typeof v === "number" && Number.isFinite(v) ? v : undefined;
 
 function itemKey(it: Item) {
   const id = str(it.id);
@@ -48,11 +43,6 @@ export function unwrapShell(command: string) {
   if (arg.length >= 2 && arg[0] === '"' && arg.endsWith('"')) return arg.slice(1, -1).replace(/\\(["\\$`])/g, "$1");
   return arg;
 }
-
-/* 执行指示里只放得下一小段 */
-const clipLabel = (s: string) => s.length > 48 ? s.slice(0, 47) + "…" : s;
-const base = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
-const oneLine = (s: string) => s.replace(/\s*\n\s*/g, " ⏎ ").trim();
 
 /* 命令的显示名与摘要：全是读/列/搜时照 CLI 的 Explored 归类，否则就是 Shell */
 function commandView(it: Item): { name: string; icon: string; sum: string; label: () => string } {
@@ -78,96 +68,11 @@ function commandView(it: Item): { name: string; icon: string; sum: string; label
   return { name: "Shell", icon: "tool", sum: oneLine(cmd), label: () => what ? i18nText("执行 {p0}…", { p0: what }) : i18nText("执行命令…") };
 }
 
-export function shortDuration(ms: number | undefined) {
-  if (ms === undefined || ms < 100) return ""; // 瞬间完成的不标，耗时长的才值得看
-  if (ms < 1000) return Math.round(ms) + "ms";
-  if (ms < 60000) return (ms / 1000).toFixed(1) + "s";
-  const s = Math.round(ms / 1000);
-  return Math.floor(s / 60) + "m " + (s % 60) + "s";
-}
-
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/g;
-const clean = (s: string) => s.replace(ANSI, "").replace(/\r(?!\n)/g, "\n");
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) {
-  const e = document.createElement(tag);
-  e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-/* 一行工具：图标 + 名字 + 摘要 + 行尾信息；有详情时整行是 <summary>，可点开 */
-interface Row { name: string; icon: string; sum: string; meta?: (HTMLElement | string)[]; body?: HTMLElement[]; tip?: string; htmlPath?: string }
-
-function fillRow(wrap: HTMLElement, row: Row, running: boolean) {
-  const line = el(row.body?.length ? "summary" : "div", "chip tool");
-  const name = el("span", "name");
-  name.append(running ? el("span", "tc-spin") : svgIcon(row.icon, 12), document.createTextNode(row.name));
-  line.append(name);
-  if (row.sum) line.append(el("span", "sum", row.sum));
-  for (const m of row.meta || []) line.append(typeof m === "string" ? el("span", "tc-meta", m) : m);
-  if (row.htmlPath) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "btn chip-open";
-    b.dataset.htmlPreview = row.htmlPath;
-    buttonLabel(b, () => i18nText("预览"), "eye");
-    setTip(b, () => i18nText("在预览窗口渲染 ") + row.htmlPath);
-    // 按钮在 <summary> 里：只打开预览（chat-log 上的委托处理），别顺带展开这一行
-    b.addEventListener("click", e => e.preventDefault());
-    line.append(b);
-  }
-  setTip(line, row.tip || row.sum || row.name);
-  wrap.dataset.rowIcon = row.icon;
-  if (running) wrap.dataset.status = "running";
-  if (row.body?.length) {
-    const det = document.createElement("details");
-    const body = el("div", "tc-body");
-    body.append(...row.body);
-    det.append(line, body);
-    wrap.replaceChildren(det);
-  } else wrap.replaceChildren(line);
-  if (running) wrap.append(el("pre", "tc-live mono"));
-}
-
-function badge(text: string, tone: "err" | "ok" | "warn" | "") {
-  return el("span", "tc-badge" + (tone ? " " + tone : ""), text);
-}
-
-function statusBadge(status: string, exit?: number) {
-  if (status === "failed") return badge(exit !== undefined ? i18nText("✗ 退出码 {p0}", { p0: String(exit) }) : i18nText("✗ 失败"), "err");
-  if (status === "declined") return badge(i18nText("已拒绝"), "warn");
-  if (status === "interrupted") return badge(i18nText("已中断"), "warn");
-  if (exit !== undefined && exit !== 0) return badge(i18nText("✗ 退出码 {p0}", { p0: String(exit) }), "err");
-  return null;
-}
-
 /* 首尾各留 20 行：服务端已截好的直接用；exec 回退路径给的是全文，这里照同样口径截 */
-const SIDE_LINES = 20, SIDE_CHARS = 3000;
 function outputParts(it: Item) {
   const full = clean(str(it.aggregated_output)).replace(/\n+$/, "");
   if (it.output_tail !== undefined || it.output_truncated) return { head: full, tail: clean(str(it.output_tail)).replace(/\n+$/, ""), cut: true, total: num(it.output_lines) };
-  const lines = full.split("\n");
-  if (lines.length <= 2 * SIDE_LINES && full.length <= 2 * SIDE_CHARS) return { head: full, tail: "", cut: false, total: lines.length };
-  const tailN = Math.min(SIDE_LINES, Math.max(0, lines.length - SIDE_LINES));
-  return { head: lines.slice(0, SIDE_LINES).join("\n").slice(0, SIDE_CHARS), tail: tailN ? lines.slice(-tailN).join("\n").slice(-SIDE_CHARS) : "", cut: true, total: lines.length };
-}
-
-function outputBlocks(it: Item) {
-  const out: HTMLElement[] = [];
-  const { head, tail, cut, total } = outputParts(it);
-  if (!head && !tail) return out;
-  out.push(el("pre", "tc-out mono", head));
-  if (cut) {
-    const shown = (head ? head.split("\n").length : 0) + (tail ? tail.split("\n").length : 0);
-    const gap = el("div", "tc-gap");
-    if (total && total > shown) setText(gap, "… 省略 {p0} 行 …", { p0: String(total - shown) });
-    else setText(gap, "… 输出过长，中间已省略 …");
-    out.push(gap);
-    if (tail) out.push(el("pre", "tc-out mono", tail));
-  }
-  return out;
+  return clipOutput(full);
 }
 
 function commandRow(it: Item, completed: boolean): Row {
@@ -188,7 +93,7 @@ function commandRow(it: Item, completed: boolean): Row {
   const cwd = str(it.cwd);
   if (cwd && cwd !== "/workspace") body.push(el("div", "tc-note mono", "cwd " + cwd));
   if (completed) {
-    const outs = outputBlocks(it);
+    const outs = outputBlocks(outputParts(it));
     if (outs.length) body.push(...outs);
     // 只有明确记了「没输出」才这么说；旧记录根本没存输出
     else if (it.output_lines === 0 || it.aggregated_output === "") {
@@ -204,25 +109,6 @@ function changeKind(c: Change) {
   return typeof c.kind === "string" ? c.kind : str(c.kind?.type);
 }
 
-function diffBlock(c: Change, kind: string) {
-  const pre = el("pre", "tc-diff mono");
-  const text = str(c.diff).replace(/\n$/, "");
-  for (const l of text.split("\n")) {
-    const cls = kind === "add" ? "add" : kind === "delete" ? "del"
-      : l.startsWith("+++") || l.startsWith("---") ? "file" : l.startsWith("@@") ? "hunk"
-      : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : "";
-    const span = el("span", cls ? "dl " + cls : "dl", (kind === "add" ? "+" : kind === "delete" ? "-" : "") + l);
-    pre.append(span, "\n");
-  }
-  const out: HTMLElement[] = [pre];
-  if (c.diff_truncated) {
-    const gap = el("div", "tc-gap");
-    setText(gap, "… 改动过长，后面已省略 …");
-    out.push(gap);
-  }
-  return out;
-}
-
 function changeRows(it: Item): Row[] {
   const changes = (Array.isArray(it.changes) ? it.changes : []) as Change[];
   const status = str(it.status);
@@ -231,22 +117,13 @@ function changeRows(it: Item): Row[] {
     const name = kind === "add" ? "Write" : kind === "delete" ? "Delete" : move ? "Move" : "Edit";
     const icon = kind === "add" ? "file-code" : kind === "delete" ? "trash" : move ? "move" : "edit";
     const meta: (HTMLElement | string)[] = [];
-    const added = num(c.added), removed = num(c.removed);
-    if (added || removed) {
-      const stat = el("span", "tc-stat");
-      if (added) stat.append(el("span", "add", "+" + added));
-      if (removed) stat.append(el("span", "del", "−" + removed));
-      meta.push(stat);
-    }
+    const stat = diffStat(num(c.added), num(c.removed));
+    if (stat) meta.push(stat);
     const b = statusBadge(status);
     if (b) meta.push(b);
     const htmlPath = changes.length === 1 && kind !== "delete" && /\.html?$/i.test(move || path) ? move || path : "";
-    return { name, icon, sum: move ? path + " → " + move : path, meta, body: c.diff ? diffBlock(c, kind) : [], htmlPath };
+    return { name, icon, sum: move ? path + " → " + move : path, meta, body: c.diff ? diffBlock(str(c.diff), kind, !!c.diff_truncated) : [], htmlPath };
   });
-}
-
-function textBlock(text: string, cls = "tc-out mono") {
-  return el("pre", cls, text);
 }
 
 function toolRow(it: Item, completed: boolean): Row {
@@ -304,31 +181,6 @@ function searchRow(it: Item, completed: boolean): Row {
     meta.push(c);
   }
   return { name, icon: "globe", sum: sum || (completed ? "" : i18nText("搜索中…")), meta, body };
-}
-
-/* 容器里的路径 → 文件直链（/workspace 与 /shared 两个范围），其它路径不给图 */
-function fileURL(path: string) {
-  if (!S.current) return "";
-  const p = path.replace(/^file:\/\//, "");
-  const [rel, scope] = p.startsWith("/workspace/") ? [p.slice(11), ""] : p.startsWith("/shared/") ? [p.slice(8), "&scope=shared"] : ["", ""];
-  if (!rel) return "";
-  return `/api/sessions/${encodeURIComponent(S.current.id)}/file?path=${encodeURIComponent(rel)}&token=${encodeURIComponent(S.token)}${scope}`;
-}
-
-function imageBody(path: string) {
-  const url = fileURL(path);
-  if (!url) return [];
-  const img = el("img", "tc-image");
-  img.src = url;
-  img.alt = base(path);
-  img.loading = "lazy";
-  img.addEventListener("click", () => openLightbox(url, path));
-  img.addEventListener("error", () => {
-    const gone = el("div", "tc-note");
-    setText(gone, "图片已不在原位置");
-    img.replaceWith(gone);
-  });
-  return [img];
 }
 
 function collabRow(it: Item, completed: boolean): Row {
@@ -416,8 +268,7 @@ export function codexItemNodes(ev: AgentEvent): HTMLElement[] | undefined {
   if (completed && !rowFor(it, true).length) return simpleNodes(it);
   const key = itemKey(it);
   if (completed) {
-    const open = key ? pending.get(key) : undefined;
-    if (open) pending.delete(key);
+    const open = takeRow(key);
     const rows = rowFor(it, true);
     if (open && rows.length === 1) {
       delete open.dataset.status;
@@ -425,23 +276,12 @@ export function codexItemNodes(ev: AgentEvent): HTMLElement[] | undefined {
       open.dataset.status = str(it.status);
       return [];
     }
-    return rows.map(r => {
-      const wrap = el("div", "tool-call");
-      fillRow(wrap, r, false);
-      wrap.dataset.status = str(it.status);
-      return wrap;
-    });
+    return rows.map(r => newRow(r, false, str(it.status)));
   }
   const rows = rowFor(it, false);
   if (rows.length !== 1) return [];
-  const wrap = el("div", "tool-call");
-  fillRow(wrap, rows[0], true);
-  if (key) {
-    const prev = pending.get(key); // 同一条目又开始了（上一次没收尾）：旧行停在未完成
-    if (prev) settleRow(prev);
-    pending.set(key, wrap);
-    if (pending.size > PENDING_MAX) pending.delete(pending.keys().next().value!);
-  }
+  const wrap = newRow(rows[0], true);
+  if (key) trackRow(key, wrap);
   return [wrap];
 }
 
@@ -464,7 +304,7 @@ export function codexWorkLabel(ev: AgentEvent): (() => string) | undefined {
 /** 不落盘的实时增量：命令输出、MCP 进度。只更新进行中的那一行，返回是否认领 */
 export function codexStreamEvent(e: { type?: string; item_id?: unknown; delta?: unknown; message?: unknown }) {
   if (e.type !== "item_output_delta" && e.type !== "item_progress") return false;
-  const row = pending.get(str(e.item_id));
+  const row = pendingRow(str(e.item_id));
   const live = row?.querySelector<HTMLElement>(".tc-live");
   if (!row || !live) return true;
   const prev = e.type === "item_progress" ? "" : liveText.get(row) || "";
@@ -472,23 +312,4 @@ export function codexStreamEvent(e: { type?: string; item_id?: unknown; delta?: 
   liveText.set(row, next);
   live.textContent = next.replace(/\n+$/, "").split("\n").slice(-LIVE_LINES).join("\n");
   return true;
-}
-
-/** 回合结束：还挂着「进行中」的行（中断、断线）停止转圈，收起实时输出 */
-function settleRow(row: HTMLElement) {
-  row.dataset.status = "unfinished";
-  row.querySelector(".tc-live")?.remove();
-  row.querySelector(".tc-spin")?.replaceWith(svgIcon(row.dataset.rowIcon || "tool", 12));
-  for (const [k, v] of pending) if (v === row) pending.delete(k);
-}
-
-export function settleCodexItems(root: ParentNode, keep?: Element | null) {
-  for (const row of root.querySelectorAll<HTMLElement>('.tool-call[data-status="running"]')) {
-    if (!keep?.contains(row)) settleRow(row);
-  }
-}
-
-/** 切线程、整体重载：对话流要重建，丢掉登记 */
-export function resetCodexItems() {
-  pending.clear();
 }

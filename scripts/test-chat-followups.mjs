@@ -154,7 +154,7 @@ async function scenario(browser,{mobile}={}){
  ev({type:'system',subtype:'task_started',task_id:'bg1',description:'Sleep for 40 seconds',is_backgrounded:true,task_type:'local_bash'});
  ev({type:'system',subtype:'background_tasks_changed',tasks:[{task_id:'bg1',description:'Sleep for 40 seconds',task_type:'local_bash'}]});
  await page.waitForFunction(()=>/后台任务 1 个运行中/.test(document.querySelector('#chat-log .turn.working .work-bg')?.textContent||''));
- assert.equal(await page.locator('.chip.tool .bg-tag').first().textContent(),'后台');
+ assert.equal(await page.locator('.cc-tool[data-tool="Bash"] .cc-res').first().textContent(),'⎿在后台运行');
  ev({type:'assistant',message:{content:[{type:'text',text:'已在后台启动'}]}});
  ev({type:'result',subtype:'success',is_error:false,result:'已在后台启动'});
  await page.waitForFunction(()=>/等待后台任务结束：Sleep for 40 seconds/.test(document.querySelector('#chat-log .turn.working .work-label')?.textContent||''));

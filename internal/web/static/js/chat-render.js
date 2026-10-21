@@ -15,6 +15,7 @@ import { usageCard, usageReportOf } from "./features/chat/usage-card.js";
 import { syntaxMarks } from "./features/chat/syntax.js";
 import { fmtTokens } from "./usage-math.js";
 import { codexItemNodes } from "./features/chat/codex-items.js";
+import { breakClaudeGroup, claudeTaskProgress, claudeToolResults, claudeToolUse, subAgentKnown, useMarkdown } from "./features/chat/claude-tools.js";
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
 /* 复制到剪贴板：clipboard API 优先，非安全上下文回退 execCommand */
 export async function copyText(text) {
@@ -47,19 +48,13 @@ export function chip(text, extra) {
 /* 工具 chip；带 htmlPath 时在末尾挂一个「预览」按钮，产品改原型不用再切到文件页
  * 翻目录。真正的打开逻辑在 preview.ts 用事件委托接管（此处保持纯渲染，也避开
  * chat-render ↔ preview ↔ files 的环形依赖）。 */
-export function toolChip(name, summary, htmlPath = "", background = false) {
+export function toolChip(name, summary, htmlPath = "") {
     const c = document.createElement("div");
     c.className = "chip tool";
     const n = document.createElement("span");
     n.className = "name";
     n.append(svgIcon("tool", 12), document.createTextNode(name));
     c.appendChild(n);
-    if (background) { // run_in_background：命令在后台跑，结束时另有一行通知
-        const tag = document.createElement("span");
-        tag.className = "bg-tag";
-        setText(tag, "后台");
-        c.appendChild(tag);
-    }
     if (summary) {
         const s = document.createElement("span");
         s.className = "sum";
@@ -324,6 +319,7 @@ export function formatText(text, opts = {}) {
         imgResolver = null;
     }
 }
+useMarkdown(text => formatText(text)); // 子 Agent 的回复（claude-tools.ts 不反向 import 这里）
 function codeBlock(lang, body) {
     const lines = String(body).split("\n");
     const box = document.createElement("div");
@@ -713,15 +709,23 @@ function backgroundChip(ev) {
     const id = String(ev.task_id || "");
     if (!backgroundTasks.has(id))
         return null;
-    const desc = backgroundTasks.get(id) || "";
+    const { desc, agent } = backgroundTasks.get(id);
     const status = ev.status === "completed" || ev.status === "failed" ? ev.status : "stopped";
     const c = document.createElement("div");
     c.className = "chip bg-task";
     c.dataset.status = status;
     const text = document.createElement("span");
-    setTextRender(text, status === "completed" ? () => desc ? i18nText("后台任务完成：{p0}", { p0: desc }) : i18nText("后台任务完成")
-        : status === "failed" ? () => desc ? i18nText("后台任务失败：{p0}", { p0: desc }) : i18nText("后台任务失败")
-            : () => desc ? i18nText("后台任务已停止：{p0}", { p0: desc }) : i18nText("后台任务已停止"));
+    const usage = (ev.usage || {});
+    const ms = typeof usage.duration_ms === "number" ? usage.duration_ms : 0;
+    const took = ms ? " · " + (ms < 1000 ? "<1s" : ms < 60000 ? Math.round(ms / 1000) + "s" : Math.floor(ms / 60000) + "m " + Math.round(ms % 60000 / 1000) + "s") : "";
+    // 后台子 Agent：CLI 的写法 ● Agent "描述" finished · 7s
+    if (agent)
+        setTextRender(text, status === "completed" ? () => i18nText("Agent “{p0}” 已完成", { p0: desc }) + took
+            : status === "failed" ? () => i18nText("Agent “{p0}” 失败", { p0: desc }) : () => i18nText("Agent “{p0}” 已停止", { p0: desc }));
+    else
+        setTextRender(text, status === "completed" ? () => desc ? i18nText("后台任务完成：{p0}", { p0: desc }) : i18nText("后台任务完成")
+            : status === "failed" ? () => desc ? i18nText("后台任务失败：{p0}", { p0: desc }) : i18nText("后台任务失败")
+                : () => desc ? i18nText("后台任务已停止：{p0}", { p0: desc }) : i18nText("后台任务已停止"));
     c.append(svgIcon(status === "completed" ? "check" : "stop", 12), text);
     if (desc)
         setTip(c, desc);
@@ -753,6 +757,7 @@ export function renderEntry(raw) {
         return [];
     if (raw.kind === "user") {
         compactReplays.clear();
+        breakClaudeGroup();
         return [renderUserTurn(raw.text, raw.ts)];
     }
     if (raw.kind === "event")
@@ -766,24 +771,6 @@ export function renderEntry(raw) {
     if (raw.kind === "status" && raw.state === "interrupted")
         return [interruptedChip()];
     return [];
-}
-/* 工具入参里指向 HTML 的落盘路径 —— 有它才给 chip 挂「预览」。只认写文件类的
- * 入参名，Read/Grep 命中的 .html 不算「刚做出来的东西」，不必给入口。 */
-function htmlOutputPath(input) {
-    if (!input || typeof input !== "object")
-        return "";
-    const o = input;
-    const p = String(o.file_path || o.path || o.notebook_path || "");
-    return /\.html?$/i.test(p) ? p : "";
-}
-function summarizeInput(input) {
-    if (!input || typeof input !== "object")
-        return "";
-    const o = input;
-    const cand = o.command || o.file_path || o.path || o.pattern ||
-        o.query || o.url || o.description;
-    const s = cand ? String(cand) : JSON.stringify(input);
-    return s.length > 100 ? s.slice(0, 100) + "…" : s;
 }
 /* 任务列表的工具（列表本身在输入框上方的任务面板，features/chat/tasks.ts）：对话流里
  * 只留一行说明做了什么；只读的 TaskList / TaskGet 与 CLI 一样不显示。
@@ -880,8 +867,16 @@ function rateLimitChip(info) {
         parts.push(i18nText("正在使用用量积分"));
     return chip(parts.filter(Boolean).join(" · "), "warn");
 }
-/* 渲染一条 agent 事件（Claude stream-json / Codex --json），返回节点数组 */
-export function renderEvent(ev) {
+/* 渲染一条 agent 事件（Claude stream-json / Codex --json），返回节点数组。
+ * live：实时到达（不是历史回放），进行中的工具行据此走秒。 */
+export function renderEvent(ev, opts = {}) {
+    const out = eventNodes(ev, opts);
+    // 文字、提示行、卡片……任何别的内容都结束 Claude 工具的折叠组（思考块除外）
+    if (ev?.type !== "assistant" && out.some(n => !n.classList.contains("think")))
+        breakClaudeGroup();
+    return out;
+}
+function eventNodes(ev, opts) {
     if (!ev || typeof ev !== "object")
         return [];
     const out = [];
@@ -890,17 +885,19 @@ export function renderEvent(ev) {
         // 其余 system 事件（init、status 等）属系统信息，对用户无意义，一律不展示；
         // 只有后台任务结束要说一声，不然模型隔一会儿又开口，看不出为什么
         if (ev.subtype === "task_started" && ev.is_backgrounded === true && ev.task_id)
-            backgroundTasks.set(ev.task_id, String(ev.description || ""));
+            backgroundTasks.set(ev.task_id, { desc: String(ev.description || ""), agent: ev.task_type === "local_agent" });
         if (ev.subtype === "background_tasks_changed" && Array.isArray(ev.tasks)) {
             for (const task of ev.tasks)
                 if (task?.task_id)
-                    backgroundTasks.set(task.task_id, String(task.description || ""));
+                    backgroundTasks.set(task.task_id, { desc: String(task.description || ""), agent: task.task_type === "local_agent" });
         }
         if (ev.subtype === "task_notification") {
             const c = backgroundChip(ev);
             if (c)
                 out.push(c);
         }
+        if (ev.subtype === "task_progress")
+            claudeTaskProgress(ev);
         if (ev.subtype === "compact_boundary") {
             const meta = ev.compact_metadata;
             compactReplays = preservedUUIDs(meta);
@@ -926,9 +923,14 @@ export function renderEvent(ev) {
         return out;
     }
     if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
+        const sub = !!ev.parent_tool_use_id && subAgentKnown(ev);
         for (const block of ev.message.content) {
-            if (block.type === "text" && block.text)
-                out.push(agentText(block.text));
+            if (block.type === "text" && block.text) {
+                if (!sub) {
+                    breakClaudeGroup();
+                    out.push(agentText(block.text));
+                }
+            }
             else if (block.type === "tool_use") {
                 // The delegation card shows the delegate call; its review gets a short line.
                 if (block.name === "mcp__agentbox__delegate")
@@ -942,20 +944,32 @@ export function renderEvent(ev) {
                 }
                 const task = taskToolChip(block.name, block.input);
                 if (task !== undefined) {
-                    if (task)
+                    if (task) {
+                        breakClaudeGroup();
                         out.push(task);
+                    }
                     continue;
                 }
-                const input = block.input;
-                out.push(toolChip(block.name, summarizeInput(block.input), htmlOutputPath(block.input), input?.run_in_background === true));
+                const input = (block.input || {});
+                // 计划模式给出的方案：与 CLI 一样把计划正文整段显示出来
+                if (block.name === "ExitPlanMode" && typeof input.plan === "string" && input.plan) {
+                    breakClaudeGroup();
+                    out.push(planBlock(input.plan));
+                    continue;
+                }
+                const node = claudeToolUse(block, ev, opts.live); // 工具行：features/chat/claude-tools.ts
+                if (node)
+                    out.push(node);
             }
-            else if (block.type === "thinking" && block.thinking)
+            // 子 Agent 自己的文字与思考收在它的工具行里（回复在结果里），不进主对话流
+            else if (block.type === "thinking" && block.thinking && !sub)
                 out.push(thinkBlock(block.thinking));
         }
         return out;
     }
     if (ev.type === "user") {
-        return out; // 工具结果回填，不展示（终端里能看到实际效果）
+        claudeToolResults(ev); // 工具结果回填到对应的工具行
+        return out;
     }
     if (ev.type === "prompt_suggestion")
         return out; // 输入框里的灰色提示，不进对话流

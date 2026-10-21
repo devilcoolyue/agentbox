@@ -42,8 +42,8 @@ func getHistory(t *testing.T, s *Server, sess store.Session, query string) (int,
 }
 
 // writeTurns appends turns whose agent output has the given number of
-// rendered events; each is followed by a Claude tool result that history
-// must not send.
+// rendered events; each is followed by a Claude tool result without a
+// tool_use_id, which no tool row can claim and history does not send.
 func writeTurns(t *testing.T, s *Server, sess store.Session, sizes ...int) string {
 	t.Helper()
 	room := s.chat.room(sess.ID)
