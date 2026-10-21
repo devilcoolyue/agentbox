@@ -1,10 +1,13 @@
 package usage
 
 import (
+	"bytes"
 	"encoding/json"
+	"log"
 	"strconv"
 	"time"
 
+	"agentbox/internal/agent"
 	"agentbox/internal/store"
 )
 
@@ -59,27 +62,63 @@ func expandCodexRequests(ev store.UsageEvent) []store.UsageEvent {
 	}
 	out := make([]store.UsageEvent, 0, len(turn.Requests))
 	for i, q := range turn.Requests {
-		row := ev
-		// 与 ParseUsage 同口径：cached 是 input 的子集，reasoning 已含在 output 里。
-		row.InputTokens = max(q.Input-q.Cached, 0)
-		row.CacheReadTokens = q.Cached
-		row.CacheWriteTokens = q.CacheWrite
-		row.OutputTokens = q.Output
-		if q.TS != 0 {
-			row.TS = time.UnixMilli(q.TS)
-		}
-		raw, _ := json.Marshal(struct {
-			Type string `json:"type"`
-			codexRequest
-		}{"codex.request", q})
-		row.Raw = string(raw)
-		row.APIRequestID = CodexRequestKey(turn.ThreadID, q.Input, q.Cached, q.Output)
+		row := codexRequestRow(ev, turn.ThreadID, q)
 		if i > 0 {
 			row.TTFTMs, row.DurationMS, row.WallMS = 0, 0, 0
 		}
 		out = append(out, row)
 	}
 	return out
+}
+
+// codexRequestRow 是线程 thread 里一次 Codex 请求的用量行。回合中当场结算与
+// 收尾展开都用它，同一次请求两边的 raw 一字不差，结算时据此认出已经记过的。
+func codexRequestRow(base store.UsageEvent, thread string, q codexRequest) store.UsageEvent {
+	row := base
+	// 与 ParseUsage 同口径：cached 是 input 的子集，reasoning 已含在 output 里。
+	row.InputTokens = max(q.Input-q.Cached, 0)
+	row.CacheReadTokens = q.Cached
+	row.CacheWriteTokens = q.CacheWrite
+	row.OutputTokens = q.Output
+	if q.TS != 0 {
+		row.TS = time.UnixMilli(q.TS)
+	}
+	raw, _ := json.Marshal(struct {
+		Type string `json:"type"`
+		codexRequest
+	}{"codex.request", q})
+	row.Raw = string(raw)
+	row.APIRequestID = CodexRequestKey(thread, q.Input, q.Cached, q.Output)
+	return row
+}
+
+// settleCodexRequest 当场结算 app-server 回合中报上来的一次请求
+// （agent.RequestUsageType）。收尾事件的 requests 还会再列一遍，Flush 跳过已记的。
+func (t *Tally) settleCodexRequest(base store.UsageEvent, line []byte) bool {
+	if !bytes.Contains(line, []byte(agent.RequestUsageType)) {
+		return false
+	}
+	var ev struct {
+		Type     string       `json:"type"`
+		ThreadID string       `json:"thread_id"`
+		Request  codexRequest `json:"request"`
+	}
+	if json.Unmarshal(line, &ev) != nil || ev.Type != agent.RequestUsageType {
+		return false
+	}
+	row := codexRequestRow(base, ev.ThreadID, ev.Request)
+	row.TTFTMs, row.DurationMS, row.WallMS = 0, 0, 0 // 回合级耗时收尾时才补
+	if row.TS.IsZero() {
+		row.TS = time.Now()
+	}
+	row = priceWith(*t.pricing, row)
+	if err := t.svc.store.InsertUsage(row); err != nil {
+		log.Printf("record usage %s: %v", row.SessionID, err)
+		t.codexRetry = append(t.codexRetry, row)
+		return true
+	}
+	t.codexLive = append(t.codexLive, row)
+	return true
 }
 
 // MergedRequests 是升级前按回合合并的 Claude 对话行里合并了几次请求；逐次成行

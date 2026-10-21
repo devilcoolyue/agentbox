@@ -309,7 +309,14 @@ data/
 
 - 回合收尾事件里的 token/费用落进 `usage_events` 表（`internal/usage/events.go` 解析，
   `runTurn` 的 `onLine` 里挂钩），并在**同一个事务**里从用户额度扣掉（见下节）。
-- Claude 网页对话在 `internal/usage/claude_messages.go` 按 `message.id` 去重：优先有 `stop_reason` 的记录，同等完整度取 output 最大者。`message_delta` 必须在 partial 早返回前交给 tally；回合启动前保存 transcript 文件边界，收尾只读同一 provider 会话及子 Agent 的新增记录补齐用量。`modelUsage` / `total_cost_usd` 可能包含续聊历史，绝不用于网页扣款；仅独立、不 resume 的起标题进程允许 result 计量。按回合开始锁定的价目表逐条计价，**每条消息（一次 API 响应）各成一行**，行时间取流里首次看到与 transcript 时间中较早者；回合级的 ttft/wall/duration 只放在回合第一条对话请求上，其余为 0。`usage_messages` 按空间/message ID 持久去重，认领、写流水、扣额度同事务，重启或重放不能重复扣款。
+- **网页回合每次请求一结束就当场结算**（`NewChatTally` 的 tally 带 `svc`），使用记录、余额与
+  用量推送跟着长回合一次次走，不等收尾；收尾只补当场没记的（流没正常结束的消息、子 Agent 只在
+  transcript 里的消息、`cli-hidden`/下一步提示、Codex 远程压缩等），以及只有回合结束才知道的
+  字段——回合级 ttft/wall/duration、Claude 的 `provider`、流里还没带上的 `request_id`——由
+  `store.FinishUsageRows` 按 (空间, 回合, kind, raw) 补到已记的那一行上，**不动 token、金额和账本**。
+  当场写库失败的留给收尾重记。「第几次 / 共几次」是查询时按窗口函数算的，与结算时机无关。
+  其他 tally（起标题、镜像门槛的 agentprobe）仍只在收尾时结算。
+- Claude 网页对话在 `internal/usage/claude_messages.go` 按 `message.id` 去重：优先有 `stop_reason` 的记录，同等完整度取 output 最大者。`message_delta` 必须在 partial 早返回前交给 tally；一条消息流到 `message_stop` 且已带 `stop_reason`（message_delta 给的是最终 output）时由 `settleLive` 当场结算，没有 `stop_reason` 的占位用量留给收尾。回合启动前保存 transcript 文件边界，收尾只读同一 provider 会话及子 Agent 的新增记录补齐用量；与已当场结算的不一致时以已结算的为准并记日志（`usage_messages` 认领后不可改写）。`modelUsage` / `total_cost_usd` 可能包含续聊历史，绝不用于网页扣款；仅独立、不 resume 的起标题进程允许 result 计量。按回合开始锁定的价目表逐条计价，**每条消息（一次 API 响应）各成一行**，行时间取流里首次看到与 transcript 时间中较早者；回合级的 ttft/wall/duration 只放在回合第一条对话请求上，其余为 0。`usage_messages` 按空间/message ID 持久去重，认领、写流水、扣额度同事务，重启或重放不能重复扣款。
 - CLI 自己发、却不逐条上报的请求（`/compact` 与自动压缩的摘要请求、WebFetch 处理网页的小模型请求等）既不在流里也不在 transcript 的 assistant 记录里，只体现在 `result.modelUsage` 与退出时的 `cost-state`（2.1.296 对本机假接口实测）。`claudeMeter.addHidden` 按 CLI 自己的累计对账：`result.modelUsage` − 本进程启动时恢复的累计（transcript 里本回合之前最后一条 `cost-state`）− 本进程逐条记到的消息（流里有 `message_start` 或 transcript 新增记录的才算，压缩后重发的旧消息不算），差额记一行 `cli-hidden:<turn>:<模型>`（kind 仍为 chat，按 message ID 去重）。只在能确定口径时才算：续聊会话必须前后两条 `cost-state` 都在，且 `startTime` 相同才扣除恢复的历史（不同说明没续上，从 0 算）；退出累计小于回合结束时、逐条记到的多于累计、消息模型对不上累计里的模型名，一律不核对只记日志；不写 `cost-state` 的老 CLI 续聊时跳过。新会话（transcript 本回合才出现）没有历史，直接用 `result.modelUsage` 对账。回合耗时挂在本进程真正发起的第一条请求上。
 - Codex 的 `type:"turn.completed"` 只有 token、**不报费用**（`cost_micro_usd` 记 0，
   按价目表折算）。app-server 路径由 `agent/appserver_usage.go` 合成收尾事件：
@@ -319,7 +326,10 @@ data/
   每次请求，不属于本回合 `turnId` 的通知只更新基线——codex-cli 0.162.1 实测续聊进程
   会在回合开始前补发上一回合的累计。收尾事件的 `usage` 是各次之和、`requests` 逐次
   列出，结算时 `usage/requests.go` 的 `expandCodexRequests` 展开成一次请求一行；
-  中断/失败的 `turn.failed` 同样带上，已发生的请求照样入账。`codex exec --json`
+  中断/失败的 `turn.failed` 同样带上，已发生的请求照样入账。每认出一次请求另发一条
+  `agent.RequestUsageType`（`agentbox.request_usage`，带 `thread_id` 与这一次的 `request`），
+  `Decode` 标 `Internal`：聊天服务交给 tally 当场结算后直接返回，不落盘、不广播；收尾展开时
+  两边由同一个 `codexRequestRow` 生成、raw 一字不差，据此跳过已记的那几次。`codex exec --json`
   回退路径的 `turn.completed` 没有 `requests`，仍按原样一行计。两条语义是实测结论，
   别按字面直觉改：
   - `cached_input_tokens` 是 `input_tokens` 的**子集**，写库时减掉才对齐 Claude 的
@@ -361,7 +371,7 @@ data/
   同源，含 CLI 启动），`duration_ms` 是 provider 自报的模型侧耗时（**不含** CLI 启动）。
   实测容器里跑一趟 haiku：墙钟 4534ms，claude 自报 `duration_ms` 2335ms，差的 2.2 秒
   全是 Claude Code 自己的启动。`wall_ms` 由 `flushUsage` 在回合真结束的那一刻盖到
-  回合第一次请求那一行上（回合中途量不到）。使用记录页的「延迟」列显示**首字 + 总耗时**，两个数同源
+  回合第一次请求那一行上（回合中途量不到；那一行已当场结算的话经 `FinishUsageRows` 补上）。使用记录页的「延迟」列显示**首字 + 总耗时**，两个数同源
   （都是我们量的），所以首字必然 ≤ 总耗时；「总耗时」必须用 `wall_ms`——早先拿
   `duration_ms` 当总耗时，出过「首字 3.1s / 总耗时 2.3s」这种看着不可能的记录。老数据
   没量过墙钟（`wall_ms == 0`），那种行退回显示 `duration_ms` 并把标签换成「模型」，
@@ -437,9 +447,9 @@ data/
 - **幂等键是 `credit_ledger.ref`，带 UNIQUE 索引。** 消耗流水用 `usage:<行id>`，
   充值用 `grant:<管理员填的或服务端生成的>`——前缀是故意的，防止管理员填个
   `usage:1` 撞掉一条扣款。重放同一个 ref 一分钱都不会动。
-- **余额可以是负数，这是设计。** 一个回合花多少钱要等 provider 收尾事件才知道，中途
-  没有可靠累计值，所以拦截只发生在**回合开始前**（`handleChatWS` 的 `user_message`
-  分支），余额见底的那个回合允许超支。宁可多花一个回合，也不把用户跑到一半的任务
+- **余额可以是负数，这是设计。** 回合中每次请求结束就扣，但一个回合还要发多少次请求
+  事先不知道，所以拦截只发生在**回合开始前**（`handleChatWS` 的 `user_message`
+  分支），余额见底的那个回合允许超支、不中途掐断。宁可多花一个回合，也不把用户跑到一半的任务
   腰斩。起标题这趟服务端自发的消耗在余额见底时直接跳过。
 - **Claude 网页对话按独立消息用量查价目表**，独立起标题才可用 CLI 报价；不报价的走 `config.json` 的 `pricing`
   按 token 折算——codex 的全部回合，以及从 transcript 补记的**终端行**（那里只有

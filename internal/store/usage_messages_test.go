@@ -59,3 +59,55 @@ func TestMessageSettlementRestartAndRollback(t *testing.T) {
 		t.Fatal(n, err)
 	}
 }
+
+// A message settled mid-turn gets the turn's latency, the provider name and a
+// late request id (claiming telemetry timing parked under it) at the end of
+// the turn; its tokens, cost and the ledger stay as settled.
+func TestFinishUsageRowsAfterLiveSettlement(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err = s.Grant("alice", 1000, "seed", "", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	e := UsageEvent{User: "alice", SessionID: "s1", ThreadID: "thread", TurnID: "turn", Agent: "claude", Kind: UsageKindChat, Model: "model", ReqID: "msg-one", InputTokens: 10, CostMicroUSD: 100, Raw: `{"id":"msg-one"}`, Price: &PriceSnapshot{Version: 1, Source: "table", Standard: TokenRates{Input: 10}}}
+	if n, err := s.InsertUsageMessages(e); err != nil || n != 1 {
+		t.Fatal(n, err)
+	}
+	if _, err = s.RecordRequestTimings([]RequestTiming{{User: "alice", SessionID: "s1", RequestID: "req_one", TTFTMs: 800, DurationMS: 4000}}); err != nil {
+		t.Fatal(err)
+	}
+	done := e
+	done.ReqID, done.CostMicroUSD, done.InputTokens = "", 999, 999 // ignored
+	done.TTFTMs, done.DurationMS, done.WallMS, done.Provider, done.APIRequestID = 700, 2500, 3000, "firstParty", "req_one"
+	if err = s.FinishUsageRows(done); err != nil {
+		t.Fatal(err)
+	}
+	rows := s.ListUsage(UsageFilter{User: "alice"})
+	if len(rows) != 1 {
+		t.Fatal(rows)
+	}
+	r := rows[0]
+	if r.TTFTMs != 700 || r.DurationMS != 2500 || r.WallMS != 3000 || r.Provider != "firstParty" ||
+		r.APIRequestID != "req_one" || r.APITTFTMs != 800 || r.APIDurationMS != 4000 || r.InputTokens != 10 || r.CostMicroUSD != 100 {
+		t.Fatalf("%+v", r)
+	}
+	if q, _ := s.GetQuota("alice"); q.BalanceMicroUSD != 900 {
+		t.Fatal(q)
+	}
+	// An empty provider keeps the one on record.
+	done.Provider = ""
+	if err = s.FinishUsageRows(done); err != nil {
+		t.Fatal(err)
+	}
+	if r := s.ListUsage(UsageFilter{User: "alice"})[0]; r.Provider != "firstParty" {
+		t.Fatalf("%+v", r)
+	}
+	other := done
+	other.TurnID = "another"
+	if err = s.FinishUsageRows(other); err == nil {
+		t.Fatal("finished a row the turn never wrote")
+	}
+}

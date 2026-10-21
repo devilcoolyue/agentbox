@@ -150,10 +150,20 @@ func (c *appServerConn) observeTokenUsage(params json.RawMessage) {
 		return
 	}
 	c.mu.Lock()
-	turn := c.turn
+	turn, thread := c.turn, c.thread
 	c.mu.Unlock()
+	seen := len(c.meter.requests)
 	c.meter.observe(turn, p.TurnID, p.TokenUsage.Total, p.TokenUsage.Last, time.Now())
+	for _, r := range c.meter.requests[seen:] {
+		c.emitJSON(map[string]any{"type": RequestUsageType, "thread_id": thread, "request": r})
+	}
 }
+
+// RequestUsageType 是每认出一次新请求就发的单次用量事件：网页对话据此当场结算
+// 这一次（usage.Tally），使用记录不必等整个回合收尾。它只给计量用，不落盘、
+// 不广播（Event.Internal）；收尾事件的 requests 仍逐次列全，结算时认出已经
+// 记过的那几次，不会记两遍。
+const RequestUsageType = "agentbox.request_usage"
 
 // emitContext 把最近一次请求的用量和上下文窗口转成 token_count 事件（与 Codex
 // 会话记录里的同名事件同形状），网页据此显示上下文占用，并随历史落盘以便刷新

@@ -26,6 +26,9 @@ type Event struct {
 	// from the CLI's cost-state. Either way the turn says nothing worth
 	// naming a thread by.
 	Local bool
+	// Internal marks a record agentbox adds to the stream for metering only
+	// (RequestUsageType): never stored in history or shown.
+	Internal bool
 }
 type Adapter interface {
 	Type() string
@@ -73,6 +76,8 @@ func (a cliAdapter) Decode(line []byte) (Event, bool) {
 	switch probe.Type {
 	case "stream_event", "assistant", "item.started", "item.completed":
 		e.Output = true
+	case RequestUsageType:
+		e.Internal = true
 	}
 	if string(a) == config.AgentClaude && probe.Type == "result" {
 		if probe.Subtype == "success" && !probe.IsError {

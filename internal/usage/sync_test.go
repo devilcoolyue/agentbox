@@ -17,6 +17,7 @@ func (b *blockedScanStore) All() []store.Session                               {
 func (*blockedScanStore) Get(string) (store.Session, bool)                     { return store.Session{}, false }
 func (*blockedScanStore) InsertUsage(...store.UsageEvent) error                { return nil }
 func (*blockedScanStore) InsertUsageMessages(...store.UsageEvent) (int, error) { return 0, nil }
+func (*blockedScanStore) FinishUsageRows(...store.UsageEvent) error            { return nil }
 func (*blockedScanStore) UpsertTerminalUsage(...store.UsageEvent) error        { return nil }
 func TestQueriesCanRequestSyncWhileScanIsBlocked(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())

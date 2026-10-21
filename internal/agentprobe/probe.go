@@ -210,6 +210,7 @@ func (m *memoryUsage) InsertUsageMessages(rows ...store.UsageEvent) (int, error)
 	m.rows = append(m.rows, rows...)
 	return len(rows), nil
 }
+func (*memoryUsage) FinishUsageRows(...store.UsageEvent) error { return nil }
 func (*memoryUsage) UpsertTerminalUsage(...store.UsageEvent) error {
 	return errors.New("probe does not scan terminals")
 }

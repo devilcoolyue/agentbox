@@ -419,6 +419,9 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 				in.Meter(&base)
 			}
 			tally.Observe(base, line)
+			if event.Internal {
+				return // metering only, settled above
+			}
 			if event.Partial {
 				// 增量 delta 只广播不落盘：随后的完整事件会带全文再来一份
 				r.Emit(map[string]any{"type": "agent_event", "event": ev, "ts": time.Now()})

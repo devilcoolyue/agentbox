@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"agentbox/internal/config"
 )
 
 // 按真实 app-server 抓包整理的一回合协议脚本：resume 失败落到新开线程，
@@ -224,6 +227,44 @@ func TestRunCodexTurnMetersEveryRequest(t *testing.T) {
 	// 线程 id 跟着请求明细走：用量行靠它对上 Codex 遥测里的这一次请求。
 	if ev.ThreadID == "" {
 		t.Fatal("收尾事件缺线程 id")
+	}
+}
+
+// 每认出一次本回合的请求就当场报一条单次用量（网页据此立即结算），与收尾
+// 事件的 requests 逐项相同；它只给计量用，Decode 标为 Internal。
+func TestRunCodexTurnReportsEachRequestAsItHappens(t *testing.T) {
+	var events []string
+	err := RunCodexTurn(context.Background(), io.Discard, strings.NewReader(strings.Replace(multiRequestScript, "%s", "completed", 1)),
+		func() {}, nil, CodexTurn{Prompt: "hi", ThreadID: "T1", Cwd: "/workspace"},
+		func(line []byte) { events = append(events, string(line)) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter, _ := Lookup(config.AgentCodex)
+	var live []codexRequest
+	for i, line := range events {
+		var ev struct {
+			Type     string       `json:"type"`
+			ThreadID string       `json:"thread_id"`
+			Request  codexRequest `json:"request"`
+		}
+		if json.Unmarshal([]byte(line), &ev) != nil || ev.Type != RequestUsageType {
+			continue
+		}
+		if e, ok := adapter.Decode([]byte(line)); !ok || !e.Internal || e.Output || e.Partial || e.Terminal != "" {
+			t.Fatalf("单次用量事件解码 %+v", e)
+		}
+		if ev.ThreadID != "T1" || i == len(events)-1 {
+			t.Fatalf("单次用量事件 %s", line)
+		}
+		live = append(live, ev.Request)
+	}
+	var end turnUsageEvent
+	if err := json.Unmarshal([]byte(events[len(events)-1]), &end); err != nil {
+		t.Fatal(err)
+	}
+	if len(live) != 2 || !reflect.DeepEqual(live, end.Requests) {
+		t.Fatalf("当场报的 %+v，收尾列的 %+v", live, end.Requests)
 	}
 }
 

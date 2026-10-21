@@ -18,6 +18,7 @@ import (
 type Store interface {
 	InsertUsage(...store.UsageEvent) error
 	InsertUsageMessages(...store.UsageEvent) (int, error)
+	FinishUsageRows(...store.UsageEvent) error
 	UpsertTerminalUsage(...store.UsageEvent) error
 	All() []store.Session
 	Get(string) (store.Session, bool)

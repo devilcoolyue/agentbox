@@ -93,6 +93,15 @@ type claudeMeter struct {
 	finalStart int64
 	compacted  bool
 	prompt     PromptCache
+	// A web turn settles each message the moment its stream ends (see
+	// settleLive), priced from the turn's pinned table, so the usage log and
+	// the balance follow a long turn request by request. settled holds the
+	// rows written that way by message ID (a zero row: an earlier turn had
+	// claimed the message); svc is nil for tallies that settle at the end.
+	svc      *Service
+	pricing  *config.PricingState
+	settled  map[string]store.UsageEvent
+	liveRows int
 }
 
 // PromptCache is the main conversation's latest request of a Claude turn as
@@ -114,7 +123,8 @@ type costState struct {
 }
 
 func newClaudeMeter() *claudeMeter {
-	return &claudeMeter{messages: map[string]claudeMessage{}, streams: map[string]claudeMessage{}, providers: map[string]string{}, live: map[string]bool{}}
+	return &claudeMeter{messages: map[string]claudeMessage{}, streams: map[string]claudeMessage{}, providers: map[string]string{}, live: map[string]bool{},
+		settled: map[string]store.UsageEvent{}}
 }
 func (c *claudeMeter) add(m claudeMessage) {
 	u := m.Usage
@@ -217,9 +227,62 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 			c.streams[e.Parent] = m
 			c.add(m)
 		case "message_stop":
+			if m, ok := c.streams[e.Parent]; ok {
+				c.settleLive(m.ID)
+			}
 			delete(c.streams, e.Parent)
 		}
 	}
+}
+
+// settleLive settles a message as its stream ends instead of with the rest of
+// the turn. Only a message the API closed (stop_reason) carries its final
+// usage; anything else, and a write that failed, waits for the end.
+func (c *claudeMeter) settleLive(id string) {
+	m, ok := c.messages[id]
+	if c.svc == nil || !ok || m.StopReason == "" || m.kind != "" {
+		return
+	}
+	if _, done := c.settled[id]; done {
+		return
+	}
+	e := c.row(id, *c.pricing, time.Now())
+	n, err := c.svc.store.InsertUsageMessages(e)
+	if err != nil {
+		log.Printf("record Claude message %s: %v", c.base.SessionID, err)
+		return
+	}
+	if n == 0 {
+		e = store.UsageEvent{}
+	}
+	c.settled[id] = e
+	c.liveRows += n
+}
+
+// row is message id's usage row priced from plan. The turn's own latency is
+// left out: it goes on one request only, once the turn has ended.
+func (c *claudeMeter) row(id string, plan config.PricingState, now time.Time) store.UsageEvent {
+	m := c.messages[id]
+	e := c.base
+	e.Model = m.Model
+	e.ReqID = id
+	e.APIRequestID = m.RequestID
+	e.InputTokens = m.Usage.Input
+	e.OutputTokens = m.Usage.Output
+	e.CacheReadTokens = m.Usage.CacheRead
+	e.CacheWriteTokens = m.Usage.CacheWrite
+	e.TTFTMs, e.DurationMS, e.WallMS = 0, 0, 0
+	if m.kind != "" {
+		e.Kind = m.kind
+	}
+	e.TS = now
+	if m.TS != 0 {
+		e.TS = time.UnixMilli(m.TS)
+	}
+	e.Provider = c.providers[m.Model]
+	raw, _ := json.Marshal(m)
+	e.Raw = string(raw)
+	return priceWith(plan, e)
 }
 
 // notePrompt keeps the main conversation's latest request (see PromptCache).
@@ -256,6 +319,7 @@ func (c *claudeMeter) notePrompt(line []byte) {
 // and avoids trusting timestamps or cumulative counters to identify requests.
 func (s *Service) NewChatTally(sess store.Session) Tally {
 	t := s.NewTally()
+	t.svc = s
 	if sess.Agent == config.AgentCodex {
 		t.codexHome = s.homeDir(sess)
 	}
@@ -264,6 +328,7 @@ func (s *Service) NewChatTally(sess store.Session) Tally {
 	}
 	c := newClaudeMeter()
 	t.claude = c
+	c.svc, c.pricing = s, t.pricing
 	c.home = s.homeDir(sess)
 	c.before = map[string]fs.FileInfo{}
 	root, err := s.openDataDir(filepath.Join(c.home, ".claude", "projects"))
@@ -580,43 +645,52 @@ func (s *Service) flushClaudeMessages(t *Tally, wall time.Duration) int {
 	}
 	now := time.Now()
 	evs := make([]store.UsageEvent, 0, len(ids))
+	var finish []store.UsageEvent
 	for _, id := range ids {
 		m := c.messages[id]
-		e := c.base
-		e.Model = m.Model
-		e.ReqID = id
-		e.APIRequestID = m.RequestID
-		e.InputTokens = m.Usage.Input
-		e.OutputTokens = m.Usage.Output
-		e.CacheReadTokens = m.Usage.CacheRead
-		e.CacheWriteTokens = m.Usage.CacheWrite
+		if live, ok := c.settled[id]; ok {
+			if live.Raw == "" {
+				continue
+			}
+			// Settled while the turn ran: its tokens and charge stand; the
+			// end only adds what it alone knows.
+			if u := m.Usage; u != (claudeTokens{live.InputTokens, live.OutputTokens, live.CacheReadTokens, live.CacheWriteTokens}) {
+				log.Printf("usage: 会话 %s 的消息 %s 回合中按 %+v 结算，回合结束时为 %+v，以已结算的为准", c.base.SessionID, id,
+					claudeTokens{live.InputTokens, live.OutputTokens, live.CacheReadTokens, live.CacheWriteTokens}, u)
+			}
+			provider := c.providers[m.Model]
+			if id != timed && (provider == "" || provider == live.Provider) && (m.RequestID == "" || live.APIRequestID != "") {
+				continue
+			}
+			live.Provider = cmp.Or(provider, live.Provider)
+			live.APIRequestID = cmp.Or(live.APIRequestID, m.RequestID)
+			if id == timed {
+				live.TTFTMs, live.DurationMS, live.WallMS = c.base.TTFTMs, c.durationMS, wall.Milliseconds()
+			}
+			finish = append(finish, live)
+			continue
+		}
+		e := c.row(id, *plan, now)
 		// Turn latency is measured once per turn; it sits on one chat request
 		// and stays 0 on the rest, so MAX per turn still holds.
 		if id == timed {
-			e.DurationMS = c.durationMS
-			e.WallMS = wall.Milliseconds()
-		} else {
-			e.TTFTMs, e.DurationMS, e.WallMS = 0, 0, 0
+			e.TTFTMs, e.DurationMS, e.WallMS = c.base.TTFTMs, c.durationMS, wall.Milliseconds()
 		}
-		if m.kind != "" {
-			e.Kind = m.kind
-		}
-		e.TS = now
-		if m.TS != 0 {
-			e.TS = time.UnixMilli(m.TS)
-		}
-		e.Provider = c.providers[m.Model]
-		raw, _ := json.Marshal(m)
-		e.Raw = string(raw)
-		evs = append(evs, priceWith(*plan, e))
+		evs = append(evs, e)
 	}
-	n, err := s.store.InsertUsageMessages(evs...)
-	if err != nil {
-		log.Printf("record Claude messages %s: %v", c.base.SessionID, err)
-		t.settlementErr = err
-		return 0
+	n := 0
+	if len(evs) > 0 {
+		var err error
+		if n, err = s.store.InsertUsageMessages(evs...); err != nil {
+			log.Printf("record Claude messages %s: %v", c.base.SessionID, err)
+			t.settlementErr = err
+			return c.liveRows
+		}
+	}
+	if err := s.store.FinishUsageRows(finish...); err != nil {
+		log.Printf("usage: 会话 %s 补记回合耗时: %v", c.base.SessionID, err)
 	}
 	c.done = true
 	t.settlementErr = nil
-	return n
+	return n + c.liveRows
 }

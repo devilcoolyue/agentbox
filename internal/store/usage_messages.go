@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 )
@@ -52,4 +53,60 @@ func (s *Store) InsertUsageMessages(messages ...UsageEvent) (int, error) {
 	}
 	s.usageWritten(evs)
 	return len(evs), nil
+}
+
+// FinishUsageRows fills in what a web turn only learns as it ends on request
+// rows settled while it still ran: the turn's own latency (TTFTMs, DurationMS,
+// WallMS, on its first request), the provider name and a provider request id
+// the stream did not carry yet. Tokens, cost and the ledger stay exactly as
+// settled. Each row is the one its turn wrote with exactly the given Raw.
+func (s *Store) FinishUsageRows(evs ...UsageEvent) error {
+	if len(evs) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, e := range evs {
+		if e.Kind == "" {
+			e.Kind = UsageKindChat
+		}
+		if e.SessionID == "" || e.TurnID == "" || e.Raw == "" {
+			return fmt.Errorf("invalid usage row to finish")
+		}
+		var id int64
+		var requestID string
+		err := tx.QueryRow(`SELECT id, api_request_id FROM usage_events
+			WHERE session_id = ? AND turn_id = ? AND kind = ? AND raw = ? ORDER BY id LIMIT 1`,
+			e.SessionID, e.TurnID, e.Kind, e.Raw).Scan(&id, &requestID)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("finish usage %s/%s: row not found", e.SessionID, e.TurnID)
+		}
+		if err != nil {
+			return err
+		}
+		if requestID == "" && e.APIRequestID != "" {
+			// Same as a fresh insert: per-request timing that arrived first
+			// waits under the request id until a row names it.
+			if err := claimRequestTimingTx(tx, &e); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(`UPDATE usage_events SET api_request_id = ?, api_ttft_ms = ?, api_duration_ms = ? WHERE id = ?`,
+				e.APIRequestID, e.APITTFTMs, e.APIDurationMS, id); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(`UPDATE usage_events SET ttft_ms = ?, duration_ms = ?, wall_ms = ?,
+			provider = CASE WHEN ? = '' THEN provider ELSE ? END WHERE id = ?`,
+			e.TTFTMs, e.DurationMS, e.WallMS, e.Provider, e.Provider, id); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.usageWritten(evs)
+	return nil
 }

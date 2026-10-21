@@ -160,7 +160,8 @@ func ParseUsage(line []byte, base store.UsageEvent) (evs []store.UsageEvent, cum
 	return nil, false
 }
 
-// Tally 把一个回合里的所有收尾事件收敛成一份账，回合结束时一次落库。
+// Tally 把一个回合里的所有收尾事件收敛成一份账，回合结束时落库；网页回合
+// （NewChatTally）的每次请求在报上来时就先结算，收尾只补其余的。
 //
 // Claude 对话按消息 ID 收集，只有独立起标题保留 result 覆盖语义。
 // Codex turn.completed 保持原有增量语义。
@@ -172,6 +173,13 @@ type Tally struct {
 	// Codex 网页对话：会话 home 与压缩过的回合，结算时补远程压缩请求。
 	codexHome  string
 	codexTurns []codexTurnEnd
+	// svc 让网页回合的每次请求一报上来就结算（NewChatTally），使用记录与余额
+	// 跟着长回合一次次走，不等收尾；为空时全部留到收尾。codexLive 是这样记下的
+	// Codex 请求行，收尾展开时按 raw 认出、不再记；codexRetry 是当场写库失败、
+	// 留给收尾重记的。
+	svc        *Service
+	codexLive  []store.UsageEvent
+	codexRetry []store.UsageEvent
 }
 
 // MeterSuggestion also bills the prompt-suggestion request a Claude chat turn
@@ -210,6 +218,9 @@ func (t *Tally) Observe(base store.UsageEvent, line []byte) {
 	}
 	if t.codexHome != "" {
 		t.observeCodexTurnEnd(base, line)
+	}
+	if t.svc != nil && t.settleCodexRequest(base, line) {
+		return
 	}
 	evs, cumulative := ParseUsage(line, base)
 	if len(evs) == 0 {
