@@ -46,8 +46,10 @@ export async function keepaliveSmoke(page, base) {
     await dialog.waitFor({ state: 'visible' });
   };
   try {
+    // A fresh load: a hash change on the loaded page would find no such
+    // workspace in its list and go home before any reload (WebKit is slower to reload).
+    await page.goto('about:blank');
     await page.goto(base + '/#/sessions/keep-space/chat');
-    await page.reload();
     await page.locator('#wb-state.run').waitFor();
 
     // Off, but the conversation is worth keeping: the chip is shown dimmed.
