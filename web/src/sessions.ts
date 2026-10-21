@@ -243,7 +243,7 @@ function sessionMenu(withPower: boolean): MenuItem[] {
     { label: i18nText("使用指引"), icon: "bulb", run: () => emit("workspace-guide-open"), sep: true },
     { label: i18nText("环境检查"), icon: "activity", run: () => openDiagnostics(s.id), sep: true },
     { label: i18nText("查看账号额度"), icon: "gauge", run: openAcctUsage, hidden: agentKey(s.agent) !== "claude", sep: true, tip: i18nText("该账号订阅的 5 小时 / 每周用量窗口") },
-    { label: i18nText("缓存保活…"), icon: "refresh", run: openKeepalive, hidden: agentKey(s.agent) !== "claude", tip: i18nText("离开时保持对话与终端会话的提示缓存") },
+    { label: i18nText("缓存保活…"), icon: "heart-pulse", run: openKeepalive, hidden: agentKey(s.agent) !== "claude", tip: i18nText("离开时保持对话与终端会话的提示缓存") },
     { label: i18nText("切换账号…"), icon: "switch", run: openSwitchAccount, sep: agentKey(s.agent) !== "claude", disabled: S.actionBusy, tip: i18nText("改用同类型的另一个账号，文件与对话保留") },
     { label: i18nText("重命名"), icon: "rename", run: renameSession },
     { label: i18nText("删除工作空间…"), icon: "trash", danger: true, sep: true, run: openDeleteDlg, disabled: S.actionBusy },

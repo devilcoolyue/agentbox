@@ -41,7 +41,7 @@ export async function keepaliveSmoke(page, base) {
   const open = async () => {
     await page.locator('#btn-wb-more').click();
     const item = page.getByRole('menuitem', { name: '缓存保活…', exact: true });
-    assert.equal(await item.locator('.ui-icon').getAttribute('data-icon-name'), 'refresh');
+    assert.equal(await item.locator('.ui-icon').getAttribute('data-icon-name'), 'heart-pulse');
     await item.click();
     await dialog.waitFor({ state: 'visible' });
   };
