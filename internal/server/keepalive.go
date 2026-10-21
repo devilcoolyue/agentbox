@@ -49,10 +49,12 @@ import (
 // next request replaces the plan; a running turn, a switched account, a chat
 // thread that no longer continues the conversation, a terminal CLI that left
 // its session, an exhausted balance or any sign the cache is gone ends it. A
-// workspace the idle reaper stopped is woken for a chat keepalive and put
-// back to sleep without telling extensions; a terminal session died with its
-// container, so nothing wakes for it, and a workspace the user stopped stays
-// stopped. Keepalive requests are charged like titles (kind keepalive). Plans
+// workspace the idle reaper stopped is woken for a keepalive and put back to
+// sleep without telling extensions, and a workspace the user stopped stays
+// stopped. The terminal's CLI stops with the container, but the user resumes
+// its session on return (`claude -c`, `--resume`), and that new process sends
+// the prefix the transcript recorded, so the cache is worth keeping for it
+// too (measured against 2.1.304). Keepalive requests are charged like titles (kind keepalive). Plans
 // live in memory: a restart forgets chat plans until the next turn, while the
 // first terminal scan reports the sessions again.
 
@@ -530,31 +532,26 @@ func (s *Server) keepCache(id string, plan keepalivePlan) (usage.PromptCache, bo
 		if s.chatTurnRunning(id) {
 			return keepaliveStopped("a turn is running")
 		}
-	} else if sess.Status != store.StatusRunning || sess.ContainerID == "" {
-		// The terminal's CLI stopped with the container.
-		return keepaliveStopped("the workspace is not running (status " + sess.Status + ")")
 	}
 	ctx, cancel := context.WithTimeout(s.workContext(), keepaliveTimeout)
 	defer cancel()
-	if plan.source == keepaliveChat {
-		woken, woke, err := s.workspaces().Wake(ctx, id)
-		if errors.Is(err, workspace.ErrNotAsleep) {
-			return keepaliveStopped("the workspace was stopped by the user")
-		}
-		if err != nil {
-			return usage.PromptCache{}, false, err
-		}
-		sess = woken
-		if woke {
-			since := time.Now()
-			defer func() {
-				sleepCtx, cancel := context.WithTimeout(s.workContext(), 30*time.Second)
-				defer cancel()
-				if err := s.workspaces().Sleep(sleepCtx, id, since); err != nil {
-					log.Printf("cache keepalive %s: back to sleep: %v", id, err)
-				}
-			}()
-		}
+	woken, woke, err := s.workspaces().Wake(ctx, id)
+	if errors.Is(err, workspace.ErrNotAsleep) {
+		return keepaliveStopped("the workspace was stopped by the user")
+	}
+	if err != nil {
+		return usage.PromptCache{}, false, err
+	}
+	sess = woken
+	if woke {
+		since := time.Now()
+		defer func() {
+			sleepCtx, cancel := context.WithTimeout(s.workContext(), 30*time.Second)
+			defer cancel()
+			if err := s.workspaces().Sleep(sleepCtx, id, since); err != nil {
+				log.Printf("cache keepalive %s: back to sleep: %v", id, err)
+			}
+		}()
 	}
 	p := plan.point
 	cmd, err := agent.KeepaliveCommand(p.Conversation, plan.cwd, p.Model, p.Effort, p.Control, p.TaskTools)

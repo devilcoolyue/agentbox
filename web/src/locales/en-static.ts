@@ -818,7 +818,7 @@ export default {
   "离开时保持对话缓存，回来继续聊时不用整段重写。": "Keep the conversation's cache while you're away, so continuing later doesn't rewrite all of it.",
   "开启缓存保活": "Turn on cache keepalive",
   "终端里的 Claude 会话也保活": "Also keep Claude sessions in the terminal",
-  "只在空间运行时保活终端会话；空间休眠后终端里的 Claude 已经退出，不会唤醒。": "Terminal sessions are kept only while the workspace runs. Once it sleeps, Claude in the terminal has exited, so it isn't woken.",
+  "空间休眠时会临时唤醒它来保活终端会话，续完重新休眠。回来后在终端里用 claude -c 或 claude --resume 接着原来的会话，才用得上保住的缓存。": "A sleeping workspace is woken briefly to keep terminal sessions, then put back to sleep. Back in the terminal, continue the session with claude -c or claude --resume to use the kept cache.",
   "上下文至少（token）": "Context at least (tokens)",
   "当前计划": "Current plans",
   "每次保活约等于读一遍缓存的费用，计入额度，使用记录里单列为「缓存保活」。最后一次请求后最多续到设定的时长。": "Each keepalive costs about one read of the cache. It counts against your credit and shows up as \"Cache keepalive\" in usage records. Caches are kept for at most the set time after the last request.",

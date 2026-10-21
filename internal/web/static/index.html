@@ -2334,7 +2334,7 @@
       <label class="check"><input id="ka-enabled" type="checkbox"><span data-i18n="开启缓存保活">开启缓存保活</span></label>
       <div id="ka-options" class="ka-options">
         <label class="check"><input id="ka-terminal" type="checkbox"><span data-i18n="终端里的 Claude 会话也保活">终端里的 Claude 会话也保活</span></label>
-        <p class="note" data-i18n="只在空间运行时保活终端会话；空间休眠后终端里的 Claude 已经退出，不会唤醒。">只在空间运行时保活终端会话；空间休眠后终端里的 Claude 已经退出，不会唤醒。</p>
+        <p class="note" data-i18n="空间休眠时会临时唤醒它来保活终端会话，续完重新休眠。回来后在终端里用 claude -c 或 claude --resume 接着原来的会话，才用得上保住的缓存。">空间休眠时会临时唤醒它来保活终端会话，续完重新休眠。回来后在终端里用 claude -c 或 claude --resume 接着原来的会话，才用得上保住的缓存。</p>
         <div class="field-row">
           <label class="field"><span data-i18n="上下文至少（token）">上下文至少（token）</span><input id="ka-min" type="number" min="0" max="2000000" step="1000" class="mono"></label>
           <label class="field"><span id="ka-hours-label"></span><input id="ka-hours" type="number" min="1" step="1" class="mono"></label>

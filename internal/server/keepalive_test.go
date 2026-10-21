@@ -299,11 +299,11 @@ func TestKeepCacheLeavesWhatItMustNotTouch(t *testing.T) {
 	if _, err := f.s.store.Update(f.sess.ID, func(x *store.Session) { x.Status = store.StatusStopped; x.StopReason = "idle" }); err != nil {
 		t.Fatal(err)
 	}
-	skip("terminal of a sleeping workspace", f.terminalPlan())
 	if _, err := f.s.store.Update(f.sess.ID, func(x *store.Session) { x.StopReason = "" }); err != nil {
 		t.Fatal(err)
 	}
 	skip("stopped by the user", f.plan())
+	skip("terminal stopped by the user", f.terminalPlan())
 	if _, err := f.s.store.Update(f.sess.ID, func(x *store.Session) { x.Status = store.StatusRunning }); err != nil {
 		t.Fatal(err)
 	}
