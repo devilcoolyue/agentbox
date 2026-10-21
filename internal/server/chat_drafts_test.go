@@ -61,7 +61,7 @@ func TestDraftScopeSeparatesInstanceAndUserLifetime(t *testing.T) {
 	}
 }
 
-func TestDraftHistoryPinsNavigableEmptyThreadWithoutMessages(t *testing.T) {
+func TestDraftHistoryPinsEmptyThreadWithoutListingIt(t *testing.T) {
 	s, sess := newTestServer(t)
 	s.chat = newChatManager(s)
 	read := func(query string) map[string]json.RawMessage {
@@ -83,8 +83,11 @@ func TestDraftHistoryPinsNavigableEmptyThreadWithoutMessages(t *testing.T) {
 	if !threadIDRe.MatchString(id) {
 		t.Fatal(first)
 	}
-	if rows := s.listThreads(sess); len(rows) != 1 || rows[0].ID != id || rows[0].Turns != 0 {
-		t.Fatal("empty draft thread is not navigable", rows)
+	if _, err := os.Stat(s.threadPath(sess, id)); err != nil {
+		t.Fatal("draft context was not pinned", err)
+	}
+	if rows := s.listThreads(sess); len(rows) != 0 {
+		t.Fatal("unsent draft thread is listed", rows)
 	}
 	if firstMessage, turns, titled := s.threadTitleSource(sess, id); firstMessage != "" || turns != 0 || titled {
 		t.Fatal("draft context became a model message")
@@ -108,6 +111,70 @@ func TestDraftHistoryPinsNavigableEmptyThreadWithoutMessages(t *testing.T) {
 	third := read("?draft_context=1")
 	if string(third["active_thread"]) == string(first["active_thread"]) {
 		t.Fatal("distinct empty threads share draft context")
+	}
+}
+
+func TestNewThreadReturnsToUnsentDraftAfterSwitchingAway(t *testing.T) {
+	s, sess := newTestServer(t)
+	if err := s.store.Put(sess); err != nil {
+		t.Fatal(err)
+	}
+	s.chat = newChatManager(s)
+	history := func() string {
+		w := httptest.NewRecorder()
+		s.handleHistory(w, httptest.NewRequest("GET", "/history?draft_context=1", nil), sess)
+		var out struct {
+			Active string `json:"active_thread"`
+		}
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		return out.Active
+	}
+	newThread := func() (string, bool) {
+		w := httptest.NewRecorder()
+		s.handleThreadNew(w, httptest.NewRequest("POST", "/threads", nil), sess)
+		var out struct {
+			ID      string `json:"id"`
+			Created bool   `json:"created"`
+		}
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		return out.ID, out.Created
+	}
+	old := "20260101-000000-aaaaaa"
+	if err := s.migrateThreads(sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.appendThreadEntry(sess, old, logEntry{Kind: "user", Text: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.setActiveThread(sess, old); err != nil {
+		t.Fatal(err)
+	}
+	draft, created := newThread()
+	if !created || draft == old || history() != draft {
+		t.Fatal("new thread was not activated", draft, created)
+	}
+	if err := s.setActiveThread(sess, old); err != nil { // 切回有消息的旧对话
+		t.Fatal(err)
+	}
+	again, created := newThread()
+	if !created || again != draft {
+		t.Fatal("new thread minted another empty thread instead of reusing the draft", again, draft)
+	}
+	if rows := s.listThreads(sess); len(rows) != 1 || rows[0].ID != old {
+		t.Fatal("history lists unsent threads", rows)
+	}
+	if err := s.appendThreadEntry(sess, draft, logEntry{Kind: "user", Text: "now sent"}); err != nil {
+		t.Fatal(err)
+	}
+	if rows := s.listThreads(sess); len(rows) != 2 {
+		t.Fatal("sent thread missing from history", rows)
+	}
+	if next, created := newThread(); !created || next == draft || next == old {
+		t.Fatal("sent thread was reused as a draft", next)
 	}
 }
 

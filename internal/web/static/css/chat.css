@@ -1,8 +1,13 @@
 #chat-draft-check { margin:0 8px 6px; }
 #chat-draft-status { margin:2px 8px 6px; color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
-.attach-remove { border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:10px; padding:3px; }
-.attach-thumb .attach-remove { position:absolute; right:0; top:0; background:var(--panel-solid); max-width:70px; }
+/* 只有图标：去掉 [data-icon] 的间距与空标签，否则 × 右侧会空出一截，看着不在角上 */
+.attach-remove { border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:10px; padding:3px; gap:0; }
+.attach-remove > .action-label:empty { display:none; }
 .attach-remove:is(:hover, :focus-visible) { color:var(--red); }
+/* 缩略图上的关闭钮与左上角 #n 角标同一套深色圆角，贴右上角 */
+.attach-thumb .attach-remove { position:absolute; right:3px; top:3px; z-index:1; width:18px; height:18px; padding:0; border-radius:var(--radius-round); background:var(--overlay-chip); color:#fff; }
+.attach-thumb .attach-remove svg { width:12px; height:12px; }
+.attach-thumb .attach-remove:is(:hover, :focus-visible) { background:var(--red); color:#fff; }
 .attachment-invalid { border-color:var(--red); gap:8px; flex-wrap:wrap; }
 .attachment-invalid > span { overflow-wrap:anywhere; }
 
@@ -722,6 +727,7 @@ details.think.streaming .think-body::after {
   padding: 34px 18px;
 }
 .tp-empty .spin { margin-right: 8px; }
+.tp-empty .btn { margin-top: 12px; }
 .tp-skeleton { display: flex; flex-direction: column; gap: 3px; }
 .tp-skeleton .tp-item:hover { background: none; }
 .tp-hint {

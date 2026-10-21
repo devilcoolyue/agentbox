@@ -80,20 +80,35 @@ async function openThreadPanel() {
  * 就打一次接口 */
 let allThreads: Thread[] = [];
 let activeID = "";
+let listSeq = 0;
 
+/* 只认最后一次请求的结果。会话按 id 比对：8 秒一次的轮询会把 S.current 换成
+ * 新对象，按对象比对时请求一旦跨过轮询就被当成过期丢掉，骨架屏永远不退。 */
 async function refreshList() {
   const sess = S.current; if (!sess) return;
+  const seq = ++listSeq;
   const list = $("tp-list");
   list.replaceChildren(threadsSkeleton(keepCount(list, ".tp-item", 5)));
   $("tp-count").textContent = "";
   try {
-    const { threads, active } = await api<ThreadList>(`/sessions/${sess.id}/chat/threads`);
-    if (S.current !== sess || !panelOpen()) return;
+    const { threads, active } = await api<ThreadList>(`/sessions/${sess.id}/chat/threads`, { signal: AbortSignal.timeout(15000) });
+    if (seq !== listSeq || S.current?.id !== sess.id || !panelOpen()) return;
     allThreads = threads;
     activeID = active;
     renderList();
   } catch (e) {
-    if (panelOpen()) toast(i18nText("加载历史对话失败：") + (e as Error).message, true);
+    if (seq !== listSeq || !panelOpen()) return;
+    const err = e as Error;
+    const d = document.createElement("div");
+    d.className = "tp-empty";
+    d.textContent = err.name === "TimeoutError" ? i18nText("历史对话加载超时") : i18nText("加载历史对话失败：") + err.message;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "btn btn-sm";
+    setText(retry, "重试");
+    retry.addEventListener("click", () => { void refreshList(); });
+    d.append(document.createElement("br"), retry);
+    list.replaceChildren(d);
   }
 }
 

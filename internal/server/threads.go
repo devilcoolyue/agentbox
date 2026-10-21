@@ -201,6 +201,7 @@ type threadMeta struct {
 	Updated   time.Time `json:"updated"`
 	Turns     int       `json:"turns"`
 	Resumable bool      `json:"resumable"` // 是否记录了可续聊的 provider 会话 id
+	sent      bool      // 发出过消息；只有 draft_context 等元数据的空对话不进历史列表
 }
 
 // scanThread derives list metadata from one thread file. Callers hold fileMu.
@@ -221,9 +222,12 @@ func (s *Server) scanThread(sess store.Session, tid string) (threadMeta, bool) {
 		switch e.meta.Kind {
 		case "user":
 			m.Turns++
+			m.sent = true
 			if firstMsg == "" {
 				firstMsg = e.meta.Text
 			}
+		case "event":
+			m.sent = true
 		case "title":
 			if e.meta.Text != "" {
 				genTitle = e.meta.Text
@@ -357,12 +361,55 @@ func (s *Server) listThreads(sess store.Session) []threadMeta {
 		if !threadIDRe.MatchString(tid) {
 			continue
 		}
-		if m, ok := s.scanThread(sess, tid); ok && (m.Turns > 0 || !m.Updated.IsZero()) {
+		if m, ok := s.scanThread(sess, tid); ok && m.sent {
 			out = append(out, m)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Updated.After(out[j].Updated) })
 	return out
+}
+
+// draftOnlyThread reports whether a thread file holds nothing but the
+// draft_context marker an unsent composer leaves (see handleHistory). Such a
+// file is a few dozen bytes, so larger ones are rejected without reading.
+// Callers hold fileMu.
+func (s *Server) draftOnlyThread(sess store.Session, tid string) bool {
+	path := s.threadPath(sess, tid)
+	if fi, err := os.Stat(path); err != nil || fi.Size() > 4<<10 {
+		return false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	entries := parseEntries(raw)
+	for _, e := range entries {
+		if e.meta.Kind != "draft_context" {
+			return false
+		}
+	}
+	return len(entries) > 0
+}
+
+// draftThread returns the newest unsent draft thread other than skip, or "".
+// Callers hold fileMu.
+func (s *Server) draftThread(sess store.Session, skip string) string {
+	entries, err := os.ReadDir(s.chatsDir(sess))
+	if err != nil {
+		return ""
+	}
+	// ids lead with their UTC creation time, so the last match is the newest
+	found := ""
+	for _, e := range entries {
+		tid, ok := strings.CutSuffix(e.Name(), ".jsonl")
+		if e.IsDir() || !ok || tid == skip || !threadIDRe.MatchString(tid) {
+			continue
+		}
+		if s.draftOnlyThread(sess, tid) {
+			found = tid
+		}
+	}
+	return found
 }
 
 func truncRunes(s string, n int) string {
@@ -479,8 +526,10 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 			return
 		}
 		if _, err = os.Stat(s.threadPath(sess, tid)); os.IsNotExist(err) {
-			// A metadata-only entry makes an unsent draft's thread navigable after
-			// switching away. It contains no prompt and is ignored by old renderers.
+			// A metadata-only entry keeps an unsent draft's thread on disk after
+			// switching away, so the next "new thread" returns to it instead of
+			// minting another. It contains no prompt, is ignored by old renderers
+			// and keeps the thread out of the list until a message is sent.
 			err = s.appendThreadEntry(sess, tid, logEntry{Kind: "draft_context"})
 		}
 		if err != nil {
@@ -603,20 +652,19 @@ func (s *Server) handleThreadNew(w http.ResponseWriter, r *http.Request, sess st
 		return
 	}
 	// 当前已是没发过消息的空对话：直接复用，不堆积空线程
-	if tid := s.activeThread(sess); tid != "" {
-		if _, err := os.Stat(s.threadPath(sess, tid)); os.IsNotExist(err) {
-			writeJSON(w, http.StatusOK, map[string]any{"id": tid, "created": false})
+	active := s.activeThread(sess)
+	if active != "" {
+		if _, err := os.Stat(s.threadPath(sess, active)); os.IsNotExist(err) || s.draftOnlyThread(sess, active) {
+			writeJSON(w, http.StatusOK, map[string]any{"id": active, "created": false})
 			return
 		}
-		if raw, err := os.ReadFile(s.threadPath(sess, tid)); err == nil {
-			entries := parseEntries(raw)
-			if len(entries) == 1 && entries[0].meta.Kind == "draft_context" {
-				writeJSON(w, http.StatusOK, map[string]any{"id": tid, "created": false})
-				return
-			}
-		}
 	}
-	tid := newThreadID(time.Now())
+	// 之前开过、没发消息就切走的空对话也复用（连带它的本机草稿），
+	// 历史列表里不会因为来回切换而攒出一串空对话
+	tid := s.draftThread(sess, active)
+	if tid == "" {
+		tid = newThreadID(time.Now())
+	}
 	if err := s.setActiveThread(sess, tid); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
