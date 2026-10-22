@@ -824,7 +824,7 @@ export function liveNode(kind: string): LiveNode {
 function thinkBlock(text: string, peek = false) {
   const { el, body } = liveNode("thinking");
   (el as HTMLDetailsElement).open = false;
-  body.textContent = text;
+  body.textContent = text.trim(); // 思考摘要常以空行结尾，pre-wrap 会把它画成一行空白
   const first = peek ? text.trim().split("\n")[0].replace(/^\*\*(.+?)\*\*$/, "$1").trim() : "";
   if (first) {
     const s = document.createElement("span");

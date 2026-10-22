@@ -384,15 +384,24 @@
 .tool-call .chip.tool .sum { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tool-call summary.chip { cursor: pointer; list-style: none; border-radius: calc(6px * var(--radius-scale)); }
 .tool-call summary.chip::-webkit-details-marker { display: none; }
-.tool-call summary.chip::after {
-  content: "›"; flex: none; margin-left: 8px;
-  color: var(--muted); opacity: 0;
+/* 行尾的展开箭头：对话流里所有可展开的行共用这一种，用边框画（「›」字形落在基线上，和文字对不齐），
+ * 收起朝右、展开朝下，与文字垂直居中 */
+.tool-call summary.chip::after, .cc-toggle::after, .cc-gsum::after,
+details.think summary::after, .fold-head::after, details.fold-item > summary::after {
+  content: ""; flex: none; align-self: center;
+  width: 5px; height: 5px; margin: 0 2px 0 8px;
+  border: solid var(--muted); border-width: 0 1.5px 1.5px 0;
+  transform: translateX(-1px) rotate(-45deg);
   transition: transform var(--dur-fast) var(--ease-out, ease), opacity var(--dur-fast) ease;
 }
+.tool-call details[open] > summary.chip::after, .cc-toggle[aria-expanded="true"]::after, .cc-gsum[aria-expanded="true"]::after,
+details.think[open] > summary::after, .fold-open > .fold-head::after, details.fold-item[open] > summary::after {
+  transform: translateY(-1px) rotate(45deg);
+}
+.tool-call summary.chip::after { opacity: 0; }
 .tool-call summary.chip:hover .name, .tool-call summary.chip:hover .sum { color: var(--text-hi, var(--text)); }
 .tool-call summary.chip:hover::after, .tool-call summary.chip:focus-visible::after,
 .tool-call details[open] > summary.chip::after { opacity: 1; }
-.tool-call details[open] > summary.chip::after { transform: rotate(90deg); }
 .tc-meta, .tc-badge, .tc-stat { flex: none; margin-left: 10px; }
 .tc-meta { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0.85; }
 .tc-badge {
@@ -461,27 +470,25 @@
   min-width: 0; max-width: 100%;
   font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--text);
 }
-.cc-head, .cc-gsum { display: flex; align-items: baseline; min-width: 0; white-space: nowrap; }
-.cc-dot { flex: none; width: 1.6em; font-size: 10px; color: var(--green); }
+.cc-head, .cc-gsum { display: flex; align-items: center; min-width: 0; white-space: nowrap; }
+/* 状态圆点用 CSS 画（「●」字形偏下），字留在 DOM 里给复制与读屏 */
+.cc-dot { flex: none; width: 19px; display: inline-flex; align-items: center; font-size: 0; color: var(--green); }
+.cc-dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .cc-tool[data-status="failed"] > .cc-head .cc-dot { color: var(--red); }
 .cc-tool[data-status="unfinished"] > .cc-head .cc-dot { color: var(--muted); }
 .cc-tool[data-status="running"] > .cc-head .cc-dot,
 .cc-group[data-status="running"] > .cc-gsum .cc-icon { color: var(--muted); animation: cc-blink 1.2s ease-in-out infinite; }
 /* 折叠组标题前是操作类型的图标（命令、读文件、搜索、列目录，混合是扳手），出错标红 */
-.cc-icon { flex: none; width: 1.6em; align-self: center; display: inline-flex; color: var(--muted); }
+.cc-icon { flex: none; width: 19px; display: inline-flex; align-items: center; color: var(--muted); }
 .cc-group[data-status="failed"] > .cc-gsum .cc-icon { color: var(--red); }
 @keyframes cc-blink { 50% { opacity: 0.15; } }
 .cc-name { flex: none; font-weight: 600; }
 .cc-args { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .cc-head .chip-open { flex: none; }
 .cc-toggle, .cc-gsum { cursor: pointer; border-radius: calc(4px * var(--radius-scale)); }
-.cc-toggle::after, .cc-gsum::after {
-  content: "›"; flex: none; margin-left: 8px; color: var(--muted); opacity: 0;
-  transition: transform var(--dur-fast) var(--ease-out, ease), opacity var(--dur-fast) ease;
-}
+.cc-toggle::after, .cc-gsum::after { opacity: 0; }
 .cc-toggle:hover::after, .cc-toggle:focus-visible::after, .cc-gsum:hover::after, .cc-gsum:focus-visible::after,
 .cc-toggle[aria-expanded="true"]::after, .cc-gsum[aria-expanded="true"]::after { opacity: 1; }
-.cc-toggle[aria-expanded="true"]::after, .cc-gsum[aria-expanded="true"]::after { transform: rotate(90deg); }
 .cc-toggle:focus-visible, .cc-gsum:focus-visible { outline: 1px solid var(--line); }
 .cc-gsum { color: var(--muted); }
 .cc-gsum:hover .cc-gtext { color: var(--text); }
@@ -548,12 +555,6 @@ details.think summary {
 }
 details.think summary::-webkit-details-marker { display: none; }
 details.think summary > .ui-icon { flex: none; }
-details.think summary::after, .fold-head::after, details.fold-item > summary::after {
-  content: "›"; flex: none;
-  transition: transform var(--dur-fast) var(--ease-out, ease);
-  color: var(--muted);
-}
-details.think[open] > summary::after, .fold-open > .fold-head::after, details.fold-item[open] > summary::after { transform: rotate(90deg); }
 details.think summary:hover { color: var(--text); }
 
 /* 连着的思考、工具心跳收成一行（features/chat/folds.ts）：点开是列表，每条再点开看详情 */

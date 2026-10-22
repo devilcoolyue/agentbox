@@ -415,19 +415,32 @@ input[type="checkbox"]:disabled, input[type="radio"]:disabled { cursor: default;
 .tip.show { display: block; }
 .tip.in { opacity: 1; transform: none; }
 
-/* 箭头：旋转 45° 的小方块，画在气泡边框之上，底色正好把那截边框盖住。
+/* 箭头：两个同样大的三角叠在一起——::before 是边框色、贴着气泡边框外沿，::after 是底色、
+ * 往里错 1px 盖住那截边框，斜边就是一条连续的 1px 线（旋转小方块的写法会和边框错位出豁口）。
  * --tip-ax / --tip-ay 由 tip.js 写，跟着锚点中心走，气泡被夹到视口边缘也指得对。 */
-.tip::after {
+.tip::before, .tip::after {
   content: ""; position: absolute;
-  width: 8px; height: 8px;
-  background: var(--panel-solid);
-  border: 1px solid var(--amber-dim);
-  transform: rotate(45deg);
+  width: 0; height: 0;
+  border: 6px solid transparent;
 }
-.tip[data-side="top"]::after    { bottom: -4px; left: var(--tip-ax); margin-left: -4px; border-top: 0; border-left: 0; }
-.tip[data-side="bottom"]::after { top: -4px;    left: var(--tip-ax); margin-left: -4px; border-bottom: 0; border-right: 0; }
-.tip[data-side="left"]::after   { right: -4px;  top: var(--tip-ay);  margin-top: -4px;  border-bottom: 0; border-left: 0; }
-.tip[data-side="right"]::after  { left: -4px;   top: var(--tip-ay);  margin-top: -4px;  border-top: 0; border-right: 0; }
+.tip::before { --tip-arrow: var(--amber-dim); }
+.tip::after  { --tip-arrow: var(--panel-solid); }
+.tip[data-side="top"]::before, .tip[data-side="top"]::after,
+.tip[data-side="bottom"]::before, .tip[data-side="bottom"]::after { left: var(--tip-ax); margin-left: -6px; }
+.tip[data-side="left"]::before, .tip[data-side="left"]::after,
+.tip[data-side="right"]::before, .tip[data-side="right"]::after { top: var(--tip-ay); margin-top: -6px; }
+.tip[data-side="top"]::before, .tip[data-side="top"]::after { border-bottom-width: 0; border-top-color: var(--tip-arrow); }
+.tip[data-side="top"]::before { top: calc(100% + 1px); }
+.tip[data-side="top"]::after  { top: 100%; }
+.tip[data-side="bottom"]::before, .tip[data-side="bottom"]::after { border-top-width: 0; border-bottom-color: var(--tip-arrow); }
+.tip[data-side="bottom"]::before { bottom: calc(100% + 1px); }
+.tip[data-side="bottom"]::after  { bottom: 100%; }
+.tip[data-side="left"]::before, .tip[data-side="left"]::after { border-right-width: 0; border-left-color: var(--tip-arrow); }
+.tip[data-side="left"]::before { left: calc(100% + 1px); }
+.tip[data-side="left"]::after  { left: 100%; }
+.tip[data-side="right"]::before, .tip[data-side="right"]::after { border-left-width: 0; border-right-color: var(--tip-arrow); }
+.tip[data-side="right"]::before { right: calc(100% + 1px); }
+.tip[data-side="right"]::after  { right: 100%; }
 
 @media (prefers-reduced-motion: reduce) {
   .btn { transition: none; }

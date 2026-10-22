@@ -330,7 +330,7 @@ export function createChatStream(hooks) {
                 footer.el.hidden = false;
         }
         else
-            b.body.textContent = b.shown; // thinking 与最终渲染一致，保持纯文本
+            b.body.textContent = b.shown.trim(); // thinking 与最终渲染一致：纯文本，去掉首尾空行
         if (stick)
             log.scrollTop = log.scrollHeight;
     }
