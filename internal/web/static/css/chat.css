@@ -657,15 +657,15 @@ details.think.streaming .think-body::after {
   color: var(--muted); font-size: 11px;
 }
 
-/* 消息气泡里的图片缩略图 */
-.msg.user .chat-thumb {
+/* 消息气泡里的图片缩略图（用户消息与引导消息共用） */
+.chat-thumb {
   display: inline-block; vertical-align: middle;
   max-width: 200px; max-height: 110px;
   border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
   margin: 3px 4px;
   cursor: zoom-in;
 }
-.msg.user .chat-thumb:hover { border-color: var(--amber); }
+.chat-thumb:hover { border-color: var(--amber); }
 .img-gone { color: var(--muted); font-size: 12px; font-family: var(--mono); }
 
 /* ---- 对话切换栏：当前对话标题（历史面板入口）+ 新对话（chat-threads.js） ---- */
@@ -1036,6 +1036,7 @@ details.think.streaming .think-body::after {
 .steer-msg { align-self: flex-end; max-width: 78%; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; margin: 2px 0; }
 .steer-tag { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; }
 .steer-text {
+  max-width: 100%;
   padding: 7px 14px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; word-break: break-word;
   background: var(--panel-2); border: 1px dashed var(--line);
   border-radius: calc(16px * var(--radius-scale)) calc(16px * var(--radius-scale)) calc(6px * var(--radius-scale)) calc(16px * var(--radius-scale));

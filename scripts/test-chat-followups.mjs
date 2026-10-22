@@ -66,6 +66,7 @@ async function scenario(browser,{mobile}={}){
     else body={version:1,receipt:receipts.get(id)};
    }else{await route.fulfill({status:404,json:{code:'chat_request_not_found',error:'x'}});return;}
   }
+  else if(path.endsWith('/file')){await route.fulfill({status:200,contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="500"><rect width="1600" height="500" fill="#c96"/></svg>'}).catch(()=>{});return;}
   else if(path.endsWith('/files')||path==='/api/git/connections')body=[];
   await route.fulfill({status,json:body}).catch(()=>{});
  });
@@ -136,6 +137,14 @@ async function scenario(browser,{mobile}={}){
  assert.match(await dropped.textContent(),/引导未生效/);
  await dropped.locator('.steer-copy').click();
  await page.waitForFunction(()=>document.querySelector('#chat-input').value==='来不及的补充');
+ // An image in a steer message is a thumbnail like in the user's own bubble, and the bubble stays in the column.
+ emit('space-a',{type:'steer',kind:'steer',event:{id:'c'.repeat(32),text:'看这张图 [图片#1 /shared/.images/wide.png] 再说一段很长的补充说明，确认气泡不会超出对话栏左边',state:'applied'},ts:now()});
+ const pic=page.locator('.steer-msg .chat-thumb');await pic.waitFor();
+ await page.waitForFunction(()=>{const i=document.querySelector('.steer-msg .chat-thumb');return i&&i.complete&&i.naturalWidth>0;});
+ const box=await pic.boundingBox();
+ assert.ok(box.width<=201&&box.height<=111,`steer thumbnail is capped: ${box.width}x${box.height}`);
+ const [log,steerBox]=await Promise.all([page.locator('#chat-log').boundingBox(),pic.locator('xpath=ancestor::*[contains(@class,"steer-text")]').boundingBox()]);
+ assert.ok(steerBox.x>=log.x&&steerBox.x+steerBox.width<=log.x+log.width+1,'steer bubble stays inside the chat column');
  if(shots)await page.locator('#chat-log').screenshot({path:`${shots}/${mobile?'mobile':'desktop'}-steer.png`});
  // A queued follow-up that starts later updates in place.
  await input.fill('跑完再部署');
