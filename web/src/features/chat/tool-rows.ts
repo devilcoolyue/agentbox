@@ -2,7 +2,7 @@
  * 图标 + 工具名 + 摘要 + 行尾信息（耗时、徽标、增删行数），有详情时整行是 <summary>，
  * 点开看命令、输出首尾或 diff。进行中的行转圈，并按 key 登记，完成事件到达时原地更新；
  * 回合结束仍挂着的行由 settleToolRows 停止转圈。模型与工具输出一律走 textContent。 */
-import { buttonLabel, svgIcon } from "../../icons.js";
+import { buttonLabel, svgIcon, type IconSlot } from "../../icons.js";
 import { setTip } from "../../tip.js";
 import { setText, t as i18nText } from "../../i18n.js";
 import { S } from "../../state.js";
@@ -34,7 +34,7 @@ export function shortDuration(ms: number | undefined) {
   return Math.floor(s / 60) + "m " + (s % 60) + "s";
 }
 
-export interface Row { name: string; icon: string; sum: string; meta?: (HTMLElement | string)[]; body?: HTMLElement[]; tip?: string; htmlPath?: string }
+export interface Row { name: string; icon: IconSlot; sum: string; meta?: (HTMLElement | string)[]; body?: HTMLElement[]; tip?: string; htmlPath?: string }
 
 export function fillRow(wrap: HTMLElement, row: Row, running: boolean) {
   const line = el(row.body?.length ? "summary" : "div", "chip tool");
@@ -48,7 +48,7 @@ export function fillRow(wrap: HTMLElement, row: Row, running: boolean) {
     b.type = "button";
     b.className = "btn chip-open";
     b.dataset.htmlPreview = row.htmlPath;
-    buttonLabel(b, () => i18nText("预览"), "eye");
+    buttonLabel(b, () => i18nText("预览"), "chat.preview");
     setTip(b, () => i18nText("在预览窗口渲染 ") + row.htmlPath);
     // 按钮在 <summary> 里：只打开预览（chat-log 上的委托处理），别顺带展开这一行
     b.addEventListener("click", e => e.preventDefault());
@@ -202,7 +202,7 @@ function settleRow(row: HTMLElement) {
   row.dataset.status = "unfinished";
   settlers.get(row)?.();
   row.querySelector(":scope > .tc-live")?.remove();
-  row.querySelector(":scope > details > summary .tc-spin, :scope > .chip .tc-spin")?.replaceWith(svgIcon(row.dataset.rowIcon || "tool", 12));
+  row.querySelector(":scope > details > summary .tc-spin, :scope > .chip .tc-spin")?.replaceWith(svgIcon((row.dataset.rowIcon || "chat.tool") as IconSlot, 12));
   for (const [k, v] of pending) if (v === row) pending.delete(k);
 }
 

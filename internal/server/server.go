@@ -32,6 +32,7 @@ import (
 	"agentbox/internal/filesearch"
 	"agentbox/internal/gitaccess"
 	"agentbox/internal/gitx"
+	"agentbox/internal/iconset"
 	"agentbox/internal/imageupdate"
 	"agentbox/internal/mcpconfig"
 	"agentbox/internal/pricecatalog"
@@ -93,6 +94,8 @@ type Server struct {
 	mcp           *mcpconfig.Service
 	themesOnce    sync.Once
 	themes        *theme.Service
+	iconsOnce     sync.Once
+	icons         *iconset.Service
 	mcpCheckMu    sync.Mutex
 	mcpChecks     map[string]bool
 	gitOperations gitOperationRegistry
@@ -325,6 +328,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/login", s.handleLogin)
 	mux.Handle("POST /api/tunnel/probe", s.auth(http.HandlerFunc(s.handleNetworkProbe)))
 	mux.HandleFunc("GET /api/ping", s.handlePing)
+	// 全站图标配置不含敏感信息，登录页也要用，所以读取不需要登录
+	mux.HandleFunc("GET /api/icons", s.handleIcons)
+	mux.Handle("PUT /api/icons", s.admin(http.HandlerFunc(s.handleIconsPut)))
 	mux.Handle("POST /api/logout", s.auth(http.HandlerFunc(s.handleLogout)))
 	mux.Handle("GET /api/clients/capabilities", s.auth(http.HandlerFunc(s.handleClientCapabilities)))
 	mux.Handle("POST /api/clients/pair", s.auth(http.HandlerFunc(s.handleClientPair)))
@@ -625,23 +631,28 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 }
 
 // staticHandler 用「内容哈希版本化路径」发布前端资源：index.html 里的资源
+// webFS 是前端静态资源：默认取嵌入的 static/，AGENTBOX_WEB_DIR 指向磁盘目录时热加载。
+func webFS() fs.FS {
+	if dev := os.Getenv("AGENTBOX_WEB_DIR"); dev != "" {
+		return os.DirFS(dev)
+	}
+	sub, err := fs.Sub(web.FS, "static")
+	if err != nil {
+		panic(err)
+	}
+	return sub
+}
+
 // 引用形如 /_v/<hash>/js/main.js（{{BUILD}} 占位符启动时替换），ES Module 的
 // 相对 import 自动继承该前缀。内容一变哈希即变、URL 全新，所以哈希路径可以
 // 放心长缓存（immutable）；而 index.html 本身 no-cache。这是唯一能穿透
 // Cloudflare 的方案——CF 会把 .js/.css 的 Cache-Control 重写成 max-age=14400
 // 并做边缘缓存，单纯 no-cache 到不了浏览器。
 func staticHandler() http.Handler {
+	fsys := webFS()
 	dev := os.Getenv("AGENTBOX_WEB_DIR")
-	var fsys fs.FS
 	if dev != "" {
 		log.Printf("serving web UI from %s", dev)
-		fsys = os.DirFS(dev)
-	} else {
-		sub, err := fs.Sub(web.FS, "static")
-		if err != nil {
-			panic(err)
-		}
-		fsys = sub
 	}
 	build := assetBuildID(fsys)
 	log.Printf("web asset build id: %s", build)

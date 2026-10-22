@@ -706,5 +706,43 @@
         "sha256": "a0a699b17d3f730326eee80414ffa1b5fbab2c6c27280d0ad19bece8cc86f9b3"
       }
     ]
+  },
+  {
+    "name": "@tabler/icons",
+    "version": "3.49.0",
+    "source": "https://registry.npmjs.org/@tabler/icons/-/icons-3.49.0.tgz",
+    "integrity": "sha512-l+GnSkFETx0U26icxv1VUFnxxiTqXfCcVRiRAnyMwibupM2S2L/hSaZ9gmSgz01rkrsH/93NvLsxykqdanc6lw==",
+    "license": "MIT",
+    "modifications": "Repacked the upstream icon node JSON into compact per-set JSON: dropped the transparent artboard path, kept only whitelisted shape tags/attributes, merged search tags. Shapes unchanged.",
+    "license_files": [
+      "third_party/licenses/tabler-icons-LICENSE"
+    ],
+    "files": [
+      {
+        "path": "internal/web/static/vendor/icons/tabler.json",
+        "sha256": "7f19cff5a116cd876bf577d556a368bf439be418fd7141630e37ccea1aa247c3"
+      },
+      {
+        "path": "internal/web/static/vendor/icons/tabler-filled.json",
+        "sha256": "308cce752fdf8354bcba90c58cb1b40fbb33fbd08834958a114c12f9b031e3ac"
+      }
+    ]
+  },
+  {
+    "name": "lucide-static",
+    "version": "1.61.0",
+    "source": "https://registry.npmjs.org/lucide-static/-/lucide-static-1.61.0.tgz",
+    "integrity": "sha512-yLAiQB3MWUJEstsEDAwenSA3m7vr1tdLvgnC16Q/XMxRRma0DWwMs8M2bWlvgShrIs1m2mWMJ+0AiahqQO4GrA==",
+    "license": "ISC",
+    "modifications": "Repacked the upstream icon node JSON into compact per-set JSON: dropped the transparent artboard path, kept only whitelisted shape tags/attributes, merged search tags. Shapes unchanged.",
+    "license_files": [
+      "third_party/licenses/lucide-LICENSE"
+    ],
+    "files": [
+      {
+        "path": "internal/web/static/vendor/icons/lucide.json",
+        "sha256": "258dcae9d053dbbedf6e1c0d3c9bc1743af95d12a6c41ac05baae04607b3074f"
+      }
+    ]
   }
 ]

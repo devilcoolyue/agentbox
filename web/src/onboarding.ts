@@ -2,7 +2,7 @@ import {api} from "./api.js";
 import { skelBar } from "./skeleton.js";
 import {S,bus,emit} from "./state.js";
 import {setText,setTextRender,t} from "./i18n.js";
-import {actionButton} from "./icons.js";
+import { actionButton, type IconSlot } from "./icons.js";
 import {openDiagnostics} from "./diagnostics.js";
 import type {OnboardingSnapshot,DiagnosticReport,BrowserDiagnosticCheck} from "./types.js";
 
@@ -34,7 +34,7 @@ export function initOnboarding() {
   newButton.disabled=true;
   steps.replaceChildren();setText(status,"正在读取准备状态…");
 
-  const button=(label:string,icon:string,run:()=>void)=>{
+  const button=(label:string,icon:IconSlot,run:()=>void)=>{
     const node=document.createElement("button");node.type="button";node.className="btn btn-sm";
     actionButton(node,()=>t(label),icon);node.addEventListener("click",run,{signal:rendered.signal});return node;
   };

@@ -47,7 +47,7 @@ export function fillRow(wrap, row, running) {
         b.type = "button";
         b.className = "btn chip-open";
         b.dataset.htmlPreview = row.htmlPath;
-        buttonLabel(b, () => i18nText("预览"), "eye");
+        buttonLabel(b, () => i18nText("预览"), "chat.preview");
         setTip(b, () => i18nText("在预览窗口渲染 ") + row.htmlPath);
         // 按钮在 <summary> 里：只打开预览（chat-log 上的委托处理），别顺带展开这一行
         b.addEventListener("click", e => e.preventDefault());
@@ -207,7 +207,7 @@ function settleRow(row) {
     row.dataset.status = "unfinished";
     settlers.get(row)?.();
     row.querySelector(":scope > .tc-live")?.remove();
-    row.querySelector(":scope > details > summary .tc-spin, :scope > .chip .tc-spin")?.replaceWith(svgIcon(row.dataset.rowIcon || "tool", 12));
+    row.querySelector(":scope > details > summary .tc-spin, :scope > .chip .tc-spin")?.replaceWith(svgIcon((row.dataset.rowIcon || "chat.tool"), 12));
     for (const [k, v] of pending)
         if (v === row)
             pending.delete(k);

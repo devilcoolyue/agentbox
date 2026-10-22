@@ -3,7 +3,7 @@ import { htmlText as trHTML, setAttrRender, setText, setTextRender, t as i18nTex
  * 单文件预览/编辑弹窗在 preview.ts。 */
 "use strict";
 
-import { actionButton, buttonLabel, fileIconName } from "./icons.js";
+import { actionButton, buttonLabel, fileIconName, type IconSlot } from "./icons.js";
 
 import { S, emit } from "./state.js";
 import type { FileScope } from "./state.js";
@@ -251,7 +251,7 @@ function fileRow(ent: FileEntry, rel: string, depth: number) {
   return row;
 }
 
-function fileAction(label: string, icon: string, action: () => void, danger = false) {
+function fileAction(label: string, icon: IconSlot, action: () => void, danger = false) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "file-act" + (danger ? " danger" : "");
@@ -431,7 +431,7 @@ async function loadMoveDirs() {
     const arrow = document.createElement("span");
     arrow.className = "dir-arrow";
     arrow.appendChild(svgIcon("caret", 13));
-    btn.append(svgIcon("folder", 17), name, arrow);
+    btn.append(svgIcon("file.folder", 17), name, arrow);
     btn.addEventListener("click", () => { fileOp.movePath = path; loadMoveDirs(); });
     frag.appendChild(btn);
   }

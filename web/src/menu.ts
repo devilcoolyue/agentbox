@@ -4,13 +4,13 @@
 import { t as i18nText, setAttrRender } from "./i18n.js";
 "use strict";
 
-import { svgIcon } from "./icons.js";
+import { svgIcon, type IconSlot } from "./icons.js";
 import { hideTip } from "./tip.js";
 import { enter, leave } from "./motion.js";
 
 export interface MenuItem {
   label: string;
-  icon: string;
+  icon: IconSlot;
   run: () => void;
   /** 只改颜色；删除类动作放在最后 */
   danger?: boolean;

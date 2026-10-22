@@ -162,7 +162,7 @@ export function createMentionMenu(hooks: {
       row.id = "mention-opt-" + i;
       row.setAttribute("role", "option");
       row.setAttribute("aria-selected", String(i === active));
-      const icon = svgIcon(item.dir ? "folder" : fileIconName(item.path.slice(item.path.lastIndexOf("/") + 1)), 14);
+      const icon = svgIcon(item.dir ? "file.folder" : fileIconName(item.path.slice(item.path.lastIndexOf("/") + 1)), 14);
       icon.classList.add("mention-icon");
       row.append(icon, ...pathLabel(item, query));
       // 鼠标按下不抢输入框焦点；触屏不拦，否则 Safari 滚不动列表

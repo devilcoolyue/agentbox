@@ -419,7 +419,7 @@ func TestBackupSnapshotDoesNotMigrateSource(t *testing.T) {
 
 func TestMCPAndThemeSystemBackupRestore(t *testing.T) {
 	cfg, data := fixture(t)
-	paths := []string{"users/alice/mcp.json", "users/alice/sessions/s1/mcp.json", "themes.json", "users/alice/themes.json"}
+	paths := []string{"users/alice/mcp.json", "users/alice/sessions/s1/mcp.json", "themes.json", "icons.json", "users/alice/themes.json"}
 	for _, rel := range paths {
 		if err := os.WriteFile(filepath.Join(data, rel), []byte(`{"version":1,"entries":{},"revision":4}`), 0600); err != nil {
 			t.Fatal(err)

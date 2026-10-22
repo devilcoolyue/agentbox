@@ -415,7 +415,7 @@ async function loadMoveDirs() {
         const arrow = document.createElement("span");
         arrow.className = "dir-arrow";
         arrow.appendChild(svgIcon("caret", 13));
-        btn.append(svgIcon("folder", 17), name, arrow);
+        btn.append(svgIcon("file.folder", 17), name, arrow);
         btn.addEventListener("click", () => { fileOp.movePath = path; loadMoveDirs(); });
         frag.appendChild(btn);
     }

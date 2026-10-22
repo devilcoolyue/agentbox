@@ -13,7 +13,7 @@ import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
  * 不是可选值，不参与选中态。 */
 "use strict";
 
-import { svgIcon } from "./icons.js";
+import { svgIcon, type IconSlot } from "./icons.js";
 
 export interface PrefOption {
   value: string;
@@ -26,7 +26,7 @@ export interface PrefOption {
 
 export interface PrefAction {
   label: () => string;
-  icon: string;
+  icon: IconSlot;
   run: () => void;
 }
 

@@ -33,7 +33,7 @@ export async function mcpSmoke(page) {
   assert.equal(await page.locator('#tab-mcp').isVisible(),true);
   const heights=await page.locator('.mcp-toolbar').evaluate(el=>[...el.querySelectorAll('.btn,.select-trigger')].map(e=>e.getBoundingClientRect().height));
   assert.ok(Math.max(...heights)-Math.min(...heights)<=1,'toolbar controls must have equal heights');
-  assert.equal(await page.locator('#tab-btn-mcp svg').getAttribute('data-icon-name'),'plug');
+  assert.equal(await page.locator('#tab-btn-mcp svg').getAttribute('data-icon-name'),'tab.mcp');
   await page.locator('#mcp-add').click();
   assert.equal(await page.locator('#mcp-editor').evaluate(el=>el.matches(':modal')),true);
   await page.keyboard.press('Escape');

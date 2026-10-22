@@ -229,6 +229,15 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 
 校验失败返回 400，`error` 是简体中文说明，`theme_error` 给出稳定的 `code`（`bad_json`、`bad_type`、`unknown_field`、`format`、`id`、`name`、`base`、`author`、`description`、`unknown_token`、`bad_value`），以及相关的 `token`、`section`（`common` / `dark` / `light`）。超过 64 KiB 返回 413（`too_large`），数量达到上限返回 409（`limit`）。
 
+## 图标
+
+位置注册表与默认图标见[图标统一管理](icons.md)。
+
+| 方法与路径 | 权限 | 用途 |
+| --- | --- | --- |
+| `GET /api/icons` | 无需登录 | 返回 `overrides`（位置 ID → `库:名字`）、`icons`（这些图标的形状，可直接绘制）、`sets`、`limit`、`updated_at`、`updated_by` |
+| `PUT /api/icons` | 管理员 | 请求体 `{overrides}` 整份替换覆盖表；位置 ID 须符合 `a.b-c` 格式，图标须在随二进制分发的库里存在，最多 500 项；不接受 SVG 标记。成功返回与 GET 相同的结构 |
+
 ## 草稿能力
 
 v0.1.11 起 `/api/me` 增补 `draft_protocol:1` 与 `draft_scope`，仅用于未发送草稿隔离；它不声明 WS 接收确认能力。历史接口可显式携带 `?draft_context=1` 获取稳定的 `active_thread`（空对话会登记不含正文的元数据），附件校验接口为 `POST /api/sessions/{id}/attachments/validate`。权限、上限与恢复边界见[聊天草稿](chat-recovery.md)。

@@ -161,7 +161,7 @@ export function createTaskPanel(hooks) {
             const mark = document.createElement("span");
             mark.className = "task-mark";
             if (task.status === "completed")
-                mark.append(svgIcon("check", 12));
+                mark.append(svgIcon("chat.task-done", 12));
             setAttrRender(mark, "aria-label", () => task.status === "completed" ? i18nText("已完成") : task.status === "in_progress" ? i18nText("进行中") : i18nText("待办"));
             mark.setAttribute("role", "img");
             const text = document.createElement("span");

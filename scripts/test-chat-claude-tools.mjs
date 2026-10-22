@@ -129,7 +129,7 @@ export async function chatClaudeToolsSmoke(page, { setHistory, send, socket, set
  await group.waitFor();
  assert.equal(await group.getAttribute('data-status'), 'running');
  assert.equal(await group.locator('.cc-gsum').textContent(), '正在运行 1 条命令…');
- assert.equal(await group.locator('.cc-gsum .cc-icon svg').getAttribute('data-icon-name'), 'tool', 'command groups lead with the terminal icon');
+ assert.equal(await group.locator('.cc-gsum .cc-icon svg').getAttribute('data-icon-name'), 'chat.tool-shell', 'command groups lead with the terminal icon');
  assert.equal(await group.locator('.cc-hint').textContent(), '⎿$ npm test');
  await until(async () => await page.locator('.turn.working .work-label').textContent() === '执行 npm test…', 'working line names the command');
  await until(async () => /· \ds…$/.test(await group.locator('.cc-gsum').textContent()), 'running group counts seconds');
@@ -142,7 +142,7 @@ export async function chatClaudeToolsSmoke(page, { setHistory, send, socket, set
   tool_use_result:{type:'text', file:{filePath:'/workspace/package.json', content:'{}', numLines:1, startLine:1, totalLines:1}}});
  await until(async () => await group.getAttribute('data-status') === 'completed', 'results complete the group in place');
  assert.equal(await group.locator('.cc-gsum').textContent(), '运行 1 条命令，读取 1 个文件');
- assert.equal(await group.locator('.cc-gsum .cc-icon svg').getAttribute('data-icon-name'), 'wrench', 'mixed groups lead with the wrench');
+ assert.equal(await group.locator('.cc-gsum .cc-icon svg').getAttribute('data-icon-name'), 'chat.tool-group', 'mixed groups lead with the wrench');
  assert.equal(await live.locator(':scope > .turn-body > .tool-call').count(), 1);
  // Text ends the group; a sub-agent shows its latest call while it runs.
  ev({type:'assistant', message:{content:[{type:'text', text:'测试通过，再让子 Agent 看下。'}]}});
@@ -179,7 +179,7 @@ export async function chatClaudeToolsSmoke(page, { setHistory, send, socket, set
  await until(async () => await thinks.locator('details.think').count() === 3, 'consecutive thinking folds into one row');
  assert.equal(await page.locator('#chat-log .turn:not(.working)').last().locator(':scope > .turn-body > details.think').count(), 0);
  assert.equal(await thinks.locator('.fold-head').textContent(), '思考过程 · 3 段');
- assert.equal(await thinks.locator('.fold-head svg').getAttribute('data-icon-name'), 'brain');
+ assert.equal(await thinks.locator('.fold-head svg').getAttribute('data-icon-name'), 'chat.thinking');
  await thinks.locator('.fold-head').click();
  assert.deepEqual(await thinks.locator('.think-peek').evaluateAll(l => l.map(x => x.textContent)), ['Checking the logs.', 'Looks fine.', 'Writing the summary.']);
  assert.equal(await thinks.locator('.think-body').first().isVisible(), false, 'each step stays closed until clicked');

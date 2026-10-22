@@ -3,7 +3,7 @@ import { initApplication } from "./app/lifecycle.js";
 /* main：入口。chat/settings 由 app/lifecycle 显式挂载与清理；
  * 其他功能仍保留兼容入口，逐步迁移。 */
 "use strict";
-import { decorateIcons } from "./icons.js";
+import { decorateIcons, loadCachedIconConfig, refreshIconConfig } from "./icons.js";
 import { S } from "./state.js";
 import { enhanceSelects } from "./select.js";
 import { initInk } from "./ink.js";
@@ -36,7 +36,9 @@ for (const m of document.querySelectorAll("[data-mark]"))
 const themeIco = document.getElementById("tpl-theme-ico").content;
 for (const m of document.querySelectorAll("[data-theme-ico]"))
     m.append(themeIco.cloneNode(true));
+loadCachedIconConfig();
 decorateIcons();
+void refreshIconConfig();
 enhanceSelects();
 initInk();
 initLoadingBar();

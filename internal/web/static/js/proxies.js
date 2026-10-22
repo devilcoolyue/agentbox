@@ -379,7 +379,7 @@ export function mountProxyPicker(root) {
     label.className = "pp-label";
     const caret = document.createElement("span");
     caret.className = "pp-caret";
-    caret.textContent = "▾";
+    caret.append(svgIcon("chevron", 12));
     trigger.append(label, caret);
     const menu = document.createElement("div");
     menu.className = "pp-menu hidden";
@@ -450,9 +450,9 @@ export function mountProxyPicker(root) {
             row.appendChild(test);
         }
         if (id === value) {
-            row.appendChild(Object.assign(document.createElement("span"), {
-                className: "pp-check", textContent: "✓",
-            }));
+            const check = Object.assign(document.createElement("span"), { className: "pp-check" });
+            check.append(svgIcon("check", 13));
+            row.appendChild(check);
         }
         row.addEventListener("click", () => { value = id; paint(); close(); });
         return row;

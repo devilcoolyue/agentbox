@@ -45,10 +45,10 @@
 
 ## 维护约定
 
-- `web/src/icons.ts` 不依赖业务模块。静态按钮声明 `data-icon`，入口执行 `decorateIcons()`；动态节点或文字变化调用 `buttonLabel(element, label, icon)`。用户文本仍通过文本节点写入。
+- `web/src/icons.ts` 不依赖业务模块。静态按钮声明 `data-icon`，入口执行 `decorateIcons()`；动态节点或文字变化调用 `buttonLabel(element, label, icon)`。用户文本仍通过文本节点写入。`data-icon` 与这些函数接收的都是**图标位置 ID**（`web/src/icon-slots.ts`），不是图形；图形由管理员在「系统设置 → 图标管理」里配置，详见 [icons.md](icons.md)。
 - `.btn` 操作通过上述入口加 `action-control`，缺少文字的常规图标按钮另加 `action-icon`。密集组容器显式标记 `action-tools`，`css/actions.css` 仅压缩它的直接子按钮，并跳过 `.btn-primary`、`.btn-danger` 和 `.keep-label`；不要按屏幕宽度或瞬时按钮数量推断。
 - 「⋯」菜单统一用 `menu.ts` 的 `moreButton(items)` / `bindMenu(button, items)`：菜单挂在 body（或所在的模态框）上 fixed 定位，列表的 overflow 裁不到；items 每次打开时重新取，禁用和隐藏状态随当前数据。删除类项用 `danger: true, sep: true` 放最后。
-- 图标一种意思只对应一个：检查类用 `refresh`，导出 / 下载文件用 `download`，账号认证用 `key`，切换空间账号用双向箭头 `switch`，网页 / OAuth 授权用 `login`，Git 远程用 `cloud`，IP 代理用 `network`，安全设置用 `shield`。文件类型用 `fileIconName()`，不要再用 ◨ ▣ ⌘ 这类字符。按钮移入更多菜单后恢复文字，避免一串无说明图标。先设置 className，再调用标签函数，避免覆盖统一类名。空标签必须隐藏，否则 flex gap 会把图标挤偏。
+- 图标一种意思只对应一个：检查类用 `refresh`，导出 / 下载文件用 `download`，账号认证用 `key`，切换空间账号用双向箭头 `switch`，网页 / OAuth 授权用 `login`，Git 远程用 `cloud`，IP 代理用 `network`，安全设置用 `shield`。文件类型用 `fileIconName()`，不要再用 ◨ ▣ ⌘、📄 ⚠ ✓ 这类字符或 emoji 当图标。按钮移入更多菜单后恢复文字，避免一串无说明图标。先设置 className，再调用标签函数，避免覆盖统一类名。空标签必须隐藏，否则 flex gap 会把图标挤偏。
 - `chat-render.ts` 继续导出 `svgIcon`，兼容已有调用方，实际实现统一位于 `icons.ts`。
 - `btnBusy` / `btnDone` 保存并恢复原节点，更新 `aria-busy`，避免加载结束后图标丢失。
 - SVG 使用 `currentColor`，装饰图标设置 `aria-hidden` 和 `focusable=false`，不依赖外部字体或网络图标资源。

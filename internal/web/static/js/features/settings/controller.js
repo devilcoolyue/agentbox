@@ -10,6 +10,7 @@ import { bindSaveBar, confirmDiscard, defineGroups, dirtyGroups, holdDirty, reba
  * 容器与资源、模型管理、安全与访问、关于。 */
 "use strict";
 import { actionButton } from "../../icons.js";
+import { openIconManager, leaveIconManager } from "../../icon-manager.js";
 import { setSelectValue } from "../../select.js";
 import { S, bus, emit } from "../../state.js";
 import { $, btnBusy as baseBusy, btnDone as baseDone, toast as baseToast, fmtTime, askConfirm, askPrompt } from "../../util.js";
@@ -35,7 +36,7 @@ for (const h of document.querySelectorAll("h3[data-agent]")) {
     h.classList.add("agent-h3", "agent-" + agentKey(h.dataset.agent));
     h.prepend(agentIcon(h.dataset.agent, 15));
 }
-export const SET_SECS = ["accounts", "proxies", "container", "models", "decision", "interface", "security", "monitor", "about"];
+export const SET_SECS = ["accounts", "proxies", "container", "models", "decision", "interface", "icons", "security", "monitor", "about"];
 /** 模型管理里的标签页；价格（原「价目表」分区）是其中之一。 */
 export const MODEL_TABS = ["accounts", "pricing", "system"];
 export function createSettingsController() {
@@ -109,6 +110,10 @@ export function createSettingsController() {
         stopSystem();
         if (name === "about")
             void loadSystem(lifetime.signal);
+        if (name === "icons")
+            void openIconManager(lifetime.signal);
+        else
+            leaveIconManager();
         if (name === "security")
             loadUsers();
         if (name === "monitor")

@@ -46,7 +46,7 @@ function asItem(think) {
     return think;
 }
 function thinkFold(first) {
-    const fold = newFold("think", "brain", n => i18nText("思考过程 · {p0} 段", { p0: String(n) }));
+    const fold = newFold("think", "chat.thinking", n => i18nText("思考过程 · {p0} 段", { p0: String(n) }));
     first.replaceWith(fold);
     fold.querySelector(".fold-items").append(asItem(first));
     recount(fold);

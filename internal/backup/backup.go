@@ -184,7 +184,7 @@ func Create(ctx context.Context, opts Options) (_ *Manifest, err error) {
 	}
 	// client-instance-id is intentionally installation-local, not backed up.
 	// A restored service must require desktop clients to confirm a new baseline.
-	for _, name := range []string{"creds", "home-template", "git-secrets", "themes.json"} {
+	for _, name := range []string{"creds", "home-template", "git-secrets", "themes.json", "icons.json"} {
 		if err = add(data, name, "data/"+name, true); err != nil {
 			return nil, err
 		}

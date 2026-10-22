@@ -5,7 +5,7 @@
   "description": "主控制台前端（TypeScript 源码在 web/src，编译产物落到 internal/web/static/js 并随 go:embed 进二进制）",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/sync-i18n-core.mjs",
+    "build": "node scripts/gen-icons.mjs && tsc -p tsconfig.json && node scripts/sync-i18n-core.mjs",
     "watch": "tsc -p tsconfig.json --watch",
     "check": "tsc -p tsconfig.json --noEmit",
     "test:i18n": "node --test scripts/test-i18n.mjs",
@@ -15,7 +15,8 @@
     "test:outbox": "node --test scripts/test-outbox.mjs",
     "test:contracts": "python3 scripts/generate-contracts.py --check && node --test scripts/test-contracts.mjs",
     "test:chat-history": "node --test scripts/test-chat-history.mjs",
-    "test:feature-lifetimes": "node --test scripts/test-feature-lifetimes.mjs"
+    "test:feature-lifetimes": "node --test scripts/test-feature-lifetimes.mjs",
+    "test:icons": "node --test scripts/test-icons.mjs"
   },
   "devDependencies": {
     "typescript": "~7.0.2"

@@ -16,6 +16,8 @@ Agentbox 的项目许可证不替代第三方许可证。发布包携带本目�
 | GitHub Markdown CSS | 5.9.0，npm / sindresorhus/github-markdown-css | MIT | 合并 light/dark，选择器限定到文件预览及应用主题 |
 | noVNC | 1.6.0，novnc/noVNC | MPL-2.0，另附 BSD 许可 | core/vendor 原生模块与上游一致 |
 | Playwright seccomp profile | 1.58.2，microsoft/playwright | Apache-2.0 | 无；仅用于可选浏览器镜像的用户命名空间沙箱 |
+| Tabler Icons | 3.49.0，npm @tabler/icons / tabler/tabler-icons | MIT | 由 `scripts/vendor-icons.py` 把上游节点 JSON 重新打包为 `vendor/icons/tabler.json`、`tabler-filled.json`：去掉透明画板路径、只保留白名单图形元素与属性、合并搜索标签；图形未改 |
+| Lucide | 1.61.0，npm lucide-static / lucide-icons/lucide | ISC（含 Feather MIT 声明） | 同上，打包为 `vendor/icons/lucide.json` |
 | claude-hud | 0.5.1，jarrodwatts/claude-hud @ 10979d16dce075b112b7564bead95c5f236d8a87 | MIT | package.json 和 54 个 dist 文件与上游一致；补入上游 LICENSE |
 
 来源 URL、每个文件的 SHA-256、许可文件位置见 `vendor.json`。更新资源后需重新核对来源、版本、修改及许可，不能仅修改哈希绕过校验。执行 `python3 scripts/verify-third-party.py` 验证。

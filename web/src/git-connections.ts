@@ -10,7 +10,7 @@ import { gitRequest, openGitOperations } from "./git-operations.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
 import { askConfirm, askPrompt, toast } from "./util.js";
-import { actionButton, decorateIcons } from "./icons.js";
+import { actionButton, decorateIcons, type IconSlot } from "./icons.js";
 import { moreButton } from "./menu.js";
 import type { MenuItem } from "./menu.js";
 import { enhanceSelects, setSelectValue } from "./select.js";
@@ -33,7 +33,7 @@ function errorText(d: HTMLElement, error: unknown) {
   for (const skeleton of d.querySelectorAll(".skeleton-list")) skeleton.remove(); // 读失败就别再装作在读
 }
 function option(value: string, label: string) { return Object.assign(document.createElement("option"), {value, textContent: label}); }
-function action(label: string, icon: string, run: () => Promise<void>, tip = label) {
+function action(label: string, icon: IconSlot, run: () => Promise<void>, tip = label) {
   const b = document.createElement("button"); b.type = "button"; b.className = "btn btn-sm"; actionButton(b, label, icon, tip);
   b.addEventListener("click", async () => { b.disabled = true; try { await run(); } catch (e) { toast((e as Error).message, true); } finally { b.disabled = false; } });
   return b;

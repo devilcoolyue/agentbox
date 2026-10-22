@@ -118,7 +118,7 @@ export async function chatMentionsSmoke(page, { setHistory, messages, socket, se
  await input.pressSequentially('demo');
  await shows(['demo.py src', 'demo notes.md docs']);
  assert.equal(await menu.locator('.mention-row').first().locator('.mention-name b').innerText(), 'demo');
- assert.equal(await menu.locator('.mention-row').first().locator('svg').getAttribute('data-icon-name'), 'file-code');
+ assert.equal(await menu.locator('.mention-row').first().locator('svg').getAttribute('data-icon-name'), 'file.code');
 
  // Enter fills (never sends) and quotes a path with spaces the way the CLI reads it.
  const sent = messages().length;
@@ -292,7 +292,7 @@ export async function chatMentionsSmoke(page, { setHistory, messages, socket, se
  assert.equal(await bubbles.first().locator('.msg-cmd').innerText(), '/compact');
  assert.equal(await bubbles.first().locator('.msg-cmd-icon').count(), 1);
  assert.deepEqual(await bubbles.nth(1).locator('.msg-mention').allInnerTexts(), ['src/main.go', 'docs/demo notes.md', 'src/']);
- assert.equal(await bubbles.nth(1).locator('.msg-mention').nth(2).locator('svg').getAttribute('data-icon-name'), 'folder');
+ assert.equal(await bubbles.nth(1).locator('.msg-mention').nth(2).locator('svg').getAttribute('data-icon-name'), 'file.folder');
  assert.equal(await bubbles.nth(2).locator('.msg-cmd, .msg-mention').count(), 0, 'a path at the start is not a command');
  await page.locator('#chat-log').evaluate(el => { el.scrollTop = 0; });
  await page.screenshot({path:'output/playwright/chat-syntax-bubbles.png', animations:'disabled'});

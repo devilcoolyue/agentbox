@@ -1,5 +1,5 @@
 import { t as i18nText, setText, setTextRender, setAttrRender } from "./i18n.js";
-import { svgIcon } from "./icons.js";
+import { svgIcon, type IconSlot } from "./icons.js";
 import { BUDGETS, EFFORT_LABELS } from "./reasoning.js";
 import { cacheHitText, fmtSpeed, fmtTokens, outputSpeed } from "./usage-math.js";
 /* usage：使用记录（消耗流水明细）。
@@ -255,7 +255,7 @@ const KIND_HINT: Record<string, string> = {
 /* 类型列写名称，前面一枚图标帮着扫读「这笔钱是谁按下去的」；不套框，免得和计费
  * 标签抢眼。悬停给名称与说明。墨色深浅沿用原来的分档：对话是主体最重，终端次之，
  * 服务端自发的调用最轻——不加色相，旁边的 Token 与计费列已经用了好几种颜色。 */
-const KIND_ICON: Record<string, string> = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network", background: "cpu", keepalive: "heart-pulse" };
+const KIND_ICON: Record<string, IconSlot> = { chat: "message", delegation: "users", terminal: "tool", title: "type", suggestion: "bulb", decision: "network", background: "cpu", keepalive: "heart-pulse" };
 const KIND_TONE: Record<string, string> = { chat: "chat", delegation: "chat", suggestion: "chat", terminal: "term", title: "title", decision: "title", background: "title", keepalive: "title" };
 
 function kindBadge(kind: string) {
@@ -313,7 +313,7 @@ function cell(label: string | (() => string), text: string, cls = "") {
 /* Token 格照 sub2api 的排法：第一行 ↓ 输入 ↑ 输出（完整数字），第二行缓存读取
  * （数据库图标）与缓存写入（铅笔图标）按 K/M/B 缩写，右边 ⓘ 悬停看完整数字。
  * 箭头只是图形记号，读屏与悬停提示里仍写明「输入 / 输出」。 */
-function tokenPart(icon: string, cls: string, text: string, label: () => string) {
+function tokenPart(icon: IconSlot, cls: string, text: string, label: () => string) {
   const part = document.createElement("span");
   part.className = "u-tk " + cls;
   const value = document.createElement("span");

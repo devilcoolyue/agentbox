@@ -64,7 +64,7 @@ const prefPickers = [
     value: currentSkin,
     select: setSkin,
     // 主题管理弹窗归 themes.ts（随登录挂载）；这里只广播，shell 不反向依赖功能模块
-    action: { label: () => i18nText("管理主题…"), icon: "sliders", run: () => { closeUserMenu(); emit("themes-open"); } },
+    action: { label: () => i18nText("管理主题…"), icon: "nav.themes", run: () => { closeUserMenu(); emit("themes-open"); } },
   }),
 ];
 const skinPicker = prefPickers[1]!;

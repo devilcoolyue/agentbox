@@ -4,7 +4,7 @@ import { i18n, t as i18nText } from "./i18n.js";
  * 不持有状态，也不碰 DOM 以外的东西；令牌白名单由调用方传入（/api/themes 下发）。 */
 "use strict";
 
-import { actionButton } from "./icons.js";
+import { actionButton, type IconSlot } from "./icons.js";
 import { APIError } from "./problems.js";
 import { SKINS, SKIN_LABEL } from "./theme.js";
 import type { Skin } from "./theme.js";
@@ -158,7 +158,7 @@ export function problemText(err: unknown, limitBytes = 64 << 10): string {
   }
 }
 
-export function themeButton(label: () => string, icon: string, onClick: () => void, iconOnly = false, danger = false) {
+export function themeButton(label: () => string, icon: IconSlot, onClick: () => void, iconOnly = false, danger = false) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = danger ? "btn btn-sm btn-danger" : "btn btn-sm";

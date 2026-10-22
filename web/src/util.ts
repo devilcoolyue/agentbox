@@ -2,7 +2,7 @@
 import { t as i18nText, setTextRender, setAttrRender } from "./i18n.js";
 "use strict";
 
-import { actionButton } from "./icons.js";
+import { actionButton, type IconSlot } from "./icons.js";
 
 import { S } from "./state.js";
 
@@ -241,7 +241,7 @@ export interface ConfirmOpts {
   hint?: string;
   okLabel?: string;
   /** Action meaning; danger only controls color. */
-  icon?: string;
+  icon?: IconSlot;
   /** true = 确定按钮用红色危险样式 */
   danger?: boolean;
 }

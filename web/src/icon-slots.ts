@@ -1,0 +1,240 @@
+/* 图标位置注册表：界面上每个用图标的地方都引用这里的位置 ID，而不是直接写图形。
+ *
+ * - 语义位（无点号，如 refresh）：一类动作或对象，被许多按钮共用；管理员换一次，所有引用它的地方一起变。
+ * - 具体位置（带点号，如 nav.usage）：
+ *     icon 有值 → 独立默认图标；
+ *     base 有值 → 默认跟随该语义位，管理员可以单独覆盖。
+ *
+ * 默认图形来自 Tabler（主）与 Lucide（补充），引用写成 "库:名字"。新增或改默认图标后执行
+ * `node scripts/gen-icons.mjs` 重新生成 icon-builtin.ts（npm run build 会自动执行）。 */
+
+export type IconRef = `${"tabler" | "tabler-filled" | "lucide"}:${string}`;
+
+export const ICON_GROUPS = {
+  nav: "侧边栏与菜单",
+  tab: "工作空间标签",
+  settings: "系统设置导航",
+  chat: "对话",
+  composer: "输入框",
+  file: "文件类型",
+  action: "通用操作",
+  arrow: "方向与展开",
+  status: "状态提示",
+  object: "对象与概念",
+  git: "Git",
+} as const;
+export type IconGroup = keyof typeof ICON_GROUPS;
+
+export interface IconSlotDef {
+  group: IconGroup;
+  label: string;
+  icon?: IconRef;
+  base?: string;
+}
+
+export const ICON_SLOTS = {
+  // ── 侧边栏与菜单 ──
+  "nav.new-session": { group: "nav", label: "新建工作空间", base: "plus" },
+  "nav.search": { group: "nav", label: "搜索工作空间", base: "search" },
+  "nav.usage": { group: "nav", label: "使用记录", icon: "tabler:receipt" },
+  "nav.git": { group: "nav", label: "Git 管理", icon: "tabler:git-fork" },
+  "nav.extensions": { group: "nav", label: "扩展", icon: "tabler:puzzle" },
+  "nav.tunnel": { group: "nav", label: "内网隧道", icon: "tabler:affiliate" },
+  "nav.settings": { group: "nav", label: "系统设置", icon: "tabler:settings" },
+  "nav.user": { group: "nav", label: "用户菜单", icon: "tabler:user-circle" },
+  "nav.logout": { group: "nav", label: "退出登录", base: "logout" },
+  "nav.themes": { group: "nav", label: "管理主题", icon: "tabler:palette" },
+  "nav.sidebar": { group: "nav", label: "收起侧边栏", base: "panel-left" },
+
+  // ── 工作空间标签 ──
+  "tab.chat": { group: "tab", label: "对话", icon: "tabler:message-circle" },
+  "tab.terminal": { group: "tab", label: "终端", icon: "tabler:terminal-2" },
+  "tab.browser": { group: "tab", label: "浏览器", icon: "tabler:world" },
+  "tab.files": { group: "tab", label: "文件", icon: "tabler:folder" },
+  "tab.changes": { group: "tab", label: "变更", icon: "tabler:git-compare" },
+  "tab.skills": { group: "tab", label: "技能", icon: "tabler:sparkles" },
+  "tab.mcp": { group: "tab", label: "MCP", icon: "tabler:plug-connected" },
+
+  // ── 系统设置导航 ──
+  "settings.accounts": { group: "settings", label: "账号池", icon: "tabler:users" },
+  "settings.proxies": { group: "settings", label: "IP 代理", icon: "tabler:network" },
+  "settings.container": { group: "settings", label: "容器与资源", icon: "tabler:box" },
+  "settings.models": { group: "settings", label: "模型管理", icon: "tabler:cpu" },
+  "settings.decision": { group: "settings", label: "智能决策", icon: "tabler:route" },
+  "settings.interface": { group: "settings", label: "界面与提示", icon: "tabler:layout-dashboard" },
+  "settings.icons": { group: "settings", label: "图标管理", icon: "tabler:icons" },
+  "settings.security": { group: "settings", label: "安全与访问", icon: "tabler:shield-lock" },
+  "settings.monitor": { group: "settings", label: "运维监控", icon: "tabler:activity" },
+  "settings.about": { group: "settings", label: "关于与更新", icon: "tabler:info-circle" },
+
+  // ── 对话 ──
+  "chat.thinking": { group: "chat", label: "思考过程", icon: "tabler:brain" },
+  "chat.tool": { group: "chat", label: "工具调用（通用）", icon: "tabler:terminal" },
+  "chat.tool-group": { group: "chat", label: "多种工具折叠组", icon: "tabler:tool" },
+  "chat.tool-read": { group: "chat", label: "读取文件", icon: "tabler:file-text" },
+  "chat.tool-search": { group: "chat", label: "搜索代码", icon: "tabler:file-search" },
+  "chat.tool-list": { group: "chat", label: "列出目录", icon: "tabler:list-tree" },
+  "chat.tool-shell": { group: "chat", label: "执行命令", icon: "tabler:terminal" },
+  "chat.tool-edit": { group: "chat", label: "修改文件", icon: "tabler:file-pencil" },
+  "chat.tool-add": { group: "chat", label: "新建文件", icon: "tabler:file-plus" },
+  "chat.tool-delete": { group: "chat", label: "删除文件", icon: "tabler:file-minus" },
+  "chat.tool-move": { group: "chat", label: "移动文件", icon: "tabler:file-arrow-right" },
+  "chat.tool-web": { group: "chat", label: "网页搜索", icon: "tabler:world-search" },
+  "chat.tool-agent": { group: "chat", label: "子 Agent", icon: "tabler:robot" },
+  "chat.tool-mcp": { group: "chat", label: "MCP 工具", icon: "tabler:plug-connected" },
+  "chat.tool-custom": { group: "chat", label: "其他工具", icon: "tabler:puzzle" },
+  "chat.tool-image": { group: "chat", label: "查看图片", icon: "tabler:photo" },
+  "chat.tool-image-gen": { group: "chat", label: "生成图片", icon: "tabler:photo-ai" },
+  "chat.plan": { group: "chat", label: "计划", icon: "tabler:list-check" },
+  "chat.task-done": { group: "chat", label: "任务完成勾选", base: "check" },
+  "chat.user": { group: "chat", label: "用户头像", base: "user" },
+  "chat.copy-message": { group: "chat", label: "复制消息", base: "copy" },
+  "chat.refill": { group: "chat", label: "填回输入框", icon: "tabler:arrow-back-up" },
+  "chat.copy-code": { group: "chat", label: "复制代码", base: "copy" },
+  "chat.preview": { group: "chat", label: "预览", base: "eye" },
+  "chat.steer": { group: "chat", label: "引导消息", icon: "tabler:send" },
+  "chat.queued": { group: "chat", label: "排队消息", base: "clock" },
+  "chat.interrupted": { group: "chat", label: "已中断", icon: "tabler:player-stop" },
+  "chat.compact": { group: "chat", label: "压缩上下文", icon: "tabler:arrows-minimize" },
+  "chat.review": { group: "chat", label: "代码审查", icon: "tabler:eye-check" },
+  "chat.wait": { group: "chat", label: "等待", base: "clock" },
+  "chat.question": { group: "chat", label: "Agent 提问", icon: "tabler:message-question" },
+  "chat.delegation": { group: "chat", label: "委派", icon: "tabler:users-group" },
+  "chat.disclosure": { group: "chat", label: "折叠展开箭头", base: "caret" },
+  "chat.warning": { group: "chat", label: "对话警告", base: "alert" },
+  "chat.error": { group: "chat", label: "对话错误", base: "x-circle" },
+  "chat.attachment": { group: "chat", label: "附件文件", base: "file" },
+
+  // ── 输入框 ──
+  "composer.attach": { group: "composer", label: "添加附件", icon: "tabler:paperclip" },
+  "composer.mic": { group: "composer", label: "语音输入", icon: "tabler:microphone" },
+  "composer.send": { group: "composer", label: "发送", base: "send" },
+  "composer.stop": { group: "composer", label: "停止生成", base: "stop" },
+  "composer.model": { group: "composer", label: "模型选择", icon: "tabler:cpu" },
+  "composer.effort": { group: "composer", label: "思考强度", icon: "tabler:adjustments-horizontal" },
+
+  // ── 文件类型 ──
+  "file.generic": { group: "file", label: "普通文件", icon: "tabler:file" },
+  "file.image": { group: "file", label: "图片文件", icon: "tabler:file-type-jpg" },
+  "file.archive": { group: "file", label: "压缩包", icon: "tabler:file-zip" },
+  "file.code": { group: "file", label: "代码文件", icon: "tabler:file-code" },
+  "file.skill": { group: "file", label: "技能说明 SKILL.md", icon: "tabler:sparkles" },
+  "file.folder": { group: "file", label: "文件夹", icon: "tabler:folder" },
+
+  // ── 通用操作 ──
+  "plus": { group: "action", label: "新增", icon: "tabler:plus" },
+  "close": { group: "action", label: "关闭 / 取消", icon: "tabler:x" },
+  "check": { group: "action", label: "确认 / 完成", icon: "tabler:check" },
+  "save": { group: "action", label: "保存", icon: "tabler:device-floppy" },
+  "trash": { group: "action", label: "删除", icon: "tabler:trash" },
+  "edit": { group: "action", label: "编辑", icon: "tabler:edit" },
+  "rename": { group: "action", label: "重命名 / 修改", icon: "tabler:pencil" },
+  "copy": { group: "action", label: "复制", icon: "tabler:copy" },
+  "paste": { group: "action", label: "粘贴", icon: "tabler:clipboard" },
+  "refresh": { group: "action", label: "刷新 / 重试", icon: "tabler:refresh" },
+  "undo": { group: "action", label: "撤销 / 恢复", icon: "tabler:arrow-back-up" },
+  "download": { group: "action", label: "下载", icon: "tabler:download" },
+  "upload": { group: "action", label: "上传", icon: "tabler:upload" },
+  "search": { group: "action", label: "搜索", icon: "tabler:search" },
+  "more": { group: "action", label: "更多操作", icon: "tabler:dots" },
+  "menu": { group: "action", label: "菜单", icon: "tabler:menu-2" },
+  "expand": { group: "action", label: "全屏 / 展开", icon: "tabler:maximize" },
+  "collapse": { group: "action", label: "还原 / 收起", icon: "tabler:minimize" },
+  "send": { group: "action", label: "发送 / 提交", icon: "tabler:send" },
+  "play": { group: "action", label: "启动", icon: "tabler:player-play" },
+  "stop": { group: "action", label: "停止", icon: "tabler:player-stop" },
+  "login": { group: "action", label: "登录 / 认证", icon: "tabler:login-2" },
+  "logout": { group: "action", label: "退出", icon: "tabler:logout" },
+  "external": { group: "action", label: "外部链接", icon: "tabler:external-link" },
+  "link": { group: "action", label: "链接 / 关联", icon: "tabler:link" },
+  "unlink": { group: "action", label: "取消关联", icon: "tabler:unlink" },
+  "move": { group: "action", label: "移动", icon: "tabler:file-arrow-right" },
+  "switch": { group: "action", label: "切换", icon: "tabler:switch-horizontal" },
+  "eye": { group: "action", label: "查看 / 预览", icon: "tabler:eye" },
+  "eye-off": { group: "action", label: "隐藏", icon: "tabler:eye-off" },
+  "lock": { group: "action", label: "锁定 / 密码", icon: "tabler:lock" },
+  "unlock": { group: "action", label: "解锁", icon: "tabler:lock-open" },
+  "key": { group: "action", label: "密钥 / 凭证", icon: "tabler:key" },
+  "folder-plus": { group: "action", label: "新建文件夹", icon: "tabler:folder-plus" },
+  "package-plus": { group: "action", label: "安装", icon: "tabler:package-import" },
+  "archive": { group: "action", label: "归档", icon: "tabler:archive" },
+
+  // ── 方向与展开 ──
+  "arrow-left": { group: "arrow", label: "返回 / 上一步", icon: "tabler:arrow-left" },
+  "arrow-right": { group: "arrow", label: "前往 / 下一步", icon: "tabler:arrow-right" },
+  "arrow-up": { group: "arrow", label: "向上", icon: "tabler:arrow-up" },
+  "arrow-down": { group: "arrow", label: "向下", icon: "tabler:arrow-down" },
+  "chevron": { group: "arrow", label: "下拉箭头", icon: "tabler:chevron-down" },
+  "chevron-up": { group: "arrow", label: "向上箭头", icon: "tabler:chevron-up" },
+  "chevron-left": { group: "arrow", label: "向左箭头", icon: "tabler:chevron-left" },
+  "chevron-right": { group: "arrow", label: "向右箭头", icon: "tabler:chevron-right" },
+  "caret": { group: "arrow", label: "折叠指示", icon: "tabler:chevron-right" },
+
+  // ── 状态提示 ──
+  "info": { group: "status", label: "信息", icon: "tabler:info-circle" },
+  "alert": { group: "status", label: "警告", icon: "tabler:alert-triangle" },
+  "x-circle": { group: "status", label: "失败", icon: "tabler:circle-x" },
+  "help": { group: "status", label: "帮助 / 提问", icon: "tabler:help-circle" },
+  "clock": { group: "status", label: "时间 / 等待", icon: "tabler:clock" },
+  "history": { group: "status", label: "历史记录", icon: "tabler:history" },
+  "activity": { group: "status", label: "活动 / 测试", icon: "tabler:activity" },
+  "heart-pulse": { group: "status", label: "健康检查", icon: "tabler:heartbeat" },
+  "gauge": { group: "status", label: "资源用量", icon: "tabler:gauge" },
+  "bulb": { group: "status", label: "提示 / 建议", icon: "tabler:bulb" },
+
+  // ── 对象与概念 ──
+  "user": { group: "object", label: "用户", icon: "tabler:user" },
+  "users": { group: "object", label: "成员 / 多人", icon: "tabler:users" },
+  "settings": { group: "object", label: "设置", icon: "tabler:settings" },
+  "sliders": { group: "object", label: "参数调节", icon: "tabler:adjustments-horizontal" },
+  "file": { group: "object", label: "文件", icon: "tabler:file" },
+  "file-image": { group: "object", label: "图片", icon: "tabler:photo" },
+  "file-archive": { group: "object", label: "压缩文件", icon: "tabler:file-zip" },
+  "file-code": { group: "object", label: "代码文件", icon: "tabler:file-code" },
+  "folder": { group: "object", label: "文件夹", icon: "tabler:folder" },
+  "folder-shared": { group: "object", label: "共享目录", icon: "tabler:folder-share" },
+  "template": { group: "object", label: "模板", icon: "tabler:template" },
+  "box": { group: "object", label: "容器", icon: "tabler:box" },
+  "cloud": { group: "object", label: "云端", icon: "tabler:cloud" },
+  "globe": { group: "object", label: "网络 / 浏览器", icon: "tabler:world" },
+  "network": { group: "object", label: "代理 / 网络拓扑", icon: "tabler:network" },
+  "cpu": { group: "object", label: "模型", icon: "tabler:cpu" },
+  "wallet": { group: "object", label: "额度 / 费用", icon: "tabler:wallet" },
+  "calendar": { group: "object", label: "日期", icon: "tabler:calendar" },
+  "store": { group: "object", label: "市场", icon: "tabler:building-store" },
+  "message": { group: "object", label: "对话", icon: "tabler:message-circle" },
+  "paperclip": { group: "object", label: "附件", icon: "tabler:paperclip" },
+  "mic": { group: "object", label: "麦克风", icon: "tabler:microphone" },
+  "keyboard": { group: "object", label: "键盘", icon: "tabler:keyboard" },
+  "plug": { group: "object", label: "连接 / 插件", icon: "tabler:plug-connected" },
+  "puzzle": { group: "object", label: "扩展", icon: "tabler:puzzle" },
+  "shield": { group: "object", label: "安全", icon: "tabler:shield-check" },
+  "shield-off": { group: "object", label: "撤销授权", icon: "tabler:shield-off" },
+  "sun": { group: "object", label: "浅色", icon: "tabler:sun" },
+  "moon": { group: "object", label: "深色", icon: "tabler:moon" },
+  "type": { group: "object", label: "文本 / 字体", icon: "tabler:typography" },
+  "code": { group: "object", label: "代码", icon: "tabler:code" },
+  "diff": { group: "object", label: "差异", icon: "tabler:file-diff" },
+  "bug": { group: "object", label: "调试", icon: "tabler:bug" },
+  "list": { group: "object", label: "列表", icon: "tabler:list-details" },
+  "list-check": { group: "object", label: "清单", icon: "tabler:list-check" },
+  "tool": { group: "object", label: "终端 / 命令", icon: "tabler:terminal" },
+  "wrench": { group: "object", label: "工具", icon: "tabler:tool" },
+  "brain": { group: "object", label: "思考", icon: "tabler:brain" },
+  "sparkles": { group: "object", label: "AI / 技能", icon: "tabler:sparkles" },
+  "panel-left": { group: "object", label: "侧边栏", icon: "tabler:layout-sidebar-left-collapse" },
+  "desktop": { group: "object", label: "桌面视图", icon: "tabler:device-desktop" },
+  "tablet": { group: "object", label: "平板视图", icon: "tabler:device-tablet" },
+  "phone": { group: "object", label: "手机视图", icon: "tabler:device-mobile" },
+
+  // ── Git ──
+  "branch": { group: "git", label: "分支", icon: "tabler:git-branch" },
+  "commit": { group: "git", label: "提交", icon: "tabler:git-commit" },
+  "git-fetch": { group: "git", label: "抓取", icon: "tabler:cloud-download" },
+  "git-pull": { group: "git", label: "拉取", icon: "tabler:arrow-bar-to-down" },
+  "git-push": { group: "git", label: "推送", icon: "tabler:arrow-bar-up" },
+  "git-clone": { group: "git", label: "克隆", icon: "tabler:folder-down" },
+  "git-pr": { group: "git", label: "合并请求", icon: "tabler:git-pull-request" },
+} as const satisfies Record<string, IconSlotDef>;
+
+export type IconSlot = keyof typeof ICON_SLOTS;

@@ -1,5 +1,7 @@
 # 当前图标名称索引
 
+> 2026-10-22 起图标改为「位置 → 图标库」统一管理，默认图形换成 Tabler / Lucide；本页与 HTML 全集是此前手绘图标的快照。现行清单以 `web/src/icon-slots.ts` 和「系统设置 → 图标管理」为准，见 [icons.md](icons.md)。
+
 图形与用途请打开 [HTML 图标全集](current-icons.html)。HTML 直接嵌入当前 SVG 路径，可搜索；本 Markdown 仅提供名称索引，不用 emoji 代替真实图形。
 
 2026-09-27 快照：主站 87 个名称；abox-link 9 个名称。当前账号行：shield 管理认证、edit 编辑账号、users 使用范围、sliders 模型能力、trash 删除账号。

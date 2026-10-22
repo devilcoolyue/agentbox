@@ -11,6 +11,7 @@ import {loginProblemsSmoke, problemsSmoke} from './test-problems-browser.mjs';
 import { responsiveSmoke } from './test-responsive.mjs';
 import { skinsSmoke } from './test-skins.mjs';
 import { themesSmoke } from './test-themes.mjs';
+import { iconManagerSmoke } from './test-icon-manager.mjs';
 import { switchAccountSmoke } from './test-switch-account.mjs';
 import { keepaliveSmoke } from './test-keepalive.mjs';
 import { accountModelsSmoke } from './test-account-models.mjs';
@@ -434,6 +435,11 @@ export async function smoke(page) {
   }
   if (process.env.AGENTBOX_BROWSER_ONLY_PRICING === '1') {
    await pricingSmoke(page);
+   assert.deepEqual(errors,[]);
+   return;
+  }
+  if (process.env.AGENTBOX_BROWSER_ONLY_ICONS === '1') {
+   await iconManagerSmoke(page);
    assert.deepEqual(errors,[]);
    return;
   }
@@ -992,6 +998,7 @@ export async function smoke(page) {
   await responsiveSmoke(page, base);
   await skinsSmoke(page, base);
   await themesSmoke(page);
+  await iconManagerSmoke(page);
   await pricingSmoke(page);
   await extensionsSmoke(page,base,next=>{sessions=next;});
   const checksBeforeUser=updateChecks, readsBeforeUser=updateReads, upgradesBeforeUser=upgradeReads;

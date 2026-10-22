@@ -138,7 +138,7 @@ const PHRASES = {
         : plural(n, () => i18nText("运行 1 条命令"), () => i18nText("运行 {p0} 条命令", { p0: String(n) })),
 };
 /* 组标题前的图标与 Codex 工具行同一套：只有一类操作就用它的图标，混在一起用扳手 */
-const ICONS = { read: "file", search: "search", list: "folder", bash: "tool" };
+const ICONS = { read: "chat.tool-read", search: "chat.tool-search", list: "chat.tool-list", bash: "chat.tool-shell" };
 /* 当前可以续上的组：之后没有别的内容插进来（思考块除外，CLI 普通视图里不显示思考） */
 let openGroup = null;
 /** 文字、别的工具、提示行……任何正文内容都结束当前的折叠组 */
@@ -196,7 +196,7 @@ function renderGroup(g) {
     g.el.classList.toggle("cc-open", g.open);
     g.head.setAttribute("aria-expanded", String(g.open));
     const icon = el("span", "cc-icon");
-    icon.append(svgIcon(counts.size === 1 ? ICONS[[...counts.keys()][0]] : "wrench", 13));
+    icon.append(svgIcon(counts.size === 1 ? ICONS[[...counts.keys()][0]] : "chat.tool-group", 13));
     const text = el("span", "cc-gtext");
     setTextRender(text, () => cap(join([...counts].map(([k, n]) => PHRASES[k](n, running))))
         + (since && Date.now() - since >= 1000 ? " · " + secs(Date.now() - since) : "") + (running ? "…" : ""));
@@ -543,7 +543,7 @@ function renderTool(t) {
         const b = el("button", "btn chip-open");
         b.type = "button";
         b.dataset.htmlPreview = html;
-        buttonLabel(b, () => i18nText("预览"), "eye");
+        buttonLabel(b, () => i18nText("预览"), "chat.preview");
         setTip(b, () => i18nText("在预览窗口渲染 ") + html);
         b.addEventListener("click", e => e.stopPropagation());
         head.append(b);

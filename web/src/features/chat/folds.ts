@@ -8,13 +8,13 @@
  * 还在流式输出的思考块（.streaming）不收，免得边写边藏；完整事件到达后正式渲染的
  * 那一块再收进去。Codex exec 回退的整段回放没有正式渲染，放完时由 stream.ts 调 foldThink。 */
 import type { AgentEvent } from "../../types.js";
-import { svgIcon } from "../../icons.js";
+import { svgIcon, type IconSlot } from "../../icons.js";
 import { setText, setTextRender, t as i18nText } from "../../i18n.js";
 import { el } from "./tool-rows.js";
 
 const labels = new WeakMap<Element, (n: number) => string>();
 
-function newFold(kind: "think" | "beat", icon: string, text: (n: number) => string) {
+function newFold(kind: "think" | "beat", icon: IconSlot, text: (n: number) => string) {
   const wrap = el("div", "fold fold-" + kind);
   const head = el("div", "fold-head");
   head.tabIndex = 0;
@@ -58,7 +58,7 @@ function asItem(think: HTMLDetailsElement) {
 }
 
 function thinkFold(first: HTMLDetailsElement) {
-  const fold = newFold("think", "brain", n => i18nText("思考过程 · {p0} 段", { p0: String(n) }));
+  const fold = newFold("think", "chat.thinking", n => i18nText("思考过程 · {p0} 段", { p0: String(n) }));
   first.replaceWith(fold);
   fold.querySelector(".fold-items")!.append(asItem(first));
   recount(fold);

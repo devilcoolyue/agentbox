@@ -370,6 +370,9 @@
   background: color-mix(in srgb, var(--red) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--red) 28%, transparent);
 }
+/* 带图标的错误 / 警告：图标对齐首行，正文照常换行 */
+.chip.has-icon { display: flex; align-items: flex-start; gap: 7px; }
+.chip.has-icon > .ui-icon { margin-top: 2px; }
 .chip.warn {
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 7%, transparent);

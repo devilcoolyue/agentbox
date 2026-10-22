@@ -1,6 +1,6 @@
 import { setAttrRender, setTextRender, t as i18nText } from "./i18n.js";
 import { keepCount, skelBar, skelShell } from "./skeleton.js";
-import { actionButton } from "./icons.js";
+import { actionButton, type IconSlot } from "./icons.js";
 import { hideTip } from "./tip.js";
 import { api } from "./api.js";
 import { S, bus } from "./state.js";
@@ -52,7 +52,7 @@ export function initMCP() {
   $("mcp-form-error").textContent = ""; $("mcp-form-error").classList.add("hidden");
  };
  const closeEditor = () => { if (editor.open) editor.close(); clearEditor(); };
- function button(text: string | (() => string), icon: string, fn: () => Promise<void>, compact = false) {
+ function button(text: string | (() => string), icon: IconSlot, fn: () => Promise<void>, compact = false) {
   const b = node("button", "", "btn btn-sm"); b.type = "button";
   actionButton(b, compact ? "" : text, icon, text);
   if (icon === "trash") b.classList.add("btn-danger");

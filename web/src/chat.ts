@@ -514,7 +514,7 @@ function renderAttach() {
       name.className = "fn";
       setTextRender(name, () => info.orig || info.name || i18nText("附件"));
       if (info.path) {
-        box.append(document.createTextNode("📄"), name);
+        box.append(svgIcon("chat.attachment", 13), name);
         setTip(box, () => i18nText("附件 #{p0} · {p1}", { p0: String(n), p1: String(info.path) }));
       } else {
         box.append(spinEl(), name);
@@ -886,7 +886,7 @@ function pickRow(label: string, value: string, kind: string) {
   const b = document.createElement("button");
   b.className = "pick-row";
   const l = document.createElement("span");
-  buttonLabel(l, label, kind === "model" ? "cpu" : "sliders");
+  buttonLabel(l, label, kind === "model" ? "composer.model" : "composer.effort");
   const r = document.createElement("span");
   r.className = "val";
   r.textContent = value + " ›";
@@ -954,7 +954,7 @@ function pickOpt(label: string, sub: string, on: boolean, onPick: () => void) {
   }
   const check = document.createElement("span");
   check.className = "check";
-  check.textContent = "✓";
+  check.append(svgIcon("check", 13));
   b.append(lbl, check);
   b.addEventListener("click", (e) => { e.stopPropagation(); onPick(); });
   return b;

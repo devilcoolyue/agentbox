@@ -71,7 +71,7 @@ export async function extensionsSmoke(page, base, setSessions) {
   await mkdir('output/playwright',{recursive:true});
   await page.screenshot({path:'output/playwright/extensions-list.png',animations:'disabled'});
   // The sidebar entry is a puzzle piece, not the security shield.
-  assert.equal(await page.locator('#btn-extensions svg').getAttribute('data-icon-name'), 'puzzle');
+  assert.equal(await page.locator('#btn-extensions svg').getAttribute('data-icon-name'), 'nav.extensions');
   // A slow request started by a click shows the top loading line until it completes.
   slowNext = true;
   await card.click();

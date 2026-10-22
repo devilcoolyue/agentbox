@@ -243,6 +243,7 @@ data/                               实际根目录由 data_dir 决定
   creds/<id>/                      网页创建账号的凭证
   home-template/                   全体用户的 home 模板
   themes.json                      管理员导入的全站界面主题（见 themes.md）
+  icons.json                       管理员设置的全站图标覆盖（见 icons.md）
   marketplace/repo/                官方插件缓存（设置 cache_dir 后移到该目录下）
   abox-link/                       网页提供下载的客户端二进制
   backups/                         内置脚本生成的备份包

@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 
 export async function assertActionIcons(page, root = 'body') {
   const malformed = await page.locator(root).evaluate(container => [...container.querySelectorAll('svg.ui-icon')]
-    .filter(svg => svg.getAttribute('viewBox') !== '0 0 24 24' || svg.querySelectorAll(':scope > path[d]').length !== 1 || svg.querySelector('svg'))
+    .filter(svg => svg.getAttribute('viewBox') !== '0 0 24 24' || !svg.dataset.iconRef || !svg.querySelector(':scope > :is(path[d], circle, ellipse, rect, line, polyline, polygon)') || svg.querySelector(':scope > :not(path[d], circle, ellipse, rect, line, polyline, polygon)'))
     .map(svg => svg.dataset.iconName || svg.outerHTML));
-  assert.deepEqual(malformed, [], 'shared icons and SVG state slots must render exactly one path');
+  assert.deepEqual(malformed, [], 'shared icons and SVG state slots must render library shapes only');
   const failures = await page.locator(root).evaluate(container => [...container.querySelectorAll('button.btn, button.dlg-x')]
     .filter(button => !button.classList.contains('loading'))
     .flatMap(button => {
       const name = button.id || button.getAttribute('aria-label') || button.textContent;
       const icons = button.querySelectorAll(':scope > svg');
       const problems = [];
-      if (icons.length !== 1 || !icons[0]?.querySelector('path[d]')) problems.push(`${name}: missing or duplicate icon`);
+      if (icons.length !== 1 || !icons[0]?.querySelector('path[d], circle, ellipse, rect, line, polyline, polygon')) problems.push(`${name}: missing or duplicate icon`);
       if (!button.textContent.trim() && (!button.getAttribute('aria-label') || !button.dataset.tip)) problems.push(`${name}: missing accessible name or tooltip`);
       // Same rule as actions.css: inside tool groups only plain actions become icons;
       // primary, destructive and .keep-label actions keep their words.

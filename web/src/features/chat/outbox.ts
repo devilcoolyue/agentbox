@@ -2,7 +2,7 @@ import {readChatReceipt} from "../../contracts/chat.js";
 import {S} from "../../state.js";
 import {api} from "../../api.js";
 import {$,askConfirm} from "../../util.js";
-import {actionButton,svgIcon} from "../../icons.js";
+import {actionButton,svgIcon,type IconSlot} from "../../icons.js";
 import {t,setTextRender,setAttrRender} from "../../i18n.js";
 import {APIError,problemMessages} from "../../problems.js";
 import {keyboardInput} from "../../modality.js";
@@ -11,7 +11,7 @@ import type {Draft} from "./draft-store.js";
 import {OutboxStore,receiptActive,draftFromRequest,type Outgoing} from "./outbox-store.js";
 
 type Tone="busy"|"attention"|"error"|"done"|"quiet";
-type Look={title:string;reason:string;tone:Tone;icon:string};
+type Look={title:string;reason:string;tone:Tone;icon:IconSlot|""};
 // Why a turn's outcome is unknown, by receipt code. Shown so "review" is not a
 // riddle: each names what the server could not confirm.
 const unknownReasons:Record<string,string>={server_restarted:"服务重启时任务正在运行",server_upgraded:"服务升级时任务正在运行",chat_turn_timed_out:"超过时长上限后没有确认停下",execution_incomplete:"没有收到任务结束信号",history_write_failed:"对话记录没有完整保存",usage_write_failed:"用量没有记账成功",receipt_write_failed:"任务状态没有保存成功",chat_failed:"任务报错结束"};
@@ -195,9 +195,9 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
  const dismiss=(row:Outgoing)=>{const id=key(row.session,row.id);dismissed.add(id);fullText.delete(id);storage.remove(row.id,row.session);views.delete(id);known.delete(id);};
  // The one action a row needs before anything else can happen. The collapsed
  // bar offers it too, so a blocked composer never hides its way out.
- const primary=(row:Outgoing)=>row.state==="unconfirmed"?{label:"重试",tip:"用原编号重新发送，不会重复执行",icon:"refresh",run:()=>void retry(row),disabled:!row.input||row.thread!==context?.thread}
-  :row.state==="uncertain"?{label:"已查看，继续",tip:"确认已查看结果，然后可以发送新消息",icon:"check",run:()=>void act(row,"review"),disabled:false}:undefined;
- const control=(label:string,tip:string,icon:string,run:()=>void,disabled:boolean,kind=""):HTMLButtonElement=>{
+ const primary=(row:Outgoing)=>row.state==="unconfirmed"?{label:"重试",tip:"用原编号重新发送，不会重复执行",icon:"refresh" as IconSlot,run:()=>void retry(row),disabled:!row.input||row.thread!==context?.thread}
+  :row.state==="uncertain"?{label:"已查看，继续",tip:"确认已查看结果，然后可以发送新消息",icon:"check" as IconSlot,run:()=>void act(row,"review"),disabled:false}:undefined;
+ const control=(label:string,tip:string,icon:IconSlot,run:()=>void,disabled:boolean,kind=""):HTMLButtonElement=>{
   const b=document.createElement("button");b.type="button";b.className="btn btn-sm delivery-act"+(kind?" "+kind:"");b.dataset.deliveryAction=tip;
   actionButton(b,label?()=>t(label):"",icon,()=>t(label||tip));setAttrRender(b,"data-tip",()=>t(tip));
   b.disabled=disabled;b.addEventListener("click",()=>{if(owns())run();});return b;

@@ -8,7 +8,7 @@
  * 字段来自 agent/appserver_items.go，exec --json 回退路径只有其中一部分，缺的就不显示。
  * 行结构、进行中登记与收尾在 tool-rows.ts，与 Claude 的工具行共用。 */
 import type { AgentEvent } from "../../types.js";
-import { svgIcon } from "../../icons.js";
+import { svgIcon, type IconSlot } from "../../icons.js";
 import { setText, setTextRender, t as i18nText } from "../../i18n.js";
 import {
   badge, base, clean, clipLabel, clipOutput, diffBlock, diffStat, el, fillRow, imageBody, newRow, num, oneLine,
@@ -45,7 +45,7 @@ export function unwrapShell(command: string) {
 }
 
 /* 命令的显示名与摘要：全是读/列/搜时照 CLI 的 Explored 归类，否则就是 Shell */
-function commandView(it: Item): { name: string; icon: string; sum: string; label: () => string } {
+function commandView(it: Item): { name: string; icon: IconSlot; sum: string; label: () => string } {
   const cmd = unwrapShell(str(it.command));
   const acts = (Array.isArray(it.actions) ? it.actions : []) as Action[];
   if (acts.length && acts.every(a => a.type === "read" || a.type === "list_files" || a.type === "search")) {
@@ -57,15 +57,15 @@ function commandView(it: Item): { name: string; icon: string; sum: string; label
       const t = acts[0].type;
       const sum = acts.map(part).join(", ");
       const what = clipLabel(sum);
-      if (t === "read") return { name: "Read", icon: "file", sum, label: () => i18nText("读取 {p0}…", { p0: what }) };
-      if (t === "search") return { name: "Search", icon: "search", sum, label: () => i18nText("搜索 {p0}…", { p0: what }) };
-      return { name: "List", icon: "folder", sum, label: () => i18nText("列出 {p0}…", { p0: what }) };
+      if (t === "read") return { name: "Read", icon: "chat.tool-read", sum, label: () => i18nText("读取 {p0}…", { p0: what }) };
+      if (t === "search") return { name: "Search", icon: "chat.tool-search", sum, label: () => i18nText("搜索 {p0}…", { p0: what }) };
+      return { name: "List", icon: "chat.tool-list", sum, label: () => i18nText("列出 {p0}…", { p0: what }) };
     }
     const verb = (a: Action) => a.type === "read" ? "Read" : a.type === "search" ? "Search" : "List";
-    return { name: "Explore", icon: "search", sum: acts.map(a => verb(a) + " " + part(a)).join(" · "), label: () => i18nText("浏览代码…") };
+    return { name: "Explore", icon: "chat.tool-search", sum: acts.map(a => verb(a) + " " + part(a)).join(" · "), label: () => i18nText("浏览代码…") };
   }
   const what = clipLabel(oneLine(cmd));
-  return { name: "Shell", icon: "tool", sum: oneLine(cmd), label: () => what ? i18nText("执行 {p0}…", { p0: what }) : i18nText("执行命令…") };
+  return { name: "Shell", icon: "chat.tool-shell", sum: oneLine(cmd), label: () => what ? i18nText("执行 {p0}…", { p0: what }) : i18nText("执行命令…") };
 }
 
 /* 首尾各留 20 行：服务端已截好的直接用；exec 回退路径给的是全文，这里照同样口径截 */
@@ -115,7 +115,7 @@ function changeRows(it: Item): Row[] {
   return changes.map(c => {
     const kind = changeKind(c), path = str(c.path), move = str(c.move_path);
     const name = kind === "add" ? "Write" : kind === "delete" ? "Delete" : move ? "Move" : "Edit";
-    const icon = kind === "add" ? "file-code" : kind === "delete" ? "trash" : move ? "move" : "edit";
+    const icon: IconSlot = kind === "add" ? "chat.tool-add" : kind === "delete" ? "chat.tool-delete" : move ? "chat.tool-move" : "chat.tool-edit";
     const meta: (HTMLElement | string)[] = [];
     const stat = diffStat(num(c.added), num(c.removed));
     if (stat) meta.push(stat);
@@ -143,7 +143,7 @@ function toolRow(it: Item, completed: boolean): Row {
     const res = str(it.result_text);
     if (res) body.push(textBlock(res));
   }
-  return { name: name || (mcp ? "MCP" : "Tool"), icon: mcp ? "plug" : "puzzle", sum: oneLine(args).slice(0, 160), meta, body };
+  return { name: name || (mcp ? "MCP" : "Tool"), icon: mcp ? "chat.tool-mcp" : "chat.tool-custom", sum: oneLine(args).slice(0, 160), meta, body };
 }
 
 function searchRow(it: Item, completed: boolean): Row {
@@ -180,7 +180,7 @@ function searchRow(it: Item, completed: boolean): Row {
     setText(c, "{p0} 条结果", { p0: String(count) });
     meta.push(c);
   }
-  return { name, icon: "globe", sum: sum || (completed ? "" : i18nText("搜索中…")), meta, body };
+  return { name, icon: "chat.tool-web", sum: sum || (completed ? "" : i18nText("搜索中…")), meta, body };
 }
 
 function collabRow(it: Item, completed: boolean): Row {
@@ -198,10 +198,10 @@ function collabRow(it: Item, completed: boolean): Row {
     if (b) meta.push(b);
   }
   const body = str(it.prompt) ? [textBlock(str(it.prompt), "tc-cmd mono")] : [];
-  return { name: "Agent." + (tool || "call"), icon: "users", sum, meta, body };
+  return { name: "Agent." + (tool || "call"), icon: "chat.tool-agent", sum, meta, body };
 }
 
-function noteChip(icon: string, text: () => string, cls = "") {
+function noteChip(icon: IconSlot, text: () => string, cls = "") {
   const c = el("div", "chip tc-note-chip" + (cls ? " " + cls : ""));
   const s = document.createElement("span");
   setTextRender(s, text);
@@ -215,7 +215,7 @@ function simpleNodes(it: Item): HTMLElement[] {
     case "image_view": {
       const path = str(it.path);
       const wrap = el("div", "tool-call");
-      fillRow(wrap, { name: "ViewImage", icon: "file-image", sum: path, body: imageBody(path) }, false);
+      fillRow(wrap, { name: "ViewImage", icon: "chat.tool-image", sum: path, body: imageBody(path) }, false);
       return [wrap];
     }
     case "image_generation": {
@@ -223,24 +223,24 @@ function simpleNodes(it: Item): HTMLElement[] {
       const wrap = el("div", "tool-call");
       const meta = failed ? [badge(str(it.failure) === "usage_limit_exceeded" ? i18nText("✗ 额度已用完") : i18nText("✗ 失败"), "err")] : [];
       const body = [...(str(it.revised_prompt) ? [textBlock(str(it.revised_prompt), "tc-cmd mono")] : []), ...(saved ? imageBody(saved) : [])];
-      fillRow(wrap, { name: "ImageGen", icon: "sparkles", sum: saved || oneLine(str(it.revised_prompt)).slice(0, 160), meta, body }, false);
+      fillRow(wrap, { name: "ImageGen", icon: "chat.tool-image-gen", sum: saved || oneLine(str(it.revised_prompt)).slice(0, 160), meta, body }, false);
       return [wrap];
     }
     case "context_compaction":
-      return [noteChip("sparkles", () => i18nText("已压缩上下文"), "compact")];
+      return [noteChip("chat.compact", () => i18nText("已压缩上下文"), "compact")];
     case "sub_agent_activity": {
       const kind = str(it.kind), who = str(it.agent_path) || str(it.model);
       const label: Record<string, () => string> = {
         started: () => i18nText("子 Agent 已启动"), interacted: () => i18nText("子 Agent 收到消息"),
         interrupted: () => i18nText("子 Agent 已中断"), completed: () => i18nText("子 Agent 已完成"),
       };
-      return [noteChip("users", () => [label[kind]?.() || i18nText("子 Agent"), who].filter(Boolean).join(" · "))];
+      return [noteChip("chat.tool-agent", () => [label[kind]?.() || i18nText("子 Agent"), who].filter(Boolean).join(" · "))];
     }
     case "review_mode":
-      return [noteChip("eye", () => it.entered ? i18nText("进入代码审查") : i18nText("代码审查结束"))];
+      return [noteChip("chat.review", () => it.entered ? i18nText("进入代码审查") : i18nText("代码审查结束"))];
     case "sleep": {
       const d = shortDuration(num(it.duration_ms));
-      return [noteChip("clock", () => d ? i18nText("等待了 {p0}", { p0: d }) : i18nText("等待"))];
+      return [noteChip("chat.wait", () => d ? i18nText("等待了 {p0}", { p0: d }) : i18nText("等待"))];
     }
   }
   return [];

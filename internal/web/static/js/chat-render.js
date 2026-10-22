@@ -40,10 +40,13 @@ export async function copyText(text) {
         }
     }
 }
-export function chip(text, extra) {
+export function chip(text, extra, icon) {
     const c = document.createElement("div");
-    c.className = "chip" + (extra ? " " + extra : "");
-    c.textContent = text;
+    c.className = "chip" + (extra ? " " + extra : "") + (icon ? " has-icon" : "");
+    if (!icon)
+        c.textContent = text;
+    else
+        c.append(svgIcon(icon, 14), Object.assign(document.createElement("span"), { textContent: text }));
     return c;
 }
 /* 工具 chip；带 htmlPath 时在末尾挂一个「预览」按钮，产品改原型不用再切到文件页
@@ -54,7 +57,7 @@ export function toolChip(name, summary, htmlPath = "") {
     c.className = "chip tool";
     const n = document.createElement("span");
     n.className = "name";
-    n.append(svgIcon("tool", 12), document.createTextNode(name));
+    n.append(svgIcon("chat.tool", 12), document.createTextNode(name));
     c.appendChild(n);
     if (summary) {
         const s = document.createElement("span");
@@ -69,7 +72,7 @@ export function toolChip(name, summary, htmlPath = "") {
         b.type = "button";
         b.className = "btn chip-open";
         b.dataset.htmlPreview = htmlPath;
-        buttonLabel(b, () => i18nText("预览"), "eye");
+        buttonLabel(b, () => i18nText("预览"), "chat.preview");
         setTip(b, () => i18nText("在预览窗口渲染 ") + htmlPath);
         c.appendChild(b);
     }
@@ -93,7 +96,7 @@ export function renderUserMsg(text) {
     const marks = syntaxMarks(str, S.current?.agent || "claude");
     if (marks[0]?.kind === "command") {
         d.classList.add("cmd");
-        const icon = svgIcon("tool", 14);
+        const icon = svgIcon("chat.tool", 14);
         icon.classList.add("msg-cmd-icon");
         d.append(icon);
     }
@@ -127,7 +130,7 @@ function appendMarked(box, str, from, to, marks) {
         else {
             const path = raw.slice(1).replace(/^"|"$/g, ""), name = path.split("/").filter(Boolean).pop() || path;
             span.className = "msg-mention mono";
-            span.append(svgIcon(path.endsWith("/") ? "folder" : fileIconName(name), 13), path);
+            span.append(svgIcon(path.endsWith("/") ? "file.folder" : fileIconName(name), 13), path);
             setTip(span, () => i18nText("引用文件：{p0}", { p0: path }));
         }
         box.append(span);
@@ -171,7 +174,7 @@ export function renderUserTurn(text, ts) {
         setTip(time, () => i18nText("发送时间：{p0}（{p1}）", { p0: fmtDateTime(d), p1: S.timeZone || "Asia/Shanghai" }));
         actions.append(time);
     }
-    const copy = userActionButton(() => i18nText("复制消息"), "copy", async (btn) => {
+    const copy = userActionButton(() => i18nText("复制消息"), "chat.copy-message", async (btn) => {
         if (btn.classList.contains("copied"))
             return;
         try {
@@ -185,13 +188,13 @@ export function renderUserTurn(text, ts) {
         btn.classList.add("copied");
         setTip(btn, () => i18nText("已复制"));
         setTimeout(() => {
-            btn.replaceChildren(svgIcon("copy", 16));
+            btn.replaceChildren(svgIcon("chat.copy-message", 16));
             btn.classList.remove("copied");
             setTip(btn, () => i18nText("复制消息"));
         }, 1400);
     });
     // 与「引导未生效」的复制同一入口：不覆盖已有草稿，不自动发送
-    const restore = userActionButton(() => i18nText("填回输入框"), "undo", () => document.dispatchEvent(new CustomEvent("chat-restore-text", { detail: str })));
+    const restore = userActionButton(() => i18nText("填回输入框"), "chat.refill", () => document.dispatchEvent(new CustomEvent("chat-restore-text", { detail: str })));
     actions.append(copy, restore);
     main.append(renderUserMsg(str), actions);
     const avatar = document.createElement("span");
@@ -201,7 +204,7 @@ export function renderUserTurn(text, ts) {
     if (initial)
         avatar.textContent = initial;
     else
-        avatar.append(svgIcon("user", 16));
+        avatar.append(svgIcon("chat.user", 16));
     row.append(main, avatar);
     return row;
 }
@@ -225,7 +228,7 @@ export function chatThumb(containerPath, title) {
 function fileLink(containerPath, title) {
     const a = document.createElement("a");
     a.className = "file-link mono";
-    a.textContent = "📄 " + containerPath.split("/").pop();
+    a.append(svgIcon("chat.attachment", 13), containerPath.split("/").pop() || "");
     setTip(a, title + " · " + containerPath);
     a.href = imgURLFromPath(containerPath);
     a.target = "_blank";
@@ -249,7 +252,7 @@ function planBlock(text) {
     head.className = "codex-plan-head";
     const label = document.createElement("span");
     setText(label, "计划");
-    head.append(svgIcon("list-check", 13), label);
+    head.append(svgIcon("chat.plan", 13), label);
     box.append(head, agentText(text));
     return box;
 }
@@ -335,7 +338,7 @@ function codeBlock(lang, body) {
     toggle.setAttribute("aria-expanded", "true");
     const caret = document.createElement("span");
     caret.className = "cb-caret";
-    caret.appendChild(svgIcon("caret", 11));
+    caret.appendChild(svgIcon("chat.disclosure", 11));
     const l = document.createElement("span");
     l.className = "cb-lang";
     l.textContent = lang || "code";
@@ -350,7 +353,7 @@ function codeBlock(lang, body) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "btn cb-copy";
-    actionButton(btn, () => i18nText("复制"), "copy", () => i18nText("复制代码"));
+    actionButton(btn, () => i18nText("复制"), "chat.copy-code", () => i18nText("复制代码"));
     btn.addEventListener("click", async () => {
         try {
             await copyText(body);
@@ -362,7 +365,7 @@ function codeBlock(lang, body) {
         actionButton(btn, () => i18nText("已复制"), "check", () => i18nText("代码已复制"));
         btn.disabled = true;
         setTimeout(() => {
-            actionButton(btn, () => i18nText("复制"), "copy", () => i18nText("复制代码"));
+            actionButton(btn, () => i18nText("复制"), "chat.copy-code", () => i18nText("复制代码"));
             btn.disabled = false;
         }, 1400);
     });
@@ -676,7 +679,7 @@ export function renderSteer(view) {
     tag.className = "steer-tag";
     const label = document.createElement("span");
     setText(label, view.state === "dropped" ? "引导未生效" : "引导");
-    tag.append(svgIcon("send", 12), label);
+    tag.append(svgIcon("chat.steer", 12), label);
     const body = renderUserMsg(view.text);
     body.classList.replace("user", "steer-text");
     box.append(tag, body);
@@ -687,7 +690,7 @@ export function renderSteer(view) {
         const copy = document.createElement("button");
         copy.type = "button";
         copy.className = "btn btn-sm btn-ghost steer-copy";
-        buttonLabel(copy, () => i18nText("复制回输入框"), "copy");
+        buttonLabel(copy, () => i18nText("复制回输入框"), "chat.refill");
         copy.addEventListener("click", () => document.dispatchEvent(new CustomEvent("chat-restore-text", { detail: view.text })));
         box.append(note, copy);
     }
@@ -700,7 +703,7 @@ export function interruptedChip() {
     c.className = "chip stopped";
     const text = document.createElement("span");
     setText(text, "已中断 · 你停止了这一轮，已经执行的操作不会撤销");
-    c.append(svgIcon("stop", 12), text);
+    c.append(svgIcon("chat.interrupted", 12), text);
     return c;
 }
 /* 回合的错误收尾。服务停机（重启、升级）或时长上限打断的回合不是它自己出错，CLI
@@ -757,7 +760,7 @@ function compactChip(meta) {
     const text = document.createElement("span");
     setTextRender(text, () => [auto ? i18nText("已自动压缩上下文") : i18nText("已压缩上下文"),
         pre && post ? i18nText("{p0} → {p1} tokens", { p0: pre, p1: post }) : pre ? i18nText("压缩前 {p0} tokens", { p0: pre }) : ""].filter(Boolean).join(" · "));
-    c.append(svgIcon("sparkles", 12), text);
+    c.append(svgIcon("chat.compact", 12), text);
     return c;
 }
 function preservedUUIDs(meta) {
@@ -830,7 +833,7 @@ export function liveNode(kind) {
         const label = document.createElement("span");
         label.className = "think-label";
         setText(label, "思考过程");
-        sum.append(svgIcon("brain", 13), label);
+        sum.append(svgIcon("chat.thinking", 13), label);
         const body = document.createElement("div");
         body.className = "think-body";
         det.append(sum, body);
@@ -875,15 +878,15 @@ function rateLimitChip(info) {
     const label = RATE_LIMIT_LABEL[info.rateLimitType] || i18nText("用量额度");
     const reset = resetsAt(info.resetsAt);
     if (info.status === "rejected") {
-        return chip([i18nText("⛔ 已用尽") + label, reset].filter(Boolean).join(" · "), "err");
+        return chip([i18nText("已用尽") + label, reset].filter(Boolean).join(" · "), "err", "chat.error");
     }
     const pct = typeof info.utilization === "number" ? i18nText("已用 ") + Math.round(info.utilization * 100) + "%" : "";
     // allowed_warning 之外的未知状态照原样带出，免得又变成看不懂的提示
     const head = (info.status === "allowed_warning" ? i18nText("接近") : info.status + " · ") + label;
-    const parts = ["⚠ " + head, pct, reset];
+    const parts = [head, pct, reset];
     if (info.isUsingOverage)
         parts.push(i18nText("正在使用用量积分"));
-    return chip(parts.filter(Boolean).join(" · "), "warn");
+    return chip(parts.filter(Boolean).join(" · "), "warn", "chat.warning");
 }
 /* 渲染一条 agent 事件（Claude stream-json / Codex --json），返回节点数组。
  * live：实时到达（不是历史回放），进行中的工具行据此走秒。 */
@@ -1011,7 +1014,7 @@ function eventNodes(ev, opts) {
             out.push(chip([i18nText("✓ 回合完成"), secs].filter(Boolean).join(" · "), "result"));
         }
         else {
-            out.push(chip("✗ " + (ev.result || ev.subtype || i18nText("回合失败")), "err"));
+            out.push(chip(String(ev.result || ev.subtype || i18nText("回合失败")), "err", "chat.error"));
         }
         return out;
     }
@@ -1045,7 +1048,7 @@ function eventNodes(ev, opts) {
         return out;
     }
     if (ev.type === "turn.failed") {
-        out.push(chip("✗ " + (ev.error && ev.error.message || i18nText("回合失败")), "err"));
+        out.push(chip(String(ev.error && ev.error.message || i18nText("回合失败")), "err", "chat.error"));
         return out;
     }
     if (ev.type === "error" && ev.message) {
@@ -1053,17 +1056,17 @@ function eventNodes(ev, opts) {
         if (ev.will_retry)
             out.push(chip(i18nText("连接中断，正在重试：{p0}", { p0: String(ev.message) }), "warn"));
         else
-            out.push(chip("✗ " + ev.message, "err"));
+            out.push(chip(String(ev.message), "err", "chat.error"));
         return out;
     }
     if (ev.type === "warning" && typeof ev.message === "string" && ev.message) {
-        out.push(chip("⚠ " + ev.message, "warn"));
+        out.push(chip(ev.message, "warn", "chat.warning"));
         return out;
     }
     if (ev.type === "model_rerouted" && typeof ev.to_model === "string") {
         const from = typeof ev.from_model === "string" ? ev.from_model : "";
         const why = ev.reason === "high_risk_cyber_activity" ? i18nText("请求被判定为高风险网络安全内容") : "";
-        out.push(chip(["⚠ " + (from ? i18nText("本轮已由 {p0} 改用 {p1}", { p0: from, p1: ev.to_model }) : i18nText("本轮已改用 {p0}", { p0: ev.to_model })), why].filter(Boolean).join(" · "), "warn"));
+        out.push(chip([(from ? i18nText("本轮已由 {p0} 改用 {p1}", { p0: from, p1: ev.to_model }) : i18nText("本轮已改用 {p0}", { p0: ev.to_model })), why].filter(Boolean).join(" · "), "warn", "chat.warning"));
         return out;
     }
     // Codex 旧版事件（{"msg":{...}} 结构，宽松匹配）
@@ -1088,7 +1091,7 @@ function eventNodes(ev, opts) {
             return out;
         }
         if (m.type === "error" && m.message) {
-            out.push(chip("✗ " + m.message, "err"));
+            out.push(chip(String(m.message), "err", "chat.error"));
             return out;
         }
         if (m.type.startsWith("exec_command_output") || m.type === "task_started" ||

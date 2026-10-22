@@ -775,3 +775,27 @@ dialog input.te-value { grid-area: value; min-width: 0; padding: 5px 8px; font-s
   .te-token { grid-template-areas: "color label reset" ". value value"; grid-template-columns: 28px minmax(0, 1fr) auto; row-gap: 4px; }
   .te-scale { grid-template-areas: "label reset" "value value"; grid-template-columns: minmax(0, 1fr) 40px; }
 }
+
+/* ---- 图标选择器 / 设置到哪些位置（icon-manager.ts） ---- */
+.dlg-icon-picker { width: min(760px, 96vw); height: min(680px, 92vh); }
+.dlg-icon-slots { width: min(560px, 96vw); height: min(640px, 92vh); }
+.ip-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ip-bar input[type="search"] { flex: 1 1 220px; }
+.ip-status { margin: 0 0 6px; }
+.ip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 6px; padding: 2px; }
+.ip-item {
+  aspect-ratio: 1; display: grid; place-items: center;
+  border: 1px solid transparent; border-radius: calc(8px * var(--radius-scale));
+  background: var(--panel-2); color: var(--text); cursor: pointer;
+}
+.ip-item:hover { border-color: var(--line); background: var(--panel); }
+.ip-item.current { border-color: var(--line); border-style: dashed; }
+.ip-item.on { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
+.ip-more { grid-column: 1 / -1; height: 1px; }
+.ip-actions { align-items: center; }
+.ip-choice { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); overflow: hidden; }
+.is-list h3 { font-size: 12.5px; color: var(--muted); margin: 12px 0 4px; }
+.is-list h3:first-child { margin-top: 0; }
+.is-row { display: flex; align-items: center; gap: 8px; padding: 4px 2px; color: var(--text); font-size: 13px; }
+.is-row .ir-meta { margin-left: auto; }
+.is-now { display: inline-grid; place-items: center; color: var(--muted); }
