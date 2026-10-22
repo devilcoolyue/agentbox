@@ -1075,7 +1075,8 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
     settleToolRows(log, S.chatState === "running" ? live.body : null);
     background.reset(); // 重连时仍在等后台任务的回合，从最新一页恢复
     for (const e of entries) {
-      if (e.kind === "user" && e.turn?.id) recordedTurn = e.turn.id;
+      // 超长回合的页从回合中段开始，开头的 turn_context 说明它的消息早已记下
+      if ((e.kind === "user" || e.kind === "turn_context") && e.turn?.id) recordedTurn = e.turn.id;
       if (e.kind === "user" || e.kind === "status") background.reset();
       else if (e.kind === "event") { background.observe(e.event); commandMenu.observe(e.event); }
     }

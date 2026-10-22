@@ -235,6 +235,40 @@ func TestHistorySplitsOnlyOversizedTurns(t *testing.T) {
 	}
 }
 
+// Older builds stored Claude's thinking token counts, thousands in a long
+// turn. They render nothing, so history neither sends nor counts them: a turn
+// of ordinary length stays on one page instead of starting mid-turn.
+func TestHistorySkipsStoredThinkingProgress(t *testing.T) {
+	smallHistoryPages(t)
+	s, sess := newTestServer(t)
+	s.chat = newChatManager(s)
+	if err := s.store.Put(sess); err != nil {
+		t.Fatal(err)
+	}
+	room := s.chat.room(sess.ID)
+	if err := room.appendLog(logEntry{Kind: "user", Text: "turn-0", Turn: &chatTurnMetadata{ID: "turn-0", Model: "fixture"}}); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 3 * historyPage.MaxEntries {
+		ev := fmt.Sprintf(`{"type":"system","subtype":"thinking_tokens","estimated_tokens":%d,"estimated_tokens_delta":1}`, i+1)
+		if err := room.appendLog(logEntry{Kind: "event", Event: json.RawMessage(ev)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := room.appendLog(logEntry{Kind: "event", Event: json.RawMessage(`{"type":"assistant","message":{"content":[{"type":"text","text":"turn-0 answer 0"}]}}`)}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, page := getHistory(t, s, sess, "")
+	var keys []string
+	for _, e := range page.Entries {
+		keys = append(keys, historyKey(e))
+	}
+	if page.Start != 0 || page.HasMore || !reflect.DeepEqual(keys, []string{"user:turn-0", "turn-0 answer 0"}) {
+		t.Fatalf("page start=%d more=%v entries=%q", page.Start, page.HasMore, keys)
+	}
+}
+
 func TestHistoryRejectsInvalidCursors(t *testing.T) {
 	s, sess := newTestServer(t)
 	s.chat = newChatManager(s)

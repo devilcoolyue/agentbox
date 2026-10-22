@@ -1166,7 +1166,7 @@ export interface ChatTurnCost {
 export interface HistoryEntry extends APIProblem {
   turn?: ChatTurnMetadata;
   ts: string;
-  /** "user" | "event" | "status" | "question" | "steer" | "chat_session" | "title" | "delegation" | "divider"(旧) */
+  /** "user" | "turn_context"(页从超长回合中段开始) | "event" | "status" | "question" | "steer" | "chat_session" | "title" | "delegation" | "divider"(旧) */
   kind: string;
   text?: string;
   /** delegation 条目里是 DelegationView，question 是 QuestionView，steer 是 SteerView，其余是 Agent 事件 */

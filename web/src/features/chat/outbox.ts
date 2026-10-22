@@ -329,9 +329,11 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
   message(c:unknown){if(!owns()||!context||!enabled)return;try{const value=receipt(c,context.session);apply(value);render();}catch{void refresh();}},
   // The message this page is sending or the server is starting, until the
   // server records it (a stopped workspace starts first): its text and turn.
+  // A saved copy says so only once its receipt is back with the turn, else a
+  // reloaded page would show an already recorded message once more.
   pending(){
    if(!owns()||!enabled||!context)return;
-   const row=rows().find(r=>r.thread===context?.thread&&!!r.input&&!r.input.delivery&&(r.state==="unconfirmed"?busy.has(key(r.session,r.id)):["accepted","starting","running"].includes(r.state)));
+   const row=rows().find(r=>r.thread===context?.thread&&!!r.input&&!r.input.delivery&&(r.state==="unconfirmed"?busy.has(key(r.session,r.id)):known.has(key(r.session,r.id))&&["accepted","starting","running"].includes(r.state)));
    if(!row?.input)return;
    return {id:row.id,text:row.input.text,turn:known.get(key(row.session,row.id))?.turn_id||""};
   },

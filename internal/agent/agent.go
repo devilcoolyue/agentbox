@@ -611,15 +611,24 @@ func copyConfined(src *safefs.Root, source string, dst *safefs.Root, target stri
 // --include-partial-messages event (type "stream_event"). These carry
 // content-block deltas for live rendering; the complete assistant event that
 // follows repeats the full content, so partials are broadcast but never
-// persisted.
+// persisted. Claude's thinking_tokens progress counts are the same kind: a
+// tick every few tokens while the model thinks, thousands in a long turn,
+// which would split its history page mid-turn.
 func IsPartialEvent(line []byte) bool {
 	var ev struct {
-		Type string `json:"type"`
+		Type    string `json:"type"`
+		Subtype string `json:"subtype"`
 	}
 	if err := json.Unmarshal(line, &ev); err != nil {
 		return false
 	}
-	return ev.Type == "stream_event"
+	return ev.Type == "stream_event" || IsThinkingProgress(ev.Type, ev.Subtype)
+}
+
+// IsThinkingProgress reports Claude's estimated thinking token count, sent
+// while a thinking block streams; the complete thinking block follows.
+func IsThinkingProgress(typ, subtype string) bool {
+	return typ == "system" && subtype == "thinking_tokens"
 }
 
 // ExtractSessionID pulls the provider conversation id out of a stream event,

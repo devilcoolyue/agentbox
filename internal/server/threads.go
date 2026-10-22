@@ -446,15 +446,17 @@ var historyPage = historyLimits{
 
 // historySent reports whether an entry goes out as written and counts as a
 // rendered entry. Claude tool results ("user" events) are often whole file
-// contents; only their slim copy (historyTool) is sent.
+// contents; only their slim copy (historyTool) is sent. Thinking token counts
+// that older builds stored render nothing and are not sent at all.
 func historySent(e *histEntry) bool {
 	if e.meta.Kind != "event" {
 		return true
 	}
 	var ev struct {
-		Type string `json:"type"`
+		Type    string `json:"type"`
+		Subtype string `json:"subtype"`
 	}
-	return json.Unmarshal(e.meta.Event, &ev) != nil || ev.Type != "user"
+	return json.Unmarshal(e.meta.Event, &ev) != nil || ev.Type != "user" && !agent.IsThinkingProgress(ev.Type, ev.Subtype)
 }
 
 // historyTool is the slim copy of a tool result entry, nil for other entries.

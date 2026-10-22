@@ -21,7 +21,7 @@ const browser=await launchBrowser();
 try{
  for(const locale of ['zh-CN','zh-TW','en']){
   const context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();page.setDefaultTimeout(15000);
-  const errors=[],receipts=new Map(),puts=[],requests=[],sockets=new Set(),held=[],validations=[];let heldAccepted=()=>{};let identity='alice',mode='normal',executions=0,holdValidation=false,attachmentsValid=true,protocol=1;
+  const errors=[],receipts=new Map(),puts=[],requests=[],sockets=new Set(),held=[],validations=[];let heldAccepted=()=>{};let identity='alice',mode='normal',executions=0,holdValidation=false,attachmentsValid=true,protocol=1,historyEntries=null;
   const actorScope=()=> (identity==='alice'?'a':'b').repeat(64),draftScope=()=> (identity==='alice'?'c':'d').repeat(64);
   const spaces=['a','b'].map(id=>({id:'space-'+id,name:'Space '+id.toUpperCase(),user:'alice',agent:'codex',account_id:'fixture',status:'stopped',default_model:'model-one'}));
   const threads={'space-a':'thread-one','space-b':'thread-one'};
@@ -44,7 +44,7 @@ try{
    else if(path==='/api/accounts')body=[{id:'fixture',type:'codex',label:'Fixture',cred_status:'ok'}];
    else if(path==='/api/onboarding')body={version:1,can_configure:false,can_create:true,has_workspaces:true,accounts:[{id:'fixture',type:'codex',label:'Fixture',credentials_present:true}],default_models:{codex:'model-one'},container_resources:{cpus:1,memory_mb:512,pids_limit:128}};
    else if(path.endsWith('/models'))body={models:[{id:'model-one',label:'Model one'},{id:'model-two',label:'Model two'}],discovery:'available'};
-   else if(path.endsWith('/history'))body={entries:[{kind:'user',text:'Earlier fixture task',ts:new Date().toISOString()}],thread:{id:threads[session],title:'Fixture conversation',turns:1},active_thread:threads[session],costs:{}};
+   else if(path.endsWith('/history'))body={entries:historyEntries||[{kind:'user',text:'Earlier fixture task',ts:new Date().toISOString()}],thread:{id:threads[session],title:'Fixture conversation',turns:1},active_thread:threads[session],costs:{}};
    else if(path.endsWith('/chat/threads')){
     if(method==='POST'){await threadCreationGate;threads[session]='thread-two';body={id:'thread-two',created:true};}
     else body=[{id:'thread-one',title:'Fixture conversation',turns:1},{id:'thread-two',title:'Another conversation',turns:1}];
@@ -232,6 +232,20 @@ try{
    assert.equal(await sent.count(),1);assert.equal(await sent.evaluate(e=>e.classList.contains('from-pending')),true);
    update('space-a',starting,'completed');await state(starting,'completed');await page.waitForTimeout(60);
    assert.equal(await sent.count(),1,'the settled receipt brought the pending copy back');
+   // Reloading during a long turn: its newest history page starts inside the
+   // turn with a turn_context line. The message is recorded, so no pending copy
+   // may sit below the turn's output and take the live events' place.
+   const longPut=page.waitForRequest(r=>r.method()==='PUT'&&r.postDataJSON()?.text==='Reload during a long turn');
+   await input.fill('Reload during a long turn');await page.locator('#chat-send').click();
+   const long=new URL((await longPut).url()).pathname.split('/').at(-1);await state(long,'running');
+   const longTurn={id:receipts.get(receiptKey('space-a',long)).turn_id,model:'model-one',effort:'',control:''};
+   emit('space-a',{type:'user_message',text:'Reload during a long turn',ts:new Date().toISOString(),turn:longTurn});
+   await page.waitForFunction(()=>!document.querySelector('#chat-log .user-turn.pending'));
+   historyEntries=[{kind:'turn_context',ts:new Date().toISOString(),turn:longTurn},{kind:'event',ts:new Date().toISOString(),event:{type:'item.completed',item:{id:'long-answer',type:'agent_message',text:'Midway through the long turn'}}}];
+   await page.reload();await ready();await state(long,'running');
+   await page.locator('#chat-log .msg.agent').filter({hasText:'Midway through the long turn'}).waitFor();await page.waitForTimeout(60);
+   assert.equal(await page.locator('#chat-log .user-turn.pending').count(),0,'a reload mid-turn showed the recorded message again');
+   historyEntries=null;update('space-a',long,'completed');await state(long,'completed');
    // Mobile state/action layout and logout/another-user isolation.
    mode='drop-before';await input.fill('Private pending before logout');await page.locator('#chat-send').click();await page.locator('.delivery-item[data-state="unconfirmed"]').waitFor({state:'attached'});
    await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);

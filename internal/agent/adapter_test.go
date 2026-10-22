@@ -70,6 +70,25 @@ func TestAdapterTerminalOutcomesAreExplicit(t *testing.T) {
 	}
 }
 
+// Claude's thinking token counts tick every few tokens while the model thinks;
+// like content deltas they are broadcast but never persisted.
+func TestAdapterThinkingProgressIsPartial(t *testing.T) {
+	a, _ := Lookup("claude")
+	for _, tc := range []struct {
+		raw     string
+		partial bool
+	}{
+		{`{"type":"system","subtype":"thinking_tokens","estimated_tokens":5,"estimated_tokens_delta":4}`, true},
+		{`{"type":"system","subtype":"status","status":"requesting"}`, false},
+		{`{"type":"system","subtype":"task_started","task_id":"x"}`, false},
+		{`{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"..."}]}}`, false},
+	} {
+		if e, ok := a.Decode([]byte(tc.raw)); !ok || e.Partial != tc.partial {
+			t.Fatalf("%s: %+v", tc.raw, e)
+		}
+	}
+}
+
 // A result without any model round-trip is a local slash command: /context
 // and friends answer from the CLI itself and have no usage to meter.
 func TestAdapterMarksLocalClaudeResults(t *testing.T) {
