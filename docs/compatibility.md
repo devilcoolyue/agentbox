@@ -47,6 +47,8 @@ v0.1.14 从 schema 18 迁移至 19（从 v0.1.12 及更早升级连续执行到 
 
 v0.1.16 沿用 schema 19 与 `compatibility_epoch` 1，现有网页、abox-link、聊天、终端和配对接口不变；新增配置段 `extensions` 与 `model_gateway`。回退到 v0.1.15 不涉及数据库，但旧版忽略这两段、再次保存配置会丢掉它们，回退前保留配置备份。循环保护绑定的 Codex 账号会把空间 `.codex/config.toml` 的 `base_url` 改成模型网关地址，旧版不监听网关，回退前先在扩展页解绑或停用；Claude 的网关地址只在每次执行时注入，新开的 CLI 自动恢复原地址。循环保护的真实 CLI 验证为 Claude Code 2.1.302、Codex 0.163.0（`cli.model-gateway`）。Desktop 0.1.2 能力不变、同步默认关闭，本次不发布新桌面包。
 
+v0.1.17 从 schema 19 迁移至 22（20 请求计时、21 缓存保活、22 五小时暂停），`compatibility_epoch` 仍为 1，只加列加表；v0.1.16 及更早的二进制不能直接打开新库，回退须恢复升级前兼容备份到新目录，升级后记下的实测计时、保活设置与暂停状态不会保留。新增配置段 `cache_keepalive`、`usage_telemetry` 与 `turn_timeout_min`，旧版忽略并在再次保存时丢掉。Claude 空间执行时注入 `OTEL_*` 遥测变量（账号自带 `OTEL_*` 收集器时不注入），Codex 空间的会话 `config.toml` 增加 `[otel]` 段（账号池不改，已有 `[otel]` 不动，接收器关闭时移除）。现有网页、abox-link、聊天、终端和配对接口兼容，新增推送 `GET /api/usage/live` 与 `GET/PUT /api/icons`。默认固定镜像仍为 Claude Code 2.1.280；缓存保活与实测计时在 Claude Code 2.1.303/2.1.304 上验证。Desktop 0.1.2 能力不变，本次不发布新桌面包。
+
 客户端按能力发现显示扩展入口，旧服务端返回 404 或页面时进入基础模式；鉴权错误、网络故障和无效响应不会冒充基础模式。新桌面包不会自动升级服务端。
 
 v0.1.9 的 schema 10 只新增项目和终端元数据，不移动空间文件。升级前保存并验证配套备份；v0.1.8 不能直接打开已迁移数据库，回退必须恢复兼容备份到新目录，并保全升级后的文件变化。桌面本地状态另使用 schema 5，不与服务端 schema 混用。详见[数据库迁移与回退](architecture/database-migrations.md)。

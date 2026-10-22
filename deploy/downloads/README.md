@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.16 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.17 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.16
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.17
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.16_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.17_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.16_linux_arm64/install.sh --version v0.1.16
+sudo bash agentbox_v0.1.17_linux_arm64/install.sh --version v0.1.17
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,14 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### 升级至 v0.1.17
+
+本版新增 Claude 对话的缓存保活（空间自行开启，默认关闭）与五小时额度暂停，使用记录显示每次请求实测的首字时间、耗时与输出速度，网页对话逐次请求实时结算；Claude 与 Codex 的工具调用按各自 CLI 的样子显示，新增「系统设置 → 图标管理」，回合时限默认 2 小时并会真正停止 CLI；完整分类说明见 [v0.1.17 Release](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.17)。
+
+从 v0.1.14～v0.1.16 升级会执行 schema 19 → 22 迁移（更早版本连续执行到 22），只加列加表。升级前先保存并验证备份；**v0.1.16 及更早的二进制不能直接打开 schema 22 数据库**，回退须恢复升级前兼容备份到新目录，升级后记下的实测计时、保活设置与暂停状态不会保留。新增配置段 `cache_keepalive`、`usage_telemetry` 与 `turn_timeout_min`，旧版会忽略并在再次保存时丢掉。用量遥测接收器默认开启并监听 `172.17.0.1:1084`；该端口另有用途时改 `usage_telemetry.bind`，或设 `"usage_telemetry": {"disabled": true}` 关闭。无需更新空间镜像。
+
+请先结束当前网页任务，升级会备份并重启服务（被打断的回合显示为「已升级」），完成后刷新页面。标准 Linux/systemd 版本目录安装可使用「关于与更新 → 升级并重启」，或在 Bash 中执行下文 v0.1.15 的命令并把 `version` 改为 `v0.1.17`。
 
 ### 升级至 v0.1.16
 

@@ -120,7 +120,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 - **运行环境：** Linux x86_64 / arm64、systemd 与本机 Docker Engine。Ubuntu 22.04+ / Debian 12+ 会自动安装缺失依赖；其他发行版见[安装前提](deploy/README.md#一键安装)。
 - **打开登录：** 访问 `http://服务器IP:8180`，使用安装完成时显示的 `boxadmin` 和随机密码。直接远程访问需放行 TCP 8180；公网长期使用请配置 [HTTPS](deploy/README.md#https-与-websocket-反向代理)。
-- **服务端正式版：** [v0.1.16](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.16)。命令默认安装最新正式版；末尾加 `-s -- --version v0.1.16` 可固定版本，加 `-s -- --listen 127.0.0.1:8180` 可限制为仅本机监听。
+- **服务端正式版：** [v0.1.17](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.17)。命令默认安装最新正式版；末尾加 `-s -- --version v0.1.17` 可固定版本，加 `-s -- --listen 127.0.0.1:8180` 可限制为仅本机监听。
 - **已有部署：** 使用控制台「关于与更新」或[升级指南](docs/releases.md#升级与回退)。安装器会保留已有部署，不覆盖安装。
 
 配置位于 `/etc/agentbox`，数据位于 `/var/lib/agentbox`。每个空间默认限制 2 GiB 内存、2 CPU，请按并发空间数准备资源。完整选项与失败恢复见[安装说明](deploy/README.md#一键安装)。
@@ -230,7 +230,7 @@ sudo ./agentbox -config config.json
 
 ## 开发里程碑
 
-当前服务端正式版为 **v0.1.16**（2026-10-19）。最近几个版本新增了主管委派、主题编辑器与本地存储容量管理（v0.1.13），Agent 提问、跟进消息、`/` 命令、`@` 引用、上下文占用、任务列表与逐次请求计费（v0.1.14），以及扩展、Webhook 通知、回合计时和后台执行的 Git 网络操作（v0.1.16）。详见[更新记录](CHANGELOG.md)。
+当前服务端正式版为 **v0.1.17**（2026-10-22）。最近几个版本新增了主管委派、主题编辑器与本地存储容量管理（v0.1.13），Agent 提问、跟进消息、`/` 命令、`@` 引用、上下文占用、任务列表与逐次请求计费（v0.1.14），扩展、Webhook 通知、回合计时和后台执行的 Git 网络操作（v0.1.16），以及缓存保活、逐次请求实测耗时与实时结算、按 CLI 样式显示的工具调用和图标管理（v0.1.17）。详见[更新记录](CHANGELOG.md)。
 
 第一轮 M1～M5（故障定位、首次使用、日常可靠性、维护质量、多端一致性）已随 v0.1.11 发布，真实用户观察、性能阈值、恢复目标、桌面签名等外部验收仍未完成（[记录](docs/milestones/backlog.md)）。第二轮接续：
 

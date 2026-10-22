@@ -8,7 +8,13 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.16](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.16)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.17](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.17)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.17：缓存保活、实测耗时与 CLI 样式的工具调用
+
+Claude 对话可以开启缓存保活：用户离开期间服务端定时续读订阅的一小时提示缓存，回来时不必把整段对话重新写入缓存；开启保活的空间在五小时额度用到阈值时暂停、窗口重置后自动继续。使用记录显示每次请求实测的首字时间、耗时与输出速度，网页对话逐次请求结算并推送到页面。Claude 与 Codex 的工具调用按各自 CLI 的样子显示 diff、输出和折叠的读取/命令组；新增管理员图标管理；回合时限默认 2 小时并会真正停止 CLI，服务重启或升级打断的回合不再显示为失败。分项内容见 [CHANGELOG](../CHANGELOG.md)。
+
+从 v0.1.14～v0.1.16 升级会执行 schema 19 → 22 迁移，只加列加表；v0.1.16 及更早的二进制不能打开新库，回退须恢复兼容备份到新目录。新增配置段 `cache_keepalive`、`usage_telemetry` 与 `turn_timeout_min`，用量遥测接收器默认监听 `172.17.0.1:1084`；缓存保活默认关闭。Go 升级到 1.26.10（GO-2026-6809），无需更新 Agent 镜像，详见[包内升级说明](../deploy/downloads/README.md#升级至-v0117)。本次发布两个 Linux 服务端包、五个平台 abox-link、`release.json` 与 `SHA256SUMS`，不发布新桌面包。
 
 ### v0.1.16：扩展、Webhook 通知与后台 Git 操作
 
