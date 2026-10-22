@@ -35,6 +35,17 @@ func TestClaudeTerminalCachePoint(t *testing.T) {
 	if !ok || got != want {
 		t.Fatalf("cache point\n got %+v\nwant %+v", got, want)
 	}
+	// Compacting leaves the cache behind; the next request is a new point.
+	p.line([]byte(`{"type":"system","subtype":"compact_boundary","entrypoint":"cli","uuid":"c1","isSidechain":false,"sessionId":"conv","cwd":"/workspace/app","timestamp":"2026-10-20T10:02:00.000Z","compactMetadata":{"trigger":"manual","preTokens":120072,"postTokens":9000}}`))
+	compacted := want
+	compacted.Prompt = PromptCache{TTL: "1h", Compacted: true}
+	if got, ok := p.cachePoint(); !ok || got != compacted {
+		t.Fatalf("after compacting\n got %+v\nwant %+v", got, compacted)
+	}
+	p.line([]byte(`{"type":"assistant","entrypoint":"cli","uuid":"a4","sessionId":"conv","cwd":"/workspace/app","requestId":"req_3","effort":"xhigh","timestamp":"2026-10-20T10:03:00.000Z","message":{"id":"msg_3","model":"claude-opus-5-5","stop_reason":"end_turn","usage":{"input_tokens":2,"output_tokens":30,"cache_read_input_tokens":8000,"cache_creation_input_tokens":1500}}}`))
+	if got, _ := p.cachePoint(); got.Prompt != (PromptCache{Prompt: 9502, Read: 8000, TTL: "1h"}) {
+		t.Fatalf("request after compacting: %+v", got)
+	}
 	p.line([]byte(lines[len(lines)-1]))
 	if got, _ := p.cachePoint(); !got.Exited {
 		t.Fatal("the CLI leaving the session went unnoticed")

@@ -363,6 +363,16 @@ func TestKeepalivePlansFollowTheWorkspaceSetting(t *testing.T) {
 	if planned(s, key) != p {
 		t.Fatal("a turn without a request moved the plan")
 	}
+	// /compact sends no request in the stream either, but the conversation
+	// left the cache behind: the indicator must not go on showing it.
+	s.noteChatCache(turn(chat.OutcomeCompleted, usage.PromptCache{TTL: "1h", Compacted: true}))
+	if planned(s, key) != nil {
+		t.Fatal("a compacted conversation kept the plan")
+	}
+	if code, v := f.api(t, "GET", "", "keep-alice", nil); code != 200 || v.Chat != nil || len(v.Plans) != 0 {
+		t.Fatalf("view after /compact %d %+v %+v", code, v, v.Chat)
+	}
+	s.noteChatCache(turn(chat.OutcomeCompleted, warm))
 	// The workspace's own threshold, then the administrator, drop the plan.
 	if code, _ := f.api(t, "PUT", "", "keep-alice", map[string]any{"enabled": true, "min_context_tokens": 200000}); code != 200 || planned(s, key) != nil {
 		t.Fatalf("threshold kept the plan: %d", code)
@@ -473,6 +483,16 @@ func TestTerminalSessionsPlanKeepalive(t *testing.T) {
 	s.noteTerminalCache(f.sess, odd)
 	if p := planned(s, terminalSlot(f.sess.ID, "/workspace/odd")); p == nil || p.point.Effort != "" || p.point.Control != "" {
 		t.Fatalf("an effort the CLI does not take: %+v", p)
+	}
+	compacted := session("T2", now)
+	compacted.Prompt = usage.PromptCache{TTL: "1h", Compacted: true}
+	s.noteTerminalCache(f.sess, compacted)
+	if planned(s, key) != nil {
+		t.Fatal("the session was compacted, still planned")
+	}
+	s.noteTerminalCache(f.sess, session("T2", now.Add(time.Second))) // its next request
+	if planned(s, key) == nil {
+		t.Fatal("the request after compacting was not planned")
 	}
 	gone := session("T1", now)
 	gone.Exited = true

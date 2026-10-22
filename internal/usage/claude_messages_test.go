@@ -513,4 +513,24 @@ func TestClaudePromptCacheAndKeepaliveRows(t *testing.T) {
 	if pc := turn.PromptCache(); pc != (PromptCache{Prompt: 904, Read: 902, TTL: "5m"}) {
 		t.Fatal(pc)
 	}
+
+	// /compact: the stream shows no request of its own, only the boundary,
+	// after which the conversation is the summary. A sub-agent's does not count.
+	compact := s.NewTally()
+	observe(&compact, "compact",
+		`{"type":"stream_event","event":{"type":"message_start","message":{"id":"c1","model":"claude","usage":{"input_tokens":2,"output_tokens":1,"cache_read_input_tokens":400000,"cache_creation_input_tokens":900,"cache_creation":{"ephemeral_1h_input_tokens":900}}}}}`,
+		`{"type":"system","subtype":"compact_boundary","parent_tool_use_id":"tool-a","compact_metadata":{"trigger":"auto"}}`)
+	if pc := compact.PromptCache(); pc.Compacted || pc.Prompt != 400902 {
+		t.Fatal(pc)
+	}
+	observe(&compact, "compact", `{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"manual","pre_tokens":400902,"post_tokens":14000}}`)
+	if pc := compact.PromptCache(); pc != (PromptCache{TTL: "1h", Compacted: true}) {
+		t.Fatal(pc)
+	}
+	// Compacted mid-turn: the requests after it are the conversation now.
+	observe(&compact, "compact",
+		`{"type":"stream_event","event":{"type":"message_start","message":{"id":"c2","model":"claude","usage":{"input_tokens":2,"output_tokens":1,"cache_read_input_tokens":12000,"cache_creation_input_tokens":2000,"cache_creation":{"ephemeral_1h_input_tokens":2000}}}}}`)
+	if pc := compact.PromptCache(); pc != (PromptCache{Prompt: 14002, Read: 12000, TTL: "1h"}) {
+		t.Fatal(pc)
+	}
 }

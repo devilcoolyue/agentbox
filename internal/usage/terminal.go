@@ -67,6 +67,7 @@ const termEntrypointCLI = "cli"
 // termTranscriptRec 是 transcript 里我们关心的那几个字段。
 type termTranscriptRec struct {
 	Type       string          `json:"type"`
+	Subtype    string          `json:"subtype"`
 	Entrypoint string          `json:"entrypoint"`
 	UUID       string          `json:"uuid"`
 	RequestID  string          `json:"requestId"`
@@ -687,7 +688,8 @@ type claudeTermParser struct {
 
 // TerminalCache 是终端里交互式 Claude Code 会话主对话的最近一次请求，按
 // transcript 记的样子：缓存保活据它决定要不要续、用什么参数续。Exited 表示
-// CLI 在这次请求之后离开了会话（退出时写下 cost-state）。
+// CLI 在这次请求之后离开了会话（退出时写下 cost-state），Prompt.Compacted 表示
+// 之后压缩过上下文。
 type TerminalCache struct {
 	Conversation, Cwd, Model, Effort string
 	Prompt                           PromptCache
@@ -811,6 +813,11 @@ func (p *claudeTermParser) line(line []byte) {
 		return // -p 发起的那些已经记过账了
 	}
 	switch rec.Type {
+	case "system":
+		// 压缩上下文：之后的请求从摘要开始，最近一次请求留下的缓存不会再被读到。
+		if rec.Subtype == "compact_boundary" && !rec.IsSidechain && p.cacheID != "" {
+			p.cache.Prompt = PromptCache{TTL: p.ttl, Compacted: true}
+		}
 	case "user":
 		// 一次提问开一个回合。user 记录一定有 uuid，promptId 在老版本 CLI 上
 		// 是 null，所以用 uuid 当回合键。

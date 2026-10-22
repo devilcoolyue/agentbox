@@ -183,6 +183,14 @@ func (k *keepaliveState) forget(key keepaliveKey) {
 	k.forgetLocked(key)
 }
 
+// drop forgets the slot, saying why when it had a plan.
+func (k *keepaliveState) drop(key keepaliveKey, why string) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.dropLocked(key, why)
+	delete(k.points, key)
+}
+
 func (k *keepaliveState) forgetLocked(key keepaliveKey) {
 	k.cancelLocked(key)
 	delete(k.points, key)
@@ -356,6 +364,12 @@ func (s *Server) noteChatCache(o chat.TurnOutcome) {
 	// Close interrupts running turns, which then fail; what one sent is cached
 	// all the same, and the user resumes the conversation after the restart.
 	failed := o.Status == chat.OutcomeFailed && !s.stopping()
+	// /compact replaced the conversation the cache held with a summary; the
+	// next request writes the cache anew and plans from there.
+	if o.Cache != nil && o.Cache.Prompt.Compacted && !failed {
+		s.keepalive.drop(key, "the conversation was compacted")
+		return
+	}
 	// A turn that sent no request (a local command such as /context) left the
 	// cache's hour where it was, and the plan with it.
 	if o.Cache != nil && o.Cache.Prompt.Prompt == 0 && !failed {
@@ -380,6 +394,10 @@ func (s *Server) noteTerminalCache(sess store.Session, c usage.TerminalCache) {
 	key := terminalSlot(sess.ID, c.Cwd)
 	if c.Exited {
 		s.keepalive.forgetConversation(key, c.Conversation, "the CLI left session "+c.Conversation)
+		return
+	}
+	if c.Prompt.Compacted {
+		s.keepalive.forgetConversation(key, c.Conversation, "session "+c.Conversation+" was compacted")
 		return
 	}
 	if time.Since(c.At) >= cacheLifetime {

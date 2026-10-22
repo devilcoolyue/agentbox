@@ -109,9 +109,15 @@ type claudeMeter struct {
 // and written to the cache), Read the part served from cache, and TTL the
 // lifetime the turn's cache writes asked for ("1h" or "5m"; "" while the turn
 // wrote none). The chat cache keepalive is decided on it.
+//
+// Compacted says the conversation was compacted after that request (/compact
+// sends none of its own in the stream): Prompt and Read are zero, and what the
+// cache held will not be read again, since the next request starts from the
+// summary.
 type PromptCache struct {
 	Prompt, Read int64
 	TTL          string
+	Compacted    bool `json:",omitempty"`
 }
 
 // costState is the cumulative record the CLI appends to the transcript as a
@@ -185,6 +191,9 @@ func (c *claudeMeter) observe(base store.UsageEvent, line []byte) {
 	case "system":
 		if e.Subtype == "compact_boundary" {
 			c.compacted = true
+			if e.Parent == "" {
+				c.prompt = PromptCache{TTL: c.prompt.TTL, Compacted: true}
+			}
 		}
 	case "assistant":
 		e.Message.TS, e.Message.RequestID = now, e.RequestID
@@ -305,7 +314,7 @@ func (c *claudeMeter) notePrompt(line []byte) {
 		return
 	}
 	u := e.Event.Message.Usage
-	c.prompt.Prompt, c.prompt.Read = u.Input+u.CacheRead+u.CacheWrite, u.CacheRead
+	c.prompt.Prompt, c.prompt.Read, c.prompt.Compacted = u.Input+u.CacheRead+u.CacheWrite, u.CacheRead, false
 	switch {
 	case u.CacheCreation.OneHour > 0:
 		c.prompt.TTL = "1h"
