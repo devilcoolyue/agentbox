@@ -220,16 +220,22 @@ bus.addEventListener("signed-out", () => dlg().close());
 
 /* ---------------- 对话输入栏 / 终端顶栏的小图标 ---------------- */
 
-export type ChipState = {show: false} | {show: true; on: boolean; tip: () => string};
+/** count：保活中的会话数，大于 0 时图标钮琥珀底并在右上角标出（只有带 .icon-count 的图标用） */
+export type ChipState = {show: false} | {show: true; on: boolean; count?: number; tip: () => string};
 
-/** 对话输入栏：开着时说明状态；没开但值得开（订阅账号、上下文过门槛）时灰着提示 */
+/** 对话输入栏：有计划时标出保活中的会话数（对话与终端，和弹窗列表一致）；
+ * 开着但没排上时说明原因；没开但值得开（订阅账号、上下文过门槛）时灰着提示 */
 export function chatChipState(v: KeepaliveView | undefined): ChipState {
   if (!v || v.reason === "agent") return {show: false};
   const interval = String(v.interval_minutes);
   const chat = v.chat;
   if (v.enabled && v.available) {
-    const plan = v.plans.find((p) => p.source === "chat");
-    if (plan) return {show: true, on: true, tip: () => [i18nText("缓存保活中"), planMeta(plan), i18nText("点击查看或调整")].join("\n")};
+    const plans = v.plans;
+    if (plans.length) return {show: true, on: true, count: plans.length, tip: () => [
+      i18nText("缓存保活中：{n} 个会话", {n: String(plans.length)}),
+      ...plans.map((p) => `${planName(p)} · ${planMeta(p)}`),
+      i18nText("点击查看或调整"),
+    ].join("\n")};
     const why = !chat ? i18nText("下一轮结束后，上下文达到门槛就开始保活。")
       : chat.ttl !== "1h" ? i18nText("这一轮写的不是 1 小时缓存，续不上。")
       : chat.prompt_tokens < v.effective.min_context_tokens
@@ -260,7 +266,14 @@ export function termChipState(v: KeepaliveView | undefined): ChipState {
 export function renderChip(el: HTMLElement, state: ChipState) {
   el.classList.toggle("hidden", !state.show);
   if (!state.show) return;
+  const count = state.count || 0;
   el.classList.toggle("on", state.on);
+  el.classList.toggle("live", count > 0);
+  const badge = el.querySelector<HTMLElement>(".icon-count");
+  if (badge) {
+    badge.hidden = !count;
+    badge.textContent = count ? String(count) : "";
+  }
   setTip(el, state.tip);
   el.setAttribute("aria-label", state.tip().split("\n")[0]);
 }

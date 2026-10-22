@@ -478,7 +478,7 @@
                   </button>
                   <div id="chat-delegate-picker" class="delegate-picker" hidden>
                     <button id="chat-delegate" type="button" class="icon-btn chat-delegate" aria-haspopup="dialog" aria-expanded="false" aria-controls="chat-delegate-pop">
-                      <svg width="18" height="18" data-icon="users" aria-hidden="true"></svg><span id="chat-delegate-count" class="dg-count" aria-hidden="true" hidden></span>
+                      <svg width="18" height="18" data-icon="users" aria-hidden="true"></svg><span id="chat-delegate-count" class="icon-count" aria-hidden="true" hidden></span>
                     </button>
                     <div id="chat-delegate-pop" class="delegate-pop hidden" role="dialog" aria-label="委派给跑腿模型" data-i18n-attrs='{"aria-label":"委派给跑腿模型"}'></div>
                   </div>
@@ -489,9 +489,10 @@
                     <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><circle class="ctx-track" cx="10" cy="10" r="7.5" pathLength="100"/><circle class="ctx-fill" cx="10" cy="10" r="7.5" pathLength="100"/></svg>
                     <span class="ctx-value"></span>
                   </span>
-                  <!-- 缓存保活状态（features/workspaces/keepalive.ts）：开着时常亮，没开但上下文值得续时灰着提示 -->
-                  <button id="chat-keepalive" type="button" class="keepalive-chip hidden" aria-haspopup="dialog" aria-controls="dlg-keepalive" data-tip-tap>
-                    <svg width="16" height="16" data-icon="heart-pulse" aria-hidden="true"></svg>
+                  <!-- 缓存保活状态（features/workspaces/keepalive.ts）：与委派按钮同款，有计划时琥珀底并在右上角标出保活中的会话数；
+                       开着但还没排上时只亮图标，没开但上下文值得续时灰着提示 -->
+                  <button id="chat-keepalive" type="button" class="icon-btn keepalive-chip hidden" aria-haspopup="dialog" aria-controls="dlg-keepalive" data-tip-tap>
+                    <svg width="18" height="18" data-icon="heart-pulse" aria-hidden="true"></svg><span class="icon-count" aria-hidden="true" hidden></span>
                   </button>
                   <div id="picker" class="picker">
                     <button id="btn-pick" class="pick-pill"></button>

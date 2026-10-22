@@ -2,23 +2,13 @@
  * 压在正文上的层一律用不透明的 --panel-solid（玻璃风格的面板半透明，字会叠在一起）。 */
 
 /* ---- 输入框工具栏的委派按钮与弹层 ----
- * 按钮与附件、语音同尺寸（.icon-btn）；开启时琥珀色底并在右上角标出跑腿个数。
+ * 按钮与附件、语音同尺寸（.icon-btn）；开启时琥珀色底并在右上角标出跑腿个数（.icon-count）。
  * 宽屏弹层贴着按钮向上展开，窄屏改为贴住整个输入框，避免超出屏幕。 */
 .delegate-picker { position: relative; display: inline-flex; flex: none; }
 .delegate-picker[hidden], .chat-delegate[hidden] { display: none; }
 .chat-delegate { position: relative; transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
 .chat-delegate[aria-expanded="true"] { color: var(--text); background: var(--panel-2); }
 .chat-delegate.on, .chat-delegate.on:hover { color: var(--accent); background: color-mix(in srgb, var(--panel-solid) 84%, var(--accent) 16%); }
-.dg-count {
-  position: absolute; top: -1px; right: -2px;
-  min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box;
-  border-radius: var(--radius-pill);
-  background: var(--accent); color: var(--on-accent);
-  box-shadow: 0 0 0 2px var(--panel);
-  font-size: 10px; font-weight: 700; line-height: 15px; text-align: center;
-  font-variant-numeric: tabular-nums; pointer-events: none;
-}
-.dg-count[hidden] { display: none; }
 
 .delegate-pop {
   position: absolute; left: 0; bottom: calc(100% + 10px); z-index: 40;

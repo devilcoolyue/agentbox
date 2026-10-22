@@ -2620,7 +2620,7 @@ export default {
   "暂无保活计划。": "No keepalive plans.",
   "停止这条保活，下一次请求后再按设置排上": "Stop this keepalive; the next request plans it again under the settings",
   "缓存保活设置已保存": "Cache keepalive settings saved",
-  "缓存保活中": "Keeping the cache",
+  "缓存保活中：{n} 个会话": "Keeping caches warm: {n} sessions",
   "点击查看或调整": "Click to view or adjust",
   "下一轮结束后，上下文达到门槛就开始保活。": "Starts after the next turn once the context reaches the threshold.",
   "这一轮写的不是 1 小时缓存，续不上。": "This turn didn't write a one-hour cache, so it can't be kept.",

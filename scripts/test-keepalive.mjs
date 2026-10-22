@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 // Cache keepalive on the synthetic API: the ⋯ entry exists for Claude
 // workspaces, the dialog shows the workspace setting with the administrator's
 // defaults, saving sends the workspace values (empty = default), plans list
-// and stop one by one, the composer chip follows the state, and an account
+// and stop one by one, the composer chip counts the kept sessions, and an account
 // that writes five-minute caches explains why it cannot be kept.
 export async function keepaliveSmoke(page, base) {
   const now = Date.now();
@@ -56,6 +56,7 @@ export async function keepaliveSmoke(page, base) {
     const chip = page.locator('#chat-keepalive');
     await chip.waitFor({ state: 'visible' });
     assert.equal(await chip.evaluate(el => el.classList.contains('on')), false);
+    assert.equal(await chip.locator('.icon-count').isVisible(), false);
     assert.match(await chip.getAttribute('data-tip'), /重写约 152.0K token 的缓存（≈\$1\.22）/);
 
     await open();
@@ -77,14 +78,17 @@ export async function keepaliveSmoke(page, base) {
     assert.match(await page.locator('.ka-plan-meta').first().innerText(), /^152.0K tokens · 下次 \d\d:\d\d · 已续 1\/3 次 · 每次约 \$0\.030$/);
 
     assert.deepEqual(await page.locator('.ka-plan button').evaluateAll(els => els.map(el => el.classList.contains('btn-danger'))), [true, true]);
+    // Saving told the chip: like the delegate button, it fills in and counts the sessions being kept.
+    await chip.locator('.icon-count').filter({ hasText: /^2$/ }).waitFor();
+    assert.equal(await chip.evaluate(el => el.classList.contains('live')), true);
     await page.locator('.ka-plan').nth(1).getByRole('button', { name: '停止' }).click();
     await page.waitForFunction(() => document.querySelectorAll('.ka-plan').length === 1);
     assert.deepEqual(stops, [{ id: 'terminal:/workspace/app' }]);
     await page.locator('#ka-cancel').click();
     await dialog.waitFor({ state: 'hidden' });
-    // Saving told the chip: it lights up and describes the chat plan.
-    await page.locator('#chat-keepalive.on').waitFor();
-    assert.match(await chip.getAttribute('data-tip'), /^缓存保活中\n152.0K tokens · 下次/);
+    // Stopping one recounts, and the tip lists what is still kept.
+    await chip.locator('.icon-count').filter({ hasText: /^1$/ }).waitFor();
+    assert.match(await chip.getAttribute('data-tip'), /^缓存保活中：1 个会话\n对话「Refactor billing」 · 152.0K tokens · 下次/);
 
     // An API key account cannot keep its five-minute caches.
     view = { ...base_view, available: false, reason: 'account', chat: undefined };
@@ -93,7 +97,7 @@ export async function keepaliveSmoke(page, base) {
     assert.equal(await page.locator('#ka-enabled').isDisabled(), true);
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'hidden' });
-    console.log('Cache keepalive: menu entry, defaults, save, plan list, stop, composer chip and unavailable account passed');
+    console.log('Cache keepalive: menu entry, defaults, save, plan list, stop, composer chip count and unavailable account passed');
   } finally {
     for (const [pattern, handler] of Object.entries(routes)) await page.unroute(pattern, handler);
   }

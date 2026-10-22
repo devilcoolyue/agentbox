@@ -964,6 +964,17 @@ details.think.streaming .think-body::after {
   line-height: 1;
 }
 .icon-btn:hover { color: var(--text); background: var(--panel-2); }
+/* 图标钮右上角的数字角标：委派的跑腿个数、保活中的会话数；按钮需 position: relative */
+.icon-count {
+  position: absolute; top: -1px; right: -2px;
+  min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  background: var(--accent); color: var(--on-accent);
+  box-shadow: 0 0 0 2px var(--panel);
+  font-size: 10px; font-weight: 700; line-height: 15px; text-align: center;
+  font-variant-numeric: tabular-nums; pointer-events: none;
+}
+.icon-count[hidden] { display: none; }
 .icon-btn.rec {
   color: var(--on-red); background: var(--red);
   animation: voice-pulse 1.4s ease-out infinite;
@@ -1157,19 +1168,17 @@ details.think.streaming .think-body::after {
 .ctx-meter[data-level="critical"] { color: var(--red); }
 .ctx-meter[data-level="critical"] .ctx-fill { stroke: var(--red); }
 
-/* ---- 缓存保活状态（features/workspaces/keepalive.ts）：开着时琥珀色，没开但值得开时灰着 ---- */
+/* ---- 缓存保活状态（features/workspaces/keepalive.ts）：与委派按钮同款（.icon-btn + .icon-count）。
+ * 有计划时琥珀底、角标是保活中的会话数；开着但还没排上时只亮图标；没开但值得开时灰着 ---- */
 .keepalive-chip {
-  flex: none; margin-left: auto; width: 28px; height: 28px; padding: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: var(--radius-pill); background: transparent;
-  color: var(--muted); cursor: pointer;
+  position: relative; margin-left: auto; padding: 0; cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
 /* 上下文圈在时由它吃掉左侧空白；保活图标在时模型胶囊紧挨着它 */
 .ctx-meter:not(.hidden) ~ .keepalive-chip { margin-left: 0; }
 .keepalive-chip:not(.hidden) ~ .picker { margin-left: 0; }
-.keepalive-chip.on { color: var(--amber); }
-.keepalive-chip:hover { color: var(--text); background: var(--panel-2); }
-.keepalive-chip.on:hover { color: var(--amber); }
+.keepalive-chip.on, .keepalive-chip.on:hover { color: var(--amber); }
+.keepalive-chip.live, .keepalive-chip.live:hover { color: var(--accent); background: color-mix(in srgb, var(--panel-solid) 84%, var(--accent) 16%); }
 .keepalive-chip:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
 /* ---- 模型 / 思考强度选择胶囊 + 上弹菜单 ---- */
@@ -1336,6 +1345,7 @@ details.think.streaming .think-body::after {
   .user-actions { transition: none; }
   .work-label, .turn.working .agent-ico { animation: none; }
   .icon-btn.rec { animation: none; }
+  .keepalive-chip { transition: none; }
   .hero-cursor { animation: none; }
   .msg.live-text.streaming:empty::after,
   .msg.live-text.streaming > :last-child::after,
