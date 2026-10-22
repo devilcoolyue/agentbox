@@ -4,6 +4,7 @@ import {t as i18nText} from "../../i18n.js";
 import {codexStreamEvent,codexWorkLabel} from "./codex-items.js";
 import {resetToolRows} from "./tool-rows.js";
 import {claudeWorkLabel} from "./claude-tools.js";
+import {foldThink} from "./folds.js";
 
 export function createChatStream(hooks: {
  append: (node: HTMLElement) => void;
@@ -148,7 +149,7 @@ function replayFinish() {
   if (!b || !b.replay) return;
   if (b.raf) cancelAnimationFrame(b.raf);
   b.el.classList.remove("streaming", "live-text");
-  if (b.kind === "thinking") (b.el as HTMLDetailsElement).open = false; // 与正式渲染一致：思考默认折叠
+  if (b.kind === "thinking") { (b.el as HTMLDetailsElement).open = false; foldThink(b.el); } // 与正式渲染一致：思考默认折叠，连着的收成一组
   liveBlock = null;
   hooks.footer()?.update();
   replayPump();

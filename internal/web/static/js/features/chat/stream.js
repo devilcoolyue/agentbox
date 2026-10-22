@@ -3,6 +3,7 @@ import { t as i18nText } from "../../i18n.js";
 import { codexStreamEvent, codexWorkLabel } from "./codex-items.js";
 import { resetToolRows } from "./tool-rows.js";
 import { claudeWorkLabel } from "./claude-tools.js";
+import { foldThink } from "./folds.js";
 export function createChatStream(hooks) {
     /* ---------------- 流式增量渲染 ----------------
      * Claude：--include-partial-messages 下，完整 assistant 事件之前会先收到
@@ -134,8 +135,10 @@ export function createChatStream(hooks) {
         if (b.raf)
             cancelAnimationFrame(b.raf);
         b.el.classList.remove("streaming", "live-text");
-        if (b.kind === "thinking")
-            b.el.open = false; // 与正式渲染一致：思考默认折叠
+        if (b.kind === "thinking") {
+            b.el.open = false;
+            foldThink(b.el);
+        } // 与正式渲染一致：思考默认折叠，连着的收成一组
         liveBlock = null;
         hooks.footer()?.update();
         replayPump();

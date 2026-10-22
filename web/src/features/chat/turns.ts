@@ -5,6 +5,7 @@ import { answerFooter, observeAnswer } from "../../chat-footer.js";
 import type { AnswerContext } from "../../chat-footer.js";
 import { renderEntry } from "../../chat-render.js";
 import { agentIcon } from "../../brand.js";
+import { foldInto } from "./folds.js";
 
 type Footer = ReturnType<typeof answerFooter>;
 const footers = new WeakMap<HTMLElement, Footer>();
@@ -33,7 +34,7 @@ export class TurnWriter {
     }
     const body = this.turnBody(), footer = this.footer!;
     if (node.classList.contains("result") && body.querySelector(".msg.agent")) footer.setReceipt(node);
-    else body.insertBefore(node, footer.el);
+    else if (!foldInto(footer.el.previousElementSibling, node)) body.insertBefore(node, footer.el);
     footer.update();
   }
 

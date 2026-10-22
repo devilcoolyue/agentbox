@@ -14,7 +14,7 @@
  * 退回 tool_result 的文字。进行中登记与回合结束的收尾在 tool-rows.ts。模型与工具输出一律
  * 走 textContent。 */
 import type { AgentEvent, ContentBlock } from "../../types.js";
-import { buttonLabel } from "../../icons.js";
+import { buttonLabel, svgIcon } from "../../icons.js";
 import { setTip } from "../../tip.js";
 import { setTextRender, t as i18nText } from "../../i18n.js";
 import { clean, clipLabel, base, el, onSettle, pendingRow, str, num, takeRow, trackRow } from "./tool-rows.js";
@@ -78,7 +78,7 @@ function bytes(n: number) {
 
 /* ---------------- 名称与参数：CLI 的 userFacingName ---------------- */
 
-function displayName(t: Tool) {
+function displayName(t: { name: string }) {
   switch (t.name) {
     case "Edit": case "MultiEdit": return "Update";
     case "WebFetch": return "Fetch";
@@ -165,6 +165,9 @@ const PHRASES: Record<Kind, (n: number, running: boolean) => string> = {
     : plural(n, () => i18nText("运行 1 条命令"), () => i18nText("运行 {p0} 条命令", { p0: String(n) })),
 };
 
+/* 组标题前的图标与 Codex 工具行同一套：只有一类操作就用它的图标，混在一起用扳手 */
+const ICONS: Record<Kind, string> = { read: "file", search: "search", list: "folder", bash: "tool" };
+
 /* 当前可以续上的组：之后没有别的内容插进来（思考块除外，CLI 普通视图里不显示思考） */
 let openGroup: Group | null = null;
 
@@ -174,7 +177,7 @@ export function breakClaudeGroup() { openGroup = null; }
 function groupContinues(g: Group | null): g is Group {
   if (!g) return false;
   for (let n = g.el.nextElementSibling; n; n = n.nextElementSibling) {
-    if (n.classList.contains("think") || n.classList.contains("answer-footer")) continue;
+    if (n.classList.contains("think") || n.classList.contains("fold-think") || n.classList.contains("answer-footer")) continue;
     return false;
   }
   return true;
@@ -217,11 +220,12 @@ function renderGroup(g: Group) {
   g.el.dataset.status = running ? "running" : g.tools.some(t => t.status === "unfinished") ? "unfinished" : failed ? "failed" : "completed";
   g.el.classList.toggle("cc-open", g.open);
   g.head.setAttribute("aria-expanded", String(g.open));
-  const dot = el("span", "cc-dot", "●");
+  const icon = el("span", "cc-icon");
+  icon.append(svgIcon(counts.size === 1 ? ICONS[[...counts.keys()][0]] : "wrench", 13));
   const text = el("span", "cc-gtext");
   setTextRender(text, () => cap(join([...counts].map(([k, n]) => PHRASES[k](n, running))))
     + (since && Date.now() - since >= 1000 ? " · " + secs(Date.now() - since) : "") + (running ? "…" : ""));
-  g.head.replaceChildren(dot, text);
+  g.head.replaceChildren(icon, text);
   if (failed && !running) {
     const err = el("span", "cc-gerr");
     setTextRender(err, () => " · " + plural(failed, () => i18nText("1 处出错"), () => i18nText("{p0} 处出错", { p0: String(failed) })));
@@ -405,7 +409,7 @@ function agentView(t: Tool): View {
   const full: Node[] = [];
   const prompt = str(t.input.prompt);
   if (prompt) full.push(res(line(() => i18nText("提示词："), "cc-label"), el("pre", "cc-pre cc-wrap", prompt)));
-  for (const c of kids) { renderTool(c, true); full.push(c.el); }
+  for (const c of kids) { renderTool(c); full.push(c.el); }
   let compact: Node[];
   if (!r) {
     // 运行中：最近三条子调用，更早的折成「还有 N 次」
@@ -524,15 +528,18 @@ function htmlPath(t: Tool) {
   return /\.html?$/i.test(p) ? p : "";
 }
 
-/** verbose：折叠组与子 Agent 里的详细视图，全文展开、标题不再可点 */
-function renderTool(t: Tool, verbose = !!t.group || !!t.parent) {
-  const view = viewOf(t, verbose);
-  const expandable = !verbose && !!view.full;
+/** 折叠组与子 Agent 里的一条只有标题一行，点开才是详细视图（全文）；单独的一行平时是摘要，
+ * 有详细视图的点开看全文 */
+function renderTool(t: Tool) {
+  const item = !!t.group || !!t.parent;
+  const view = viewOf(t, item);
+  const detail = view.full ?? view.compact;
+  const expandable = item ? detail.length > 0 : !!view.full;
   const head = el("div", "cc-head");
   head.append(el("span", "cc-dot", "●"), el("b", "cc-name", displayName(t)));
   const args = headArgs(t);
   if (args) {
-    const a = el("span", "cc-args", "(" + (verbose || t.open ? args : args.split("\n")[0] + (args.includes("\n") ? " …" : "")) + ")");
+    const a = el("span", "cc-args", "(" + (t.open ? args : args.split("\n")[0] + (args.includes("\n") ? " …" : "")) + ")");
     head.append(a);
   }
   setTip(head, args || displayName(t));
@@ -557,7 +564,7 @@ function renderTool(t: Tool, verbose = !!t.group || !!t.parent) {
   }
   t.el.dataset.status = t.status;
   t.el.dataset.tool = t.name;
-  t.el.replaceChildren(head, ...(verbose || t.open ? view.full ?? view.compact : view.compact));
+  t.el.replaceChildren(head, ...(t.open ? detail : item ? [] : view.compact));
 }
 
 function settleTool(t: Tool) {
@@ -590,7 +597,7 @@ export function claudeToolUse(block: ContentBlock, ev: AgentEvent, live = false)
   if (parent?.children) {
     t.parent = parent;
     parent.children.push(t);
-    renderTool(t, true);
+    renderTool(t);
     refresh(t);
     return null;
   }
@@ -599,7 +606,7 @@ export function claudeToolUse(block: ContentBlock, ev: AgentEvent, live = false)
     const g = openGroup || newGroup();
     t.group = g;
     g.tools.push(t);
-    renderTool(t, true);
+    renderTool(t);
     renderGroup(g);
     if (live) tick(g);
     if (openGroup === g) return null;
@@ -624,6 +631,15 @@ export function claudeToolResults(ev: AgentEvent) {
     t.status = t.result.error ? "failed" : "completed";
     refresh(t);
   }
+}
+
+/** 心跳行要说是哪个工具在跑：还在跑的调用给出「Bash(npm test)」，找不到就只给工具名 */
+export function claudeToolTitle(id: string, name: string) {
+  const row = pendingRow(KEY + id);
+  const t = row && tools.get(row);
+  if (!t) return name ? displayName({ name }) : "";
+  const args = headArgs(t).split("\n")[0];
+  return displayName(t) + (args ? `(${clipLabel(args)})` : "");
 }
 
 /** 子 Agent 的事件能否收进它的工具行（那一行还在，且是 Agent 调用） */

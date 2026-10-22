@@ -466,9 +466,10 @@
 .cc-tool[data-status="failed"] > .cc-head .cc-dot { color: var(--red); }
 .cc-tool[data-status="unfinished"] > .cc-head .cc-dot { color: var(--muted); }
 .cc-tool[data-status="running"] > .cc-head .cc-dot,
-.cc-group[data-status="running"] > .cc-gsum .cc-dot { color: var(--muted); animation: cc-blink 1.2s ease-in-out infinite; }
-/* 折叠组结束后与 CLI 一样不带圆点，只留缩进 */
-.cc-group:not([data-status="running"]) > .cc-gsum .cc-dot { visibility: hidden; }
+.cc-group[data-status="running"] > .cc-gsum .cc-icon { color: var(--muted); animation: cc-blink 1.2s ease-in-out infinite; }
+/* 折叠组标题前是操作类型的图标（命令、读文件、搜索、列目录，混合是扳手），出错标红 */
+.cc-icon { flex: none; width: 1.6em; align-self: center; display: inline-flex; color: var(--muted); }
+.cc-group[data-status="failed"] > .cc-gsum .cc-icon { color: var(--red); }
 @keyframes cc-blink { 50% { opacity: 0.15; } }
 .cc-name { flex: none; font-weight: 600; }
 .cc-args { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -519,7 +520,7 @@
 .cc-links a { color: var(--text); }
 .cc-links a:hover { color: var(--amber); }
 @media (prefers-reduced-motion: reduce) {
-  .cc-tool[data-status="running"] > .cc-head .cc-dot, .cc-group[data-status="running"] > .cc-gsum .cc-dot { animation: none; }
+  .cc-tool[data-status="running"] > .cc-head .cc-dot, .cc-group[data-status="running"] > .cc-gsum .cc-icon { animation: none; }
   .cc-toggle::after, .cc-gsum::after { transition: none; }
 }
 /* Codex 计划模式的方案 */
@@ -546,13 +547,46 @@ details.think summary {
   border-radius: calc(6px * var(--radius-scale));
 }
 details.think summary::-webkit-details-marker { display: none; }
-details.think summary::before {
-  content: "›";
-  transition: transform 0.15s ease;
+details.think summary > .ui-icon { flex: none; }
+details.think summary::after, .fold-head::after, details.fold-item > summary::after {
+  content: "›"; flex: none;
+  transition: transform var(--dur-fast) var(--ease-out, ease);
   color: var(--muted);
 }
-details.think[open] summary::before { transform: rotate(90deg); }
+details.think[open] > summary::after, .fold-open > .fold-head::after, details.fold-item[open] > summary::after { transform: rotate(90deg); }
 details.think summary:hover { color: var(--text); }
+
+/* 连着的思考、工具心跳收成一行（features/chat/folds.ts）：点开是列表，每条再点开看详情 */
+.fold { min-width: 0; max-width: 100%; font-size: 12px; color: var(--muted); }
+.fold-head {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0;
+  cursor: pointer; border-radius: calc(6px * var(--radius-scale));
+}
+.fold-head > .ui-icon { flex: none; }
+.fold-head:hover { color: var(--text); }
+.fold-head:focus-visible { outline: 1px solid var(--line); }
+.fold-text { flex: none; }
+.fold-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fold-items { display: none; }
+.fold-open > .fold-items {
+  display: flex; flex-direction: column; gap: 4px;
+  margin: 6px 0 2px 6px; padding-left: 12px; border-left: 2px solid var(--line);
+}
+/* 列表里的一段思考：标题是它的第一行，展开时也留着 */
+.fold-think details.think summary { display: flex; max-width: 100%; }
+.fold-think details.think summary > .ui-icon, .fold-think details.think summary > .think-label { display: none; }
+.fold-think details.think[open] summary .think-peek { display: inline; }
+.fold-think details.think .think-body { margin-top: 4px; }
+/* 心跳：工具与已运行时长，展开看原始事件 */
+details.fold-item > summary {
+  display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%;
+  cursor: pointer; list-style: none; border-radius: calc(6px * var(--radius-scale));
+}
+details.fold-item > summary::-webkit-details-marker { display: none; }
+details.fold-item > summary:hover { color: var(--text); }
+.beat-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); }
+.beat-time { flex: none; }
+.beat-raw { max-height: 240px; overflow: auto; margin: 4px 0 2px; font-size: 11.5px; color: var(--muted); white-space: pre; }
 details.think .think-body {
   white-space: pre-wrap;
   border-left: 2px solid var(--line);

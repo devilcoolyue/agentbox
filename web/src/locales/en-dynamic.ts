@@ -2700,4 +2700,7 @@ export default {
   "Agent “{p0}” 已完成": "Agent \"{p0}\" finished",
   "Agent “{p0}” 失败": "Agent \"{p0}\" failed",
   "Agent “{p0}” 已停止": "Agent \"{p0}\" stopped",
+  "思考过程 · {p0} 段": "Thought process · {p0} steps",
+  "心跳检查 · {p0} 次": "Heartbeat · {p0} checks",
+  "已运行 {p0}": "running for {p0}",
 } satisfies Record<string, string>;

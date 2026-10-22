@@ -1,0 +1,132 @@
+/* 对话流里连着出现的同类细行收成一行，点开是列表，列表里每一条再点开看详情：
+ *
+ *   🧠 思考过程 · 4 段      两段以上的思考连着时收起；列表每段带它的第一行
+ *   ♡ 心跳检查 · 10 次      Claude Code 的 tool_progress：长命令每 30 秒报一次还在跑，
+ *                           列表每条是工具与已运行时长，点开看原始事件
+ *
+ * TurnWriter.place 插入新节点前先交给 foldInto，被收进前一个折叠组就不再单独插入。
+ * 还在流式输出的思考块（.streaming）不收，免得边写边藏；完整事件到达后正式渲染的
+ * 那一块再收进去。Codex exec 回退的整段回放没有正式渲染，放完时由 stream.ts 调 foldThink。 */
+import type { AgentEvent } from "../../types.js";
+import { svgIcon } from "../../icons.js";
+import { setText, setTextRender, t as i18nText } from "../../i18n.js";
+import { el } from "./tool-rows.js";
+
+const labels = new WeakMap<Element, (n: number) => string>();
+
+function newFold(kind: "think" | "beat", icon: string, text: (n: number) => string) {
+  const wrap = el("div", "fold fold-" + kind);
+  const head = el("div", "fold-head");
+  head.tabIndex = 0;
+  head.setAttribute("role", "button");
+  head.setAttribute("aria-expanded", "false");
+  const label = el("span", "fold-text");
+  const items = el("div", "fold-items");
+  head.append(svgIcon(icon, 13), label);
+  wrap.append(head, items);
+  labels.set(wrap, text);
+  const toggle = () => {
+    const open = !wrap.classList.contains("fold-open");
+    wrap.classList.toggle("fold-open", open);
+    head.setAttribute("aria-expanded", String(open));
+  };
+  head.addEventListener("click", toggle);
+  head.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  return wrap;
+}
+
+/* 条数变了重新绑定标题（重新绑定会立即重画，语言切换时也按它重算） */
+function recount(fold: Element) {
+  const label = fold.querySelector<HTMLElement>(":scope > .fold-head > .fold-text"), text = labels.get(fold);
+  const n = fold.querySelector(":scope > .fold-items")!.childElementCount;
+  if (label && text) setTextRender(label, () => text(n));
+}
+
+/* ---------------- 思考过程 ---------------- */
+
+const isThink = (n: Element | null): n is HTMLDetailsElement => !!n && n.matches("details.think:not(.streaming)");
+
+/* 列表里每段用它的第一行当标题，点开看全文 */
+function asItem(think: HTMLDetailsElement) {
+  think.open = false;
+  const sum = think.querySelector(":scope > summary");
+  if (sum && !sum.querySelector(".think-peek")) {
+    const first = (think.querySelector(".think-body")?.textContent || "").trim().split("\n")[0].replace(/^\*\*(.+?)\*\*$/, "$1").trim();
+    if (first) sum.append(el("span", "think-peek", first));
+  }
+  return think;
+}
+
+function thinkFold(first: HTMLDetailsElement) {
+  const fold = newFold("think", "brain", n => i18nText("思考过程 · {p0} 段", { p0: String(n) }));
+  first.replaceWith(fold);
+  fold.querySelector(".fold-items")!.append(asItem(first));
+  recount(fold);
+  return fold;
+}
+
+/** 回放放完的思考块：前面紧挨着思考就并进去 */
+export function foldThink(node: HTMLElement) {
+  if (!isThink(node)) return;
+  const prev = node.previousElementSibling;
+  if (isThink(prev)) thinkFold(prev);
+  const group = node.previousElementSibling;
+  if (group?.classList.contains("fold-think")) { group.querySelector(".fold-items")!.append(asItem(node)); relabel(group); }
+}
+
+/* ---------------- 工具心跳 ---------------- */
+
+function secs(s: number) {
+  return s < 60 ? s + "s" : Math.floor(s / 60) + "m " + (s % 60) + "s";
+}
+
+/** tool_progress → 只有一条的心跳组；紧跟在另一个心跳组后面时由 foldInto 并进去 */
+export function heartbeatNode(ev: AgentEvent, title: string) {
+  const fold = newFold("beat", "heart-pulse", n => i18nText("心跳检查 · {p0} 次", { p0: String(n) }));
+  const item = document.createElement("details");
+  item.className = "fold-item beat";
+  const sum = document.createElement("summary");
+  const elapsed = typeof ev.elapsed_time_seconds === "number" ? ev.elapsed_time_seconds : undefined;
+  const what = el("span", "beat-what", title);
+  const time = el("span", "beat-time");
+  if (elapsed !== undefined) setText(time, "已运行 {p0}", { p0: secs(elapsed) });
+  sum.append(what, time);
+  const pre = el("pre", "beat-raw mono", JSON.stringify(ev, null, 2));
+  item.append(sum, pre);
+  item.dataset.elapsed = elapsed !== undefined ? String(elapsed) : "";
+  fold.querySelector(".fold-items")!.append(item);
+  relabel(fold);
+  return fold;
+}
+
+/* 心跳组标题后跟最近一次的已运行时长 */
+function relabel(fold: Element) {
+  recount(fold);
+  if (!fold.classList.contains("fold-beat")) return;
+  const head = fold.querySelector(":scope > .fold-head")!;
+  const last = fold.querySelector<HTMLElement>(":scope > .fold-items > .fold-item:last-child");
+  const elapsed = Number(last?.dataset.elapsed || NaN);
+  let meta = head.querySelector<HTMLElement>(".fold-meta");
+  if (!Number.isFinite(elapsed)) { meta?.remove(); return; }
+  if (!meta) { meta = el("span", "fold-meta"); head.append(meta); }
+  const what = last?.querySelector(".beat-what")?.textContent || "";
+  setTextRender(meta, () => " · " + (what ? what + " " : "") + i18nText("已运行 {p0}", { p0: secs(elapsed) }));
+}
+
+/* ---------------- 入口 ---------------- */
+
+/** 新节点能并进紧挨着的前一个节点就并进去，返回 true（调用方不再插入它） */
+export function foldInto(prev: Element | null, node: HTMLElement) {
+  if (!prev) return false;
+  if (node.classList.contains("fold-beat") && prev.classList.contains("fold-beat")) {
+    prev.querySelector(".fold-items")!.append(...node.querySelector(".fold-items")!.children);
+    relabel(prev);
+    return true;
+  }
+  if (!isThink(node)) return false;
+  if (isThink(prev)) prev = thinkFold(prev);
+  if (!prev.classList.contains("fold-think")) return false;
+  prev.querySelector(".fold-items")!.append(asItem(node));
+  relabel(prev);
+  return true;
+}

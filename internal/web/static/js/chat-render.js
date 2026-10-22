@@ -15,7 +15,8 @@ import { usageCard, usageReportOf } from "./features/chat/usage-card.js";
 import { syntaxMarks } from "./features/chat/syntax.js";
 import { fmtTokens } from "./usage-math.js";
 import { codexItemNodes } from "./features/chat/codex-items.js";
-import { breakClaudeGroup, claudeTaskProgress, claudeToolResults, claudeToolUse, subAgentKnown, useMarkdown } from "./features/chat/claude-tools.js";
+import { breakClaudeGroup, claudeTaskProgress, claudeToolResults, claudeToolTitle, claudeToolUse, subAgentKnown, useMarkdown } from "./features/chat/claude-tools.js";
+import { heartbeatNode } from "./features/chat/folds.js";
 export const USER_ATTACH_RE = /\[(图片|附件)#(\d+) (\/shared\/\.(?:images|file)\/[A-Za-z0-9._-]+)\]/g;
 /* 复制到剪贴板：clipboard API 优先，非安全上下文回退 execCommand */
 export async function copyText(text) {
@@ -826,7 +827,10 @@ export function liveNode(kind) {
         det.className = "think";
         det.open = true;
         const sum = document.createElement("summary");
-        setText(sum, "思考过程");
+        const label = document.createElement("span");
+        label.className = "think-label";
+        setText(label, "思考过程");
+        sum.append(svgIcon("brain", 13), label);
         const body = document.createElement("div");
         body.className = "think-body";
         det.append(sum, body);
@@ -987,6 +991,11 @@ function eventNodes(ev, opts) {
     }
     if (ev.type === "prompt_suggestion")
         return out; // 输入框里的灰色提示，不进对话流
+    // 长时间运行的工具每 30 秒一次心跳：连着的收成一行「心跳检查 · N 次」（features/chat/folds.ts）
+    if (ev.type === "tool_progress") {
+        out.push(heartbeatNode(ev, claudeToolTitle(String(ev.parent_tool_use_id || ""), typeof ev.tool_name === "string" ? ev.tool_name : "")));
+        return out;
+    }
     if (ev.type === "rate_limit_event") {
         const c = rateLimitChip(ev.rate_limit_info);
         if (c)

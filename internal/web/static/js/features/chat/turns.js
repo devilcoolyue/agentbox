@@ -3,6 +3,7 @@ import { sealQuestions, upsertQuestionCard } from "./questions.js";
 import { answerFooter, observeAnswer } from "../../chat-footer.js";
 import { renderEntry } from "../../chat-render.js";
 import { agentIcon } from "../../brand.js";
+import { foldInto } from "./folds.js";
 const footers = new WeakMap();
 /* Agent 回合分组：两条用户消息之间的 agent 输出（文字/工具行/思考…）
  * 归入同一个 .turn 容器，左侧挂品牌头像（OpenWebUI 式对话流）。
@@ -32,7 +33,7 @@ export class TurnWriter {
         const body = this.turnBody(), footer = this.footer;
         if (node.classList.contains("result") && body.querySelector(".msg.agent"))
             footer.setReceipt(node);
-        else
+        else if (!foldInto(footer.el.previousElementSibling, node))
             body.insertBefore(node, footer.el);
         footer.update();
     }
