@@ -71,6 +71,7 @@ var problemCatalog = map[string]problemDefinition{
 	"server_stopping":                 {503, "服务正在重启或停止", "请稍后重新连接并核对任务状态。", "wait", true},
 	"server_restarted":                {503, "服务重启，这一轮已中断", "已经执行的操作不会撤销；服务恢复后发消息即可接着做。", "check_result", false},
 	"server_upgraded":                 {503, "服务升级，这一轮已中断", "已经执行的操作不会撤销；服务恢复后发消息即可接着做。", "check_result", false},
+	"chat_turn_timed_out":             {504, "这一轮超过时长上限，已自动中断", "已经执行的操作不会撤销；发消息即可接着做。管理员可在系统设置中调整上限。", "check_result", false},
 	"websocket_failed":                {400, "对话连接不可用", "请检查网络及反向代理的 WebSocket 配置后重连。", "reconnect", true},
 	"internal_error":                  {500, "服务暂时无法完成操作", "请将操作编号交给管理员排查。", "contact_admin", false},
 }

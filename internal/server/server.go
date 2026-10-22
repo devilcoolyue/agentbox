@@ -66,6 +66,9 @@ func migrateLegacyUserDir(dataDir string) {
 }
 
 type Server struct {
+	// turnLimit, when set, replaces the configured turn time limit; tests
+	// use it for limits shorter than the setting's minutes allow.
+	turnLimit          time.Duration
 	decisionService    decision.Service
 	decisionProvider   func(config.DecisionJev) decision.Provider
 	delegations        delegationRegistry

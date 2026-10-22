@@ -65,6 +65,7 @@
 | `operation_timed_out` / `operation_cancelled` | 先检查空间和任务状态，再决定下一步 |
 | `server_stopping` | 稍后重新连接并核对任务状态 |
 | `server_restarted` / `server_upgraded` | 回合被服务停机打断（升级由 `release.py activate` 停服务前留下的 `upgrading.json` 识别）；已执行的操作不撤销，恢复后发消息接着做 |
+| `chat_turn_timed_out` | 回合超过 `turn_timeout_min`，服务端已像用户停止一样中断 CLI；已执行的操作不撤销，发消息接着做 |
 | `websocket_failed` | 检查网络、同源策略与反向代理的 WebSocket 支持 |
 | `internal_error` | 未分类的服务错误，提供操作编号给管理员 |
 

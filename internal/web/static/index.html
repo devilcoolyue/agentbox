@@ -913,6 +913,14 @@
                   <span class="note" data-i18n-text="[&quot;即时生效，无需重启；0 表示永不自动停机&quot;]">即时生效，无需重启；0 表示永不自动停机</span>
                 </div>
               </div>
+              <div class="card">
+                <h3 data-i18n="单轮对话时长上限">单轮对话时长上限</h3>
+                <p class="card-desc" data-i18n="一轮对话超过这个时长还没结束，自动中断，免得卡住或失控的回合一直占着工作空间、一直消耗额度。等待用户回答提问的时间不计入。">一轮对话超过这个时长还没结束，自动中断，免得卡住或失控的回合一直占着工作空间、一直消耗额度。等待用户回答提问的时间不计入。</p>
+                <label class="field"><span data-i18n="时长上限（分钟）">时长上限（分钟）</span><input id="set-turn-timeout" type="number" min="5" max="1440" step="1" required class="mono"></label>
+                <div class="card-foot">
+                  <span class="note" data-i18n="即时生效，从之后开始的回合起作用；可设 5–1440 分钟，默认 120。可能委派跑腿的回合至少 2 小时。">即时生效，从之后开始的回合起作用；可设 5–1440 分钟，默认 120。可能委派跑腿的回合至少 2 小时。</span>
+                </div>
+              </div>
               <div class="card" id="set-keepalive">
                 <h3 data-i18n="对话缓存保活">对话缓存保活</h3>
                 <p class="card-desc" data-i18n="用户离开时，服务端定期读一遍 Claude 对话的提示缓存，回来继续聊不用整段重写。每个空间由用户在「⋯ → 缓存保活」里自己开启；这里决定是否允许，以及默认值和上限。">用户离开时，服务端定期读一遍 Claude 对话的提示缓存，回来继续聊不用整段重写。每个空间由用户在「⋯ → 缓存保活」里自己开启；这里决定是否允许，以及默认值和上限。</p>

@@ -36,9 +36,9 @@ import (
 var delegateMCPHelper []byte
 
 const (
-	// A delegating turn waits for workers, so it gets more than the ordinary
-	// 30 minutes; each worker call is bounded separately.
-	delegationTurnTimeout   = 2 * time.Hour
+	// A delegating turn waits for workers, so it gets at least this long
+	// whatever the ordinary turn limit; each worker call is bounded separately.
+	delegationTurnMinimum   = 2 * time.Hour
 	delegationWorkerTimeout = 20 * time.Minute
 	// The MCP wall clock only has to outlast the server's own bounds.
 	delegationToolTimeout = 3 * time.Hour
@@ -221,7 +221,7 @@ func (s *Server) openDelegation(room *chatRoom, u store.User, receipt store.Chat
 	endpoint := "http://" + net.JoinHostPort(pb.Host, fmt.Sprint(ln.Addr().(*net.TCPAddr).Port))
 	ctx, cancel := context.WithCancel(s.workContext())
 	g := &delegationGrant{srv: s, room: room, owner: u, session: sess.ID, thread: receipt.ThreadID, turn: receipt.TurnID,
-		refs: opts.Workers, workers: workers, jev: jev, ticket: oauthRandom(), ctx: ctx, cancel: cancel, deadline: time.Now().Add(delegationTurnTimeout)}
+		refs: opts.Workers, workers: workers, jev: jev, ticket: oauthRandom(), ctx: ctx, cancel: cancel, deadline: time.Now().Add(s.delegationTurnTimeout())}
 	tools, _ := json.Marshal(delegationTools())
 	mcp, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"agentbox": map[string]any{
 		"type": "stdio", "command": "python3", "args": []string{"-I", delegationHelperPath},
@@ -283,6 +283,20 @@ func (g *delegationGrant) wait(limit time.Duration) {
 }
 
 // interruptActive stops a running worker for a user interrupt of the turn.
+// turnTimeout is how long one chat turn may run before it is stopped.
+func (s *Server) turnTimeout() time.Duration {
+	if s.turnLimit > 0 {
+		return s.turnLimit
+	}
+	return s.cfg.GetTurnTimeout()
+}
+
+// delegationTurnTimeout bounds a turn that may delegate: the configured turn
+// limit, but never less than delegationTurnMinimum.
+func (s *Server) delegationTurnTimeout() time.Duration {
+	return max(s.turnTimeout(), delegationTurnMinimum)
+}
+
 func (s *Server) interruptDelegation(session string) {
 	s.delegations.mu.Lock()
 	g := s.delegations.grants[session]

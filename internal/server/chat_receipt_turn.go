@@ -72,6 +72,15 @@ func (t *chatReceiptTurn) Fail(err error, code string) {
 	case t.room.srv.isStopping():
 		// Shutdown is not the user confirming an interrupt nor a CLI error.
 		t.outcome = store.ChatUncertain
+	case code == chat.ChatTurnTimedOut && t.Interrupted():
+		t.outcome, t.code = store.ChatInterrupted, "operation_cancelled" // the user got there first
+	case code == chat.ChatTurnTimedOut:
+		// The limit stopped the CLI. Once it exited the turn is over; one let
+		// go after the grace may still be running.
+		t.outcome = store.ChatUncertain
+		if err == nil || errors.Is(err, errChatInterrupted) || errors.As(err, &exited) {
+			t.outcome = store.ChatInterrupted
+		}
 	case (errors.Is(err, errChatInterrupted) || errors.As(err, &exited)) && t.Interrupted():
 		t.outcome, t.code = store.ChatInterrupted, "operation_cancelled"
 	case errors.As(err, &exited):

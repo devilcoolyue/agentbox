@@ -64,7 +64,7 @@ export async function smoke(page) {
  let upgradeStarts = 0, upgradeReads = 0, loseUpgradeResponse = false, upgradeOffline = false;
  const accounts = []; let accountCreates = 0, failOAuthOnce = true, oauthFinishes = 0, keyWrites = 0, modelDiscoveries = 0;
  let settings = { listen:'127.0.0.1:8180', agent_image:'fixture', permission_mode:'bypassPermissions', max_upload_mb:10,
-  idle_timeout_min:30, timezone:'UTC', container:{memory_mb:512,cpus:1,pids_limit:128,network:'none'},
+  idle_timeout_min:30, turn_timeout_min:120, timezone:'UTC', container:{memory_mb:512,cpus:1,pids_limit:128,network:'none'},
   resources:{max_running:2,max_running_per_user:1,min_free_bytes:0},models:{claude:[],codex:[{id:'fixture',label:'Fixture',reasoning:{support:'supported',control:'effort',levels:['low','high','xhigh']}},{id:'fixture-lite',label:'Fixture Lite',reasoning:{support:'supported',control:'effort',levels:['low','high']}},{id:'fixture-none',label:'No adjustment',reasoning:{support:'unsupported'}},{id:'fixture-custom',label:'Custom'}]}, default_models:{claude:'fixture',codex:'fixture'},
   terminal_tips:{tips:['fixture'],interval_sec:4,animation:'scroll'},tunnel:{enabled:false},proxy_bridge:{bind:'127.0.0.1:1081'},
   model_gateway:{bind:'172.17.0.1:1083',host:'172.17.0.1',dedicated_connections:false,active:false,needed:false},pricing:{} };
@@ -600,8 +600,10 @@ export async function smoke(page) {
   assert.equal(await page.locator('#set-savebar').isVisible(),false,'save bar shown without changes');
   await page.locator('#set-running').fill('4');
   await page.locator('#set-idle').fill('45');
+  assert.equal(await page.locator('#set-turn-timeout').inputValue(),'120');
+  await page.locator('#set-turn-timeout').fill('180');
   await page.locator('#set-savebar').waitFor();
-  assert.match(await page.locator('#set-savebar-text').innerText(),/容量与磁盘、空闲自动停机/);
+  assert.match(await page.locator('#set-savebar-text').innerText(),/容量与磁盘、空闲自动停机、单轮对话时长上限/);
   // Switching sections with unsaved edits asks first; cancelling keeps the edits.
   await page.locator('#set-nav [data-sec="interface"]').click();
   await page.locator('#dlg-ask[open]').waitFor();
@@ -613,6 +615,7 @@ export async function smoke(page) {
   assert.equal(settingsWrites,1,'save bar must merge dirty cards into one write');
   assert.equal(settings.resources.max_running,4);
   assert.equal(settings.idle_timeout_min,45);
+  assert.equal(settings.turn_timeout_min,180);
   // Discard restores the last saved values without a write.
   await page.locator('#set-running').fill('9');
   await page.locator('#set-discard').click();

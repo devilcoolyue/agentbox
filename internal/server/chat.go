@@ -390,7 +390,7 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 		control = controls[0]
 	}
 	service := chat.Service{Runtime: chatRuntime{r}, Usage: r.srv.usageService()}
-	in := chat.Input{SessionID: r.sessID, Text: text, Model: model, Effort: effort, Control: control}
+	in := chat.Input{SessionID: r.sessID, Text: text, Model: model, Effort: effort, Control: control, Timeout: r.srv.turnTimeout()}
 	if receipt != nil && receipt.receipt.Request != nil {
 		in.Suggestions = receipt.receipt.Request.Suggestions
 		in.Questions = receipt.receipt.Request.Questions
@@ -407,7 +407,7 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 		}
 		if grant != nil {
 			defer grant.close()
-			in.Extras, in.Timeout, in.Preface = grant.extras, delegationTurnTimeout, delegation.TurnReminder()
+			in.Extras, in.Timeout, in.Preface = grant.extras, r.srv.delegationTurnTimeout(), delegation.TurnReminder()
 		}
 	}
 	service.Run(parent, in, observer)

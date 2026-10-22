@@ -38,6 +38,8 @@ export default {
   "服务正在重启或停止": "The server is restarting or stopping",
   "服务重启，这一轮已中断": "The server restarted; this turn was cut off",
   "服务升级，这一轮已中断": "The server was upgraded; this turn was cut off",
+  "这一轮超过时长上限，已自动中断": "This turn ran past its time limit and was stopped",
+  "已经执行的操作不会撤销；发消息即可接着做。管理员可在系统设置中调整上限。": "Actions already taken are not undone; send a message to carry on. Administrators can change the limit in system settings.",
   "已经执行的操作不会撤销；服务恢复后发消息即可接着做。": "Actions already taken are not undone; once the server is back, send a message to carry on.",
   "消息所属的实例或登录身份已变化": "The instance or signed-in identity for this message has changed.",
   "消息编号与已接收内容或状态不一致": "The message ID conflicts with the accepted content or state.",

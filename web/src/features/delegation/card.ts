@@ -2,6 +2,7 @@
  * 历史里同一次委派会落多条（开始、结束、评价），按 ID 合并成一张卡片。
  * 跑腿模型的完整过程单独保存，点「查看跑腿过程」时按需读取，不进主对话的历史。 */
 import { api } from "../../api.js";
+import { problemMessages } from "../../problems.js";
 import { renderEvent, formatText } from "../../chat-render.js";
 import { settleToolRows } from "../chat/tool-rows.js";
 import { buttonLabel } from "../../icons.js";
@@ -120,7 +121,10 @@ function fill(el: HTMLElement, view: DelegationView) {
     parts.push(section("跑腿报告", report));
   }
   if (view.error_code && view.state !== "completed") {
-    const err = Object.assign(document.createElement("p"), { className: "dg-error", textContent: view.error_code });
+    // A known problem code reads as its message; others stay as the raw code.
+    const code = view.error_code, known = problemMessages[code];
+    const err = Object.assign(document.createElement("p"), { className: "dg-error" });
+    setTextRender(err, () => known ? t(known[0]) : code);
     parts.push(err);
   }
   if (view.feedback) {

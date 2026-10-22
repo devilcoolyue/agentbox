@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"sync/atomic"
 	"time"
 )
 
@@ -59,6 +60,9 @@ type Runtime interface {
 	// Stopping reports whether the server is shutting down; its interrupt
 	// ends every running turn.
 	Stopping() bool
+	// Interrupt stops the running turn's CLI the way a user's stop does,
+	// without counting as one. It must not block.
+	Interrupt()
 	ProviderSession(store.Session, string) error
 	// PromptSuggestions reports whether the started container's CLI can
 	// predict the next prompt; an older image would reject the flag.
@@ -77,6 +81,13 @@ type Runtime interface {
 	// its usage is booked. It must not block.
 	TurnEnded(TurnOutcome)
 }
+
+// ChatTurnTimedOut is the problem code of a turn its time limit stopped.
+const ChatTurnTimedOut = "chat_turn_timed_out"
+
+// TurnStopGrace is how long a turn whose time ran out waits for its stopped
+// CLI to end (its protocol interrupt, then SIGINT after 10 s) before letting go.
+var TurnStopGrace = 30 * time.Second
 
 // Turn outcomes reported to Runtime.TurnEnded.
 const (
@@ -204,11 +215,18 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 
 	timeout := in.Timeout
 	if timeout <= 0 {
-		timeout = 30 * time.Minute
+		timeout = config.DefaultTurnTimeoutMin * time.Minute
 	}
-	// The limit pauses while a question waits for the user (see ask).
+	// The limit pauses while a question waits for the user (see ask). When it
+	// runs out the CLI is stopped like a user's stop, so it cannot carry on
+	// unseen; the turn lets go of it only if it has not ended after the grace.
 	ctx, cancelTurn := context.WithCancelCause(parent)
-	clock := newTurnClock(timeout, func() { cancelTurn(context.DeadlineExceeded) })
+	var timedOut atomic.Bool
+	clock := newTurnClock(timeout, func() {
+		timedOut.Store(true)
+		r.Interrupt()
+		time.AfterFunc(TurnStopGrace, func() { cancelTurn(context.DeadlineExceeded) })
+	})
 	defer func() { clock.stop(); cancelTurn(context.Canceled) }()
 	outcome := TurnOutcome{SessionID: in.SessionID, Status: OutcomeFailed}
 	var began time.Time // set once the turn is admitted; see below
@@ -224,10 +242,14 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	}
 
 	fail := func(err error, fallback string) {
-		if errors.Is(err, context.Canceled) && errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
-			err = context.DeadlineExceeded // the turn ran out of time, nobody cancelled it
+		cause := err
+		if timedOut.Load() {
+			// The limit ended the turn, whatever the stopped CLI or its stream
+			// returned; like a user's stop, the conversation carries on.
+			cause, fallback = nil, ChatTurnTimedOut
+			outcome.Status = OutcomeInterrupted
 		}
-		p := r.Problem(ctx, "chat.turn", err, fallback)
+		p := r.Problem(ctx, "chat.turn", cause, fallback)
 		outcome.Code = p.Code
 		if receipt != nil {
 			receipt.Fail(err, p.Code)
@@ -389,8 +411,8 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if in.Fresh {
 		chatID = in.Resume
 	}
-	// The user's stop and the server's shutdown end the CLI's turn with a
-	// failed result; history shows one status saying why instead of that failure.
+	// The user's stop, the time limit and the server's shutdown end the CLI's
+	// turn with a failed result; history shows one status saying why instead.
 	executor := r.Executor(sess)
 	userStopped := func() bool { return executor.Interrupted != nil && executor.Interrupted() }
 	terminal := ""
@@ -432,7 +454,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 				return
 			}
 			entry := Entry{Kind: "event", Event: ev}
-			if event.Terminal != "" && event.Terminal != "completed" && (userStopped() || r.Stopping()) {
+			if event.Terminal != "" && event.Terminal != "completed" && (userStopped() || timedOut.Load() || r.Stopping()) {
 				entry.State = "interrupted"
 			}
 			record(entry, "agent_event", "")
@@ -502,8 +524,8 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		receipt.Completed(ctx)
 	}
 	cachePoint()
-	if terminal != "" && terminal != "completed" && !userStopped() && r.Stopping() {
-		fail(nil, "chat_failed") // the server's shutdown ended the turn; the problem says so
+	if terminal != "" && terminal != "completed" && !userStopped() && (timedOut.Load() || r.Stopping()) {
+		fail(nil, "chat_failed") // the limit or the server's shutdown ended the turn; the problem says so
 		return
 	}
 	state := "idle"

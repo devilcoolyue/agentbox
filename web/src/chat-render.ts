@@ -689,15 +689,17 @@ export function interruptedChip() {
   return c;
 }
 
-/* 回合的错误收尾。服务停机（重启、升级）打断的回合不是它自己出错，CLI 因此报的
- * 失败同样由服务端标为 interrupted，这里和用户停止一样只留一行说明，不带操作编号。 */
+/* 回合的错误收尾。服务停机（重启、升级）或时长上限打断的回合不是它自己出错，CLI
+ * 因此报的失败同样由服务端标为 interrupted，这里和用户停止一样只留一行说明，不带操作编号。 */
+const STOPPED_BY: Record<string, string> = { server_restarted: "refresh", server_upgraded: "refresh", chat_turn_timed_out: "clock" };
 export function problemChip(problem: APIProblem) {
-  if (problem.code !== "server_restarted" && problem.code !== "server_upgraded") return chip(formatProblem(problem, i18nText), "err");
+  const icon = problem.code ? STOPPED_BY[problem.code] : undefined;
+  if (!icon) return chip(formatProblem(problem, i18nText), "err");
   const c = document.createElement("div");
-  c.className = "chip stopped server-stop";
+  c.className = "chip stopped turn-stopped";
   const text = document.createElement("span");
   setTextRender(text, () => problemMessages[problem.code!].map(line => i18nText(line)).join(" · "));
-  c.append(svgIcon("refresh", 12), text);
+  c.append(svgIcon(icon, 12), text);
   return c;
 }
 

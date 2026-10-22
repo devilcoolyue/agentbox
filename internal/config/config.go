@@ -342,6 +342,7 @@ type Config struct {
 	DesktopSync           bool                     `json:"desktop_sync_enabled"`
 	Decision              DecisionConfig           `json:"decision"`
 	IdleTimeoutMin        int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
+	TurnTimeoutMin        int64                    `json:"turn_timeout_min"` // 单轮对话的时长上限（分钟），到时自动中断；0 为默认
 	TimeZone              string                   `json:"timezone"`         // IANA 时区；用于界面时间与用量筛选
 	Container             ContainerLimits          `json:"container"`
 	Tunnel                TunnelConfig             `json:"tunnel"`
@@ -381,6 +382,7 @@ func Load(path string) (*Config, error) {
 		MaxUploadMB:           512,
 		ChatHistoryTimeoutSec: 120,
 		IdleTimeoutMin:        30, // 缺省 30 分钟空闲即停机；config 里显式写 0 可关闭
+		TurnTimeoutMin:        DefaultTurnTimeoutMin,
 		TimeZone:              DefaultTimeZone,
 		Container: ContainerLimits{
 			MemoryMB:  2048,
@@ -526,6 +528,9 @@ func (c *Config) validateLocked() error {
 	}
 	if c.IdleTimeoutMin < 0 {
 		return fmt.Errorf("idle_timeout_min must be >= 0 (0 关闭自动停机)")
+	}
+	if c.TurnTimeoutMin != 0 && (c.TurnTimeoutMin < MinTurnTimeoutMin || c.TurnTimeoutMin > MaxTurnTimeoutMin) {
+		return fmt.Errorf("turn_timeout_min must be between %d and %d", MinTurnTimeoutMin, MaxTurnTimeoutMin)
 	}
 	if _, err := time.LoadLocation(c.TimeZone); err != nil {
 		return fmt.Errorf("timezone %q invalid: %w", c.TimeZone, err)
@@ -715,6 +720,7 @@ type persistConfig struct {
 	DesktopSync           bool                     `json:"desktop_sync_enabled"`
 	Decision              DecisionConfig           `json:"decision"`
 	IdleTimeoutMin        int64                    `json:"idle_timeout_min"`
+	TurnTimeoutMin        int64                    `json:"turn_timeout_min"`
 	TimeZone              string                   `json:"timezone"`
 	Container             ContainerLimits          `json:"container"`
 	Tunnel                TunnelConfig             `json:"tunnel"`
@@ -755,6 +761,7 @@ func (c *Config) saveLocked() error {
 		DesktopSync:           c.DesktopSync,
 		Decision:              c.Decision.normalized(),
 		IdleTimeoutMin:        c.IdleTimeoutMin,
+		TurnTimeoutMin:        c.TurnTimeoutMin,
 		TimeZone:              c.TimeZone,
 		Container:             c.Container,
 		Tunnel:                c.Tunnel,
@@ -873,6 +880,25 @@ func (c *Config) GetIdleTimeoutMin() int64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.IdleTimeoutMin
+}
+
+// Bounds of the per-turn time limit. It is a safety net for a turn nobody
+// stops (a hung CLI, a page left open); interrupts are the user's tool.
+const (
+	DefaultTurnTimeoutMin = 120
+	MinTurnTimeoutMin     = 5
+	MaxTurnTimeoutMin     = 24 * 60
+)
+
+// GetTurnTimeout returns how long one chat turn may run before it is stopped.
+// Configs built in code without Load fall back to the default.
+func (c *Config) GetTurnTimeout() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.TurnTimeoutMin == 0 {
+		return DefaultTurnTimeoutMin * time.Minute
+	}
+	return time.Duration(c.TurnTimeoutMin) * time.Minute
 }
 
 // GetTimeZone returns the configured IANA timezone. The fallback also covers
@@ -1100,6 +1126,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		DesktopSync:           c.DesktopSync,
 		Decision:              c.Decision.normalized(),
 		IdleTimeoutMin:        c.IdleTimeoutMin,
+		TurnTimeoutMin:        c.TurnTimeoutMin,
 		TimeZone:              c.TimeZone,
 		Container:             c.Container,
 		Tunnel:                c.Tunnel,
@@ -1153,6 +1180,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	}
 	c.Decision = work.Decision.Clone()
 	c.IdleTimeoutMin = work.IdleTimeoutMin
+	c.TurnTimeoutMin = work.TurnTimeoutMin
 	c.TimeZone = work.TimeZone
 	c.Container = work.Container
 	c.Resources = work.Resources
@@ -1191,6 +1219,7 @@ type SettingsPatch struct {
 	ChatHistoryTimeoutSec *int64                   `json:"chat_history_timeout_sec"`
 	DesktopSync           *bool                    `json:"desktop_sync_enabled"`
 	IdleTimeoutMin        *int64                   `json:"idle_timeout_min"`
+	TurnTimeoutMin        *int64                   `json:"turn_timeout_min"`
 	TimeZone              *string                  `json:"timezone"`
 	Container             *ContainerLimits         `json:"container"`
 	Models                map[string][]ModelOption `json:"models"`
@@ -1241,6 +1270,9 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.IdleTimeoutMin != nil {
 			w.IdleTimeoutMin = *p.IdleTimeoutMin
+		}
+		if p.TurnTimeoutMin != nil {
+			w.TurnTimeoutMin = *p.TurnTimeoutMin
 		}
 		if p.TimeZone != nil {
 			w.TimeZone = strings.TrimSpace(*p.TimeZone)

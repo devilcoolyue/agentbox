@@ -305,6 +305,12 @@ func (t *delegationTurn) interrupt() {
 	if t.interrupted.Swap(true) {
 		return
 	}
+	t.halt()
+	time.AfterFunc(8*time.Second, t.call.cancel)
+}
+
+// halt stops the worker's CLI: its protocol stop, else SIGINT by pid file.
+func (t *delegationTurn) halt() {
 	t.mu.Lock()
 	stop := t.stop
 	t.mu.Unlock()
@@ -320,7 +326,6 @@ func (t *delegationTurn) interrupt() {
 			}
 		}()
 	}
-	time.AfterFunc(8*time.Second, t.call.cancel)
 }
 
 type delegationRuntime struct{ t *delegationTurn }
@@ -391,6 +396,7 @@ func (r delegationRuntime) Problem(ctx context.Context, operation string, err er
 	return r.t.g.srv.turnProblem(ctx, operation, err, fallback)
 }
 func (r delegationRuntime) Stopping() bool { return r.t.g.srv.stopping() }
+func (r delegationRuntime) Interrupt()     { r.t.halt() }
 func (r delegationRuntime) ProviderSession(_ store.Session, id string) error {
 	return r.t.g.srv.store.SaveDelegationProviderSession(r.t.d.ID, id)
 }

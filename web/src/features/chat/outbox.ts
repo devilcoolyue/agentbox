@@ -14,7 +14,7 @@ type Tone="busy"|"attention"|"error"|"done"|"quiet";
 type Look={title:string;reason:string;tone:Tone;icon:string};
 // Why a turn's outcome is unknown, by receipt code. Shown so "review" is not a
 // riddle: each names what the server could not confirm.
-const unknownReasons:Record<string,string>={server_restarted:"服务重启时任务正在运行",server_upgraded:"服务升级时任务正在运行",execution_incomplete:"没有收到任务结束信号",history_write_failed:"对话记录没有完整保存",usage_write_failed:"用量没有记账成功",receipt_write_failed:"任务状态没有保存成功",chat_failed:"任务报错结束"};
+const unknownReasons:Record<string,string>={server_restarted:"服务重启时任务正在运行",server_upgraded:"服务升级时任务正在运行",chat_turn_timed_out:"超过时长上限后没有确认停下",execution_incomplete:"没有收到任务结束信号",history_write_failed:"对话记录没有完整保存",usage_write_failed:"用量没有记账成功",receipt_write_failed:"任务状态没有保存成功",chat_failed:"任务报错结束"};
 function look(state:Outgoing["state"],code="",merged=false):Look{
  switch(state){
   case "queued":return {title:"排队中",reason:"这一轮结束后自动执行",tone:"busy",icon:"clock"};
@@ -25,7 +25,7 @@ function look(state:Outgoing["state"],code="",merged=false):Look{
   case "completed":return merged?{title:"已插入当前任务",reason:"当前步骤结束后生效",tone:"done",icon:"send"}:{title:"已完成",reason:"",tone:"done",icon:"check"};
   // A failure after running may have changed files; one before never ran.
   case "failed":return code==="turn_failed"?{title:"执行出错",reason:"可能已改动部分文件，请查看对话和文件",tone:"error",icon:"x-circle"}:{title:"未执行",reason:problemMessages[code]?.[0]||"没有执行，可以修改后重新发送",tone:"error",icon:"x-circle"};
-  case "interrupted":return {title:"已中断",reason:"",tone:"quiet",icon:"stop"};
+  case "interrupted":return {title:"已中断",reason:code==="chat_turn_timed_out"?"超过单轮时长上限，已自动中断":"",tone:"quiet",icon:"stop"};
   case "uncertain":return {title:"结果不确定",reason:unknownReasons[code]||"无法确认任务做到了哪一步",tone:"attention",icon:"alert"};
   case "reviewed":return {title:"已查看结果",reason:unknownReasons[code]||"",tone:"quiet",icon:"check"};
   case "abandoned":return code==="withdrawn"?{title:"已撤回",reason:"没有执行",tone:"quiet",icon:"undo"}:{title:"已放弃",reason:"没有执行",tone:"quiet",icon:"close"};

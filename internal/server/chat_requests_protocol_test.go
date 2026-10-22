@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"agentbox/internal/chat"
 	"agentbox/internal/config"
 	"agentbox/internal/dockerx"
 	"agentbox/internal/store"
@@ -591,6 +592,65 @@ func TestShutdownNamesWhatEndedTheTurn(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// The turn time limit stops the CLI like a user's stop rather than letting it
+// run on unseen: history shows one timeout status instead of the CLI's failure,
+// and the receipt is interrupted once the CLI ended, uncertain when the turn
+// had to let go of a CLI that never answered.
+func TestTurnTimeLimitStopsTheCLI(t *testing.T) {
+	for _, answers := range []bool{true, false} {
+		t.Run(fmt.Sprint(answers), func(t *testing.T) {
+			grace := chat.TurnStopGrace
+			chat.TurnStopGrace = 10 * time.Second
+			if !answers {
+				chat.TurnStopGrace = 100 * time.Millisecond
+			}
+			t.Cleanup(func() { chat.TurnStopGrace = grace })
+			f := newReceiptFixture(t, "{\"type\":\"turn.failed\",\"status\":\"interrupted\"}\n", false)
+			f.s.turnLimit = 100 * time.Millisecond
+			id := newOperationID()
+			receiptFrom(t, f.request("PUT", "requests/"+id, "alice", f.input))
+			deadline := time.Now().Add(5 * time.Second)
+			for f.interruptions.Load() == 0 {
+				if time.Now().After(deadline) {
+					t.Fatal("the time limit never stopped the CLI")
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+			if answers {
+				f.unblock() // the CLI ends its turn on the interrupt
+			}
+			c := f.wait(t, id)
+			want := store.ChatInterrupted
+			if !answers {
+				want = store.ChatUncertain
+			}
+			if c.State != want || c.ErrorCode != chat.ChatTurnTimedOut {
+				t.Fatal("receipt", c.State, c.ErrorCode)
+			}
+			raw, err := os.ReadFile(f.s.threadPath(f.sess, f.input.ThreadID))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var status *logEntry
+			for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+				var e logEntry
+				if err := json.Unmarshal([]byte(line), &e); err != nil {
+					t.Fatal(err)
+				}
+				if e.Kind == "event" && strings.Contains(string(e.Event), "turn.failed") && e.State != "interrupted" {
+					t.Fatalf("the CLI's failure is shown: %s", raw)
+				}
+				if e.Kind == "status" && e.State == "error" {
+					status = &e
+				}
+			}
+			if status == nil || status.ProblemDetails == nil || status.Code != chat.ChatTurnTimedOut {
+				t.Fatalf("status: %s", raw)
+			}
+		})
 	}
 }
 

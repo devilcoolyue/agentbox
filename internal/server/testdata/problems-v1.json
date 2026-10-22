@@ -258,6 +258,14 @@
       "retryable": false
     },
     {
+      "code": "chat_turn_timed_out",
+      "http_status": 504,
+      "error": "这一轮超过时长上限，已自动中断",
+      "hint": "已经执行的操作不会撤销；发消息即可接着做。管理员可在系统设置中调整上限。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
       "code": "websocket_failed",
       "http_status": 400,
       "error": "对话连接不可用",

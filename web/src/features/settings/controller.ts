@@ -475,6 +475,7 @@ function fillSettingsForms() {
   $<HTMLInputElement>("set-user-running").value = String(st.resources?.max_running_per_user || 0);
   $<HTMLInputElement>("set-free-gib").value = String((st.resources?.min_free_bytes || 0) / (1024 ** 3));
   $<HTMLInputElement>("set-idle").value = String(st.idle_timeout_min);
+  $<HTMLInputElement>("set-turn-timeout").value = String(st.turn_timeout_min ?? 120);
   const keep = st.cache_keepalive;
   $("set-keepalive").classList.toggle("hidden", !keep); // 旧服务端没有这一项
   if (keep) {
@@ -806,6 +807,8 @@ function initSaveBar(signal: AbortSignal) {
       } : null },
     { id: "idle", get label() { return i18nText("空闲自动停机"); }, fields: ["set-idle"],
       patch: () => ({ idle_timeout_min: Number(inputVal("set-idle")) }) },
+    { id: "turn-timeout", get label() { return i18nText("单轮对话时长上限"); }, fields: ["set-turn-timeout"],
+      patch: () => valid("set-turn-timeout") ? { turn_timeout_min: Number(inputVal("set-turn-timeout")) } : null },
     { id: "keepalive", get label() { return i18nText("对话缓存保活"); }, fields: ["set-ka-allowed", "set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval"],
       patch: () => valid("set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval") ? {
         cache_keepalive: {

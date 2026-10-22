@@ -145,6 +145,13 @@ func (a chatRuntime) Problem(ctx context.Context, operation string, err error, f
 	return a.room.srv.turnProblem(ctx, operation, err, fallback)
 }
 func (a chatRuntime) Stopping() bool { return a.room.srv.stopping() }
+func (a chatRuntime) Interrupt() {
+	go func() {
+		ctx, cancel := context.WithTimeout(a.room.srv.workContext(), 10*time.Second)
+		defer cancel()
+		a.room.interruptContext(ctx)
+	}()
+}
 func (a chatRuntime) ProviderSession(sess store.Session, id string) error {
 	_, writeErr := a.room.srv.store.Update(sess.ID, func(s *store.Session) { s.ChatSession = id })
 	if writeErr != nil {

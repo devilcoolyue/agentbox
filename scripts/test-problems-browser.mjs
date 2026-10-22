@@ -72,13 +72,15 @@ export async function problemsSmoke(page, base, socket, history) {
       history([{kind:'event',state:'interrupted',ts:'2026-10-05T00:00:00Z',event:{type:'result',subtype:'error_during_execution',is_error:true}},
         {kind:'status',state:'error',ts:'2026-10-05T00:00:01Z',...problem('server_upgraded'),action:'check_result'}]);
       await page.evaluate(async()=>{const {loadHistory}=await import('/_v/{{BUILD}}/js/chat.js');await loadHistory();});
-      const stop=page.locator('#chat-log .chip.stopped.server-stop').last();
+      const stop=page.locator('#chat-log .chip.stopped.turn-stopped').last();
       for (const text of expected('server_upgraded',locale)) await stop.filter({hasText:text}).waitFor();
       assert.ok(!(await stop.innerText()).includes(id));
       assert.equal(await page.locator('#chat-log .chip.err').count(),0);
       assert.ok(!(await page.locator('#chat-log').innerText()).includes('error_during_execution'));
-      socket().send(JSON.stringify({type:'status',state:'error',...problem('server_restarted'),action:'check_result'}));
-      await page.locator('#chat-log .chip.stopped.server-stop').filter({hasText:expected('server_restarted',locale)[0]}).waitFor();
+      for (const code of ['server_restarted','chat_turn_timed_out']) {
+        socket().send(JSON.stringify({type:'status',state:'error',...problem(code),action:'check_result'}));
+        await page.locator('#chat-log .chip.stopped.turn-stopped').filter({hasText:expected(code,locale)[0]}).waitFor();
+      }
       assert.equal(await page.locator('#chat-log .chip.err').count(),0);
     }
     history([{kind:'status',state:'error',ts:'2026-10-05T00:00:00Z',error:'legacy-history-error'}]);
@@ -95,7 +97,7 @@ export async function problemsSmoke(page, base, socket, history) {
     assert.equal(await page.locator('#chat-conn').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'connection error overflows on narrow screen');
     await mkdir('output/playwright',{recursive:true});
     await page.screenshot({path:'output/playwright/problems-english-mobile.png',animations:'disabled'});
-    console.log('Problems browser: three-language login/start/chat/history, server restart/upgrade notice, old-server fallback, redaction, narrow layout and WS connection reference passed');
+    console.log('Problems browser: three-language login/start/chat/history, server restart/upgrade/time-limit notice, old-server fallback, redaction, narrow layout and WS connection reference passed');
   } finally {
     await page.unroute('**/api/sessions/fixture-space/start',handler);
     history([]);

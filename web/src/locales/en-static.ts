@@ -830,4 +830,8 @@ export default {
   "用户最长可设（小时）": "Longest users may set (hours)",
   "保活间隔（分钟）": "Keepalive interval (minutes)",
   "即时生效；取消允许后所有空间立即停止保活。间隔要小于缓存的 1 小时，可设 30–55 分钟。": "Applies immediately. Disallowing stops every workspace's keepalive at once. The interval must stay under the cache's one hour: 30–55 minutes.",
+  "单轮对话时长上限": "Chat turn time limit",
+  "一轮对话超过这个时长还没结束，自动中断，免得卡住或失控的回合一直占着工作空间、一直消耗额度。等待用户回答提问的时间不计入。": "A turn still running after this long is stopped automatically, so a stuck or runaway turn doesn't hold its workspace or keep spending credit. Time spent waiting for a user's answer doesn't count.",
+  "时长上限（分钟）": "Time limit (minutes)",
+  "即时生效，从之后开始的回合起作用；可设 5–1440 分钟，默认 120。可能委派跑腿的回合至少 2 小时。": "Applies immediately to turns that start afterwards. 5–1440 minutes, 120 by default. Turns that may delegate to workers get at least 2 hours.",
 } satisfies Record<string, string>;

@@ -32,6 +32,7 @@ type settingsView struct {
 	ChatHistoryTimeoutSec int64                           `json:"chat_history_timeout_sec"`
 	DesktopSync           bool                            `json:"desktop_sync_enabled"`
 	IdleTimeoutMin        int64                           `json:"idle_timeout_min"`
+	TurnTimeoutMin        int64                           `json:"turn_timeout_min"`
 	TimeZone              string                          `json:"timezone"`
 	Container             config.ContainerLimits          `json:"container"`
 	Models                map[string][]config.ModelOption `json:"models"`
@@ -62,6 +63,7 @@ func (s *Server) settingsView() settingsView {
 		ChatHistoryTimeoutSec: s.cfg.GetChatHistoryTimeoutSec(),
 		DesktopSync:           s.cfg.GetDesktopSyncEnabled(),
 		IdleTimeoutMin:        s.cfg.GetIdleTimeoutMin(),
+		TurnTimeoutMin:        int64(s.cfg.GetTurnTimeout() / time.Minute),
 		TimeZone:              s.cfg.GetTimeZone(),
 		Container:             s.cfg.GetContainer(),
 		Models:                s.cfg.GetModels(),

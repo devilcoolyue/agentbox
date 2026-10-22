@@ -720,6 +720,8 @@ export interface Settings {
   chat_history_timeout_sec?: number;
   /** 会话空闲自动停机的分钟数；0 = 关闭 */
   idle_timeout_min: number;
+  /** 单轮对话的时长上限（分钟）；旧服务端没有这一项 */
+  turn_timeout_min?: number;
   /** 控制台显示与使用记录筛选使用的 IANA 时区 */
   timezone: string;
   container: ContainerLimits;
