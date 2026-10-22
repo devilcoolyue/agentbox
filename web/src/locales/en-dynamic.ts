@@ -2633,7 +2633,7 @@ export default {
   "点击查看或调整": "Click to view or adjust",
   "下一轮结束后，上下文达到门槛就开始保活。": "Starts after the next turn once the context reaches the threshold.",
   "这一轮写的不是 1 小时缓存，续不上。": "This turn didn't write a one-hour cache, so it can't be kept.",
-  "当前上下文 {tokens}，未到 {min} 门槛。": "The context is {tokens}, below the {min} threshold.",
+  "上一轮结束时上下文 {tokens}，未到 {min} 门槛；每轮结束后重新判断。": "The context was {tokens} when the last turn ended, below the {min} threshold; checked again after each turn.",
   "下一轮结束后开始保活。": "Starts after the next turn.",
   "缓存保活已开启": "Cache keepalive is on",
   "离开超过 1 小时再回来，要重写约 {tokens} token 的缓存（≈{cost}）。": "Coming back after more than an hour rewrites about {tokens} tokens of cache (≈{cost}).",

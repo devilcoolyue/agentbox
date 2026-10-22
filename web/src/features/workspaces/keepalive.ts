@@ -239,7 +239,7 @@ export function chatChipState(v: KeepaliveView | undefined): ChipState {
     const why = !chat ? i18nText("下一轮结束后，上下文达到门槛就开始保活。")
       : chat.ttl !== "1h" ? i18nText("这一轮写的不是 1 小时缓存，续不上。")
       : chat.prompt_tokens < v.effective.min_context_tokens
-        ? i18nText("当前上下文 {tokens}，未到 {min} 门槛。", {tokens: fmtTokens(chat.prompt_tokens), min: fmtTokens(v.effective.min_context_tokens)})
+        ? i18nText("上一轮结束时上下文 {tokens}，未到 {min} 门槛；每轮结束后重新判断。", {tokens: fmtTokens(chat.prompt_tokens), min: fmtTokens(v.effective.min_context_tokens)})
         : i18nText("下一轮结束后开始保活。");
     return {show: true, on: true, tip: () => [i18nText("缓存保活已开启"), why, i18nText("点击查看或调整")].join("\n")};
   }
