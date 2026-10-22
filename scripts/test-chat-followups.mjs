@@ -188,7 +188,7 @@ async function scenario(browser,{mobile}={}){
   return [html({kind:'event',state:'interrupted',event:{type:'result',subtype:'error_during_execution',is_error:true}}),html({kind:'status',state:'interrupted'}),html({kind:'event',event:{type:'result',subtype:'error_during_execution',is_error:true}})];});
  assert.deepEqual(replayed[0],[]);
  assert.match(replayed[1].join(),/chip stopped:已中断/);
- assert.match(replayed[2].join(),/chip err:✗ error_during_execution/,'real failures still shown');
+ assert.match(replayed[2].join(),/chip err has-icon:error_during_execution/,'real failures still shown');
  // Codex cannot be steered: always queue, even with the modifier.
  await open('space-c');
  await input.fill('codex 任务');await page.locator('#chat-send').click();await cleared();
