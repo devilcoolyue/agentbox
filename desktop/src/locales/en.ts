@@ -39,7 +39,7 @@ export default {
   "服务重启，这一轮已中断": "The server restarted; this turn was cut off",
   "服务升级，这一轮已中断": "The server was upgraded; this turn was cut off",
   "5 小时额度达到暂停阈值，这一轮已暂停": "The five-hour limit reached the pause threshold; this turn is paused",
-  "已经执行的操作不会撤销；额度重置后自动发「继续」接着做。可在「缓存保活」里调整暂停阈值。": "Actions already taken are not undone; a “继续” (continue) message is sent automatically once the limit resets. Change the pause threshold under Cache keepalive.",
+  "已经执行的操作不会撤销；额度重置后自动发「继续」接着做。可在「缓存保活」里调整暂停阈值。": "Actions already taken are not undone; a “continue” message is sent automatically once the limit resets. Change the pause threshold under Cache keepalive.",
   "5 小时额度已达到暂停阈值": "The five-hour limit has reached the pause threshold",
   "剩余额度留给缓存保活。额度重置后再发，或以排队方式发送；也可在「缓存保活」里调高或关闭暂停阈值。": "The rest is kept for the cache keepalive. Send after the reset or queue the message, or raise or turn off the pause threshold under Cache keepalive.",
   "这一轮超过时长上限，已自动中断": "This turn ran past its time limit and was stopped",
