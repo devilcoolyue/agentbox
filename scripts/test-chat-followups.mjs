@@ -23,7 +23,7 @@ async function scenario(browser,{mobile}={}){
  const context=await browser.newContext(mobile?{viewport:{width:390,height:780},hasTouch:true,isMobile:true}:{viewport:{width:1280,height:900}});
  const page=await context.newPage();page.setDefaultTimeout(15000);
  const errors=[],puts=[],actions=[],sockets=new Set(),receipts=new Map();let seq=0,runningID='';
- const running={};
+ const running={},paused={};
  await context.addInitScript(()=>{if(window===window.top&&/^https?:$/.test(location.protocol))localStorage.setItem('agentbox.language','zh-CN');});
  page.on('pageerror',e=>{if(!cancelledFetchError(e))errors.push(e.message);});
  await context.routeWebSocket('**/api/sessions/*/chat?*',ws=>{
@@ -57,7 +57,7 @@ async function scenario(browser,{mobile}={}){
     const input=req.postDataJSON();puts.push({session,input});seq++;
     let c={request_id:id,session_id:session,thread_id:thread,turn_id:'t'+seq,request:input,revision:3,created_at:now(),updated_at:now()};
     if(running[session]&&input.delivery==='steer'&&session==='space-a')c={...c,state:'completed',turn_id:'',merged_into:runningID};
-    else if(running[session]&&input.delivery)c={...c,state:'queued',revision:1};
+    else if((running[session]||paused[session])&&input.delivery)c={...c,state:'queued',revision:1};
     else{c={...c,state:'running'};running[session]=true;runningID=id;setTimeout(()=>{emit(session,{type:'status',state:'running'});emit(session,{type:'user_message',text:input.text,turn:{id:c.turn_id}});},20);}
     receipts.set(id,c);body={version:1,receipt:c,replayed:false};status=202;
    }else if(req.method()==='POST'&&receipts.has(id)){
@@ -189,6 +189,22 @@ async function scenario(browser,{mobile}={}){
  assert.deepEqual(replayed[0],[]);
  assert.match(replayed[1].join(),/chip stopped:已中断/);
  assert.match(replayed[2].join(),/chip err has-icon:error_during_execution/,'real failures still shown');
+ // A five-hour pause: the turn it stopped reads as stopped, the composer says
+ // until when, and a message sent meanwhile queues for the reset.
+ emit('space-a',{type:'status',kind:'status',state:'error',code:'chat_quota_paused',error:'synthetic',hint:'synthetic',ts:now()});
+ await page.locator('#chat-log .chip.stopped',{hasText:'5 小时额度达到暂停阈值，这一轮已暂停'}).waitFor();
+ assert.equal(await page.locator('#chat-log .chip.err').count(),0,'pause shown as an error');
+ paused['space-a']=true;
+ emit('space-a',{type:'quota_pause',pause:{percent:96,threshold:95,resets_at:Date.now()+2*3600000}});
+ await page.waitForFunction(()=>/^5 小时额度已用 96%，暂停到 \d\d:\d\d；现在发送会排队，重置后执行$/.test(document.querySelector('#chat-input').placeholder));
+ await input.fill('重置后接着做');await page.locator('#chat-send').click();await cleared();
+ assert.equal(puts.at(-1).input.delivery,'queue','sent during the pause without queueing');
+ await toast('已排队，5 小时额度重置后自动执行');
+ await page.waitForFunction(()=>document.querySelector('#chat-delivery-reason')?.textContent==='5 小时额度重置后自动执行');
+ paused['space-a']=false;
+ emit('space-a',{type:'quota_pause',pause:null});
+ await page.waitForFunction(()=>document.querySelector('#chat-delivery-reason')?.textContent==='这一轮结束后自动执行');
+ assert.ok(!/5 小时额度/.test(await input.getAttribute('placeholder')),'placeholder kept the pause');
  // Codex cannot be steered: always queue, even with the modifier.
  await open('space-c');
  await input.fill('codex 任务');await page.locator('#chat-send').click();await cleared();

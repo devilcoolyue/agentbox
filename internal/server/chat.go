@@ -291,6 +291,9 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 	}
 	room.mu.Unlock()
 	_ = cw.send(status)
+	if _, paused := s.quotaPause(sess); paused {
+		_ = cw.send(room.quotaPauseMessage())
+	}
 
 	conn.SetReadDeadline(time.Now().Add(wsPongWait))
 	conn.SetReadLimit(4 << 20)
@@ -351,6 +354,10 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 			}
 			if _, err := s.sessionAccount(sess); err != nil {
 				reject(classifyProblem(err, "account_unavailable"))
+				continue
+			}
+			if _, paused := s.quotaPaused(sess.ID); paused {
+				reject(chatRequestErrorCode(errChatPaused))
 				continue
 			}
 			if err := room.begin(); err != nil {

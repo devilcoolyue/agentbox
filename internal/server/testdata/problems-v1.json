@@ -258,6 +258,22 @@
       "retryable": false
     },
     {
+      "code": "chat_quota_paused",
+      "http_status": 429,
+      "error": "5 小时额度达到暂停阈值，这一轮已暂停",
+      "hint": "已经执行的操作不会撤销；额度重置后自动发「继续」接着做。可在「缓存保活」里调整暂停阈值。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "chat_quota_reserved",
+      "http_status": 429,
+      "error": "5 小时额度已达到暂停阈值",
+      "hint": "剩余额度留给缓存保活。额度重置后再发，或以排队方式发送；也可在「缓存保活」里调高或关闭暂停阈值。",
+      "action": "wait",
+      "retryable": true
+    },
+    {
       "code": "chat_turn_timed_out",
       "http_status": 504,
       "error": "这一轮超过时长上限，已自动中断",

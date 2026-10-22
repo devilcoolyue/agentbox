@@ -487,6 +487,10 @@ export function createSettingsController() {
             $("set-ka-hours").value = String(keep.max_hours);
             $("set-ka-limit").value = String(keep.max_hours_limit);
             $("set-ka-interval").value = String(keep.interval_minutes);
+            // 旧服务端没有 5 小时额度暂停
+            $("set-ka-pause-field").hidden = keep.pause_percent === undefined;
+            $("set-ka-pause").disabled = keep.pause_percent === undefined;
+            $("set-ka-pause").value = String(keep.pause_percent ?? "");
         }
         const tz = $("set-timezone");
         if (![...tz.options].some((o) => o.value === st.timezone)) {
@@ -819,14 +823,15 @@ export function createSettingsController() {
                 patch: () => ({ idle_timeout_min: Number(inputVal("set-idle")) }) },
             { id: "turn-timeout", get label() { return i18nText("单轮对话时长上限"); }, fields: ["set-turn-timeout"],
                 patch: () => valid("set-turn-timeout") ? { turn_timeout_min: Number(inputVal("set-turn-timeout")) } : null },
-            { id: "keepalive", get label() { return i18nText("对话缓存保活"); }, fields: ["set-ka-allowed", "set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval"],
-                patch: () => valid("set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval") ? {
+            { id: "keepalive", get label() { return i18nText("对话缓存保活"); }, fields: ["set-ka-allowed", "set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval", "set-ka-pause"],
+                patch: () => valid("set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval", "set-ka-pause") ? {
                     cache_keepalive: {
                         disabled: !$("set-ka-allowed").checked,
                         min_context_tokens: Number(inputVal("set-ka-min")),
                         max_hours: Number(inputVal("set-ka-hours")),
                         max_hours_limit: Number(inputVal("set-ka-limit")),
                         interval_minutes: Number(inputVal("set-ka-interval")),
+                        ...($("set-ka-pause-field").hidden ? {} : { pause_percent: Number(inputVal("set-ka-pause")) }),
                     },
                 } : null },
             { id: "timezone", get label() { return i18nText("界面时区"); }, fields: ["set-timezone"],

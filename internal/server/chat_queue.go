@@ -94,7 +94,8 @@ func (r *chatRoom) kickQueue() {
 // dispatchQueue starts the oldest queued request once the room is free and no
 // unreviewed turn blocks it. Turn ends, reviews and startup call it; a request
 // the workspace no longer admits (thread switched, quota, account) fails
-// without running and the next one is tried.
+// without running and the next one is tried. A five-hour pause holds the
+// queue; the window's reset dispatches it (quota_pause.go).
 func (r *chatRoom) dispatchQueue() {
 	s := r.srv
 	r.submitMu.Lock()
@@ -105,6 +106,9 @@ func (r *chatRoom) dispatchQueue() {
 			if !errors.Is(err, sql.ErrNoRows) {
 				log.Printf("chat queue %s: %v", r.sessID, err)
 			}
+			return
+		}
+		if _, paused := s.quotaPaused(r.sessID); paused {
 			return
 		}
 		if r.begin() != nil {

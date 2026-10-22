@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -39,6 +40,19 @@ type keepaliveView struct {
 	IntervalMinutes  int                 `json:"interval_minutes"`
 	Chat             *keepaliveChatView  `json:"chat,omitempty"`
 	Plans            []keepalivePlanView `json:"plans"`
+	// The five-hour pause (quota_pause.go): the workspace's own threshold
+	// (0 follows PauseDefault, -1 is off), the administrator's default, the
+	// account's latest window while it lasts, and the pause itself.
+	PausePercent int             `json:"pause_percent"`
+	PauseDefault int             `json:"pause_default"`
+	FiveHour     *fiveHourView   `json:"five_hour,omitempty"`
+	Paused       *quotaPauseView `json:"paused,omitempty"`
+}
+
+// fiveHourView is the latest five-hour window the account's responses reported.
+type fiveHourView struct {
+	Percent  float64 `json:"percent"`
+	ResetsAt int64   `json:"resets_at"` // Unix ms
 }
 
 // keepaliveChatView is the chat's latest request within the cache's hour.
@@ -80,7 +94,14 @@ func (s *Server) keepaliveView(sess store.Session) keepaliveView {
 		Effective:       keepaliveLimits{cfg.maxHours, cfg.minTokens},
 		MaxHoursLimit:   cfg.admin.MaxHoursLimit,
 		IntervalMinutes: cfg.admin.IntervalMinutes,
-		Plans:           []keepalivePlanView{}}
+		Plans:           []keepalivePlanView{},
+		PausePercent:    cfg.PausePercent, PauseDefault: cfg.admin.PausePercent}
+	if w, ok := s.quota.window(sess.AccountID); ok && time.Now().Before(w.ResetsAt) {
+		v.FiveHour = &fiveHourView{Percent: w.Percent, ResetsAt: w.ResetsAt.UnixMilli()}
+	}
+	if p, ok := s.quotaPause(sess); ok {
+		v.Paused = &p
+	}
 	if pt, ok := s.keepalive.point(chatSlot(sess.ID)); ok && time.Since(pt.lastUse()) < cacheLifetime {
 		prompt := pt.point.Prompt.Prompt
 		v.Chat = &keepaliveChatView{PromptTokens: prompt, TTL: pt.point.Prompt.TTL, At: pt.at.UnixMilli(),
@@ -124,6 +145,8 @@ func (s *Server) handlePutKeepalive(w http.ResponseWriter, r *http.Request, sess
 		Terminal         bool  `json:"terminal"`
 		MaxHours         int   `json:"max_hours"`
 		MinContextTokens int64 `json:"min_context_tokens"`
+		// Absent (an older page) keeps the saved threshold.
+		PausePercent *int `json:"pause_percent"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
@@ -143,9 +166,17 @@ func (s *Server) handlePutKeepalive(w http.ResponseWriter, r *http.Request, sess
 	case body.MinContextTokens < 0 || body.MinContextTokens > maxKeepaliveMinTokens:
 		writeErr(w, http.StatusBadRequest, "上下文门槛无效")
 		return
+	case body.PausePercent != nil && *body.PausePercent != 0 && *body.PausePercent != -1 &&
+		(*body.PausePercent < config.MinPausePercent || *body.PausePercent > config.MaxPausePercent):
+		writeErr(w, http.StatusBadRequest, fmt.Sprintf("暂停阈值要在 %d–%d%% 之间", config.MinPausePercent, config.MaxPausePercent))
+		return
+	}
+	pause := cfg.PausePercent
+	if body.PausePercent != nil {
+		pause = *body.PausePercent
 	}
 	err := s.store.SetKeepalive(sess.ID, store.WorkspaceKeepalive{Enabled: body.Enabled, Terminal: body.Terminal,
-		MaxHours: body.MaxHours, MinContextTokens: body.MinContextTokens})
+		MaxHours: body.MaxHours, MinContextTokens: body.MinContextTokens, PausePercent: pause})
 	if errors.Is(err, store.ErrKeepaliveWorkspace) {
 		writeProblem(w, r, "session.access", "session_not_found")
 		return
@@ -155,6 +186,10 @@ func (s *Server) handlePutKeepalive(w http.ResponseWriter, r *http.Request, sess
 		return
 	}
 	s.reconcileKeepalive(sess)
+	// A changed threshold may end or start a pause.
+	room := s.chat.room(sess.ID)
+	room.publishQuotaPause()
+	room.kickQueue()
 	writeJSON(w, http.StatusOK, s.keepaliveView(sess))
 }
 

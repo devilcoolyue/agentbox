@@ -25,6 +25,7 @@ export async function keepaliveSmoke(page, base) {
         const body = route.request().postDataJSON();
         puts.push(body);
         view = { ...view, enabled: body.enabled, terminal: body.terminal, max_hours: body.max_hours, min_context_tokens: body.min_context_tokens,
+          ...(body.pause_percent === undefined ? {} : { pause_percent: body.pause_percent }),
           effective: { max_hours: body.max_hours || 3, min_context_tokens: body.min_context_tokens || 100000 },
           plans: [plan('chat', { source: 'chat', thread: 't1', title: 'Refactor billing' }), plan('terminal:/workspace/app', { source: 'terminal', cwd: '/workspace/app', runs: 0 })] };
       }
@@ -90,6 +91,40 @@ export async function keepaliveSmoke(page, base) {
     await chip.locator('.icon-count').filter({ hasText: /^1$/ }).waitFor();
     assert.match(await chip.getAttribute('data-tip'), /^缓存保活中：1 个会话\n对话「Refactor billing」 · 152.0K tokens · 下次/);
 
+    // The five-hour pause, from a server that has it: the threshold (empty =
+    // the administrator's default), the account's window, and the pause.
+    const saved = async n => {
+      for (let i = 0; i < 200 && puts.length < n; i++) await page.waitForTimeout(25);
+      assert.equal(puts.length, n);
+    };
+    const resets = now + 2 * 3600000;
+    view = { ...view, pause_percent: 0, pause_default: 95, five_hour: { percent: 63, resets_at: resets } };
+    await open();
+    await page.locator('#ka-pause-state').filter({ hasText: '当前 5 小时额度已用 63%' }).waitFor();
+    assert.equal(await page.locator('#ka-pause').isChecked(), true);
+    assert.equal(await page.locator('#ka-pause-percent').inputValue(), '');
+    assert.equal(await page.locator('#ka-pause-percent').getAttribute('placeholder'), '95');
+    assert.match(await page.locator('#ka-pause-note').innerText(), /留空使用默认值 95%/);
+    await page.locator('#ka-pause-percent').fill('98');
+    await page.locator('#ka-save').click();
+    await saved(2);
+    assert.equal(puts.at(-1).pause_percent, 98);
+    await page.waitForFunction(() => document.querySelector('#ka-pause-percent').value === '98');
+    await page.locator('#ka-pause').uncheck();
+    assert.equal(await page.locator('#ka-pause-percent').isDisabled(), true, 'the threshold follows its switch');
+    await page.locator('#ka-save').click();
+    await saved(3);
+    assert.equal(puts.at(-1).pause_percent, -1);
+    await page.waitForFunction(() => !document.querySelector('#ka-pause').checked);
+    await page.locator('#ka-cancel').click();
+    await dialog.waitFor({ state: 'hidden' });
+    view = { ...view, pause_percent: 0, paused: { percent: 96, threshold: 95, resets_at: resets } };
+    await open();
+    await page.locator('#ka-pause-state').filter({ hasText: /^已暂停：5 小时额度已用 96%，\d\d:\d\d 重置后自动继续。$/ }).waitFor();
+    await page.locator('#ka-cancel').click();
+    await dialog.waitFor({ state: 'hidden' });
+    view = { ...view, paused: undefined, five_hour: undefined };
+
     // An API key account cannot keep its five-minute caches.
     view = { ...base_view, available: false, reason: 'account', chat: undefined };
     await open();
@@ -97,7 +132,7 @@ export async function keepaliveSmoke(page, base) {
     assert.equal(await page.locator('#ka-enabled').isDisabled(), true);
     await page.keyboard.press('Escape');
     await dialog.waitFor({ state: 'hidden' });
-    console.log('Cache keepalive: menu entry, defaults, save, plan list, stop, composer chip count and unavailable account passed');
+    console.log('Cache keepalive: menu entry, defaults, save, plan list, stop, composer chip count, five-hour pause threshold and state, and unavailable account passed');
   } finally {
     for (const [pattern, handler] of Object.entries(routes)) await page.unroute(pattern, handler);
   }

@@ -325,7 +325,7 @@ curl --fail-with-body -sS "$ABOX_URL/api/users/alice/credits" \
 {"type":"interrupt"}
 ```
 
-服务端发送 `status`、`user_message`、`agent_event`、`agent_raw`、`thread_title`、`turn_cost`、`error` 等消息；开启委派的回合另有 `delegation`（委派状态，开始/结束也写入历史 `kind:"delegation"`）、`delegation_event`（跑腿的完整事件，只广播）、`delegation_stream`（跑腿增量）和 `delegation_notice`（本条消息没有可用跑腿，按普通对话处理）。`turn_cost` 按 `turn_id` 返回已结算金额及来源，历史接口的 `costs` 提供对应回合费用，`entries[].turn` 保存模型和推理设置快照。`agent_event.event` 内含 provider 事件；实时增量只广播，完整事件保存到线程 JSONL。调用方应保留对未知事件的兼容，不把某个 CLI 版本的字段当成永远不变的协议。
+服务端发送 `status`、`user_message`、`agent_event`、`agent_raw`、`thread_title`、`turn_cost`、`quota_pause`、`error` 等消息；`quota_pause.pause` 为 `{percent, threshold, resets_at}`（毫秒）时，空间因 Claude 订阅 5 小时额度达到暂停阈值而暂停到重置，`null` 表示没有暂停（连接时只在暂停中下发）；暂停期间普通发送返回 `chat_quota_reserved`，带 `delivery` 的消息排队到重置后执行。开启委派的回合另有 `delegation`（委派状态，开始/结束也写入历史 `kind:"delegation"`）、`delegation_event`（跑腿的完整事件，只广播）、`delegation_stream`（跑腿增量）和 `delegation_notice`（本条消息没有可用跑腿，按普通对话处理）。`turn_cost` 按 `turn_id` 返回已结算金额及来源，历史接口的 `costs` 提供对应回合费用，`entries[].turn` 保存模型和推理设置快照。`agent_event.event` 内含 provider 事件；实时增量只广播，完整事件保存到线程 JSONL。调用方应保留对未知事件的兼容，不把某个 CLI 版本的字段当成永远不变的协议。
 
 终端连接为 `/api/sessions/<id>/term?mode=shell&token=<token>`，也可选 `mode=agent`。**二进制帧**承载原始 PTY 输入 / 输出，文本帧仅用于调整尺寸：
 

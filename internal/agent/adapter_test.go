@@ -130,3 +130,41 @@ func TestIsClaudeSlashCommand(t *testing.T) {
 		}
 	}
 }
+
+// Claude passes on the subscription windows with each response; the five-hour
+// one drives the pause, and the request that follows is where it stops.
+func TestAdapterReadsFiveHourWindowAndRequests(t *testing.T) {
+	a, _ := Lookup("claude")
+	for _, tc := range []struct {
+		raw     string
+		percent float64
+		resets  int64
+	}{
+		{`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1791263400,"rateLimitType":"five_hour","unifiedWindows":{"five_hour":{"utilization":0.95,"resetsAt":1791263400},"seven_day":{"utilization":0.37,"resetsAt":1791622800}}}}`, 95, 1791263400},
+		{`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.07,"resetsAt":1791364800}}}}`, 7, 1791364800},
+		// An older CLI without unifiedWindows: only a rejection says anything.
+		{`{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1791263400,"rateLimitType":"five_hour"}}`, 100, 1791263400},
+		{`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1791263400,"rateLimitType":"five_hour"}}`, -1, 0},
+		{`{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1791622800,"rateLimitType":"seven_day"}}`, -1, 0},
+	} {
+		e, ok := a.Decode([]byte(tc.raw))
+		switch {
+		case !ok || e.Partial || e.Output:
+			t.Fatalf("%s: %+v", tc.raw, e)
+		case tc.percent < 0 && e.FiveHour != nil:
+			t.Fatalf("%s: window %+v", tc.raw, e.FiveHour)
+		case tc.percent >= 0 && (e.FiveHour == nil || e.FiveHour.Percent != tc.percent || e.FiveHour.ResetsAt.Unix() != tc.resets):
+			t.Fatalf("%s: window %+v", tc.raw, e.FiveHour)
+		}
+	}
+	if e, _ := a.Decode([]byte(`{"type":"system","subtype":"status","status":"requesting"}`)); !e.Requesting {
+		t.Fatal("request start not marked")
+	}
+	if e, _ := a.Decode([]byte(`{"type":"system","subtype":"status","status":"compacting"}`)); e.Requesting {
+		t.Fatal("compacting marked as a request")
+	}
+	codex, _ := Lookup("codex")
+	if e, _ := codex.Decode([]byte(`{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1,"rateLimitType":"five_hour"}}`)); e.FiveHour != nil {
+		t.Fatal("codex read a Claude window")
+	}
+}

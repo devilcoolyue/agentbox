@@ -178,6 +178,16 @@ func (a chatRuntime) PublishCost(thread, turn string, running bool) {
 func (a chatRuntime) TurnEnded(o chat.TurnOutcome) {
 	a.room.srv.emitTurnEnded(o)
 	a.room.srv.noteChatCache(o)
+	if o.Code == chat.ChatQuotaPaused {
+		a.room.mu.Lock()
+		id := a.room.requestID
+		a.room.mu.Unlock()
+		a.room.srv.spawn(func() { a.room.queueQuotaResume(id) })
+	}
+}
+func (a chatRuntime) FiveHour(w agent.RateWindow) bool {
+	sess, ok := a.room.srv.store.Get(a.room.sessID)
+	return ok && a.room.srv.noteFiveHour(sess, w)
 }
 func (a chatRuntime) Title(thread, text string) {
 	a.room.srv.spawn(func() { a.room.generateTitle(thread, text) })

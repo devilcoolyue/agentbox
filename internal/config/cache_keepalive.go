@@ -16,6 +16,12 @@ const (
 	// response, waking the workspace).
 	MinKeepaliveInterval = 30
 	MaxKeepaliveInterval = 55
+	// A workspace keeping caches pauses its chat once a Claude
+	// subscription's five-hour window is this used, leaving the rest for the
+	// keepalive (server/quota_pause.go).
+	DefaultPausePercent = 95
+	MinPausePercent     = 50
+	MaxPausePercent     = 99
 )
 
 // CacheKeepaliveConfig is the administrator's side of the prompt cache
@@ -35,6 +41,9 @@ type CacheKeepaliveConfig struct {
 	MinContextTokens int64 `json:"min_context_tokens,omitempty"`
 	// IntervalMinutes is how long the server waits between two reads.
 	IntervalMinutes int `json:"interval_minutes,omitempty"`
+	// PausePercent is the default five-hour usage at which a workspace
+	// keeping caches pauses its chat until the window starts over.
+	PausePercent int `json:"pause_percent,omitempty"`
 }
 
 func (c *Config) validateCacheKeepalive() error {
@@ -53,6 +62,9 @@ func (c *Config) validateCacheKeepalive() error {
 	}
 	if k.IntervalMinutes != 0 && (k.IntervalMinutes < MinKeepaliveInterval || k.IntervalMinutes > MaxKeepaliveInterval) {
 		return fmt.Errorf("cache_keepalive.interval_minutes must be between %d and %d (0 = %d)", MinKeepaliveInterval, MaxKeepaliveInterval, DefaultKeepaliveInterval)
+	}
+	if k.PausePercent != 0 && (k.PausePercent < MinPausePercent || k.PausePercent > MaxPausePercent) {
+		return fmt.Errorf("cache_keepalive.pause_percent must be between %d and %d (0 = %d)", MinPausePercent, MaxPausePercent, DefaultPausePercent)
 	}
 	return nil
 }
@@ -75,6 +87,9 @@ func (c *Config) GetCacheKeepalive() CacheKeepaliveConfig {
 	}
 	if out.IntervalMinutes == 0 {
 		out.IntervalMinutes = DefaultKeepaliveInterval
+	}
+	if out.PausePercent == 0 {
+		out.PausePercent = DefaultPausePercent
 	}
 	return out
 }

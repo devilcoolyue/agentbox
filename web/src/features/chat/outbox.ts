@@ -15,9 +15,10 @@ type Look={title:string;reason:string;tone:Tone;icon:IconSlot|""};
 // Why a turn's outcome is unknown, by receipt code. Shown so "review" is not a
 // riddle: each names what the server could not confirm.
 const unknownReasons:Record<string,string>={server_restarted:"服务重启时任务正在运行",server_upgraded:"服务升级时任务正在运行",chat_turn_timed_out:"超过时长上限后没有确认停下",execution_incomplete:"没有收到任务结束信号",history_write_failed:"对话记录没有完整保存",usage_write_failed:"用量没有记账成功",receipt_write_failed:"任务状态没有保存成功",chat_failed:"任务报错结束"};
-function look(state:Outgoing["state"],code="",merged=false):Look{
+function look(state:Outgoing["state"],code="",merged=false,paused=false):Look{
  switch(state){
-  case "queued":return {title:"排队中",reason:"这一轮结束后自动执行",tone:"busy",icon:"clock"};
+  // During a five-hour pause the queue waits for the reset, not for a turn.
+  case "queued":return {title:"排队中",reason:paused?"5 小时额度重置后自动执行":"这一轮结束后自动执行",tone:"busy",icon:"clock"};
   case "unconfirmed":return {title:"未收到发送确认",reason:"可能没有发出去；重试会沿用原编号，不会重复执行",tone:"attention",icon:"alert"};
   case "accepted":return {title:"已发送",reason:"",tone:"busy",icon:""};
   case "starting":return {title:"正在准备",reason:"",tone:"busy",icon:""};
@@ -25,7 +26,7 @@ function look(state:Outgoing["state"],code="",merged=false):Look{
   case "completed":return merged?{title:"已插入当前任务",reason:"当前步骤结束后生效",tone:"done",icon:"send"}:{title:"已完成",reason:"",tone:"done",icon:"check"};
   // A failure after running may have changed files; one before never ran.
   case "failed":return code==="turn_failed"?{title:"执行出错",reason:"可能已改动部分文件，请查看对话和文件",tone:"error",icon:"x-circle"}:{title:"未执行",reason:problemMessages[code]?.[0]||"没有执行，可以修改后重新发送",tone:"error",icon:"x-circle"};
-  case "interrupted":return {title:"已中断",reason:code==="chat_turn_timed_out"?"超过单轮时长上限，已自动中断":"",tone:"quiet",icon:"stop"};
+  case "interrupted":return code==="chat_quota_paused"?{title:"已暂停",reason:"5 小时额度达到暂停阈值",tone:"quiet",icon:"clock"}:{title:"已中断",reason:code==="chat_turn_timed_out"?"超过单轮时长上限，已自动中断":"",tone:"quiet",icon:"stop"};
   case "uncertain":return {title:"结果不确定",reason:unknownReasons[code]||"无法确认任务做到了哪一步",tone:"attention",icon:"alert"};
   case "reviewed":return {title:"已查看结果",reason:unknownReasons[code]||"",tone:"quiet",icon:"check"};
   case "abandoned":return code==="withdrawn"?{title:"已撤回",reason:"没有执行",tone:"quiet",icon:"undo"}:{title:"已放弃",reason:"没有执行",tone:"quiet",icon:"close"};
@@ -44,7 +45,7 @@ function receipt(value:unknown,session:string,id?:string):ChatRequestReceipt {
 }
 
 /** Owns only delivery/recovery. Polling and socket events never submit a task. */
-export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;move:(expected:Draft)=>void;restore:(draft:Draft)=>boolean;followed:(how:"queued"|"steered")=>void}){
+export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;move:(expected:Draft)=>void;restore:(draft:Draft)=>boolean;followed:(how:"queued"|"steered")=>void;paused:()=>boolean}){
  const owner=S.token,scope=S.chatScope,protocol=S.chatProtocol,lifetime=new AbortController();
  const storage=new OutboxStore(localStorage,scope,S.draftScope);
  const enabled=protocol===1;
@@ -224,7 +225,7 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
   root.classList.toggle("hidden",enabled&&!items.some(r=>r.state!=="completed")&&!loading&&!queryFailed&&!scopeChanged&&!notice&&!storage.error);
   // Any of these replaces the headline, so the row's reason and action step aside.
   const pageIssue=unsupported||!enabled||!scope||scopeChanged||!!notice||storage.error;
-  const view=highlighted&&look(highlighted.state,code(highlighted),merged(highlighted));
+  const view=highlighted&&look(highlighted.state,code(highlighted),merged(highlighted),hooks.paused());
   root.dataset.tone=pageIssue&&noticeError||queryFailed||unsupported||scopeChanged||storage.error?"attention":loading?"busy":view?.tone||"quiet";
   // Status precedence: a page/protocol problem, then this row's own story.
   const headline=()=>unsupported?t("当前网页不支持此服务端的消息协议，请刷新页面或升级客户端。"):!enabled?t("此服务端使用旧发送方式，无法按消息编号确认接收结果。"):!scope||scopeChanged?t("消息所属的实例或登录身份已变化"):notice?(noticeTranslated?notice:t(notice)):storage.error?t("本机待确认副本保存失败，请保留本页并检查存储设置。"):loading?t("正在查询消息接收状态…"):view?t(view.title)+other(highlighted):t("消息确认与恢复");
@@ -241,14 +242,14 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
    quick.replaceChildren(...(next&&highlighted?[control(next.label,next.tip,next.icon,next.run,next.disabled||busy.has(key(highlighted.session,highlighted.id)),"delivery-primary")]:[]));
    if(keep)(quick.querySelector<HTMLElement>("button:not(:disabled)")||$("chat-delivery-toggle")).focus();
   }
-  const signature=JSON.stringify([context,waiting,items.map(row=>{const id=key(row.session,row.id);return [row,known.get(id)?.request?.text,code(row),merged(row),busy.has(id),fullText.has(id)];})]);
+  const signature=JSON.stringify([context,waiting,hooks.paused(),items.map(row=>{const id=key(row.session,row.id);return [row,known.get(id)?.request?.text,code(row),merged(row),busy.has(id),fullText.has(id)];})]);
   if(signature===listSignature){hooks.changed();return;}
   listSignature=signature;
   const focused=document.activeElement instanceof HTMLElement&&list.contains(document.activeElement)?document.activeElement:undefined;
   const focusID=focused?.closest<HTMLElement>(".delivery-item")?.dataset.requestId,focusAction=focused?.dataset.deliveryAction;
   list.replaceChildren();
   for(const row of items){
-   const id=key(row.session,row.id),c=known.get(id),working=busy.has(id),rowView=look(row.state,c?.error_code||"",!!c?.merged_into);
+   const id=key(row.session,row.id),c=known.get(id),working=busy.has(id),rowView=look(row.state,c?.error_code||"",!!c?.merged_into,hooks.paused());
    const entry=document.createElement("div");entry.className="delivery-item";entry.dataset.requestId=row.id;entry.dataset.state=row.state;entry.dataset.tone=rowView.tone;
    const main=document.createElement("div");main.className="delivery-main";
    const line=document.createElement("p");line.className="delivery-line";
@@ -313,6 +314,8 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
  const leave=()=>{showDetails(false);++epoch;closeConfirmation();viewAbort.abort();viewAbort=new AbortController();context=undefined;loading=false;queryFailed=false;notice="";socketState=undefined;$("chat-delivery").classList.add("hidden");};
  return {
   enabled,unsupported,blocked,
+  /** The five-hour pause began or ended: queued rows say what they wait for. */
+  repaint(){render();},
   socketStatus(state:string){socketState=state==="running"?"running":"idle";},
   executionState(){
    if(!owns()||!enabled||loading)return;

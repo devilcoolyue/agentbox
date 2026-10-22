@@ -418,6 +418,7 @@ func (s *Server) noteTerminalCache(sess store.Session, c usage.TerminalCache) {
 // drops the plan when the workspace does not keep it.
 func (s *Server) planKeepalive(sess store.Session, key keepaliveKey) {
 	cfg := s.keepaliveConfig(sess)
+	pause, paused := s.quotaPause(sess)
 	k := &s.keepalive
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -437,6 +438,17 @@ func (s *Server) planKeepalive(sess store.Session, key keepaliveKey) {
 		return
 	}
 	until := pt.at.Add(time.Duration(cfg.maxHours) * time.Hour)
+	if paused {
+		// A five-hour pause keeps the cache for the turn that resumes after
+		// the reset, within the longest a workspace may ask for.
+		reset := time.UnixMilli(pause.ResetsAt).Add(quotaKeepPastReset)
+		if limit := pt.at.Add(time.Duration(cfg.admin.MaxHoursLimit) * time.Hour); reset.After(limit) {
+			reset = limit
+		}
+		if reset.After(until) {
+			until = reset
+		}
+	}
 	next := pt.lastUse().Add(cfg.interval)
 	if next.Before(now) {
 		next = now.Add(time.Second)
@@ -601,6 +613,9 @@ func (s *Server) keepCache(id string, plan keepalivePlan) (usage.PromptCache, bo
 				lines++
 				result.observe(line)
 				tally.Observe(base, line)
+				if w, ok := agent.FiveHourWindow(line); ok {
+					s.noteFiveHour(sess, w)
+				}
 			}
 		}}
 	started := time.Now()

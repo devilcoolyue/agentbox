@@ -691,9 +691,9 @@ export function interruptedChip() {
   return c;
 }
 
-/* 回合的错误收尾。服务停机（重启、升级）或时长上限打断的回合不是它自己出错，CLI
+/* 回合的错误收尾。服务停机（重启、升级）、时长上限或 5 小时额度暂停打断的回合不是它自己出错，CLI
  * 因此报的失败同样由服务端标为 interrupted，这里和用户停止一样只留一行说明，不带操作编号。 */
-const STOPPED_BY: Record<string, IconSlot> = { server_restarted: "refresh", server_upgraded: "refresh", chat_turn_timed_out: "clock" };
+const STOPPED_BY: Record<string, IconSlot> = { server_restarted: "refresh", server_upgraded: "refresh", chat_turn_timed_out: "clock", chat_quota_paused: "gauge" };
 export function problemChip(problem: APIProblem) {
   const icon = problem.code ? STOPPED_BY[problem.code] : undefined;
   if (!icon) return chip(formatProblem(problem, i18nText), "err");

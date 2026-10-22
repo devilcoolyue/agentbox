@@ -75,13 +75,38 @@ function fill(v: KeepaliveView) {
   reason.classList.toggle("hidden", v.available);
   setTextRender(reason, () => reasonText(v.reason));
   enabled.disabled = !v.available && !v.enabled; // 已开着的仍能关掉
+  fillPause(v);
   syncControls();
+}
+
+/** 5 小时额度暂停（server/quota_pause.go）：旧服务端没有这一项 */
+function fillPause(v: KeepaliveView) {
+  const box = $("ka-pause-box");
+  box.hidden = v.pause_percent === undefined;
+  if (box.hidden) return;
+  const pause = $<HTMLInputElement>("ka-pause"), percent = $<HTMLInputElement>("ka-pause-percent");
+  pause.checked = v.pause_percent !== -1;
+  numberOrEmpty(percent, v.pause_percent!);
+  percent.placeholder = String(v.pause_default);
+  setTextRender($("ka-pause-note"), () => i18nText("Claude 订阅账号的 5 小时额度用到阈值时，正在跑的回合在下一次模型请求前暂停，剩下的额度留给保活；额度重置后自动发「继续」接着做。留空使用默认值 {n}%。", {n: String(v.pause_default)}));
+  renderPauseState(v);
+}
+
+function renderPauseState(v: KeepaliveView) {
+  const state = $("ka-pause-state");
+  const w = v.paused ?? v.five_hour;
+  state.classList.toggle("hidden", !w || !!$("ka-pause-box").hidden);
+  if (!w) return;
+  setTextRender(state, () => v.paused
+    ? i18nText("已暂停：5 小时额度已用 {percent}%，{time} 重置后自动继续。", {percent: String(Math.round(v.paused.percent)), time: fmtClock(v.paused.resets_at, false)})
+    : i18nText("当前 5 小时额度已用 {percent}%，{time} 重置。", {percent: String(Math.round(w.percent)), time: fmtClock(w.resets_at, false)}));
 }
 
 /** 总开关关着时，终端与阈值都没有意义，置灰 */
 function syncControls() {
   const on = $<HTMLInputElement>("ka-enabled").checked;
-  for (const id of ["ka-terminal", "ka-hours", "ka-min"]) $<HTMLInputElement>(id).disabled = !on;
+  for (const id of ["ka-terminal", "ka-hours", "ka-min", "ka-pause"]) $<HTMLInputElement>(id).disabled = !on;
+  $<HTMLInputElement>("ka-pause-percent").disabled = !on || !$<HTMLInputElement>("ka-pause").checked;
   $("ka-options").classList.toggle("off", !on);
 }
 
@@ -126,6 +151,7 @@ async function refresh(fillForm: boolean) {
     const v = await loadKeepalive(id);
     if (id !== forSession || gen !== loadGen) return;
     if (fillForm) fill(v);
+    else renderPauseState(v);
     renderPlans(v);
     $("ka-error").classList.add("hidden");
   } catch (e) {
@@ -177,6 +203,7 @@ async function save(ev: SubmitEvent) {
         terminal: $<HTMLInputElement>("ka-terminal").checked,
         max_hours: intField("ka-hours"),
         min_context_tokens: intField("ka-min"),
+        ...($("ka-pause-box").hidden ? {} : {pause_percent: $<HTMLInputElement>("ka-pause").checked ? intField("ka-pause-percent") : -1}),
       }),
     });
     if (id !== forSession) return;
@@ -214,6 +241,7 @@ function closeDialog() {
 
 $("ka-form").addEventListener("submit", (e) => void save(e as SubmitEvent));
 $("ka-enabled").addEventListener("change", syncControls);
+$("ka-pause").addEventListener("change", syncControls);
 for (const id of ["ka-close", "ka-cancel"]) $(id).addEventListener("click", () => dlg().close());
 dlg().addEventListener("close", closeDialog);
 bus.addEventListener("signed-out", () => dlg().close());
@@ -230,8 +258,10 @@ export function chatChipState(v: KeepaliveView | undefined): ChipState {
   const interval = String(v.interval_minutes);
   const chat = v.chat;
   if (v.enabled && v.available) {
-    const plans = v.plans;
+    const plans = v.plans, paused = v.paused;
+    const pauseLine = () => paused ? [i18nText("5 小时额度已用 {percent}%，对话已暂停，{time} 重置后自动继续", {percent: String(Math.round(paused.percent)), time: fmtClock(paused.resets_at, false)})] : [];
     if (plans.length) return {show: true, on: true, count: plans.length, tip: () => [
+      ...pauseLine(),
       i18nText("缓存保活中：{n} 个会话", {n: String(plans.length)}),
       ...plans.map((p) => `${planName(p)} · ${planMeta(p)}`),
       i18nText("点击查看或调整"),
@@ -241,7 +271,7 @@ export function chatChipState(v: KeepaliveView | undefined): ChipState {
       : chat.prompt_tokens < v.effective.min_context_tokens
         ? i18nText("上一轮结束时上下文 {tokens}，未到 {min} 门槛；每轮结束后重新判断。", {tokens: fmtTokens(chat.prompt_tokens), min: fmtTokens(v.effective.min_context_tokens)})
         : i18nText("下一轮结束后开始保活。");
-    return {show: true, on: true, tip: () => [i18nText("缓存保活已开启"), why, i18nText("点击查看或调整")].join("\n")};
+    return {show: true, on: true, tip: () => [...pauseLine(), i18nText("缓存保活已开启"), why, i18nText("点击查看或调整")].join("\n")};
   }
   if (!v.enabled && v.available && chat && chat.ttl === "1h" && chat.prompt_tokens >= v.effective.min_context_tokens) {
     return {show: true, on: false, tip: () => [

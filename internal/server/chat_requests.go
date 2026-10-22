@@ -129,8 +129,14 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 		room.release() // earlier follow-ups run first
 		err = errChatBusy
 	}
+	if err == nil {
+		if _, paused := s.quotaPaused(sess.ID); paused {
+			room.release() // a follow-up waits for the five-hour reset
+			err = errChatPaused
+		}
+	}
 	if err != nil {
-		if input.Delivery != "" && (errors.Is(err, errChatBusy) || errors.Is(err, store.ErrChatPending)) {
+		if input.Delivery != "" && (errors.Is(err, errChatBusy) || errors.Is(err, store.ErrChatPending) || errors.Is(err, errChatPaused)) {
 			s.queueChatRequest(w, r, room, sess, u, id, input)
 			return
 		}

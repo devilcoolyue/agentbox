@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestWorkspaceKeepaliveLivesWithItsWorkspace(t *testing.T) {
@@ -23,7 +24,7 @@ func TestWorkspaceKeepaliveLivesWithItsWorkspace(t *testing.T) {
 	if k, err := st.Keepalive("w1"); err != nil || k != (WorkspaceKeepalive{}) {
 		t.Fatalf("unset workspace: %+v %v", k, err)
 	}
-	want := WorkspaceKeepalive{Enabled: true, Terminal: true, MaxHours: 2, MinContextTokens: 50000}
+	want := WorkspaceKeepalive{Enabled: true, Terminal: true, MaxHours: 2, MinContextTokens: 50000, PausePercent: 97}
 	if err = st.SetKeepalive("w1", want); err != nil {
 		t.Fatal(err)
 	}
@@ -54,5 +55,33 @@ func TestWorkspaceKeepaliveLivesWithItsWorkspace(t *testing.T) {
 	var rows int
 	if err = st.db.QueryRow("SELECT COUNT(*) FROM workspace_keepalive").Scan(&rows); err != nil || rows != 0 {
 		t.Fatalf("rows left after the user was deleted: %d %v", rows, err)
+	}
+}
+
+// An account's latest five-hour window replaces the one before and is no
+// longer listed once it has started over.
+func TestRateWindowsUntilReset(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Now()
+	soon, later := now.Add(time.Hour).Truncate(time.Second), now.Add(3*time.Hour).Truncate(time.Second)
+	for _, w := range []struct {
+		account string
+		window  RateWindow
+	}{
+		{"a", RateWindow{Percent: 40, ResetsAt: soon}},
+		{"a", RateWindow{Percent: 96.5, ResetsAt: later}},
+		{"b", RateWindow{Percent: 99, ResetsAt: now.Add(-time.Minute)}},
+	} {
+		if err := st.SetRateWindow(w.account, w.window); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := st.RateWindows(now)
+	if err != nil || len(got) != 1 || got["a"].Percent != 96.5 || !got["a"].ResetsAt.Equal(later) {
+		t.Fatal(got, err)
 	}
 }

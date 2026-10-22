@@ -424,4 +424,7 @@ func (r delegationRuntime) PublishCost(string, string, bool) {}
 
 // TurnEnded: a worker turn is part of the main agent's turn, which reports.
 func (r delegationRuntime) TurnEnded(chat.TurnOutcome) {}
-func (r delegationRuntime) Title(string, string)       {}
+
+// FiveHour: a worker runs only while its main turn does; that turn pauses.
+func (r delegationRuntime) FiveHour(agent.RateWindow) bool { return false }
+func (r delegationRuntime) Title(string, string)           {}

@@ -29,6 +29,13 @@ type Event struct {
 	// Internal marks a record agentbox adds to the stream for metering only
 	// (RequestUsageType): never stored in history or shown.
 	Internal bool
+	// Requesting marks Claude starting another model request within the
+	// turn: everything before it, tool results included, is in the
+	// conversation, so stopping here loses no work.
+	Requesting bool
+	// FiveHour is the subscription's five-hour window a Claude
+	// rate_limit_event reported, nil otherwise.
+	FiveHour *RateWindow
 }
 type Adapter interface {
 	Type() string
@@ -78,6 +85,16 @@ func (a cliAdapter) Decode(line []byte) (Event, bool) {
 		e.Output = true
 	case RequestUsageType:
 		e.Internal = true
+	}
+	if string(a) == config.AgentClaude {
+		switch {
+		case probe.Type == "system" && probe.Subtype == "status" && probe.Status == "requesting":
+			e.Requesting = true
+		case probe.Type == RateLimitType:
+			if w, ok := FiveHourWindow(line); ok {
+				e.FiveHour = &w
+			}
+		}
 	}
 	if string(a) == config.AgentClaude && probe.Type == "result" {
 		if probe.Subtype == "success" && !probe.IsError {

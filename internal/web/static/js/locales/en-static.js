@@ -846,4 +846,8 @@ export default {
     "使用这个图标": "Use this icon",
     "设置到哪些位置": "Use in which places",
     "筛选位置": "Filter places",
+    "5 小时额度快用完时暂停对话": "Pause the chat when the five-hour limit is nearly used up",
+    "暂停阈值（5 小时额度 %）": "Pause threshold (five-hour limit %)",
+    "默认暂停阈值（5 小时额度 %）": "Default pause threshold (five-hour limit %)",
+    "开启保活的空间在 Claude 订阅的 5 小时额度用到暂停阈值时暂停对话，把剩下的额度留给保活，重置后自动继续；用户可在空间里调整或关闭。": "Workspaces keeping caches pause their chat when the Claude subscription's five-hour limit reaches the pause threshold, leaving the rest for the keepalive, and carry on after the reset. Users can change or turn it off per workspace.",
 };

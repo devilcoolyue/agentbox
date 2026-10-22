@@ -4,7 +4,7 @@ import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js"
 "use strict";
 import { actionButton, buttonLabel } from "./icons.js";
 import { S, bus, emit } from "./state.js";
-import { $, fmtElapsed, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
+import { $, fmtClock, fmtElapsed, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
 import { chip, renderUserTurn, renderSteer, interruptedChip, problemChip, svgIcon, USER_ATTACH_RE } from "./chat-render.js";
@@ -178,6 +178,7 @@ export function chatTeardown() {
     mentionMenu.reset();
     chatConnectionID = undefined;
     setChatConn("connected");
+    quotaPause = null;
     cancelHistoryLoad();
     stream.reset();
     live.reset();
@@ -289,6 +290,13 @@ function handleChatMsg(msg) {
             // 服务端异步生成好了线程标题
             applyThreadTitle(msg.id, msg.title);
             break;
+        case "quota_pause":
+            // 5 小时额度达到暂停阈值：额度重置前发送的消息排队，重置后服务端接着跑
+            quotaPause = msg.pause ?? null;
+            updateChatPlaceholder();
+            outbox?.repaint();
+            keepaliveChip.soon(0);
+            break;
         case "status":
             outbox?.socketStatus(msg.state || "idle");
             if (!live.context.ts && msg.ts)
@@ -393,12 +401,15 @@ export function setChatStatus(state, problem) {
 /* 占位提示：窄屏一行放不下长文案，且键盘快捷键提示在手机上无意义 */
 function updateChatPlaceholder() {
     // 有下一步提示时它就是占位文字：空输入框里的灰字，Tab 填入
-    setAttrRender($("chat-input"), "placeholder", () => questionsWaiting() ? i18nText("Agent 在等你回答上面的问题") : followupsOpen() ? (isMobile() || enterInsertsNewline()
-        ? i18nText("补充或调整当前任务…")
-        : followupDefault() === "steer" && sessionAgent() === "claude" ? i18nText("补充或调整当前任务…（Enter 引导，Ctrl+Enter 排队）") : sessionAgent() === "claude" ? i18nText("补充或调整当前任务…（Enter 排队，Ctrl+Enter 引导）") : i18nText("补充当前任务…（Enter 排队，这一轮结束后执行）"))
-        : suggestion.current() || (isMobile() || enterInsertsNewline()
-            ? i18nText("向 Agent 下达任务…")
-            : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）")));
+    const pause = pausedQueue();
+    setAttrRender($("chat-input"), "placeholder", () => questionsWaiting() ? i18nText("Agent 在等你回答上面的问题") : pause && S.chatState !== "running"
+        ? i18nText("5 小时额度已用 {percent}%，暂停到 {time}；现在发送会排队，重置后执行", { percent: String(Math.round(pause.percent)), time: fmtClock(pause.resets_at, false) })
+        : followupsOpen() ? (isMobile() || enterInsertsNewline()
+            ? i18nText("补充或调整当前任务…")
+            : followupDefault() === "steer" && sessionAgent() === "claude" ? i18nText("补充或调整当前任务…（Enter 引导，Ctrl+Enter 排队）") : sessionAgent() === "claude" ? i18nText("补充或调整当前任务…（Enter 排队，Ctrl+Enter 引导）") : i18nText("补充当前任务…（Enter 排队，这一轮结束后执行）"))
+            : suggestion.current() || (isMobile() || enterInsertsNewline()
+                ? i18nText("向 Agent 下达任务…")
+                : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）")));
 }
 /* 输入框随内容自动增高（1 行起步，封顶后内部滚动） */
 export function autoGrow() {
@@ -434,7 +445,8 @@ const sender = new ChatSender({
         // This page shows the model's questions, so Claude may stop and ask within the turn.
         const questions = S.chatQuestions === 1 && sessionAgent() === "claude";
         // Sent while a turn runs: queue it after the turn or steer the running turn.
-        const delivery = sendingFollow || undefined;
+        // During a five-hour pause it queues until the reset.
+        const delivery = sendingFollow || (pausedQueue() ? "queue" : undefined);
         // Claude Code leaves its task list off for Claude 5; turning it on costs tokens, so only on request.
         const taskTools = S.chatTasks === 1 && sessionAgent() === "claude" && taskToolsEnabled();
         const input = { scope: S.chatScope, thread_id: composerThread, text, ...pick, attachments: draft.attachments.map(a => a.path), ...(delegation ? { delegation } : {}), ...(suggestions ? { suggestions } : {}), ...(questions ? { questions } : {}), ...(delivery ? { delivery } : {}), ...(taskTools ? { tasks: true } : {}) };
@@ -478,6 +490,9 @@ export async function sendChat() {
 /* 跟进：任务运行中发出的消息排队或引导（features/chat/followup.ts）。 */
 let sendingFollow = "";
 const followupsOpen = () => S.chatState === "running" && S.chatFollowups === 1 && !!outbox?.enabled && !outbox.unsupported;
+/* 5 小时额度暂停（server/quota_pause.go）：重置前发送的消息排队，重置后自动执行 */
+let quotaPause = null;
+const pausedQueue = () => quotaPause && quotaPause.resets_at > Date.now() && S.chatFollowups === 1 && !!outbox?.enabled && !outbox.unsupported ? quotaPause : null;
 async function sendFollow(mode) {
     if (!followupsOpen() || sendingFollow)
         return;
@@ -1417,7 +1432,8 @@ export function initChat() {
             void drafts?.validate();
             return true;
         },
-        followed: how => toast(how === "steered" ? i18nText("已插入当前任务，当前步骤结束后生效") : i18nText("已排队，这一轮结束后自动执行")),
+        followed: how => toast(how === "steered" ? i18nText("已插入当前任务，当前步骤结束后生效") : pausedQueue() ? i18nText("已排队，5 小时额度重置后自动执行") : i18nText("已排队，这一轮结束后自动执行")),
+        paused: () => !!pausedQueue(),
     });
     window.matchMedia("(max-width: 760px)").addEventListener("change", updateChatPlaceholder, { signal: lifetime.signal });
     updateChatPlaceholder();

@@ -752,6 +752,16 @@ export interface CacheKeepaliveSettings {
   max_hours_limit: number;
   min_context_tokens: number;
   interval_minutes: number;
+  /** 开启保活的空间在 5 小时额度用到这个百分比时暂停对话（旧服务端没有） */
+  pause_percent?: number;
+}
+
+/** server.quotaPauseView：5 小时额度达到暂停阈值、等待重置的空间 */
+export interface QuotaPause {
+  percent: number;
+  threshold: number;
+  /** Unix ms */
+  resets_at: number;
 }
 
 /** server.keepaliveView：GET/PUT /api/sessions/{id}/keepalive */
@@ -771,6 +781,12 @@ export interface KeepaliveView {
   /** 对话最近一次请求（缓存的一小时内） */
   chat?: { prompt_tokens: number; ttl: string; at: number; keep_micro_usd: number; rewrite_micro_usd: number };
   plans: KeepalivePlan[];
+  /** 5 小时额度暂停阈值：空间自己的值（0 跟随 pause_default，-1 关闭）；旧服务端没有 */
+  pause_percent?: number;
+  pause_default?: number;
+  /** 账号最近一次响应报告的 5 小时窗口（重置前） */
+  five_hour?: { percent: number; resets_at: number };
+  paused?: QuotaPause;
 }
 
 export interface KeepalivePlan {
@@ -1448,6 +1464,8 @@ export interface ChatMessage extends APIProblem {
   retry_text?: string;
   /** status running（连接时下发）：本回合已进行的毫秒数，页面据此续上计时 */
   elapsed_ms?: number;
+  /** quota_pause：空间因 5 小时额度暂停时的状态，null 表示没有暂停 */
+  pause?: QuotaPause | null;
   /** status running：回合在 CLI 开跑前等什么——"starting" 是在启动工作空间，"" 是等完了 */
   phase?: string;
   /** 回合最终 status：本回合总耗时 */

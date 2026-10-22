@@ -82,10 +82,17 @@ type Runtime interface {
 	// TurnEnded observes the end of every turn that got past admission, after
 	// its usage is booked. It must not block.
 	TurnEnded(TurnOutcome)
+	// FiveHour records the subscription's five-hour window a model response
+	// reported and says whether the workspace pauses at it. It must not block.
+	FiveHour(agent.RateWindow) bool
 }
 
 // ChatTurnTimedOut is the problem code of a turn its time limit stopped.
 const ChatTurnTimedOut = "chat_turn_timed_out"
+
+// ChatQuotaPaused is the problem code of a turn stopped because its
+// subscription's five-hour window reached the workspace's pause threshold.
+const ChatQuotaPaused = "chat_quota_paused"
 
 // TurnStopGrace is how long a turn whose time ran out waits for its stopped
 // CLI to end (its protocol interrupt, then SIGINT after 10 s) before letting go.
@@ -229,6 +236,11 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		r.Interrupt()
 		time.AfterFunc(TurnStopGrace, func() { cancelTurn(context.DeadlineExceeded) })
 	})
+	// The five-hour pause stops the CLI the same way, at the turn's next model
+	// request once a response reported the window at the threshold: the rest
+	// of the window is left to the cache keepalive.
+	var paused atomic.Bool
+	pauseDue := false
 	defer func() { clock.stop(); cancelTurn(context.Canceled) }()
 	outcome := TurnOutcome{SessionID: in.SessionID, Status: OutcomeFailed}
 	var began time.Time // set once the turn is admitted; see below
@@ -249,6 +261,9 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 			// The limit ended the turn, whatever the stopped CLI or its stream
 			// returned; like a user's stop, the conversation carries on.
 			cause, fallback = nil, ChatTurnTimedOut
+			outcome.Status = OutcomeInterrupted
+		} else if paused.Load() {
+			cause, fallback = nil, ChatQuotaPaused
 			outcome.Status = OutcomeInterrupted
 		}
 		p := r.Problem(ctx, "chat.turn", cause, fallback)
@@ -453,6 +468,14 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 				settled = n
 				r.PublishCost(tid, turnID, true)
 			}
+			if event.FiveHour != nil && r.FiveHour(*event.FiveHour) {
+				pauseDue = true
+			}
+			if event.Requesting && pauseDue && !paused.Load() && !timedOut.Load() && !userStopped() {
+				paused.Store(true)
+				r.Interrupt()
+				time.AfterFunc(TurnStopGrace, func() { cancelTurn(context.Canceled) })
+			}
 			if event.Internal {
 				return // metering only, settled above
 			}
@@ -532,8 +555,8 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		receipt.Completed(ctx)
 	}
 	cachePoint()
-	if terminal != "" && terminal != "completed" && !userStopped() && (timedOut.Load() || r.Stopping()) {
-		fail(nil, "chat_failed") // the limit or the server's shutdown ended the turn; the problem says so
+	if terminal != "" && terminal != "completed" && !userStopped() && (timedOut.Load() || paused.Load() || r.Stopping()) {
+		fail(nil, "chat_failed") // a limit or the server's shutdown ended the turn; the problem says so
 		return
 	}
 	state := "idle"

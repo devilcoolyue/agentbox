@@ -145,6 +145,7 @@ type Server struct {
 	modelGW    modelGatewayState   // model gateway behind the model.* hooks; see modelgateway.go
 	usageTel   usageTelemetryState // per-request timing from the CLIs; see usage_telemetry.go
 	keepalive  keepaliveState      // prompt caches kept warm while users are away; see keepalive.go
+	quota      quotaWindows        // subscriptions' five-hour windows; see quota_pause.go
 
 	codexPairs    codexPairing  // Codex requests waiting for their completion record
 	codexRollouts codexRollouts // Codex conversations known to keep a rollout
@@ -610,6 +611,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}); ok {
 		s.applyExtensions()
 	}
+	s.loadQuotaWindows()           // a five-hour pause holds the queue until its reset
 	s.spawn(s.dispatchQueuedChats) // follow-ups queued before a restart run in order
 	log.Printf("agentbox listening on http://%s", ln.Addr())
 	serveErr := make(chan error, 1)

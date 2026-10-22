@@ -9,7 +9,7 @@ import (
 
 // SchemaVersion changes only with a committed, ordered migration. Versions
 // predating this framework use user_version=0, including partially upgraded DBs.
-const SchemaVersion = 21
+const SchemaVersion = 22
 
 //go:embed migrations/001_baseline.sql
 var baselineSQL string
@@ -61,6 +61,9 @@ var requestTimingSQL string
 
 //go:embed migrations/021_workspace_keepalive.sql
 var workspaceKeepaliveSQL string
+
+//go:embed migrations/022_quota_pause.sql
+var quotaPauseSQL string
 
 type migration struct {
 	version int
@@ -114,6 +117,7 @@ func migrations() []migration {
 		{19, func(tx *sql.Tx) error { _, err := tx.Exec(chatQueueSQL); return err }},
 		{20, func(tx *sql.Tx) error { _, err := tx.Exec(requestTimingSQL); return err }},
 		{21, func(tx *sql.Tx) error { _, err := tx.Exec(workspaceKeepaliveSQL); return err }},
+		{22, func(tx *sql.Tx) error { _, err := tx.Exec(quotaPauseSQL); return err }},
 	}
 }
 func migrate(db *sql.DB) error { return runMigrations(db, migrations()) }

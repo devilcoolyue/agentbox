@@ -931,7 +931,9 @@
                   <label class="field"><span data-i18n="默认最长保活（小时）">默认最长保活（小时）</span><input id="set-ka-hours" type="number" min="1" max="24" step="1" required class="mono"></label>
                   <label class="field"><span data-i18n="用户最长可设（小时）">用户最长可设（小时）</span><input id="set-ka-limit" type="number" min="1" max="24" step="1" required class="mono"></label>
                   <label class="field"><span data-i18n="保活间隔（分钟）">保活间隔（分钟）</span><input id="set-ka-interval" type="number" min="30" max="55" step="1" required class="mono"></label>
+                  <label id="set-ka-pause-field" class="field"><span data-i18n="默认暂停阈值（5 小时额度 %）">默认暂停阈值（5 小时额度 %）</span><input id="set-ka-pause" type="number" min="50" max="99" step="1" required class="mono"></label>
                 </div>
+                <p class="note" data-i18n="开启保活的空间在 Claude 订阅的 5 小时额度用到暂停阈值时暂停对话，把剩下的额度留给保活，重置后自动继续；用户可在空间里调整或关闭。">开启保活的空间在 Claude 订阅的 5 小时额度用到暂停阈值时暂停对话，把剩下的额度留给保活，重置后自动继续；用户可在空间里调整或关闭。</p>
                 <div class="card-foot">
                   <span class="note" data-i18n="即时生效；取消允许后所有空间立即停止保活。间隔要小于缓存的 1 小时，可设 30–55 分钟。">即时生效；取消允许后所有空间立即停止保活。间隔要小于缓存的 1 小时，可设 30–55 分钟。</span>
                 </div>
@@ -2426,6 +2428,14 @@
           <label class="field"><span id="ka-hours-label"></span><input id="ka-hours" type="number" min="1" step="1" class="mono"></label>
         </div>
         <p id="ka-defaults" class="note"></p>
+        <div id="ka-pause-box" class="ka-pause">
+          <label class="check"><input id="ka-pause" type="checkbox"><span data-i18n="5 小时额度快用完时暂停对话">5 小时额度快用完时暂停对话</span></label>
+          <div class="field-row">
+            <label class="field"><span data-i18n="暂停阈值（5 小时额度 %）">暂停阈值（5 小时额度 %）</span><input id="ka-pause-percent" type="number" min="50" max="99" step="1" class="mono"></label>
+          </div>
+          <p id="ka-pause-note" class="note"></p>
+          <p id="ka-pause-state" class="note hidden"></p>
+        </div>
       </div>
       <h3 class="ka-plans-title" data-i18n="当前计划">当前计划</h3>
       <div id="ka-plans" class="ka-plans"></div>

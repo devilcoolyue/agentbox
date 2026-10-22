@@ -80,6 +80,9 @@ dialog textarea { resize: vertical; }
 .ka-options.off { opacity: .55; }
 .ka-options .field-row { margin: 4px 0 0; }
 .ka-options .note { margin: 0; }
+.ka-pause { display: grid; gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ka-pause[hidden] { display: none; }
+.ka-pause .field-row { margin: 0; }
 .ka-plans-title { margin: 18px 0 8px; font-size: 13px; }
 .ka-plans { display: grid; gap: 6px; }
 .ka-plan {
