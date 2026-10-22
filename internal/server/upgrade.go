@@ -71,6 +71,23 @@ func upgradeHelper(executable, version string) (app, script string, err error) {
 	return app, script, nil
 }
 
+// releaseUpgrading reports whether deploy/release.py activate is what stops
+// this server: it leaves <app>/upgrading.json for the duration of its
+// systemctl stop. Only a versioned installation can tell; a marker an
+// interrupted activate left behind must not label later restarts.
+func releaseUpgrading(executable string, now time.Time) bool {
+	executable, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		return false
+	}
+	packageDir := filepath.Dir(executable)
+	if filepath.Base(filepath.Dir(packageDir)) != "releases" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(filepath.Dir(filepath.Dir(packageDir)), "upgrading.json"))
+	return err == nil && info.Mode().IsRegular() && now.Sub(info.ModTime()) < 10*time.Minute
+}
+
 func (s *Server) upgradeCommand(ctx context.Context, action, version string) (upgradeInfo, error) {
 	info := upgradeInfo{CurrentVersion: buildinfo.Version}
 	if runtime.GOOS != "linux" || os.Geteuid() != 0 {

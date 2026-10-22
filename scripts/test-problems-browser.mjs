@@ -67,6 +67,19 @@ export async function problemsSmoke(page, base, socket, history) {
       history([{kind:'status',state:'error',ts:'2026-10-05T00:00:00Z',...problem('agent_image_missing')}]);
       await page.evaluate(async()=>{const {loadHistory}=await import('/_v/{{BUILD}}/js/chat.js');await loadHistory();});
       for (const text of [...expected('agent_image_missing',locale),id]) await page.locator('#chat-log .chip.err').last().filter({hasText:text}).waitFor();
+      // A turn the server's shutdown cut off: one quiet line instead of the CLI's
+      // failure and a red error, without the operation ID; live and from history.
+      history([{kind:'event',state:'interrupted',ts:'2026-10-05T00:00:00Z',event:{type:'result',subtype:'error_during_execution',is_error:true}},
+        {kind:'status',state:'error',ts:'2026-10-05T00:00:01Z',...problem('server_upgraded'),action:'check_result'}]);
+      await page.evaluate(async()=>{const {loadHistory}=await import('/_v/{{BUILD}}/js/chat.js');await loadHistory();});
+      const stop=page.locator('#chat-log .chip.stopped.server-stop').last();
+      for (const text of expected('server_upgraded',locale)) await stop.filter({hasText:text}).waitFor();
+      assert.ok(!(await stop.innerText()).includes(id));
+      assert.equal(await page.locator('#chat-log .chip.err').count(),0);
+      assert.ok(!(await page.locator('#chat-log').innerText()).includes('error_during_execution'));
+      socket().send(JSON.stringify({type:'status',state:'error',...problem('server_restarted'),action:'check_result'}));
+      await page.locator('#chat-log .chip.stopped.server-stop').filter({hasText:expected('server_restarted',locale)[0]}).waitFor();
+      assert.equal(await page.locator('#chat-log .chip.err').count(),0);
     }
     history([{kind:'status',state:'error',ts:'2026-10-05T00:00:00Z',error:'legacy-history-error'}]);
     await page.evaluate(async()=>{const {loadHistory}=await import('/_v/{{BUILD}}/js/chat.js');await loadHistory();});
@@ -82,7 +95,7 @@ export async function problemsSmoke(page, base, socket, history) {
     assert.equal(await page.locator('#chat-conn').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,'connection error overflows on narrow screen');
     await mkdir('output/playwright',{recursive:true});
     await page.screenshot({path:'output/playwright/problems-english-mobile.png',animations:'disabled'});
-    console.log('Problems browser: three-language login/start/chat/history, old-server fallback, redaction, narrow layout and WS connection reference passed');
+    console.log('Problems browser: three-language login/start/chat/history, server restart/upgrade notice, old-server fallback, redaction, narrow layout and WS connection reference passed');
   } finally {
     await page.unroute('**/api/sessions/fixture-space/start',handler);
     history([]);

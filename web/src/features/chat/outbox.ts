@@ -14,7 +14,7 @@ type Tone="busy"|"attention"|"error"|"done"|"quiet";
 type Look={title:string;reason:string;tone:Tone;icon:string};
 // Why a turn's outcome is unknown, by receipt code. Shown so "review" is not a
 // riddle: each names what the server could not confirm.
-const unknownReasons:Record<string,string>={server_restarted:"服务重启时任务正在运行",execution_incomplete:"没有收到任务结束信号",history_write_failed:"对话记录没有完整保存",usage_write_failed:"用量没有记账成功",receipt_write_failed:"任务状态没有保存成功",chat_failed:"任务报错结束"};
+const unknownReasons:Record<string,string>={server_restarted:"服务重启时任务正在运行",server_upgraded:"服务升级时任务正在运行",execution_incomplete:"没有收到任务结束信号",history_write_failed:"对话记录没有完整保存",usage_write_failed:"用量没有记账成功",receipt_write_failed:"任务状态没有保存成功",chat_failed:"任务报错结束"};
 function look(state:Outgoing["state"],code="",merged=false):Look{
  switch(state){
   case "queued":return {title:"排队中",reason:"这一轮结束后自动执行",tone:"busy",icon:"clock"};

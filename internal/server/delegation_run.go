@@ -388,8 +388,9 @@ func (r delegationRuntime) Emit(value any) {
 	}
 }
 func (r delegationRuntime) Problem(ctx context.Context, operation string, err error, fallback string) protocol.APIProblem {
-	return operationProblem(ctx, operation, classifyProblem(err, fallback))
+	return r.t.g.srv.turnProblem(ctx, operation, err, fallback)
 }
+func (r delegationRuntime) Stopping() bool { return r.t.g.srv.stopping() }
 func (r delegationRuntime) ProviderSession(_ store.Session, id string) error {
 	return r.t.g.srv.store.SaveDelegationProviderSession(r.t.d.ID, id)
 }

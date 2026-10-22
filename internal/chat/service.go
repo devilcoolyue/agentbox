@@ -29,7 +29,8 @@ type Entry struct {
 	Text  string          `json:"text,omitempty"`
 	Event json.RawMessage `json:"event,omitempty"`
 	// status: running | idle | error | interrupted (the user stopped the turn).
-	// event: "interrupted" marks the CLI's failed result caused by that stop.
+	// event: "interrupted" marks the CLI's failed result caused by that stop
+	// or by the server's shutdown.
 	State string        `json:"state,omitempty"`
 	Error string        `json:"error,omitempty"`
 	Turn  *TurnMetadata `json:"turn,omitempty"`
@@ -55,6 +56,9 @@ type Runtime interface {
 	Record(Entry, string, string) error
 	Emit(any)
 	Problem(context.Context, string, error, string) protocol.APIProblem
+	// Stopping reports whether the server is shutting down; its interrupt
+	// ends every running turn.
+	Stopping() bool
 	ProviderSession(store.Session, string) error
 	// PromptSuggestions reports whether the started container's CLI can
 	// predict the next prompt; an older image would reject the flag.
@@ -385,8 +389,8 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	if in.Fresh {
 		chatID = in.Resume
 	}
-	// The user's stop ends the CLI's turn with a failed result; history shows
-	// one interrupted status for it instead of that failure.
+	// The user's stop and the server's shutdown end the CLI's turn with a
+	// failed result; history shows one status saying why instead of that failure.
 	executor := r.Executor(sess)
 	userStopped := func() bool { return executor.Interrupted != nil && executor.Interrupted() }
 	terminal := ""
@@ -428,7 +432,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 				return
 			}
 			entry := Entry{Kind: "event", Event: ev}
-			if event.Terminal != "" && event.Terminal != "completed" && userStopped() {
+			if event.Terminal != "" && event.Terminal != "completed" && (userStopped() || r.Stopping()) {
 				entry.State = "interrupted"
 			}
 			record(entry, "agent_event", "")
@@ -498,6 +502,10 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 		receipt.Completed(ctx)
 	}
 	cachePoint()
+	if terminal != "" && terminal != "completed" && !userStopped() && r.Stopping() {
+		fail(nil, "chat_failed") // the server's shutdown ended the turn; the problem says so
+		return
+	}
 	state := "idle"
 	outcome.Status = OutcomeCompleted
 	if terminal != "" && terminal != "completed" && userStopped() {

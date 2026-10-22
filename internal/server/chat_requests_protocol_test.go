@@ -532,6 +532,68 @@ func TestChatReceiptUserInterruptAndShutdownRemainDistinct(t *testing.T) {
 	}
 }
 
+// A turn the server's shutdown cut off says so: history drops the CLI's
+// failure for one status naming the restart or upgrade, and the receipt keeps
+// that code beside its uncertain outcome.
+func TestShutdownNamesWhatEndedTheTurn(t *testing.T) {
+	// Codex ends an interrupted turn normally; Claude exits with an error.
+	failures := map[string]string{
+		config.AgentCodex:  "{\"type\":\"turn.failed\",\"status\":\"interrupted\"}\n",
+		config.AgentClaude: "{\"type\":\"result\",\"subtype\":\"error_during_execution\",\"is_error\":true}\n",
+	}
+	for agentType, output := range failures {
+		for _, upgrading := range []bool{false, true} {
+			t.Run(fmt.Sprint(agentType, upgrading), func(t *testing.T) {
+				f := newAgentReceiptFixture(t, agentType, output, false)
+				id := newOperationID()
+				receiptFrom(t, f.request("PUT", "requests/"+id, "alice", f.input))
+				select {
+				case <-f.started:
+				case <-time.After(5 * time.Second):
+					t.Fatal("not running")
+				}
+				l := f.s.runtime() // what Close does first
+				l.mu.Lock()
+				l.stopping, l.upgrading = true, upgrading
+				l.mu.Unlock()
+				f.s.chat.room(f.sess.ID).interruptContext(context.Background())
+				f.unblock()
+				c := f.wait(t, id)
+				code := "server_restarted"
+				if upgrading {
+					code = "server_upgraded"
+				}
+				if c.State != store.ChatUncertain || c.ErrorCode != code {
+					t.Fatal("receipt", c.State, c.ErrorCode)
+				}
+				raw, err := os.ReadFile(f.s.threadPath(f.sess, f.input.ThreadID))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var failure, status *logEntry
+				for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+					var e logEntry
+					if err := json.Unmarshal([]byte(line), &e); err != nil {
+						t.Fatal(err)
+					}
+					switch {
+					case e.Kind == "event" && strings.Contains(string(e.Event), output[:20]):
+						failure = &e
+					case e.Kind == "status" && e.State == "error":
+						status = &e
+					}
+				}
+				if failure == nil || failure.State != "interrupted" {
+					t.Fatalf("the CLI's failure is shown: %s", raw)
+				}
+				if status == nil || status.ProblemDetails == nil || status.Code != code || status.Action != "check_result" {
+					t.Fatalf("status: %s", raw)
+				}
+			})
+		}
+	}
+}
+
 func TestChatReceiptAccountingFailureStaysUncertain(t *testing.T) {
 	f := newReceiptFixture(t, receiptCompletedOutput, false)
 	if _, err := f.s.store.Grant(f.u.Name, 1000, "synthetic", "", "admin"); err != nil {

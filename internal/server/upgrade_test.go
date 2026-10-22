@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"agentbox/internal/buildinfo"
 )
@@ -96,5 +97,38 @@ func TestDevelopmentUpgradeStartAcceptsReviewedStableTarget(t *testing.T) {
 		if w.Code != http.StatusConflict || strings.Contains(w.Body.String(), "版本检查结果") {
 			t.Fatalf("%s: version admission failed: %d %s", current, w.Code, w.Body.String())
 		}
+	}
+}
+
+// Only a fresh marker beside the running release names an upgrade.
+func TestReleaseUpgradingReadsTheActivateMarker(t *testing.T) {
+	app := t.TempDir()
+	pkg := filepath.Join(app, "releases", "v1.0.0")
+	if err := os.MkdirAll(pkg, 0700); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(pkg, "agentbox")
+	if err := os.WriteFile(exe, []byte("fixture"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if releaseUpgrading(exe, now) {
+		t.Fatal("upgrading without a marker")
+	}
+	marker := filepath.Join(app, "upgrading.json")
+	if err := os.WriteFile(marker, []byte(`{"version":"v1.1.0"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if !releaseUpgrading(exe, now) {
+		t.Fatal("missed the marker")
+	}
+	if releaseUpgrading(exe, now.Add(time.Hour)) {
+		t.Fatal("a stale marker labels a later restart")
+	}
+	if err := os.MkdirAll(filepath.Join(app, "src"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if releaseUpgrading(filepath.Join(app, "src", "agentbox"), now) {
+		t.Fatal("not a versioned installation")
 	}
 }

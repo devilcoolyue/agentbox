@@ -132,6 +132,14 @@ export const problemMessages: Record<string, readonly [string, string]> = {
     "服务正在重启或停止",
     "请稍后重新连接并核对任务状态。"
   ],
+  "server_restarted": [
+    "服务重启，这一轮已中断",
+    "已经执行的操作不会撤销；服务恢复后发消息即可接着做。"
+  ],
+  "server_upgraded": [
+    "服务升级，这一轮已中断",
+    "已经执行的操作不会撤销；服务恢复后发消息即可接着做。"
+  ],
   "websocket_failed": [
     "对话连接不可用",
     "请检查网络及反向代理的 WebSocket 配置后重连。"

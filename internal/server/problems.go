@@ -69,6 +69,8 @@ var problemCatalog = map[string]problemDefinition{
 	"operation_timed_out":             {504, "操作超时", "请先检查当前空间和任务状态，再决定是否重试。", "check_result", false},
 	"operation_cancelled":             {409, "操作已取消", "请检查当前空间和任务状态后再继续。", "check_result", false},
 	"server_stopping":                 {503, "服务正在重启或停止", "请稍后重新连接并核对任务状态。", "wait", true},
+	"server_restarted":                {503, "服务重启，这一轮已中断", "已经执行的操作不会撤销；服务恢复后发消息即可接着做。", "check_result", false},
+	"server_upgraded":                 {503, "服务升级，这一轮已中断", "已经执行的操作不会撤销；服务恢复后发消息即可接着做。", "check_result", false},
 	"websocket_failed":                {400, "对话连接不可用", "请检查网络及反向代理的 WebSocket 配置后重连。", "reconnect", true},
 	"internal_error":                  {500, "服务暂时无法完成操作", "请将操作编号交给管理员排查。", "contact_admin", false},
 }
@@ -124,6 +126,17 @@ func writeProblem(w http.ResponseWriter, r *http.Request, operation, code string
 	p := operationProblem(r.Context(), operation, code)
 	w.Header().Set("X-Agentbox-Operation-ID", p.OperationID)
 	writeJSON(w, problemCatalog[p.Code].status, p)
+}
+
+// turnProblem describes why a chat or delegation turn ended early. While Close
+// is in progress it was the server's shutdown that cut the turn off, whatever
+// error the interrupted CLI or its stream returned.
+func (s *Server) turnProblem(ctx context.Context, operation string, err error, fallback string) protocol.APIProblem {
+	code := classifyProblem(err, fallback)
+	if stop := s.stopCode(); stop != "" && operation == "chat.turn" {
+		code = stop
+	}
+	return operationProblem(ctx, operation, code)
 }
 
 func classifyProblem(err error, fallback string) string {

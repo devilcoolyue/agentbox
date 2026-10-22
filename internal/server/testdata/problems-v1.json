@@ -242,6 +242,22 @@
       "retryable": true
     },
     {
+      "code": "server_restarted",
+      "http_status": 503,
+      "error": "服务重启，这一轮已中断",
+      "hint": "已经执行的操作不会撤销；服务恢复后发消息即可接着做。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
+      "code": "server_upgraded",
+      "http_status": 503,
+      "error": "服务升级，这一轮已中断",
+      "hint": "已经执行的操作不会撤销；服务恢复后发消息即可接着做。",
+      "action": "check_result",
+      "retryable": false
+    },
+    {
       "code": "websocket_failed",
       "http_status": 400,
       "error": "对话连接不可用",

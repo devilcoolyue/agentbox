@@ -203,7 +203,14 @@ def activate(app, version, config, backup_dir, unit_dir, progress=lambda phase: 
     progress('checking')
     compatible(binary, config, data)
     progress('stopping')
-    run('systemctl', 'stop', 'agentbox.service')
+    # The stopping server reads this to tell its running turns they were cut off
+    # by an upgrade rather than a plain restart (internal/server/lifecycle.go).
+    marker = app / 'upgrading.json'
+    atomic_json(marker, {'version': version})
+    try:
+        run('systemctl', 'stop', 'agentbox.service')
+    finally:
+        marker.unlink(missing_ok=True)
     # Inspect again after stop, then back up with the currently installed binary.
     # No automatic rollback: the new binary might already have migrated SQLite.
     progress('backup')

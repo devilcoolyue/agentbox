@@ -7,7 +7,7 @@ import { S, bus, emit } from "./state.js";
 import { $, fmtElapsed, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
-import { chip, renderUserTurn, renderSteer, interruptedChip, svgIcon, USER_ATTACH_RE } from "./chat-render.js";
+import { chip, renderUserTurn, renderSteer, interruptedChip, problemChip, svgIcon, USER_ATTACH_RE } from "./chat-render.js";
 import { observeAnswer } from "./chat-footer.js";
 import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
@@ -310,7 +310,7 @@ function handleChatMsg(msg) {
                 live.context.duration = msg.duration_ms;
                 live.footer?.update();
             }
-            setChatStatus(msg.state, msg.error ? formatProblem(msg, i18nText) : undefined);
+            setChatStatus(msg.state, msg.error ? msg : undefined);
             if (msg.state === "error" && msg.retry_text && !outbox?.enabled) {
                 const input = $("chat-input");
                 if (!input.value.trim()) {
@@ -350,7 +350,7 @@ function handleChatMsg(msg) {
  * 图标是按钮里的两个 SVG，靠 .stop class 切换显隐，别用 textContent 覆盖。
  * 执行进度不再用输入框上方的浮动胶囊，而是在对话流末尾挂一枚会动的品牌头像
  * + 阶段文案（详见 ensureWorking）。 */
-export function setChatStatus(state, error) {
+export function setChatStatus(state, problem) {
     S.chatState = state === "running" ? "running" : "idle";
     if (state === "error" || state === "interrupted")
         stream.flush(); // 立刻放完，提示紧随其后
@@ -378,8 +378,8 @@ export function setChatStatus(state, error) {
         setTip(send, () => i18nText("发送"));
         setAttrRender(send, "aria-label", () => i18nText("发送"));
         send.disabled = chatImgs.uploading > 0;
-        if (state === "error" && error)
-            appendChat(chip(error, "err"));
+        if (state === "error" && problem)
+            appendChat(problemChip(problem));
         if (state === "interrupted")
             appendChat(interruptedChip());
     }

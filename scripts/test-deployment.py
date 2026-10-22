@@ -142,6 +142,26 @@ class Deployment(unittest.TestCase):
    with patch.object(m,'run') as run:
     with self.assertRaises(ValueError):m.activate(root,'v1.0.0',root/'config',root/'backups',root)
     run.assert_not_called()
+ def test_upgrade_marker_lasts_only_for_the_stop(self):
+  # The stopping server reads <app>/upgrading.json to name the upgrade; a
+  # stop that fails or one that succeeds must not leave it behind.
+  for stop_fails in (False,True):
+   with self.subTest(stop_fails=stop_fails), tempfile.TemporaryDirectory() as tmp:
+    root=Path(tmp);config=root/'config.json';config.write_text('{}')
+    (root/'agentbox.service').write_text(m.unit(root,config))
+    seen=[]
+    def run(*args,**kw):
+     if args[:2]==('systemctl','stop'):
+      seen.append(json.loads((root/'upgrading.json').read_text()))
+      if stop_fails:raise subprocess.CalledProcessError(1,'systemctl')
+    checks=iter([None,ValueError('after stop')])
+    def compatible(*a):
+     error=next(checks)
+     if error:raise error
+    with patch.object(m,'restore_context'), patch.object(m,'compatible',side_effect=compatible), patch.object(m,'run',side_effect=run):
+     with self.assertRaises(subprocess.CalledProcessError if stop_fails else ValueError):m.activate(root,'v1.0.0',config,root/'backups',root)
+    self.assertEqual(seen,[{'version':'v1.0.0'}])
+    self.assertFalse((root/'upgrading.json').exists())
  def test_mount_selection_includes_ancestor_mounts(self):
   records=[{'Id':'match','Mounts':[{'Source':'/fixture/users/u'}]}, {'Id':'ancestor','Mounts':[{'Source':'/fixture'}]}, {'Id':'other','Mounts':[{'Source':'/unrelated'}]}]
   with patch.object(m,'run',side_effect=['match ancestor other',json.dumps(records)]):

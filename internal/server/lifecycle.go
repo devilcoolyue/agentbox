@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -16,6 +17,7 @@ import (
 type runtimeState struct {
 	mu        sync.Mutex
 	stopping  bool
+	upgrading bool // release.py activate is stopping the server to switch versions
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
@@ -43,6 +45,22 @@ func (s *Server) stopping() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.stopping
+}
+
+// stopCode is the problem code for a turn Close cut off: server_upgraded when
+// a release is switching versions, server_restarted for any other stop. ""
+// while serving.
+func (s *Server) stopCode() string {
+	l := s.runtime()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	switch {
+	case !l.stopping:
+		return ""
+	case l.upgrading:
+		return "server_upgraded"
+	}
+	return "server_restarted"
 }
 
 func (l *runtimeState) begin() bool {
@@ -101,8 +119,10 @@ func (s *Server) track(close func()) (release func(), ok bool) {
 func (s *Server) Close(ctx context.Context) error {
 	l := s.runtime()
 	l.closeOnce.Do(func() {
+		executable, _ := os.Executable()
+		upgrading := executable != "" && releaseUpgrading(executable, time.Now())
 		l.mu.Lock()
-		l.stopping = true
+		l.stopping, l.upgrading = true, upgrading
 		l.mu.Unlock()
 		go func() {
 			// Stop provider work before detaching its output. Existing terminal
