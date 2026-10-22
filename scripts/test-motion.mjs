@@ -84,6 +84,16 @@ export async function motionSmoke(page, fixture) {
   assert.deepEqual(closingMenu, {menus: [true], focus: 'btn-wb-more'});
   await page.locator('#btn-wb-more').click();
   assert.equal(await page.locator('.menu-pop:not([inert])').count(), 1, 'reopened menu mixed with the closing one');
+  // A streaming reply keeps scrolling the chat log; the header ⋯ does not move with it.
+  assert.equal(await page.evaluate(() => {
+   document.querySelector('#chat-log').dispatchEvent(new Event('scroll'));
+   return document.querySelectorAll('.menu-pop:not([inert])').length;
+  }), 1, 'the chat log scrolling closed the header menu');
+  assert.equal(await page.evaluate(() => {
+   document.dispatchEvent(new Event('scroll'));
+   return document.querySelectorAll('.menu-pop:not([inert])').length;
+  }), 0, 'the page scrolling left the menu behind its button');
+  await page.locator('#btn-wb-more').click();
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.menu-pop'));
 

@@ -157,10 +157,17 @@ window.addEventListener("keydown", (e) => {
                 : (at - 1 + list.length) % list.length;
     list[next].focus();
 }, true);
-// 滚动与改窗口大小时按钮会挪走，菜单留在原处就对不上了，直接收起。
+// 滚动与改窗口大小时按钮会挪走，菜单留在原处就对不上了，直接收起。只看带着按钮一起滚的
+// 那层：对话流式输出时聊天记录一直在自动滚到底，头部 ⋯ 不跟着动，菜单不该被它收掉。
 window.addEventListener("resize", () => closeMenu());
 document.addEventListener("scroll", (e) => {
-    if (current && !current.pop.contains(e.target))
-        closeMenu();
+    if (!current)
+        return;
+    const t = e.target;
+    if (current.pop.contains(t))
+        return;
+    if (current.btn && t !== document && !t.contains(current.btn))
+        return;
+    closeMenu();
 }, true);
 window.addEventListener("agentbox-language-change", () => closeMenu());
