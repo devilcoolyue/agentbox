@@ -94,9 +94,10 @@ def inside(args):
         result={}
         for path in sorted(root.rglob('*')):
             relative=path.relative_to(root).as_posix()
-            # Image maintenance tracks this Docker daemon's immutable image IDs;
-            # portable backups do not include that host-local runtime state.
-            if relative in ('state.db','state.db-wal','state.db-shm','agentbox.lock','client-instance-id','image-update-state.json') or relative.startswith('backups/'):continue
+            # Image maintenance tracks this Docker daemon's immutable image IDs and
+            # keepalive points are hour-scale cache plans; portable backups do not
+            # include that host-local runtime state.
+            if relative in ('state.db','state.db-wal','state.db-shm','agentbox.lock','client-instance-id','image-update-state.json','keepalive-points.json') or relative.startswith('backups/'):continue
             if path.is_symlink():result[relative]={'link':os.readlink(path)}
             elif path.is_file():
                 st=path.stat();result[relative]={'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'bytes':st.st_size,'mode':st.st_mode&0o777,'uid':st.st_uid,'gid':st.st_gid}
@@ -162,7 +163,7 @@ def inside(args):
         measured('stop_for_full_backup',lambda:run('systemctl','stop','agentbox.service'))
         image_state=data/'image-update-state.json'
         image_state_before=image_state.read_bytes() if image_state.exists() else None
-        report['excluded_runtime_files']=['image-update-state.json']
+        report['excluded_runtime_files']=['image-update-state.json','keepalive-points.json']
         measured('full_backup_offline',lambda:cli('backup','--config',config,'--full','--output',full_archive))
         # Record controlled post-snapshot changes to make the loss window
         # visible: restoring either archive must exclude these later writes.
@@ -204,6 +205,7 @@ def inside(args):
             assert credential.is_relative_to(destination) and (credential/'auth.json').read_bytes()==(external/'auth.json').read_bytes()
             assert not (destination/'data/client-instance-id').exists()
             assert not (destination/'data/image-update-state.json').exists()
+            assert not (destination/'data/keepalive-points.json').exists()
             assert (image_state.read_bytes() if image_state.exists() else None)==image_state_before
             report['backups'][mode]={'archive_bytes':archive.stat().st_size,'restored_files':len(restored),'project_files_included':mode=='full','database_matches':True}
             # Actually start the restored copy via systemd and exercise health.
