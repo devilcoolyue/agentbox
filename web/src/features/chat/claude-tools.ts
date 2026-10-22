@@ -1,7 +1,7 @@
 /* Claude 的工具调用：照 Claude Code 终端的写法画——
  *
  *   ● Update(src/x.ts)                 工具名（CLI 的显示名）+ 括号里的主参数
- *     ⎿  Added 1 line, removed 1 line  结果摘要；Write/Edit 带行号的内容与 diff
+ *     ⎿  Added 1 line, removed 1 line  结果摘要；Write/Edit 点开看带行号的内容与 diff
  *
  * 连续的 Read / Grep / Glob 与只读、普通 Bash 命令像 CLI 一样折成一行
  * 「Read 3 files, ran 1 shell command」，进行中是「Running 1 shell command · 2s…」加一行
@@ -465,16 +465,16 @@ function viewOf(t: Tool, verbose: boolean): View {
       const patch = Array.isArray(tur?.structuredPatch) ? tur!.structuredPatch as Hunk[] : [];
       if (tur?.type === "update" && patch.length) {
         const { added, removed } = patchStat(patch);
-        return { compact: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, lim(40)))], full: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, FULL_CAP))] };
+        return { compact: [res(line(() => addedRemoved(added, removed)))], full: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, FULL_CAP))] };
       }
       const content = str(t.input.content), n = content ? content.replace(/\n$/, "").split("\n").length : 0, path = relPath(t.input.file_path);
       const head = () => plural(n, () => i18nText("已写入 1 行到 {p0}", { p0: path }), () => i18nText("已写入 {p0} 行到 {p1}", { p0: String(n), p1: path }));
-      return { compact: [res(line(head), ...numbered(t, content, lim(10)))], full: [res(line(head), ...numbered(t, content, FULL_CAP))] };
+      return { compact: [res(line(head))], full: [res(line(head), ...numbered(t, content, FULL_CAP))] };
     }
     case "Edit": case "MultiEdit": {
       const patch = Array.isArray(tur?.structuredPatch) && (tur!.structuredPatch as Hunk[]).length ? tur!.structuredPatch as Hunk[] : inputPatch(t);
       const { added, removed } = patchStat(patch);
-      return { compact: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, lim(40)))], full: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, FULL_CAP))] };
+      return { compact: [res(line(() => addedRemoved(added, removed)))], full: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, FULL_CAP))] };
     }
     case "Grep": case "Glob": {
       const files = Array.isArray(tur?.filenames) ? (tur!.filenames as unknown[]).map(relPath) : [];

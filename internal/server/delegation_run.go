@@ -420,7 +420,7 @@ func (r delegationRuntime) Questions(context.Context, store.Session) bool { retu
 func (r delegationRuntime) Question(agent.Question) (<-chan agent.Answer, func()) {
 	return nil, func() {}
 }
-func (r delegationRuntime) PublishCost(string, string) {}
+func (r delegationRuntime) PublishCost(string, string, bool) {}
 
 // TurnEnded: a worker turn is part of the main agent's turn, which reports.
 func (r delegationRuntime) TurnEnded(chat.TurnOutcome) {}

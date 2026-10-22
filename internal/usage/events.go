@@ -203,6 +203,16 @@ func (t *Tally) PromptCache() PromptCache {
 	return t.claude.prompt
 }
 
+// Settled counts the rows this turn has already booked as its requests ended;
+// it grows mid-turn, so a change means the turn's recorded cost moved.
+func (t *Tally) Settled() int {
+	n := len(t.codexLive)
+	if t.claude != nil {
+		n += t.claude.liveRows
+	}
+	return n
+}
+
 // observe 把一行事件并进汇总；不是用量事件就什么也不做。
 // Claude 的保活请求与对话同样逐条消息计量，只是种类保持 keepalive。
 func (t *Tally) Observe(base store.UsageEvent, line []byte) {

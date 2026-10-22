@@ -75,7 +75,7 @@ func TestChatCostMatchesSettlementLiveAndHistory(t *testing.T) {
 				cw := &connWriter{c: conn}
 				room.attach(cw)
 				defer room.detach(cw)
-				room.publishTurnCost(tid, "turn")
+				room.publishTurnCost(tid, "turn", false)
 			}))
 			defer server.Close()
 			conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)

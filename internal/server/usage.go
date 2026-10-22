@@ -10,7 +10,9 @@ import (
 
 // Publish only after the settlement transaction commits. Historical views read
 // this same amount from SQLite, so editing pricing cannot change old answers.
-func (r *chatRoom) publishTurnCost(threadID, turnID string) {
+// running marks a mid-turn total: requests settled so far, before the rest of
+// the turn (sub-agents, compaction) is booked at its end.
+func (r *chatRoom) publishTurnCost(threadID, turnID string, running bool) {
 	cost := store.ChatTurnCost{TurnID: turnID, Source: "unknown"}
 	values, err := r.srv.store.ChatTurnCosts(r.sessID, threadID, []string{turnID})
 	if err != nil {
@@ -18,7 +20,11 @@ func (r *chatRoom) publishTurnCost(threadID, turnID string) {
 	} else if value, ok := values[turnID]; ok {
 		cost = value
 	}
-	r.broadcast(map[string]any{"type": "turn_cost", "cost": cost})
+	msg := map[string]any{"type": "turn_cost", "cost": cost}
+	if running {
+		msg["running"] = true
+	}
+	r.broadcast(msg)
 }
 
 type usageTally = usage.Tally

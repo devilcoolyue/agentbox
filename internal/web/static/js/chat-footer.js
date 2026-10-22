@@ -56,6 +56,12 @@ function costView(context) {
         if (cost.source === "unpriced")
             return { label: i18nText("未定价"), detail: i18nText("本轮已记录用量，但这个模型还没有设置单价，所以没有算出金额；这不表示模型服务免费。"), priced: false };
         const source = SOURCE_TEXT[cost.source] || i18nText("混合计价");
+        if (context.costRunning)
+            return {
+                label: i18nText("{p0} · 累计中", { p0: (cost.partial ? "≥ " : "") + money(cost.cost_micro_usd) }),
+                detail: i18nText("回合进行中：已结束的模型请求累计 {p0}，{p1}，每次请求结束就更新。子 Agent、上下文压缩等其余请求在回合结束时补记，最终金额以那时为准。", { p0: money(cost.cost_micro_usd), p1: cost.partial ? i18nText("部分模型未设置单价，金额不完整") : source }),
+                priced: true,
+            };
         return {
             label: (cost.partial ? "≥ " : "") + money(cost.cost_micro_usd),
             detail: i18nText("本轮用量成本 {p0}，{p1}。与使用记录一致，包含本轮子模型，不含自动起标题；不代表订阅额外扣费或中转站实际账单。", { p0: String(money(cost.cost_micro_usd)), p1: String(cost.partial ? i18nText("部分模型未设置单价，金额不完整") : source) }),
@@ -74,7 +80,7 @@ function costView(context) {
             detail: i18nText("历史回答中客户端上报的用量成本；无法关联当时的入账记录，不代表订阅额外扣费或中转站实际账单。"), priced: true,
         };
     const pending = !cost && !context.historical;
-    return { label: pending ? i18nText("费用待结算") : i18nText("费用未记录"), detail: pending ? i18nText("回合结束后显示已入账的用量成本。") : i18nText("未找到这轮回答对应的费用记录，未按当前价格重算历史。"), priced: false };
+    return { label: pending ? i18nText("费用待结算") : i18nText("费用未记录"), detail: pending ? i18nText("每次模型请求结束后显示已入账的用量成本，回合结束时给出最终金额。") : i18nText("未找到这轮回答对应的费用记录，未按当前价格重算历史。"), priced: false };
 }
 export function answerFooter(body, context) {
     const el = document.createElement("div");

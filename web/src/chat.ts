@@ -265,6 +265,7 @@ function handleChatMsg(msg: ChatMessage) {
     case "turn_cost":
       if (msg.cost && msg.cost.turn_id === live.context.turn?.id) {
         live.context.cost = msg.cost;
+        live.context.costRunning = !!msg.running;
         live.footer?.update();
       }
       break;

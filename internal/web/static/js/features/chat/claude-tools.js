@@ -456,17 +456,17 @@ function viewOf(t, verbose) {
             const patch = Array.isArray(tur?.structuredPatch) ? tur.structuredPatch : [];
             if (tur?.type === "update" && patch.length) {
                 const { added, removed } = patchStat(patch);
-                return { compact: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, lim(40)))], full: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, FULL_CAP))] };
+                return { compact: [res(line(() => addedRemoved(added, removed)))], full: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, FULL_CAP))] };
             }
             const content = str(t.input.content), n = content ? content.replace(/\n$/, "").split("\n").length : 0, path = relPath(t.input.file_path);
             const head = () => plural(n, () => i18nText("已写入 1 行到 {p0}", { p0: path }), () => i18nText("已写入 {p0} 行到 {p1}", { p0: String(n), p1: path }));
-            return { compact: [res(line(head), ...numbered(t, content, lim(10)))], full: [res(line(head), ...numbered(t, content, FULL_CAP))] };
+            return { compact: [res(line(head))], full: [res(line(head), ...numbered(t, content, FULL_CAP))] };
         }
         case "Edit":
         case "MultiEdit": {
             const patch = Array.isArray(tur?.structuredPatch) && tur.structuredPatch.length ? tur.structuredPatch : inputPatch(t);
             const { added, removed } = patchStat(patch);
-            return { compact: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, lim(40)))], full: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, FULL_CAP))] };
+            return { compact: [res(line(() => addedRemoved(added, removed)))], full: [res(line(() => addedRemoved(added, removed)), ...patchLines(t, patch, FULL_CAP))] };
         }
         case "Grep":
         case "Glob": {

@@ -5,8 +5,9 @@ import { mkdir, readFile } from 'node:fs/promises';
 // terminal shows them. The history is real stream-json from Claude Code 2.1.280 /
 // 2.1.304 (scripts/fixtures/claude-cli-2.1-events.json, ids and local paths
 // scrubbed): reads, searches and plain commands fold into one summary line,
-// Write / Update show numbered content and diffs, Fetch / Web Search / Agent their
-// result lines, failures their error. Live events then check the running state.
+// Write / Update show a summary line that opens into numbered content and diffs,
+// Fetch / Web Search / Agent their result lines, failures their error. Live events
+// then check the running state.
 // No provider calls.
 export async function chatClaudeToolsSmoke(page, { setHistory, send, socket, setAgent }) {
  const fixture = JSON.parse(await readFile(new URL('./fixtures/claude-cli-2.1-events.json', import.meta.url), 'utf8'));
@@ -52,9 +53,13 @@ export async function chatClaudeToolsSmoke(page, { setHistory, send, socket, set
  ], 'reads, searches and commands fold like the CLI; anything else ends the group');
  const write = turns.nth(0).locator('.cc-tool[data-tool="Write"]');
  assert.equal(await write.locator('.cc-res .cc-line').first().textContent(), '已写入 1 行到 a.py');
+ assert.equal(await write.locator('.cc-num').count(), 0, 'written content stays folded until the row is opened');
+ await write.locator('.cc-head').click();
  assert.equal(await write.locator('.cc-num').textContent(), '1 print(1)\n');
  const edit = turns.nth(0).locator('.cc-tool[data-tool="Edit"]');
  assert.equal(await edit.locator('.cc-res .cc-line').first().textContent(), '新增 1 行，删除 1 行');
+ assert.equal(await edit.locator('.cc-diff').count(), 0, 'the diff stays folded until the row is opened');
+ await edit.locator('.cc-head').click();
  assert.deepEqual(await edit.locator('.cc-diff .dl').evaluateAll(l => l.map(d => d.className + ':' + d.textContent)),
   ['dl del: -print(1)', 'dl add: +print(2)']);
  // A folded group opens into a list of its calls; each call opens into its full output.
@@ -97,6 +102,7 @@ export async function chatClaudeToolsSmoke(page, { setHistory, send, socket, set
   '运行 1 条命令',
   '读取 1 个文件',
  ]);
+ await turns.nth(2).locator('.cc-tool[data-tool="Edit"]').first().locator('.cc-head').click();
  assert.deepEqual(await turns.nth(2).locator('.cc-tool[data-tool="Edit"]').first().locator('.cc-diff').evaluate(p => p.textContent),
   '1 -export const a = 1;\n1 +export const a = 2;\n2  // TODO fix\n');
  assert.equal(await turns.nth(2).locator(':scope > .turn-body > .cc-tool[data-tool="Bash"] > .cc-res').textContent(), '⎿在后台运行');
@@ -191,5 +197,5 @@ export async function chatClaudeToolsSmoke(page, { setHistory, send, socket, set
  setHistory([]);
  // Leave the workspace as Codex, as the Codex items suite does: later suites expect it.
  setAgent('codex');
- console.log('Chat Claude tools: real Claude Code stream-json rendered like the CLI (folded read/search/command groups with failures, Write/Update numbered content and diffs, Fetch/Web Search/Agent result lines, hidden ToolSearch, sub-agent calls kept in their row, background command), calls listed on expand and opened one by one, live running group with seconds completing in place, settled when idle, heartbeats and consecutive thinking folded with counts, mobile passed');
+ console.log('Chat Claude tools: real Claude Code stream-json rendered like the CLI (folded read/search/command groups with failures, Write/Update summaries opening into numbered content and diffs, Fetch/Web Search/Agent result lines, hidden ToolSearch, sub-agent calls kept in their row, background command), calls listed on expand and opened one by one, live running group with seconds completing in place, settled when idle, heartbeats and consecutive thinking folded with counts, mobile passed');
 }

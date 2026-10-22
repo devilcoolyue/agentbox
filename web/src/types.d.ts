@@ -1440,6 +1440,8 @@ export interface ChatMessage extends APIProblem {
   version?: number;
   receipt?: ChatRequestReceipt;
   cost?: ChatTurnCost;
+  /** turn_cost：回合还在进行，cost 是已结算请求的累计，收尾时还会再推一次最终金额。 */
+  running?: boolean;
   ts?: string;
   turn?: ChatTurnMetadata;
   /** 参数校验失败，回合未提交；可由用户修改后重试。 */

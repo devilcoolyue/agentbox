@@ -75,7 +75,9 @@ type Runtime interface {
 	Question(agent.Question) (answers <-chan agent.Answer, withdraw func())
 	Executor(store.Session) Executor
 	Permission() string
-	PublishCost(string, string)
+	// PublishCost reports the turn's booked cost; running marks a mid-turn
+	// total that grows as each model request is settled.
+	PublishCost(thread, turn string, running bool)
 	Title(string, string)
 	// TurnEnded observes the end of every turn that got past admission, after
 	// its usage is booked. It must not block.
@@ -387,6 +389,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	// about (/compact's summary request is billed from the CLI's cost-state),
 	// and neither names the thread. Set by onLine from the CLI's own result.
 	local := false
+	settled := 0          // tally.Settled() last published mid-turn
 	var cache *CachePoint // set once the CLI ran; see below
 	defer func() {
 		if cache != nil {
@@ -399,7 +402,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 				receipt.UsageFailed()
 			}
 		}
-		r.PublishCost(tid, turnID)
+		r.PublishCost(tid, turnID, false)
 		if receipt != nil && tally.SettlementError() != nil {
 			receipt.UsageFailed()
 		}
@@ -445,6 +448,11 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 				in.Meter(&base)
 			}
 			tally.Observe(base, line)
+			// 每次请求一结算就把本轮已入账的金额推给页面，不等回合收尾
+			if n := tally.Settled(); n != settled {
+				settled = n
+				r.PublishCost(tid, turnID, true)
+			}
 			if event.Internal {
 				return // metering only, settled above
 			}

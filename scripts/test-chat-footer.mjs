@@ -152,8 +152,12 @@ export async function chatFooterSmoke(page, { setHistory, send }) {
  await footers.last().locator('.answer-details .ad-v').filter({hasText:'reported-model'}).waitFor({state:'attached'});
  assert.equal(await footers.last().locator('.answer-cost').innerText(),'费用待结算');
  emit({type:'turn_cost',cost:{turn_id:'other-thread',cost_micro_usd:999000,source:'table'}});
+ // A mid-turn total (requests settled so far) is marked until the final amount replaces it.
+ emit({type:'turn_cost',running:true,cost:{turn_id:'live',cost_micro_usd:12000,source:'table'}});
+ await footers.last().locator('.answer-cost').filter({hasText:'$0.0120 · 累计中'}).waitFor();
  emit({type:'turn_cost',cost:{turn_id:'live',cost_micro_usd:42300,source:'provider'}});
  await footers.last().locator('.answer-cost').filter({hasText:'$0.0423'}).waitFor();
+ assert.equal(await footers.last().locator('.answer-cost').innerText(),'$0.0423');
  assert.equal(await page.locator('#chat-log .turn').last().locator('.msg.agent').count(),1);
  await footers.last().getByRole('button',{name:'复制回答',exact:true}).click();
  await footers.last().getByRole('button',{name:'已复制回答',exact:true}).waitFor();

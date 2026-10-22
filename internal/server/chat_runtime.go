@@ -171,8 +171,10 @@ func (a chatRuntime) Executor(sess store.Session) chat.Executor {
 			}
 		}}
 }
-func (a chatRuntime) Permission() string              { return a.room.srv.cfg.GetPermissionMode() }
-func (a chatRuntime) PublishCost(thread, turn string) { a.room.publishTurnCost(thread, turn) }
+func (a chatRuntime) Permission() string { return a.room.srv.cfg.GetPermissionMode() }
+func (a chatRuntime) PublishCost(thread, turn string, running bool) {
+	a.room.publishTurnCost(thread, turn, running)
+}
 func (a chatRuntime) TurnEnded(o chat.TurnOutcome) {
 	a.room.srv.emitTurnEnded(o)
 	a.room.srv.noteChatCache(o)

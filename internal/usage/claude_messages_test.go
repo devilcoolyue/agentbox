@@ -87,6 +87,29 @@ func TestClaudeStreamUsageUsesFinalOutputAndIndependentSubagents(t *testing.T) {
 	}
 }
 
+// Settled grows as each streamed request closes, so the page can show the
+// turn's booked cost before the turn ends.
+func TestClaudeSettledCountsRequestsAsTheyClose(t *testing.T) {
+	s, sess := newTestServer(t)
+	sess.Agent = "claude"
+	s.cfg.Pricing = map[string]config.ModelPrice{"claude": {TokenRates: config.TokenRates{Output: 1}}}
+	tally := s.NewChatTally(sess)
+	observe(&tally, "turn", `{"type":"stream_event","event":{"type":"message_start","message":{"id":"a","model":"opus","usage":{"input_tokens":2,"output_tokens":1}}}}`,
+		`{"type":"stream_event","event":{"type":"message_delta","usage":{"output_tokens":5}}}`)
+	if n := tally.Settled(); n != 0 {
+		t.Fatal("open request settled", n)
+	}
+	observe(&tally, "turn", `{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":9}}}`,
+		`{"type":"stream_event","event":{"type":"message_stop"}}`)
+	if n := tally.Settled(); n != 1 {
+		t.Fatal("closed request not settled", n)
+	}
+	costs, err := s.store.ChatTurnCosts("s1", "thread", []string{"turn"})
+	if err != nil || costs["turn"].CostMicroUSD == 0 {
+		t.Fatal("mid-turn cost not booked", costs, err)
+	}
+}
+
 func appendTranscript(t *testing.T, path string, lines ...string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
