@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -151,27 +152,25 @@ func TestProxyEnvForUnboundAccount(t *testing.T) {
 }
 
 func TestListenDynamicStaysInRange(t *testing.T) {
-	s := &Server{cfg: &config.Config{ProxyBridge: config.ProxyBridgeConfig{DynamicPorts: "39100-39102"}}}
-	var lns []net.Listener
-	defer func() {
-		for _, ln := range lns {
-			ln.Close()
-		}
-	}()
-	seen := map[int]bool{}
-	for range 3 {
-		ln, err := s.listenDynamic("127.0.0.1")
-		if err != nil {
-			t.Fatal(err)
-		}
-		lns = append(lns, ln)
-		port := ln.Addr().(*net.TCPAddr).Port
-		if port < 39100 || port > 39102 || seen[port] {
-			t.Fatalf("port %d outside range or reused", port)
-		}
-		seen[port] = true
+	// A fixed range can be taken on a busy CI runner (it may sit inside the
+	// kernel's ephemeral range); a port the kernel just handed out is free.
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := s.listenDynamic("127.0.0.1"); err == nil {
+	free := probe.Addr().(*net.TCPAddr).Port
+	probe.Close()
+	s := &Server{cfg: &config.Config{ProxyBridge: config.ProxyBridgeConfig{DynamicPorts: fmt.Sprintf("%d-%d", free, free)}}}
+	ln, err := s.listenDynamic("127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if port := ln.Addr().(*net.TCPAddr).Port; port != free {
+		t.Fatalf("port %d outside range %d-%d", port, free, free)
+	}
+	if extra, err := s.listenDynamic("127.0.0.1"); err == nil {
+		extra.Close()
 		t.Fatal("range exhausted but listen succeeded")
 	}
 }
