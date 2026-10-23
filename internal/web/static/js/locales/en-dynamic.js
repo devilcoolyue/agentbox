@@ -399,6 +399,7 @@ export default {
     "附件 #": "Attachment #",
     "（点击查看大图）": "(Click to view larger image)",
     "[{p0} 已过期]": "[{p0} expired]",
+    "已过期": "Expired",
     "折叠 / 展开代码": "Fold/expand code",
     " 行": " lines",
     "复制": "Copy",

@@ -98,6 +98,17 @@ export function renderUserMsg(text: string | undefined) {
   const d = document.createElement("div");
   d.className = "msg user";
   const str = String(text);
+  // 图片按编号（即粘贴顺序）排在气泡顶部，和输入框的附件条一个样子；正文里原位置只留一个可点的引用
+  const thumbs = new Map<string, HTMLButtonElement>();
+  for (const m of [...str.matchAll(USER_ATTACH_RE)].sort((a, b) => Number(a[2]) - Number(b[2]))) {
+    if (m[1] === "图片" && !thumbs.has(m[2])) thumbs.set(m[2], chatThumb(d, m[3], m[2]));
+  }
+  if (thumbs.size) {
+    const strip = document.createElement("div");
+    strip.className = "msg-attach";
+    strip.append(...thumbs.values());
+    d.append(strip);
+  }
   // 发给 CLI 的斜杠命令整条换成命令样式，@路径 换成文件引用标签（原文不变，复制、填回仍用原文）
   const marks = syntaxMarks(str, S.current?.agent || "claude");
   if (marks[0]?.kind === "command") {
@@ -109,7 +120,7 @@ export function renderUserMsg(text: string | undefined) {
   let last = 0;
   for (const m of str.matchAll(USER_ATTACH_RE)) {
     if (m.index > last) appendMarked(d, str, last, m.index, marks);
-    if (m[1] === "图片") d.appendChild(chatThumb(m[3], i18nText("图片 #") + m[2]));
+    if (m[1] === "图片") d.appendChild(imageRef(thumbs.get(m[2])!, m[2]));
     else d.appendChild(fileLink(m[3], i18nText("附件 #") + m[2]));
     last = m.index + m[0].length;
   }
@@ -205,21 +216,49 @@ export function renderUserTurn(text: string | undefined, ts?: string) {
   return row;
 }
 
-/* 消息气泡里的图片缩略图 */
-export function chatThumb(containerPath: string, title: string) {
+/* 消息气泡顶部的图片缩略图：与输入框附件条同款（左上角 #n 角标），只是没有删除钮。
+ * 图片已被清理时整格换成「已过期」，正文里对应的引用一并置灰 */
+function chatThumb(msg: HTMLElement, containerPath: string, n: string) {
+  const title = () => i18nText("图片 #") + n;
+  const box = document.createElement("button");
+  box.type = "button";
+  box.className = "attach-thumb msg-thumb";
+  setAttrRender(box, "aria-label", title);
+  setTip(box, () => title() + i18nText("（点击查看大图）"));
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  badge.textContent = "#" + n;
   const img = document.createElement("img");
   img.className = "chat-thumb";
   img.src = imgURLFromPath(containerPath);
-  img.alt = title;
-  setTip(img, () => title + i18nText("（点击查看大图）"));
-  img.addEventListener("click", () => openLightbox(imgURLFromPath(containerPath), title + " · " + containerPath));
+  img.alt = "";
+  box.append(badge, img);
+  box.addEventListener("click", () => openLightbox(imgURLFromPath(containerPath), i18nText("图片 #{p0} · {p1}", { p0: n, p1: containerPath })));
   img.addEventListener("error", () => {
     const gone = document.createElement("span");
     gone.className = "img-gone";
-    setText(gone, "[{p0} 已过期]", { p0: String(title) });
+    setText(gone, "已过期");
     img.replaceWith(gone);
+    box.disabled = true;
+    setTip(box, () => i18nText("[{p0} 已过期]", { p0: title() }));
+    for (const ref of msg.querySelectorAll<HTMLElement>(`.msg-img-ref[data-n="${n}"]`)) ref.classList.add("gone");
   });
-  return img;
+  return box;
+}
+
+/* 正文里的图片引用：链接样式，点了和点顶部那张缩略图一样 */
+function imageRef(thumb: HTMLButtonElement, n: string) {
+  const ref = document.createElement("button");
+  ref.type = "button";
+  ref.className = "msg-img-ref";
+  ref.dataset.n = n;
+  setTextRender(ref, () => i18nText("图片 #") + n);
+  setTip(ref, () => {
+    const title = i18nText("图片 #") + n;
+    return thumb.disabled ? i18nText("[{p0} 已过期]", { p0: title }) : title + i18nText("（点击查看大图）");
+  });
+  ref.addEventListener("click", () => thumb.click());
+  return ref;
 }
 
 /* 消息里的附件：可点击下载的文件条 */

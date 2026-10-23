@@ -660,16 +660,24 @@ details.think.streaming .think-body::after {
   color: var(--muted); font-size: 11px;
 }
 
-/* 消息气泡里的图片缩略图（用户消息与引导消息共用） */
-.chat-thumb {
-  display: inline-block; vertical-align: middle;
-  max-width: 200px; max-height: 110px;
-  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale));
-  margin: 3px 4px;
+/* 消息气泡里的图片（用户消息与引导消息共用）：顶部一排缩略图沿用上面输入框的 .attach-thumb，
+ * 正文里原位置的引用画成链接，配色同输入框里的 [Image #n] 标记 */
+.msg-attach { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 8px; white-space: normal; }
+.msg-thumb { padding: 0; color: inherit; cursor: zoom-in; transition: border-color .15s ease; }
+.msg-thumb:hover:not(:disabled) { border-color: var(--amber); }
+.msg-thumb:disabled { cursor: default; }
+.msg-img-ref {
+  display: inline; padding: 0 3px; margin: 0 1px; border: 0;
+  border-radius: calc(4px * var(--radius-scale));
+  color: var(--info); background: color-mix(in srgb, var(--info) 13%, transparent);
+  line-height: inherit;
+  text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--info) 40%, transparent); text-underline-offset: 3px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
   cursor: zoom-in;
 }
-.chat-thumb:hover { border-color: var(--amber); }
-.img-gone { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+.msg-img-ref:hover { text-decoration-color: currentColor; }
+.msg-img-ref.gone { color: var(--muted); background: transparent; text-decoration: line-through; cursor: default; }
+.img-gone { color: var(--muted); font-size: 11px; font-family: var(--mono); }
 
 /* ---- 对话切换栏：当前对话标题（历史面板入口）+ 新对话（chat-threads.js） ---- */
 .thread-bar {
