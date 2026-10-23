@@ -30,15 +30,16 @@
 }
 .side-head:has(.version-badge:not(.hidden)) .side-brand {
   grid-area: 1 / 1; position: relative; display: block;
-  padding-left: 50px; font-size: 15px; line-height: 20px; letter-spacing: .06em;
+  padding-left: 46px; font-size: 15px; line-height: 20px; letter-spacing: .06em;
 }
 .side-head:has(.version-badge:not(.hidden)) .side-brand-name { display: block; overflow: hidden; text-overflow: ellipsis; }
-.side-head:has(.version-badge:not(.hidden)) .side-mark { position: absolute; left: 0; top: 2px; width: 40px; height: 40px; }
+/* 36px 的 logo 在「名称 20 + 间距 4 + 版本号 22」这 46px 里上下居中 */
+.side-head:has(.version-badge:not(.hidden)) .side-mark { position: absolute; left: 0; top: 5px; width: 36px; height: 36px; }
 .side-head:has(.version-badge:not(.hidden)) :is(.side-collapse, .side-close) { grid-area: 1 / 2 / 3 / 3; align-self: center; }
 .version-badge {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
-  grid-area: 2 / 1; justify-self: start; margin-left: 50px;
-  min-height: 22px; max-width: calc(100% - 50px); padding: 3px 6px;
+  grid-area: 2 / 1; justify-self: start; margin-left: 46px;
+  min-height: 22px; max-width: calc(100% - 46px); padding: 3px 6px;
   border: 1px solid transparent; border-radius: calc(6px * var(--radius-scale));
   background: var(--panel-2); color: var(--muted);
   font: 10px var(--mono); white-space: nowrap;

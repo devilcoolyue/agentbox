@@ -150,13 +150,10 @@
 }
 .side-brand:hover { color: var(--text-hi); }
 .side-brand-name { white-space: nowrap; }
-.side-mark {
-  width: 32px; height: 32px; flex: none;
-  display: grid; place-items: center;
-  border-radius: calc(9px * var(--radius-scale));
-  background: color-mix(in srgb, var(--amber) 9%, transparent);
-}
-.side-brand .mark { width: 24px; height: 24px; margin: 0; }
+/* logo 不垫底板、撑满整格：剪影本身就好认，底板只会把它压成一小块；
+ * 底色随风格变而 logo 固定琥珀，换了风格两者还会打架 */
+.side-mark { width: 32px; height: 32px; flex: none; display: grid; place-items: center; }
+.side-brand .mark { width: 100%; height: 100%; margin: 0; }
 .side-close {
   display: none; align-items: center; justify-content: center;
   margin-left: auto; width: 36px; height: 36px; flex: none;
