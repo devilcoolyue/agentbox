@@ -43,3 +43,23 @@ func TestValidateEgress(t *testing.T) {
 		t.Error("unknown egress must normalize to open")
 	}
 }
+
+func TestUnboundEgress(t *testing.T) {
+	for _, v := range []string{"", "server", "none"} {
+		if err := (&Config{Container: ContainerLimits{Network: "bridge", UnboundEgress: v}}).validateEgress(); err != nil {
+			t.Errorf("%q rejected: %v", v, err)
+		}
+	}
+	if err := (&Config{Container: ContainerLimits{Network: "bridge", UnboundEgress: "direct"}}).validateEgress(); err == nil {
+		t.Error("unknown unbound_egress accepted")
+	}
+	for l, want := range map[ContainerLimits]bool{
+		{Egress: "restricted"}:                        true,
+		{Egress: "restricted", UnboundEgress: "none"}: false,
+		{Egress: "open"}:                              false,
+	} {
+		if got := l.UnboundServerDirect(); got != want {
+			t.Errorf("%+v.UnboundServerDirect() = %v, want %v", l, got, want)
+		}
+	}
+}

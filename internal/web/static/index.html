@@ -904,6 +904,14 @@
                   </select>
                   <span class="hint" data-i18n-text="[&quot;受限模式在每个工作空间的网络命名空间里装防火墙规则：不能直连外网、宿主机其他服务和其他工作空间；绑了代理的账号走自己的代理，未绑代理的账号由服务器代为访问公网。需要网络辅助镜像，运行中的空间约 10 秒内生效。&quot;]">受限模式在每个工作空间的网络命名空间里装防火墙规则：不能直连外网、宿主机其他服务和其他工作空间；绑了代理的账号走自己的代理，未绑代理的账号由服务器代为访问公网。需要网络辅助镜像，运行中的空间约 10 秒内生效。</span>
                 </label>
+                <label class="field">
+                  <span data-i18n-text="[&quot;未绑代理的账号&quot;]">未绑代理的账号</span>
+                  <select id="set-unbound-egress">
+                    <option value="server" data-i18n-text="[&quot;由服务器代为访问公网（出口为服务器 IP）&quot;]">由服务器代为访问公网（出口为服务器 IP）</option>
+                    <option value="none" data-i18n-text="[&quot;禁止访问外网（含模型接口，需先绑代理）&quot;]">禁止访问外网（含模型接口，需先绑代理）</option>
+                  </select>
+                  <span class="hint" data-i18n-text="[&quot;仅在受限模式下生效。选「由服务器代为访问」时，空间可通过 IP 回显服务看到服务器真实 IP；要完全隐藏，请为所有账号绑定代理或选择禁止。&quot;]">仅在受限模式下生效。选「由服务器代为访问」时，空间可通过 IP 回显服务看到服务器真实 IP；要完全隐藏，请为所有账号绑定代理或选择禁止。</span>
+                </label>
                 <div class="card-foot">
                   <span class="note" data-i18n-text="[&quot;对新启动的容器生效&quot;]">对新启动的容器生效</span>
                 </div>

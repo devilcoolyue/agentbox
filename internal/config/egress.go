@@ -17,11 +17,26 @@ import (
 // network control, model gateway, usage telemetry and the dynamic bridge
 // ports). Direct internet access, other host services (sshd, databases…) and
 // other workspaces become unreachable, so the only way out is the account's
-// bound egress proxy. Accounts without a bound proxy get no internet at all.
+// bridge. Accounts without a bound proxy follow container.unbound_egress.
 const (
 	EgressOpen       = "open"
 	EgressRestricted = "restricted"
 )
+
+// container.unbound_egress: how restricted egress treats accounts without a
+// bound proxy. UnboundServer dials public targets from the server (its real
+// IP is visible to whatever the workspace contacts); UnboundNone gives them
+// no internet at all — model APIs included — until a proxy is bound.
+const (
+	UnboundServer = "server"
+	UnboundNone   = "none"
+)
+
+// UnboundServerDirect reports whether an account without a proxy may reach the
+// internet through the bridge's server-direct route.
+func (l ContainerLimits) UnboundServerDirect() bool {
+	return l.EgressMode() == EgressRestricted && l.UnboundEgress != UnboundNone
+}
 
 // defaultDynamicPorts is where per-request bridge listeners (Git transports,
 // Git terminal credentials, delegation MCP) bind. A fixed range lets the
@@ -72,6 +87,11 @@ func (c *Config) validateEgress() error {
 	case "", EgressOpen, EgressRestricted:
 	default:
 		return fmt.Errorf("container.egress must be %q or %q", EgressOpen, EgressRestricted)
+	}
+	switch c.Container.UnboundEgress {
+	case "", UnboundServer, UnboundNone:
+	default:
+		return fmt.Errorf("container.unbound_egress must be %q or %q", UnboundServer, UnboundNone)
 	}
 	if c.Container.Egress == EgressRestricted {
 		n := c.Container.Network

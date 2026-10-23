@@ -122,6 +122,10 @@ type ContainerLimits struct {
 	Network   string  `json:"network"`
 	// Egress is EgressOpen (default when empty) or EgressRestricted; see egress.go.
 	Egress string `json:"egress,omitempty"`
+	// UnboundEgress (restricted egress only): UnboundServer (default) lets the
+	// bridge dial public targets from the server for accounts without a proxy;
+	// UnboundNone refuses them, so no workspace can learn the server's own IP.
+	UnboundEgress string `json:"unbound_egress,omitempty"`
 }
 
 // TunnelConfig controls the reverse-tunnel feature: a local "abox-link" client

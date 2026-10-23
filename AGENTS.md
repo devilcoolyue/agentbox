@@ -816,7 +816,7 @@ data/
 - 规则对命名空间内**所有 UID** 生效（含透明辅助进程）：它的隧道流量去控制端口（已放行），直连回落按设计失败。不要改成只匹配 UID 1000。
 - 已锁状态按「容器 ID → StartedAt|规则哈希」缓存在内存；Docker 每次启动容器都新建命名空间，StartedAt 变了就重装。`networkLoop` 在 restricted 时也运行，负责给切换前已运行的空间补锁并清理缓存。
 - 放行端点来自 `egressPolicy`：代理桥、隧道（启用时）、网络控制（透明时）、模型网关、用量回传（未停用时）的广播地址和端口，外加 `proxy_bridge.dynamic_ports`。**新增给容器的宿主机监听必须加进这里**，按请求开的临时监听用 `s.listenDynamic`，不要再 `net.Listen(host:0)`。
-- 未绑代理的账号在 restricted 下也注入代理变量，`bridgeAuth` 返回 `directProxy`，`dialThrough` 走 `dialPublic`：服务端解析后只拨公网地址（`publicTarget` 排除私网/保留/嵌 IPv4 的 IPv6 前缀和本机网卡地址），且拨检查过的 IP，防 DNS 重绑定。开放模式下未绑代理仍是 502，不变。
+- 未绑代理的账号在 restricted 下也注入代理变量，`bridgeAuth` 返回 `directProxy`，`dialThrough` 走 `dialPublic`：服务端解析后只拨公网地址（`publicTarget` 排除私网/保留/嵌 IPv4 的 IPv6 前缀和本机网卡地址），且拨检查过的 IP，防 DNS 重绑定。`container.unbound_egress=none` 时改为 502 拒绝（`UnboundServerDirect` 为假），用于连服务器出口 IP 都不暴露的场景。开放模式下未绑代理仍是 502，不变。
 - 本地无 Docker 时，可用 `unshare -rn` 建两个网络命名空间（一侧当宿主机、一侧当工作空间），在 Alpine 的 iptables 根文件系统里跑 `EgressScript` 做真实验证；生产镜像是 alpine + iptables（nft 后端）。
 
 ### 内网隧道

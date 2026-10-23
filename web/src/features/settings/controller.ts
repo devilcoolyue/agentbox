@@ -475,6 +475,7 @@ function fillSettingsForms() {
   }
   setSelectValue(net, st.container.network);
   setSelectValue($<HTMLSelectElement>("set-egress"), st.container.egress || "open");
+  setSelectValue($<HTMLSelectElement>("set-unbound-egress"), st.container.unbound_egress || "server");
   $<HTMLInputElement>("set-running").value = String(st.resources?.max_running || 0);
   $<HTMLInputElement>("set-user-running").value = String(st.resources?.max_running_per_user || 0);
   $<HTMLInputElement>("set-free-gib").value = String((st.resources?.min_free_bytes || 0) / (1024 ** 3));
@@ -788,7 +789,7 @@ const valid = (...ids: string[]) => ids.every((id) => $<HTMLInputElement>(id).re
 function initSaveBar(signal: AbortSignal) {
   defineGroups([
     decisionSettingsGroup(),
-    { id: "container", get label() { return i18nText("Agent 镜像与资源限制"); }, fields: ["set-image", "set-mem", "set-cpus", "set-pids", "set-net", "set-egress"],
+    { id: "container", get label() { return i18nText("Agent 镜像与资源限制"); }, fields: ["set-image", "set-mem", "set-cpus", "set-pids", "set-net", "set-egress", "set-unbound-egress"],
       patch: () => ({
         agent_image: inputVal("set-image").trim(),
         expected_agent_image: settingsState.value?.agent_image,
@@ -796,6 +797,7 @@ function initSaveBar(signal: AbortSignal) {
           memory_mb: Number(inputVal("set-mem")), cpus: Number(inputVal("set-cpus")),
           pids_limit: Number(inputVal("set-pids")), network: $<HTMLSelectElement>("set-net").value,
           egress: $<HTMLSelectElement>("set-egress").value as "open" | "restricted",
+          unbound_egress: $<HTMLSelectElement>("set-unbound-egress").value as "server" | "none",
         },
       }) },
     { id: "image-updates", get label() { return i18nText("Agent 镜像自动更新"); }, fields: ["image-update-enabled", "image-update-channel", "image-update-time", "image-update-codex"],

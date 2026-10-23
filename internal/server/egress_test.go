@@ -197,3 +197,18 @@ func TestEgressPolicyCoversAdvertisedEndpoints(t *testing.T) {
 		t.Fatal("wildcard advertised host accepted")
 	}
 }
+
+// unbound_egress=none: an account without a proxy gets no route at all, so no
+// workspace can learn the server's own IP through an echo service.
+func TestBridgeUnboundNoneRefusesEverything(t *testing.T) {
+	s := unboundTestServer(config.EgressRestricted)
+	s.cfg.Container.UnboundEgress = config.UnboundNone
+	proxyURL := startBridge(t, s)
+	if code := rawConnect(t, proxyURL, "1.1.1.1:443"); code != http.StatusBadGateway {
+		t.Fatalf("CONNECT status = %d, want 502", code)
+	}
+	// The env is still injected so tools fail fast with the bridge's message.
+	if env := s.proxyEnvList(store.Session{ID: "s1", AccountID: "claude-1"}); len(env) != 8 {
+		t.Fatalf("env = %v", env)
+	}
+}

@@ -178,8 +178,12 @@ func (s *Server) bridgeAuth(w http.ResponseWriter, r *http.Request) (config.Prox
 		return config.Proxy{}, false
 	}
 	p, bound := s.cfg.AccountProxy(acct.ID)
-	if !bound && s.egressRestricted() {
+	if !bound && s.cfg.GetContainer().UnboundServerDirect() {
 		return directProxy, true
+	}
+	if !bound && s.egressRestricted() {
+		http.Error(w, "agentbox: 受限出网下未绑定 IP 代理的账号不能访问外网，请管理员为账号绑定代理", http.StatusBadGateway)
+		return config.Proxy{}, false
 	}
 	if !bound {
 		// The env is injected per exec; an admin can unbind mid-session and the
