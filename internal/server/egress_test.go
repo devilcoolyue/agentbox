@@ -212,3 +212,23 @@ func TestBridgeUnboundNoneRefusesEverything(t *testing.T) {
 		t.Fatalf("env = %v", env)
 	}
 }
+
+// Exempt users' workspaces are never locked and behave like open egress.
+func TestEgressExemptUser(t *testing.T) {
+	s := unboundTestServer(config.EgressRestricted)
+	s.cfg.Container.UnboundEgress = config.UnboundNone
+	s.cfg.Container.EgressExemptUsers = []string{"boxadmin"}
+	admin := store.Session{ID: "s1", User: "boxadmin", AccountID: "claude-1", ContainerID: "c1"}
+	// s.dock is nil: reaching the Docker layer would panic.
+	if err := s.ensureEgress(t.Context(), admin); err != nil {
+		t.Fatal(err)
+	}
+	if env := s.proxyEnvList(admin); env != nil {
+		t.Fatalf("exempt user got bridge env for an unbound account: %v", env)
+	}
+	other := admin
+	other.User = "alice"
+	if env := s.proxyEnvList(other); len(env) != 8 {
+		t.Fatalf("restricted user env = %v", env)
+	}
+}

@@ -126,6 +126,10 @@ type ContainerLimits struct {
 	// bridge dial public targets from the server for accounts without a proxy;
 	// UnboundNone refuses them, so no workspace can learn the server's own IP.
 	UnboundEgress string `json:"unbound_egress,omitempty"`
+	// EgressExemptUsers are user names whose workspaces stay unrestricted under
+	// restricted egress (typically the administrator, who manages the host from
+	// a workspace). Nil in a settings patch means "keep the current list".
+	EgressExemptUsers []string `json:"egress_exempt_users,omitempty"`
 }
 
 // TunnelConfig controls the reverse-tunnel feature: a local "abox-link" client
@@ -1293,7 +1297,14 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 			w.TimeZone = strings.TrimSpace(*p.TimeZone)
 		}
 		if p.Container != nil {
+			exempt := w.Container.EgressExemptUsers
 			w.Container = *p.Container
+			if p.Container.EgressExemptUsers == nil {
+				// Clients that predate the field must not wipe the list on save.
+				w.Container.EgressExemptUsers = exempt
+			} else {
+				w.Container.EgressExemptUsers = normalizeUserList(p.Container.EgressExemptUsers)
+			}
 		}
 		if p.Models != nil {
 			w.Models = cloneModels(p.Models)

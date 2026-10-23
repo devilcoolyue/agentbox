@@ -52,8 +52,9 @@ var proxyEnvNames = []string{
 // the account's official requests out of the server's real IP, which is the
 // failure this feature exists to prevent; a hard error is the safer symptom.
 func (s *Server) proxyEnvList(sess store.Session) []string {
-	// 受限出网下未绑代理的账号也注入：工作空间别无他路，桥接替它从服务器直连公网。
-	if _, bound := s.cfg.AccountProxy(sess.AccountID); !bound && !s.egressRestricted() {
+	// 受限出网下未绑代理的账号也注入：工作空间别无他路，只能经桥接出网。
+	// 例外用户的空间不加锁，按开放模式处理，否则 unbound_egress=none 会让它连模型都调不通。
+	if _, bound := s.cfg.AccountProxy(sess.AccountID); !bound && (!s.egressRestricted() || s.cfg.GetContainer().EgressExempt(sess.User)) {
 		return nil
 	}
 	pb := s.cfg.GetProxyBridge()

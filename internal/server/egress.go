@@ -56,7 +56,7 @@ func (s *Server) workspaceNetwork(ctx context.Context, sess store.Session) error
 // under the workspace lifecycle lock on every start/attach and from the
 // network loop, and is a single inspect when nothing changed.
 func (s *Server) ensureEgress(ctx context.Context, sess store.Session) error {
-	if !s.egressRestricted() || sess.ContainerID == "" {
+	if !s.egressRestricted() || sess.ContainerID == "" || s.cfg.GetContainer().EgressExempt(sess.User) {
 		return nil
 	}
 	p, err := s.egressPolicy(ctx)

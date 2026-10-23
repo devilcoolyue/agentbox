@@ -53,13 +53,52 @@ func TestUnboundEgress(t *testing.T) {
 	if err := (&Config{Container: ContainerLimits{Network: "bridge", UnboundEgress: "direct"}}).validateEgress(); err == nil {
 		t.Error("unknown unbound_egress accepted")
 	}
-	for l, want := range map[ContainerLimits]bool{
-		{Egress: "restricted"}:                        true,
-		{Egress: "restricted", UnboundEgress: "none"}: false,
-		{Egress: "open"}:                              false,
+	for _, c := range []struct {
+		l    ContainerLimits
+		want bool
+	}{
+		{ContainerLimits{Egress: "restricted"}, true},
+		{ContainerLimits{Egress: "restricted", UnboundEgress: "none"}, false},
+		{ContainerLimits{Egress: "open"}, false},
 	} {
-		if got := l.UnboundServerDirect(); got != want {
-			t.Errorf("%+v.UnboundServerDirect() = %v, want %v", l, got, want)
+		if got := c.l.UnboundServerDirect(); got != c.want {
+			t.Errorf("%+v.UnboundServerDirect() = %v, want %v", c.l, got, c.want)
 		}
+	}
+}
+
+// A settings save from a client that does not know egress_exempt_users must
+// keep the list; an explicit list replaces it (trimmed, de-duplicated).
+func TestApplySettingsKeepsEgressExemptUsers(t *testing.T) {
+	c := writeConfig(t, minimalConfig)
+	base := c.GetContainer()
+	with := base
+	with.EgressExemptUsers = []string{" boxadmin ", "boxadmin", "", "ops"}
+	if err := c.ApplySettings(SettingsPatch{Container: &with}); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.GetContainer().EgressExemptUsers; len(got) != 2 || got[0] != "boxadmin" || got[1] != "ops" {
+		t.Fatalf("exempt users = %q", got)
+	}
+	legacy := base
+	legacy.MemoryMB = 4096
+	legacy.EgressExemptUsers = nil
+	if err := c.ApplySettings(SettingsPatch{Container: &legacy}); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := Load(c.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.GetContainer(); got.MemoryMB != 4096 || !got.EgressExempt("boxadmin") {
+		t.Fatalf("legacy save dropped the list or the change: %+v", got)
+	}
+	cleared := base
+	cleared.EgressExemptUsers = []string{}
+	if err := c.ApplySettings(SettingsPatch{Container: &cleared}); err != nil {
+		t.Fatal(err)
+	}
+	if c.GetContainer().EgressExempt("boxadmin") {
+		t.Fatal("explicit empty list did not clear exemptions")
 	}
 }

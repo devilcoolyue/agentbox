@@ -51,6 +51,31 @@ func (l ContainerLimits) EgressMode() string {
 	return EgressOpen
 }
 
+// EgressExempt reports whether user's workspaces skip the restricted-egress lock.
+func (l ContainerLimits) EgressExempt(user string) bool {
+	for _, u := range l.EgressExemptUsers {
+		if u == user {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeUserList trims, drops empties and de-duplicates, keeping order.
+// It returns a non-nil slice so an explicit empty list stays distinguishable.
+func normalizeUserList(in []string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, u := range in {
+		u = strings.TrimSpace(u)
+		if u != "" && !seen[u] {
+			seen[u] = true
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
 // PortRange is an inclusive TCP port range.
 type PortRange struct{ Low, High int }
 

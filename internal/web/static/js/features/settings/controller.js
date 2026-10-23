@@ -476,6 +476,7 @@ export function createSettingsController() {
         setSelectValue(net, st.container.network);
         setSelectValue($("set-egress"), st.container.egress || "open");
         setSelectValue($("set-unbound-egress"), st.container.unbound_egress || "server");
+        $("set-egress-exempt").value = (st.container.egress_exempt_users || []).join(", ");
         $("set-running").value = String(st.resources?.max_running || 0);
         $("set-user-running").value = String(st.resources?.max_running_per_user || 0);
         $("set-free-gib").value = String((st.resources?.min_free_bytes || 0) / (1024 ** 3));
@@ -796,7 +797,7 @@ export function createSettingsController() {
     function initSaveBar(signal) {
         defineGroups([
             decisionSettingsGroup(),
-            { id: "container", get label() { return i18nText("Agent 镜像与资源限制"); }, fields: ["set-image", "set-mem", "set-cpus", "set-pids", "set-net", "set-egress", "set-unbound-egress"],
+            { id: "container", get label() { return i18nText("Agent 镜像与资源限制"); }, fields: ["set-image", "set-mem", "set-cpus", "set-pids", "set-net", "set-egress", "set-unbound-egress", "set-egress-exempt"],
                 patch: () => ({
                     agent_image: inputVal("set-image").trim(),
                     expected_agent_image: settingsState.value?.agent_image,
@@ -805,6 +806,7 @@ export function createSettingsController() {
                         pids_limit: Number(inputVal("set-pids")), network: $("set-net").value,
                         egress: $("set-egress").value,
                         unbound_egress: $("set-unbound-egress").value,
+                        egress_exempt_users: inputVal("set-egress-exempt").split(/[,，\s]+/).map((u) => u.trim()).filter(Boolean),
                     },
                 }) },
             { id: "image-updates", get label() { return i18nText("Agent 镜像自动更新"); }, fields: ["image-update-enabled", "image-update-channel", "image-update-time", "image-update-codex"],

@@ -677,6 +677,8 @@ export interface ContainerLimits {
   egress?: "open" | "restricted";
   /** 受限出网下未绑代理的账号："server"（缺省，服务器直连公网）或 "none"。 */
   unbound_egress?: "server" | "none";
+  /** 受限出网下不加锁的用户名。 */
+  egress_exempt_users?: string[];
 }
 
 /** config.TunnelConfig：反向隧道（容器经用户机器出网）配置。 */

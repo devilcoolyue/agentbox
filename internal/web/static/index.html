@@ -912,6 +912,11 @@
                   </select>
                   <span class="hint" data-i18n-text="[&quot;仅在受限模式下生效。选「由服务器代为访问」时，空间可通过 IP 回显服务看到服务器真实 IP；要完全隐藏，请为所有账号绑定代理或选择禁止。&quot;]">仅在受限模式下生效。选「由服务器代为访问」时，空间可通过 IP 回显服务看到服务器真实 IP；要完全隐藏，请为所有账号绑定代理或选择禁止。</span>
                 </label>
+                <label class="field">
+                  <span data-i18n-text="[&quot;不受限的用户&quot;]">不受限的用户</span>
+                  <input id="set-egress-exempt" class="mono" placeholder="例如 boxadmin，多个用逗号分隔" data-i18n-attrs="{&quot;placeholder&quot;: &quot;例如 boxadmin，多个用逗号分隔&quot;}">
+                  <span class="hint" data-i18n-text="[&quot;这些用户的空间不加出网限制（可直连、可访问宿主机），用于管理员在空间里维护服务器。只对之后启动或重新检查的空间生效；已加锁的空间需重启才会解除。&quot;]">这些用户的空间不加出网限制（可直连、可访问宿主机），用于管理员在空间里维护服务器。只对之后启动或重新检查的空间生效；已加锁的空间需重启才会解除。</span>
+                </label>
                 <div class="card-foot">
                   <span class="note" data-i18n-text="[&quot;对新启动的容器生效&quot;]">对新启动的容器生效</span>
                 </div>
