@@ -4,6 +4,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -111,5 +112,34 @@ requires_openai_auth = true
 	base, wire := ReadCodexProvider(dir)
 	if base != "https://new.example.com" || wire != "chat" {
 		t.Fatalf("round-trip = %q, %q", base, wire)
+	}
+}
+
+// Current Codex warns on every turn about disable_response_storage, which
+// earlier agentbox versions seeded into new configs: neither the account pool
+// nor a session copy may keep it.
+func TestCodexConfigDropsObsoleteResponseStorageKey(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeCodexProviderTOML(dir, "https://api.example.com", "responses"); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "config.toml"))
+	if strings.Contains(string(raw), codexObsoleteKey) {
+		t.Fatalf("fresh config seeds %s:\n%s", codexObsoleteKey, raw)
+	}
+	os.WriteFile(filepath.Join(dir, "config.toml"), []byte("disable_response_storage = true\nmodel = \"gpt-5.5\"\n"), 0o600)
+	if err := writeCodexProviderTOML(dir, "https://api.example.com", "responses"); err != nil {
+		t.Fatal(err)
+	}
+	pool, _ := os.ReadFile(filepath.Join(dir, "config.toml"))
+	if strings.Contains(string(pool), codexObsoleteKey) || !strings.Contains(string(pool), "gpt-5.5") {
+		t.Fatalf("pool rewrite:\n%s", pool)
+	}
+	session, err := codexConnectionConfig([]byte("disable_response_storage = true\nmodel = \"gpt-5.5\"\n"), pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(session), codexObsoleteKey) || !strings.Contains(string(session), "gpt-5.5") {
+		t.Fatalf("session config:\n%s", session)
 	}
 }

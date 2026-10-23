@@ -161,6 +161,7 @@ func codexConnectionConfig(raw, pool []byte) ([]byte, error) {
 		}
 	}
 	delete(settings, "forced_chatgpt_workspace_id")
+	delete(settings, codexObsoleteKey)
 	provider, _ := source["model_provider"].(string)
 	providers, _ := settings["model_providers"].(map[string]any)
 	if providers == nil {

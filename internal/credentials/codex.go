@@ -8,6 +8,12 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// codexObsoleteKey was written by earlier agentbox versions into every new
+// Codex config. Current Codex no longer knows it and prints an "ignoring
+// unrecognized configuration settings" warning on every turn, so it is
+// stripped wherever agentbox rewrites a config.
+const codexObsoleteKey = "disable_response_storage"
+
 // writeCodexProviderTOML 更新账号池的连接配置，保留模型、推理强度和 MCP。
 func writeCodexProviderTOML(credDir, baseURL, wireAPI string) error {
 	raw, err := readPoolFile(config.Account{CredentialsDir: credDir}, "config.toml")
@@ -18,9 +24,7 @@ func writeCodexProviderTOML(credDir, baseURL, wireAPI string) error {
 	if err := toml.Unmarshal(raw, &settings); err != nil {
 		return err
 	}
-	if len(settings) == 0 {
-		settings["disable_response_storage"] = true
-	}
+	delete(settings, codexObsoleteKey)
 	provider := "openai"
 	if baseURL != "" {
 		provider = "agentbox"
