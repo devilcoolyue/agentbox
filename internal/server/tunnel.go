@@ -409,6 +409,8 @@ func (s *Server) bindUserMaps(user string, specs []tunnel.MapSpec) (statuses []s
 		switch {
 		case spec.Port < 1024:
 			status = "listen ports below 1024 are not allowed"
+		case s.egressRestricted() && !s.cfg.GetProxyBridge().DynamicPortRange().Contains(spec.Port):
+			status = "restricted egress: map ports must be within proxy_bridge.dynamic_ports " + s.cfg.GetProxyBridge().DynamicPortRange().String()
 		case len(entries) >= maxMapsPerUser:
 			status = fmt.Sprintf("too many maps (max %d)", maxMapsPerUser)
 		default:

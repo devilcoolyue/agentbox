@@ -26,7 +26,8 @@
     "memory_mb": 2048,
     "cpus": 2,
     "pids_limit": 512,
-    "network": "bridge"
+    "network": "bridge",
+    "egress": "open"
   },
   "tunnel": {
     "transparent": true,

@@ -140,7 +140,7 @@ func (s *Server) handleGitTerminal(w http.ResponseWriter, r *http.Request, sess 
 		writeErr(w, 503, "终端授权网桥地址无效")
 		return
 	}
-	ln, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
+	ln, err := s.listenDynamic(host)
 	if err != nil {
 		writeErr(w, 503, "终端授权网桥不可用")
 		return

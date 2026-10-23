@@ -318,15 +318,23 @@ func (s *Server) networkStatus(sess store.Session, p netaccess.Policy) workspace
 }
 func (s *Server) networkLoop() {
 	for {
-		if tc := s.cfg.GetTunnel(); tc.Transparent && tc.Enabled {
+		tc := s.cfg.GetTunnel()
+		transparent := tc.Transparent && tc.Enabled
+		// Restricted egress rides the same reconcile: a workspace already running
+		// when the mode is switched on gets its rules here, not at next use.
+		if restricted := s.egressRestricted(); transparent || restricted {
+			running := map[string]bool{}
 			for _, sess := range s.store.All() {
 				if sess.Status != store.StatusRunning {
 					continue
 				}
+				running[sess.ContainerID] = true
 				ctx, cancel := context.WithTimeout(s.workContext(), 15*time.Second)
 				err := s.workspaces().RefreshNetwork(ctx, sess.ID)
 				cancel()
-				if err != nil && s.workContext().Err() == nil {
+				if err != nil && s.workContext().Err() == nil && !transparent {
+					logEgress(sess, err)
+				} else if err != nil && s.workContext().Err() == nil {
 					s.network.mu.Lock()
 					if s.network.reports == nil {
 						s.network.reports = map[string]networkReport{}
@@ -335,6 +343,7 @@ func (s *Server) networkLoop() {
 					s.network.mu.Unlock()
 				}
 			}
+			s.pruneEgress(running)
 		}
 		if !waitInterval(s.workContext(), 10*time.Second) {
 			return

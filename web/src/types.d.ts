@@ -673,6 +673,8 @@ export interface ContainerLimits {
   cpus: number;
   pids_limit: number;
   network: string;
+  /** "open"（缺省）或 "restricted"：受限出网。 */
+  egress?: "open" | "restricted";
 }
 
 /** config.TunnelConfig：反向隧道（容器经用户机器出网）配置。 */

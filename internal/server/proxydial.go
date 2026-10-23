@@ -37,6 +37,8 @@ func dialThrough(ctx context.Context, p config.Proxy, addr string) (net.Conn, er
 		return nil, fmt.Errorf("代理 %s 已停用", proxyLabel(p))
 	}
 	switch p.Scheme {
+	case directScheme:
+		return dialPublic(ctx, addr)
 	case config.ProxySOCKS5:
 		return dialSOCKS5(ctx, p, addr)
 	case config.ProxyHTTP, config.ProxyHTTPS:
@@ -133,6 +135,9 @@ func (c *bufferedConn) Read(b []byte) (int, error) { return c.r.Read(b) }
 
 // proxyLabel names a proxy in error messages without ever printing credentials.
 func proxyLabel(p config.Proxy) string {
+	if p.Scheme == directScheme {
+		return p.Name
+	}
 	if p.Name != "" && p.Name != p.Host {
 		return p.Name + "(" + p.Endpoint() + ")"
 	}

@@ -214,7 +214,7 @@ func (s *Server) openDelegation(room *chatRoom, u store.User, receipt store.Chat
 	if _, err = root.WriteFile(delegationHelperFile, delegateMCPHelper, safefs.WriteOptions{Mode: 0o600, Chown: true, UID: 1000, GID: 1000, BestEffortChown: true}); err != nil {
 		return nil, err
 	}
-	ln, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
+	ln, err := s.listenDynamic(host)
 	if err != nil {
 		return nil, fmt.Errorf("delegation bridge unavailable: %w", err)
 	}

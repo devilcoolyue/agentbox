@@ -52,7 +52,8 @@ var proxyEnvNames = []string{
 // the account's official requests out of the server's real IP, which is the
 // failure this feature exists to prevent; a hard error is the safer symptom.
 func (s *Server) proxyEnvList(sess store.Session) []string {
-	if _, bound := s.cfg.AccountProxy(sess.AccountID); !bound {
+	// 受限出网下未绑代理的账号也注入：工作空间别无他路，桥接替它从服务器直连公网。
+	if _, bound := s.cfg.AccountProxy(sess.AccountID); !bound && !s.egressRestricted() {
 		return nil
 	}
 	pb := s.cfg.GetProxyBridge()
@@ -91,7 +92,7 @@ func (s *Server) applyProxyBridge() error {
 	s.bridgeMu.Lock()
 	defer s.bridgeMu.Unlock()
 	pb := s.cfg.GetProxyBridge()
-	want := len(s.cfg.ProxyList()) > 0
+	want := len(s.cfg.ProxyList()) > 0 || s.egressRestricted()
 	if s.bridgeLn != nil && (!want || s.bridgeBind != pb.Bind) {
 		_ = s.bridgeLn.Close()
 		s.bridgeLn = nil
@@ -177,6 +178,9 @@ func (s *Server) bridgeAuth(w http.ResponseWriter, r *http.Request) (config.Prox
 		return config.Proxy{}, false
 	}
 	p, bound := s.cfg.AccountProxy(acct.ID)
+	if !bound && s.egressRestricted() {
+		return directProxy, true
+	}
 	if !bound {
 		// The env is injected per exec; an admin can unbind mid-session and the
 		// container keeps using the old env until its next exec.

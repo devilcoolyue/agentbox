@@ -120,6 +120,8 @@ type ContainerLimits struct {
 	CPUs      float64 `json:"cpus"`
 	PidsLimit int64   `json:"pids_limit"`
 	Network   string  `json:"network"`
+	// Egress is EgressOpen (default when empty) or EgressRestricted; see egress.go.
+	Egress string `json:"egress,omitempty"`
 }
 
 // TunnelConfig controls the reverse-tunnel feature: a local "abox-link" client
@@ -158,6 +160,9 @@ const defaultTunnelBind = "172.17.0.1:1080"
 type ProxyBridgeConfig struct {
 	Bind string `json:"bind,omitempty"`
 	Host string `json:"host,omitempty"`
+	// DynamicPorts is the "low-high" range for per-request bridge listeners,
+	// default defaultDynamicPorts. Restricted egress allows exactly this range.
+	DynamicPorts string `json:"dynamic_ports,omitempty"`
 }
 
 // defaultProxyBridgeBind sits on the same gateway as the tunnel proxy, one port
@@ -551,6 +556,9 @@ func (c *Config) validateLocked() error {
 	}
 	if c.Container.Network == "" {
 		return fmt.Errorf("container.network must not be empty")
+	}
+	if err := c.validateEgress(); err != nil {
+		return err
 	}
 	if c.Tunnel.Enabled && c.Tunnel.Transparent {
 		if c.Tunnel.ProxyBind == "" {
@@ -963,6 +971,9 @@ func (c *Config) GetProxyBridge() ProxyBridgeConfig {
 		if host, _, err := net.SplitHostPort(pb.Bind); err == nil {
 			pb.Host = host
 		}
+	}
+	if pb.DynamicPorts == "" {
+		pb.DynamicPorts = defaultDynamicPorts
 	}
 	return pb
 }

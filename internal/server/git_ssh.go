@@ -58,7 +58,7 @@ func (s *Server) gitSSHTransport(ctx context.Context, c store.GitConnection, rep
 	if err != nil {
 		return "", nil, err
 	}
-	ln, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
+	ln, err := s.listenDynamic(host)
 	if err != nil {
 		return "", nil, errors.New("SSH Git 网桥不可用")
 	}

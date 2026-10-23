@@ -66,7 +66,7 @@ func (s *Server) gitTransport(ctx context.Context, c store.GitConnection, reposi
 	if err != nil {
 		return "", nil, errors.New("Git 传输网桥地址无效")
 	}
-	ln, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
+	ln, err := s.listenDynamic(host)
 	if err != nil {
 		return "", nil, errors.New("Git 传输网桥不可用，请检查 proxy_bridge.bind")
 	}

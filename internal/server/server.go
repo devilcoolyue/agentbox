@@ -110,6 +110,7 @@ type Server struct {
 	prices           *pricecatalog.Service
 
 	network          networkState
+	egress           egressState
 	updates          updateState
 	storage          storageState
 	storageReserveMu sync.Mutex
@@ -919,7 +920,7 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) workspaces() *workspace.Service {
 	s.workspaceOnce.Do(func() {
 		s.workspace = workspace.New(s.cfg, s.store, s.dock, s.sessionAccount, s.credentialService().Sync)
-		s.workspace.SetNetworkHook(s.ensureNetwork)
+		s.workspace.SetNetworkHook(s.workspaceNetwork)
 		s.workspace.SetMCPHook(s.syncMCPOnStart)
 		s.workspace.SetConnectionHook(s.applyCodexEndpoint)
 		s.workspace.SetLifecycleHook(s.emitWorkspaceLifecycle)

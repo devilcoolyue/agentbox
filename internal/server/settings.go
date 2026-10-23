@@ -103,6 +103,17 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if patch.Container != nil && patch.Container.Egress == config.EgressRestricted && !s.egressRestricted() {
+		// Refuse up front rather than fail every workspace start afterwards.
+		p, err := s.egressPolicy(r.Context())
+		if err == nil {
+			_, _, err = p.Rules()
+		}
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if err := s.cfg.ApplySettings(patch); err != nil {
 		if errors.Is(err, config.ErrDecisionRevision) {
 			writeErr(w, http.StatusConflict, err.Error())
@@ -126,8 +137,8 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if patch.CacheKeepalive != nil {
 		s.reconcileAllKeepalive()
 	}
-	if patch.ProxyBridge != nil {
-		// 换绑定地址同样热生效：重绑失败只记日志，代理列表接口里会显示当前状态。
+	if patch.ProxyBridge != nil || patch.Container != nil {
+		// 受限出网要求桥接常驻（未绑代理的账号也经它出网）；换绑定地址同样热生效：重绑失败只记日志，代理列表接口里会显示当前状态。
 		s.refreshProxyBridge()
 	}
 	writeJSON(w, http.StatusOK, view)

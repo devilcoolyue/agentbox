@@ -896,6 +896,14 @@
                     <option value="none" data-i18n-text="[&quot;none — 完全断网&quot;]">none — 完全断网</option>
                   </select>
                 </label>
+                <label class="field">
+                  <span data-i18n-text="[&quot;出网范围&quot;]">出网范围</span>
+                  <select id="set-egress">
+                    <option value="open" data-i18n-text="[&quot;开放 — 可直连外网和宿主机（默认）&quot;]">开放 — 可直连外网和宿主机（默认）</option>
+                    <option value="restricted" data-i18n-text="[&quot;受限 — 只能经 agentbox 出网（账号代理或服务器直连公网）&quot;]">受限 — 只能经 agentbox 出网（账号代理或服务器直连公网）</option>
+                  </select>
+                  <span class="hint" data-i18n-text="[&quot;受限模式在每个工作空间的网络命名空间里装防火墙规则：不能直连外网、宿主机其他服务和其他工作空间；绑了代理的账号走自己的代理，未绑代理的账号由服务器代为访问公网。需要网络辅助镜像，运行中的空间约 10 秒内生效。&quot;]">受限模式在每个工作空间的网络命名空间里装防火墙规则：不能直连外网、宿主机其他服务和其他工作空间；绑了代理的账号走自己的代理，未绑代理的账号由服务器代为访问公网。需要网络辅助镜像，运行中的空间约 10 秒内生效。</span>
+                </label>
                 <div class="card-foot">
                   <span class="note" data-i18n-text="[&quot;对新启动的容器生效&quot;]">对新启动的容器生效</span>
                 </div>
