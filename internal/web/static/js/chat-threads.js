@@ -7,7 +7,7 @@ import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js"
  * 本端与广播都汇入 bus 的 thread-changed 事件，由 chat.ts 重载对话流。 */
 "use strict";
 import { S, emit } from "./state.js";
-import { $, fmtTime, toast, askConfirm, askPrompt } from "./util.js";
+import { $, fmtSize, fmtTime, toast, askConfirm, askPrompt } from "./util.js";
 import { api } from "./api.js";
 import { svgIcon, USER_ATTACH_RE } from "./chat-render.js";
 import { setTip } from "./tip.js";
@@ -164,7 +164,7 @@ function threadItem(t, on) {
     title.textContent = previewText(t.title);
     const meta = document.createElement("span");
     meta.className = "tp-meta";
-    setTextRender(meta, () => [fmtTime(t.updated || t.ts), i18nText("{p0} 轮", { p0: String(t.turns || 0) }), on ? i18nText("当前") : ""]
+    setTextRender(meta, () => [fmtTime(t.updated || t.ts), i18nText("{p0} 轮", { p0: String(t.turns || 0) }), t.size ? fmtSize(t.size) : "", on ? i18nText("当前") : ""]
         .filter(Boolean).join(" · "));
     open.append(title, meta);
     open.addEventListener("click", () => { if (on)

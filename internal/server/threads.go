@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"agentbox/internal/agent"
+	"agentbox/internal/config"
+	"agentbox/internal/safefs"
 	"agentbox/internal/store"
 )
 
@@ -204,8 +206,10 @@ type threadMeta struct {
 	TS        time.Time `json:"ts"`
 	Updated   time.Time `json:"updated"`
 	Turns     int       `json:"turns"`
-	Resumable bool      `json:"resumable"` // 是否记录了可续聊的 provider 会话 id
+	Resumable bool      `json:"resumable"`      // 是否记录了可续聊的 provider 会话 id
+	Size      int64     `json:"size,omitempty"` // 续聊所用 CLI 会话记录的字节数，与 Claude Code /resume 同口径；拿不到时省略
 	sent      bool      // 发出过消息；只有 draft_context 等元数据的空对话不进历史列表
+	resume    string    // 最后一条 chat_session 记的 provider 会话 id
 }
 
 // scanThread derives list metadata from one thread file. Callers hold fileMu.
@@ -237,6 +241,7 @@ func (s *Server) scanThread(sess store.Session, tid string) (threadMeta, bool) {
 				genTitle = e.meta.Text
 			}
 		case "chat_session":
+			m.resume = e.meta.Text
 			m.Resumable = e.meta.Text != ""
 		}
 	}
@@ -371,6 +376,50 @@ func (s *Server) listThreads(sess store.Session) []threadMeta {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Updated.After(out[j].Updated) })
 	return out
+}
+
+var transcriptIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// fillTranscriptSizes sets each thread's Size to the byte size of the Claude
+// Code transcript it resumes from, the figure the CLI's /resume list shows.
+// The session home is a host bind mount, so this is a stat per thread with no
+// container involved, hibernated or not. The cwd-derived project directory is
+// not recorded, so every one is tried (there is normally one). Codex rollouts
+// are filed by date and get no size.
+func (s *Server) fillTranscriptSizes(sess store.Session, list []threadMeta) {
+	if sess.Agent != config.AgentClaude || len(list) == 0 {
+		return
+	}
+	root, err := s.openDataDir(filepath.Join(s.homeDir(sess), ".claude", "projects"))
+	if err != nil {
+		return
+	}
+	defer root.Close()
+	entries, err := root.ReadDirLimit(".", 256)
+	if err != nil {
+		return
+	}
+	var dirs []*safefs.Root
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if d, err := root.Sub(e.Name()); err == nil {
+			defer d.Close()
+			dirs = append(dirs, d)
+		}
+	}
+	for i := range list {
+		if !transcriptIDRe.MatchString(list[i].resume) {
+			continue
+		}
+		for _, d := range dirs {
+			if fi, err := d.Lstat(list[i].resume + ".jsonl"); err == nil && fi.Mode().IsRegular() {
+				list[i].Size = fi.Size()
+				break
+			}
+		}
+	}
 }
 
 // draftOnlyThread reports whether a thread file holds nothing but the
@@ -654,8 +703,10 @@ func (s *Server) handleThreadList(w http.ResponseWriter, r *http.Request, sess s
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	list := s.listThreads(sess)
+	s.fillTranscriptSizes(sess, list)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"threads": s.listThreads(sess),
+		"threads": list,
 		"active":  s.activeThread(sess),
 	})
 }

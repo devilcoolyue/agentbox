@@ -1160,6 +1160,8 @@ export interface Thread {
   turns: number;
   /** 是否记录了可续聊的 provider 会话 id */
   resumable: boolean;
+  /** 续聊所用 CLI 会话记录的字节数（与 Claude Code /resume 同口径）；Codex 或找不到记录时没有 */
+  size?: number;
 }
 
 /** GET /api/sessions/{id}/history 的一条落盘记录。 */

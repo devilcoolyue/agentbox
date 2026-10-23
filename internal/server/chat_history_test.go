@@ -138,11 +138,42 @@ func TestScanThread(t *testing.T) {
 	if !ok {
 		t.Fatal("scanThread failed")
 	}
-	if m.Title != "问个问题" || m.Turns != 2 || !m.Resumable {
+	if m.Title != "问个问题" || m.Turns != 2 || !m.Resumable || m.resume != "sid-9" {
 		t.Fatalf("meta unexpected: %+v", m)
 	}
 	if !m.Updated.After(m.TS) {
 		t.Fatalf("updated %v should be after ts %v", m.Updated, m.TS)
+	}
+}
+
+// 历史列表的大小取续聊所用 CLI 会话记录的字节数（与 Claude Code /resume 同口径）：
+// 按最后一条 chat_session 找，项目目录不固定所以逐个试；找不到、Codex 都不填。
+func TestFillTranscriptSizes(t *testing.T) {
+	s, sess := testThreadServer(t)
+	sess.Agent = config.AgentClaude
+	projects := filepath.Join(s.homeDir(sess), ".claude", "projects")
+	for _, dir := range []string{"-tmp", "-workspace"} {
+		if err := os.MkdirAll(filepath.Join(projects, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(projects, "-workspace", "sid-new.jsonl"), make([]byte, 1234), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projects, "-workspace", "sid-old.jsonl"), make([]byte, 9), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list := []threadMeta{{ID: "a", resume: "sid-new"}, {ID: "b", resume: "sid-gone"}, {ID: "c", resume: "../x"}, {ID: "d"}}
+	s.fillTranscriptSizes(sess, list)
+	if list[0].Size != 1234 || list[1].Size != 0 || list[2].Size != 0 || list[3].Size != 0 {
+		t.Fatalf("sizes = %d %d %d %d", list[0].Size, list[1].Size, list[2].Size, list[3].Size)
+	}
+
+	sess.Agent = config.AgentCodex
+	list = []threadMeta{{ID: "a", resume: "sid-new"}}
+	s.fillTranscriptSizes(sess, list)
+	if list[0].Size != 0 {
+		t.Fatalf("codex size = %d, want none", list[0].Size)
 	}
 }
 
