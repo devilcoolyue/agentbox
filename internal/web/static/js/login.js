@@ -12,6 +12,7 @@ import { startPing } from "./ping.js";
 import { renderMyQuota } from "./quota.js";
 import { buttonLabel } from "./icons.js";
 import { clearPreviousChatIdentity, rememberChatIdentity } from "./features/chat/local-identity.js";
+import { enter, motionOff } from "./motion.js";
 function setPasswordVisible(visible) {
     $("login-pass").type = visible ? "text" : "password";
     const toggle = $("login-password-toggle");
@@ -39,12 +40,32 @@ export function showLogin(err, keepStoredToken = false) {
     emit("signed-out");
     $("app").classList.add("hidden");
     $("login").classList.remove("hidden");
+    endBoot();
     if (err) {
         $("login-error").textContent = err;
         $("login-error").classList.remove("hidden");
     }
 }
+/* 启动页（index.html 的 #boot，样式在 shell.css）：从校验令牌一直盖到路由落到目标页。
+ * 刷新时 <head> 已先挂上；登录表单提交后也走这里，登录卡片直接换成启动页。 */
+function endBoot() {
+    const root = document.documentElement;
+    if (!("boot" in root.dataset))
+        return;
+    delete root.dataset.boot;
+    if (!motionOff())
+        enter($("app").classList.contains("hidden") ? $("login") : $("app"), 0, "--dur");
+}
 export async function tryEnter() {
+    document.documentElement.dataset.boot = "";
+    try {
+        await enterApp();
+    }
+    finally {
+        endBoot();
+    } // 路由已在 app-ready 里落到目标页；中途换了令牌或失败也不能一直盖着
+}
+async function enterApp() {
     const token = S.token;
     let me;
     try {

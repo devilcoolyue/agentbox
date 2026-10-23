@@ -1,5 +1,41 @@
 /* shell：登录页 + 应用外壳（顶栏 / 侧栏 / 抽屉 / 主区视图切换）。 */
 
+/* ---- 启动页：<head> 里看到本地令牌就挂上 :root[data-boot]，直到路由落到目标页（login.ts）。
+ * 界面只是 visibility:hidden，底下照常排版，揭开时不会再跳一下；背景透明，风格的画布照常透出。
+ * 内容晚 150ms 才淡入，刷新得快时只看到一瞬底色，不会闪一下盒仔。
+ * 盒仔从箱子里探头（头和手分开动，手一直扶着箱沿），天线灯跟着节奏亮，下面三颗点依次跳。 ---- */
+.boot { display: none; }
+:root[data-boot] .boot { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; }
+:root[data-boot] :is(#app, #login) { visibility: hidden; }
+:root[data-boot] #top-loader { display: none; }
+.boot-stage {
+  display: flex; flex-direction: column; align-items: center; gap: 26px;
+  margin-top: -6vh;
+  animation: boot-in var(--dur-slow) var(--ease-out) 150ms both;
+}
+.mascot-boot { width: 132px; }
+.mascot-boot svg { overflow: visible; }
+.mascot-boot .boxi-bob:first-of-type { animation: boot-peek 1.6s var(--ease-move) infinite; }
+.mascot-boot .boxi-bob:last-of-type { animation: boot-grip 1.6s var(--ease-move) infinite; }
+.mascot-boot .boxi-glow { animation-duration: .8s; }
+.boot-dots { display: flex; gap: 8px; }
+.boot-dots i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--amber);
+  animation: boot-dot 1.2s ease-in-out infinite;
+}
+.boot-dots i:nth-child(2) { animation-delay: .16s; }
+.boot-dots i:nth-child(3) { animation-delay: .32s; }
+@keyframes boot-in { from { opacity: 0; translate: 0 var(--enter-y); } }
+@keyframes boot-peek { 0%, 100% { transform: translateY(0); } 45%, 60% { transform: translateY(-13px); } }
+@keyframes boot-grip { 0%, 100% { transform: translateY(0); } 45%, 60% { transform: translateY(-3px); } }
+@keyframes boot-dot { 0%, 70%, 100% { opacity: .28; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-5px); } }
+@media (prefers-reduced-motion: reduce) {
+  .boot-stage, .mascot-boot .boxi-bob:is(:first-of-type, :last-of-type), .boot-dots i { animation: none; }
+  .boot-dots i:nth-child(2) { opacity: .6; }
+  .boot-dots i:nth-child(3) { opacity: .3; }
+}
+
 /* ---- 登录：牛皮纸点阵衬底 + 盒仔迎宾 ---- */
 .login {
   height: 100vh;

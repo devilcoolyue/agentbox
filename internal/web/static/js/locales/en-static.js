@@ -424,6 +424,7 @@ export default {
     "系统模型列表": "System model list",
     "没有配置可用模型的账号使用这里的模型和新空间默认模型。读取上游模型时，上游没有报告思考强度的模型也会参考这里同名模型的配置。": "Accounts without their own available models use these models and the default model for new workspaces. When models are loaded from a provider that reports no reasoning effort, the settings of a model with the same ID here are suggested.",
     "模拟宽度": "Preview width",
+    "加载中…": "Loading…",
     "正在加载历史对话…": "Loading conversation history…",
     "正在启动": "Starting",
     "正在移动": "Moving",
