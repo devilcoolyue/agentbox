@@ -100,6 +100,10 @@ func (p EgressPolicy) Rules() (v4, v6 string, err error) {
 	var b strings.Builder
 	b.WriteString("*filter\n:" + EgressChain + " - [0:0]\n:" + IngressChain + " - [0:0]\n")
 	b.WriteString("-F " + EgressChain + "\n-F " + IngressChain + "\n")
+	// The transparent helper REDIRECTs agent TCP/DNS to 127.0.0.1 in nat
+	// OUTPUT; filter OUTPUT then still sees the original out interface, so
+	// "-o lo" alone rejects every redirected flow. Match the destination too.
+	b.WriteString("-A " + EgressChain + " -d 127.0.0.0/8 -j RETURN\n")
 	b.WriteString("-A " + EgressChain + " -o lo -j RETURN\n")
 	b.WriteString("-A " + EgressChain + " -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN\n")
 	for _, h := range p.Hosts {
@@ -114,6 +118,7 @@ func (p EgressPolicy) Rules() (v4, v6 string, err error) {
 	// No IPv6 endpoint is ever advertised to workspaces: loopback only.
 	v6 = "*filter\n:" + EgressChain + " - [0:0]\n:" + IngressChain + " - [0:0]\n" +
 		"-F " + EgressChain + "\n-F " + IngressChain + "\n" +
+		"-A " + EgressChain + " -d ::1/128 -j RETURN\n" +
 		"-A " + EgressChain + " -o lo -j RETURN\n" +
 		"-A " + EgressChain + " -j REJECT\n" +
 		"-A " + IngressChain + " -i lo -j RETURN\n" +

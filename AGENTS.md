@@ -813,6 +813,7 @@ data/
 ### 受限出网
 
 - `container.egress`：空/`open` 是历史行为；`restricted` 由 `internal/server/egress.go` 在网络钩子（`workspaceNetwork`，先锁出网再起透明辅助进程）里调用 `dockerx.LockEgress`：一次性 NET_ADMIN 容器共享工作空间网络命名空间，用网络辅助镜像里的 `sh` + `iptables-restore` 执行 `netaccess.EgressScript`，规则文本由 `netaccess.EgressPolicy.Rules` 生成。复用镜像而不加子命令，是为了不重建镜像就能上线。
+- 透明模式的 nat OUTPUT 把 agent 的 TCP/DNS REDIRECT 到 127.0.0.1，但 filter OUTPUT 里这些包的出接口仍是原来的（不是 lo），所以 `ABX_EGRESS` 必须有 `-d 127.0.0.0/8 -j RETURN`（IPv6 `::1`），只写 `-o lo` 会把透明空间的全部连接和 DNS 拒掉（2026-10-23 生产事故，约 1.5 分钟）。命名空间测试要带上这条 REDIRECT。
 - 规则对命名空间内**所有 UID** 生效（含透明辅助进程）：它的隧道流量去控制端口（已放行），直连回落按设计失败。不要改成只匹配 UID 1000。
 - 已锁状态按「容器 ID → StartedAt|规则哈希」缓存在内存；Docker 每次启动容器都新建命名空间，StartedAt 变了就重装。`networkLoop` 在 restricted 时也运行，负责给切换前已运行的空间补锁并清理缓存。
 - 放行端点来自 `egressPolicy`：代理桥、隧道（启用时）、网络控制（透明时）、模型网关、用量回传（未停用时）的广播地址和端口，外加 `proxy_bridge.dynamic_ports`。**新增给容器的宿主机监听必须加进这里**，按请求开的临时监听用 `s.listenDynamic`，不要再 `net.Listen(host:0)`。
