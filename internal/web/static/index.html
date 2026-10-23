@@ -1321,7 +1321,7 @@
               <div class="sec-intro">
                 <div>
                   <h2 data-i18n-text="[&quot;运维监控&quot;]">运维监控</h2>
-                  <p data-i18n-text="[&quot;服务端与主机的实时资源占用，以及每个工作空间容器的 CPU / 内存。&quot;]">服务端与主机的实时资源占用，以及每个工作空间容器的 CPU / 内存。</p>
+                  <p data-i18n-text="[&quot;服务端与主机的实时资源占用，每个工作空间容器的 CPU / 内存 / 磁盘，以及每个用户的存储配额。&quot;]">服务端与主机的实时资源占用，每个工作空间容器的 CPU / 内存 / 磁盘，以及每个用户的存储配额。</p>
                 </div>
                 <label class="mon-auto" data-i18n-text="[&quot; 自动刷新&quot;]"><input type="checkbox" id="mon-auto" checked> 自动刷新</label>
               </div>
@@ -1344,9 +1344,30 @@
                         <th class="num">CPU</th>
                         <th class="num" data-i18n-text="[&quot;内存&quot;]">内存</th>
                         <th class="num" data-i18n-text="[&quot;进程&quot;]">进程</th>
+                        <th class="num" data-i18n-text="[&quot;磁盘&quot;]">磁盘</th>
                       </tr>
                     </thead>
                     <tbody id="mon-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="card mon-card">
+                <div class="mon-card-head">
+                  <h3 data-i18n-text="[&quot;用户存储&quot;]">用户存储</h3>
+                  <span id="mon-storage-sub" class="note"></span>
+                </div>
+                <div class="mon-table-wrap">
+                  <table class="mon-table">
+                    <thead>
+                      <tr>
+                        <th data-i18n-text="[&quot;用户&quot;]">用户</th>
+                        <th data-i18n-text="[&quot;数据配额&quot;]">数据配额</th>
+                        <th data-i18n-text="[&quot;缓存配额&quot;]">缓存配额</th>
+                        <th class="num" data-i18n-text="[&quot;共享目录&quot;]">共享目录</th>
+                        <th class="num" data-i18n-text="[&quot;工作空间&quot;]">工作空间</th>
+                      </tr>
+                    </thead>
+                    <tbody id="mon-storage-tbody"></tbody>
                   </table>
                 </div>
               </div>

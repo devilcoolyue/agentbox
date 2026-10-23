@@ -2,8 +2,10 @@ package server
 
 import (
 	"agentbox/internal/safefs"
+	"agentbox/internal/storagepolicy"
 	"context"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,17 +20,29 @@ type storageReport struct {
 	Bytes      int64            `json:"bytes"`
 	Files      int              `json:"files"`
 	Users      map[string]int64 `json:"users"`
+	Sessions   map[string]int64 `json:"sessions"` // users/<u>/sessions/<id> by session id
+	Shared     map[string]int64 `json:"shared"`   // users/<u>/shared by user
 	Categories map[string]int64 `json:"categories"`
 }
 type storageState struct {
 	sync.RWMutex
-	report storageReport
+	report   storageReport
+	quota    storagepolicy.Report
+	quotaAt  int64 // ms; 0 until the first successful read
+	quotaErr string
 }
+
+// Walk bounds: the production data dir already holds ~150k entries, so the
+// old 100k cap left every report partial. One walk every five minutes.
+const (
+	storageWalkEntries = 1_000_000
+	storageWalkTimeout = time.Minute
+)
 
 // Logical file lengths, not allocated blocks: hardlinks count twice; symlinks
 // are never followed. Reports are bounded and explicitly marked incomplete.
 func measureStorage(ctx context.Context, dir string) storageReport {
-	report := storageReport{Users: map[string]int64{}, Categories: map[string]int64{}}
+	report := storageReport{Users: map[string]int64{}, Sessions: map[string]int64{}, Shared: map[string]int64{}, Categories: map[string]int64{}}
 	root, err := safefs.Open(dir)
 	if err != nil {
 		report.Partial = true
@@ -41,7 +55,7 @@ func measureStorage(ctx context.Context, dir string) storageReport {
 			return ctx.Err()
 		}
 		entries++
-		if entries > 100000 {
+		if entries > storageWalkEntries {
 			report.Partial = true
 			return fs.SkipAll
 		}
@@ -70,6 +84,11 @@ func measureStorage(ctx context.Context, dir string) storageReport {
 		parts := strings.Split(path, "/")
 		if len(parts) >= 3 && parts[0] == "users" {
 			report.Users[parts[1]] += info.Size()
+			if parts[2] == "shared" {
+				report.Shared[parts[1]] += info.Size()
+			} else if parts[2] == "sessions" && len(parts) >= 5 {
+				report.Sessions[parts[3]] += info.Size()
+			}
 		}
 		return nil
 	})
@@ -81,7 +100,7 @@ func measureStorage(ctx context.Context, dir string) storageReport {
 }
 func (s *Server) storageLoop() {
 	for s.workContext().Err() == nil {
-		ctx, cancel := context.WithTimeout(s.workContext(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(s.workContext(), storageWalkTimeout)
 		report := measureStorage(ctx, s.cfg.DataDir)
 		cancel()
 		tools := s.cfg.GetToolStorage().Root
@@ -112,6 +131,33 @@ func (s *Server) storageLoop() {
 		}
 	}
 }
+
+// storageQuotaLoop keeps the kernel quota usage of every user fresh for the
+// monitor. quotactl itself is instant; the minute only spares a python start
+// on every five-second monitor poll.
+func (s *Server) storageQuotaLoop() {
+	for s.workContext().Err() == nil {
+		if p := s.cfg.GetStoragePolicy(); p.Mount != "" {
+			ctx, cancel := context.WithTimeout(s.workContext(), 15*time.Second)
+			report, err := storagepolicy.ReadReport(ctx, p, s.cfg.DataDir)
+			cancel()
+			s.storage.Lock()
+			if err != nil {
+				s.storage.quotaErr = err.Error()
+			} else {
+				s.storage.quota, s.storage.quotaAt, s.storage.quotaErr = report, time.Now().UnixMilli(), ""
+			}
+			s.storage.Unlock()
+			if err != nil && s.workContext().Err() == nil {
+				log.Printf("storage: read quota usage: %v", err)
+			}
+		}
+		if !waitInterval(s.workContext(), time.Minute) {
+			return
+		}
+	}
+}
+
 func (s *Server) handleStorage(w http.ResponseWriter, r *http.Request) {
 	s.storage.RLock()
 	report := s.storage.report

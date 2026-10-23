@@ -588,6 +588,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.spawn(s.credSyncLoop)
 	s.spawn(s.idleReaper)
 	s.spawn(s.storageLoop)
+	s.spawn(s.storageQuotaLoop)
 	s.spawn(s.storageMaintenanceLoop)
 	s.spawn(s.pricingLoop)
 	s.spawn(s.imageUpdateLoop)

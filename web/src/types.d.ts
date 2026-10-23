@@ -950,6 +950,42 @@ export interface ContainerStat {
   mem_usage: number;
   mem_limit: number;
   pids: number;
+  /** 工作空间目录（home + workspace + 对话记录）文件大小合计，来自 5 分钟一次的目录统计；0 = 还没统计到 */
+  disk_bytes: number;
+}
+
+/** 项目配额的内核记账 */
+export interface QuotaUsage {
+  used_bytes: number;
+  limit_bytes: number;
+  files: number;
+  file_limit: number;
+}
+
+export interface UserStorage {
+  user: string;
+  /** 账号已删除，配额仍未释放；缓存配额查不回用户名时 user 形如 cache:<key 前 8 位> */
+  deleted?: boolean;
+  data?: QuotaUsage;
+  cache?: QuotaUsage;
+  /** 目录统计：users/<u> 合计 */
+  files_bytes: number;
+  shared_bytes: number;
+  sessions: number;
+}
+
+export interface MonitorStorage {
+  /** 配额读取时间(ms)，0 = 未启用配额或还没读到 */
+  quota_at: number;
+  quota_error?: string;
+  budget_bytes: number;
+  allocated_bytes: number;
+  /** 用户目录以外的占用：镜像、交换文件、备份等 */
+  unassigned?: QuotaUsage;
+  /** 目录统计时间(ms)，0 = 首次统计中 */
+  scanned_at: number;
+  partial: boolean;
+  users: UserStorage[];
 }
 
 /** GET /api/monitor */
@@ -962,6 +998,7 @@ export interface Monitor {
   host: HostStat;
   summary: MonitorSummary;
   containers: ContainerStat[];
+  storage: MonitorStorage;
 }
 
 /* ---------------- 文件 / 变更 ---------------- */

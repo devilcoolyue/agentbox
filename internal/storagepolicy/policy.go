@@ -77,6 +77,32 @@ func Ensure(ctx context.Context, p config.StoragePolicy, data, tools, user, owne
 	return result, err
 }
 
+// Project is one registered quota project and its kernel-accounted usage.
+type Project struct {
+	Usage
+	Project int64  `json:"project"`
+	Kind    string `json:"kind"` // data | cache
+	Owner   string `json:"owner"`
+	Root    string `json:"root"`
+}
+
+// Report is the kernel usage of every registered project plus project 0,
+// which holds whatever lives outside user roots.
+type Report struct {
+	Projects   []Project `json:"projects"`
+	Unassigned Usage     `json:"unassigned"`
+}
+
+// ReadReport only reads limits and usage; it takes no registry lock.
+func ReadReport(ctx context.Context, p config.StoragePolicy, data string) (Report, error) {
+	var result Report
+	if p.Mount == "" {
+		return result, nil
+	}
+	err := run(ctx, map[string]any{"policy": p, "data": data, "report": true}, &result)
+	return result, err
+}
+
 // Adopt is only for the offline maintenance command holding the data lock and
 // after verifying no containers mount data or tools. Interrupted runs resume.
 func Adopt(ctx context.Context, p config.StoragePolicy, data, tools, user, owner string) error {

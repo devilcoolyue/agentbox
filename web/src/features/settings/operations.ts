@@ -2,7 +2,7 @@ import { t as i18nText, setText } from "../../i18n.js";
 import { S } from "../../state.js";
 import { $, toast, fmtUptime, fmtBytes, fmtTime, fmtDateTime } from "../../util.js";
 import { api } from "../../api.js";
-import type { SystemInfo, Monitor, ContainerStat } from "../../types.js";
+import type { SystemInfo, Monitor, ContainerStat, QuotaUsage, UserStorage } from "../../types.js";
 import { agentIcon, agentName } from "../../brand.js";
 import { setTip } from "../../tip.js";
 import { Poller } from "../../shared/poller.js";
@@ -93,6 +93,7 @@ async function loadMonitor(surfaceErr: boolean, signal: AbortSignal) {
   if (signal.aborted || S.view !== "settings" || S.sec !== "monitor") return; // 请求在途中切走了页，丢弃这帧
   renderMonitorTiles(m);
   renderMonitorTable(m);
+  renderMonitorStorage(m);
 }
 
 /* 磁贴骨架：标签、大号数值、进度条、副标题四层，与 monTile 同高 */
@@ -177,14 +178,14 @@ function renderMonitorTable(m: Monitor) {
   if (!m.containers.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 9;
+    td.colSpan = 10;
     td.className = "mon-empty";
     setText(td, "暂无工作空间容器");
     tr.appendChild(td);
     tb.appendChild(tr);
     return;
   }
-  for (const c of m.containers) tb.appendChild(monRow(c, m.now, !!m.window_ms));
+  for (const c of m.containers) tb.appendChild(monRow(c, m.now, !!m.window_ms, m.storage.scanned_at));
 }
 
 function monCell(text: string, cls?: string) {
@@ -194,7 +195,7 @@ function monCell(text: string, cls?: string) {
   return el;
 }
 
-function monRow(c: ContainerStat, now: number, rate: boolean) {
+function monRow(c: ContainerStat, now: number, rate: boolean, scannedAt: number) {
   const tr = document.createElement("tr");
   if (!c.running) tr.className = "off";
 
@@ -210,6 +211,9 @@ function monRow(c: ContainerStat, now: number, rate: boolean) {
 
   const mem = monCell(c.running ? fmtBytes(c.mem_usage) : "—", "num");
   if (c.running && c.mem_limit) setTip(mem, () => fmtBytes(c.mem_usage) + " / " + fmtBytes(c.mem_limit) + i18nText(" 上限"));
+  // 停机的空间照样占盘，磁盘一列不看运行状态
+  const disk = monCell(c.disk_bytes ? fmtBytes(c.disk_bytes) : "—", "num");
+  if (scannedAt) setTip(disk, () => i18nText("home、workspace 与对话记录的文件大小合计，统计于 {p0}", { p0: fmtTime(scannedAt) }));
 
   tr.append(
     name,
@@ -221,6 +225,92 @@ function monRow(c: ContainerStat, now: number, rate: boolean) {
     monCell(c.running ? (rate ? c.cpu_percent.toFixed(1) + "%" : "…") : "—", "num"),
     mem,
     monCell(c.running && c.pids ? String(c.pids) : "—", "num"),
+    disk,
   );
   return tr;
+}
+
+/* ---------------- 用户存储 ---------------- */
+
+function renderMonitorStorage(m: Monitor) {
+  const st = m.storage;
+  const parts: string[] = [];
+  if (st.quota_at) {
+    parts.push(st.budget_bytes
+      ? i18nText("配额已分配 {p0} / 预算 {p1}", { p0: String(fmtBytes(st.allocated_bytes)), p1: String(fmtBytes(st.budget_bytes)) })
+      : i18nText("配额已分配 {p0}", { p0: String(fmtBytes(st.allocated_bytes)) }));
+    if (st.unassigned) parts.push(i18nText("配额外占用 {p0}（镜像、交换文件、备份等）", { p0: String(fmtBytes(st.unassigned.used_bytes)) }));
+  } else if (st.quota_error) {
+    parts.push(i18nText("读取配额失败"));
+  } else {
+    parts.push(i18nText("未启用存储配额"));
+  }
+  parts.push(st.scanned_at
+    ? i18nText("目录统计于 {p0}", { p0: fmtTime(st.scanned_at) }) + (st.partial ? i18nText("（未完整）") : "")
+    : i18nText("目录统计中"));
+  $("mon-storage-sub").textContent = parts.join(" · ");
+  setTip($("mon-storage-sub"), st.quota_error || null);
+
+  const tb = $("mon-storage-tbody");
+  if (!st.users.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.className = "mon-empty";
+    setText(td, "暂无用户");
+    tr.appendChild(td);
+    tb.replaceChildren(tr);
+    return;
+  }
+  tb.replaceChildren(...st.users.map((u) => storageRow(u, !!st.quota_at)));
+}
+
+function storageRow(u: UserStorage, quota: boolean) {
+  const tr = document.createElement("tr");
+  if (u.deleted) tr.className = "off";
+  const name = document.createElement("td");
+  name.className = "mon-name";
+  name.textContent = u.user;
+  if (u.deleted) {
+    const gone = document.createElement("span");
+    gone.className = "mon-gone";
+    setText(gone, "已删除，配额未释放");
+    name.append(gone);
+  }
+  // 没开配额时数据一列退回目录统计，只有已用没有限额
+  const data = u.data ? quotaCell(u.data) : monCell(quota ? "—" : fmtBytes(u.files_bytes));
+  tr.append(
+    name,
+    data,
+    u.cache ? quotaCell(u.cache) : monCell("—"),
+    monCell(u.shared_bytes ? fmtBytes(u.shared_bytes) : "—", "num"),
+    monCell(u.deleted ? "—" : String(u.sessions), "num"),
+  );
+  return tr;
+}
+
+function quotaCell(q: QuotaUsage) {
+  const td = document.createElement("td");
+  const box = document.createElement("div");
+  box.className = "mon-quota";
+  if (!q.limit_bytes) {
+    box.classList.add("none");
+    box.textContent = fmtBytes(q.used_bytes) + i18nText("（不限）");
+    td.append(box);
+    return td;
+  }
+  const pct = q.used_bytes / q.limit_bytes * 100;
+  const text = document.createElement("span");
+  text.textContent = fmtBytes(q.used_bytes) + " / " + fmtBytes(q.limit_bytes) + " · " + pct.toFixed(0) + "%";
+  const bar = document.createElement("div");
+  bar.className = "mt-bar";
+  const fill = document.createElement("span");
+  fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  if (pct >= 90) fill.classList.add("hot");
+  else if (pct >= 70) fill.classList.add("warn");
+  bar.append(fill);
+  box.append(text, bar);
+  td.append(box);
+  setTip(td, () => i18nText("文件数 {p0} / {p1}", { p0: String(q.files), p1: String(q.file_limit || "∞") }));
+  return td;
 }

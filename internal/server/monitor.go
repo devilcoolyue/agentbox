@@ -80,6 +80,7 @@ type monitorView struct {
 	Host       hostStat        `json:"host"`
 	Summary    monitorSummary  `json:"summary"`
 	Containers []containerStat `json:"containers"`
+	Storage    monitorStorage  `json:"storage"`
 }
 
 type processStat struct {
@@ -122,6 +123,7 @@ type containerStat struct {
 	MemUsage   uint64  `json:"mem_usage"`
 	MemLimit   uint64  `json:"mem_limit"`
 	Pids       uint64  `json:"pids"`
+	DiskBytes  int64   `json:"disk_bytes"` // 工作空间目录（home + workspace + 对话记录）的文件大小合计，来自 5 分钟一次的目录统计
 }
 
 // handleMonitor 采样一次窗口并返回后端进程、主机与全部会话容器的资源快照。
@@ -189,7 +191,12 @@ func (s *Server) handleMonitor(w http.ResponseWriter, r *http.Request) {
 		view.Host.CPUPercent = hostCPUPercent(prev.host, cur.host)
 	}
 
+	s.storage.RLock()
+	sessionBytes := s.storage.report.Sessions
+	s.storage.RUnlock()
+	sessionsByUser := map[string]int{}
 	for _, m := range metas {
+		sessionsByUser[m.sess.User]++
 		row := containerStat{
 			SessionID: m.sess.ID,
 			Name:      m.sess.Name,
@@ -198,6 +205,7 @@ func (s *Server) handleMonitor(w http.ResponseWriter, r *http.Request) {
 			AccountID: m.sess.AccountID,
 			Running:   m.running,
 			CreatedAt: m.sess.CreatedAt.UnixMilli(),
+			DiskBytes: sessionBytes[m.sess.ID],
 		}
 		view.Summary.Total++
 		if m.running {
@@ -229,6 +237,7 @@ func (s *Server) handleMonitor(w http.ResponseWriter, r *http.Request) {
 		}
 		return a.CreatedAt > b.CreatedAt
 	})
+	view.Storage = s.monitorStorageView(sessionsByUser)
 
 	writeJSON(w, http.StatusOK, view)
 }

@@ -132,6 +132,21 @@ def main():
             raise ValueError('drop CAP_SYS_RESOURCE from service to enforce quotas on server writes')
         quota(device, 0)
         return {'ready': True}
+    if req.get('report'):
+        # Read-only usage of every registered project for the monitor. Project 0
+        # is everything outside user roots (images, swap, backups, releases).
+        registry = Path(req['data']) / '.storage-projects'
+        projects = []
+        if registry.is_dir() and not registry.is_symlink():
+            if registry.stat().st_uid != os.geteuid() or registry.stat().st_mode & 0o022:
+                raise ValueError('quota registry is not service owned')
+            for marker in sorted(registry.glob('*.json')):
+                if marker.is_symlink() or not marker.stem.isdigit():
+                    continue
+                saved = json.loads(marker.read_text())
+                projects.append(dict(quota(device, int(marker.stem)), project=int(marker.stem),
+                                     kind=str(saved.get('kind', '')), owner=str(saved.get('owner', '')), root=str(saved.get('root', ''))))
+        return {'projects': projects, 'unassigned': quota(device, 0)}
     if not re.fullmatch('[a-f0-9]{64}', req['owner']) or not re.fullmatch('[a-z0-9][a-z0-9_-]{1,31}', req['user']):
         raise ValueError('invalid owner')
     data = Path(req['data'])

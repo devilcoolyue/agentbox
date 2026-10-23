@@ -462,7 +462,7 @@
   display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   padding: 14px 16px; border-bottom: 1px solid var(--line);
 }
-.mon-card-head h3 { margin: 0; }
+.mon-card-head h3 { margin: 0; white-space: nowrap; }
 .mon-table-wrap { overflow-x: auto; }
 .mon-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .mon-table th, .mon-table td { padding: 9px 14px; text-align: left; white-space: nowrap; }
@@ -479,6 +479,11 @@
 .mon-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
 .mon-dot.on { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); }
 .mon-empty { text-align: center; color: var(--muted); padding: 24px; }
+/* 用户存储：配额格里「已用 / 限额」下面压一根细条，水位一眼可见 */
+.mon-quota { display: flex; flex-direction: column; gap: 4px; min-width: 150px; font-family: var(--mono); }
+.mon-quota .mt-bar { margin-top: 0; }
+.mon-quota.none { color: var(--muted); }
+.mon-gone { color: var(--muted); font-weight: 400; font-size: 12px; }
 
 /* ---- 窄屏：二级导航胶囊自动换行，账号行纵向堆叠 ---- */
 @media (max-width: 760px) {
