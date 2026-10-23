@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"strings"
 	"sync"
@@ -235,19 +236,33 @@ func (g *loginGuard) success(key string) {
 	delete(g.entries, key)
 }
 
-// clientIP extracts the caller's address, honoring a single X-Forwarded-For hop
-// (agentbox sits behind an nginx/Cloudflare reverse proxy in production).
+// clientIP returns the key used to throttle logins and pairing. Forwarding
+// headers are honored only from a loopback or private peer (the reverse proxy
+// in front of agentbox), and only their last X-Forwarded-For entry: that is
+// the address the proxy appended itself. Entries to its left are whatever the
+// client sent, so trusting the first one let anyone dodge the limit by
+// sending a fresh fake address with every guess.
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
+	peer := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(peer); err == nil {
+		peer = host
 	}
-	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		return host
+	addr, err := netip.ParseAddr(peer)
+	if err != nil || !(addr.IsLoopback() || addr.IsPrivate()) {
+		return peer
 	}
-	return r.RemoteAddr
+	xff := r.Header.Values("X-Forwarded-For")
+	if len(xff) == 0 {
+		return peer
+	}
+	last := xff[len(xff)-1]
+	if i := strings.LastIndexByte(last, ','); i >= 0 {
+		last = last[i+1:]
+	}
+	if ip, err := netip.ParseAddr(strings.TrimSpace(last)); err == nil {
+		return ip.Unmap().String()
+	}
+	return peer
 }
 
 // tokenJanitor periodically deletes login tokens past their TTL.

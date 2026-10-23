@@ -126,6 +126,8 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+登录与配对的失败限速按来源 IP 计数。只有来自回环或内网地址的请求才会参考 `X-Forwarded-For`，而且只取最后一项，也就是紧挨 agentbox 的那层代理追加的地址，客户端自己填的前几项会被忽略。所以这层代理必须用 `$proxy_add_x_forwarded_for` 追加它看到的来源地址。前面还有 CDN 时，应先在这层代理还原真实访客 IP，例如 Nginx 的 `real_ip_header CF-Connecting-IP` 加上 CDN 的回源网段；否则同一 CDN 节点后面的访客会共用一个计数。
+
 `client_max_body_size` 应高于应用上传限制并留出 multipart 开销。若外层还有 CDN / 网关，它们的上传上限和 WebSocket 超时也会影响实际体验。
 
 仓库的 `scripts/enable-domain.sh` 是特定环境的辅助脚本：依赖已安装的 Nginx、Certbot、firewalld、可用的 `/var/www/certbot` HTTP challenge 入口及正确 DNS。它会写 Nginx 配置、改监听地址、重启 agentbox 并关闭公网业务端口。先阅读脚本并核对环境，不要把它当作通用的依赖安装器。
