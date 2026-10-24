@@ -63,6 +63,18 @@ export function recordNavigations(page,label='page'){
   if(log.length>40)log.shift();
  });
 }
+// Until that navigation is found, a step that only sets up the page (language, route) may
+// retry once after the page settles; the reload keeps routes and the stored login. Say so
+// in the log so a recurring cause stays visible.
+export async function evaluateSettled(page,fn,arg){
+ try{return await page.evaluate(fn,arg);}
+ catch(error){
+  if(!/Execution context was destroyed/.test(error.message))throw error;
+  console.warn('page navigated during evaluate; retrying once after load');
+  await page.waitForLoadState('load');
+  return page.evaluate(fn,arg);
+ }
+}
 process.on('exit',code=>{
  if(!code)return;
  for(const {label,log} of navigationLogs){

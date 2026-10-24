@@ -174,8 +174,12 @@ async function mobileScrollSmoke(page, base) {
     hidden.forEach(([child]) => { child.style.display = 'none'; });
     const probe = Object.assign(document.createElement('div'), {textContent:'probe'});
     region.append(probe);
-    const touch = y => new Touch({identifier:1, target:probe, clientX:100, clientY:y});
-    const fire = (type, y) => probe.dispatchEvent(new TouchEvent(type, {bubbles:true, touches:y == null ? [] : [touch(y)], changedTouches:[touch(y ?? 300)]}));
+    // WebKit has no Touch constructor off touch devices; the handler only reads touches.
+    const fire = (type, y) => {
+      const event = new Event(type, {bubbles:true});
+      Object.defineProperty(event, 'touches', {value:y == null ? [] : [{clientX:100, clientY:y}]});
+      probe.dispatchEvent(event);
+    };
     const shift = () => new DOMMatrix(getComputedStyle(probe).transform).m42;
     fire('touchstart', 200);
     fire('touchmove', 300);

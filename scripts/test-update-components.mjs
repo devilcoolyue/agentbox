@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
+import {evaluateSettled} from './playwright-launch.mjs';
 
 export async function updateComponentsSmoke(page){
  let reads=0,fail=false,hold=false;const pending=[],writes=[];
@@ -16,7 +17,7 @@ export async function updateComponentsSmoke(page){
  const ready=()=>page.waitForFunction(()=>!document.querySelector('#component-refresh').disabled);
  try{
   for(const locale of ['zh-CN','zh-TW','en']){
-   await page.evaluate(async locale=>{(await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage(locale);location.hash='#/settings/about';},locale);
+   await evaluateSettled(page,async locale=>{(await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage(locale);location.hash='#/settings/about';},locale);
    await page.locator('#sec-about').waitFor({state:'visible'});await page.locator('#component-refresh').click();await ready();
    assert.ok((await page.locator('#component-server-version').innerText()).includes('schema 11'));
    assert.ok((await page.locator('#component-image-version').innerText()).includes('<script>metadata</script>'));
