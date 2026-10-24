@@ -200,26 +200,29 @@ mobile.addEventListener("change", () => {
         details.open = !mobile.matches;
 });
 /* 键盘弹出时 iOS 与 Android Chrome 只把可视区域往上挪，不缩小布局视口：外壳连同顶栏被推出
- * 屏幕。触屏或窄屏上键盘开着时，把外壳钉在可视视口上（.keyboard-viewport，见 shell.css）。
- * 可视高度比窗口矮够多才算键盘（地址栏伸缩只差几十像素）；页面被放大时不接管，保留浏览器的
- * 平移缩放。键盘收起后 iOS 有时把布局视口留在挪开的位置，顺手滚回顶部。 */
+ * 屏幕。触屏或窄屏上把外壳一直钉在可视视口上（.visual-viewport，见 shell.css），顶栏留在
+ * 原处、输入框贴着键盘；不猜键盘是否打开（iOS 各版本 innerHeight 表现不一，判断会漏）。
+ * 页面被放大时不接管，保留浏览器的平移缩放。可视区域明显变高（键盘收起）时，iOS 有时把
+ * 布局视口留在挪开的位置，顺手滚回顶部。 */
 const touchLayout = matchMedia("(max-width: 760px), (pointer: coarse)");
 const KEYBOARD_MIN_PX = 120;
-let keyboardOpen = false;
-function fitKeyboardViewport() {
+let lastHeight = 0;
+function fitVisualViewport() {
     const viewport = window.visualViewport;
     const app = byId("app");
-    const open = !!viewport && touchLayout.matches && Math.abs(viewport.scale - 1) < 0.01 && innerHeight - viewport.height > KEYBOARD_MIN_PX;
-    app.classList.toggle("keyboard-viewport", open);
-    if (open) {
-        app.style.setProperty("--keyboard-viewport-height", `${viewport.height}px`);
-        app.style.setProperty("--keyboard-viewport-top", `${viewport.offsetTop}px`);
+    const active = !!viewport && touchLayout.matches && Math.abs(viewport.scale - 1) < 0.01;
+    app.classList.toggle("visual-viewport", active);
+    if (!viewport)
+        return;
+    if (active) {
+        app.style.setProperty("--visual-viewport-height", `${viewport.height}px`);
+        app.style.setProperty("--visual-viewport-top", `${viewport.offsetTop}px`);
     }
-    else if (keyboardOpen && (scrollX || scrollY)) {
+    if (lastHeight && viewport.height - lastHeight > KEYBOARD_MIN_PX && (scrollX || scrollY))
         scrollTo(0, 0);
-    }
-    keyboardOpen = open;
+    lastHeight = viewport.height;
 }
-window.visualViewport?.addEventListener("resize", fitKeyboardViewport);
-window.visualViewport?.addEventListener("scroll", fitKeyboardViewport);
-touchLayout.addEventListener("change", fitKeyboardViewport);
+window.visualViewport?.addEventListener("resize", fitVisualViewport);
+window.visualViewport?.addEventListener("scroll", fitVisualViewport);
+touchLayout.addEventListener("change", fitVisualViewport);
+fitVisualViewport();

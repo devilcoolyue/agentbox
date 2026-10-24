@@ -497,14 +497,19 @@
   .kebab-wrap { display: none; } /* 桌面端会话操作在工作台头部 */
 }
 /* 键盘弹出时 iOS / Android Chrome 不缩小布局视口，只把可视区域往上挪，外壳连同顶栏被
- * 推出屏幕。responsive.ts 在键盘开着时把外壳钉在可视视口上：顶栏留在原处，输入框贴着
- * 键盘。终端页另有常驻的同类处理（term.css 的 .term-viewport），两者取值相同。 */
+ * 推出屏幕。手机上 responsive.ts 把外壳一直钉在可视视口上：顶栏留在原处，输入框贴着
+ * 键盘。不靠「窗口比可视区域高多少」猜键盘——各版本 iOS 的 innerHeight 表现不一。
+ * 终端页另有同类处理（term.css 的 .term-viewport），两者取值相同。 */
 @media (max-width: 760px), (pointer: coarse) {
-  .app.keyboard-viewport {
-    position: fixed; left: 0; right: 0; top: var(--keyboard-viewport-top);
-    height: var(--keyboard-viewport-height);
+  .app.visual-viewport {
+    position: fixed; left: 0; right: 0; top: var(--visual-viewport-top);
+    height: var(--visual-viewport-height);
   }
 }
+/* 区域滚动容器滚到头时在自己身上回弹（iOS）或拉伸（Android），不串到外层：文档本身不滚
+ * （base.css），用户拉到顶或底能看到「到头了」，顶栏不跟着动。 */
+:is(.chat-log, .chat-hero, .tp-list, .empty, .set-content, .ext-body, .tun-body, .files-list,
+    .changes-list, .changes-diff, .skills-list, .skills-detail, #mcp-content) { overscroll-behavior: contain; }
 /* 收起偏好在首屏脚本中恢复；窄屏始终展示完整抽屉。
  * 窄栏是一条居中的图标列：新建、搜索、空间头像、管理入口、用户与主题都用同一个
  * --rail-item 见方，不再各自撑满不同宽度。版本入口收起时不显示（见 updates.css）。 */

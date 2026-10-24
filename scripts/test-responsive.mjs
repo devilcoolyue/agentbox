@@ -125,9 +125,9 @@ export async function responsiveSmoke(page, base) {
   console.log('Responsive: six widths, both themes, all settings sections, Git picker/history/reload, help, Escape, no page overflow, locked document scroll and keyboard viewport passed');
 }
 
-// Phones: the document never scrolls or rubber-bands (only region containers
-// do), and while a keyboard shrinks the visual viewport the shell is pinned to
-// it, so the top bar stays on screen; closing the keyboard releases it.
+// Phones: the document never scrolls or rubber-bands as a whole; region
+// containers bounce on their own (overscroll contained), and the shell stays
+// pinned to the visual viewport, so a keyboard never pushes the top bar away.
 async function mobileScrollSmoke(page, base) {
   await page.setViewportSize({width:390,height:780});
   await page.goto(base + '/#/settings/accounts');
@@ -135,31 +135,34 @@ async function mobileScrollSmoke(page, base) {
   const root = await page.evaluate(() => {
     scrollTo(0, 400);
     const html = getComputedStyle(document.documentElement), body = getComputedStyle(document.body);
-    return {scrollY, html:[html.overflowY, html.overscrollBehaviorY], body:[body.overflowY, body.overscrollBehaviorY]};
+    return {scrollY, html:[html.overflowY, html.overscrollBehaviorY], body:[body.overflowY, body.overscrollBehaviorY],
+      region:getComputedStyle(document.querySelector('.set-content')).overscrollBehaviorY};
   });
-  assert.deepEqual(root, {scrollY:0, html:['hidden','none'], body:['hidden','none']}, 'document scroll is locked');
+  assert.deepEqual(root, {scrollY:0, html:['hidden','none'], body:['hidden','none'], region:'contain'}, 'document locked, regions bounce locally');
   const app = page.locator('#app');
   const topbar = page.locator('.topbar');
-  await page.evaluate(() => {
-    Object.defineProperty(visualViewport, 'height', {configurable:true, value:430});
-    Object.defineProperty(visualViewport, 'offsetTop', {configurable:true, value:120});
+  await page.waitForFunction(() => document.querySelector('#app').classList.contains('visual-viewport'));
+  const fake = (height, offsetTop) => page.evaluate(([height, offsetTop]) => {
+    Object.defineProperty(visualViewport, 'height', {configurable:true, value:height});
+    Object.defineProperty(visualViewport, 'offsetTop', {configurable:true, value:offsetTop});
     visualViewport.dispatchEvent(new Event('resize'));
-  });
-  await page.waitForFunction(() => document.querySelector('#app').classList.contains('keyboard-viewport'));
-  const shell = await app.boundingBox(), bar = await topbar.boundingBox();
-  assert.ok(Math.abs(shell.y - 120) < 1 && Math.abs(shell.height - 430) < 1, `shell follows the visual viewport: ${JSON.stringify(shell)}`);
-  assert.ok(Math.abs(bar.y - 120) < 1, 'top bar stays at the top of the visible area');
-  // A small address-bar change is not a keyboard.
+  }, [height, offsetTop]);
+  // A keyboard shrinks and pans the visual viewport; window.innerHeight may or
+  // may not shrink with it depending on the iOS version, so it is not consulted.
+  for (const inner of [780, 430]) {
+    await page.evaluate(inner => Object.defineProperty(window, 'innerHeight', {configurable:true, value:inner}), inner);
+    await fake(430, 120);
+    await page.waitForFunction(() => document.querySelector('#app').style.getPropertyValue('--visual-viewport-top') === '120px');
+    const shell = await app.boundingBox(), bar = await topbar.boundingBox();
+    assert.ok(Math.abs(shell.y - 120) < 1 && Math.abs(shell.height - 430) < 1, `shell follows the visual viewport (innerHeight ${inner}): ${JSON.stringify(shell)}`);
+    assert.ok(Math.abs(bar.y - 120) < 1, 'top bar stays at the top of the visible area');
+    await fake(780, 0);
+  }
   await page.evaluate(() => {
-    Object.defineProperty(visualViewport, 'height', {configurable:true, value:740});
-    Object.defineProperty(visualViewport, 'offsetTop', {configurable:true, value:0});
-    visualViewport.dispatchEvent(new Event('resize'));
-  });
-  await page.waitForFunction(() => !document.querySelector('#app').classList.contains('keyboard-viewport'));
-  await page.evaluate(() => {
-    delete visualViewport.height; delete visualViewport.offsetTop;
+    delete window.innerHeight; delete visualViewport.height; delete visualViewport.offsetTop;
     visualViewport.dispatchEvent(new Event('resize'));
   });
   assert.equal(await page.evaluate(() => scrollY), 0);
   assert.ok(Math.abs((await topbar.boundingBox()).y) < 1, 'top bar back at the top');
+  assert.ok(Math.abs((await app.boundingBox()).height - 780) < 1, 'shell fills the screen without a keyboard');
 }
