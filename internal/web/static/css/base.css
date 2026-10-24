@@ -219,6 +219,13 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
 :root[data-input="pointer"] button:focus-visible { outline: none; }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); cursor: pointer; }
 input[type="checkbox"]:disabled, input[type="radio"]:disabled { cursor: default; }
+/* iOS 把日期/时间输入框画成原生控件：文字居中、行高更高，还自带最小宽度，width: 100% 也会撑出所在
+ * 的列，盖住旁边的框。去掉原生外观，按普通输入框的高度和左对齐来排。 */
+input:is([type="time"], [type="date"], [type="datetime-local"]) {
+  -webkit-appearance: none; appearance: none;
+  min-width: 0; height: 40px; text-align: left;
+}
+input:is([type="time"], [type="date"], [type="datetime-local"])::-webkit-date-and-time-value { text-align: left; margin: 0; }
 
 /* ---- 字标：logo 主形 + AGENTBOX + 呼吸光标 ---- */
 .wordmark {
