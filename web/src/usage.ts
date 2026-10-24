@@ -20,7 +20,7 @@ import { setSelectValue } from "./select.js";
 
 import { S, bus } from "./state.js";
 import type { UsageEventRow, UsageEvents } from "./types.js";
-import { $, toast, startDownload, fmtTime } from "./util.js";
+import { $, toast, startDownload, fmtTime, keepScroll } from "./util.js";
 import { DateRangePicker } from "./date-range.js";
 import { api } from "./api.js";
 import { showView } from "./shell.js";
@@ -852,12 +852,15 @@ async function load() {
     // 箭头跟着真拿到的顺序回正，不会出现「箭头指着正序、表还是倒序」。
     asc = data.order === "asc";
     syncSort();
-    fillSelect("uf-user", data.facets.users);
-    fillSelect("uf-agent", data.facets.agents, usageAgentName);
-    fillSelect("uf-model", data.facets.models);
-    renderSummary(data);
-    renderRows(data);
-    renderPager(data);
+    // 轮询与推送都走这里原地重画；换筛选、翻页的回顶在下面单独做
+    keepScroll($("usage-rows"), () => {
+      fillSelect("uf-user", data.facets.users);
+      fillSelect("uf-agent", data.facets.agents, usageAgentName);
+      fillSelect("uf-model", data.facets.models);
+      renderSummary(data);
+      renderRows(data);
+      renderPager(data);
+    });
     if (resetScroll) {
       $("usage-table-scroll").scrollTop = 0;
       resetScroll = false;

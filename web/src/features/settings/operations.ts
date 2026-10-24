@@ -1,6 +1,6 @@
 import { t as i18nText, setText } from "../../i18n.js";
 import { S } from "../../state.js";
-import { $, toast, fmtUptime, fmtBytes, fmtTime, fmtDateTime } from "../../util.js";
+import { $, toast, fmtUptime, fmtBytes, fmtTime, fmtDateTime, keepScroll } from "../../util.js";
 import { api } from "../../api.js";
 import type { SystemInfo, Monitor, ContainerStat, QuotaUsage, UserStorage } from "../../types.js";
 import { agentIcon, agentName } from "../../brand.js";
@@ -91,9 +91,11 @@ async function loadMonitor(surfaceErr: boolean, signal: AbortSignal) {
     return;
   }
   if (signal.aborted || S.view !== "settings" || S.sec !== "monitor") return; // 请求在途中切走了页，丢弃这帧
-  renderMonitorTiles(m);
-  renderMonitorTable(m);
-  renderMonitorStorage(m);
+  keepScroll($("sec-monitor"), () => {
+    renderMonitorTiles(m);
+    renderMonitorTable(m);
+    renderMonitorStorage(m);
+  });
 }
 
 /* 磁贴骨架：标签、大号数值、进度条、副标题四层，与 monTile 同高 */

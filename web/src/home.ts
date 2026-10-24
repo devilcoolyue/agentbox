@@ -5,7 +5,7 @@ import { setText, setTextRender, t as i18nText } from "./i18n.js";
 
 import { S, bus, emit } from "./state.js";
 import type { Session, ThreadList, UsageEvents } from "./types.js";
-import { $, fmtAgo, todayWall } from "./util.js";
+import { $, fmtAgo, keepScroll, todayWall } from "./util.js";
 import { api } from "./api.js";
 import { agentAvatar, agentName } from "./brand.js";
 import { fmtUSD } from "./quota.js";
@@ -131,6 +131,6 @@ function syncHome() {
 }
 
 $("home-new").addEventListener("click", () => $("btn-new").click());
-bus.addEventListener("data-updated", () => { if (homeVisible()) renderHome(); });
+bus.addEventListener("data-updated", () => { if (homeVisible()) keepScroll($("home-list"), renderHome); });
 bus.addEventListener("navigation-changed", syncHome);
 bus.addEventListener("view-changed", syncHome);

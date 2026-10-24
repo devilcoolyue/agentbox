@@ -6,7 +6,7 @@ import { skelBar } from "./skeleton.js";
 "use strict";
 import { buttonLabel } from "./icons.js";
 import { S, bus, emit } from "./state.js";
-import { $, toast, fmtUptime } from "./util.js";
+import { $, toast, fmtUptime, keepScroll } from "./util.js";
 import { api } from "./api.js";
 import { showView } from "./shell.js";
 import { setTip } from "./tip.js";
@@ -28,7 +28,7 @@ async function refreshStatus(force) {
     renderSideItem();
     renderChatNetwork();
     if (onPage())
-        renderPage();
+        keepScroll($("tun-maps"), renderPage); // 停在本页时 5 秒一刷
 }
 /* ---- 侧栏入口 ---- */
 function renderSideItem() {

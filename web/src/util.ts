@@ -31,6 +31,17 @@ export const isImeEnter = (e: KeyboardEvent) => e.isComposing || e.keyCode === 2
 const touchOnly = window.matchMedia("(hover: none) and (pointer: coarse)");
 export const enterInsertsNewline = () => touchOnly.matches;
 
+/* 后台刷新原地重画时保住滚动位置。WebKit（Safari）在同一个任务里换掉大段 DOM 时，
+ * 会把所在滚动容器的 scrollTop 直接丢回 0，哪怕重画前后内容一样高；Chromium 不会。
+ * 重画前记下 inner 往上每一层已滚动的位置，画完原样写回（内容变短时浏览器自己夹到底）。
+ * 只给轮询、推送这类「人没动」的刷新用；切页、换筛选本来就该回顶，不要包。 */
+export function keepScroll<T>(inner: Element, render: () => T): T {
+  const kept: [Element, number][] = [];
+  for (let el: Element | null = inner; el; el = el.parentElement) if (el.scrollTop) kept.push([el, el.scrollTop]);
+  try { return render(); }
+  finally { for (const [el, top] of kept) if (el.scrollTop !== top) el.scrollTop = top; }
+}
+
 /* ---- 加载态 ---- */
 
 export function spinEl() {

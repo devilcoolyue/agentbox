@@ -7,7 +7,7 @@ import { setTextRender, t } from "./i18n.js";
 import { setSelectValue } from "./select.js";
 import { S, bus } from "./state.js";
 import { toast } from "./toast.js";
-import { $, askConfirm, btnBusy, btnDone, fmtAgo, fmtTime } from "./util.js";
+import { $, askConfirm, btnBusy, btnDone, fmtAgo, fmtTime, keepScroll } from "./util.js";
 const REFRESH = 15_000;
 let current = null;
 let skew = 0;
@@ -87,7 +87,8 @@ async function loadCurrent(signal) {
 }
 async function loadActivity(signal) {
     try {
-        renderActivity(await api("/announcement/activity", { signal }));
+        const v = await api("/announcement/activity", { signal });
+        keepScroll($("ann-tbody"), () => renderActivity(v)); // 15 秒一刷，别把往下翻着看的人拽回顶
     }
     catch (e) {
         if (!signal.aborted)
@@ -202,7 +203,7 @@ export function openAnnouncementAdmin(signal) {
             leaveAnnouncementAdmin();
             return;
         }
-        renderCurrent();
+        keepScroll($("ann-current"), renderCurrent);
         void loadActivity(ctl.signal);
     }, REFRESH);
 }

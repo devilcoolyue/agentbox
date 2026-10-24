@@ -14,7 +14,7 @@ import { openIconManager, leaveIconManager } from "../../icon-manager.js";
 import { openAnnouncementAdmin, leaveAnnouncementAdmin } from "../../announcement-admin.js";
 import { setSelectValue } from "../../select.js";
 import { S, bus, emit } from "../../state.js";
-import { $, btnBusy as baseBusy, btnDone as baseDone, toast as baseToast, fmtTime, askConfirm, askPrompt } from "../../util.js";
+import { $, btnBusy as baseBusy, btnDone as baseDone, toast as baseToast, fmtTime, askConfirm, askPrompt, keepScroll } from "../../util.js";
 import { api as httpApi } from "../../api.js";
 import { refreshAll } from "../../data.js";
 import { showView } from "../../shell.js";
@@ -921,10 +921,8 @@ export function createSettingsController() {
             stopImageUpdates();
         } }, { signal: lifetime.signal });
         bus.addEventListener("data-updated", () => {
-            if (S.view === "settings") {
-                renderSettingsAccounts();
-                refreshModelDisplay();
-            }
+            if (S.view === "settings")
+                keepScroll($("set-content"), () => { renderSettingsAccounts(); refreshModelDisplay(); });
         }, { signal: lifetime.signal });
         bus.addEventListener("pricing-updated", refreshModelDisplay, { signal: lifetime.signal });
         $("mdl-tabs").addEventListener("click", (e) => {

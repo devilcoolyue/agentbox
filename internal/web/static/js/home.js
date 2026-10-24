@@ -3,7 +3,7 @@ import { setText, setTextRender, t as i18nText } from "./i18n.js";
  * 今天的花费），点一下直接进入；一个空间都没有时才显示新手引导和吉祥物。 */
 "use strict";
 import { S, bus, emit } from "./state.js";
-import { $, fmtAgo, todayWall } from "./util.js";
+import { $, fmtAgo, keepScroll, todayWall } from "./util.js";
 import { api } from "./api.js";
 import { agentAvatar, agentName } from "./brand.js";
 import { fmtUSD } from "./quota.js";
@@ -128,6 +128,6 @@ function syncHome() {
 }
 $("home-new").addEventListener("click", () => $("btn-new").click());
 bus.addEventListener("data-updated", () => { if (homeVisible())
-    renderHome(); });
+    keepScroll($("home-list"), renderHome); });
 bus.addEventListener("navigation-changed", syncHome);
 bus.addEventListener("view-changed", syncHome);

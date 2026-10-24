@@ -8,7 +8,7 @@ import { setSelectValue } from "./select.js";
 import { S, bus } from "./state.js";
 import { toast } from "./toast.js";
 import type { Announcement, AnnouncementActivity, AnnouncementInput, AnnouncementKind, AnnouncementView } from "./types.js";
-import { $, askConfirm, btnBusy, btnDone, fmtAgo, fmtTime } from "./util.js";
+import { $, askConfirm, btnBusy, btnDone, fmtAgo, fmtTime, keepScroll } from "./util.js";
 
 const REFRESH = 15_000;
 
@@ -90,7 +90,8 @@ async function loadCurrent(signal: AbortSignal) {
 
 async function loadActivity(signal: AbortSignal) {
   try {
-    renderActivity(await api<AnnouncementActivity>("/announcement/activity", { signal }));
+    const v = await api<AnnouncementActivity>("/announcement/activity", { signal });
+    keepScroll($("ann-tbody"), () => renderActivity(v)); // 15 秒一刷，别把往下翻着看的人拽回顶
   } catch (e) {
     if (!signal.aborted) toast(t("读取在线情况失败：") + (e as Error).message, true);
   }
@@ -185,7 +186,7 @@ export function openAnnouncementAdmin(signal: AbortSignal) {
   timer = setInterval(() => {
     // 切到别的视图时控制器不一定调 leave：同运维监控，在这里自己停。
     if (S.view !== "settings" || S.sec !== "announce") { leaveAnnouncementAdmin(); return; }
-    renderCurrent();
+    keepScroll($("ann-current"), renderCurrent);
     void loadActivity(ctl.signal);
   }, REFRESH);
 }

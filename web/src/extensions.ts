@@ -2,7 +2,7 @@ import { pickLocal, setAttrRender, setTextRender, t as i18nText } from "./i18n.j
 import { api } from "./api.js";
 import { APIError } from "./problems.js";
 import { S, bus } from "./state.js";
-import { $, fmtDateTime, toast } from "./util.js";
+import { $, fmtDateTime, keepScroll, toast } from "./util.js";
 import { showView } from "./shell.js";
 import { buttonLabel } from "./icons.js";
 import { enhanceSelects } from "./select.js";
@@ -116,14 +116,14 @@ export function initExtensionsPage() {
       if (!data) $("ext-list").replaceChildren(el("p", "ext-error", (err as Error).message));
       return;
     }
-    renderList();
+    // 5 秒轮询原地重画列表与详情，滚动位置留着；打开别的扩展时 openExtension 已先画过一遍
+    keepScroll($("ext-list"), renderList);
     const ext = selected();
     if (ext) {
       await loadActivity(ext.id, mine);
       if (mine !== gen) return;
     }
-    if (resetPending || !dirty) renderDetail();
-    else renderLive();
+    keepScroll($("ext-detail"), () => { if (resetPending || !dirty) renderDetail(); else renderLive(); });
   }
 
   async function loadActivity(id: string, mine: number) {

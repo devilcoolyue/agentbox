@@ -9,7 +9,7 @@ import { buttonLabel } from "./icons.js";
 
 import { S, bus, emit } from "./state.js";
 import type { TunnelClient, TunnelPair, TunnelStatus } from "./types.js";
-import { $, toast, fmtUptime } from "./util.js";
+import { $, toast, fmtUptime, keepScroll } from "./util.js";
 import { api } from "./api.js";
 import { showView } from "./shell.js";
 import { setTip } from "./tip.js";
@@ -29,7 +29,7 @@ async function refreshStatus(force: boolean) {
   }
   renderSideItem();
   renderChatNetwork();
-  if (onPage()) renderPage();
+  if (onPage()) keepScroll($("tun-maps"), renderPage); // 停在本页时 5 秒一刷
 }
 
 /* ---- 侧栏入口 ---- */
