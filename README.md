@@ -60,6 +60,7 @@ You bring the server and your own Claude / Codex subscription, API key, or compa
 - **Usage and cost:** one record per model request with tokens, cache, latency, reasoning effort and the price snapshot it was billed at; terminal usage is recorded too. Claude Code and Codex report each request's first-token time and duration over telemetry, which gives a measured latency and output speed (tok/s) per request; requests without that report fall back to estimates from the CLI logs. A workspace can turn on cache keepalive: while you are away, the server keeps the prompt cache of a large Claude conversation (in chat, and optionally in the terminal) from expiring for up to three hours by default, so coming back does not pay to write it all into the cache again. Optional credit balances and CSV export.
 - **Reuse:** Claude skills (including the official marketplace), layered home templates, and MCP servers as user defaults with per-workspace overrides.
 - **Private networks:** pair abox-link to reach allowlisted services on your own network; route each account through its own egress proxy.
+- **Announcements:** administrators show every page a banner, such as a release countdown that turns into "upgraded" once the new version starts, and can see who a restart would affect first. [Announcements →](docs/announcements.md)
 
 ### Extend, delegate, make it yours
 

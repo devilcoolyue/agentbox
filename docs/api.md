@@ -238,6 +238,19 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `GET /api/icons` | 无需登录 | 返回 `overrides`（位置 ID → `库:名字`）、`icons`（这些图标的形状，可直接绘制）、`sets`、`limit`、`updated_at`、`updated_by` |
 | `PUT /api/icons` | 管理员 | 请求体 `{overrides}` 整份替换覆盖表；位置 ID 须符合 `a.b-c` 格式，图标须在随二进制分发的库里存在，最多 500 项；不接受 SVG 标记。成功返回与 GET 相同的结构 |
 
+## 系统通告
+
+用途与发布流程见[系统通告](announcements.md)。时间均为 Unix 毫秒。
+
+| 方法与路径 | 权限 | 用途 |
+| --- | --- | --- |
+| `GET /api/announcement` | 登录用户 | 返回 `{announcement, now}`：当前应显示的通告（没有、已过显示期或文件损坏时为 `null`）与服务端时钟。通告字段：`id`（重新发布即变）、`kind`（`release` / `notice`）、`message`、`starts_at`、`duration_min`、`posted_at`、`posted_by`、`from_version`，升级完成后另有 `completed_at`、`completed_version` |
+| `PUT /api/announcement` | 管理员 | 请求体 `{kind, message, starts_at, duration_min}` 替换当前通告。`notice` 必须有内容；`release` 的 `starts_at` 为 0 表示「即将」，否则须在一小时前到 30 天内，`duration_min` 为 0–240；内容最多 500 字。返回与 GET 相同的结构 |
+| `DELETE /api/announcement` | 管理员 | 撤下通告，没有通告时也成功 |
+| `GET /api/announcement/activity` | 管理员 | 现在重启会影响谁：`online`（`{user, pages}`，每个开着的页面一条推送连接）与 `workspaces`（`{id, name, user, agent, attached, active_turns, last_active}`：挂着的终端/对话连接数、未结束的网页对话回合数、最后活动时间；只列有连接、有回合或 30 分钟内用过的空间） |
+
+通告变化时 `/api/usage/live` 推送 `{"type":"announcement","sessions":null}`，不带内容；页面收到后重新读 `GET /api/announcement`。
+
 ## 草稿能力
 
 v0.1.11 起 `/api/me` 增补 `draft_protocol:1` 与 `draft_scope`，仅用于未发送草稿隔离；它不声明 WS 接收确认能力。历史接口可显式携带 `?draft_context=1` 获取稳定的 `active_thread`（空对话会登记不含正文的元数据），附件校验接口为 `POST /api/sessions/{id}/attachments/validate`。权限、上限与恢复边界见[聊天草稿](chat-recovery.md)。

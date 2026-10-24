@@ -838,6 +838,16 @@ data/
   终端里的 agent 永远看不到代理变量。运行中的窗格改不了，须重连后新开 tmux 窗口；在旧 Shell 内仅重启 agent 仍会继承旧环境。
 - 端口映射按来源 IP 鉴权：只有属主用户自己的容器（和宿主机）能连映射端口。
 
+### 系统通告
+
+- 单条全站横幅（`internal/announce` + `server/announcement.go`，前端 `announcement.ts` 横幅、`announcement-admin.ts` 设置页，用户文档 `docs/announcements.md`）。存 `<data_dir>/announcement.json` 而不是 SQLite：一条记录不值得一次 schema 迁移，迁移会让回退旧版本先得恢复备份。文件**刻意不进系统备份**，恢复不能带回过期的「即将发版」。
+- 写入方有两个：网页 `PUT/DELETE /api/announcement` 与宿主机 `agentbox announce`（给 `release.py`，不需要登录）。服务端 `announcementLoop` 每 3 秒比对文件摘要，任何写入方的变化都经 `usageLiveHub.announce()` 推 `{"type":"announcement"}`；网页写入时立刻推一次。不要另开推送通道。
+- `/api/usage/live` 因此在登录期间常连（`announcement.ts` 用 `watchUsageLive("announcement", true)` 占住）；`usageLiveHub.online()` 的连接数就是「开着的页面数」，系统通告页的在线列表来自这里。推送只带类型，用量与通告各自按 `usage`/`announce` 标志发送，只有通告变化时不能发空的 usage 通知（`take()` 返回三元组）。
+- 「升级完成」只在服务启动时由 `Service.Complete(buildinfo.Version, startedAt)` 判定：发布早于本次启动、版本与 `from_version` 不同（没有 `from_version` 时以启动晚于 `starts_at` 为准）。完成后保留 10 分钟（`CompletedVisible`）；从未完成的发版通告在计划时间 24 小时后不再返回（`StaleAfter`），由 `Visible` 在读取时判断，不改文件。
+- `release.py activate --announce-minutes N`：先跑 `compatible`，再用**目标版本**的二进制 `announce --release --from-version <current/build.json 的 version>`，sleep N 分钟后再 `compatible` 一次。停服务之前的任何异常（含 Ctrl+C）都 `announce --clear` 后再抛出。目标二进制写文件、旧服务读文件，所以文件格式（`version:1`）只能向后兼容地扩展。
+- 「现在重启会影响谁」= 在线连接 + `workspace.Activity.Snapshot()`（holds 即挂着的终端/对话连接）+ `store.ActiveChatTurns()`（accepted/starting/running 的网页回合）。终端里 CLI 自己跑的任务看不到回合，只体现在 holds 与最后活动时间上。
+- 隐藏带 `.btn` / `.field` 等自带 `display` 的元素要用 `.hidden` 类，`hidden` 属性会被覆盖；横幅本身用 `.announce-bar[hidden]` 显式处理。
+
 ### 扩展（Extensions）
 
 - 设计、已定决策与 P1 实施记录见 `docs/architecture/extensions-spi.md`。界面叫「扩展」；「插件」专指 Claude Code 插件市场（`market.go`），不要混用。内网隧道刻意保持内嵌，不是扩展。

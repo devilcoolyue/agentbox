@@ -35,7 +35,7 @@ export async function responsiveSmoke(page, base) {
               checked:menu.querySelector('[aria-checked=true] .action-label')?.textContent.trim(), focused:document.activeElement?.getAttribute('aria-checked'),
               ids:menu.querySelectorAll('[id]').length};
           });
-          assert.deepEqual(menu, {items:10, inputs:0, scrolls:false, inView:true, checked:'账号池', focused:'true', ids:0}, 'section menu shows every section at '+height+'px');
+          assert.deepEqual(menu, {items:11, inputs:0, scrolls:false, inView:true, checked:'账号池', focused:'true', ids:0}, 'section menu shows every section at '+height+'px');
           await page.keyboard.press('ArrowDown');
           assert.match(await page.evaluate(()=>document.activeElement.textContent), /IP 代理/);
           await page.keyboard.press('Escape');

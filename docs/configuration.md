@@ -246,6 +246,7 @@ data/                               实际根目录由 data_dir 决定
   home-template/                   全体用户的 home 模板
   themes.json                      管理员导入的全站界面主题（见 themes.md）
   icons.json                       管理员设置的全站图标覆盖（见 icons.md）
+  announcement.json                当前系统通告（见 announcements.md；不进系统备份）
   marketplace/repo/                官方插件缓存（设置 cache_dir 后移到该目录下）
   abox-link/                       网页提供下载的客户端二进制
   backups/                         内置脚本生成的备份包

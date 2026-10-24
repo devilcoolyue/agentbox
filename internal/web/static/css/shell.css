@@ -435,6 +435,32 @@
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
+/* 系统通告横幅（announcement.ts）：主区顶部一条，不遮挡内容；颜色随阶段变化，
+ * 只用现成令牌，十套风格都不用另补。 */
+.announce-bar {
+  flex: none;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 10px 8px 14px;
+  background: var(--panel-solid);
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px; line-height: 1.5;
+  transition: opacity var(--dur) var(--ease-out);
+}
+@starting-style { .announce-bar { opacity: 0; } }
+.announce-bar[hidden] { display: none; }
+.announce-ico { flex: none; margin-top: 2px; color: var(--accent); }
+.announce-text { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; column-gap: 10px; padding-top: 1px; }
+.announce-title { font-weight: 600; }
+.announce-msg { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.announce-bar .announce-close { width: 26px; height: 26px; margin: -2px 0; }
+.announce-bar[data-phase="scheduled"], .announce-bar[data-phase="live"] { border-bottom-color: var(--amber-dim); }
+.announce-bar[data-phase="scheduled"] .announce-ico, .announce-bar[data-phase="live"] .announce-ico { color: var(--amber); }
+.announce-bar.soon, .announce-bar[data-phase="live"] { border-bottom-color: var(--amber); }
+.announce-bar.soon .announce-title, .announce-bar[data-phase="live"] .announce-title { color: var(--amber); }
+.announce-bar[data-phase="done"] { border-bottom-color: var(--green-line); }
+.announce-bar[data-phase="done"] .announce-ico { color: var(--green); }
+
 /* ---- 窄屏 ---- */
 @media (max-width: 760px) {
   .topbar { display: flex; }

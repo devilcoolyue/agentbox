@@ -18,6 +18,7 @@ import { initUpdates } from "../updates.js";
 import { initThemes } from "../themes.js";
 import { initExtensionsPage } from "../extensions.js";
 import { initUsageLive } from "../usage-live.js";
+import { initAnnouncement } from "../announcement.js";
 
 /** App-owned feature lifetime; each init can be safely repeated. */
 export function initApplication() {
@@ -34,7 +35,7 @@ export function initApplication() {
  };
  const start = () => {
   disposers.splice(0).reverse().forEach(dispose => dispose());
-  disposers = [initWorkspaceFilter(renderSidebar), initOnboarding(), initWorkspaceCreation(), initChat(), initFirstTask(), initMCP(), initSettings(), initUpdates(), initPricing(), initRemoteBrowser(), initThemes(), initExtensionsPage(), initUsageLive()];
+  disposers = [initWorkspaceFilter(renderSidebar), initOnboarding(), initWorkspaceCreation(), initChat(), initFirstTask(), initMCP(), initSettings(), initUpdates(), initPricing(), initRemoteBrowser(), initThemes(), initExtensionsPage(), initAnnouncement(), initUsageLive()];
  };
  bus.addEventListener("signed-in", start, { signal: lifetime.signal });
  bus.addEventListener("signed-out", stop, { signal: lifetime.signal });

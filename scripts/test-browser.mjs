@@ -14,6 +14,7 @@ import { themesSmoke } from './test-themes.mjs';
 import { iconManagerSmoke } from './test-icon-manager.mjs';
 import { switchAccountSmoke } from './test-switch-account.mjs';
 import { keepaliveSmoke } from './test-keepalive.mjs';
+import { announcementSmoke } from './test-announcement.mjs';
 import { accountModelsSmoke } from './test-account-models.mjs';
 import { userPickerSmoke } from './test-user-picker.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
@@ -414,6 +415,8 @@ export async function smoke(page) {
   if (process.env.AGENTBOX_BROWSER_ONLY_DIAGNOSTICS === '1') { assert.deepEqual(errors,[]); return; }
   await switchAccountSmoke(page,base);
   await keepaliveSmoke(page,base);
+  await announcementSmoke(page,()=>usageLiveSocket);
+  if (process.env.AGENTBOX_BROWSER_ONLY_ANNOUNCEMENT === '1') { assert.deepEqual(errors,[]); return; }
   if (process.env.AGENTBOX_BROWSER_ONLY_SWITCH_ACCOUNT === '1') { assert.deepEqual(errors,[]); return; }
   await accountModelsSmoke(page,base);
   if (process.env.AGENTBOX_BROWSER_ONLY_ACCOUNT_MODELS === '1') { assert.deepEqual(errors,[]); return; }

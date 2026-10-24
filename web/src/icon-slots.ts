@@ -64,6 +64,7 @@ export const ICON_SLOTS = {
   "settings.interface": { group: "settings", label: "界面与提示", icon: "tabler:layout-dashboard" },
   "settings.icons": { group: "settings", label: "图标管理", icon: "tabler:icons" },
   "settings.security": { group: "settings", label: "安全与访问", icon: "tabler:shield-lock" },
+  "settings.announce": { group: "settings", label: "系统通告", icon: "tabler:speakerphone" },
   "settings.monitor": { group: "settings", label: "运维监控", icon: "tabler:activity" },
   "settings.about": { group: "settings", label: "关于与更新", icon: "tabler:info-circle" },
 
@@ -176,6 +177,7 @@ export const ICON_SLOTS = {
   "x-circle": { group: "status", label: "失败", icon: "tabler:circle-x" },
   "help": { group: "status", label: "帮助 / 提问", icon: "tabler:help-circle" },
   "clock": { group: "status", label: "时间 / 等待", icon: "tabler:clock" },
+  "status.announce": { group: "status", label: "系统通告横幅", icon: "tabler:speakerphone" },
   "history": { group: "status", label: "历史记录", icon: "tabler:history" },
   "activity": { group: "status", label: "活动 / 测试", icon: "tabler:activity" },
   "heart-pulse": { group: "status", label: "健康检查", icon: "tabler:heartbeat" },

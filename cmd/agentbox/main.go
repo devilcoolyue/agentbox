@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"agentbox/internal/app"
 	"agentbox/internal/config"
@@ -39,6 +40,11 @@ func main() {
 	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "announce":
+			if err := announceCommand(os.Args[2:], os.Stdout, time.Now()); err != nil {
+				log.Fatal(err)
+			}
+			return
 		case "backup", "backup-verify", "restore", "check-config", "git-key-rotate", "admin-reset-password", "storage-config", "storage-prepare":
 			if err := maintenance(os.Args[1:]); err != nil {
 				log.Fatal(err)

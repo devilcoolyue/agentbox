@@ -310,6 +310,15 @@
     </aside>
 
     <main class="main">
+      <!-- 系统通告横幅：管理员发布的发版预告等，逻辑在 announcement.ts -->
+      <div id="announce-bar" class="announce-bar" role="status" aria-live="polite" hidden>
+        <svg class="announce-ico" width="16" height="16" data-icon="status.announce" aria-hidden="true"></svg>
+        <div class="announce-text">
+          <span id="announce-title" class="announce-title"></span>
+          <span id="announce-msg" class="announce-msg" hidden></span>
+        </div>
+        <button id="announce-close" type="button" class="icon-btn announce-close" aria-label="收起通告" data-tip="收起通告" data-i18n-attrs="{&quot;aria-label&quot;:&quot;收起通告&quot;,&quot;data-tip&quot;:&quot;收起通告&quot;}"><svg width="16" height="16" data-icon="close" aria-hidden="true"></svg></button>
+      </div>
       <!-- 工作空间工作台视图 -->
       <div id="view-work" class="view">
         <div id="empty" class="empty">
@@ -753,6 +762,7 @@
             <button data-sec="interface" data-icon="settings.interface" data-i18n-text="[&quot;界面与提示&quot;]">界面与提示</button>
             <button data-sec="icons" data-settings-admin data-icon="settings.icons" data-i18n-text="[&quot;图标管理&quot;]">图标管理</button>
             <button data-sec="security" data-settings-admin data-icon="settings.security" data-i18n-text="[&quot;安全与访问&quot;]">安全与访问</button>
+            <button data-sec="announce" data-settings-admin data-icon="settings.announce" data-i18n-text="[&quot;系统通告&quot;]">系统通告</button>
             <button data-sec="monitor" data-settings-admin data-icon="settings.monitor" data-i18n-text="[&quot;运维监控&quot;]">运维监控</button>
             <button data-sec="about" data-settings-admin data-icon="settings.about" data-i18n-text="[&quot;关于与更新&quot;]">关于与更新</button>
           </nav>
@@ -1389,6 +1399,84 @@
                       </tr>
                     </thead>
                     <tbody id="mon-storage-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+            <!-- 系统通告：发布/撤下全站横幅，查看当前在线；逻辑在 announcement-admin.ts -->
+            <section id="sec-announce" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2 data-i18n-text="[&quot;系统通告&quot;]">系统通告</h2>
+                  <p data-i18n-text="[&quot;向所有登录用户在页面顶部显示一条通告，例如提前告知发版维护。同一时间只有一条，重新发布会替换旧的；发版通告到点后显示「正在发版」，新版本启动后自动变成「已升级」，10 分钟后消失。&quot;]">向所有登录用户在页面顶部显示一条通告，例如提前告知发版维护。同一时间只有一条，重新发布会替换旧的；发版通告到点后显示「正在发版」，新版本启动后自动变成「已升级」，10 分钟后消失。</p>
+                </div>
+              </div>
+              <div class="card">
+                <h3 data-i18n-text="[&quot;当前通告&quot;]">当前通告</h3>
+                <div id="ann-current" class="ann-current"></div>
+                <div class="card-foot">
+                  <span id="ann-current-meta" class="note"></span>
+                  <button id="ann-clear" type="button" class="btn btn-sm btn-ghost hidden" data-icon="trash" data-i18n-text="[&quot;撤下通告&quot;]">撤下通告</button>
+                </div>
+              </div>
+              <form id="ann-form" class="card" novalidate>
+                <h3 data-i18n-text="[&quot;发布通告&quot;]">发布通告</h3>
+                <label class="field">
+                  <span data-i18n-text="[&quot;类型&quot;]">类型</span>
+                  <select id="ann-kind">
+                    <option value="release" data-i18n-text="[&quot;发版维护 — 显示倒计时，升级后自动提示完成&quot;]">发版维护 — 显示倒计时，升级后自动提示完成</option>
+                    <option value="notice" data-i18n-text="[&quot;普通通知 — 一直显示，直到撤下&quot;]">普通通知 — 一直显示，直到撤下</option>
+                  </select>
+                </label>
+                <div id="ann-release-fields" class="field-row">
+                  <label class="field">
+                    <span data-i18n-text="[&quot;计划时间&quot;]">计划时间</span>
+                    <select id="ann-lead">
+                      <option value="5" data-i18n-text="[&quot;5 分钟后&quot;]">5 分钟后</option>
+                      <option value="10" selected data-i18n-text="[&quot;10 分钟后&quot;]">10 分钟后</option>
+                      <option value="15" data-i18n-text="[&quot;15 分钟后&quot;]">15 分钟后</option>
+                      <option value="30" data-i18n-text="[&quot;30 分钟后&quot;]">30 分钟后</option>
+                      <option value="60" data-i18n-text="[&quot;1 小时后&quot;]">1 小时后</option>
+                      <option value="at" data-i18n-text="[&quot;指定时间&quot;]">指定时间</option>
+                    </select>
+                  </label>
+                  <label id="ann-at-field" class="field hidden">
+                    <span data-i18n-text="[&quot;开始时间&quot;]">开始时间</span>
+                    <input id="ann-at" type="datetime-local" class="mono">
+                  </label>
+                  <label class="field">
+                    <span data-i18n-text="[&quot;预计中断（分钟）&quot;]">预计中断（分钟）</span>
+                    <input id="ann-duration" type="number" min="0" max="240" value="2" class="mono">
+                  </label>
+                </div>
+                <label class="field">
+                  <span data-i18n-text="[&quot;内容&quot;]">内容</span>
+                  <textarea id="ann-message" rows="3" maxlength="500" placeholder="发版通告可留空，或补充本次更新内容" data-i18n-attrs="{&quot;placeholder&quot;: &quot;发版通告可留空，或补充本次更新内容&quot;}"></textarea>
+                  <span class="hint" data-i18n-text="[&quot;纯文本，最多 500 字。发布后已打开的页面几秒内就会看到。&quot;]">纯文本，最多 500 字。发布后已打开的页面几秒内就会看到。</span>
+                </label>
+                <div class="card-foot">
+                  <span id="ann-form-note" class="note" data-i18n-text="[&quot;会替换当前通告&quot;]">会替换当前通告</span>
+                  <button id="ann-post" type="submit" class="btn btn-sm btn-primary" data-icon="send" data-i18n-text="[&quot;发布&quot;]">发布</button>
+                </div>
+              </form>
+              <div class="card mon-card">
+                <div class="mon-card-head">
+                  <h3 data-i18n-text="[&quot;现在重启会影响谁&quot;]">现在重启会影响谁</h3>
+                  <button id="ann-refresh" type="button" class="btn btn-sm btn-ghost" data-icon="refresh" data-i18n-text="[&quot;刷新&quot;]">刷新</button>
+                </div>
+                <p id="ann-online" class="card-desc"></p>
+                <div class="mon-table-wrap">
+                  <table class="mon-table">
+                    <thead>
+                      <tr>
+                        <th data-i18n-text="[&quot;工作空间&quot;]">工作空间</th>
+                        <th data-i18n-text="[&quot;用户&quot;]">用户</th>
+                        <th data-i18n-text="[&quot;状态&quot;]">状态</th>
+                        <th data-i18n-text="[&quot;最后活动&quot;]">最后活动</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ann-tbody"></tbody>
                   </table>
                 </div>
               </div>

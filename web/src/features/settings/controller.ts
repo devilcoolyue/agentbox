@@ -13,6 +13,7 @@ import type { SettingsPatch } from "./savebar.js";
 
 import { actionButton } from "../../icons.js";
 import { openIconManager, leaveIconManager } from "../../icon-manager.js";
+import { openAnnouncementAdmin, leaveAnnouncementAdmin } from "../../announcement-admin.js";
 
 import { setSelectValue } from "../../select.js";
 
@@ -47,7 +48,7 @@ for (const h of document.querySelectorAll<HTMLElement>("h3[data-agent]")) {
   h.prepend(agentIcon(h.dataset.agent!, 15));
 }
 
-export const SET_SECS = ["accounts", "proxies", "container", "models", "decision", "interface", "icons", "security", "monitor", "about"];
+export const SET_SECS = ["accounts", "proxies", "container", "models", "decision", "interface", "icons", "security", "announce", "monitor", "about"];
 /** 模型管理里的标签页；价格（原「价目表」分区）是其中之一。 */
 export const MODEL_TABS = ["accounts", "pricing", "system"];
 
@@ -107,6 +108,8 @@ function setSec(name: string) {
   stopSystem();if (name === "about") void loadSystem(lifetime.signal);
   if (name === "icons") void openIconManager(lifetime.signal);
   else leaveIconManager();
+  if (name === "announce") openAnnouncementAdmin(lifetime.signal);
+  else leaveAnnouncementAdmin();
   if (name === "security") loadUsers();
   if (name === "monitor") startMonitor();
   if (name === "proxies") openProxiesSection();

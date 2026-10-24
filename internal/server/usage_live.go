@@ -19,6 +19,10 @@ import (
 //
 // 推送只带空间 ID、不带金额与 token：读数据仍走原接口，可见范围照旧由那边判断。
 // 管理员能收到所有用户的变更，普通用户只收到自己的。
+//
+// 同一条连接也推系统通告变更（{"type":"announcement"}，不带内容，浏览器收到后
+// 读 /api/announcement）。所以登录后的每个页面都连着它，连接数也就是「谁开着
+// 页面」，系统通告页的在线列表即来自这里。
 const (
 	// usageLiveDebounce 合并一小段时间内的多次写入：CLI 一次回复会落好几行，
 	// 一趟扫描可能覆盖好几个空间，合成一条通知，免得浏览器连着重读。
@@ -48,6 +52,8 @@ type usageLiveSub struct {
 	admin    bool
 	sessions map[string]bool
 	overflow bool
+	usage    bool // 有待发的用量变更（sessions 可能因 overflow 为空）
+	announce bool // 有待发的系统通告变更
 }
 
 func (h *usageLiveHub) subscribe(user string, admin bool) *usageLiveSub {
@@ -89,13 +95,43 @@ func (sub *usageLiveSub) offer(writes []store.UsageWrite) {
 			sub.sessions[w.SessionID] = true
 		}
 	}
+	if hit {
+		sub.usage = true
+	}
 	sub.mu.Unlock()
 	if hit {
-		select {
-		case sub.signal <- struct{}{}:
-		default:
-		}
+		sub.wake()
 	}
+}
+
+func (sub *usageLiveSub) wake() {
+	select {
+	case sub.signal <- struct{}{}:
+	default:
+	}
+}
+
+// announce 通知所有连接系统通告变了；同 publish，只做内存标记。
+func (h *usageLiveHub) announce() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for sub := range h.subs {
+		sub.mu.Lock()
+		sub.announce = true
+		sub.mu.Unlock()
+		sub.wake()
+	}
+}
+
+// online 按用户统计当前开着的推送连接数（即开着的页面数）。
+func (h *usageLiveHub) online() map[string]int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := map[string]int{}
+	for sub := range h.subs {
+		out[sub.user]++
+	}
+	return out
 }
 
 func (sub *usageLiveSub) setAdmin(admin bool) {
@@ -104,11 +140,13 @@ func (sub *usageLiveSub) setAdmin(admin bool) {
 	sub.mu.Unlock()
 }
 
-// take 取走攒下的空间列表；nil 表示超过上限、不逐个列出。
-func (sub *usageLiveSub) take() []string {
+// take 取走攒下的变更：用量部分 ids 为 nil 表示超过上限、不逐个列出，usage
+// 为 false 表示这次没有用量变更；announce 表示系统通告变了。
+func (sub *usageLiveSub) take() (ids []string, usage, announce bool) {
 	sub.mu.Lock()
 	defer sub.mu.Unlock()
-	var ids []string
+	usage, announce = sub.usage, sub.announce
+	sub.usage, sub.announce = false, false
 	if !sub.overflow {
 		ids = make([]string, 0, len(sub.sessions))
 		for id := range sub.sessions {
@@ -118,7 +156,7 @@ func (sub *usageLiveSub) take() []string {
 	}
 	sub.sessions = map[string]bool{}
 	sub.overflow = false
-	return ids
+	return ids, usage, announce
 }
 
 type usageLiveNotice struct {
@@ -185,9 +223,17 @@ func (s *Server) handleUsageLive(w http.ResponseWriter, r *http.Request) {
 				return
 			case <-wait.C:
 			}
+			ids, usage, announce := sub.take()
 			conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-			if err := conn.WriteJSON(usageLiveNotice{Type: "usage", Sessions: sub.take()}); err != nil {
-				return
+			if usage {
+				if err := conn.WriteJSON(usageLiveNotice{Type: "usage", Sessions: ids}); err != nil {
+					return
+				}
+			}
+			if announce {
+				if err := conn.WriteJSON(usageLiveNotice{Type: "announcement"}); err != nil {
+					return
+				}
 			}
 		}
 	}

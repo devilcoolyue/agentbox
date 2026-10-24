@@ -289,6 +289,26 @@ func (s *Store) QueuedChatSessions() ([]string, error) {
 	return out, rows.Err()
 }
 
+// ActiveChatTurns counts accepted, starting and running requests per
+// session: the turns a restart would cut off.
+func (s *Store) ActiveChatTurns() (map[string]int, error) {
+	rows, err := s.db.Query("SELECT session_id, count(*) FROM chat_requests WHERE state IN ('accepted','starting','running') GROUP BY session_id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
 // QueuedChatRequests lists the session's queue in order, so every page can
 // show and withdraw it.
 func (s *Store) QueuedChatRequests(u User, session string) ([]ChatRequest, error) {

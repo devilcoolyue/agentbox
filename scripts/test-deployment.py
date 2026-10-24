@@ -162,6 +162,46 @@ class Deployment(unittest.TestCase):
      with self.assertRaises(subprocess.CalledProcessError if stop_fails else ValueError):m.activate(root,'v1.0.0',config,root/'backups',root)
     self.assertEqual(seen,[{'version':'v1.0.0'}])
     self.assertFalse((root/'upgrading.json').exists())
+ def test_release_announcement_posts_waits_and_withdraws_on_failure(self):
+  # The banner is posted with the target binary, naming the running version,
+  # and waited out before the stop; a failure before the stop withdraws it.
+  for fails in (False,True):
+   with self.subTest(fails=fails), tempfile.TemporaryDirectory() as tmp:
+    root=Path(tmp);config=root/'config.json';config.write_text('{}')
+    (root/'agentbox.service').write_text(m.unit(root,config))
+    (root/'releases'/'v0.9.0').mkdir(parents=True);(root/'current').symlink_to(root/'releases'/'v0.9.0')
+    (root/'releases'/'v0.9.0'/'build.json').write_text('{"version":"v0.9.0"}')
+    calls=[];slept=[];cleared=[]
+    def run(*args,**kw):
+     calls.append([str(a) for a in args])
+     if args[:2]==('systemctl','stop'):raise subprocess.CalledProcessError(1,'systemctl')
+    checks=iter([None,ValueError('changed while waiting') if fails else None])
+    def compatible(*a):
+     error=next(checks)
+     if error:raise error
+    with patch.object(m,'restore_context'),patch.object(m,'compatible',side_effect=compatible),patch.object(m,'run',side_effect=run),\
+         patch.object(m.time,'sleep',side_effect=slept.append),patch.object(m.subprocess,'run',side_effect=lambda a,**k:cleared.append(a)):
+     with self.assertRaises(ValueError if fails else subprocess.CalledProcessError):
+      m.activate(root,'v1.0.0',config,root/'backups',root,notice={'minutes':5,'duration':2,'message':'hi'})
+    post=calls[0]
+    self.assertEqual(post[0],str(root/'releases'/'v1.0.0'/'agentbox'))
+    self.assertEqual(post[1:],['announce','--config',str(config),'--release','--in','5m','--duration','2','--message','hi','--from-version','v0.9.0'])
+    self.assertEqual(slept,[300])
+    self.assertEqual(len(cleared),1 if fails else 0)
+    if fails:
+     self.assertEqual(cleared[0][1:],['announce','--config',str(config),'--clear'])
+     self.assertFalse(any(c[:2]==['systemctl','stop'] for c in calls))
+    else:
+     self.assertTrue(any(c[:2]==['systemctl','stop'] for c in calls))
+
+ def test_release_announcement_lead_time_bounded(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp)
+   for minutes in (0,121):
+    with patch.object(m,'run') as run:
+     with self.assertRaises(ValueError):m.announce_release(root/'agentbox',root,root/'config.json',{'minutes':minutes})
+     run.assert_not_called()
+
  def test_mount_selection_includes_ancestor_mounts(self):
   records=[{'Id':'match','Mounts':[{'Source':'/fixture/users/u'}]}, {'Id':'ancestor','Mounts':[{'Source':'/fixture'}]}, {'Id':'other','Mounts':[{'Source':'/unrelated'}]}]
   with patch.object(m,'run',side_effect=['match ancestor other',json.dumps(records)]):

@@ -24,6 +24,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"agentbox/internal/announce"
 	"agentbox/internal/config"
 	"agentbox/internal/credentials"
 	"agentbox/internal/decision"
@@ -96,6 +97,8 @@ type Server struct {
 	themes        *theme.Service
 	iconsOnce     sync.Once
 	icons         *iconset.Service
+	announceOnce  sync.Once
+	announce      *announce.Service
 	mcpCheckMu    sync.Mutex
 	mcpChecks     map[string]bool
 	gitOperations gitOperationRegistry
@@ -333,6 +336,10 @@ func (s *Server) Handler() http.Handler {
 	// 全站图标配置不含敏感信息，登录页也要用，所以读取不需要登录
 	mux.HandleFunc("GET /api/icons", s.handleIcons)
 	mux.Handle("PUT /api/icons", s.admin(http.HandlerFunc(s.handleIconsPut)))
+	mux.Handle("GET /api/announcement", s.auth(http.HandlerFunc(s.handleAnnouncement)))
+	mux.Handle("PUT /api/announcement", s.admin(http.HandlerFunc(s.handleAnnouncementPut)))
+	mux.Handle("DELETE /api/announcement", s.admin(http.HandlerFunc(s.handleAnnouncementDelete)))
+	mux.Handle("GET /api/announcement/activity", s.admin(http.HandlerFunc(s.handleAnnouncementActivity)))
 	mux.Handle("POST /api/logout", s.auth(http.HandlerFunc(s.handleLogout)))
 	mux.Handle("GET /api/clients/capabilities", s.auth(http.HandlerFunc(s.handleClientCapabilities)))
 	mux.Handle("POST /api/clients/pair", s.auth(http.HandlerFunc(s.handleClientPair)))
@@ -596,6 +603,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	s.spawn(s.termUsageLoop)
 	s.spawn(s.termWatchLoop)
 	s.spawn(s.tokenJanitor)
+	s.spawn(s.announcementLoop)
 	s.spawn(s.networkLoop)
 	if err := s.applyTunnel(); err != nil {
 		log.Printf("tunnel disabled: %v", err)

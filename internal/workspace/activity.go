@@ -95,3 +95,20 @@ func (a *Activity) Reapable(id string, d time.Duration) bool {
 	}
 	return time.Since(e.lastSeen) >= d
 }
+
+// ActivityState is one session's liveness as seen by the idle reaper.
+type ActivityState struct {
+	Holds    int
+	LastSeen time.Time
+}
+
+// Snapshot copies every tracked session's state.
+func (a *Activity) Snapshot() map[string]ActivityState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make(map[string]ActivityState, len(a.seen))
+	for id, e := range a.seen {
+		out[id] = ActivityState{Holds: e.holds, LastSeen: e.lastSeen}
+	}
+	return out
+}

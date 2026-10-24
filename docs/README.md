@@ -12,6 +12,7 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 | 第一次部署 | [快速开始](../README_CN.md#快速开始) → [账号与模型](accounts-and-models.md) → [部署与运维](../deploy/README.md) |
 | 使用已有实例 | [工作空间使用指南](user-guide.md) → [创建与项目导入](project-creation.md) → [技能与 MCP](skills-and-mcp.md) → [使用记录](usage-and-quotas.md) |
 | 换一套界面配色 | [界面主题](themes.md)（导入、导出模板、全站与个人主题） |
+| 提前告知用户发版维护 | [系统通告](announcements.md)（全站横幅、倒计时、`release.py activate --announce-minutes`） |
 | 恢复未发送的输入 | [聊天草稿与恢复](chat-recovery.md)（v0.1.11 起；草稿、待确认副本和查询恢复） |
 | 接入持久聊天接收与结果查询 | [聊天协议 v1](chat-protocol.md)（v0.1.11 起；网页发送与显式核对） |
 | 管理用户和成本 | [配置参考](configuration.md) → [账号与模型](accounts-and-models.md) → [额度与价目表](usage-and-quotas.md) |

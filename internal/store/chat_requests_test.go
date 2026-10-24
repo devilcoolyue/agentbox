@@ -701,3 +701,25 @@ func TestChatRequestQueueAndSteer(t *testing.T) {
 		t.Fatal("withdrawn request still queued", ids, err)
 	}
 }
+
+func TestActiveChatTurnsCountsUnfinishedRequests(t *testing.T) {
+	s, u, sess, input := chatRequestFixture(t)
+	if got, err := s.ActiveChatTurns(); err != nil || len(got) != 0 {
+		t.Fatalf("empty = %v, %v", got, err)
+	}
+	c, _, err := s.AcceptChatRequest(u, sess.ID, "request", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.ActiveChatTurns(); got[sess.ID] != 1 {
+		t.Fatalf("accepted = %v", got)
+	}
+	c = advanceChat(t, s, u, c, ChatStarting, ChatRunning)
+	if got, _ := s.ActiveChatTurns(); got[sess.ID] != 1 {
+		t.Fatalf("running = %v", got)
+	}
+	advanceChat(t, s, u, c, ChatFailed)
+	if got, _ := s.ActiveChatTurns(); len(got) != 0 {
+		t.Fatalf("finished = %v", got)
+	}
+}

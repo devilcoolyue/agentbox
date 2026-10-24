@@ -13,6 +13,37 @@ import (
 	"agentbox/internal/store"
 )
 
+func takeIDs(sub *usageLiveSub) []string {
+	ids, _, _ := sub.take()
+	return ids
+}
+
+// 系统通告变更推给所有连接（不分用户与角色），且不夹带空的用量通知。
+func TestUsageLiveHubAnnouncementReachesEveryone(t *testing.T) {
+	h := newUsageLiveHub()
+	alice, root := h.subscribe("alice", false), h.subscribe("root", true)
+	h.subscribe("alice", false)
+	if got := h.online(); got["alice"] != 2 || got["root"] != 1 {
+		t.Fatalf("online = %v", got)
+	}
+	h.announce()
+	for _, sub := range []*usageLiveSub{alice, root} {
+		if len(sub.signal) != 1 {
+			t.Fatal("announcement not signalled")
+		}
+		if _, usage, announce := sub.take(); usage || !announce {
+			t.Fatalf("take = usage %v announce %v", usage, announce)
+		}
+		if _, usage, announce := sub.take(); usage || announce {
+			t.Fatal("take did not reset the announcement flag")
+		}
+	}
+	h.publish([]store.UsageWrite{{User: "alice", SessionID: "a1"}})
+	if ids, usage, announce := alice.take(); !usage || announce || strings.Join(ids, ",") != "a1" {
+		t.Fatalf("usage take = %v %v %v", ids, usage, announce)
+	}
+}
+
 func TestUsageLiveHubScopesAndCoalesces(t *testing.T) {
 	h := newUsageLiveHub()
 	alice, root := h.subscribe("alice", false), h.subscribe("root", true)
@@ -27,13 +58,13 @@ func TestUsageLiveHubScopesAndCoalesces(t *testing.T) {
 	if len(alice.signal) != 1 || len(root.signal) != 1 {
 		t.Fatal("writes were not coalesced into one pending signal")
 	}
-	if got := alice.take(); strings.Join(got, ",") != "a1,a2" {
+	if got := takeIDs(alice); strings.Join(got, ",") != "a1,a2" {
 		t.Fatalf("alice sessions = %v", got)
 	}
-	if got := root.take(); strings.Join(got, ",") != "a1,a2,b1" {
+	if got := takeIDs(root); strings.Join(got, ",") != "a1,a2,b1" {
 		t.Fatalf("admin sessions = %v", got)
 	}
-	if got := alice.take(); got == nil || len(got) != 0 {
+	if got := takeIDs(alice); got == nil || len(got) != 0 {
 		t.Fatalf("take did not reset: %v", got)
 	}
 	<-alice.signal
@@ -50,7 +81,7 @@ func TestUsageLiveHubScopesAndCoalesces(t *testing.T) {
 		many = append(many, store.UsageWrite{User: "alice", SessionID: fmt.Sprint("s", i)})
 	}
 	h.publish(many)
-	if got := alice.take(); got != nil {
+	if got := takeIDs(alice); got != nil {
 		t.Fatalf("overflow listed %d sessions", len(got))
 	}
 	<-alice.signal

@@ -72,3 +72,18 @@ func TestActivityHoldBalance(t *testing.T) {
 		t.Fatal("still-held session must not be reapable")
 	}
 }
+
+func TestActivitySnapshotCopies(t *testing.T) {
+	a := NewActivity()
+	a.Hold("s1")
+	a.Hold("s1")
+	a.Touch("s2")
+	snap := a.Snapshot()
+	if snap["s1"].Holds != 2 || snap["s2"].Holds != 0 || snap["s2"].LastSeen.IsZero() {
+		t.Fatalf("snapshot = %+v", snap)
+	}
+	a.Release("s1")
+	if snap["s1"].Holds != 2 {
+		t.Fatal("snapshot aliases live state")
+	}
+}

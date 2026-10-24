@@ -191,7 +191,23 @@ def install_clients(package, data):
             os.replace(Path(tmp) / name, target / name)
 
 
-def activate(app, version, config, backup_dir, unit_dir, progress=lambda phase: None):
+def announce_release(binary, app, config, notice):
+    """Post the release banner with the target binary, then wait out the lead
+    time. The running server picks the file up and counts down; the new one
+    turns it into "upgraded" once it starts with another version."""
+    minutes = notice['minutes']
+    if not 1 <= minutes <= 120: raise ValueError('--announce-minutes must be 1-120')
+    current = app / 'current' / 'build.json'
+    running = read(current).get('version', '') if current.is_file() else ''
+    args = [binary, 'announce', '--config', config, '--release', '--in', str(minutes) + 'm',
+            '--duration', str(notice.get('duration', 0)), '--message', notice.get('message', '')]
+    if running: args += ['--from-version', running]
+    run(*args)
+    print('Announced release in', minutes, 'min; waiting', flush=True)
+    time.sleep(minutes * 60)
+
+
+def activate(app, version, config, backup_dir, unit_dir, progress=lambda phase: None, notice=None):
     # Only manage a unit created for this layout. Never hijack a repository install.
     if (unit_dir / 'agentbox.service').read_text() != unit(app, config):
         raise ValueError('unit belongs to another installation; migrate/install explicitly first')
@@ -202,6 +218,16 @@ def activate(app, version, config, backup_dir, unit_dir, progress=lambda phase: 
     cfg = read(config); data = resolve(config.parent, cfg.get('data_dir', 'data'))
     progress('checking')
     compatible(binary, config, data)
+    if notice:
+        progress('announced')
+        try:
+            announce_release(binary, app, config, notice)
+            # The wait may outlast a config or schema change; check again.
+            compatible(binary, config, data)
+        except BaseException:
+            # Nothing stopped yet: do not leave users a countdown to nothing.
+            subprocess.run([str(binary), 'announce', '--config', str(config), '--clear'], check=False)
+            raise
     progress('stopping')
     # The stopping server reads this to tell its running turns they were cut off
     # by an upgrade rather than a plain restart (internal/server/lifecycle.go).
@@ -460,6 +486,9 @@ def main():
     sub = p.add_subparsers(dest='command', required=True)
     s = sub.add_parser('install'); s.add_argument('--package', required=True)
     s = sub.add_parser('activate'); s.add_argument('--version', required=True); s.add_argument('--backup-dir', default='/var/lib/agentbox/backups')
+    s.add_argument('--announce-minutes', type=int, default=0, help='show users a release banner this many minutes (1-120) before stopping the service')
+    s.add_argument('--announce-duration', type=int, default=0, help='expected interruption in minutes, shown on the banner')
+    s.add_argument('--announce-message', default='', help='extra banner text')
     s = sub.add_parser('migrate'); s.add_argument('--source-config', required=True); s.add_argument('--binary', required=True); s.add_argument('--backup', required=True)
     s.add_argument('--snapshot-backup', action='store_true', help='create a verified self-contained full reflink recovery directory instead of a full tarball')
     s.add_argument('--data', default='/var/lib/agentbox'); s.add_argument('--cache', default='/var/cache/agentbox'); s.add_argument('--apply', action='store_true'); s.add_argument('--reflink', action='store_true', help='require copy-on-write cloning of users; verify every entry against full backup')
@@ -485,7 +514,10 @@ def main():
             resolve(config.parent, cfg.get('data_dir', 'data')).mkdir(parents=True, exist_ok=True, mode=0o700)
             print('Installed', version, '; activate explicitly after configuring the pinned agent image.')
         elif a.command == 'activate':
-            activate(app, a.version, config, absolute(a.backup_dir), units)
+            notice = None
+            if a.announce_minutes:
+                notice = {'minutes': a.announce_minutes, 'duration': a.announce_duration, 'message': a.announce_message}
+            activate(app, a.version, config, absolute(a.backup_dir), units, notice=notice)
 
 
 if __name__ == '__main__':

@@ -404,8 +404,44 @@ export interface UsageEvents {
 /** GET /api/usage/live 推送的一条用量变更通知（usageLiveNotice）。只带空间 ID；
  *  sessions 为 null 表示变更太多、没有逐个列出。 */
 export interface UsageLiveNotice {
-  type: "usage";
+  /** usage: 用量落库；announcement: 系统通告变了，内容另读 /api/announcement */
+  type: "usage" | "announcement";
   sessions: string[] | null;
+}
+
+/* ---------------- 系统通告（GET/PUT /api/announcement）---------------- */
+export type AnnouncementKind = "notice" | "release";
+export interface Announcement {
+  version: number;
+  id: string;
+  kind: AnnouncementKind;
+  message: string;
+  starts_at?: number;
+  duration_min?: number;
+  posted_at: number;
+  posted_by: string;
+  from_version?: string;
+  completed_at?: number;
+  completed_version?: string;
+}
+export interface AnnouncementView {
+  announcement: Announcement | null;
+  /** 服务端时钟（ms），倒计时按它校正本机时间 */
+  now: number;
+}
+export interface AnnouncementInput {
+  kind: AnnouncementKind;
+  message: string;
+  starts_at: number;
+  duration_min: number;
+}
+export interface AnnouncementActivity {
+  online: { user: string; pages: number }[];
+  workspaces: {
+    id: string; name: string; user: string; agent: string;
+    attached: number; active_turns: number; last_active: number;
+  }[];
+  now: number;
 }
 
 /* ---------------- Claude 订阅额度 ---------------- */

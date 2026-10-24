@@ -134,7 +134,7 @@ sudo systemctl reload nginx
 
 ## 日常更新
 
-服务发布会重启 agentbox 并短暂断开 HTTP / WebSocket，正在执行的网页任务可能受影响，应安排在合适的维护窗口。
+服务发布会重启 agentbox 并短暂断开 HTTP / WebSocket，正在执行的网页任务可能受影响，应安排在合适的维护窗口。发版前可在「系统设置 → 系统通告」查看现在重启会影响谁，并给所有页面发一条带倒计时的发版通告；独立发布目录布局可直接用 `release.py activate --announce-minutes 10` 先预告、到点再发版（见[系统通告](../docs/announcements.md)）。
 
 1. 检查本地 / 服务器仓库的已有改动，确认这次发布包含哪些文件。
 2. 运行 `go build ./...`、`go test ./...`；涉及前端时运行 `npm run check` 和 `npm run build` 并保留产物。
