@@ -232,7 +232,11 @@ fitVisualViewport();
  * 起点在输入框、或在一个自己能竖向滚动的子元素里时不接管。区域列表与 shell.css 保持一致。 */
 const PULL_REGIONS = ".chat-log, .chat-hero, .tp-list, .empty, .set-content, .ext-body, .tun-body, .files-list, "
     + ".changes-list, .changes-diff, .skills-list, .skills-detail, #mcp-content";
-const PULL_MAX = 110;
+/* 阻尼曲线照 iOS 原生回弹：位移 = h·(1 − 1/(d·0.55/h + 1))，h 是区域高度。拉 100px 走约 50px、
+ * 拉 300px 走约 130px，越拉越沉但没有硬顶，和内容超出一屏时的原生回弹手感一致。
+ * （2026-10 第一版用 110px 封顶、系数 0.6，真机上嫌拉着太重。） */
+const PULL_RESIST = 0.55;
+const PULL_MIN_SPAN = 300;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const scrollsY = (el) => el.scrollHeight > el.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(el).overflowY);
 let pull = null;
@@ -284,7 +288,8 @@ document.addEventListener("touchmove", event => {
         pull.region.classList.remove("pull-settle");
         pull.region.classList.add("pull-bounce");
     }
-    const offset = Math.sign(dy) * PULL_MAX * (1 - 1 / (Math.abs(dy) / PULL_MAX * 0.6 + 1));
+    const span = Math.max(pull.region.clientHeight, PULL_MIN_SPAN);
+    const offset = Math.sign(dy) * span * (1 - 1 / (Math.abs(dy) * PULL_RESIST / span + 1));
     pull.region.style.setProperty("--pull-y", `${offset.toFixed(1)}px`);
 }, { passive: true });
 document.addEventListener("touchend", event => { if (!event.touches.length)
