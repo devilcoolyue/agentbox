@@ -122,7 +122,7 @@ export async function responsiveSmoke(page, base) {
   }
   await mobileScrollSmoke(page, base);
   await page.setViewportSize({width:1280,height:900});
-  console.log('Responsive: six widths, both themes, all settings sections, Git picker/history/reload, help, Escape, no page overflow, locked document scroll and keyboard viewport passed');
+  console.log('Responsive: six widths, both themes, all settings sections, Git picker/history/reload, help, Escape, no page overflow, locked document scroll, pull feedback on short regions and keyboard viewport passed');
 }
 
 // Phones: the document never scrolls or rubber-bands as a whole; region
@@ -165,4 +165,30 @@ async function mobileScrollSmoke(page, base) {
   assert.equal(await page.evaluate(() => scrollY), 0);
   assert.ok(Math.abs((await topbar.boundingBox()).y) < 1, 'top bar back at the top');
   assert.ok(Math.abs((await app.boundingBox()).height - 780) < 1, 'shell fills the screen without a keyboard');
+  // A region too short to scroll has no native bounce, so a pull moves its
+  // content with resistance and springs back on release (not under reduced motion).
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  const pulled = await page.evaluate(async () => {
+    const region = document.getElementById('set-content');
+    const hidden = [...region.children].map(child => [child, child.style.display]);
+    hidden.forEach(([child]) => { child.style.display = 'none'; });
+    const probe = Object.assign(document.createElement('div'), {textContent:'probe'});
+    region.append(probe);
+    const touch = y => new Touch({identifier:1, target:probe, clientX:100, clientY:y});
+    const fire = (type, y) => probe.dispatchEvent(new TouchEvent(type, {bubbles:true, touches:y == null ? [] : [touch(y)], changedTouches:[touch(y ?? 300)]}));
+    const shift = () => new DOMMatrix(getComputedStyle(probe).transform).m42;
+    fire('touchstart', 200);
+    fire('touchmove', 300);
+    const during = shift();
+    fire('touchend');
+    await new Promise(r => setTimeout(r, 500));
+    const after = {shift:shift(), classes:region.className};
+    probe.remove();
+    hidden.forEach(([child, display]) => { child.style.display = display; });
+    return {during, after};
+  });
+  assert.ok(pulled.during > 20 && pulled.during < 100, `short region follows the pull with resistance: ${pulled.during}`);
+  assert.equal(pulled.after.shift, 0, 'content springs back on release');
+  assert.doesNotMatch(pulled.after.classes, /pull-/, 'pull classes cleared');
+  await page.emulateMedia({reducedMotion:'reduce'});
 }

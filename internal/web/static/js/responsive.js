@@ -226,3 +226,67 @@ window.visualViewport?.addEventListener("resize", fitVisualViewport);
 window.visualViewport?.addEventListener("scroll", fitVisualViewport);
 touchLayout.addEventListener("change", fitVisualViewport);
 fitVisualViewport();
+/* 区域内容不满一屏时浏览器不回弹（只有真能滚的容器才有 iOS 回弹 / Android 拉伸），用户往下
+ * 拉毫无反应，像是卡住了。这种情况下由这里补一个同样手感的拉动：内容跟手位移、越拉越沉，
+ * 松手弹回。内容超出一屏时交给浏览器原生效果（shell.css 的 overscroll-behavior: contain）；
+ * 起点在输入框、或在一个自己能竖向滚动的子元素里时不接管。区域列表与 shell.css 保持一致。 */
+const PULL_REGIONS = ".chat-log, .chat-hero, .tp-list, .empty, .set-content, .ext-body, .tun-body, .files-list, "
+    + ".changes-list, .changes-diff, .skills-list, .skills-detail, #mcp-content";
+const PULL_MAX = 110;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const scrollsY = (el) => el.scrollHeight > el.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(el).overflowY);
+let pull = null;
+function pullTarget(target) {
+    if (!touchLayout.matches || reducedMotion.matches || target.closest("input, textarea, select, [contenteditable]"))
+        return null;
+    const region = target.closest(PULL_REGIONS);
+    if (!region || region.scrollHeight > region.clientHeight + 1)
+        return null;
+    for (let el = target; el && el !== region; el = el.parentElement)
+        if (scrollsY(el))
+            return null;
+    return region;
+}
+function releasePull() {
+    const region = pull?.active ? pull.region : null;
+    pull = null;
+    if (!region)
+        return;
+    region.classList.add("pull-settle");
+    region.style.setProperty("--pull-y", "0px");
+    const done = () => { if (!pull || pull.region !== region)
+        region.classList.remove("pull-bounce", "pull-settle"); };
+    setTimeout(done, 400);
+}
+document.addEventListener("touchstart", event => {
+    releasePull();
+    const touch = event.touches[0];
+    const region = event.touches.length === 1 ? pullTarget(event.target) : null;
+    if (region)
+        pull = { region, x: touch.clientX, y: touch.clientY, active: false };
+}, { passive: true });
+document.addEventListener("touchmove", event => {
+    if (!pull)
+        return;
+    if (event.touches.length !== 1) {
+        releasePull();
+        return;
+    }
+    const dx = event.touches[0].clientX - pull.x, dy = event.touches[0].clientY - pull.y;
+    if (!pull.active) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+            pull = null;
+            return;
+        } // 横向滑动（代码块、标签条）不管
+        if (Math.abs(dy) < 6)
+            return;
+        pull.active = true;
+        pull.region.classList.remove("pull-settle");
+        pull.region.classList.add("pull-bounce");
+    }
+    const offset = Math.sign(dy) * PULL_MAX * (1 - 1 / (Math.abs(dy) / PULL_MAX * 0.6 + 1));
+    pull.region.style.setProperty("--pull-y", `${offset.toFixed(1)}px`);
+}, { passive: true });
+document.addEventListener("touchend", event => { if (!event.touches.length)
+    releasePull(); }, { passive: true });
+document.addEventListener("touchcancel", releasePull, { passive: true });

@@ -510,6 +510,10 @@
  * （base.css），用户拉到顶或底能看到「到头了」，顶栏不跟着动。 */
 :is(.chat-log, .chat-hero, .tp-list, .empty, .set-content, .ext-body, .tun-body, .files-list,
     .changes-list, .changes-diff, .skills-list, .skills-detail, #mcp-content) { overscroll-behavior: contain; }
+/* 内容不满一屏时没有原生回弹，responsive.ts 用 --pull-y 让内容跟手位移、松手弹回。
+ * 移的是子元素：区域本身留在原地并裁掉越界部分，不会盖到上方的栏。 */
+.pull-bounce > * { transform: translateY(var(--pull-y, 0px)); }
+.pull-settle > * { transition: transform .38s cubic-bezier(.2, .9, .3, 1); }
 /* 收起偏好在首屏脚本中恢复；窄屏始终展示完整抽屉。
  * 窄栏是一条居中的图标列：新建、搜索、空间头像、管理入口、用户与主题都用同一个
  * --rail-item 见方，不再各自撑满不同宽度。版本入口收起时不显示（见 updates.css）。 */
