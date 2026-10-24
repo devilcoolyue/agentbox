@@ -16,7 +16,7 @@ export async function responsiveSmoke(page, base) {
         assert.equal(await page.locator('#set-nav').isVisible(), false);
         assert.equal(await page.locator('#view-settings > .set-head').isVisible(), false);
         assert.ok((await page.locator('#acct-list-box').boundingBox()).y < 160, 'navigation consumes content space');
-        for (const [label, sec] of [['IP 代理','proxies'],['容器与资源','container'],['模型管理','models'],['智能决策','decision'],['界面与提示','interface'],['图标管理','icons'],['安全与访问','security'],['运维监控','monitor'],['关于与更新','about'],['账号池','accounts']]) {
+        for (const [label, sec] of [['IP 代理','proxies'],['容器与资源','container'],['模型管理','models'],['智能决策','decision'],['界面与提示','interface'],['图标管理','icons'],['安全与访问','security'],['系统通告','announce'],['运维监控','monitor'],['关于与更新','about'],['账号池','accounts']]) {
           await choose(label);
           await page.locator('#sec-'+sec).waitFor({state:'visible'});
           assert.equal(await page.locator('#topbar-title').innerText(),'系统设置');
@@ -120,6 +120,46 @@ export async function responsiveSmoke(page, base) {
       }
     }
   }
+  await mobileScrollSmoke(page, base);
   await page.setViewportSize({width:1280,height:900});
-  console.log('Responsive: six widths, both themes, all settings sections, Git picker/history/reload, help, Escape, no page overflow passed');
+  console.log('Responsive: six widths, both themes, all settings sections, Git picker/history/reload, help, Escape, no page overflow, locked document scroll and keyboard viewport passed');
+}
+
+// Phones: the document never scrolls or rubber-bands (only region containers
+// do), and while a keyboard shrinks the visual viewport the shell is pinned to
+// it, so the top bar stays on screen; closing the keyboard releases it.
+async function mobileScrollSmoke(page, base) {
+  await page.setViewportSize({width:390,height:780});
+  await page.goto(base + '/#/settings/accounts');
+  await page.locator('#sec-accounts').waitFor({state:'visible'});
+  const root = await page.evaluate(() => {
+    scrollTo(0, 400);
+    const html = getComputedStyle(document.documentElement), body = getComputedStyle(document.body);
+    return {scrollY, html:[html.overflowY, html.overscrollBehaviorY], body:[body.overflowY, body.overscrollBehaviorY]};
+  });
+  assert.deepEqual(root, {scrollY:0, html:['hidden','none'], body:['hidden','none']}, 'document scroll is locked');
+  const app = page.locator('#app');
+  const topbar = page.locator('.topbar');
+  await page.evaluate(() => {
+    Object.defineProperty(visualViewport, 'height', {configurable:true, value:430});
+    Object.defineProperty(visualViewport, 'offsetTop', {configurable:true, value:120});
+    visualViewport.dispatchEvent(new Event('resize'));
+  });
+  await page.waitForFunction(() => document.querySelector('#app').classList.contains('keyboard-viewport'));
+  const shell = await app.boundingBox(), bar = await topbar.boundingBox();
+  assert.ok(Math.abs(shell.y - 120) < 1 && Math.abs(shell.height - 430) < 1, `shell follows the visual viewport: ${JSON.stringify(shell)}`);
+  assert.ok(Math.abs(bar.y - 120) < 1, 'top bar stays at the top of the visible area');
+  // A small address-bar change is not a keyboard.
+  await page.evaluate(() => {
+    Object.defineProperty(visualViewport, 'height', {configurable:true, value:740});
+    Object.defineProperty(visualViewport, 'offsetTop', {configurable:true, value:0});
+    visualViewport.dispatchEvent(new Event('resize'));
+  });
+  await page.waitForFunction(() => !document.querySelector('#app').classList.contains('keyboard-viewport'));
+  await page.evaluate(() => {
+    delete visualViewport.height; delete visualViewport.offsetTop;
+    visualViewport.dispatchEvent(new Event('resize'));
+  });
+  assert.equal(await page.evaluate(() => scrollY), 0);
+  assert.ok(Math.abs((await topbar.boundingBox()).y) < 1, 'top bar back at the top');
 }

@@ -40,11 +40,15 @@
 .login {
   height: 100vh;
   height: 100dvh;
+  /* 文档不滚动（base.css）：矮屏或键盘弹出时登录卡在这里滚，卡片用 margin:auto 居中，
+   * 比视口高时顶部不会被裁掉。 */
+  overflow-y: auto; overscroll-behavior: contain;
   display: flex; align-items: center; justify-content: center;
   background-image: radial-gradient(color-mix(in srgb, var(--amber) 7%, transparent) 1px, transparent 1.4px);
   background-size: 26px 26px;
 }
 .login-card {
+  margin: auto;
   width: min(380px, 90vw);
   background: var(--panel);
   border: 1px solid var(--line);
@@ -491,6 +495,15 @@
 }
 @media (min-width: 761px) {
   .kebab-wrap { display: none; } /* 桌面端会话操作在工作台头部 */
+}
+/* 键盘弹出时 iOS / Android Chrome 不缩小布局视口，只把可视区域往上挪，外壳连同顶栏被
+ * 推出屏幕。responsive.ts 在键盘开着时把外壳钉在可视视口上：顶栏留在原处，输入框贴着
+ * 键盘。终端页另有常驻的同类处理（term.css 的 .term-viewport），两者取值相同。 */
+@media (max-width: 760px), (pointer: coarse) {
+  .app.keyboard-viewport {
+    position: fixed; left: 0; right: 0; top: var(--keyboard-viewport-top);
+    height: var(--keyboard-viewport-height);
+  }
 }
 /* 收起偏好在首屏脚本中恢复；窄屏始终展示完整抽屉。
  * 窄栏是一条居中的图标列：新建、搜索、空间头像、管理入口、用户与主题都用同一个

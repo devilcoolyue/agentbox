@@ -179,7 +179,10 @@
   ::-webkit-scrollbar-thumb { background-color: ButtonText; }
   ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: Highlight; }
 }
-html, body { height: 100%; }
+/* 文档本身不滚动：外壳是定高应用，能滚的只有各区域自己的容器。手机上拖动顶栏这类不滚的
+ * 地方、或内层列表滚到头继续拖，不再带着整页回弹（iOS）或触发下拉刷新（Android Chrome）。
+ * 登录页在 .login 内部滚动。 */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 body {
   margin: 0;
   background: var(--bg);
