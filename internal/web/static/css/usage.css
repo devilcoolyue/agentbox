@@ -363,11 +363,11 @@
    * 时间那一格，当卡片列表的排序条 */
   .usage-table thead { display: block; position: sticky; top: 0; z-index: 1; background: var(--panel-solid); }
   .usage-table thead th { display: none; }
-  .usage-table thead tr { display: flex; justify-content: flex-end; padding: 8px 12px; }
+  .usage-table thead tr { display: flex; justify-content: flex-end; padding: 2px 8px; border-bottom: 1px solid var(--line-soft); }
   .usage-table th.col-time {
     display: block;
     position: static;
-    padding: 0; border: 0;
+    padding: 0; border: 0; background: none;
   }
   /* 触屏没有 hover，两个箭头都得看得清、点得着 */
   .u-sort-b { padding: 4px 7px; opacity: 0.6; }
@@ -379,12 +379,16 @@
     text-align: left; white-space: normal;
   }
   .usage-table .skeleton-row td { padding-top: 7px; padding-bottom: 7px; }
+  /* 标签一律靠左：数字格（.num）在宽屏是整格右对齐，这里不能连标签一起推到右边，
+   * 否则比最小宽度短的「费用」「延迟」「时间」看着像多缩进了一截 */
   .usage-table td::before {
     content: attr(data-l);
-    flex: none; min-width: 44px;
-    font-family: var(--sans); font-size: 11.5px; color: var(--muted);
+    flex: none; min-width: 44px; text-align: left;
+    font-family: var(--sans); font-size: 11.5px; font-weight: 400; color: var(--muted);
   }
   .usage-table td .u-v { flex: 1; min-width: 0; text-align: right; }
+  /* 「官方直连 · 推理强度」那行是 flex，text-align 管不到，得自己靠右 */
+  .usage-table td .u-v .u-sub:has(.u-effort) { justify-content: flex-end; }
 
   /* 触屏没有 hover，问号得一直看得见，也得点得着 */
   .u-why { opacity: 1; width: 19px; height: 19px; margin-left: 8px; font-size: 11px; }
