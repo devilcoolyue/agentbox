@@ -28,8 +28,10 @@ import "./ping.js";
  * （登录页 / 侧栏字标 / 工作台空状态），避免大段 SVG 在 HTML 里重复。
  * 吉祥物填入容器（.mascot-* 控制尺寸），logo 主形直接替换占位。 */
 const boxi = document.getElementById("tpl-mascot").content;
+// 启动页那一份已由 index.html 的内联脚本当场盖好
 for (const m of document.querySelectorAll("[data-mascot]"))
-    m.append(boxi.cloneNode(true));
+    if (!m.firstElementChild)
+        m.append(boxi.cloneNode(true));
 const mark = document.getElementById("tpl-mark").content;
 for (const m of document.querySelectorAll("[data-mark]"))
     m.replaceWith(mark.cloneNode(true).firstElementChild);

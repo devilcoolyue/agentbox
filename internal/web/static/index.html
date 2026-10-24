@@ -156,13 +156,21 @@
   <button type="button" class="version-menu-footer" data-update-about><span data-i18n-text="[&quot;每 4 小时自动检查&quot;]">每 4 小时自动检查<span data-update-time data-i18n-text="[&quot;尚未检查&quot;]">尚未检查</span></span><span data-icon="caret" aria-hidden="true"></span></button>
 </div>
 
-<!-- 启动页：校验登录、读首批数据期间盖住界面，样式见 shell.css。盒仔与其他挂载点一样由 main.js 盖章 -->
+<!-- 启动页：校验登录、读首批数据期间盖住界面，样式见 shell.css。 -->
 <div id="boot" class="boot" role="status" aria-label="加载中…" data-i18n-attrs="{&quot;aria-label&quot;:&quot;加载中…&quot;}">
   <div class="boot-stage">
     <div class="mascot mascot-boot" data-mascot aria-hidden="true"></div>
     <span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span>
   </div>
 </div>
+<script>
+  /* 启动页的盒仔在这里当场盖章，不等 main.js：模块脚本要等整棵依赖都下载完才执行，
+     没有缓存时启动页会先只剩三个点。main.js 跳过已经盖好的挂载点。 */
+  (function () {
+    var boot = document.querySelector("#boot [data-mascot]"), tpl = document.getElementById("tpl-mascot");
+    if (boot && tpl && !boot.firstElementChild) boot.appendChild(tpl.content.cloneNode(true));
+  })();
+</script>
 
 <!-- 登录：默认跟随系统主题，页内不放主题切换（登录后在侧栏切换） -->
 <div id="login" class="login hidden">

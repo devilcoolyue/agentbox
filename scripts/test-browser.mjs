@@ -996,8 +996,17 @@ export async function smoke(page) {
   sessions = [{...sessions[0], agent:"claude"}];
   await mcpSmoke(page);
   sessions = [];
-  await page.reload();
+  // The boot screen shows its mascot while main.js and its module graph are
+  // still downloading (an empty cache), and main.js does not stamp it twice.
+  const slowMain = async route => { await new Promise(r => setTimeout(r, 1500)); await route.continue(); };
+  await page.route('**/js/main.js', slowMain);
+  try {
+   const reloaded = page.reload();
+   await page.waitForFunction(() => document.documentElement.hasAttribute('data-boot') && !!document.querySelector('#boot [data-mascot] svg'), null, {timeout:1200});
+   await reloaded;
+  } finally { await page.unroute('**/js/main.js', slowMain); }
   await at('#/','#empty'); // Deleted or inaccessible workspace.
+  assert.equal(await page.locator('#boot [data-mascot] > svg').count(), 1, 'boot mascot stamped twice');
   await responsiveSmoke(page, base);
   await skinsSmoke(page, base);
   await themesSmoke(page);
