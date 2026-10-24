@@ -5,11 +5,12 @@
 // input and leave, focus returns, list motion does not replay on repaint, and reduced motion is
 // instant. Exit transitions on the top layer need `overlay`; engines without it close at once.
 import assert from 'node:assert/strict';
+import {emulateMotion} from './playwright-launch.mjs';
 
 const settle = page => page.evaluate(() => Promise.all(document.getAnimations().filter(a => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))));
 
 export async function motionSmoke(page, fixture) {
- await page.emulateMedia({reducedMotion: 'no-preference'});
+ await emulateMotion(page, 'no-preference');
  try {
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--dur').trim()), '180ms');
   const overlay = await page.evaluate(() => CSS.supports('overlay', 'auto'));
@@ -174,7 +175,7 @@ export async function motionSmoke(page, fixture) {
   assert.equal(replayed, 0, 'finished entries replayed on poll');
 
   // Reduced motion: tokens are zero, menus leave synchronously, nothing is staggered.
-  await page.emulateMedia({reducedMotion: 'reduce'});
+  await emulateMotion(page, 'reduce');
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--dur').trim()), '0s');
   await page.evaluate(async () => (await import('/_v/{{BUILD}}/js/home.js')).renderHome());
   assert.equal(await page.locator('#home-list .enter').count(), 0);
@@ -187,6 +188,6 @@ export async function motionSmoke(page, fixture) {
   assert.equal(await page.locator('.menu-pop').count(), 0, 'reduced motion kept the closed menu');
   console.log(`Motion: tab underline slide and resize placement, pane entry, menu exit/focus, dialog entry${overlay ? '/exit' : ''}, skeleton rows, staggered home cards without replay, new-workspace flash, reduced motion passed`);
  } finally {
-  await page.emulateMedia({reducedMotion: 'reduce'});
+  await emulateMotion(page, 'reduce');
  }
 }

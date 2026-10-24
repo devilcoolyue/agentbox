@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {emulateMotion} from './playwright-launch.mjs';
 
 export async function responsiveSmoke(page, base) {
   const choose = async label => {
@@ -167,7 +168,7 @@ async function mobileScrollSmoke(page, base) {
   assert.ok(Math.abs((await app.boundingBox()).height - 780) < 1, 'shell fills the screen without a keyboard');
   // A region too short to scroll has no native bounce, so a pull moves its
   // content with resistance and springs back on release (not under reduced motion).
-  await page.emulateMedia({reducedMotion:'no-preference'});
+  await emulateMotion(page, 'no-preference');
   const pulled = await page.evaluate(async () => {
     const region = document.getElementById('set-content');
     const hidden = [...region.children].map(child => [child, child.style.display]);
@@ -194,5 +195,5 @@ async function mobileScrollSmoke(page, base) {
   assert.ok(pulled.during > 20 && pulled.during < 100, `short region follows the pull with resistance: ${pulled.during}`);
   assert.equal(pulled.after.shift, 0, 'content springs back on release');
   assert.doesNotMatch(pulled.after.classes, /pull-/, 'pull classes cleared');
-  await page.emulateMedia({reducedMotion:'reduce'});
+  await emulateMotion(page, 'reduce');
 }

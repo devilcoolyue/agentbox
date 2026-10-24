@@ -48,6 +48,15 @@ export function cancelledFetchError(error){
  return [error.message,rejoined].some(text=>CANCELLED_FETCH.test(String(text).split('\n')[0]));
 }
 
+// WebKit applies emulateMedia asynchronously: a MediaQueryList the page already holds keeps
+// its old value until the next rendering update, so code reading it right after the switch
+// still sees the previous preference. Wait until a fresh query agrees, then two frames.
+export async function emulateMotion(page,reducedMotion){
+ await page.emulateMedia({reducedMotion});
+ await page.waitForFunction(reduce=>matchMedia('(prefers-reduced-motion: reduce)').matches===reduce,reducedMotion==='reduce');
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+}
+
 // CI intermittently fails a page.evaluate with "Execution context was destroyed", i.e. a
 // full-page navigation the test did not ask for, and it has not reproduced locally. Keep the
 // page's recent document requests and print them only when the run fails, so the next CI
