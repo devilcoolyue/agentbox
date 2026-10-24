@@ -15,9 +15,35 @@ export class TurnWriter {
     body = null; // 当前回合的内容列（.turn-body）
     footer = null;
     context = {};
+    /** 回放历史期间攒下要刷新的底栏，回放完各刷一次：底栏只取决于回合的最终内容与上下文，
+     * 逐条刷新在上千条的一页里要多花几百毫秒。 */
+    pending = null;
     constructor(log, agent) {
         this.log = log;
         this.agent = agent;
+    }
+    touch(footer) {
+        if (!footer)
+            return;
+        if (this.pending)
+            this.pending.add(footer);
+        else
+            footer.update();
+    }
+    batch(run) {
+        const outer = this.pending;
+        this.pending ??= new Set();
+        try {
+            return run();
+        }
+        finally {
+            if (!outer) {
+                const pending = this.pending;
+                this.pending = null;
+                for (const footer of pending)
+                    footer.update();
+            }
+        }
     }
     reset() {
         this.body = null;
@@ -35,7 +61,7 @@ export class TurnWriter {
             footer.setReceipt(node);
         else if (!foldInto(footer.el.previousElementSibling, node))
             body.insertBefore(node, footer.el);
-        footer.update();
+        this.touch(footer);
     }
     turnBody() {
         const log = this.log();
@@ -60,6 +86,9 @@ export class TurnWriter {
 /** 按历史记录重建对话流；place 决定节点落在哪（实时流还要处理贴底与执行指示）。
  * latest 表示这是对话最新的一页：只有它最后一个回合里没结束的提问还可能在等回答。 */
 export function replayHistory(writer, entries, costs, place, latest = false) {
+    writer.batch(() => replayEntries(writer, entries, costs, place, latest));
+}
+function replayEntries(writer, entries, costs, place, latest) {
     let open = [];
     for (const raw of entries) {
         if (raw.kind === "event")
@@ -93,7 +122,7 @@ export function replayHistory(writer, entries, costs, place, latest = false) {
             writer.context.ts = raw.ts;
         if (raw.kind === "status" && raw.duration_ms)
             writer.context.duration = raw.duration_ms;
-        writer.footer?.update();
+        writer.touch(writer.footer);
     }
     if (!latest && open.length)
         sealQuestions(open);

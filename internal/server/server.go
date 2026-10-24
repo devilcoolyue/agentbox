@@ -97,6 +97,7 @@ type Server struct {
 	themes        *theme.Service
 	iconsOnce     sync.Once
 	icons         *iconset.Service
+	threadIndexes threadIndexCache
 	announceOnce  sync.Once
 	announce      *announce.Service
 	mcpCheckMu    sync.Mutex

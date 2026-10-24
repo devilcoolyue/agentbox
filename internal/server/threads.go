@@ -214,75 +214,29 @@ type threadMeta struct {
 
 // scanThread derives list metadata from one thread file. Callers hold fileMu.
 func (s *Server) scanThread(sess store.Session, tid string) (threadMeta, bool) {
-	raw, err := os.ReadFile(s.threadPath(sess, tid))
+	x, f, err := s.threadIndex(s.threadPath(sess, tid))
 	if err != nil {
 		return threadMeta{}, false
 	}
-	m := threadMeta{ID: tid}
-	firstMsg, genTitle := "", ""
-	for _, e := range parseEntries(raw) {
-		if m.TS.IsZero() && !e.meta.TS.IsZero() {
-			m.TS = e.meta.TS
-		}
-		if !e.meta.TS.IsZero() {
-			m.Updated = e.meta.TS
-		}
-		switch e.meta.Kind {
-		case "user":
-			m.Turns++
-			m.sent = true
-			if firstMsg == "" {
-				firstMsg = e.meta.Text
-			}
-		case "event":
-			m.sent = true
-		case "title":
-			if e.meta.Text != "" {
-				genTitle = e.meta.Text
-			}
-		case "chat_session":
-			m.resume = e.meta.Text
-			m.Resumable = e.meta.Text != ""
-		}
-	}
-	// 优先用模型总结的标题，没有则回退到首条用户消息（截断）
-	if genTitle != "" {
-		m.Title = truncRunes(genTitle, 120)
-	} else {
-		m.Title = truncRunes(firstMsg, 120)
-	}
-	return m, true
+	f.Close()
+	return x.meta(tid), true
 }
 
 // threadTitleSource returns the thread's first user message, its user-turn
 // count, and whether a model-generated title has already been stored. Callers
 // hold fileMu.
 func (s *Server) threadTitleSource(sess store.Session, tid string) (firstMsg string, userTurns int, hasTitle bool) {
-	raw, err := os.ReadFile(s.threadPath(sess, tid))
+	x, f, err := s.threadIndex(s.threadPath(sess, tid))
 	if err != nil {
 		return "", 0, false
 	}
-	// A turn the CLI answered locally (/context…) closes with a local idle
-	// status; its message neither names the thread nor counts as a turn.
-	var messages []string
-	for _, e := range parseEntries(raw) {
-		switch e.meta.Kind {
-		case "user":
-			messages = append(messages, e.meta.Text)
-		case "status":
-			if e.meta.Local && len(messages) > 0 {
-				messages = messages[:len(messages)-1]
-			}
-		case "title":
-			if e.meta.Text != "" {
-				hasTitle = true
-			}
+	defer f.Close()
+	if len(x.messages) > 0 {
+		if e, err := x.entry(f, x.messages[0]); err == nil {
+			firstMsg = e.meta.Text
 		}
 	}
-	if len(messages) > 0 {
-		firstMsg = messages[0]
-	}
-	return firstMsg, len(messages), hasTitle
+	return firstMsg, len(x.messages), x.title != ""
 }
 
 // appendThreadEntry appends one entry to a specific thread file (not
@@ -305,13 +259,11 @@ func (s *Server) appendThreadEntry(sess store.Session, tid string, e logEntry) e
 func parseEntries(raw []byte) []histEntry {
 	out := []histEntry{}
 	for _, l := range bytes.Split(raw, []byte{'\n'}) {
-		l = bytes.TrimSpace(l)
-		if len(l) == 0 || !json.Valid(l) {
-			continue
+		if l = bytes.TrimSpace(l); len(l) > 0 {
+			if e, ok := decodeEntry(l); ok {
+				out = append(out, e)
+			}
 		}
-		e := histEntry{raw: json.RawMessage(l)}
-		_ = json.Unmarshal(l, &e.meta)
-		out = append(out, e)
 	}
 	return out
 }
@@ -486,10 +438,13 @@ type historyLimits struct {
 
 // Counted in rendered entries: Claude's tool results go out as slim copies that
 // count only toward the byte budget; they made up a third of a tool-heavy
-// transcript.
+// transcript. The browser lays out a whole page at once, about 1 ms per entry
+// on a desktop and several times that on a phone (2026-10: an 800-entry first
+// page took 1–3 s to show), so pages hold a few recent turns and scrolling up
+// fetches the rest.
 var historyPage = historyLimits{
-	Entries: 800, Bytes: 4 << 20,
-	MaxEntries: 3000, MaxBytes: 16 << 20,
+	Entries: 300, Bytes: 1 << 20,
+	MaxEntries: 600, MaxBytes: 4 << 20,
 	ReloadEntries: 12000, ReloadBytes: 64 << 20,
 }
 
@@ -517,45 +472,6 @@ func historyTool(e *histEntry) json.RawMessage {
 		}
 	}
 	return e.tool
-}
-
-// historyStart picks the first index of the page ending before end.
-func historyStart(entries []histEntry, end int, limits historyLimits) int {
-	count, size, start := 0, 0, end
-	for start > 0 {
-		e := &entries[start-1]
-		if historySent(e) {
-			count++
-			size += len(e.raw)
-		} else {
-			size += len(historyTool(e))
-		}
-		start--
-		if count >= limits.MaxEntries || size >= limits.MaxBytes {
-			break
-		}
-		if e.meta.Kind == "user" && (count >= limits.Entries || size >= limits.Bytes) {
-			break
-		}
-	}
-	return start
-}
-
-func historyWithin(entries []histEntry, count, size int) bool {
-	n, total := 0, 0
-	for i := range entries {
-		e := &entries[i]
-		if historySent(e) {
-			n++
-			total += len(e.raw)
-		} else {
-			total += len(historyTool(e))
-		}
-		if n > count || total > size {
-			return false
-		}
-	}
-	return true
 }
 
 // historyIndex parses a page cursor. Cursors index the valid JSONL lines of a
@@ -613,7 +529,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "thread": nil, "start": 0, "has_more": false})
 		return
 	}
-	raw, err := os.ReadFile(s.threadPath(sess, tid))
+	x, f, err := s.threadIndex(s.threadPath(sess, tid))
 	if err != nil {
 		if os.IsNotExist(err) && older {
 			writeProblem(w, r, "chat.history", "invalid_request")
@@ -626,51 +542,49 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	entries := parseEntries(raw)
-	end, start := len(entries), -1
+	defer f.Close()
+	end, start := len(x.lines), -1
 	if older {
 		var ok bool
-		if end, ok = historyIndex(q.Get("before"), 1, len(entries)); !ok {
+		if end, ok = historyIndex(q.Get("before"), 1, len(x.lines)); !ok {
 			writeProblem(w, r, "chat.history", "invalid_request")
 			return
 		}
 	} else if q.Get("thread") == tid && q.Has("from") {
 		// A stale or oversized refresh quietly falls back to the newest page;
 		// the client compares start with what it asked for.
-		if from, ok := historyIndex(q.Get("from"), 0, len(entries)); ok &&
-			historyWithin(entries[from:], historyPage.ReloadEntries, historyPage.ReloadBytes) {
+		if from, ok := historyIndex(q.Get("from"), 0, len(x.lines)); ok &&
+			x.within(f, from, historyPage.ReloadEntries, historyPage.ReloadBytes) {
 			start = from
 		}
 	}
 	if start < 0 {
-		start = historyStart(entries, end, historyPage)
+		start = x.pageStart(f, end, historyPage)
 	}
 	var contextLine json.RawMessage
 	// A page can begin inside a long turn. Preserve its request snapshot
 	// without returning the potentially large original prompt.
-	if start > 0 && start < end && entries[start].meta.Kind != "user" {
+	if start > 0 && start < end && !x.lines[start].user {
 		for i := start - 1; i >= 0; i-- {
-			if entries[i].meta.Kind == "user" {
+			if x.lines[i].user {
 				var user logEntry
-				if json.Unmarshal(entries[i].raw, &user) == nil && user.Turn != nil {
+				if e, err := x.entry(f, i); err == nil && json.Unmarshal(e.raw, &user) == nil && user.Turn != nil {
 					contextLine, _ = json.Marshal(logEntry{TS: user.TS, Kind: "turn_context", Turn: user.Turn})
 				}
 				break
 			}
 		}
 	}
-	lines := make([]json.RawMessage, 0, end-start+1)
+	page, err := x.page(f, start, end)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	lines := make([]json.RawMessage, 0, len(page)+1)
 	if contextLine != nil {
 		lines = append(lines, contextLine)
 	}
-	for i := start; i < end; i++ {
-		e := &entries[i]
-		if historySent(e) {
-			lines = append(lines, e.raw)
-		} else if tool := historyTool(e); tool != nil {
-			lines = append(lines, tool)
-		}
-	}
+	lines = append(lines, page...)
 	var turnIDs []string
 	for _, line := range lines {
 		var entry struct {
@@ -689,8 +603,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 	if older {
 		out["thread_id"] = tid
 	} else {
-		meta, _ := s.scanThread(sess, tid)
-		out["thread"], out["active_thread"] = meta, tid
+		out["thread"], out["active_thread"] = x.meta(tid), tid
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -865,6 +778,7 @@ func (s *Server) handleThreadDelete(w http.ResponseWriter, r *http.Request, sess
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.threadIndexes.drop(s.threadPath(sess, tid))
 	active := s.activeThread(sess)
 	if active == tid {
 		// 当前对话被删：切到最近的一条，没有就回到空白新对话

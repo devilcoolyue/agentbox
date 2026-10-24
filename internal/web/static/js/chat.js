@@ -1203,7 +1203,11 @@ export async function loadHistory(opts = {}) {
         live.reset();
         resetDelegationCards();
         resetQuestionCards();
-        replayHistory(live, entries, costs, appendChat, true);
+        // 整页一次性插入：不走 appendChat，免得每个节点都读一次滚动位置、逼浏览器同步重排
+        // （上千条的一页里那是秒级的开销）。贴底、执行指示和中央引导在插完后各处理一次。
+        replayHistory(live, entries, costs, node => live.place(node), true);
+        ensureWorking();
+        updateHero();
         // 只有正在跑的最后一个回合里的工具行还可能等到结束事件，其余停止转圈
         settleToolRows(log, S.chatState === "running" ? live.body : null);
         background.reset(); // 重连时仍在等后台任务的回合，从最新一页恢复
