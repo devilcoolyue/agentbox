@@ -269,31 +269,33 @@ func TestScanTerminalUsage(t *testing.T) {
 	}
 }
 
-// 终端消耗只记账不扣额度：补记是异步的、价还是我们自己查表折的，
-// 拿它去动余额用户没法对账。拦终端靠的是余额见底不让开终端，不是这里扣钱。
-func TestTerminalUsageNeverCharges(t *testing.T) {
+// 终端消耗照扣额度：第一次见到按全额扣，同一请求流式写长后只补扣多出来的，
+// 重扫不变的行一分不动。
+func TestTerminalUsageChargesGrowth(t *testing.T) {
 	s, _ := newTestServer(t)
 	const user = "alice"
 	if _, err := s.store.Grant(user, 1_000_000, "test:seed", "充值", "root"); err != nil {
 		t.Fatal(err)
 	}
-	before, _ := s.store.GetQuota(user)
-	if before.BalanceMicroUSD != 1_000_000 {
-		t.Fatalf("初始余额 = %d，想要 1000000", before.BalanceMicroUSD)
-	}
-
-	if err := s.store.UpsertTerminalUsage(store.UsageEvent{
+	ev := store.UsageEvent{
 		User: user, SessionID: "s1", TurnID: "req_A", ReqID: "req_A",
 		Agent: "claude", Model: "claude-sonnet-5",
 		InputTokens: 4, OutputTokens: 100, CostMicroUSD: 250_000,
-	}); err != nil {
-		t.Fatal(err)
 	}
-
-	after, _ := s.store.GetQuota(user)
-	if after.BalanceMicroUSD != before.BalanceMicroUSD {
-		t.Errorf("余额从 %d 变成 %d，终端消耗不该扣额度",
-			before.BalanceMicroUSD, after.BalanceMicroUSD)
+	balance := func() int64 {
+		q, _ := s.store.GetQuota(user)
+		return q.BalanceMicroUSD
+	}
+	for _, step := range []struct {
+		out, cost, want int64
+	}{{100, 250_000, 750_000}, {100, 250_000, 750_000}, {120, 300_000, 700_000}} {
+		ev.OutputTokens, ev.CostMicroUSD = step.out, step.cost
+		if err := s.store.UpsertTerminalUsage(ev); err != nil {
+			t.Fatal(err)
+		}
+		if got := balance(); got != step.want {
+			t.Fatalf("费用 %d 后余额 = %d，想要 %d", step.cost, got, step.want)
+		}
 	}
 }
 

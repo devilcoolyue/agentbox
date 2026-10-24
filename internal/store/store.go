@@ -24,14 +24,14 @@ const (
 	// UsageKindTitle is spend from the thread-title summary the server runs on
 	// its own. UsageKindTerminal is spend from the CLI the user drove by hand in
 	// the terminal tab — it never passes through the server, so those rows are
-	// backfilled from the CLI's own transcript files and, unlike the other two,
-	// never move the user's balance (see UpsertTerminalUsage).
+	// backfilled from the CLI's own transcript files and charged by how much
+	// each rewrite grew (see UpsertTerminalUsage).
 	// UsageKindSuggestion is the extra request Claude Code makes after a web
 	// chat turn to predict the user's next prompt; it is charged like chat.
 	// UsageKindBackground is a request Codex makes on its own that neither its
 	// usage reports nor its session records carry (a warm-up at every start,
 	// side conversations of the terminal UI); it is known only from the CLI's
-	// telemetry and, like terminal rows, never moves the balance (see
+	// telemetry and, like terminal rows, is charged when it is written (see
 	// InsertBackgroundUsage).
 	// UsageKindKeepalive is a request the server sends on its own while a web
 	// chat's user is away, only to read the conversation's prompt cache before
@@ -732,11 +732,11 @@ func insertUsageTx(tx *sql.Tx, evs []UsageEvent) error {
 // UpsertTerminalUsage records spend the user drove by hand in the terminal,
 // backfilled from the CLI's own transcript. It is deliberately NOT InsertUsage:
 //
-//   - It never charges. The rows land minutes after the fact, in a batch, with a
-//     price we derived ourselves rather than one the provider quoted — silently
-//     draining a balance on that basis would be unexplainable to the user. The
-//     guard against terminal spend is the balance check that blocks opening a
-//     terminal at all (see the quota section in AGENTS.md), not a debit here.
+//   - It charges only the growth of a row's cost since it was last settled
+//     (settleUsageTx): the same request comes back with more tokens while it
+//     is still streaming, and a rescan after a restart rewrites every row.
+//     Rows from before terminal billing began, and users without a quota row,
+//     settle without a charge.
 //   - It upserts on ReqID, one row per provider request. The scanner re-reads
 //     whole transcript files, and a request that was still streaming last sweep
 //     comes back with more tokens on it, so the same key has to update in place
@@ -754,6 +754,7 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 		return err
 	}
 	defer tx.Rollback()
+	metered := map[string]bool{}
 	for _, e := range evs {
 		if e.ReqID == "" {
 			return fmt.Errorf("terminal usage %s: 缺 req_id", e.SessionID)
@@ -836,6 +837,13 @@ func (s *Store) UpsertTerminalUsage(evs ...UsageEvent) error {
 			e.CostMicroUSD, e.DurationMS, e.WallMS, e.TTFTMs, e.Provider, e.ReqID, e.Raw, snapshot, e.Effort, e.EffortControl,
 			e.APIRequestID, e.APITTFTMs, e.APIDurationMS); err != nil {
 			return fmt.Errorf("upsert terminal usage %s/%s: %w", e.SessionID, e.ReqID, err)
+		}
+		var id int64
+		if err := tx.QueryRow("SELECT id FROM usage_events WHERE req_id = ?", e.ReqID).Scan(&id); err != nil {
+			return fmt.Errorf("terminal usage id %s/%s: %w", e.SessionID, e.ReqID, err)
+		}
+		if err := settleUsageTx(tx, id, e.User, usageTimestamp(e.TS), settleNote(UsageKindTerminal, e), e.CostMicroUSD, metered); err != nil {
+			return err
 		}
 	}
 	if err := tx.Commit(); err != nil {

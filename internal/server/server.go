@@ -151,6 +151,7 @@ type Server struct {
 	usageTel   usageTelemetryState // per-request timing from the CLIs; see usage_telemetry.go
 	keepalive  keepaliveState      // prompt caches kept warm while users are away; see keepalive.go
 	quota      quotaWindows        // subscriptions' five-hour windows; see quota_pause.go
+	quotaStops quotaTerminalStops  // terminal agents stopped once the balance runs out; see quota_terminal.go
 
 	codexPairs    codexPairing  // Codex requests waiting for their completion record
 	codexRollouts codexRollouts // Codex conversations known to keep a rollout
@@ -252,7 +253,10 @@ func NewContext(ctx context.Context, cfg *config.Config) (*Server, error) {
 		}
 		return toolstore.OwnerKey(instance, user.Name, user.CreatedAt.UTC().Format(time.RFC3339Nano)), nil
 	})
-	st.OnUsageWritten(s.usageLive.publish)
+	st.OnUsageWritten(func(writes []store.UsageWrite) {
+		s.usageLive.publish(writes)
+		s.noteUsageForQuota(writes)
+	})
 	s.chat = newChatManager(s)
 	s.git = gitx.New(dock, s.prepareGitSession)
 	if err := s.initExtensions(); err != nil {

@@ -593,7 +593,7 @@ async function loadSpend() {
   termKeepalive.soon(3000);
   setTip(box, () => i18nText("{p0} 个回合 / {p1} 条记录，含网页对话、终端和起标题。", { p0: String(total.turns), p1: String(total.rows) })
     + i18nText("合计 {p0} tokens。", { p0: tokens.toLocaleString("en-US") })
-    + i18nText("金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗计入这里但不扣额度。"));
+    + i18nText("金额按价目表与 provider 报价折算，订阅账号下只是等价估算；终端消耗同样扣额度，余额用完时终端里的 Agent 会被停止。"));
   box.classList.remove("hidden");
 }
 

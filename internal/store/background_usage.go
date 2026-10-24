@@ -6,11 +6,9 @@ import (
 )
 
 // InsertBackgroundUsage records Codex's background requests (UsageKindBackground)
-// as reported by its telemetry. Like terminal rows they only record spend and
-// never touch the balance: the numbers come from the CLI, asynchronously, and
-// a user could not reconcile a deduction against anything they did. ReqID
-// keeps a resent export from adding the same request twice; it returns how
-// many rows were new.
+// as reported by its telemetry, and charges the new ones like terminal rows
+// (settleUsageTx). ReqID keeps a resent export from adding — or charging — the
+// same request twice; it returns how many rows were new.
 func (s *Store) InsertBackgroundUsage(evs ...UsageEvent) (int, error) {
 	if len(evs) == 0 {
 		return 0, nil
@@ -21,6 +19,7 @@ func (s *Store) InsertBackgroundUsage(evs ...UsageEvent) (int, error) {
 	}
 	defer tx.Rollback()
 	var added []UsageEvent
+	metered := map[string]bool{}
 	for _, e := range evs {
 		if e.ReqID == "" {
 			return 0, fmt.Errorf("background usage %s: 缺 req_id", e.SessionID)
@@ -49,9 +48,17 @@ func (s *Store) InsertBackgroundUsage(evs ...UsageEvent) (int, error) {
 		}
 		if n, err := res.RowsAffected(); err != nil {
 			return 0, err
-		} else if n > 0 {
-			added = append(added, e)
+		} else if n == 0 {
+			continue
 		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			return 0, err
+		}
+		if err := settleUsageTx(tx, id, e.User, usageTimestamp(e.TS), settleNote(UsageKindBackground, e), e.CostMicroUSD, metered); err != nil {
+			return 0, err
+		}
+		added = append(added, e)
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err

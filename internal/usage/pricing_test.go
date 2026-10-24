@@ -75,9 +75,11 @@ func TestPriceSnapshotsSurviveEditsAndTerminalGrowth(t *testing.T) {
 			t.Fatalf("repriced history: got %d want %d", row.CostMicroUSD, want)
 		}
 	}
+	// The terminal row is charged 50 when first seen, then the 450 it grew by,
+	// both at the snapshot it was first priced with.
 	quota, _ := s.store.GetQuota("alice")
-	if quota.BalanceMicroUSD != 9950 {
-		t.Fatalf("terminal charged: %+v", quota)
+	if quota.BalanceMicroUSD != 9450 {
+		t.Fatalf("terminal charge: %+v", quota)
 	}
 }
 func TestUnpricedAndProviderSourcesArePersisted(t *testing.T) {

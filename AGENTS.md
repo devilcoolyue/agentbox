@@ -427,7 +427,7 @@ data/
   session_meta id；exec 回退与起标题没有线程 id，不带键。HTTP 下 Codex 每个流事件一条日志，接收端解码时就只留
   `telemetryKeys` 里的属性（账号 ID、邮箱等不进内存结构）。实测与回归见 `TestCodexTelemetryPairs`。
 - **Codex 后台请求**（`kind=background`，`recordCodexBackground` + `store.InsertBackgroundUsage`）：只在遥测里出现、别处都不记的
-  请求由完成记录直接成行，只记账不扣额度（同终端补记），关掉遥测就没有。两类：① 预热（完成记录无 `ttft_ms` 且 output 0）——0.163
+  请求由完成记录直接成行，新行入库即扣额度（同终端补记，见「额度与扣减」），关掉遥测就没有。两类：① 预热（完成记录无 `ttft_ms` 且 output 0）——0.163
   实测网页 tokenUsage、终端 rollout 的 token_count、起标题的 turn.completed 都不含它，所以不论会话一律记；② `originator=codex-tui`
   且会话在空间 home 里**没有** rollout 的请求（TUI 用小模型另开的小会话）。其余一律不从遥测造行：网页行要到回合结束才写，接收时
   无从查重；有 rollout 的会话归终端补记 / 网页结算 / 起标题。rollout 是否存在由 `usage.CodexRolloutExists` glob，查不清按「存在」
@@ -456,7 +456,8 @@ data/
 - **余额可以是负数，这是设计。** 回合中每次请求结束就扣，但一个回合还要发多少次请求
   事先不知道，所以拦截只发生在**回合开始前**（`handleChatWS` 的 `user_message`
   分支），余额见底的那个回合允许超支、不中途掐断。宁可多花一个回合，也不把用户跑到一半的任务
-  腰斩。起标题这趟服务端自发的消耗在余额见底时直接跳过。
+  腰斩。起标题这趟服务端自发的消耗在余额见底时直接跳过。终端例外：一个终端回合能连跑几个小时，
+  扣穿后立刻停掉终端里的 Agent（见「终端」）。
 - **Claude 网页对话按独立消息用量查价目表**，独立起标题才可用 CLI 报价；不报价的走 `config.json` 的 `pricing`
   按 token 折算——codex 的全部回合，以及从 transcript 补记的**终端行**（那里只有
   token 没有美元，claude 也一样要查表）。价目表单位是「每百万 token 多少美元」，
@@ -562,9 +563,13 @@ data/
     `WHERE req_id != ''`（对话行的空串必须排除），`UpsertTerminalUsage` 的
     `ON CONFLICT` 必须把这个 WHERE 原样带上，否则 SQLite 认不出这条约束。upsert 而非
     insert 是因为扫描时请求可能还没写完，下一轮要把最终用量更新到同一行上。
-  - **只记账不扣额度**：补记是异步的、价还是我们查表折的，拿它动余额用户没法对账。
-    拦终端仍然靠余额见底不让开终端（见下节）。`billingMode` 因此对 `terminal` 特判——
-    哪怕是 claude 也只能标「价目表 / 未定价」，不能标「官方报价」。
+  - **扣额度，只扣增长**（schema 23，`store/terminal_billing.go`）：同一请求流式写长、重启重扫都会
+    重写同一行，`usage_events.settled_micro_usd` 记着这一行已结清的金额，每次写入在同一事务里只扣
+    `cost − settled`；首笔流水键 `usage:<id>`，之后 `usage:<id>:2`、`:3`…（按已有条数取号，范围查询走 ref
+    唯一索引）。**「结清」不等于「扣款」**：没开额度的用户、`ts` 早于 `terminal_billing.since`（迁移时刻）
+    的请求只把 settled 推到当前费用、不写流水，所以之后开额度或重扫都不会追扣；迁移时已有的终端/后台行
+    一律视为已结清。费用变小不退，settled 保持最高值。后台请求（`kind=background`）同样入库即扣。
+    `billingMode` 对 `terminal` 特判——哪怕是 claude 也只能标「价目表 / 未定价」，不能标「官方报价」。
   - 扫描按 (size, mtime) 跳过没动过的文件；只遍历库里存在的会话，磁盘上已删除会话的
     残留目录不补（补了也是归不到人头上的孤儿行）。
   - **动过的文件只续读**（照 cc-switch 的字节游标）：`termFileState` 记着读到的字节偏移、
@@ -600,8 +605,8 @@ data/
   或终端页开着时连（`watchUsageLive` 按界面计数），重连成功后补发一次 `sessions=null`；
   使用记录页连续通知至少隔 1 秒重读、后台标签页回到前台再读。轮询都保留作兜底：使用记录页
   「跟随当前时刻」仍每 30 秒前移时间窗。
-- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源（认 `originator`；`source` 0.154 前是 `cli`，0.160 起 TUI 跑在 app-server 上写 `vscode`，与网页对话的 `agentbox`+`vscode` 靠 originator 区分），每个非零累计差值是一次请求、一行（键见上）；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；仍只记账不扣额度。远程压缩的那次请求从 `compacted` 记录补（见上「Codex 压缩上下文那次请求」）。
-- 终端推理强度只读历史日志：Claude assistant 顶层 `effort`（不回退 `perTurnEffort`），Codex `turn_context.payload.effort`；schema 17 的 `usage_events.effort/effort_control` 随原行 upsert，每次请求取它自己记录的档位，缺失留空。重启后重扫现存日志可补历史强度，不拆分原去重键、不替换价格快照、不扣余额；禁止用当前账号配置推断历史。网页强度仍取冻结聊天回执，起标题不借用网页回合强度。升级前保留 schema 16 兼容备份，回退使用匹配旧版本恢复到新目录。
+- Codex 终端补记见 `internal/usage/codex_terminal.go`：仅 codex-tui 来源（认 `originator`；`source` 0.154 前是 `cli`，0.160 起 TUI 跑在 app-server 上写 `vscode`，与网页对话的 `agentbox`+`vscode` 靠 originator 区分），每个非零累计差值是一次请求、一行（键见上）；累计 token 差值去掉重复 token_count，reasoning 不重复加，缓存输入是 input 子集。数据库 req_id 加空间前缀，防止复制 rollout 跨空间覆盖；扣额度同 Claude 终端行（按增长补扣）。远程压缩的那次请求从 `compacted` 记录补（见上「Codex 压缩上下文那次请求」）。
+- 终端推理强度只读历史日志：Claude assistant 顶层 `effort`（不回退 `perTurnEffort`），Codex `turn_context.payload.effort`；schema 17 的 `usage_events.effort/effort_control` 随原行 upsert，每次请求取它自己记录的档位，缺失留空。重启后重扫现存日志可补历史强度，不拆分原去重键、不替换价格快照，费用不变就不动余额；禁止用当前账号配置推断历史。网页强度仍取冻结聊天回执，起标题不借用网页回合强度。升级前保留 schema 16 兼容备份，回退使用匹配旧版本恢复到新目录。
 
 ### 终端
 
@@ -612,11 +617,19 @@ data/
   两道关：进门前查一次（在 `startSession` 之前，欠费用户连容器都不拉起），以及每个
   ping 周期（30s）复查一次——余额是在对话页扣穿的，挂着的终端不会自己发现，不复查
   的话把标签页一直开着就绕过了入口检查。
+- **余额见底时终端里的 Agent 当场停下**（`server/quota_terminal.go`）：断开网页终端停不住 tmux 里
+  跑着的 CLI，所以每次用量入账（`OnUsageWritten`，含对话扣穿）后，用户若被 `quotaBlock` 拦住，就给他
+  每个运行中空间 docker exec 一段脚本，对**终端启动的** `claude`/`claude.exe`/`codex` 发 SIGTERM，
+  并在其 pts 上写明原因（先退备用屏、显光标）。「终端启动」按祖先判断：一路往上先碰到父进程 1
+  （tmux 服务端、nohup/setsid 出去的都挂在 docker-init 下）才停；先碰到父进程 0 的是服务端 docker exec
+  直接拉起的网页回合/起标题/保活，不碰（网页回合照「见底的回合允许超支」跑完）。Codex 只认原生进程，
+  node 外壳转发信号后随之退出。同一空间 15 秒内只停一次。实测 Claude Code 2.1.309 收到 SIGTERM 正常
+  退出、留会话记录并打印 `claude --resume <id>`，Codex 0.164 TUI 与 node 外壳一起退出。
 - 拒绝用私有关闭码 `closeQuota`（4003）+ reason 送达，**不是** HTTP 错误：浏览器的
   WebSocket 拿不到升级失败的状态码和响应体，只会收到无原因的 1006，前端分不清是
   欠费还是网络抖动，于是无限退避重连。前端 `term.js` 见 4000–4999 就把 reason 写进
   终端画面并停止自动重连。控制帧上限 125 字节，reason 由 `truncReason` 按 rune 截断。
-- 断开只停得住新的输入：tmux detach 不杀进程，已经在跑的 agent 会继续跑完。
+- 断开只停得住新的输入：tmux detach 不杀进程；额度见底时由上一条停掉终端里的 Agent。
 - 程序复制的文字（`term-clipboard.ts`）：Claude Code 在 tmux 里复制走 `tmux load-buffer -w`，即使 `set-clipboard off` tmux 也会经 OSC 52 交给 xterm；xterm.js 不认 52，由 `parser.registerOscHandler(52)` 写进浏览器剪贴板。只写不读（查询不回应），只认用户在终端里按下/拖选/按键后 3 秒内的请求，防 Agent 静默改写本机剪贴板；`set-clipboard` 保持 off，程序直接打印的 OSC 52 不转发。Safari 不允许无手势写入，退回终端底部「复制到剪贴板」条在点击里写。回归 `scripts/test-term-clipboard.mjs`。
 - xterm 6 会丢掉 iOS 中文键盘直接上屏的标点（「，」等，上游 xtermjs/xterm.js#3070），也不认连按标点键时 iOS 不带按键事件的删除/替换（「，。？！」循环）。`term.ts` 的 `bridgeDroppedInput` 在 xterm 所有发送时机（keydown、keypress、229 差分定时器、输入事件）都过去后，若这次按键 xterm 一字未发且不在组字，才按 textarea 前后差异补发（先退格再插入，最多删 8 个字符）；升级 xterm 后若上游已修复（PR #5614），删掉它并保留 `test-browser.mjs` 的「恰好发送一次」断言。真机事件顺序用地址参数 `?imedebug` 打开 `term-input-debug.ts` 的诊断面板，上传到 `/shared/.file/`（只在开启期间记录，含期间输入的字符）。
 - xterm 6 没有触摸滚动，单指拖动原本落给浏览器滚走整页。`term-touch.ts` 把单指纵向滑动换算成滚轮事件派发给 xterm，与桌面滚轮同路：tmux（`mouse on`）下是鼠标滚轮上报，tmux 进历史模式、一次翻 5 行（所以每 3 行手指位移发一次），普通屏才直接 `scrollLines`。单指 touchmove 一律 `preventDefault`（页面放大时除外），双指交还浏览器缩放；滑动过的触摸抬手吞掉点击，免得弹出键盘。历史模式里打字会被 tmux 吞掉，Esc 或滑回底部退出，与桌面滚轮翻历史一致。长按 500ms 由同一模块回调 `term.ts`，用 `menu.ts` 的 `openMenuAt` 在手指上方弹「粘贴」（不挪焦点，否则软键盘收起）：触屏上 xterm 输入框只是光标处一个点，系统粘贴菜单出不来，只能 Clipboard API 读剪贴板（要 HTTPS），图片走与桌面粘贴相同的上传，文字走 `term.paste`（括号粘贴）。Android 长按的 contextmenu 在捕获阶段拦下，不能让 xterm 当右键处理。iPhone / iPad（UA 含 iPhone/iPad/iPod，或 Mac 且多触点）读剪贴板时系统必弹「粘贴」气泡确认，所以按住时不弹菜单、只显示「松开粘贴」：按在输入光标附近且键盘开着时 iOS 会接管长按（touchcancel）并在抬手时弹原生编辑菜单，原生粘贴一次就成，此时什么都不做；正常抬手先试读，但 WebKit 把长按后的 touchend 只当「可能的手势」，读取立即被拒且无界面（真机实测），`REFUSED_MS` 内被拒即在手指处弹「粘贴」菜单，较晚被拒是用户点掉了系统气泡，不报错。安卓读剪贴板无确认，仍先弹菜单防误触。真机事件顺序可用 `?imedebug`（含触摸、粘贴与读剪贴板结果）。回归在 `scripts/test-term-touch.mjs`（CDP 真实触摸，iOS 路径改 UA 模拟）。
@@ -662,7 +675,7 @@ data/
   ExecCommandEnv 等待 tmux 创建完成，再 ExecPTY 仅 attach；不能改成延迟 new-session，否则
   并发结束可能确认成功后再产生孤儿终端。参数逐项 shellQuote，凭证只经 Docker exec Env。
 - 关闭先持久化 closing，再停止对应 tmux，失败保留可重试记录；输入/心跳复查资源状态和账号
-  权限。项目改路径/删除必须先结束所有终端；移除项目映射不删除文件。终端用量仍只补记不扣款。
+  权限。项目改路径/删除必须先结束所有终端；移除项目映射不删除文件。终端用量照主终端补记扣款。
 - clientidentity 将 server_id 放 data/client-instance-id（0600），不进系统/完整备份；恢复实例
   生成新身份，客户端重新确认基线。损坏身份只阻止能力/同步接口，不阻断旧业务 API。
 - syncclient.StateStore 是原生专用应用目录的 SQLite，保存设备、绑定、基线、pending 与历史，
@@ -1008,7 +1021,7 @@ data/
 
 ### 用量、迁移与 Agent 接口
 
-- `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度，终端 UpsertTerminalUsage 绝不扣额度。
+- `usage.Service` 是解析、定价和终端扫描的业务入口，不能反向依赖 server。Store.InsertUsage 仍一次事务写用量与扣额度；终端 UpsertTerminalUsage 与后台 InsertBackgroundUsage 也在写行的同一事务里按 `settled_micro_usd` 补扣增长。
 - 新行 `PriceSnapshot` 包含来源、价格键、普通/长上下文档和阈值。终端 upsert 在同一事务读取首份快照，续写不能改用新价；旧行没有快照时不要伪造历史单价。Claude 0 费用按表补算时保存 table 来源。
 - 当前开发工作树 SQLite schema=21（17 补终端推理强度；18 删除旧协作表并新增主管委派表与 `usage_events.delegation_id`；19 重建 chat_requests 加 `queued` 状态与 `merged_into`；20 加每次请求的实测计时列与 `request_timings`；21 加空间缓存保活设置表 `workspace_keepalive`；迁移明细见 docs/architecture/database-migrations.md），user_version 在迁移事务内更新；未知更高版本必须在建表/改 journal 前拒绝。版本 1 接收旧库，版本 2 加价格快照。旧二进制可能无版本检查，不应连接已迁移库，回退使用兼容备份副本。
 - `agent.Adapter` 提供能力、聊天/标题命令与事件解码，Event 统一 session ID、partial/output 标记及原始 JSON。server 按能力决定 app-server 优先/exec 回退，不在 Handler 内新增 provider 事件形状判断。

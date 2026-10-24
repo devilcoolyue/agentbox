@@ -31,7 +31,7 @@
 | 文件、归档、预览与模板 | 受限目录、拒绝链接逃逸、原子写入与上传边界 | Go safefs/archivex/server；browser.preview；docker.filesystem | 所有磁盘/文件系统/浏览器组合和超大项目体验 |
 | Git、远程连接与变更审查 | Git 在容器执行；凭证受控网桥；不降级宿主 Git | Go gitx/gitaccess/server；browser.git；现有 Linux Git CI | 企业 SSO、真实私有远程和所有托管平台组合 |
 | 技能、MCP、远程浏览器 | 已有模板/官方目录、Claude MCP 管理与可选浏览器镜像 | browser 主场景；docker.mcp / mcp-server / remote-browser / browser-proxy | 任意第三方 MCP、真实 OAuth 页面与网站兼容性 |
-| 用量与额度 | 整数微美元、持久去重、账本同事务；v0.1.14 起一次模型请求一行（含 Codex 回合内各次请求与 Claude Code 不逐条上报的请求对账）；终端只记不扣 | Go usage/store/server；价格/费用浏览器回归；合成修复脚本 | 未知上游事件形状；真实计费端对端不由本轮替代 |
+| 用量与额度 | 整数微美元、持久去重、账本同事务；v0.1.14 起一次模型请求一行（含 Codex 回合内各次请求与 Claude Code 不逐条上报的请求对账）；终端补记与 Codex 后台请求入账即扣（按增长补扣），余额用完停止终端里的 Agent | Go usage/store/server；价格/费用浏览器回归；合成修复脚本 | 未知上游事件形状；真实计费端对端不由本轮替代 |
 | 对话交互（v0.1.14～v0.1.16） | Agent 提问、排队/引导跟进、下一步提示、`/` 命令与 `/context`/`/usage` 卡片、`@` 引用文件、上下文占用、任务列表、回合计时；提问/引导/提示按容器内 Claude Code 参数探测启用 | browser.chat-questions / chat-followups / chat-suggestions 与主浏览器套件里的命令、引用、上下文、任务场景；Go chat/server；候选镜像门槛含提问检查 | 合成事件流不代表所有 CLI 版本、模型与中转站的真实行为；真实账号下的提示费用与提问体验未系统验收 |
 | 主管委派（开发预览，v0.1.13） | Claude Code 主 Agent 经平台工具把子任务交给跑腿模型；按能力标签与可选 Jev 路由；跑腿用量记在原空间 | Go delegation/decision/store/workspace、server `TestDelegation*`；browser.chat-delegation | 真实主 Agent 委派意愿、跑腿质量与费用收益需真实账号另行验收 |
 | 扩展与模型网关（v0.1.16） | 管理员逐项启用、批准权限、按账号/用户绑定；循环保护经模型网关作用于 Claude/Codex API Key 与中转账号，Webhook 推送空间与回合事件；失效默认放行 | race.extensions；Go `Extension\|ModelGateway`；browser.browser（含扩展页）；cli.model-gateway（真实 Claude Code 2.1.302 / Codex 0.163.0 经网关打合成上游） | 真实供应商、终端交互界面与中转站断连后继续读上游的情况；中断记录仅在内存 |

@@ -81,7 +81,7 @@ sudo python3 "$PACKAGE/deploy/release.py" migrate \
 
 用量明细接口不再同步扫描文件。请求立即返回已提交记录，向唯一后台 worker 合并刷新请求；请求触发的全量扫描间隔至少 5 秒，inotify 及每分钟兜底继续运行。
 
-响应新增 `sync.last_scan_at`、`last_success_at`（毫秒，0 表示尚未完成）、`scanning`、`errors`。时间对应全量扫描，不代表 provider 已写完 transcript；inotify 的单会话更新可能更新。失败文件会重试，终端始终只记账、不扣额度。
+响应新增 `sync.last_scan_at`、`last_success_at`（毫秒，0 表示尚未完成）、`scanning`、`errors`。时间对应全量扫描，不代表 provider 已写完 transcript；inotify 的单会话更新可能更新。失败文件会重试；终端行入账即扣额度（同一请求只补扣增长部分），重扫不重复扣。
 
 管理员可从容量页下载 `GET /api/diagnostics`：白名单字段包含版本、构建信息、平台、schema、启动时间、会话数量、容量设置、磁盘水位与同步进度，并新增只读 `environment` 分层检查。主动写入/属主探测从「环境检查」入口运行；只读导出将这两项标为未检查。不包含配置内容、路径、用户身份、账号、环境变量、日志、原始 Docker inspect 或对话。`GET /api/system` 继续为管理员提供本机详情，并新增运行版本信息。
 

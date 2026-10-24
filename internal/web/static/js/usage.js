@@ -223,10 +223,10 @@ const KIND_LABEL = { get chat() { return i18nText("对话"); }, get delegation()
 const KIND_HINT = {
     get delegation() { return i18nText("主 Agent 把子任务交给跑腿模型时，跑腿模型花的量；与主 Agent 的回合分开记账"); },
     get decision() { return i18nText("委派时由 Jev 判断交给哪个跑腿的那次调用"); },
-    get terminal() { return i18nText("用户在「终端」页签里手敲 CLI 花的量，事后从 CLI 自己的记录里补记；只记账不扣额度"); },
+    get terminal() { return i18nText("用户在「终端」页签里手敲 CLI 花的量，事后从 CLI 自己的记录里补记，入账即扣额度；同一请求写长后只补扣多出的部分"); },
     get title() { return i18nText("服务端自动为新对话生成标题的那趟消耗，不是用户发起的"); },
     get suggestion() { return i18nText("对话回合结束后预测你下一句输入的那次调用；可在「系统设置 → 界面与提示」里关闭"); },
-    get background() { return i18nText("Codex 自己在后台发的请求：每次启动先发的预热、终端里为会话另开的小请求。对话和终端里都看不到，按 CLI 遥测补记；只记账不扣额度"); },
+    get background() { return i18nText("Codex 自己在后台发的请求：每次启动先发的预热、终端里为会话另开的小请求。对话和终端里都看不到，按 CLI 遥测补记，入账即扣额度"); },
     get keepalive() { return i18nText("你离开时，服务端为保住对话的提示缓存发的请求：只读一遍缓存、不进对话记录，比回来后整段重写缓存便宜得多"); },
 };
 /* 类型列写名称，前面一枚图标帮着扫读「这笔钱是谁按下去的」；不套框，免得和计费
