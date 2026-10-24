@@ -86,8 +86,9 @@
   .menu-btn { width: 40px; height: 40px; background: transparent; border-color: transparent; }
   .mobile-section { margin-left: auto; min-width: 0; max-width: 52%; }
   #view-settings > .set-head, #view-git > .set-head, #view-tunnel > .set-head { display: none; }
-  .usage-head > div:first-child { display: none; }
-  .set-head.usage-head { min-height: 0; padding: 8px 16px; background: transparent; }
+  /* 标题由顶栏显示，时区由 responsive.ts 挪进顶栏右侧：这一行整个不要，空间留给列表 */
+  .set-head.usage-head { display: none; }
+  .topbar .usage-zone { flex: none; min-width: 0; padding: 0 6px 0 0; }
   #set-nav, #git-nav { display: none; }
   .set-body { padding: 12px 16px 0; min-height: 0; }
   .set-content { padding-bottom: max(24px, env(safe-area-inset-bottom)); }

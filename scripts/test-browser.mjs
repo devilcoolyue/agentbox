@@ -361,7 +361,6 @@ export async function smoke(page) {
   await page.locator('#usage-rows .u-hit').first().scrollIntoViewIfNeeded();
   assert.equal(await page.locator('#usage-rows .u-hit .u-v').first().innerText(),'100.0%');
   assert.equal(await page.locator('#view-usage').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'usage page overflows on mobile');
-  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-cache-mobile.png',animations:'disabled'});
   assert.equal(await page.locator('#usage-rows tr').first().locator('.u-tk').count(),4,'token buckets stay visible on mobile');
   // Card labels start at one edge whatever the column's alignment, and the provider/effort line sits under the model on the right.
   const card=await page.locator('#usage-rows tr').first().evaluate(row=>{
@@ -371,6 +370,17 @@ export async function smoke(page) {
     effortRight:Math.round(v.lastElementChild.getBoundingClientRect().right)===Math.round(model.getBoundingClientRect().right)};
   });
   assert.deepEqual(card,{cost:['left','400'],lat:['left','400'],kind:['left','400'],effortRight:true},'usage card labels and effort line');
+  // The time zone moves into the top bar on phones, leaving the list the row it used to take.
+  assert.equal(await page.locator('.topbar .usage-zone').isVisible(),true,'time zone in the top bar');
+  assert.equal(await page.locator('.usage-head').isVisible(),false,'usage header row hidden on phones');
+  await page.setViewportSize({width:1280,height:900});
+  assert.equal(await page.locator('.usage-head .usage-zone').isVisible(),true,'time zone back in the header on desktop');
+  await page.setViewportSize({width:390,height:844});
+  await page.evaluate(()=>{location.hash='#/';});
+  await page.waitForFunction(()=>document.querySelector('.topbar .usage-zone')?.classList.contains('hidden'));
+  await page.evaluate(()=>{location.hash='#/usage';});
+  await page.locator('.topbar .usage-zone').waitFor({state:'visible'});
+  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-cache-mobile.png',animations:'disabled'});
   await page.setViewportSize({width:1280,height:900});
   usageRows=[];
   }

@@ -257,3 +257,18 @@ document.addEventListener("touchmove", event => {
 }, { passive: true });
 document.addEventListener("touchend", event => { if (!event.touches.length) releasePull(); }, { passive: true });
 document.addEventListener("touchcancel", releasePull, { passive: true });
+
+/* 窄屏上使用记录的时区挪到顶栏右侧：原来在筛选条上方独占一行，挤掉了列表的高度。
+ * 移的是原节点，usage.ts 照旧按 id 更新它；不在使用记录页时藏起来。 */
+const usageZone = document.querySelector<HTMLElement>(".usage-zone")!;
+const usageZoneHome = document.createComment("usage zone");
+usageZone.before(usageZoneHome);
+function syncUsageZone() {
+  const top = mobile.matches;
+  if (top) byId("kebab-wrap").before(usageZone);
+  else usageZoneHome.after(usageZone);
+  usageZone.classList.toggle("hidden", top && S.view !== "usage");
+}
+mobile.addEventListener("change", syncUsageZone);
+bus.addEventListener("view-changed", syncUsageZone);
+syncUsageZone();
