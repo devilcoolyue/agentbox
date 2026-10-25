@@ -18,7 +18,11 @@ type ClaudeCred struct {
 // expiring 报告令牌是否已过期或即将过期。expiresAt 缺失（老凭证）时按「还能用」
 // 处理：真失效了上游会回 401，那条路上有强制续期兜底。
 func (c ClaudeCred) Expiring() bool {
-	return c.ExpiresAt > 0 && time.Now().Add(credRefreshSkew).UnixMilli() >= c.ExpiresAt
+	return c.expiringWithin(credRefreshSkew)
+}
+
+func (c ClaudeCred) expiringWithin(d time.Duration) bool {
+	return c.ExpiresAt > 0 && time.Now().Add(d).UnixMilli() >= c.ExpiresAt
 }
 
 // ReadClaude 从账号池读出当前 OAuth 凭证。

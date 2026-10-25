@@ -6,7 +6,9 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -400,8 +402,15 @@ func SeedCredentials(agentType, homeDir, credDir string, uid, gid int) error {
 		if err != nil {
 			return fmt.Errorf("account credentials dir: %w", err)
 		}
+		scoped := agentType == config.AgentClaude && ServerRefreshes(pool)
 		for _, e := range entries {
-			if !e.Type().IsRegular() {
+			if !e.Type().IsRegular() || e.Name() == ServerRefreshMarker {
+				continue
+			}
+			if scoped && e.Name() == ".credentials.json" {
+				if err := seedClaudeLogin(pool, root, filepath.Join(target, e.Name()), uid, gid); err != nil {
+					return err
+				}
 				continue
 			}
 			if err := copyConfined(pool, e.Name(), root, filepath.Join(target, e.Name()), uid, gid); err != nil {
@@ -595,6 +604,24 @@ func openHome(home string) (*safefs.Root, error) {
 func writeOwned(root *safefs.Root, name string, data []byte, uid, gid int) error {
 	_, err := root.WriteFile(name, data, safefs.WriteOptions{Mode: 0o600, Chown: true, UID: uid, GID: gid})
 	return err
+}
+
+// seedClaudeLogin writes the access-token-only login of a server-refreshed
+// account, keeping the session's own entries (see ClaudeHomeCredential).
+func seedClaudeLogin(pool, home *safefs.Root, target string, uid, gid int) error {
+	raw, err := pool.ReadAll(".credentials.json", 4<<20)
+	if err != nil {
+		return err
+	}
+	cur, err := home.ReadAll(target, 4<<20)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	next, changed, err := ClaudeHomeCredential(raw, cur)
+	if err != nil || !changed {
+		return err
+	}
+	return writeOwned(home, target, next, uid, gid)
 }
 
 func copyConfined(src *safefs.Root, source string, dst *safefs.Root, target string, uid, gid int) error {

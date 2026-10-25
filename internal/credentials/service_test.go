@@ -97,8 +97,11 @@ func TestConcurrentEnsureRefreshesOnceAndImmediatelyBroadcasts(t *testing.T) {
 		t.Fatalf("rotated %d times", calls.Load())
 	}
 	raw, _ := os.ReadFile(alice)
-	if !strings.Contains(string(raw), "fresh-test-refresh") {
-		t.Fatal("authorized home retained old chain")
+	if !strings.Contains(string(raw), "fresh-test-access") {
+		t.Fatal("authorized home retained old access token")
+	}
+	if strings.Contains(string(raw), "refresh") {
+		t.Fatalf("home received a refresh token after the server took over the chain: %s", raw)
 	}
 	raw, _ = os.ReadFile(bob)
 	if strings.Contains(string(raw), "fresh-test") {
@@ -187,13 +190,16 @@ func TestSaveClaudePublishesAndSaveCodexPreservesConfig(t *testing.T) {
 	svc, data := testService(t, "https://not-called.invalid", acct, codex)
 	home := homeFile(data, "alice", "s1")
 	put(t, home, expiredJSON())
-	raw := strings.ReplaceAll(expiredJSON(), "old-test-refresh", "saved-test-refresh")
+	raw := strings.ReplaceAll(strings.ReplaceAll(expiredJSON(), "old-test-refresh", "saved-test-refresh"), "old-test-access", "saved-test-access")
 	if err := svc.SaveClaude(t.Context(), acct.ID, []byte(raw)); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(home)
-	if !strings.Contains(string(got), "saved-test-refresh") {
+	if !strings.Contains(string(got), "saved-test-access") {
 		t.Fatal("new login not published")
+	}
+	if strings.Contains(string(got), "refresh") {
+		t.Fatalf("server login leaked its refresh token to a home: %s", got)
 	}
 	configPath := filepath.Join(codex.CredentialsDir, "config.toml")
 	put(t, configPath, "model = \"custom-model\"\n")

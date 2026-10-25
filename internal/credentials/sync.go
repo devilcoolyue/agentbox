@@ -35,6 +35,10 @@ func (s *Service) syncRotatingCred(acct config.Account, sess store.Session) {
 		return
 	}
 	defer home.Close()
+	if acct.Type == config.AgentClaude && sess.Agent == config.AgentClaude && agent.ServerRefreshes(pool) {
+		publishClaudeLogin(pool, home, poolName, homeRel)
+		return
+	}
 	poolData, pi, perr := readCredential(pool, poolName)
 	homeData, hi, herr := readCredential(home, filepath.FromSlash(homeRel))
 	if herr != nil {
@@ -64,6 +68,31 @@ func (s *Service) syncRotatingCred(acct config.Account, sess store.Session) {
 			return
 		}
 		syncCredential(home, filepath.FromSlash(homeRel), poolData, dockerx.AgentUID, pi.ModTime())
+	}
+}
+
+// publishClaudeLogin is the only direction for a server-refreshed account:
+// pool to home, access token only. The home file is container-writable, so
+// nothing in it may reach the pool; whatever a session wrote over the login is
+// put back on the next pass. A home that was never seeded stays untouched.
+func publishClaudeLogin(pool, home *safefs.Root, poolName, homeRel string) {
+	homeData, _, err := readCredential(home, filepath.FromSlash(homeRel))
+	if err != nil {
+		return
+	}
+	poolData, _, err := readCredential(pool, poolName)
+	if err != nil {
+		return
+	}
+	next, changed, err := agent.ClaudeHomeCredential(poolData, homeData)
+	if err != nil {
+		log.Printf("credsync %s: %v", homeRel, err)
+		return
+	}
+	if changed {
+		// A fresh mtime is what makes a running CLI reread the file before its
+		// next request; the pool's own mtime may equal the one it already saw.
+		syncCredential(home, filepath.FromSlash(homeRel), next, dockerx.AgentUID, time.Now())
 	}
 }
 

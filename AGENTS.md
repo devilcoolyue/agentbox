@@ -214,19 +214,32 @@ curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 10 --max-time 20 "$P
 - **账号 env 绝不烘进容器**（`dockerx.baseContainerEnv`）：容器 `Config.Env` 在 create 那一刻定死，之后只能靠 exec 往上加、减不掉。账号从中转站切回订阅登录时 `clearClaudeRelay` 只改得动 `config.json`，旧容器里那份 `ANTHROPIC_AUTH_TOKEN` 还在，而 claude CLI 认 env 里的 Bearer 令牌优先于 OAuth 凭证——订阅登录形同虚设，CLI 卡在重试里直到被杀（回合报「进程退出码 137」，stderr 只剩一句 connectors are disabled 的告警）。所以账号 env 一律走 `server.execEnv` 每次 exec 注入，加和减都即时生效。`EnsureRunning` 里的 `hasBakedEnv` 负责认出老版本烘过 env 的容器并重建（比键不比值，镜像升级改 `NODE_VERSION` 的值不算脏）。
 - 停止/删除：只停/删容器；工作区、home、聊天线程仍在宿主机。`DELETE ?purge=1` 才删除会话目录。
 - 重启服务端后：`Server.reconcile` 以 Docker 实际运行状态修正 session status。
-- **OAuth 令牌服务端自动续期**（`internal/credentials/refresh.go`）：访问令牌只有几小时
-  寿命，账号池那份新不新鲜取决于容器里的 CLI 最近跑没跑过——挂一夜的账号第二天点
-  「查额度」必然过期。服务端自己拿刷新令牌续，不再让用户「先发一轮对话」。刷新令牌
-  是轮换制（一份用掉另一份作废），所以 `ensureClaudeCred` 里的三步顺序不能动：
-  ① **先跑一遍 credSync 把各会话 home 里可能更新的凭证收回池子**——CLI 刚续过的话池子
-  那份已经是废纸，拿它去换只会白挨一个 `invalid_grant`，而正确答案就躺在会话 home 里；
-  ② 收敛完再判断要不要续；③ **续完立刻反向播发**，不等 credSyncLoop 那趟 45 秒的兜底
-  ——空窗期里 CLI 手上还是老链条，一发对话就掉登录。同一账号全程一把锁串行，提前量
-  （`credRefreshSkew`）刻意只有一分钟：提前得越多越容易和正在跑的 CLI 抢同一个刷新
-  令牌。写回凭证走「读旧的 → 改字段 → 写回」而不是整份重建，`subscriptionType` /
-  `rateLimitTier` / `scopes` 这些刷新响应里不回的字段必须留着，冲掉会让容器里的
-  Claude Code 把订阅号当成 API 账号。查额度撞上 401 时还会强制续一次重打——凭证里的
-  `expiresAt` 不是唯一真相。
+- **Claude 刷新令牌只在账号池**（`internal/credentials/refresh.go`、`sync.go`、
+  `agent/credential_home.go`）：会话 home 的 `.credentials.json` 只有访问令牌，刷新令牌
+  从不进容器，续期全由服务端做。账号池里有 `agent.ServerRefreshMarker`
+  （`.agentbox-server-refresh`）即为此模式；服务端第一次续成（或网页 OAuth 登录
+  `SaveClaude`）时写入。未标记的账号仍走旧的双向「谁新用谁」收敛，`SyncAll` 里的
+  `refreshAhead` 会先按旧规则把会话里可能更新的链收回池子，再强制续一次完成迁移——
+  这样升级那一刻 CLI 刚轮换过的链不会丢。
+  - 标记后**任何内容都不再从 home 回到池子**：home 是容器可写的，以前用户伪造一份
+    带刷新令牌、mtime 在未来的文件就能替换整个共享账号。`publishClaudeLogin` 只按池子
+    重写 home 的 `claudeAiOauth`（去掉 `refreshToken`），45 秒内覆盖篡改。
+  - **同一文件里的 `mcpOAuth` 属于会话自己**：Linux 上 Claude Code 把 MCP 服务的 OAuth
+    令牌也存在 `.credentials.json`。home 副本 = home 自己的其他键 + 池子的登录；池子里的
+    其他键（旧版本整份收回时混进来的别人的 MCP 令牌）绝不下发。比较按解码后的登录对象，
+    CLI 自己重写文件不会引起来回覆盖。
+  - 续期提前量 `serverRefreshLead` 30 分钟：CLI 在剩余不足 5 分钟时就想自己续，home 里
+    没有刷新令牌，它只能继续用旧令牌，过期后那一轮报 401。实测 2.1.280/2.1.310：每次请求
+    前按 `.credentials.json` 的 mtime 重读，所以重写 home 必须换新 mtime（用当前时间，
+    不用池子的 mtime）。同一账号两次主动续期至少隔 10 分钟，失败按 2 分钟起翻倍退避、
+    上限 30 分钟。
+  - `EnsureClaude`（查额度、模型发现）的三步顺序不变：先收敛、再判断、续完立刻播发；
+    写回凭证走「读旧的 → 改字段 → 写回」，`subscriptionType` / `rateLimitTier` /
+    `scopes` 必须留着，冲掉会让 Claude Code 把订阅号当成 API 账号。查额度撞上 401 时
+    还会强制续一次重打。
+  - 回退到不认识标记的旧版本前，先删掉各账号池的标记并 `touch` 池子的
+    `.credentials.json`，让旧版把完整凭证重新推进 home；否则 CLI 续不了期，几小时后掉登录。
+  - Codex 的 `auth.json` 还是旧的双向同步，刷新令牌仍在 home 里。
 
 关键目录：
 

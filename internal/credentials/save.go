@@ -38,6 +38,11 @@ func (s *Service) SaveClaude(ctx context.Context, id string, raw []byte) error {
 	if err := writePoolFile(acct, ".credentials.json", raw); err != nil {
 		return err
 	}
+	// The chain was just minted by the server's own login, so it owns it from
+	// the start; homes never see this refresh token.
+	if err := markServerRefresh(acct); err != nil {
+		return err
+	}
 	s.broadcast(acct)
 	return nil
 }

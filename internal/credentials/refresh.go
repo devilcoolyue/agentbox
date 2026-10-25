@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"agentbox/internal/agent"
 	"agentbox/internal/config"
 	"agentbox/internal/safefs"
 )
@@ -124,7 +126,76 @@ func (s *Service) refreshClaudeCred(ctx context.Context, acct config.Account, re
 	if err := json.Unmarshal(raw, &tok); err != nil || tok.AccessToken == "" {
 		return out, fmt.Errorf("令牌自动续期响应解析失败")
 	}
-	return mergeClaude(filepath.Join(acct.CredentialsDir, ".credentials.json"), tok)
+	out, err = mergeClaude(filepath.Join(acct.CredentialsDir, ".credentials.json"), tok)
+	if err != nil {
+		return out, err
+	}
+	// 服务端亲手续成一次，池子里这条链就是它的了：此后会话 home 只拿访问令牌。
+	// 标记写失败只是推迟切换，下一趟续期再写。
+	if err := markServerRefresh(acct); err != nil {
+		log.Printf("credsync %s: 标记服务端续期失败: %v", acct.ID, err)
+	}
+	return out, nil
+}
+
+func markServerRefresh(acct config.Account) error {
+	return writePoolFile(acct, agent.ServerRefreshMarker, []byte(time.Now().UTC().Format(time.RFC3339)+"\n"))
+}
+
+// 服务端是刷新令牌唯一的持有者之后，续期必须赶在 CLI 自己判定过期之前完成：
+// CLI 在剩余不足 5 分钟时就想续，而 home 里没有刷新令牌，续不了。提前量取
+// 30 分钟，配合 45 秒一趟的 credSync，失败了也还有多次重试机会。
+var (
+	serverRefreshLead     = 30 * time.Minute
+	serverRefreshInterval = 10 * time.Minute // 同一账号两次主动续期的最小间隔，防有效期异常短时空转
+	serverRetryMin        = 2 * time.Minute
+	serverRetryMax        = 30 * time.Minute
+)
+
+type refreshSchedule struct {
+	next    time.Time
+	backoff time.Duration
+}
+
+// refreshAhead 在持有账号锁时调用。尚未标记的账号直接强制续一次完成迁移：
+// 之前 syncAcctCreds 已按旧规则把各会话里可能更新的链收回池子。
+func (s *Service) refreshAhead(ctx context.Context, acct config.Account) {
+	if acct.Type != config.AgentClaude || acct.CredentialsDir == "" {
+		return
+	}
+	now := time.Now()
+	sched := refreshSchedule{}
+	if v, ok := s.refreshes.Load(acct.ID); ok {
+		sched = v.(refreshSchedule)
+	}
+	if now.Before(sched.next) {
+		return
+	}
+	cred, err := ReadClaude(acct)
+	if err != nil || cred.RefreshToken == "" {
+		return
+	}
+	pool, err := safefs.Open(acct.CredentialsDir)
+	if err != nil {
+		return
+	}
+	marked := agent.ServerRefreshes(pool)
+	pool.Close()
+	if marked && !cred.expiringWithin(serverRefreshLead) {
+		return
+	}
+	if _, err := s.refreshClaudeCred(ctx, acct, cred.RefreshToken); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		sched.backoff = min(max(sched.backoff*2, serverRetryMin), serverRetryMax)
+		sched.next = now.Add(sched.backoff)
+		s.refreshes.Store(acct.ID, sched)
+		log.Printf("credsync %s: 服务端主动续期失败，%s 后重试: %v", acct.ID, sched.backoff, err)
+		return
+	}
+	s.refreshes.Store(acct.ID, refreshSchedule{next: now.Add(serverRefreshInterval)})
+	s.broadcast(acct)
 }
 
 // mergeClaude 把新令牌并回凭证文件，返回并进去之后的那份。

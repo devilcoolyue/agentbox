@@ -30,6 +30,8 @@ type Service struct {
 	clientID string
 	tokenURL func() string
 	locks    sync.Map
+	// refreshes holds each Claude account's refreshSchedule for refreshAhead.
+	refreshes sync.Map
 	// codexEndpoint returns a session's model gateway URL ("" = direct).
 	codexEndpoint func(config.Account, store.Session) string
 	// codexTelemetry returns a session's usage telemetry export URL ("" = off).
@@ -99,6 +101,7 @@ func (s *Service) SyncAll(ctx context.Context) {
 			return
 		}
 		s.syncAcctCreds(acct)
+		s.refreshAhead(ctx, acct)
 		release()
 	}
 }
@@ -122,6 +125,7 @@ func (s *Service) broadcast(acct config.Account) {
 	if err != nil {
 		return
 	}
+	scoped := acct.Type == config.AgentClaude && agent.ServerRefreshes(pool)
 	for _, sess := range s.sessions.All() {
 		current, ok = s.cfg.Account(acct.ID)
 		if !ok || sess.AccountID != acct.ID || !s.allowed(current, sess.User) {
@@ -129,6 +133,11 @@ func (s *Service) broadcast(acct config.Account) {
 		}
 		home, err := s.openHome(sess)
 		if err != nil {
+			continue
+		}
+		if scoped {
+			publishClaudeLogin(pool, home, poolName, homeRel)
+			home.Close()
 			continue
 		}
 		// Don't create a new credential tree in a home that has never been seeded.
