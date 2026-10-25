@@ -24,12 +24,13 @@ type monitorStorage struct {
 
 type userStorage struct {
 	User     string               `json:"user"`
-	Deleted  bool                 `json:"deleted,omitempty"` // 账号已删除，配额仍未释放
-	Data     *storagepolicy.Usage `json:"data,omitempty"`    // 数据配额（users/<u>）
-	Cache    *storagepolicy.Usage `json:"cache,omitempty"`   // 缓存配额（工具目录下的私有缓存）
-	Files    int64                `json:"files_bytes"`       // 目录统计：users/<u> 合计
-	Shared   int64                `json:"shared_bytes"`      // 目录统计：共享目录
-	Sessions int                  `json:"sessions"`          // 名下工作空间数
+	Deleted  bool                 `json:"deleted,omitempty"`  // 账号已删除
+	Released bool                 `json:"released,omitempty"` // 删除时已释放上限，留下的文件仍计入预算
+	Data     *storagepolicy.Usage `json:"data,omitempty"`     // 数据配额（users/<u>）
+	Cache    *storagepolicy.Usage `json:"cache,omitempty"`    // 缓存配额（工具目录下的私有缓存）
+	Files    int64                `json:"files_bytes"`        // 目录统计：users/<u> 合计
+	Shared   int64                `json:"shared_bytes"`       // 目录统计：共享目录
+	Sessions int                  `json:"sessions"`           // 名下工作空间数
 }
 
 func (s *Server) monitorStorageView(sessionsByUser map[string]int) monitorStorage {
@@ -70,14 +71,14 @@ func (s *Server) monitorStorageView(sessionsByUser map[string]int) monitorStorag
 	dataRoot := filepath.Join(s.cfg.DataDir, "users")
 	for _, p := range quota.Projects {
 		usage := p.Usage
-		view.Allocated += usage.LimitBytes
+		view.Allocated += p.Charged()
+		var r *userStorage
 		switch p.Kind {
 		case "data":
-			name := filepath.Base(p.Root)
 			if filepath.Dir(p.Root) != dataRoot {
 				continue
 			}
-			r := row(name)
+			r = row(filepath.Base(p.Root))
 			r.Data = &usage
 		case "cache":
 			name, ok := owners[p.Owner]
@@ -85,8 +86,12 @@ func (s *Server) monitorStorageView(sessionsByUser map[string]int) monitorStorag
 				// 已删除账号的缓存只登记了 owner key，查不回用户名
 				name = "cache:" + shortKey(p.Owner)
 			}
-			row(name).Cache = &usage
+			r = row(name)
+			r.Cache = &usage
+		default:
+			continue
 		}
+		r.Released = r.Released || p.Retired
 	}
 	for name, bytes := range report.Users {
 		row(name).Files = bytes

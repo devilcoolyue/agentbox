@@ -277,4 +277,4 @@ Git 连接与 OAuth 应用可在网页选择 `network.route=tunnel` 及 `network
 
 ## 存储容量策略
 
-操作员配置 `storage_policy`，默认关闭，修改后重启。用户数据/缓存项目配额、全实例分配预算、挂载 UUID 校验及维护参数见[本地存储容量管理](storage-capacity.md)。迁移与调整通过离线 `storage-config` / `storage-prepare`，网页设置写回保留这些字段。
+操作员配置 `storage_policy`，默认关闭，修改后重启。用户数据/缓存项目配额、全实例分配预算、挂载 UUID 校验及维护参数见[本地存储容量管理](storage-capacity.md)。迁移与调整通过离线 `storage-config` / `storage-prepare`，网页设置写回保留这些字段；每用户数据/缓存上限可由管理员在用户管理里在线设置。

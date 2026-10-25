@@ -171,10 +171,11 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 
 | 方法与路径 | 请求 / 返回用途 |
 | --- | --- |
-| `GET /api/users` | 用户列表 |
-| `POST /api/users` | `{username, password}`，创建普通用户 |
-| `DELETE /api/users/{name}` | 删除普通用户及其空间 / 容器，保留磁盘文件 |
+| `GET /api/users` | 用户列表；启用存储配额时每项带 `storage`（数据/缓存上限、是否自定义、已用） |
+| `POST /api/users` | `{username, password, data_bytes?, cache_bytes?}`，创建普通用户；上限仅在启用存储配额时可设，省略或 0 用默认值，超出总预算返回 409 |
+| `DELETE /api/users/{name}` | 删除普通用户及其空间 / 容器，保留磁盘文件；释放其存储上限，留下的文件仍计入预算 |
 | `POST /api/users/{name}/password` | `{password}`，重置密码 |
+| `PUT /api/users/{name}/storage` | `{data_bytes?, cache_bytes?}`，调整存储上限并立即生效；省略不变、0 回到默认，低于已用或超出总预算返回 409 |
 | `GET /api/users/{name}/quota` | 额度状态和最近 100 条账本流水 |
 | `PUT /api/users/{name}/quota` | `{metered, enforced}`，修改额度模式 |
 | `POST /api/users/{name}/credits` | `{micro_usd, ref?, note?}`，正数充值、负数冲正 |
@@ -188,6 +189,7 @@ GET    /api/tunnel/clients/{name}   下载客户端二进制（实际 <data_dir>
 | `GET /api/system` | 服务、Docker、数据目录与数量概览 |
 | `GET /api/monitor` | 运维监控数据 |
 | `GET /api/storage` | 数据 / 缓存磁盘容量与分类统计 |
+| `GET /api/storage/quotas` | 存储配额是否启用、默认上限、总预算与已分配（实时读取内核配额） |
 | `DELETE /api/cache/marketplace` | 清理可重建的技能市场缓存 |
 | `GET /api/diagnostics` | 导出按字段白名单生成的诊断信息 |
 | `GET /api/updates` | 当前构建信息与上次版本检查缓存 |

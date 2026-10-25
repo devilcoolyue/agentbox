@@ -14,6 +14,7 @@ import stat
 import struct
 import subprocess
 import sys
+import time
 
 GETXATTR = 0x801c581f
 SETXATTR = 0x401c5820
@@ -29,7 +30,8 @@ def quota(device, project, limit=None):
         command = 0x800008
         q.bhard = (limit + 1023) // 1024
         # Bound inode consumption too. No soft grace period hiding hard limits.
-        q.ihard = max(10000, min(1000000, limit // 4096))
+        # Zero releases both limits (retired projects of deleted accounts).
+        q.ihard = max(10000, min(1000000, limit // 4096)) if limit else 0
         q.valid = 1 | 4
     libc = ctypes.CDLL(None, use_errno=True)
     if libc.quotactl(ctypes.c_int((command << 8) | 2), os.fsencode(device), ctypes.c_int(project), ctypes.byref(q)) != 0:
@@ -122,6 +124,37 @@ def ensure_root(path, project, adopt=False):
     finally:
         os.close(fd)
 
+def charged(device, marker, saved):
+    # A deleted account's limit is released, but its leftover files still
+    # occupy the disk until an operator removes them.
+    usage = quota(device, int(marker.stem))
+    return usage['used_bytes'] if saved.get('retired') else usage['limit_bytes']
+
+def write_marker(registry, project, record):
+    temp = registry / (str(project) + '.tmp')
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as f:
+        json.dump(record, f); f.flush(); os.fsync(f.fileno())
+    os.replace(temp, registry / (str(project) + '.json'))
+    d = directory(str(registry)); os.fsync(d); os.close(d)
+
+def empty_root(path):
+    try:
+        fd = directory(path)
+    except FileNotFoundError:
+        return True
+    try:
+        return not os.listdir(fd)
+    finally:
+        os.close(fd)
+
+def archive_marker(data, marker):
+    # Same layout as the manual retirement: keep the record, out of the registry.
+    archive = data / '.storage-projects-retired'
+    os.close(directory(str(archive), create=True))
+    os.replace(marker, archive / (marker.stem + '-' + time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '.json'))
+    d = directory(str(marker.parent)); os.fsync(d); os.close(d)
+
 def main():
     req = json.load(sys.stdin)
     policy = req['policy']
@@ -144,7 +177,7 @@ def main():
                 if marker.is_symlink() or not marker.stem.isdigit():
                     continue
                 saved = json.loads(marker.read_text())
-                projects.append(dict(quota(device, int(marker.stem)), project=int(marker.stem),
+                projects.append(dict(quota(device, int(marker.stem)), project=int(marker.stem), retired=bool(saved.get('retired')),
                                      kind=str(saved.get('kind', '')), owner=str(saved.get('owner', '')), root=str(saved.get('root', ''))))
         return {'projects': projects, 'unassigned': quota(device, 0)}
     if not re.fullmatch('[a-f0-9]{64}', req['owner']) or not re.fullmatch('[a-z0-9][a-z0-9_-]{1,31}', req['user']):
@@ -158,6 +191,18 @@ def main():
     lockfd = os.open(registry / '.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(lockfd, 'r+') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        if req.get('retire'):
+            # The account is gone: release its limits but keep the marker, so the
+            # leftover files stay visible and block reuse of a non-empty root.
+            retired = []
+            for marker in sorted(registry.glob('*.json')):
+                saved = json.loads(marker.read_text())
+                if marker.is_symlink() or not marker.stem.isdigit() or saved.get('owner') != req['owner'] or saved.get('retired'):
+                    continue
+                quota(device, int(marker.stem), 0)
+                write_marker(registry, marker.stem, dict(saved, retired=int(time.time())))
+                retired.append(int(marker.stem))
+            return {'retired': retired}
         result = {}
         plans = (
             ('data', data / 'users' / req['user'], policy.get('users', {}).get(req['user'], policy['user_bytes'])),
@@ -168,7 +213,7 @@ def main():
             total = sum(projected.values())
             for marker in registry.glob('*.json'):
                 if marker.stem not in projected:
-                    total += quota(device,int(marker.stem))['limit_bytes']
+                    total += charged(device, marker, json.loads(marker.read_text()))
             if total > policy['budget_bytes']:
                 raise ValueError('allocated project quotas exceed storage budget')
         for kind, root, limit in plans:
@@ -184,11 +229,14 @@ def main():
                 if not saved.get('ready') and '--adopt' not in sys.argv and root.exists() and any(root.iterdir()):
                     raise ValueError('interrupted quota preparation requires offline adoption')
             else:
-                # Detect same pathname left by a removed/recreated account.
-                for other in registry.glob('*.json'):
+                # Detect same pathname left by a removed/recreated account. Once
+                # the files of a deleted account are gone, the name is free again.
+                for other in list(registry.glob('*.json')):
                     saved = json.loads(other.read_text())
                     if saved['root'] == str(root) and saved['owner'] != req['owner']:
-                        raise ValueError('previous user data requires operator retirement')
+                        if not saved.get('retired') or not empty_root(str(root)):
+                            raise ValueError('previous user data requires operator retirement')
+                        archive_marker(data, other)
                 fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
                 with os.fdopen(fd, 'w') as f:
                     json.dump(dict(record,ready=False), f)
@@ -199,12 +247,7 @@ def main():
                 os.close(d)
             quota(device, project, limit)
             ensure_root(str(root), project, '--adopt' in sys.argv)
-            temp = registry / (str(project) + '.tmp')
-            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-            with os.fdopen(fd,'w') as f:
-                json.dump(dict(record,ready=True),f);f.flush();os.fsync(f.fileno())
-            os.replace(temp,marker)
-            d=directory(str(registry));os.fsync(d);os.close(d)
+            write_marker(registry, project, dict(record, ready=True))
             result[kind] = quota(device, project)
         return result
 

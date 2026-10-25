@@ -17,6 +17,7 @@ import { keepaliveSmoke } from './test-keepalive.mjs';
 import { announcementSmoke } from './test-announcement.mjs';
 import { accountModelsSmoke } from './test-account-models.mjs';
 import { userPickerSmoke } from './test-user-picker.mjs';
+import { userStorageSmoke } from './test-user-storage.mjs';
 import { mcpSmoke } from './test-mcp.mjs';
 import { extensionsSmoke } from './test-extensions.mjs';
 import { remoteBrowserSmoke } from './test-remote-browser.mjs';
@@ -440,6 +441,8 @@ export async function smoke(page) {
   if (process.env.AGENTBOX_BROWSER_ONLY_ACCOUNT_MODELS === '1') { assert.deepEqual(errors,[]); return; }
   await userPickerSmoke(page,base,()=>settings);
   if (process.env.AGENTBOX_BROWSER_ONLY_USER_PICKER === '1') { assert.deepEqual(errors,[]); return; }
+  await userStorageSmoke(page,base);
+  if (process.env.AGENTBOX_BROWSER_ONLY_USER_STORAGE === '1') { assert.deepEqual(errors,[]); return; }
   await problemsSmoke(page,base,()=>chatSocket,entries=>{historyEntries=entries;});
   if (process.env.AGENTBOX_BROWSER_ONLY_PROBLEMS === '1') { assert.deepEqual(errors,[]); return; }
   if (process.env.AGENTBOX_BROWSER_ONLY_IMAGE_UPDATES === '1') {

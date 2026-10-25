@@ -486,6 +486,32 @@ export interface User {
   /** 毫秒时间戳 */
   created_at: number;
   quota: Quota;
+  /** 存储上限与已用；服务端未启用存储配额时缺省 */
+  storage?: UserStorageLimits;
+}
+
+/** 用户的数据/缓存上限（字节）。custom=false 表示跟随默认值；used 还没读到时缺省。 */
+export interface UserStorageLimits {
+  data_bytes: number;
+  /** 0 = 未启用共享工具目录，没有缓存配额 */
+  cache_bytes: number;
+  data_custom: boolean;
+  cache_custom: boolean;
+  data_used?: number;
+  cache_used?: number;
+}
+
+/** GET /api/storage/quotas：存储配额是否启用、默认上限与总预算。 */
+export interface StorageQuotaSummary {
+  enabled: boolean;
+  cache_enabled: boolean;
+  default_data_bytes: number;
+  default_cache_bytes: number;
+  /** 0 = 不限 */
+  budget_bytes: number;
+  /** 计入预算的合计：各用户上限 + 已删除账号留下的文件 */
+  allocated_bytes: number;
+  error?: string;
 }
 
 /** GET/PUT /api/me/git：当前用户的网页 Git 提交身份。 */
@@ -1006,8 +1032,10 @@ export interface QuotaUsage {
 
 export interface UserStorage {
   user: string;
-  /** 账号已删除，配额仍未释放；缓存配额查不回用户名时 user 形如 cache:<key 前 8 位> */
+  /** 账号已删除；缓存配额查不回用户名时 user 形如 cache:<key 前 8 位> */
   deleted?: boolean;
+  /** 删除时已释放上限，留下的文件仍计入预算（旧版本删除的账号没有释放） */
+  released?: boolean;
   data?: QuotaUsage;
   cache?: QuotaUsage;
   /** 目录统计：users/<u> 合计 */

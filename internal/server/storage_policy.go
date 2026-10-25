@@ -70,7 +70,7 @@ func (s *Server) ensureUserStorage(ctx context.Context, user store.User) error {
 	if s.storageUsers[key] {
 		return nil
 	}
-	if _, err = storagepolicy.Ensure(ctx, p, s.cfg.DataDir, s.cfg.GetToolStorage().Root, user.Name, key); err != nil {
+	if _, err = storageEnsure(ctx, p, s.cfg.DataDir, s.cfg.GetToolStorage().Root, user.Name, key); err != nil {
 		log.Printf("storage: prepare user %s: %v", user.Name, err)
 		return fmt.Errorf("prepare user storage: %w", err)
 	}

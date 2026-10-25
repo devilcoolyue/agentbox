@@ -891,4 +891,8 @@ export default {
   "发布": "Post",
   "现在重启会影响谁": "Who a restart would affect now",
   "最后活动": "Last active",
+  "存储上限 ·": "Storage limits · ",
+  "数据上限（GB）": "Data limit (GB)",
+  "缓存上限（GB）": "Cache limit (GB)",
+  "留空使用默认上限。不能低于已用空间；调高会占用存储总预算，保存后立即生效。": "Leave blank to use the default. A limit can't go below what is already used; raising it takes from the total storage budget and applies as soon as you save.",
 } satisfies Record<string, string>;

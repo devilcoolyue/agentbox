@@ -326,18 +326,23 @@ type userView struct {
 	Sessions  int       `json:"sessions"`
 	CreatedAt int64     `json:"created_at"`
 	Quota     quotaView `json:"quota"`
+	// 存储上限与已用；未启用存储配额时缺省
+	Storage *userStorageView `json:"storage,omitempty"`
 }
 
 func (s *Server) handleUserList(w http.ResponseWriter, r *http.Request) {
 	counts := s.store.SessionCounts()
 	quotas := s.store.ListQuotas()
 	out := []userView{}
-	for _, u := range s.store.ListUsers() {
+	users := s.store.ListUsers()
+	storage := s.userStorageViews(users)
+	for _, u := range users {
 		q, metered := quotas[u.Name]
 		out = append(out, userView{
 			Name: u.Name, Role: u.Role,
 			Sessions: counts[u.Name], CreatedAt: u.CreatedAt.UnixMilli(),
-			Quota: viewQuota(u.Name, q, metered),
+			Quota:   viewQuota(u.Name, q, metered),
+			Storage: storage[u.Name],
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -347,6 +352,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		storageLimits
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求体格式错误")
@@ -366,14 +372,30 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := store.User{Name: req.Username, Role: store.RoleUser, PassHash: hashPassword(req.Password), CreatedAt: time.Now()}
-	if err := s.ensureUserStorage(r.Context(), u); err != nil {
-		writeErr(w, http.StatusServiceUnavailable, "用户存储尚未就绪，请联系管理员")
+	if s.cfg.GetStoragePolicy().Mount != "" {
+		// 没指定的一项用默认值，也清掉已删除同名账号可能留下的旧上限
+		zero := int64(0)
+		limits := req.storageLimits
+		if limits.DataBytes == nil {
+			limits.DataBytes = &zero
+		}
+		if limits.CacheBytes == nil {
+			limits.CacheBytes = &zero
+		}
+		if err := s.setUserStorage(r.Context(), u, limits); err != nil {
+			writeStorageErr(w, u.Name, err)
+			return
+		}
+	} else if req.storageLimits.set() {
+		writeErr(w, http.StatusBadRequest, "未启用存储配额（storage_policy），不能设置用户存储上限")
 		return
 	}
 	if err := s.store.CreateUser(u); err != nil {
+		s.retireUserStorage(r.Context(), u) // 刚登记的上限不能一直占着预算
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.refreshStorageQuota(r.Context())
 	writeJSON(w, http.StatusCreated, userView{Name: u.Name, Role: u.Role, CreatedAt: time.Now().UnixMilli()})
 }
 
@@ -443,6 +465,8 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// 释放存储上限；留在磁盘上的文件仍计入预算，直到运维清理。
+	s.retireUserStorage(ctx, u)
 	// 个人主题是偏好不是工作成果，随用户删除；同名重建的用户不继承。
 	if err := s.themeService().RemoveUser(name); err != nil {
 		log.Printf("delete user %s: remove personal themes: %v", name, err)

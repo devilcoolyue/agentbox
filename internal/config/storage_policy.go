@@ -76,6 +76,27 @@ func (c *Config) SetStoragePolicy(p StoragePolicy) error {
 	return c.mutate(func(w *Config) error { w.StoragePolicy = p.Clone(); return nil })
 }
 
+// SetUserStorageLimits sets one user's data/cache limits; 0 falls back to the
+// policy defaults. The kernel limits are applied by the caller.
+func (c *Config) SetUserStorageLimits(user string, data, cache int64) error {
+	return c.mutate(func(w *Config) error {
+		set := func(m map[string]int64, v int64) map[string]int64 {
+			if v <= 0 {
+				delete(m, user)
+				return m
+			}
+			if m == nil {
+				m = map[string]int64{}
+			}
+			m[user] = v
+			return m
+		}
+		w.StoragePolicy.Users = set(w.StoragePolicy.Users, data)
+		w.StoragePolicy.CacheUsers = set(w.StoragePolicy.CacheUsers, cache)
+		return nil
+	})
+}
+
 // RelocateStorage is an offline operator operation after data has been copied
 // and verified. It does not copy files or hot-switch the running server.
 func (c *Config) RelocateStorage(destination string, policy StoragePolicy, reserve int64) error {

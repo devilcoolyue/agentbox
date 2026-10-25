@@ -276,28 +276,30 @@ function storageRow(u: UserStorage, quota: boolean) {
   if (u.deleted) {
     const gone = document.createElement("span");
     gone.className = "mon-gone";
-    setText(gone, "已删除，配额未释放");
+    // 新版删除时释放上限，留下的文件仍计入预算；旧版删除的账号上限还占着
+    setText(gone, u.released ? "已删除，上限已释放" : "已删除，配额未释放");
+    if (u.released) setTip(gone, () => i18nText("留下的文件仍计入存储预算，运维清理后才腾出"));
     name.append(gone);
   }
   // 没开配额时数据一列退回目录统计，只有已用没有限额
-  const data = u.data ? quotaCell(u.data) : monCell(quota ? "—" : fmtBytes(u.files_bytes));
+  const data = u.data ? quotaCell(u.data, u.released) : monCell(quota ? "—" : fmtBytes(u.files_bytes));
   tr.append(
     name,
     data,
-    u.cache ? quotaCell(u.cache) : monCell("—"),
+    u.cache ? quotaCell(u.cache, u.released) : monCell("—"),
     monCell(u.shared_bytes ? fmtBytes(u.shared_bytes) : "—", "num"),
     monCell(u.deleted ? "—" : String(u.sessions), "num"),
   );
   return tr;
 }
 
-function quotaCell(q: QuotaUsage) {
+function quotaCell(q: QuotaUsage, released = false) {
   const td = document.createElement("td");
   const box = document.createElement("div");
   box.className = "mon-quota";
   if (!q.limit_bytes) {
     box.classList.add("none");
-    box.textContent = fmtBytes(q.used_bytes) + i18nText("（不限）");
+    box.textContent = fmtBytes(q.used_bytes) + (released ? i18nText("（留下的文件）") : i18nText("（不限）"));
     td.append(box);
     return td;
   }

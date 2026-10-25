@@ -405,6 +405,7 @@ dialog label.am-default { justify-self: center; gap: 6px; font-size: 12px; white
 
 /* ---- 额度管理弹窗 ---- */
 .dlg-quota { width: min(560px, 94vw); }
+.dlg-user-storage { width: min(460px, 94vw); }
 .q-body { display: flex; flex-direction: column; gap: 18px; }
 
 .q-balance {

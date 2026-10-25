@@ -103,7 +103,20 @@ print('uid1000_nested_write_EDQUOT')
         req.update(owner='c' * 64)
         failure = subprocess.run([sys.executable, q.__file__], input=json.dumps(req), text=True, capture_output=True)
         assert failure.returncode != 0 and 'previous user' in failure.stderr
-        print('PASS: kernel limit, inheritance/bypass, same-UID isolation, identity reuse and mount UUID')
+        # Deleting bob releases both kernel limits; his leftover file keeps the
+        # name reserved, and once removed a new bob gets a fresh project.
+        helper = lambda body: json.loads(subprocess.check_output([sys.executable, q.__file__], input=json.dumps(body), text=True))
+        retired = helper({'policy': policy, 'data': str(data), 'user': 'retired', 'owner': 'b' * 64, 'retire': True})['retired']
+        usage = q.quota(device, retired[0]) if len(retired) == 1 else {}
+        assert usage.get('used_bytes', 0) > 0 and usage['limit_bytes'] == 0 and usage['file_limit'] == 0, (retired, usage)
+        report = helper({'policy': policy, 'data': str(data), 'report': True})
+        assert [p['retired'] for p in report['projects'] if p['project'] == retired[0]] == [True]
+        failure = subprocess.run([sys.executable, q.__file__], input=json.dumps(req), text=True, capture_output=True)
+        assert failure.returncode != 0 and 'previous user' in failure.stderr
+        (bob / 'ok').unlink()
+        assert helper(req)['data']['limit_bytes'] == 2 << 20
+        assert len(list((data / '.storage-projects-retired').glob('*.json'))) == 1
+        print('PASS: kernel limit, inheritance/bypass, same-UID isolation, identity reuse, retirement and mount UUID')
     finally:
         if mounted:
             run('umount', mount)

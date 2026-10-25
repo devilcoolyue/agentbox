@@ -1277,6 +1277,12 @@
                   <input id="user-new-pass" type="password" placeholder="初始密码（至少 8 位）" autocomplete="new-password" data-i18n-attrs="{&quot;placeholder&quot;:&quot;初始密码（至少 8 位）&quot;}">
                   <button id="btn-user-add" class="btn btn-sm" data-icon="plus" data-i18n-text="[&quot;添加用户&quot;]">添加用户</button>
                 </div>
+                <!-- 存储上限：服务端启用存储配额时才显示，占位文字带默认值，由 user-storage.ts 填 -->
+                <div id="user-add-storage" class="user-add-storage hidden">
+                  <input id="user-new-data" type="text" class="mono" inputmode="decimal" autocomplete="off">
+                  <input id="user-new-cache" type="text" class="mono" inputmode="decimal" autocomplete="off">
+                  <span id="user-storage-note" class="field-hint"></span>
+                </div>
               </div>
               <div class="card">
                 <h3 data-i18n-text="[&quot;修改登录密码&quot;]">修改登录密码</h3>
@@ -2262,6 +2268,35 @@
   </div>
 </dialog>
 
+<!-- 用户存储上限（管理员） -->
+<dialog id="dlg-user-storage" class="dlg-user-storage">
+  <div class="dlg-head">
+    <h2 data-i18n-text="[&quot;存储上限 · &quot;]">存储上限 · <span id="us-user" class="mono"></span></h2>
+    <button type="button" id="us-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
+  </div>
+  <div class="dlg-body">
+    <div class="field-row">
+      <label class="field">
+        <span data-i18n-text="[&quot;数据上限（GB）&quot;]">数据上限（GB）</span>
+        <input id="us-data" type="text" class="mono" inputmode="decimal" autocomplete="off">
+        <span id="us-data-used" class="field-hint"></span>
+      </label>
+      <label class="field" id="us-cache-field">
+        <span data-i18n-text="[&quot;缓存上限（GB）&quot;]">缓存上限（GB）</span>
+        <input id="us-cache" type="text" class="mono" inputmode="decimal" autocomplete="off">
+        <span id="us-cache-used" class="field-hint"></span>
+      </label>
+    </div>
+    <p id="us-budget" class="field-hint"></p>
+    <p class="field-hint" data-i18n-text="[&quot;留空使用默认上限。不能低于已用空间；调高会占用存储总预算，保存后立即生效。&quot;]">留空使用默认上限。不能低于已用空间；调高会占用存储总预算，保存后立即生效。</p>
+    <p id="us-error" class="login-error hidden"></p>
+  </div>
+  <div class="dlg-actions">
+    <button type="button" id="us-cancel" class="btn btn-ghost" data-icon="close" data-i18n-text="[&quot;取消&quot;]">取消</button>
+    <button type="button" id="us-save" class="btn btn-primary" data-icon="check" data-i18n-text="[&quot;保存&quot;]">保存</button>
+  </div>
+</dialog>
+
 <!-- 额度管理（管理员） -->
 <dialog id="dlg-quota" class="dlg-quota">
   <div class="dlg-head">
@@ -2496,7 +2531,7 @@
   <form method="dialog">
     <div class="dlg-head">
       <h2 id="icon-picker-title" data-i18n-text="[&quot;选择图标&quot;]">选择图标</h2>
-      <button type="button" id="icon-picker-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;: &quot;关闭&quot;}"></button>
+      <button type="button" id="icon-picker-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
     <div class="ip-bar">
       <div class="scope-switch" role="tablist" id="icon-picker-sets">
@@ -2523,7 +2558,7 @@
   <form method="dialog">
     <div class="dlg-head">
       <h2 id="icon-slots-title" data-i18n-text="[&quot;设置到哪些位置&quot;]">设置到哪些位置</h2>
-      <button type="button" id="icon-slots-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;: &quot;关闭&quot;}"></button>
+      <button type="button" id="icon-slots-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
     <div class="ip-bar">
       <span id="icon-slots-ref" class="ip-choice mono"></span>
@@ -2566,7 +2601,7 @@
         <h2 data-i18n="缓存保活">缓存保活</h2>
         <p class="field-hint dlg-desc" data-i18n="离开时保持对话缓存，回来继续聊时不用整段重写。">离开时保持对话缓存，回来继续聊时不用整段重写。</p>
       </div>
-      <button type="button" id="ka-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;: &quot;关闭&quot;}"></button>
+      <button type="button" id="ka-close" class="dlg-x" aria-label="关闭" data-icon="close" data-i18n-attrs="{&quot;aria-label&quot;:&quot;关闭&quot;}"></button>
     </div>
     <div class="dlg-body">
       <p id="ka-unavailable" class="dc-callout warn hidden"></p>

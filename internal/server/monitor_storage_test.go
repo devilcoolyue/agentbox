@@ -50,9 +50,11 @@ func TestMonitorStorageView(t *testing.T) {
 		{Kind: "cache", Owner: bob, Root: "/tools/private/" + bob, Usage: storagepolicy.Usage{UsedBytes: 7, LimitBytes: 1 << 20}},
 		{Kind: "data", Root: filepath.Join(users, "gone"), Usage: storagepolicy.Usage{LimitBytes: 1 << 20}},
 		{Kind: "cache", Owner: "deadbeefcafe", Root: "/tools/private/deadbeefcafe", Usage: storagepolicy.Usage{LimitBytes: 1 << 20}},
+		// 删除时已释放上限：只按留下的文件计入
+		{Kind: "data", Root: filepath.Join(users, "left"), Retired: true, Usage: storagepolicy.Usage{UsedBytes: 5 << 20}},
 	}}
 	view := s.monitorStorageView(map[string]int{"alice": 2})
-	if view.Allocated != 1<<30+3<<20 {
+	if view.Allocated != 1<<30+8<<20 {
 		t.Fatalf("allocated = %d", view.Allocated)
 	}
 	got := map[string]userStorage{}
@@ -65,7 +67,7 @@ func TestMonitorStorageView(t *testing.T) {
 	if b := got["bob"]; b.Cache == nil || b.Cache.UsedBytes != 7 || b.Data != nil || b.Deleted {
 		t.Fatalf("bob = %+v", b)
 	}
-	if !got["gone"].Deleted || !got["cache:deadbeef"].Deleted {
+	if !got["gone"].Deleted || got["gone"].Released || !got["cache:deadbeef"].Deleted || !got["left"].Deleted || !got["left"].Released {
 		t.Fatalf("deleted users missing: %+v", view.Users)
 	}
 	if last := view.Users[len(view.Users)-1]; !last.Deleted {

@@ -137,20 +137,8 @@ func (s *Server) storageLoop() {
 // on every five-second monitor poll.
 func (s *Server) storageQuotaLoop() {
 	for s.workContext().Err() == nil {
-		if p := s.cfg.GetStoragePolicy(); p.Mount != "" {
-			ctx, cancel := context.WithTimeout(s.workContext(), 15*time.Second)
-			report, err := storagepolicy.ReadReport(ctx, p, s.cfg.DataDir)
-			cancel()
-			s.storage.Lock()
-			if err != nil {
-				s.storage.quotaErr = err.Error()
-			} else {
-				s.storage.quota, s.storage.quotaAt, s.storage.quotaErr = report, time.Now().UnixMilli(), ""
-			}
-			s.storage.Unlock()
-			if err != nil && s.workContext().Err() == nil {
-				log.Printf("storage: read quota usage: %v", err)
-			}
+		if _, err := s.refreshStorageQuota(s.workContext()); err != nil && s.workContext().Err() == nil {
+			log.Printf("storage: read quota usage: %v", err)
 		}
 		if !waitInterval(s.workContext(), time.Minute) {
 			return

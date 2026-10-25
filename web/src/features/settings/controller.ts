@@ -19,7 +19,7 @@ import { setSelectValue } from "../../select.js";
 
 import { S, bus, emit } from "../../state.js";
 import type {
-  Account, ApiKeyTest, OAuthFinish, OAuthStart, Settings, User,
+  Account, ApiKeyTest, OAuthFinish, OAuthStart, Settings, StorageQuotaSummary, User,
 } from "../../types.js";
 import { $, btnBusy as baseBusy, btnDone as baseDone, toast as baseToast, fmtTime, askConfirm, askPrompt, keepScroll } from "../../util.js";
 import { api as httpApi } from "../../api.js";
@@ -28,6 +28,7 @@ import { showView } from "../../shell.js";
 import { MODEL_ID_RE } from "../../chat.js";
 import { agentKey, agentName, agentIcon, decorateAgentOpts } from "../../brand.js";
 import { quotaChip, openQuota } from "../../quota.js";
+import { clearStorageAdd, openUserStorage, renderStorageAdd, storageAddLimits, storageChip } from "../../user-storage.js";
 import { loadProxies, mountProxyPicker, openProxiesSection, refreshProxyCount } from "../../proxies.js";
 import type { ProxyPicker } from "../../proxies.js";
 import { openPricingSection } from "../../pricing.js";
@@ -685,13 +686,18 @@ async function loadUsers() {
   // 第一次进来列表是空的：先铺骨架；改完额度回来重读时旧列表留着，读完直接换
   if (!box.querySelector(".user-row")) box.replaceChildren(usersSkeleton());
   let users: User[];
+  // 存储预算读不到不影响用户列表，只是不显示上限相关的输入
+  const storage = api<StorageQuotaSummary>("/storage/quotas").catch(() => null);
   try { users = await api<User[]>("/users"); } catch (e) { if(!scope.current())return;
     box.querySelector(".skeleton-list")?.remove();
     toast(i18nText("读取用户列表失败：") + (e as Error).message, true);
     return;
   }
+  const summary = await storage;
+  if (!scope.current()) return;
+  renderStorageAdd(summary);
   box.replaceChildren();
-  for (const u of users) box.appendChild(userRow(u));
+  for (const u of users) box.appendChild(userRow(u, summary));
 }
 
 function usersSkeleton() {
@@ -708,7 +714,7 @@ function usersSkeleton() {
   return wrap;
 }
 
-function userRow(u: User) {
+function userRow(u: User, storage: StorageQuotaSummary | null) {
   const row = document.createElement("div");
   row.className = "user-row";
 
@@ -730,6 +736,13 @@ function userRow(u: User) {
   actionButton(credit, () => i18nText("额度"), "wallet", () => i18nText("查看和管理用户额度"));
   credit.addEventListener("click", () => openQuota(u.name, loadUsers));
   acts.appendChild(credit);
+  if (u.storage) {
+    const disk = document.createElement("button");
+    disk.className = "btn btn-sm btn-ghost";
+    actionButton(disk, () => i18nText("存储"), "database", () => i18nText("调整用户存储上限"));
+    disk.addEventListener("click", () => openUserStorage(u, storage, loadUsers));
+    acts.appendChild(disk);
+  }
   const pw = document.createElement("button");
   pw.className = "btn btn-sm btn-ghost";
   actionButton(pw, () => i18nText("密码"), "key", () => i18nText("重置用户密码"));
@@ -759,7 +772,11 @@ function userRow(u: User) {
     del.addEventListener("click", async () => {
       const ok = await askConfirm(() => i18nText("删除用户「") + u.name + "」？", {
         get title() { return i18nText("删除用户"); },
-        get hint() { return i18nText("该用户的全部工作空间和容器将一并移除，文件保留在服务器磁盘上。"); },
+        get hint() {
+          return u.storage
+            ? i18nText("该用户的全部工作空间和容器将一并移除，文件保留在服务器磁盘上。存储上限随之释放，留下的文件仍计入存储预算，清理后才腾出。")
+            : i18nText("该用户的全部工作空间和容器将一并移除，文件保留在服务器磁盘上。");
+        },
         get okLabel() { return i18nText("删除"); }, icon: "trash", danger: true,
       });
       if (!ok) return;
@@ -777,7 +794,9 @@ function userRow(u: User) {
     acts.appendChild(del);
   }
 
-  row.append(name, role, quota, meta, acts);
+  row.append(name, role, quota);
+  if (u.storage) row.append(storageChip(u.storage));
+  row.append(meta, acts);
   return row;
 }
 
@@ -1081,11 +1100,14 @@ $("btn-user-add").addEventListener("click", async () => {
     toast(i18nText("初始密码至少 8 位"), true);
     return;
   }
+  const limits = storageAddLimits();
+  if (!limits) return;
   btnBusy($("btn-user-add"), () => i18nText("创建中…"));
   try {
-    await api("/users", { method: "POST", body: JSON.stringify({ username, password }) });
+    await api("/users", { method: "POST", body: JSON.stringify({ username, password, ...limits }) });
     $<HTMLInputElement>("user-new-name").value = "";
     $<HTMLInputElement>("user-new-pass").value = "";
+    clearStorageAdd();
     toast(i18nText("用户 ") + username + i18nText(" 已创建，可用该账号密码登录"));
     loadUsers();
   } catch (e) { if(!scope.current())return;

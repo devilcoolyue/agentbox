@@ -1203,6 +1203,7 @@ data/
 ### 本地容量治理
 
 - `storage_policy` 默认关闭，操作员配置并重启。配置须进 Load/validate/mutate/persist，恢复删外部挂载策略。`storage-config` / `storage-prepare` 只在离线持锁并检查容器挂载后运行；路径迁移保留实例身份，不能双实例同时写。
+- 每用户上限（`users` / `cache_users`）是唯一可在线改的部分：`internal/server/user_storage.go` 持 `storageUsersMu` 先 setquota 再 `SetUserStorageLimits` 落盘，失败回滚内核限额；预算判断以 quota.py 为准，Go 侧预检只为给出可读提示。删除用户走 quota.py `retire`：限额清零、登记保留并标 `retired`，预算按已用计；根目录清空前不得分给同名新用户。服务端测试通过 `storageEnsure/storageReadReport/storageRetire` 替身，不触碰真实配额。
 - 项目配额按实例及用户创建身份区分 data/cache，不能按共享 UID 1000 限额；新用户和存量根均须准备。挂载 UUID/项目配额能力在创建 data_dir 前验证；root 服务必须去除 CAP_SYS_RESOURCE，防止服务端写入绕过。
 - ext4 属主可清继承标记，quota-managed 容器必须带 ioctl seccomp 限制，保留 Chromium 沙箱；不得仅凭 setquota 成功宣称硬限额。上传/导入暂存放在服务拥有的用户父目录，保持同项目重命名且计入配额。
 - 缓存回收在 workspace 启动锁内确认所有已知容器停止，限 Go 编译/npm 下载缓存，不碰私有模块/浏览器/profile/SDK；扫描不完整不得继续删除。发布保留持部署锁并保护 current、引用和回退版本。

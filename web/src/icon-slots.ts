@@ -202,6 +202,7 @@ export const ICON_SLOTS = {
   "network": { group: "object", label: "代理 / 网络拓扑", icon: "tabler:network" },
   "cpu": { group: "object", label: "模型", icon: "tabler:cpu" },
   "wallet": { group: "object", label: "额度 / 费用", icon: "tabler:wallet" },
+  "database": { group: "object", label: "存储空间", icon: "tabler:database" },
   "calendar": { group: "object", label: "日期", icon: "tabler:calendar" },
   "store": { group: "object", label: "市场", icon: "tabler:building-store" },
   "message": { group: "object", label: "对话", icon: "tabler:message-circle" },
