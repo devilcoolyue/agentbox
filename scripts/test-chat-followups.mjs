@@ -197,6 +197,12 @@ async function scenario(browser,{mobile}={}){
  paused['space-a']=true;
  emit('space-a',{type:'quota_pause',pause:{percent:96,threshold:95,resets_at:Date.now()+2*3600000}});
  await page.waitForFunction(()=>/^5 小时额度已用 96%，暂停到 \d\d:\d\d；现在发送会排队，重置后执行$/.test(document.querySelector('#chat-input').placeholder));
+ // The empty composer is as tall as its placeholder: on a phone the pause note wraps and
+ // used to lose its second line under a one-line box.
+ const inputLines=()=>input.evaluate(el=>{const cs=getComputedStyle(el);return Math.round((el.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom))/parseFloat(cs.lineHeight));});
+ const placeholderLines=()=>input.evaluate(el=>{const p=el.cloneNode();p.removeAttribute('id');p.value=el.placeholder;p.style.cssText=`position:absolute;visibility:hidden;height:0;min-height:0;width:${el.offsetWidth}px`;el.after(p);const cs=getComputedStyle(el),h=p.scrollHeight;p.remove();return Math.round((h-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom))/parseFloat(cs.lineHeight));});
+ if(mobile)assert.ok(await placeholderLines()>1,'the pause note wraps on a phone');
+ assert.equal(await inputLines(),await placeholderLines(),'composer shows every line of the pause note');
  await input.fill('重置后接着做');await page.locator('#chat-send').click();await cleared();
  assert.equal(puts.at(-1).input.delivery,'queue','sent during the pause without queueing');
  await toast('已排队，5 小时额度重置后自动执行');
@@ -205,6 +211,7 @@ async function scenario(browser,{mobile}={}){
  emit('space-a',{type:'quota_pause',pause:null});
  await page.waitForFunction(()=>document.querySelector('#chat-delivery-reason')?.textContent==='这一轮结束后自动执行');
  assert.ok(!/5 小时额度/.test(await input.getAttribute('placeholder')),'placeholder kept the pause');
+ await page.waitForFunction(()=>{const el=document.querySelector('#chat-input'),cs=getComputedStyle(el);return el.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom)<parseFloat(cs.lineHeight)*1.5;});
  // Codex cannot be steered: always queue, even with the modifier.
  await open('space-c');
  await input.fill('codex 任务');await page.locator('#chat-send').click();await cleared();

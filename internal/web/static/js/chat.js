@@ -415,12 +415,31 @@ function updateChatPlaceholder() {
             : suggestion.current() || (isMobile() || enterInsertsNewline()
                 ? i18nText("向 Agent 下达任务…")
                 : i18nText("随心输入，向 Agent 下达任务…（Enter 发送，Shift+Enter 换行，可粘贴图片）")));
+    fitInput();
 }
-/* 输入框随内容自动增高（1 行起步，封顶后内部滚动） */
-export function autoGrow() {
+/* 输入框随内容自动增高（1 行起步，封顶后内部滚动）。空着时按占位提示折行后的高度来：
+ * 手机上额度暂停说明、下一步提示一行放不下，只留一行会把第二行截掉半截。
+ * 占位文字不计入 scrollHeight，借一个临时的同款 textarea 量完即移除（不常驻，免得多出一个输入框）。 */
+function placeholderHeight(t) {
+    if (t.value || !t.placeholder || !t.offsetWidth)
+        return 0;
+    const probe = document.createElement("textarea");
+    probe.tabIndex = -1;
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText = `position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;height:0;min-height:0;width:${t.offsetWidth}px`;
+    probe.value = t.placeholder;
+    t.after(probe);
+    const h = probe.scrollHeight;
+    probe.remove();
+    return h;
+}
+function fitInput() {
     const t = $("chat-input");
     t.style.height = "auto";
-    t.style.height = Math.min(t.scrollHeight, 220) + "px";
+    t.style.height = Math.min(Math.max(t.scrollHeight, placeholderHeight(t)), 220) + "px";
+}
+export function autoGrow() {
+    fitInput();
     inputMarks.render();
     suggestion.render();
     renderFollow();
@@ -1478,6 +1497,10 @@ export function initChat() {
         });
     }, { signal: lifetime.signal });
     window.addEventListener("resize", updateScrollBottomButton, { signal: lifetime.signal });
+    // 宽度或界面语言变了，占位提示折行跟着变（setAttrRender 换文案时不会量高度）
+    for (const event of ["resize", "agentbox-language-change"])
+        window.addEventListener(event, () => { if (!$("chat-input").value)
+            fitInput(); }, { signal: lifetime.signal });
     $("chat-send").addEventListener("click", event => {
         if (event.detail > 1)
             return;
