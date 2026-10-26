@@ -1,5 +1,5 @@
 import { setAttrRender, setTextRender, t as i18nText } from "../../i18n.js";
-import { isMobile, onMobileChange } from "../../util.js";
+import { isMobile, onMobileChange, spinEl } from "../../util.js";
 import { motionOff } from "../../motion.js";
 import { svgIcon } from "../../icons.js";
 import { RAIL_EVENT, railMode } from "../../outline-pref.js";
@@ -10,8 +10,9 @@ import { dockLift, lastAtOrBefore, outlineAnswer, outlineQuestion, railLayout } 
  * - 手机在右边缘（左边缘是 Safari 的返回手势）：滚动时浮现、停下 1.5 秒隐去；
  *   按住上下拖动预览，松手跳转（往左拖远再松手取消）；轻点打开「对话目录」列表。
  * 颜色只分两档：指着的那根和当前阅读位置那根是正文色，其余一律同一灰色。
- * 数据来自 GET outline（整个线程，含还没加载的较早几页）；跳往没加载的位置时
- * 先从那条消息起补拉历史（loadFrom），服务端嫌范围太大就逐页往前拉（loadOlder）。
+ * 数据来自 GET outline（整个线程，含还没加载的较早几页）；跳往没加载的位置时交给
+ * reveal：对话页只拉那一段放进历史窗口（window.ts），不从它一路重拉到最新。
+ * 拉取期间那根刻度闪烁、摘要浮层多一行「正在加载…」，指针移开也留着，免得以为没反应。
  * 刻度与对话流里的消息按发送时间（.user-turn 的 data-ts）对应。
  * 用户弹层的「对话刻度」偏好（outline-pref.ts）：自动 / 常驻（手机上不隐去）/ 不显示。 */
 const TICK_MAX = 28; // 鼓到最长时的线长（px）
@@ -49,7 +50,14 @@ export function createOutline(hooks) {
     tipQ.className = "outline-tip-q";
     const tipA = document.createElement("div");
     tipA.className = "outline-tip-a";
-    tip.append(tipQ, tipA);
+    // 跳往没加载的位置、正在拉那一段时显示
+    const tipLoading = document.createElement("div");
+    tipLoading.className = "outline-tip-loading";
+    tipLoading.append(spinEl());
+    const tipLoadingText = document.createElement("span");
+    setTextRender(tipLoadingText, () => i18nText("正在加载…"));
+    tipLoading.append(tipLoadingText);
+    tip.append(tipQ, tipA, tipLoading);
     const toc = document.createElement("button");
     toc.type = "button";
     toc.className = "icon-btn outline-toc";
@@ -65,15 +73,24 @@ export function createOutline(hooks) {
         mounted = true;
         hooks.pane().append(rail, tip);
         hooks.tocBefore().before(toc);
-        const log = hooks.log();
-        new ResizeObserver(() => layout()).observe(log);
-        log.addEventListener("scroll", onScroll, { passive: true });
+        watch(hooks.log());
+        onMobileChange(() => { leave(); layout(); });
+        window.addEventListener(RAIL_EVENT, () => { leave(); layout(); });
+    }
+    /** 给一个对话流容器挂上监听（实时对话流在 mount 时，历史窗口由对话页先登记） */
+    const watched = new WeakSet();
+    function watch(log) {
+        if (watched.has(log))
+            return;
+        watched.add(log);
+        new ResizeObserver(() => { if (log === hooks.log())
+            layout(); }).observe(log);
+        log.addEventListener("scroll", () => { if (log === hooks.log())
+            onScroll(); }, { passive: true });
         // 用户自己动了滚动：不再钉住跳转目标，也打断跳转动画
         for (const type of ["wheel", "touchstart", "touchmove", "keydown", "pointerdown"]) {
             log.addEventListener(type, () => { pinned = null; anim.stop(); handScrollAt = performance.now(); }, { passive: true });
         }
-        onMobileChange(() => { leave(); layout(); });
-        window.addEventListener(RAIL_EVENT, () => { leave(); layout(); });
     }
     /* ---------- 数据 ---------- */
     const attachLabel = (kind) => kind === "图片" ? i18nText("[图片]") : i18nText("[附件]");
@@ -270,10 +287,13 @@ export function createOutline(hooks) {
             rail.classList.remove("awake"); }, SLEEP_MS);
     }
     /* ---------- 摘要浮层 ---------- */
-    let tipFor = -1;
+    let tipFor = -1, loadingFor = -1;
     function showTip(i, clientY, cancel = false) {
         if (i < 0 || !marks[i])
             return;
+        if (loadingFor >= 0 && i !== loadingFor)
+            i = loadingFor; // 加载期间浮层只说正在去的那一轮
+        tip.classList.toggle("pending", i === loadingFor);
         if (tipFor !== i) {
             tipQ.textContent = marks[i].q;
             tipA.textContent = marks[i].a;
@@ -309,7 +329,12 @@ export function createOutline(hooks) {
         }
         tip.classList.add("show");
     }
-    function hideTip() { tip.classList.remove("show", "cancel"); tipFor = -1; }
+    function hideTip() {
+        if (loadingFor >= 0)
+            return showTip(loadingFor); // 正在加载：指针移开也留着
+        tip.classList.remove("show", "cancel", "pending");
+        tipFor = -1;
+    }
     /* ---------- 指针：桌面悬停 / 手机按住拖动 ---------- */
     let drag = null;
     let holdTimer = 0, edgeFrame = 0;
@@ -549,24 +574,22 @@ export function createOutline(hooks) {
             resolve();
         if (marks[i]?.el)
             return scrollTo(i, false);
-        if (m.line < 0)
-            return;
         const tick = ticks[i];
         tick?.classList.add("loading");
+        loadingFor = i;
+        showTip(i);
         try {
-            // 从前一条消息起拉：目标上方留一轮上下文，才停得到和已加载时一样的位置
-            const prev = marks[i - 1];
-            await hooks.loadFrom(prev && prev.line >= 0 ? prev.line : m.line);
+            await hooks.reveal(m.line, ms);
             resolve();
-            // 服务端嫌从这条到最新的内容太多时退回最新一页：逐页往前拉到它为止
-            while (seq === jumpSeq && !findLoaded(ms)) {
-                if (!(await hooks.loadOlder()))
-                    break;
-                resolve();
-            }
         }
         finally {
             tick?.classList.remove("loading");
+            if (loadingFor === i) {
+                loadingFor = -1;
+                tip.classList.remove("pending");
+                if (pointerY === null)
+                    hideTip();
+            }
         }
         if (seq !== jumpSeq)
             return;
@@ -654,6 +677,8 @@ export function createOutline(hooks) {
         clearTimeout(refreshTimer);
         jumpSeq++;
         anim.stop();
+        loadingFor = -1;
+        hideTip();
         thread = "";
         pinned = null;
         if (sheet?.open)
@@ -685,5 +710,6 @@ export function createOutline(hooks) {
             layout();
         },
         reset,
+        watch,
     };
 }

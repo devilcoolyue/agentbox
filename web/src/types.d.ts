@@ -1317,6 +1317,9 @@ export interface History {
   /** cursor of the first returned entry; older servers omit it */
   start?: number;
   has_more?: boolean;
+  /** ?after= pages: cursor just past the last returned entry, and whether more follows */
+  end?: number;
+  has_newer?: boolean;
 }
 
 /** GET /api/sessions/{id}/outline: every user message of a thread with an

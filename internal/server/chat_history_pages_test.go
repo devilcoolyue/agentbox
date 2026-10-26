@@ -19,6 +19,8 @@ type historyPageView struct {
 	HasMore      bool       `json:"has_more"`
 	ActiveThread string     `json:"active_thread"`
 	ThreadID     string     `json:"thread_id"`
+	End          int        `json:"end"`
+	HasNewer     bool       `json:"has_newer"`
 }
 
 func smallHistoryPages(t *testing.T) {
@@ -293,5 +295,96 @@ func TestHistoryRejectsInvalidCursors(t *testing.T) {
 	}
 	if _, err := os.Stat(s.threadPath(sess, "20260101-000000-abcdef")); !os.IsNotExist(err) {
 		t.Fatalf("older-page request created a thread: %v", err)
+	}
+}
+
+// The rail opens a window at a message far back instead of re-reading
+// everything after it: ?after= pages walk forward on the same turn boundaries
+// as ?before= pages, and stop at until (where the client's newest pages begin).
+func TestHistoryForwardPages(t *testing.T) {
+	smallHistoryPages(t)
+	s, sess := newTestServer(t)
+	s.chat = newChatManager(s)
+	if err := s.store.Put(sess); err != nil {
+		t.Fatal(err)
+	}
+	tid := writeTurns(t, s, sess, 3, 3, 3, 3, 3) // 7 lines, 4 rendered entries per turn
+
+	var all []string
+	cursors := [][2]int{}
+	for start := 0; ; {
+		code, page := getHistory(t, s, sess, fmt.Sprintf("?thread=%s&after=%d", tid, start))
+		if code != http.StatusOK || page.ThreadID != tid || page.ActiveThread != "" || page.Start != start || page.HasMore != (start > 0) {
+			t.Fatalf("forward page at %d: code=%d %+v", start, code, page)
+		}
+		if page.Entries[0].Kind != "user" {
+			t.Fatalf("page at %d does not start a turn", start)
+		}
+		for _, e := range page.Entries {
+			all = append(all, historyKey(e))
+		}
+		cursors = append(cursors, [2]int{page.Start, page.End})
+		if !page.HasNewer {
+			if page.End != 35 {
+				t.Fatalf("last page ends at %d", page.End)
+			}
+			break
+		}
+		start = page.End
+	}
+	want := []string{}
+	for i := range 5 {
+		want = append(want, fmt.Sprintf("user:turn-%d", i))
+		for j := range 3 {
+			want = append(want, fmt.Sprintf("turn-%d answer %d", i, j))
+		}
+	}
+	if !reflect.DeepEqual(all, want) {
+		t.Fatalf("forward pages lost or repeated entries:\n got %v\nwant %v", all, want)
+	}
+	// Whole turns until the budget of 5 entries is passed, like older pages.
+	if !reflect.DeepEqual(cursors, [][2]int{{0, 14}, {14, 28}, {28, 35}}) {
+		t.Fatalf("cursors = %v", cursors)
+	}
+
+	// until caps the page where the client's loaded pages begin.
+	code, page := getHistory(t, s, sess, fmt.Sprintf("?thread=%s&after=7&until=14", tid))
+	if code != http.StatusOK || page.Start != 7 || page.End != 14 || !page.HasNewer || len(page.Entries) != 4 {
+		t.Fatalf("until: code=%d %+v", code, page)
+	}
+
+	for _, query := range []string{
+		fmt.Sprintf("?thread=%s&after=35", tid),
+		fmt.Sprintf("?thread=%s&after=-1", tid),
+		fmt.Sprintf("?thread=%s&after=x", tid),
+		fmt.Sprintf("?thread=%s&after=7&until=7", tid),
+		fmt.Sprintf("?thread=%s&after=7&until=36", tid),
+		"?after=0",
+		"?thread=../x&after=0",
+	} {
+		if code, _ := getHistory(t, s, sess, query); code != http.StatusBadRequest {
+			t.Fatalf("%s: code=%d", query, code)
+		}
+	}
+}
+
+// A turn past the hard limit is split going forward too; the page that
+// starts inside it carries the turn_context line.
+func TestHistoryForwardSplitsOversizedTurns(t *testing.T) {
+	smallHistoryPages(t)
+	s, sess := newTestServer(t)
+	s.chat = newChatManager(s)
+	if err := s.store.Put(sess); err != nil {
+		t.Fatal(err)
+	}
+	tid := writeTurns(t, s, sess, 2, 20)
+	_, first := getHistory(t, s, sess, fmt.Sprintf("?thread=%s&after=0", tid))
+	if !first.HasNewer || len(first.Entries) != historyPage.MaxEntries || historyKey(first.Entries[0]) != "user:turn-0" {
+		t.Fatalf("first page: end=%d entries=%d", first.End, len(first.Entries))
+	}
+	_, next := getHistory(t, s, sess, fmt.Sprintf("?thread=%s&after=%d", tid, first.End))
+	head := next.Entries[0]
+	if head.Kind != "turn_context" || head.Turn == nil || head.Turn.ID != "turn-1" {
+		t.Fatalf("page inside a turn lost it: %+v", head)
 	}
 }

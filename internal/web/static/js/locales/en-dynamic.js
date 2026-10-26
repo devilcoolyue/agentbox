@@ -2914,4 +2914,7 @@ export default {
     "自动": "Auto",
     "常驻": "Always",
     "不显示": "Off",
+    "正在加载…": "Loading…",
+    "后面的对话加载失败": "Couldn't load later messages",
+    "正在加载后面的对话…": "Loading later messages…",
 };

@@ -502,9 +502,12 @@ func historyIndex(value string, lo, hi int) (int, bool) {
 
 // handleHistory returns the active thread's newest page plus its metadata for
 // the thread bar. ?thread=&before= returns the page ending at that cursor of
-// the named thread; ?thread=&from= re-reads the active thread from a cursor so
-// a reconnect keeps pages the client already loaded. Responses carry start
-// (cursor of the first returned entry) and has_more.
+// the named thread; ?thread=&after=[&until=] the page starting at that cursor,
+// ending no later than until (the rail opens a window there instead of
+// re-reading everything from it to the newest entry); ?thread=&from= re-reads
+// the active thread from a cursor so a reconnect keeps pages the client
+// already loaded. Responses carry start (cursor of the first returned entry)
+// and has_more; after= pages also carry end and has_newer.
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	q := r.URL.Query()
 	room := s.chat.room(sess.ID)
@@ -514,7 +517,8 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	older := q.Has("before")
+	forward := q.Has("after")
+	older := q.Has("before") || forward
 	tid := s.activeThread(sess)
 	if older {
 		tid = q.Get("thread")
@@ -563,7 +567,21 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 	}
 	defer f.Close()
 	end, start := len(x.lines), -1
-	if older {
+	if forward {
+		var ok bool
+		if start, ok = historyIndex(q.Get("after"), 0, len(x.lines)-1); !ok {
+			writeProblem(w, r, "chat.history", "invalid_request")
+			return
+		}
+		until := len(x.lines)
+		if q.Has("until") {
+			if until, ok = historyIndex(q.Get("until"), start+1, len(x.lines)); !ok {
+				writeProblem(w, r, "chat.history", "invalid_request")
+				return
+			}
+		}
+		end = x.pageEnd(f, start, until, historyPage)
+	} else if older {
 		var ok bool
 		if end, ok = historyIndex(q.Get("before"), 1, len(x.lines)); !ok {
 			writeProblem(w, r, "chat.history", "invalid_request")
@@ -619,6 +637,9 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 		return
 	}
 	out := map[string]any{"entries": lines, "costs": costs, "start": start, "has_more": start > 0}
+	if forward {
+		out["end"], out["has_newer"] = end, end < len(x.lines)
+	}
 	if older {
 		out["thread_id"] = tid
 	} else {

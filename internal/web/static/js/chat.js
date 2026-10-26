@@ -25,6 +25,7 @@ import { createChatStream } from "./features/chat/stream.js";
 import { ChatHistory } from "./features/chat/history.js";
 import { createOlderHistory } from "./features/chat/older.js";
 import { createOutline } from "./features/chat/outline.js";
+import { createHistoryWindow } from "./features/chat/window.js";
 import { settleToolRows } from "./features/chat/tool-rows.js";
 import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { createBackground } from "./features/chat/background.js";
@@ -204,7 +205,8 @@ function updateScrollBottomButton() {
     const btn = $("chat-scroll-bottom");
     const wasVisible = btn.classList.contains("show");
     const threshold = wasVisible ? CHAT_BOTTOM_HIDE_DISTANCE : CHAT_BOTTOM_SHOW_DISTANCE;
-    const show = !log.classList.contains("hidden") &&
+    // 历史窗口开着时最新的内容不在眼前：一直给出回到最新的按钮
+    const show = historyWindow.isOpen() || !log.classList.contains("hidden") &&
         log.childElementCount > 0 && distanceFromBottom(log) > threshold;
     btn.classList.toggle("show", show);
     btn.setAttribute("aria-hidden", String(!show));
@@ -500,6 +502,7 @@ const sender = new ChatSender({
 });
 export async function sendChat() {
     const input = $("chat-input");
+    showLatest(); // 在历史窗口里发消息：回到最新，看得到自己发的这条
     if (!chatImgs.map.size && commandMenu.runWeb(input.value)) {
         input.value = "";
         autoGrow();
@@ -1163,32 +1166,66 @@ for (const c of document.querySelectorAll(".hero-pill")) {
 const readHistory = (path, signal) => api(path, { signal });
 const historyTimeout = () => S.chatHistoryTimeoutSec * 1000;
 const history = new ChatHistory(readHistory, () => S.current?.id, historyTimeout);
+/** 一页历史渲染进游离容器（独立的回合分组，不碰实时对话流）：更早一页与历史窗口共用 */
+function renderPage(value) {
+    const box = document.createElement("div");
+    const writer = new TurnWriter(() => box, sessionAgent);
+    replayHistory(writer, value.entries, value.costs, node => writer.place(node));
+    settleToolRows(box);
+    return box;
+}
 const older = createOlderHistory({
     log: () => $("chat-log"),
     session: () => S.current?.id,
     read: readHistory,
     timeout: historyTimeout,
-    render: value => {
-        const box = document.createElement("div");
-        const writer = new TurnWriter(() => box, sessionAgent);
-        replayHistory(writer, value.entries, value.costs, node => writer.place(node));
-        settleToolRows(box);
-        return box;
-    },
+    render: renderPage,
     changed: () => { updateScrollBottomButton(); outline.changed(); },
 });
+/* 刻度导航跳往没加载的较早消息时，只拉那一段放进历史窗口（features/chat/window.ts），
+ * 实时对话流藏在后面照常更新；chatView() 是当前显示的那个容器 */
+const historyWindow = createHistoryWindow({
+    live: () => $("chat-log"),
+    session: () => S.current?.id,
+    read: readHistory,
+    timeout: historyTimeout,
+    render: renderPage,
+    liveCursor: () => older.cursor(),
+    absorb: (box, range) => older.absorb(box, range),
+    switched: () => { updateScrollBottomButton(); outline.changed(); },
+    changed: () => { updateScrollBottomButton(); outline.changed(); },
+});
+const chatView = () => historyWindow.isOpen() ? historyWindow.el : $("chat-log");
+/** 收起历史窗口，回到实时对话流的最底部 */
+function showLatest() {
+    if (!historyWindow.isOpen())
+        return;
+    historyWindow.close();
+    const log = $("chat-log");
+    log.scrollTop = log.scrollHeight;
+    updateScrollBottomButton();
+}
 /* 对话流旁的刻度导航：整个线程一根消息一根刻度，可跳往还没加载的较早位置 */
 const outline = createOutline({
-    log: () => $("chat-log"),
+    log: chatView,
     pane: () => $("tab-chat"),
     tocBefore: () => $("btn-thread-new"),
     session: () => S.current?.id,
     read: (path, signal) => api(path, { signal }),
-    loadFrom: line => loadHistory({ silent: true, from: line }),
-    loadOlder: () => older.more(),
+    // 目标在藏起来的实时对话流里就收起窗口；否则开一个从它起的窗口
+    reveal: async (line, ms) => {
+        if (historyWindow.isOpen() && [...$("chat-log").querySelectorAll(":scope > .user-turn[data-ts]")].some(el => Date.parse(el.dataset.ts) === ms)) {
+            historyWindow.close();
+            return;
+        }
+        if (line >= 0)
+            await historyWindow.open(line);
+    },
 });
+outline.watch(historyWindow.el);
 function cancelHistoryLoad() {
     history.cancel();
+    historyWindow.close();
     older.cancel();
     S.histLoading = false;
     S.histError = "";
@@ -1197,19 +1234,18 @@ function cancelHistoryLoad() {
  * 加载中反而像出了故障），拉到后整体替换对话流以补上断线期间错过的事件，
  * 并保持用户原本的阅读位置（除非本来就贴着底）。正在回看时连同已加载的
  * 较早几页一起重拉（from=已显示内容的起点），贴底时只要最新一页。
- * opts.from：刻度导航跳往还没加载的消息，从它（历史游标）起重拉到最新；
- * 返回拿到的是否正是从那里起的内容（服务端嫌范围太大会退回最新一页）。 */
+ * 非静默的整体重载先收起历史窗口；重连补拉只刷新藏在后面的实时对话流，窗口照旧。 */
 export async function loadHistory(opts = {}) {
     const sess = S.current;
     if (!sess)
-        return false;
+        return;
     const silent = !!opts.silent;
     const log = $("chat-log");
-    const wasAtBottom = opts.from !== undefined ? false : silent ? nearBottom(log) : true;
+    if (!silent)
+        historyWindow.close();
+    const wasAtBottom = silent ? nearBottom(log) : true;
     const prevScroll = log.scrollTop;
-    const cur = older.cursor();
-    const keep = opts.from !== undefined && cur ? { thread: cur.thread, start: Math.min(opts.from, cur.start) }
-        : wasAtBottom ? null : cur;
+    const keep = wasAtBottom ? null : older.cursor();
     older.pause();
     if (!silent) {
         S.histLoading = true;
@@ -1275,7 +1311,7 @@ export async function loadHistory(opts = {}) {
         void outline.load(id || "");
     });
     if (result.state === "stale" || !result.current())
-        return false;
+        return;
     if (result.state === "failed" && !silent) {
         S.histError = result.timedOut ? i18nText("历史对话加载超时")
             : i18nText("历史对话加载失败：") + (result.error.message || i18nText("未知错误"));
@@ -1289,7 +1325,6 @@ export async function loadHistory(opts = {}) {
         log.scrollTop = wasAtBottom || (keep && !kept) ? log.scrollHeight : prevScroll;
         updateScrollBottomButton();
     }
-    return result.state === "loaded" && kept;
 }
 /* 对话线程发生切换（本端操作经 bus，或其它页面广播）后重载对话流 */
 export async function reloadThread() {
@@ -1304,6 +1339,7 @@ export async function reloadThread() {
     outbox?.leave();
     composerThread = "";
     history.cancel(); // 立刻作废在途加载，clear 之后它们不得再往里追加
+    historyWindow.close();
     older.cancel();
     stream.reset(); // 回放动画与积压一并丢弃，历史里有完整内容
     live.reset();
@@ -1491,6 +1527,10 @@ export function initChat() {
     }, { signal: lifetime.signal });
     $("chat-log").addEventListener("scroll", updateScrollBottomButton, { ...({ passive: true }), signal: lifetime.signal });
     $("chat-scroll-bottom").addEventListener("click", () => {
+        if (historyWindow.isOpen()) {
+            showLatest();
+            return;
+        }
         $("chat-log").scrollTo({
             top: $("chat-log").scrollHeight,
             behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",

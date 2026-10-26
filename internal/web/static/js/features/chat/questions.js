@@ -348,6 +348,12 @@ export function update() {
     changed();
 }
 /** 切换空间或重载对话时清空登记，旧节点随对话流一起丢弃。 */
+/** 一段内容整体移出页面（历史窗口收起）：忘掉其中的卡片，之后对话流加载到同一段时重新画出 */
+export function forgetQuestionCards(root) {
+    for (const [id, c] of cards)
+        if (root.contains(c.el))
+            cards.delete(id);
+}
 export function resetQuestionCards() {
     cards.clear();
     if (ticker) {

@@ -108,13 +108,30 @@ export function createOlderHistory(hooks) {
             observer?.disconnect();
             observer = undefined;
         },
-        /** 当前已显示内容的起点：重连补拉时只刷新这一段，保留已加载的较早内容 */
-        /** 刻度导航跳往更早的位置时逐页往前拉；正在拉的那一页先等它落定 */
-        async more() {
-            while (busy)
-                await new Promise(r => setTimeout(r, 50));
-            return load();
+        /** 历史窗口（window.ts）往后正好接上了：把它的整段（游离容器）并到顶部，起点改成
+         * 窗口的起点。起点对不上（期间重连重拉过）时不动，返回 false。 */
+        absorb(box, next) {
+            const c = cursor;
+            if (!c || c.session !== hooks.session() || c.thread !== next.thread || c.start !== next.end)
+                return false;
+            loads.cancel();
+            busy = 0;
+            const log = hooks.log();
+            joinTurn(box.lastElementChild, c.more ? bar.nextElementSibling : log.firstElementChild);
+            log.prepend(...box.children);
+            c.start = next.start;
+            c.more = next.start > 0;
+            if (c.more) {
+                log.prepend(bar);
+                show("idle");
+                watch();
+            }
+            else
+                bar.remove();
+            hooks.changed();
+            return true;
         },
+        /** 当前已显示内容的起点：重连补拉时只刷新这一段，保留已加载的较早内容 */
         cursor() {
             return cursor && cursor.session === hooks.session() ? { thread: cursor.thread, start: cursor.start } : null;
         },

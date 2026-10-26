@@ -6,7 +6,8 @@ import { emulateMotion } from './playwright-launch.mjs';
 // Conversation rail (features/chat/outline.ts) on a synthetic paged thread:
 // one tick per user message including pages not loaded yet, dock-style lift
 // that only changes length (colour: hovered and current tick only), the
-// question/answer tip, jumps to loaded and unloaded turns, keyboard, a live
+// question/answer tip, jumps to loaded turns and to turns far back (a history
+// window holding only that stretch, joined to the live log on scrolling down), keyboard, a live
 // message, the phone layout (right edge, drag to preview, outline sheet) and
 // the user-menu preference (auto / always / off).
 // No provider calls.
@@ -24,10 +25,18 @@ export async function chatOutlineSmoke(page, { session, send }) {
  }
  const items = () => starts.map((line, i) => ({line, ts:ts(i), text:all[line].text, answer:`回答 ${i}。后面还有别的句子。`}));
  const newest = starts[N - PAGE];
+ const FORWARD = 3 * 4; // ?after= pages hold three turns, so a window walks forward a few pages
  const requests = [];
+ let holdAfter = null;
  const history = async route => {
   const q = new URL(route.request().url()).searchParams;
   requests.push(Object.fromEntries(q));
+  if (q.has('after')) {
+   const start = Number(q.get('after')), end = Math.min(q.has('until') ? Number(q.get('until')) : all.length, start + FORWARD);
+   if (holdAfter) await holdAfter;
+   await route.fulfill({json:{entries:all.slice(start, end),thread_id:thread.id,costs:{},start,end,has_more:start > 0,has_newer:end < all.length}}).catch(() => {});
+   return;
+  }
   if (q.has('before')) {
    const end = Number(q.get('before')), start = Math.max(0, end - PAGE * 4);
    await route.fulfill({json:{entries:all.slice(start, end),thread_id:thread.id,costs:{},start,has_more:start > 0}});
@@ -46,7 +55,15 @@ export async function chatOutlineSmoke(page, { session, send }) {
  try {
   await page.setViewportSize({width:1280,height:900});
   const log = page.locator('#chat-log'), rail = page.locator('#tab-chat > .outline-rail'), tip = page.locator('#tab-chat > .outline-tip');
-  const user = n => page.locator('#chat-log .msg.user').filter({hasText:new RegExp(`^第 ${n} 个问题$`)});
+  // the conversation on screen: the live log, or the history window opened for a turn far back
+  const view = page.locator('#tab-chat .chat-log:not(.behind):not([hidden])'), win = page.locator('#tab-chat .chat-window');
+  const user = n => view.locator('.msg.user').filter({hasText:new RegExp(`^第 ${n} 个问题$`)});
+  // the same in the page, for waitForFunction
+  const landed = n => page.waitForFunction(n => {
+   const l = document.querySelector('#tab-chat .chat-window:not([hidden])') || document.getElementById('chat-log');
+   const e = [...l.querySelectorAll('.msg.user')].find(m => m.textContent === `第 ${n} 个问题`);
+   return e && Math.abs(e.getBoundingClientRect().top - l.getBoundingClientRect().top - l.clientHeight * 0.18) < 6;
+  }, n);
   const tick = i => rail.locator('.outline-tick').nth(i);
   const ticks = () => page.evaluate(() => [...document.querySelectorAll('#tab-chat > .outline-rail .outline-tick')].map(t => {
    const line = t.firstElementChild, m = /scaleX\(([\d.]+)\)/.exec(line.style.transform);
@@ -54,7 +71,7 @@ export async function chatOutlineSmoke(page, { session, send }) {
   }));
   const center = async locator => { const b = await locator.boundingBox(); return {x: b.x + b.width / 2, y: b.y + b.height / 2}; };
   // where a message sits in the log, as a fraction of the visible height
-  const place = n => user(n).evaluate(e => { const l = document.getElementById('chat-log').getBoundingClientRect(); return (e.getBoundingClientRect().top - l.top) / l.height; });
+  const place = n => user(n).evaluate(e => { const l = e.closest('.chat-log').getBoundingClientRect(); return (e.getBoundingClientRect().top - l.top) / l.height; });
   const settle = () => page.waitForTimeout(450); // longest transition on the rail
 
   await page.reload();
@@ -100,13 +117,10 @@ export async function chatOutlineSmoke(page, { session, send }) {
   await page.evaluate(() => {
    window.__outlineFlashed = [];
    new MutationObserver(list => { for (const m of list) if (m.target.classList.contains('outline-flash')) window.__outlineFlashed.push(m.target.textContent); })
-    .observe(document.getElementById('chat-log'), {subtree:true, attributes:true, attributeFilter:['class']});
+    .observe(document.getElementById('tab-chat'), {subtree:true, attributes:true, attributeFilter:['class']});
   });
   await page.mouse.down(); await page.mouse.up();
-  await page.waitForFunction(n => {
-   const e = [...document.querySelectorAll('#chat-log .msg.user')].find(m => m.textContent === `第 ${n} 个问题`), l = document.getElementById('chat-log');
-   return e && Math.abs(e.getBoundingClientRect().top - l.getBoundingClientRect().top - l.clientHeight * 0.18) < 6;
-  }, hovered);
+  await landed(hovered);
   assert.ok((await page.evaluate(() => window.__outlineFlashed)).includes(`第 ${hovered} 个问题`), 'the target message flashes');
   await emulateMotion(page, 'reduce');
   await page.mouse.move(at.x + 400, at.y);
@@ -114,37 +128,94 @@ export async function chatOutlineSmoke(page, { session, send }) {
   state = await ticks();
   assert.ok(state[hovered].active && !state.some(t => t.hot), 'jumped turn is current once the pointer leaves');
 
-  // Click a turn that is not loaded: history reloads from its line, then it is shown.
+  // Click a turn far back: only that stretch is fetched (the page before it and one from it,
+  // never up to the live pages) into a history window; the live log waits hidden behind it.
+  // While it loads the tick pulses and the tip says so, even after the pointer leaves.
   const far = 3;
   assert.equal(await user(far).count(), 0);
   const sent = requests.length;
   const b = await center(tick(far));
+  let release;
+  holdAfter = new Promise(r => { release = r; });
   await page.mouse.move(b.x, b.y, {steps:4});
   await page.mouse.down(); await page.mouse.up();
-  await user(far).waitFor();
-  assert.deepEqual(requests[sent], {thread:thread.id, from:String(starts[far - 1])}, 'reload starts one message above the target');
-  await page.waitForFunction(() => !document.querySelector('#tab-chat > .outline-rail .outline-tick.loading'));
-  assert.ok(Math.abs(await place(far) - 0.18) < 0.02, 'unloaded target lands where loaded ones do');
+  await tip.and(page.locator('.pending')).waitFor();
+  assert.equal(await tip.locator('.outline-tip-loading').innerText(), '正在加载…');
+  assert.equal(await tick(far).evaluate(e => e.classList.contains('loading')), true, 'the tick pulses while loading');
   await page.mouse.move(b.x + 400, b.y);
+  await page.waitForTimeout(200);
+  assert.equal(await tip.evaluate(e => e.classList.contains('show') && e.classList.contains('pending')), true, 'the loading tip stays after the pointer leaves');
+  await page.screenshot({path:resolve('output/playwright/chat-outline-loading.png')});
+  holdAfter = null; release();
+  await user(far).waitFor();
+  const opened = requests.slice(sent);
+  assert.deepEqual(opened.slice(0, 2).sort((x, y) => JSON.stringify(x) < JSON.stringify(y) ? -1 : 1),
+   [{thread:thread.id, after:String(starts[far]), until:String(newest)}, {thread:thread.id, before:String(starts[far])}],
+   'one page before the target and one from it, stopping where the live pages begin');
+  // a short window may already prefetch the page after it, never past the live pages
+  assert.ok(opened.slice(2).every(r => 'after' in r && r.until === String(newest)), 'then only following pages: '+JSON.stringify(opened));
+  await win.waitFor({state:'visible'});
+  assert.equal(await log.evaluate(e => e.classList.contains('behind') && getComputedStyle(e).display === 'none'), true, 'the live log waits behind the window');
+  assert.equal(await log.locator('.msg.user').count(), PAGE, 'the live log keeps its pages');
+  await page.waitForFunction(() => !document.querySelector('#tab-chat > .outline-rail .outline-tick.loading'));
+  await tip.and(page.locator('.show')).waitFor({state:'detached'}).catch(() => {});
+  assert.equal(await tip.evaluate(e => e.classList.contains('pending')), false);
+  assert.ok(Math.abs(await place(far) - 0.18) < 0.02, 'a turn in the window lands where loaded ones do');
   await settle();
-  assert.ok((await ticks())[far].active, 'unloaded target becomes current');
+  assert.ok((await ticks())[far].active, 'the window\'s turn becomes current');
+  assert.equal(await page.locator('#chat-scroll-bottom').evaluate(e => e.classList.contains('show')), true, 'the window offers the way back to the latest');
 
-  // Keyboard: Tab into the rail, arrows move, Enter jumps.
+  // Keyboard: Tab into the rail, arrows move, Enter jumps (here within the window).
   await tick(far).focus();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   assert.equal(await tip.locator('.outline-tip-q').innerText(), `第 ${far + 2} 个问题`, 'focus shows the tip');
   await page.keyboard.press('Enter');
-  await page.waitForFunction(n => {
-   const e = [...document.querySelectorAll('#chat-log .msg.user')].find(m => m.textContent === `第 ${n} 个问题`), l = document.getElementById('chat-log');
-   return e && Math.abs(e.getBoundingClientRect().top - l.getBoundingClientRect().top - l.clientHeight * 0.18) < 6;
-  }, far + 2);
+  await landed(far + 2);
   await page.keyboard.press('Escape');
 
-  // A jumped-to turn stays current only while it stays put: the scroll-to-latest button
-  // (outside the log, so no hand-scroll event) still moves the current tick to the newest turn.
+  // The scroll-to-latest button closes the window and shows the live log at its newest turn,
+  // which becomes current: a jumped-to turn stays current only while it stays put.
   await page.locator('#chat-scroll-bottom.show').click();
+  await win.waitFor({state:'hidden'});
   await page.waitForFunction(n => document.querySelectorAll('#tab-chat > .outline-rail .outline-tick')[n]?.classList.contains('active'), N - 1);
+  assert.equal(await log.evaluate(e => e.scrollHeight - e.scrollTop - e.clientHeight < 4), true, 'back at the bottom of the live log');
+  assert.equal(await log.locator('.msg.user').count(), PAGE);
+
+  // Sending from the window returns to the latest too, so the new message is in view.
+  await tick(far).click();
+  await win.waitFor({state:'visible'});
+  await page.locator('#chat-send').click();
+  await win.waitFor({state:'hidden'});
+
+  // The live log keeps receiving behind an open window; a reply that arrived meanwhile is
+  // there once back at the latest.
+  await tick(far).click();
+  await win.waitFor({state:'visible'});
+  send({type:'agent_event', event:{type:'assistant', message:{content:[{type:'text', text:'窗口开着时到达的回复'}]}}});
+  await page.waitForFunction(() => document.getElementById('chat-log').textContent.includes('窗口开着时到达的回复'));
+  assert.equal(await win.isVisible(), true, 'a live reply does not close the window');
+  assert.equal(await win.getByText('窗口开着时到达的回复').count(), 0, 'nor lands in it');
+  await page.locator('#chat-scroll-bottom.show').click();
+  await win.waitFor({state:'hidden'});
+  await log.getByText('窗口开着时到达的回复').waitFor();
+
+  // Scrolling down a window fetches the following pages up to where the live pages begin,
+  // then the window joins the live log as one conversation without moving the view.
+  await tick(far).click();
+  await win.waitFor({state:'visible'});
+  await landed(far);
+  for (let i = 0; i < 20 && await win.isVisible(); i++) {
+   await win.evaluate(e => { e.dispatchEvent(new WheelEvent('wheel')); e.scrollTop = e.scrollHeight; });
+   await page.waitForTimeout(150);
+  }
+  await win.waitFor({state:'hidden'});
+  const texts = await log.locator('.msg.user').allInnerTexts();
+  assert.deepEqual(texts, Array.from({length:N}, (_, i) => `第 ${i} 个问题`), 'the joined log holds every turn once, in order');
+  assert.equal(await log.locator('.chat-older').count(), 0, 'it starts at the first message');
+  const inView = await log.evaluate(l => [...l.querySelectorAll('.msg.user')].filter(m => { const r = m.getBoundingClientRect(), b = l.getBoundingClientRect(); return r.bottom > b.top && r.top < b.bottom; }).map(m => m.textContent));
+  assert.ok(inView.length && !inView.includes(`第 ${N - 1} 个问题`) && inView.every(t => Number(/\d+/.exec(t)[0]) < N - PAGE), 'joining keeps the view where the window was: '+inView);
+  assert.equal(requests.some(r => 'from' in r), false, 'no jump re-reads everything from the target to the newest');
 
   // Scrolling by hand moves the current tick with the reading position.
   await user(20).evaluate(e => { const l = document.getElementById('chat-log'); l.dispatchEvent(new WheelEvent('wheel')); l.scrollTop = e.parentElement.offsetTop - 40; });
@@ -280,7 +351,7 @@ export async function chatOutlineSmoke(page, { session, send }) {
   await rail.waitFor({state:'visible'});
   assert.equal(await page.evaluate(() => localStorage.getItem('agentbox_outline_rail')), null, 'auto is the default and is not stored');
   await page.keyboard.press('Escape');
-  console.log('Chat outline: ticks for unloaded pages, dock lift with two-tone colour, tip, jumps (loaded/unloaded/keyboard), live message, phone edge rail, drag/cancel, outline sheet and the auto/always/off preference passed');
+  console.log('Chat outline: ticks for unloaded pages, dock lift with two-tone colour, tip, jumps (loaded/keyboard), history window for far turns (loading tip, live log behind it, back to latest, joining on scroll), live message, phone edge rail, drag/cancel, outline sheet and the auto/always/off preference passed');
  } finally {
   await page.unroute(isHistory, history);
   await page.unroute(isOutline, outline);

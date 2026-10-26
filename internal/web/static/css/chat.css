@@ -50,6 +50,9 @@
 }
 .chat-older > [hidden] { display: none; }
 .chat-older.error { color: var(--text); }
+/* 历史窗口（window.ts）：刻度导航跳往没加载的较早消息时只放那一段，与实时对话流同款排版；
+ * 窗口开着时实时对话流藏在后面（.behind）照常接收新消息。底部的 .chat-newer 往后加载。 */
+.chat-log[hidden], .chat-log.behind { display: none; }
 
 /* 新消息淡入（历史加载在隐藏态完成，呈现时整体淡入一次） */
 .msg, .turn, .user-turn { animation: msg-in 0.2s ease-out; }
@@ -1672,6 +1675,9 @@ details.think.streaming .think-body::after {
 }
 .outline-tip-a { margin-top: 3px; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline-tip-a[hidden] { display: none; }
+/* 正在拉那一段（刻度闪烁期间）：浮层多一行加载提示，指针移开也留着 */
+.outline-tip-loading { display: none; align-items: center; gap: 6px; margin-top: 5px; font-size: 12.5px; color: var(--accent); }
+.outline-tip.pending .outline-tip-loading { display: flex; }
 
 /* 跳转到的消息闪一下 */
 .msg.user.outline-flash { animation: outline-flash 1.2s var(--ease-out); }

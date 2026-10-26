@@ -234,6 +234,28 @@ func (x *threadIndex) pageStart(f *os.File, end int, limits historyLimits) int {
 	return start
 }
 
+// pageEnd mirrors pageStart for the page beginning at start: it stops before
+// a user message once the soft limits are reached, splits a turn only past the
+// hard limits, and never runs past until.
+func (x *threadIndex) pageEnd(f *os.File, start, until int, limits historyLimits) int {
+	count, size, end := 0, 0, start
+	for end < until {
+		l := &x.lines[end]
+		if end > start && l.user && (count >= limits.Entries || size >= limits.Bytes) {
+			break
+		}
+		if l.sent {
+			count++
+		}
+		size += x.pageSize(f, end)
+		end++
+		if count >= limits.MaxEntries || size >= limits.MaxBytes {
+			break
+		}
+	}
+	return end
+}
+
 // within reports whether lines[from:] fit count rendered entries and size bytes.
 func (x *threadIndex) within(f *os.File, from, count, size int) bool {
 	n, total := 0, 0
