@@ -54,7 +54,7 @@ export async function updateComponentsSmoke(page){
  }finally{
   for(const release of pending.splice(0))release();page.off('request',requests);
   await page.unroute('**/api/updates/components',handler);
-  await page.evaluate(async()=>{(await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage('zh-CN');location.hash='#/settings/accounts';});
+  await evaluateSettled(page,async()=>{(await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage('zh-CN');location.hash='#/settings/accounts';});
   await page.locator('#sec-accounts').waitFor({state:'visible'});
  }
 }
