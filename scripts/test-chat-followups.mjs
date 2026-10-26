@@ -201,6 +201,7 @@ async function scenario(browser,{mobile}={}){
  // used to lose its second line under a one-line box.
  const inputLines=()=>input.evaluate(el=>{const cs=getComputedStyle(el);return Math.round((el.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom))/parseFloat(cs.lineHeight));});
  const placeholderLines=()=>input.evaluate(el=>{const p=el.cloneNode();p.removeAttribute('id');p.value=el.placeholder;p.style.cssText=`position:absolute;visibility:hidden;height:0;min-height:0;width:${el.offsetWidth}px`;el.after(p);const cs=getComputedStyle(el),h=p.scrollHeight;p.remove();return Math.round((h-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom))/parseFloat(cs.lineHeight));});
+ if(shots)await page.locator('.composer').screenshot({path:`${shots}/${mobile?'mobile':'desktop'}-paused.png`});
  if(mobile)assert.ok(await placeholderLines()>1,'the pause note wraps on a phone');
  assert.equal(await inputLines(),await placeholderLines(),'composer shows every line of the pause note');
  await input.fill('重置后接着做');await page.locator('#chat-send').click();await cleared();
