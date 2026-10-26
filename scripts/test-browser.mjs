@@ -376,6 +376,8 @@ export async function smoke(page) {
   assert.equal(await page.locator('.topbar .usage-zone').isVisible(),true,'time zone in the top bar');
   assert.equal(await page.locator('.usage-head').isVisible(),false,'usage header row hidden on phones');
   await page.setViewportSize({width:1280,height:900});
+  // responsive.ts moves it on the media query's change event, which may land after the resize returns
+  await page.locator('.usage-head .usage-zone').waitFor({state:'visible',timeout:3000}).catch(()=>{});
   assert.equal(await page.locator('.usage-head .usage-zone').isVisible(),true,'time zone back in the header on desktop');
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(()=>{location.hash='#/';});
