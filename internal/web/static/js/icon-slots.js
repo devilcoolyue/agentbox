@@ -72,6 +72,7 @@ export const ICON_SLOTS = {
     "chat.tool-image": { group: "chat", label: "查看图片", icon: "tabler:photo" },
     "chat.tool-image-gen": { group: "chat", label: "生成图片", icon: "tabler:photo-ai" },
     "chat.plan": { group: "chat", label: "计划", icon: "tabler:list-check" },
+    "chat.outline": { group: "chat", label: "对话目录", icon: "tabler:list-details" },
     "chat.task-done": { group: "chat", label: "任务完成勾选", base: "check" },
     "chat.user": { group: "chat", label: "用户头像", base: "user" },
     "chat.copy-message": { group: "chat", label: "复制消息", base: "copy" },

@@ -232,7 +232,7 @@ func (s *Server) threadTitleSource(sess store.Session, tid string) (firstMsg str
 	}
 	defer f.Close()
 	if len(x.messages) > 0 {
-		if e, err := x.entry(f, x.messages[0]); err == nil {
+		if e, err := x.entry(f, x.messages[0].line); err == nil {
 			firstMsg = e.meta.Text
 		}
 	}
@@ -453,14 +453,33 @@ var historyPage = historyLimits{
 // contents; only their slim copy (historyTool) is sent. Thinking token counts
 // that older builds stored render nothing and are not sent at all.
 func historySent(e *histEntry) bool {
+	sent, _ := historyEvent(e)
+	return sent
+}
+
+// historyEvent is historySent plus whether the event carries answer text for
+// the thread outline (see answerKind). One decode serves both: the index
+// already decodes every event line to tell what a page sends. The answer
+// fields stay raw so a type mismatch there cannot change what is sent.
+func historyEvent(e *histEntry) (sent bool, answer answerKind) {
 	if e.meta.Kind != "event" {
-		return true
+		return true, noAnswer
 	}
 	var ev struct {
-		Type    string `json:"type"`
-		Subtype string `json:"subtype"`
+		Type    string          `json:"type"`
+		Subtype string          `json:"subtype"`
+		Result  json.RawMessage `json:"result"`
+		Message json.RawMessage `json:"message"`
+		Item    json.RawMessage `json:"item"`
 	}
-	return json.Unmarshal(e.meta.Event, &ev) != nil || ev.Type != "user" && !agent.IsThinkingProgress(ev.Type, ev.Subtype)
+	if json.Unmarshal(e.meta.Event, &ev) != nil {
+		return true, noAnswer
+	}
+	sent = ev.Type != "user" && !agent.IsThinkingProgress(ev.Type, ev.Subtype)
+	if text, kind := eventAnswer(ev.Type, ev.Result, ev.Message, ev.Item); strings.TrimSpace(text) != "" {
+		answer = kind
+	}
+	return sent, answer
 }
 
 // historyTool is the slim copy of a tool result entry, nil for other entries.

@@ -19,7 +19,7 @@ STEPS = [
     step('go.server', 'offline', ['{python}', 'scripts/verify.py', '_go_server'], 'Server tests; Linux non-root uses sudo -n only for the test executable.'),
     step('web.types', 'offline', ['npm', 'run', 'check'], 'TypeScript type checking.', requires=['node_modules/.bin/tsc']),
     step('web.artifacts', 'offline', ['{python}', 'scripts/verify.py', '_web_artifacts'], 'Rebuild and compare complete JS inventory/bytes with the starting worktree.', requires=['node_modules/.bin/tsc']),
-    *[step('web.'+name, 'offline', ['npm','run','test:'+name], 'Synthetic '+name+' contract/catalog checks.') for name in ['i18n','problems','diagnostics','drafts','outbox','contracts','chat-history','feature-lifetimes','icons']],
+    *[step('web.'+name, 'offline', ['npm','run','test:'+name], 'Synthetic '+name+' contract/catalog checks.') for name in ['i18n','problems','diagnostics','drafts','outbox','contracts','chat-history','outline','feature-lifetimes','icons']],
     *[step('policy.'+name, 'offline', ['{python}','scripts/test-'+name+'.py'], 'Local synthetic policy regression; not real systemd or installation.') for name in ['browser-runtime','deployment','update','install','uninstall','image-policy','repair-claude-cumulative']],
     step('policy.tool-storage', 'offline', ['{python}','scripts/test-tool-storage.py'], 'Shared-tool publisher integrity, atomic publication and archive/symlink boundaries.'),
     step('policy.shell', 'offline', ['{python}','scripts/verify.py','_shell'], 'Shell syntax checks.'),
@@ -29,7 +29,7 @@ STEPS = [
     step('ui.usage', 'browser', ['node','scripts/test-browser.mjs'], 'Usage rows, delegation attribution, filtering, CSV and narrow layout; synthetic API, no Docker/provider.', requires=['node_modules/.bin/tsc'], env={'AGENTBOX_BROWSER_ONLY_USAGE':'1'}),
     *[step('webkit.'+name, 'browser', ['node','scripts/test-'+name+'.mjs'], 'Same synthetic-API scenario in Playwright WebKit; not real Safari, iOS or a device.', env={'AGENTBOX_BROWSER_ENGINE':'webkit'}, requires=['node_modules/.bin/tsc']) for name in ['browser','onboarding','chat-drafts','chat-outbox']],
     step('ui.image-update-gate', 'browser', ['node','scripts/test-browser.mjs'], 'Focused candidate-update UI, preceded by diagnostics/problem fixtures; synthetic API, three languages and narrow layout.', env={'AGENTBOX_BROWSER_ONLY_IMAGE_UPDATES':'1'}),
-    step('ui.chat-history', 'browser', ['node','scripts/test-browser.mjs'], 'History settings/defaults/save/reload/deadline, three languages and narrow layout; pagination/scroll/split turns/retry/reconnect. Synthetic API, no Docker/provider.', env={'AGENTBOX_BROWSER_ONLY_CHAT_PAGES':'1'}, requires=['node_modules/.bin/tsc']),
+    step('ui.chat-history', 'browser', ['node','scripts/test-browser.mjs'], 'History settings/defaults/save/reload/deadline, three languages and narrow layout; pagination/scroll/split turns/retry/reconnect; conversation rail (hover/jump/phone sheet). Synthetic API, no Docker/provider.', env={'AGENTBOX_BROWSER_ONLY_CHAT_PAGES':'1'}, requires=['node_modules/.bin/tsc']),
     step('integration.chat', 'browser', ['node','scripts/test-chat-integration.mjs'], 'Real local agentbox binary/API/SQLite with synthetic Docker/CLI output; native non-root asserts attachment chown denial. Use docker.chat-reliability for the full Linux matrix.'),
     step('docker.chat-reliability', 'docker', ['node','scripts/test-chat-integration.mjs','--linux','--image','{image}'], 'Actual Linux server process, crash/restart, browser HTTP/WS and ledger; synthetic Docker/CLI sidecar, temporary volume, no provider.'),
     step('audit.licenses', 'offline', ['{python}','scripts/verify-third-party.py'], 'Check bundled bytes and the linked-module license inventory.'),
@@ -101,10 +101,10 @@ EXTERNAL = {
     'desktop/src-tauri/src/credentials.rs': 'native/manual: AGENTBOX_CREDENTIAL_TEST=1 touches the OS credential store; isolated runner only',
 }
 
-BROWSER_HELPERS = ['feature-lifetimes-browser','actions','chat-footer','chat-context','chat-commands','chat-mentions','chat-tasks','chat-codex-items','chat-claude-tools','chat-pages','diagnostics-browser','image-updates','update-components','mcp','pricing','problems-browser','remote-browser','responsive','skins','themes','icon-manager','switch-account','keepalive','account-models','user-picker','user-storage','term-touch','term-clipboard','motion','extensions','announcement']
+BROWSER_HELPERS = ['feature-lifetimes-browser','actions','chat-footer','chat-context','chat-commands','chat-mentions','chat-tasks','chat-codex-items','chat-claude-tools','chat-pages','chat-outline','diagnostics-browser','image-updates','update-components','mcp','pricing','problems-browser','remote-browser','responsive','skins','themes','icon-manager','switch-account','keepalive','account-models','user-picker','user-storage','term-touch','term-clipboard','motion','extensions','announcement']
 COVERED = {f'scripts/test-{name}.mjs':'browser.browser' for name in BROWSER_HELPERS}
 COVERED['scripts/test-remote-browser-live.mjs']='docker.remote-browser'
 COVERED['desktop/scripts/test-legacy-browser.mjs']='desktop.compat'
 
 # npm wrappers are catalogued here as parents, not duplicated in the self-test.
-COVERED.update({f'scripts/test-{name}.mjs': 'web.'+name for name in ['i18n','problems','diagnostics','drafts','outbox','contracts','chat-history','feature-lifetimes','icons']})
+COVERED.update({f'scripts/test-{name}.mjs': 'web.'+name for name in ['i18n','problems','diagnostics','drafts','outbox','contracts','chat-history','outline','feature-lifetimes','icons']})

@@ -2904,4 +2904,10 @@ export default {
     "已删除，上限已释放": "deleted, limits released",
     "留下的文件仍计入存储预算，运维清理后才腾出": "Leftover files still count against the storage budget until an operator cleans them up",
     "（留下的文件）": " (leftover files)",
+    "对话导航": "Conversation navigation",
+    "对话目录": "Conversation outline",
+    "[图片]": "[Image]",
+    "[附件]": "[Attachment]",
+    "第 {n} 轮：{q}": "Turn {n}: {q}",
+    "共 {n} 轮": "{n} turns",
 };

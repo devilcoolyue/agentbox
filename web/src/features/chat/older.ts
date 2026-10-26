@@ -52,9 +52,10 @@ export function createOlderHistory(hooks: {
     observer.observe(bar);
   }
 
-  async function load() {
+  /** 拉上一页插到顶部；插进去了返回 true */
+  async function load(): Promise<boolean> {
     const c = cursor;
-    if (!c || !c.more || busy) return;
+    if (!c || !c.more || busy) return false;
     const mine = busy = ++seq;
     show("loading");
     try {
@@ -73,10 +74,11 @@ export function createOlderHistory(hooks: {
           // 按距底部的距离还原，上方插入或移走多少内容视口都停在原处（不依赖 overflow-anchor，Safari 没有）
           log.scrollTop = log.scrollHeight - fromBottom;
         });
-      if (result.state === "stale" || cursor !== c) return;
-      if (result.state === "failed") { show("error"); return; }
+      if (result.state === "stale" || cursor !== c) return false;
+      if (result.state === "failed") { show("error"); return false; }
       if (c.more) { show("idle"); watch(); }
       hooks.changed();
+      return true;
     } finally {
       if (busy === mine) busy = 0;
     }
@@ -109,6 +111,11 @@ export function createOlderHistory(hooks: {
       observer = undefined;
     },
     /** 当前已显示内容的起点：重连补拉时只刷新这一段，保留已加载的较早内容 */
+    /** 刻度导航跳往更早的位置时逐页往前拉；正在拉的那一页先等它落定 */
+    async more(): Promise<boolean> {
+      while (busy) await new Promise(r => setTimeout(r, 50));
+      return load();
+    },
     cursor(): PageCursor | null {
       return cursor && cursor.session === hooks.session() ? { thread: cursor.thread, start: cursor.start } : null;
     },

@@ -173,6 +173,7 @@ export function renderUserTurn(text: string | undefined, ts?: string) {
   const str = String(text ?? "");
   const row = document.createElement("div");
   row.className = "user-turn";
+  if (ts) row.dataset.ts = ts; // 刻度导航按发送时间找到这条消息（features/chat/outline.ts）
   const main = document.createElement("div");
   main.className = "user-main";
   const actions = document.createElement("div");

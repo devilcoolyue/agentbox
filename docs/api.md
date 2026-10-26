@@ -100,6 +100,7 @@ POST   /api/sessions/{id}/git/discard 丢弃改动 {path?, repo?}（省略 path=
 GET    /api/sessions/{id}/history   当前对话线程最新一页历史（含线程元数据）；按整回合分页，返回 start/has_more
                                     ?thread=&before=<start> 取该线程更早一页（返回 thread_id）
                                     ?thread=&from=<start> 重连时从已加载起点重读，过大或失效回到最新一页
+GET    /api/sessions/{id}/outline   对话线程的全部用户消息及回答摘录（?thread= 指定线程，默认当前）；line 即历史游标，供侧边刻度导航
 GET    /api/sessions/{id}/chat/threads              对话线程列表（标题/时间/轮数/是否可续聊）
 POST   /api/sessions/{id}/chat/threads              开启新对话线程（旧线程保留可切回）
 POST   /api/sessions/{id}/chat/threads/{tid}/activate  切换到指定线程并恢复其上下文

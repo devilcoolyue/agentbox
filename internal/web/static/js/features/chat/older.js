@@ -37,10 +37,11 @@ export function createOlderHistory(hooks) {
         observer.unobserve(bar);
         observer.observe(bar);
     }
+    /** 拉上一页插到顶部；插进去了返回 true */
     async function load() {
         const c = cursor;
         if (!c || !c.more || busy)
-            return;
+            return false;
         const mine = busy = ++seq;
         show("loading");
         try {
@@ -60,16 +61,17 @@ export function createOlderHistory(hooks) {
                 log.scrollTop = log.scrollHeight - fromBottom;
             });
             if (result.state === "stale" || cursor !== c)
-                return;
+                return false;
             if (result.state === "failed") {
                 show("error");
-                return;
+                return false;
             }
             if (c.more) {
                 show("idle");
                 watch();
             }
             hooks.changed();
+            return true;
         }
         finally {
             if (busy === mine)
@@ -107,6 +109,12 @@ export function createOlderHistory(hooks) {
             observer = undefined;
         },
         /** 当前已显示内容的起点：重连补拉时只刷新这一段，保留已加载的较早内容 */
+        /** 刻度导航跳往更早的位置时逐页往前拉；正在拉的那一页先等它落定 */
+        async more() {
+            while (busy)
+                await new Promise(r => setTimeout(r, 50));
+            return load();
+        },
         cursor() {
             return cursor && cursor.session === hooks.session() ? { thread: cursor.thread, start: cursor.start } : null;
         },

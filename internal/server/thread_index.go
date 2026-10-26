@@ -40,9 +40,9 @@ type threadIndex struct {
 	first       string // first user message, already truncated for the fallback title
 	title       string // newest non-empty title entry
 
-	// threadTitleSource inputs: user lines still counted as messages (a reply
-	// the CLI produced locally removes the message before it).
-	messages []int
+	// threadTitleSource and outline inputs: user lines still counted as
+	// messages (a reply the CLI produced locally removes the message before it).
+	messages []threadMessage
 	used     time.Time
 }
 
@@ -94,7 +94,8 @@ func (x *threadIndex) add(off int64, l []byte) {
 	if !ok {
 		return
 	}
-	x.lines = append(x.lines, threadLine{off: off, size: int32(len(l)), sent: historySent(&e), user: e.meta.Kind == "user"})
+	sent, answer := historyEvent(&e)
+	x.lines = append(x.lines, threadLine{off: off, size: int32(len(l)), sent: sent, user: e.meta.Kind == "user"})
 	if x.ts.IsZero() && !e.meta.TS.IsZero() {
 		x.ts = e.meta.TS
 	}
@@ -108,9 +109,12 @@ func (x *threadIndex) add(off int64, l []byte) {
 		if x.turns == 1 {
 			x.first = truncRunes(e.meta.Text, 120)
 		}
-		x.messages = append(x.messages, len(x.lines)-1)
+		x.messages = append(x.messages, threadMessage{line: len(x.lines) - 1, reply: -1})
 	case "event":
 		x.sent = true
+		if n := len(x.messages); n > 0 && answer != noAnswer {
+			x.messages[n-1].observe(len(x.lines)-1, answer)
+		}
 	case "status":
 		if e.meta.Local && len(x.messages) > 0 {
 			x.messages = x.messages[:len(x.messages)-1]
@@ -145,7 +149,7 @@ func (x *threadIndex) unchanged(f *os.File) bool {
 func (x *threadIndex) clone() *threadIndex {
 	y := *x
 	y.lines = append([]threadLine(nil), x.lines...)
-	y.messages = append([]int(nil), x.messages...)
+	y.messages = append([]threadMessage(nil), x.messages...)
 	return &y
 }
 

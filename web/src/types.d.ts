@@ -1319,6 +1319,22 @@ export interface History {
   has_more?: boolean;
 }
 
+/** GET /api/sessions/{id}/outline: every user message of a thread with an
+ * excerpt of its answer, for the navigation rail beside the conversation. */
+export interface ThreadOutline {
+  thread_id: string;
+  items: OutlineItem[];
+}
+export interface OutlineItem {
+  /** history cursor of the message (?thread=&from=) */
+  line: number;
+  /** the message's timestamp; matches the rendered .user-turn's data-ts */
+  ts: string;
+  text: string;
+  /** the turn's answer so far (final result, else the last assistant text) */
+  answer?: string;
+}
+
 /** GET /api/sessions/{id}/chat/threads */
 export interface ThreadList {
   threads: Thread[];

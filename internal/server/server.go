@@ -534,6 +534,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/sessions/{id}/git/push", s.auth(s.gitOperation("push", s.withSession(s.handleGitPush))))
 	mux.Handle("POST /api/sessions/{id}/git/discard", s.auth(s.gitOperation("discard", s.withSession(s.handleGitDiscard))))
 	mux.Handle("GET /api/sessions/{id}/history", s.auth(s.withSession(s.handleHistory)))
+	mux.Handle("GET /api/sessions/{id}/outline", s.auth(s.withSession(s.handleOutline)))
 	mux.Handle("GET /api/sessions/{id}/browser", s.auth(s.withSession(s.handleBrowser)))
 	mux.Handle("POST /api/sessions/{id}/browser", s.auth(s.withSession(s.handleBrowser)))
 	mux.Handle("DELETE /api/sessions/{id}/browser", s.auth(s.withSession(s.handleBrowser)))

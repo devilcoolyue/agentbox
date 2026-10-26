@@ -15,6 +15,7 @@
     "test:outbox": "node --test scripts/test-outbox.mjs",
     "test:contracts": "python3 scripts/generate-contracts.py --check && node --test scripts/test-contracts.mjs",
     "test:chat-history": "node --test scripts/test-chat-history.mjs",
+    "test:outline": "node --test scripts/test-outline.mjs",
     "test:feature-lifetimes": "node --test scripts/test-feature-lifetimes.mjs",
     "test:icons": "node --test scripts/test-icons.mjs"
   },

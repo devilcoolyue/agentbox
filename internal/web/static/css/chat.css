@@ -1593,3 +1593,133 @@ details.think.streaming .think-body::after {
   .qa-other-input { flex-basis: 100%; }
   .qa-actions .btn { flex: 1; }
 }
+
+/* ---- 刻度导航（features/chat/outline.ts）：对话流旁一条用户消息一根短横线。
+ * 桌面在内容栏左侧留白里，鼠标划过时像程序坞一样鼓起（只变长）；颜色只分两档：
+ * 指着的（.hot）和当前阅读位置（.active）用正文色，其余一律同一灰色。
+ * 手机挪到右边缘（左边缘是 Safari 的返回手势），滚动时浮现、按住拖动预览。 ---- */
+.outline-rail {
+  position: absolute; z-index: 6;
+  left: max(6px, calc((100% - 800px) / 2 - 64px));
+  width: 44px; padding: 12px 0;
+  transform: translateY(-50%);
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.outline-rail[hidden] { display: none; }
+.outline-track { position: relative; overflow: hidden; }
+/* 放不下全部刻度时只显示一段，上下两端渐隐 */
+.outline-rail.windowed .outline-track {
+  -webkit-mask-image: linear-gradient(transparent, #000 22px, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(transparent, #000 22px, #000 calc(100% - 22px), transparent);
+}
+.outline-inner { position: absolute; left: 0; right: 0; top: 0; transition: transform var(--dur) var(--ease-out); }
+.outline-rail.dragging .outline-inner { transition: none; }
+.outline-tick {
+  position: absolute; left: 0; width: 100%;
+  display: flex; align-items: center;
+  padding: 0; border: 0; background: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.outline-tick > i {
+  display: block; width: var(--tick-max); height: 2px; border-radius: 1px;
+  background: var(--text); opacity: .32;
+  transform-origin: left center; transform: scaleX(.36);
+  transition: transform .2s var(--ease-out), opacity var(--dur-fast) ease;
+}
+/* 指针在刻度上移动时每帧都在改线长，过渡缩短到跟手 */
+.outline-rail.dock .outline-tick > i { transition-duration: 70ms, var(--dur-fast); }
+.outline-tick.active > i, .outline-tick.hot > i { opacity: 1; }
+.outline-tick.loading > i { background: var(--accent); opacity: 1; animation: outline-pulse .5s ease-in-out infinite alternate; }
+@keyframes outline-pulse { from { opacity: .35; } to { opacity: 1; } }
+
+.outline-rail.mobile {
+  left: auto; right: 0; width: 34px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s ease;
+}
+.outline-rail.mobile.awake, .outline-rail.mobile.dragging { opacity: 1; pointer-events: auto; }
+.outline-rail.mobile .outline-tick { justify-content: flex-end; padding-right: 7px; }
+.outline-rail.mobile .outline-tick > i { transform-origin: right center; }
+/* 拖动时在刻度后面垫一层底色，鼓起的线压在正文上也看得清 */
+.outline-rail.mobile.dragging::before {
+  content: ""; position: absolute; z-index: -1; inset: -40px 0 -40px -40px; pointer-events: none;
+  background: linear-gradient(to left, color-mix(in srgb, var(--bg) 85%, transparent) 30%, transparent);
+}
+
+/* 摘要浮层：问题原文（最多三行）+ 回答第一句 */
+.outline-tip {
+  position: absolute; left: 0; top: 0; z-index: 7;
+  width: max-content; max-width: min(360px, calc(100% - 24px));
+  padding: 9px 13px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line); border-radius: calc(11px * var(--radius-scale));
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  opacity: 0; visibility: hidden;
+  transform: translate(var(--x, 0), var(--y, 0)) scale(.97);
+  transition: opacity var(--dur-fast) ease, visibility var(--dur-fast), transform .14s var(--ease-out);
+}
+.outline-tip.show { opacity: 1; visibility: visible; transform: translate(var(--x, 0), var(--y, 0)); }
+/* 第一次出现直接落在刻度旁，之后才跟着刻度滑动 */
+.outline-tip.instant { transition: opacity var(--dur-fast) ease, visibility var(--dur-fast); }
+.outline-tip.cancel { opacity: .4; }
+.outline-tip.mobile { max-width: min(280px, calc(100% - 60px)); }
+.outline-tip-q {
+  font-size: 13.5px; line-height: 1.55; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.outline-tip-a { margin-top: 3px; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.outline-tip-a[hidden] { display: none; }
+
+/* 跳转到的消息闪一下 */
+.msg.user.outline-flash { animation: outline-flash 1.2s var(--ease-out); }
+@keyframes outline-flash {
+  0%, 35% {
+    background: color-mix(in srgb, var(--accent) 18%, var(--panel-2));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
+
+/* 手机线程栏里的「对话目录」按钮（有刻度时才出现），把新建对话挤到最右 */
+.outline-toc[hidden] { display: none; }
+.outline-toc { margin-left: auto; width: 36px; height: 36px; }
+.outline-toc:not([hidden]) + .thread-new { margin-left: 0; }
+
+/* 手机「对话目录」：底部抽屉 */
+dialog.dlg-outline { --dlg-pad-y: 0px; --dlg-pad-x: 0px; width: min(520px, 100vw); }
+.dlg-outline > .dlg-head { align-items: center; gap: 8px; margin: 0; padding: 14px 10px 12px 18px; }
+.dlg-outline .dlg-head h2 { font-size: 15px; }
+.outline-count { margin-left: auto; color: var(--muted); font-size: 12.5px; }
+.outline-list { margin: 0; padding: 6px 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.outline-item {
+  display: flex; gap: 8px; width: 100%;
+  padding: 10px; text-align: left;
+  border: 0; border-radius: calc(10px * var(--radius-scale));
+  background: none; color: var(--text); font: inherit; cursor: pointer;
+}
+.outline-item:hover { background: var(--panel-2); }
+.outline-item.current { background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); }
+.outline-item-n { flex: none; width: 2.8em; padding-top: 2px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.outline-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.outline-item-q {
+  font-size: 14px; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.outline-item-a { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 760px) {
+  dialog.dlg-outline {
+    --dlg-from: translateY(40%);
+    margin: auto 0 0; width: 100%; max-width: 100%;
+    max-height: 72vh; max-height: 72dvh;
+    border-bottom: 0;
+    border-radius: calc(16px * var(--radius-scale)) calc(16px * var(--radius-scale)) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .outline-inner, .outline-tick > i, .outline-tip, .outline-rail.mobile { transition: none; }
+  .outline-tick.loading > i { animation: none; }
+}

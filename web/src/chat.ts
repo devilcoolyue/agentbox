@@ -8,7 +8,7 @@ import { actionButton, buttonLabel } from "./icons.js";
 import { S, bus, emit } from "./state.js";
 import type { Pick } from "./state.js";
 import type {
-  APIProblem, ChatMessage, ChatTasksView, FileMentionsView, History, ModelOption, QuestionView, QuotaPause, ReasoningCapability, SessionModels, SlashCommandsView, SteerView,
+  APIProblem, ChatMessage, ChatTasksView, FileMentionsView, History, ModelOption, QuestionView, QuotaPause, ReasoningCapability, SessionModels, SlashCommandsView, SteerView, ThreadOutline,
 } from "./types.js";
 import { $, fmtClock, fmtElapsed, spinEl, insertAtCursor, openLightbox, isMobile, onMobileChange, askPrompt, toast, isImeEnter, enterInsertsNewline } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
@@ -32,6 +32,7 @@ import { ChatSender } from "./features/chat/sender.js";
 import { createChatStream } from "./features/chat/stream.js";
 import { ChatHistory } from "./features/chat/history.js";
 import { createOlderHistory } from "./features/chat/older.js";
+import { createOutline } from "./features/chat/outline.js";
 import { settleToolRows } from "./features/chat/tool-rows.js";
 import { TurnWriter, replayHistory } from "./features/chat/turns.js";
 import { createBackground } from "./features/chat/background.js";
@@ -178,6 +179,7 @@ export function chatTeardown() {
   contextMeter.reset();
   keepaliveChip.reset();
   tasks.reset();
+  outline.reset();
   setChatStatus("idle");
 }
 
@@ -226,6 +228,7 @@ function handleChatMsg(msg: ChatMessage) {
       const userTurn = renderUserTurn(msg.text, msg.ts);
       if (shown) userTurn.classList.add("from-pending"); // 原地换上，不再淡入一次
       appendChat(userTurn);
+      outline.add(msg.ts, msg.text);
       live.context.turn = msg.turn;
       break;
     case "agent_event": {
@@ -314,7 +317,7 @@ function handleChatMsg(msg: ChatMessage) {
         }, { once: true });
         appendChat(retry);
       }
-      if (msg.state === "idle" || msg.state === "error" || msg.state === "interrupted") refreshAll();
+      if (msg.state === "idle" || msg.state === "error" || msg.state === "interrupted") { refreshAll(); outline.refreshSoon(); }
       break;
     case "error":
       appendChat(chip(formatProblem(msg, i18nText), "err"));
@@ -1041,7 +1044,17 @@ const older = createOlderHistory({
     settleToolRows(box);
     return box;
   },
-  changed: updateScrollBottomButton,
+  changed: () => { updateScrollBottomButton(); outline.changed(); },
+});
+/* 对话流旁的刻度导航：整个线程一根消息一根刻度，可跳往还没加载的较早位置 */
+const outline = createOutline({
+  log: () => $("chat-log"),
+  pane: () => $("tab-chat"),
+  tocBefore: () => $("btn-thread-new"),
+  session: () => S.current?.id,
+  read: (path, signal) => api<ThreadOutline>(path, { signal }),
+  loadFrom: line => loadHistory({ silent: true, from: line }),
+  loadOlder: () => older.more(),
 });
 function cancelHistoryLoad() {
   history.cancel();
@@ -1053,14 +1066,18 @@ function cancelHistoryLoad() {
 /* opts.silent：重连后的对齐式补拉——不显示加载态（页面已有内容，闪一下
  * 加载中反而像出了故障），拉到后整体替换对话流以补上断线期间错过的事件，
  * 并保持用户原本的阅读位置（除非本来就贴着底）。正在回看时连同已加载的
- * 较早几页一起重拉（from=已显示内容的起点），贴底时只要最新一页。 */
-export async function loadHistory(opts: { silent?: boolean } = {}) {
-  const sess = S.current; if (!sess) return;
+ * 较早几页一起重拉（from=已显示内容的起点），贴底时只要最新一页。
+ * opts.from：刻度导航跳往还没加载的消息，从它（历史游标）起重拉到最新；
+ * 返回拿到的是否正是从那里起的内容（服务端嫌范围太大会退回最新一页）。 */
+export async function loadHistory(opts: { silent?: boolean; from?: number } = {}): Promise<boolean> {
+  const sess = S.current; if (!sess) return false;
   const silent = !!opts.silent;
   const log = $("chat-log");
-  const wasAtBottom = silent ? nearBottom(log) : true;
+  const wasAtBottom = opts.from !== undefined ? false : silent ? nearBottom(log) : true;
   const prevScroll = log.scrollTop;
-  const keep = wasAtBottom ? null : older.cursor();
+  const cur = older.cursor();
+  const keep = opts.from !== undefined && cur ? { thread: cur.thread, start: Math.min(opts.from, cur.start) }
+    : wasAtBottom ? null : cur;
   older.pause();
   if (!silent) {
     S.histLoading = true;
@@ -1110,8 +1127,10 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
     // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效
     kept = !!keep && keep.thread === id && keep.start === start;
     older.reset(id && typeof start === "number" ? { thread: id, start, more: !!has_more && start > 0 } : null);
+    outline.changed();
+    void outline.load(id || "");
   });
-  if (result.state === "stale" || !result.current()) return;
+  if (result.state === "stale" || !result.current()) return false;
   if (result.state === "failed" && !silent) {
     S.histError = result.timedOut ? i18nText("历史对话加载超时")
       : i18nText("历史对话加载失败：") + ((result.error as Error).message || i18nText("未知错误"));
@@ -1122,6 +1141,7 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
     log.scrollTop = wasAtBottom || (keep && !kept) ? log.scrollHeight : prevScroll;
     updateScrollBottomButton();
   }
+  return result.state === "loaded" && kept;
 }
 
 /* 对话线程发生切换（本端操作经 bus，或其它页面广播）后重载对话流 */
@@ -1138,6 +1158,7 @@ export async function reloadThread() {
   live.reset();
   contextMeter.reset();
   tasks.reset();
+  outline.reset();
   $("chat-log").replaceChildren();
   setThreadBar(null);
   await loadHistory();
