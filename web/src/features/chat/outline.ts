@@ -208,11 +208,17 @@ export function createOutline(hooks: {
 
   /* ---------- 当前阅读位置 ---------- */
   let active = -1;
-  let pinned: number | null = null; // 跳转目标的发送时间：用户自己滚动前一直算它
+  /* 跳转目标钉成「当前」：被点的那轮很短或在最底下时，按阅读位置算会落到别的轮上。
+   * 只钉到它还停在跳过去的位置为止——at 是落定后它离视口顶的距离（途中为 null）。
+   * 顶部插入更早一页时阅读位置被平移保持，它不动、照样钉着；用户滚动、「滚到最新」
+   * 按钮或别的代码把它挪开了，就回到按阅读位置算。 */
+  let pinned: { ms: number; at: number | null } | null = null;
+  const offsetOf = (el: HTMLElement) => el.offsetTop - hooks.log().scrollTop;
   function computeActive() {
-    if (pinned !== null) {
-      const i = byMs.get(pinned);
-      if (i !== undefined) return i;
+    if (pinned) {
+      const i = byMs.get(pinned.ms), el = i === undefined ? null : marks[i].el;
+      if (i !== undefined && (pinned.at === null || (el && Math.abs(offsetOf(el) - pinned.at) <= 4))) return i;
+      pinned = null;
     }
     if (!loaded.length) return -1;
     const log = hooks.log();
@@ -440,13 +446,13 @@ export function createOutline(hooks: {
       stop() { cancelAnimationFrame(frame); frame = 0; },
       /* 每帧重新量目标位置、按剩余距离的一截逼近：途中顶部插入更早一页（阅读位置会被
        * 平移保持）也照样落到目标上，不会像浏览器的平滑滚动那样被打断 */
-      to(log: HTMLElement, target: () => number) {
+      to(log: HTMLElement, target: () => number, done: () => void) {
         this.stop();
         let frames = 0;
         const step = () => {
           const goal = Math.min(target(), log.scrollHeight - log.clientHeight);
           const left = goal - log.scrollTop;
-          if (Math.abs(left) < 1 || ++frames > 48) { log.scrollTop = goal; frame = 0; return; }
+          if (Math.abs(left) < 1 || ++frames > 48) { log.scrollTop = goal; frame = 0; done(); return; }
           log.scrollTop += left * 0.22;
           frame = requestAnimationFrame(step);
         };
@@ -468,8 +474,11 @@ export function createOutline(hooks: {
     if (!el) return;
     const log = hooks.log();
     const target = () => Math.max(0, el.offsetTop - log.clientHeight * JUMP_TOP);
-    if (instant || motionOff()) { anim.stop(); log.scrollTop = target(); }
-    else anim.to(log, target);
+    // 落定后记下目标离视口顶多远，钉住到它被挪开为止（见 pinned）
+    const ms = marks[i].ms;
+    const settle = () => { if (pinned && pinned.ms === ms && el.isConnected) pinned.at = offsetOf(el); };
+    if (instant || motionOff()) { anim.stop(); log.scrollTop = target(); settle(); }
+    else anim.to(log, target, settle);
     flash(el);
   }
 
@@ -477,7 +486,7 @@ export function createOutline(hooks: {
     const m = marks[i];
     if (!m) return;
     const seq = ++jumpSeq, ms = m.ms;
-    pinned = ms;
+    pinned = { ms, at: null };
     updateActive();
     if (!m.el?.isConnected) resolve();
     if (marks[i]?.el) return scrollTo(i, false);

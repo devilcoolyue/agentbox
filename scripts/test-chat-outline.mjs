@@ -140,6 +140,11 @@ export async function chatOutlineSmoke(page, { session, send }) {
   }, far + 2);
   await page.keyboard.press('Escape');
 
+  // A jumped-to turn stays current only while it stays put: the scroll-to-latest button
+  // (outside the log, so no hand-scroll event) still moves the current tick to the newest turn.
+  await page.locator('#chat-scroll-bottom.show').click();
+  await page.waitForFunction(n => document.querySelectorAll('#tab-chat > .outline-rail .outline-tick')[n]?.classList.contains('active'), N - 1);
+
   // Scrolling by hand moves the current tick with the reading position.
   await user(20).evaluate(e => { const l = document.getElementById('chat-log'); l.dispatchEvent(new WheelEvent('wheel')); l.scrollTop = e.parentElement.offsetTop - 40; });
   const handScrolledAt = Date.now();
