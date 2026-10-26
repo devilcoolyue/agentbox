@@ -1024,13 +1024,21 @@ export async function smoke(page) {
   sessions = [];
   // The boot screen shows its mascot while main.js and its module graph are
   // still downloading (an empty cache), and main.js does not stamp it twice.
-  const slowMain = async route => { await new Promise(r => setTimeout(r, 1500)); await route.continue(); };
+  // main.js is held until the mascot is seen rather than for a fixed time:
+  // a slow WebKit runner can take longer than any fixed delay just to reload.
+  // Poll on a timer: WebKit runs no animation frames before its first paint.
+  let releaseMain;
+  const mainHeld = new Promise(r => { releaseMain = r; });
+  const slowMain = async route => { await Promise.race([mainHeld, new Promise(r => setTimeout(r, 15000))]); await route.continue(); };
   await page.route('**/js/main.js', slowMain);
+  const reloaded = page.reload();
   try {
-   const reloaded = page.reload();
-   await page.waitForFunction(() => document.documentElement.hasAttribute('data-boot') && !!document.querySelector('#boot [data-mascot] svg'), null, {timeout:1200});
-   await reloaded;
-  } finally { await page.unroute('**/js/main.js', slowMain); }
+   await page.waitForFunction(() => document.documentElement.hasAttribute('data-boot') && !!document.querySelector('#boot [data-mascot] svg'), null, {timeout:10000, polling:100});
+  } finally {
+   releaseMain();
+   await reloaded.catch(() => {}); // a failed check above is the error to report, not the reload
+   await page.unroute('**/js/main.js', slowMain);
+  }
   await at('#/','#empty'); // Deleted or inaccessible workspace.
   assert.equal(await page.locator('#boot [data-mascot] > svg').count(), 1, 'boot mascot stamped twice');
   await responsiveSmoke(page, base);
