@@ -2910,4 +2910,8 @@ export default {
     "[附件]": "[Attachment]",
     "第 {n} 轮：{q}": "Turn {n}: {q}",
     "共 {n} 轮": "{n} turns",
+    "对话刻度": "Conversation rail",
+    "自动": "Auto",
+    "常驻": "Always",
+    "不显示": "Off",
 };

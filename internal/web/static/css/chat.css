@@ -1637,7 +1637,8 @@ details.think.streaming .think-body::after {
   opacity: 0; pointer-events: none;
   transition: opacity .25s ease;
 }
-.outline-rail.mobile.awake, .outline-rail.mobile.dragging { opacity: 1; pointer-events: auto; }
+/* .stay：用户弹层「对话刻度」选了常驻，不随滚动隐去 */
+.outline-rail.mobile.awake, .outline-rail.mobile.stay, .outline-rail.mobile.dragging { opacity: 1; pointer-events: auto; }
 .outline-rail.mobile .outline-tick { justify-content: flex-end; padding-right: 7px; }
 .outline-rail.mobile .outline-tick > i { transform-origin: right center; }
 /* 拖动时在刻度后面垫一层底色，鼓起的线压在正文上也看得清 */

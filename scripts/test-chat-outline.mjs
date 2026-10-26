@@ -7,7 +7,8 @@ import { emulateMotion } from './playwright-launch.mjs';
 // one tick per user message including pages not loaded yet, dock-style lift
 // that only changes length (colour: hovered and current tick only), the
 // question/answer tip, jumps to loaded and unloaded turns, keyboard, a live
-// message, and the phone layout (right edge, drag to preview, outline sheet).
+// message, the phone layout (right edge, drag to preview, outline sheet) and
+// the user-menu preference (auto / always / off).
 // No provider calls.
 export async function chatOutlineSmoke(page, { session, send }) {
  const thread = {id:'thread-outline',title:'Outline thread',ts:'2026-10-02T00:00:00Z',updated:'2026-10-02T01:00:00Z',turns:30,resumable:true};
@@ -232,13 +233,54 @@ export async function chatOutlineSmoke(page, { session, send }) {
    return e && Math.abs(e.getBoundingClientRect().top - l.getBoundingClientRect().top - l.clientHeight * 0.18) < 6;
   });
 
-  // Other languages label the rail and sheet.
+  // The user-menu preference (outline-pref.ts): "always" keeps the phone rail out after it
+  // would have gone to sleep; "off" hides the rail and the outline button; "auto" brings them back asleep.
+  const railMode = mode => page.evaluate(async mode => (await import('/_v/{{BUILD}}/js/outline-pref.js')).setRailMode(mode), mode);
+  const railStyle = () => rail.evaluate(e => ({awake:e.classList.contains('awake'), opacity:getComputedStyle(e).opacity, events:getComputedStyle(e).pointerEvents}));
+  await railMode('always');
+  await page.waitForFunction(() => !document.querySelector('#tab-chat > .outline-rail').classList.contains('awake'), null, {timeout:4000});
+  await settle();
+  assert.deepEqual(await railStyle(), {awake:false, opacity:'1', events:'auto'}, 'always: the phone rail stays out');
+  await railMode('off');
+  await rail.waitFor({state:'hidden'});
+  await toc.waitFor({state:'hidden'});
+  await log.evaluate(e => { e.dispatchEvent(new WheelEvent('wheel')); e.scrollTop -= 200; });
+  await page.waitForTimeout(150);
+  assert.equal(await rail.isHidden(), true, 'off: scrolling does not bring the rail back');
+  await railMode('auto');
+  await toc.waitFor({state:'visible'});
+  await page.waitForFunction(() => { const r = document.querySelector('#tab-chat > .outline-rail'); return !r.hidden && getComputedStyle(r).opacity === '0' && getComputedStyle(r).pointerEvents === 'none'; }, null, {timeout:4000});
+
+  // Other languages label the rail, sheet and preference.
   await page.evaluate(async () => (await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage('en'));
   assert.equal(await rail.getAttribute('aria-label'), 'Conversation navigation');
   assert.equal(await toc.getAttribute('aria-label'), 'Conversation outline');
+  assert.equal(await page.locator('#pref-outline .pref-picker-title').textContent(), 'Conversation rail');
   await page.evaluate(async () => (await import('/_v/{{BUILD}}/js/i18n.js')).i18n.setLanguage('zh-CN'));
   await page.setViewportSize({width:1280,height:900});
-  console.log('Chat outline: ticks for unloaded pages, dock lift with two-tone colour, tip, jumps (loaded/unloaded/keyboard), live message, phone edge rail, drag/cancel and outline sheet passed');
+  await rail.waitFor({state:'visible'});
+
+  // Desktop: the "对话刻度" row in the user menu turns the rail off and back on, kept in localStorage.
+  await page.locator('#btn-user-menu').click();
+  const pref = page.locator('#pref-outline'), prefTrigger = pref.locator('.pref-trigger');
+  assert.equal(await pref.locator('.pref-picker-title').innerText(), '对话刻度');
+  assert.equal((await prefTrigger.innerText()).trim(), '自动');
+  const pick = async label => {
+   if (await pref.locator('.pref-menu').isHidden()) await prefTrigger.click();
+   await pref.locator('.pref-menu-item[role="menuitemradio"]').filter({hasText:label}).click();
+  };
+  await prefTrigger.click();
+  assert.deepEqual((await pref.locator('.pref-menu-item[role="menuitemradio"]').allInnerTexts()).map(t => t.trim()), ['自动', '常驻', '不显示']);
+  await page.screenshot({path:resolve('output/playwright/chat-outline-pref.png')});
+  await pick('不显示');
+  await rail.waitFor({state:'hidden'});
+  assert.equal(await page.evaluate(() => localStorage.getItem('agentbox_outline_rail')), 'off');
+  assert.equal((await prefTrigger.innerText()).trim(), '不显示');
+  await pick('自动');
+  await rail.waitFor({state:'visible'});
+  assert.equal(await page.evaluate(() => localStorage.getItem('agentbox_outline_rail')), null, 'auto is the default and is not stored');
+  await page.keyboard.press('Escape');
+  console.log('Chat outline: ticks for unloaded pages, dock lift with two-tone colour, tip, jumps (loaded/unloaded/keyboard), live message, phone edge rail, drag/cancel, outline sheet and the auto/always/off preference passed');
  } finally {
   await page.unroute(isHistory, history);
   await page.unroute(isOutline, outline);

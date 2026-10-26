@@ -3,6 +3,7 @@ import { isMobile, onMobileChange } from "../../util.js";
 import { motionOff } from "../../motion.js";
 import { svgIcon } from "../../icons.js";
 import type { OutlineItem, ThreadOutline } from "../../types.js";
+import { RAIL_EVENT, railMode } from "../../outline-pref.js";
 import { dockLift, lastAtOrBefore, outlineAnswer, outlineQuestion, railLayout } from "./outline-text.js";
 
 /* 对话刻度导航：对话流旁一列短横线，一条用户消息一根，自上而下按时间排。
@@ -13,7 +14,8 @@ import { dockLift, lastAtOrBefore, outlineAnswer, outlineQuestion, railLayout } 
  * 颜色只分两档：指着的那根和当前阅读位置那根是正文色，其余一律同一灰色。
  * 数据来自 GET outline（整个线程，含还没加载的较早几页）；跳往没加载的位置时
  * 先从那条消息起补拉历史（loadFrom），服务端嫌范围太大就逐页往前拉（loadOlder）。
- * 刻度与对话流里的消息按发送时间（.user-turn 的 data-ts）对应。 */
+ * 刻度与对话流里的消息按发送时间（.user-turn 的 data-ts）对应。
+ * 用户弹层的「对话刻度」偏好（outline-pref.ts）：自动 / 常驻（手机上不隐去）/ 不显示。 */
 
 const TICK_MAX = 28;      // 鼓到最长时的线长（px）
 const TICK_BASE = 10;     // 静止线长
@@ -92,6 +94,7 @@ export function createOutline(hooks: {
       log.addEventListener(type, () => { pinned = null; anim.stop(); handScrollAt = performance.now(); }, { passive: true });
     }
     onMobileChange(() => { leave(); layout(); });
+    window.addEventListener(RAIL_EVENT, () => { leave(); layout(); });
   }
 
   /* ---------- 数据 ---------- */
@@ -155,8 +158,10 @@ export function createOutline(hooks: {
     mobile = isMobile();
     rail.classList.toggle("mobile", mobile);
     tip.classList.toggle("mobile", mobile);
+    const mode = railMode();
+    rail.classList.toggle("stay", mobile && mode === "always");
     const scrollable = log.scrollHeight > log.clientHeight + 40 || (loaded.length > 0 && loaded[0] > 0);
-    const show = marks.length >= MIN_MARKS && scrollable && log.clientHeight > 0 && !log.classList.contains("hidden");
+    const show = mode !== "off" && marks.length >= MIN_MARKS && scrollable && log.clientHeight > 0 && !log.classList.contains("hidden");
     toc.hidden = !(show && mobile);
     if (!show) {
       if (!rail.hidden) { rail.hidden = true; leave(); }

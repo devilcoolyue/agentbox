@@ -11,6 +11,7 @@ import { sessionState } from "./session-state.js";
 import { filterWorkspaces, workspaceFilterActive } from "./features/workspaces/filter.js";
 import { mountPrefPicker } from "./pref-picker.js";
 import { currentSkin, setSkin, skinChoices } from "./theme.js";
+import { RAIL_EVENT, railMode, setRailMode } from "./outline-pref.js";
 import { ListMotion } from "./motion.js";
 /* ---- 侧栏：桌面收起偏好与移动抽屉各自独立 ---- */
 const narrowMQ = window.matchMedia("(max-width: 760px)");
@@ -39,7 +40,7 @@ function renderUserMenu() {
     $("side-user-label").textContent = S.user;
     setAttrRender(userButton, "aria-label", () => i18nText("{p0} · {p1}，用户菜单", { p0: String(S.user), p1: String(role()) }));
 }
-/* 弹层里的语言、风格各占一行：右侧是当前选择和箭头，展开后在上方列出全部选项
+/* 弹层里的语言、风格、对话刻度各占一行：右侧是当前选择和箭头，展开后在上方列出全部选项
  * （pref-picker.ts）。菜单是弹层的子节点，鼠标移进去不算离开弹层，选完弹层还在。 */
 const prefPickers = [
     mountPrefPicker($("pref-language"), {
@@ -58,11 +59,22 @@ const prefPickers = [
         // 主题管理弹窗归 themes.ts（随登录挂载）；这里只广播，shell 不反向依赖功能模块
         action: { label: () => i18nText("管理主题…"), icon: "nav.themes", run: () => { closeUserMenu(); emit("themes-open"); } },
     }),
+    // 对话页旁的刻度导航：自动（手机滚动时浮现）/ 常驻 / 不显示，见 outline-pref.ts
+    mountPrefPicker($("pref-outline"), {
+        title: () => i18nText("对话刻度"),
+        options: [
+            { value: "auto", label: () => i18nText("自动") },
+            { value: "always", label: () => i18nText("常驻") },
+            { value: "off", label: () => i18nText("不显示") },
+        ],
+        value: railMode,
+        select: value => setRailMode(value),
+    }),
 ];
 const skinPicker = prefPickers[1];
 window.addEventListener("agentbox-themes-change", () => skinPicker.refresh());
 // 其他标签页改了偏好、或系统语言变化时跟着换选中态
-for (const event of ["agentbox-language-change", "agentbox-theme-change"]) {
+for (const event of ["agentbox-language-change", "agentbox-theme-change", RAIL_EVENT]) {
     window.addEventListener(event, () => { for (const picker of prefPickers)
         picker.sync(); });
 }
