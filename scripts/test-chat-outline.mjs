@@ -142,6 +142,7 @@ export async function chatOutlineSmoke(page, { session, send }) {
 
   // Scrolling by hand moves the current tick with the reading position.
   await user(20).evaluate(e => { const l = document.getElementById('chat-log'); l.dispatchEvent(new WheelEvent('wheel')); l.scrollTop = e.parentElement.offsetTop - 40; });
+  const handScrolledAt = Date.now();
   await page.waitForFunction(() => document.querySelectorAll('#tab-chat > .outline-rail .outline-tick')[20]?.classList.contains('active'));
 
   // A message sent now gets its tick at once; the answer arrives with the next outline read.
@@ -163,7 +164,11 @@ export async function chatOutlineSmoke(page, { session, send }) {
   const toc = page.locator('.thread-bar .outline-toc');
   await toc.waitFor({state:'visible'});
   assert.equal(await toc.getAttribute('aria-label'), '对话目录');
-  // resizing scrolls the log too; once it rests the rail fades out and lets touches through
+  // Only scrolls within 1.5 s of the user's own input show the rail. Resizing scrolls the log
+  // too, and WebKit may deliver that scroll a frame later, still inside the window of the
+  // wheel above: let that window lapse first, then the rail rests, fades out and lets touches through.
+  const handWindow = handScrolledAt + 1600 - Date.now();
+  if (handWindow > 0) await page.waitForTimeout(handWindow);
   await page.waitForFunction(() => { const r = document.querySelector('#tab-chat > .outline-rail'); return getComputedStyle(r).opacity === '0' && getComputedStyle(r).pointerEvents === 'none'; }, null, {timeout:4000});
   // a scroll the page makes itself (streaming keeps the log at the bottom) does not show it
   await log.evaluate(e => { e.scrollTop = e.scrollHeight / 2; });
