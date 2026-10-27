@@ -76,8 +76,19 @@ func termCommand(env []string) string {
 	if sync := tmuxEnvSync(env); sync != "" {
 		cmd += "{ " + sync + "} >/dev/null 2>&1\n"
 	}
-	return cmd + "exec tmux -u new-session -A -D -s main"
+	return cmd + "exec tmux -u new-session -A -D -s main" + tmuxClipboard
 }
+
+// tmuxClipboard is chained onto every attach so tmux's own copies (dragging,
+// double/triple-clicking in a shell) reach xterm as OSC 52, which
+// term-clipboard.ts writes to the user's clipboard. images/agent/tmux.conf says
+// the same, but images built before it changed start tmux with set-clipboard
+// off, the web image update never re-copies that file, and a running tmux
+// server keeps its options; setting it here covers all of them. external,
+// unlike on, still ignores OSC 52 printed by programs, so cat-ing a file cannot
+// set the clipboard. Chained after new-session it also reaches a server that
+// command started.
+const tmuxClipboard = " ';' set -s set-clipboard external"
 
 // tmuxEnvSync renders the `tmux set-environment` calls mirroring env into the
 // tmux global environment. Variables that come and go — the tunnel's, and the

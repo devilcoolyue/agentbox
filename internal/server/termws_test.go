@@ -145,8 +145,12 @@ func TestTermCommandKeepsFallbackAndAttach(t *testing.T) {
 	if !strings.HasPrefix(cmd, "command -v tmux >/dev/null || exec /bin/bash\n") {
 		t.Errorf("pre-tmux image fallback lost:\n%s", cmd)
 	}
-	if !strings.HasSuffix(cmd, "exec tmux -u new-session -A -D -s main") {
-		t.Errorf("attach must be the last thing exec'd:\n%s", cmd)
+	if !strings.HasSuffix(cmd, "exec tmux -u new-session -A -D -s main ';' set -s set-clipboard external") {
+		t.Errorf("attach must be the last thing exec'd, followed only by the clipboard option:\n%s", cmd)
+	}
+	// on would also forward OSC 52 printed by programs: cat-ing a file could set the user's clipboard.
+	if strings.Contains(cmd, "set-clipboard on") {
+		t.Errorf("set-clipboard must stay external:\n%s", cmd)
 	}
 	// The sync block must not be able to write to the PTY or abort the attach.
 	if !strings.Contains(cmd, "} >/dev/null 2>&1\n") {

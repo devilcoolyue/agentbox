@@ -134,7 +134,7 @@ func (s *Server) handleClientTerminalWS(w http.ResponseWriter, r *http.Request, 
 		if err != nil {
 			return err
 		}
-		attach := "export TMUX_TMPDIR=/tmp\nunset TMUX\nexec tmux -L " + clientTerminalSocket(id) + " -u attach-session -d -t =work"
+		attach := "export TMUX_TMPDIR=/tmp\nunset TMUX\nexec tmux -L " + clientTerminalSocket(id) + " -u attach-session -d -t =work" + tmuxClipboard
 		pty, err = s.dock.ExecPTY(ctx, current.ContainerID, []string{"/bin/bash", "-c", attach}, env)
 		if err == nil {
 			s.workspaces().Activity().Hold(current.ID)

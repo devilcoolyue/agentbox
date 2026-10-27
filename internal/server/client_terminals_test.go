@@ -29,7 +29,7 @@ func TestClientTerminalCommandSeparatesSocketsAndQuotesArguments(t *testing.T) {
 	if _, err = clientTerminalCommand(sess, p, tm, nil); err == nil {
 		t.Fatal("unsafe persisted ID")
 	}
-	if !strings.HasSuffix(termCommand(nil), "exec tmux -u new-session -A -D -s main") {
+	if !strings.HasSuffix(termCommand(nil), "exec tmux -u new-session -A -D -s main"+tmuxClipboard) {
 		t.Fatal("legacy default terminal changed")
 	}
 }
