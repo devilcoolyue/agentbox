@@ -8,7 +8,13 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.17](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.17)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.18](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.18)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.18：对话刻度、系统通告与受限出网
+
+对话旁边新增刻度条，悬停预览问题与回答首句，点击跳到任意回合，很久以前的回合只加载那一段历史；长对话与历史列表借助服务端索引大幅加快。管理员可以向所有页面发布带倒计时的发版通告并查看现在重启会影响谁，`release.py activate --announce-minutes` 把预告与发版串起来；可选的受限出网把工作空间限制在 agentbox 自己的代理与隧道上。终端与 Codex 后台用量开始扣额度，余额用完时停止终端里运行的 Agent；管理员可在用户管理里为每个用户设置数据与缓存上限。登录限速不再能被伪造的 `X-Forwarded-For` 绕过，Claude 订阅的刷新令牌只留在账号池。分项内容见 [CHANGELOG](../CHANGELOG.md)。
+
+从 v0.1.17 升级会执行 schema 22 → 23 迁移，只加列加表，升级前已记录的终端用量不追扣；v0.1.17 及更早的二进制不能打开新库，回退须恢复兼容备份到新目录。新增配置项 `container.egress`、`container.unbound_egress`、`container.egress_exempt_users` 与 `proxy_bridge.dynamic_ports`，默认保持开放出网；系统通告存在数据目录的 `announcement.json`，不进系统备份。无需更新 Agent 镜像，详见[包内升级说明](../deploy/downloads/README.md#升级至-v0118)。本次发布两个 Linux 服务端包、五个平台 abox-link、`release.json` 与 `SHA256SUMS`，不发布新桌面包。
 
 ### v0.1.17：缓存保活、实测耗时与 CLI 样式的工具调用
 

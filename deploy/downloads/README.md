@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.17 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.18 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.17
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.18
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.17_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.18_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.17_linux_arm64/install.sh --version v0.1.17
+sudo bash agentbox_v0.1.18_linux_arm64/install.sh --version v0.1.18
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,14 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### 升级至 v0.1.18
+
+本版新增对话刻度（悬停预览、跳到任意回合）、带倒计时的系统通告、可选的受限出网，终端与 Codex 后台用量开始扣额度，管理员可在用户管理里为每个用户设置存储上限；修复登录限速可被伪造 `X-Forwarded-For` 绕过的问题，Claude 订阅的刷新令牌不再下发到工作空间；完整分类说明见 [v0.1.18 Release](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.18)。
+
+从 v0.1.17 升级会执行 schema 22 → 23 迁移（更早版本连续执行到 23），只加列加表。升级前先保存并验证备份；**v0.1.17 及更早的二进制不能直接打开 schema 23 数据库**，回退须恢复升级前兼容备份到新目录，升级后的终端扣款流水不会保留。开启额度的用户从升级起终端消耗也扣余额（升级前的不追扣），超支拦截时余额用完会停止终端里运行的 Agent。新增配置项 `container.egress` 等默认保持开放出网，旧版会忽略并在再次保存时丢掉。反向代理须用 `$proxy_add_x_forwarded_for` 追加来源地址，否则登录限速按代理地址计数。无需更新空间镜像。
+
+请先结束当前网页任务，升级会备份并重启服务，完成后刷新页面。从 v0.1.17 升级时旧服务端还不支持系统通告，`--announce-minutes` 的预告不会显示。标准 Linux/systemd 版本目录安装可使用「关于与更新 → 升级并重启」，或在 Bash 中执行下文 v0.1.15 的命令并把 `version` 改为 `v0.1.18`。
 
 ### 升级至 v0.1.17
 

@@ -49,6 +49,8 @@ v0.1.16 沿用 schema 19 与 `compatibility_epoch` 1，现有网页、abox-link�
 
 v0.1.17 从 schema 19 迁移至 22（20 请求计时、21 缓存保活、22 五小时暂停），`compatibility_epoch` 仍为 1，只加列加表；v0.1.16 及更早的二进制不能直接打开新库，回退须恢复升级前兼容备份到新目录，升级后记下的实测计时、保活设置与暂停状态不会保留。新增配置段 `cache_keepalive`、`usage_telemetry` 与 `turn_timeout_min`，旧版忽略并在再次保存时丢掉。Claude 空间执行时注入 `OTEL_*` 遥测变量（账号自带 `OTEL_*` 收集器时不注入），Codex 空间的会话 `config.toml` 增加 `[otel]` 段（账号池不改，已有 `[otel]` 不动，接收器关闭时移除）。现有网页、abox-link、聊天、终端和配对接口兼容，新增推送 `GET /api/usage/live` 与 `GET/PUT /api/icons`。默认固定镜像仍为 Claude Code 2.1.280；缓存保活与实测计时在 Claude Code 2.1.303/2.1.304 上验证。Desktop 0.1.2 能力不变，本次不发布新桌面包。
 
+v0.1.18 从 schema 22 迁移至 23（终端计费），`compatibility_epoch` 仍为 1，只加列加表；v0.1.17 及更早的二进制不能直接打开新库，回退须恢复升级前兼容备份到新目录，升级后的终端扣款流水不会保留。新增配置项 `container.egress`、`container.unbound_egress`、`container.egress_exempt_users` 与 `proxy_bridge.dynamic_ports`，旧版忽略并在再次保存时丢掉；默认开放出网，行为不变。Claude 订阅账号空间里的 `.claude/.credentials.json` 改为只含访问令牌，由服务端续期并推送，Claude Code 2.1.280 与 2.1.310 在下一次请求前读到新令牌。现有网页、abox-link、聊天、终端和配对接口兼容，新增 `GET /api/sessions/{id}/outline`、历史分页参数 `after` / `until`、系统通告与按用户存储上限接口（`GET /api/storage/quotas`、`PUT /api/users/{name}/storage`），`/api/usage/live` 推送连接在登录后常驻。默认固定镜像不变；tmux `set-clipboard external` 由服务端在每次接入终端时设置，不需要重建镜像。Desktop 0.1.2 能力不变，本次不发布新桌面包。
+
 客户端按能力发现显示扩展入口，旧服务端返回 404 或页面时进入基础模式；鉴权错误、网络故障和无效响应不会冒充基础模式。新桌面包不会自动升级服务端。
 
 v0.1.9 的 schema 10 只新增项目和终端元数据，不移动空间文件。升级前保存并验证配套备份；v0.1.8 不能直接打开已迁移数据库，回退必须恢复兼容备份到新目录，并保全升级后的文件变化。桌面本地状态另使用 schema 5，不与服务端 schema 混用。详见[数据库迁移与回退](architecture/database-migrations.md)。

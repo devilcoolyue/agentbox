@@ -121,7 +121,7 @@ The installer downloads and verifies the server package, builds the workspace im
 
 - **Host:** Linux x86_64 / arm64, systemd, and local Docker Engine. Ubuntu 22.04+ / Debian 12+ install missing dependencies automatically. For other distributions, see the [prerequisites](deploy/README.md#一键安装).
 - **Sign in:** open `http://YOUR_SERVER_IP:8180` and use `boxadmin` with the generated password printed by the installer. Allow TCP 8180 through your firewall if connecting directly; configure [HTTPS](deploy/README.md#https-与-websocket-反向代理) for ongoing public access.
-- **Stable server:** [v0.1.17](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.17). The command selects the latest stable release; append `-s -- --version v0.1.17` to pin it, or `-s -- --listen 127.0.0.1:8180` to bind only to localhost.
+- **Stable server:** [v0.1.18](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.18). The command selects the latest stable release; append `-s -- --version v0.1.18` to pin it, or `-s -- --listen 127.0.0.1:8180` to bind only to localhost.
 - **Existing installation:** use About and updates in the console or the [upgrade guide](docs/releases.md#升级与回退). The installer preserves existing deployments and will not overwrite them.
 
 Configuration lives in `/etc/agentbox`, data in `/var/lib/agentbox`. Each workspace defaults to a 2 GiB memory limit and 2 CPUs; size your server for the number of concurrent workspaces. See [installation and recovery](deploy/README.md#一键安装) for all options.
@@ -231,7 +231,7 @@ English and Chinese READMEs cover the same overview and setup. Detailed guides a
 
 ## Development roadmap
 
-The current server release is **v0.1.17** (2026-10-22). Recent releases added supervisor delegation, the theme editor and local storage capacity management (v0.1.13); questions, follow-ups, `/` commands, `@` mentions, the context meter, the task list and per-request billing (v0.1.14); extensions, webhook notifications, the turn timer and background Git network operations (v0.1.16); and prompt cache keepalive, measured per-request latency, live per-request billing, CLI-style tool rows and icon management (v0.1.17). See the [changelog](CHANGELOG.md).
+The current server release is **v0.1.18** (2026-10-27). Recent releases added supervisor delegation, the theme editor and local storage capacity management (v0.1.13); questions, follow-ups, `/` commands, `@` mentions, the context meter, the task list and per-request billing (v0.1.14); extensions, webhook notifications, the turn timer and background Git network operations (v0.1.16); prompt cache keepalive, measured per-request latency, live per-request billing, CLI-style tool rows and icon management (v0.1.17); and the conversation rail, system announcements with a release countdown, restricted workspace egress, terminal usage billing and per-user storage limits (v0.1.18). See the [changelog](CHANGELOG.md).
 
 The first round (M1–M5: diagnostics, onboarding, reliable chat, maintenance quality, desktop consistency) shipped in v0.1.11; its external acceptance — real-user observations, performance thresholds, recovery targets and desktop signing — is still pending ([record](docs/milestones/backlog.md)). The second round continues it:
 
