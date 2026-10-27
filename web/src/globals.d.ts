@@ -85,6 +85,13 @@ interface XtermTerminal {
   onResize(handler: (size: { cols: number; rows: number }) => void): void;
   /** 老版本 xterm 没有这个方法，term.ts 里先判空再用 */
   registerLinkProvider?(provider: XtermLinkProvider): void;
+  /** keydown / keypress / keyup 都先过这里，返回 false 则 xterm 不处理这次按键（也不取消默认动作）。
+   * 只能挂一个，后挂的替换先挂的 */
+  attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean): void;
+  /** xterm 自己的选区（没有鼠标上报，或按住 Shift 拖出来的） */
+  hasSelection(): boolean;
+  getSelection(): string;
+  clearSelection(): void;
   /** 转义序列解析器：registerOscHandler 接管 xterm 不认的 OSC（term-clipboard.ts 接 52 号）。
    * 回调返回 true 表示已处理，不再交给别的处理器 */
   readonly parser?: {

@@ -3,15 +3,23 @@
  * Claude Code 在 tmux 里选中文字后执行 `tmux load-buffer -w`，tmux 再用 OSC 52（ESC ] 52 ; 选区 ;
  * base64 BEL）把内容交给外层终端，也就是这个 xterm。xterm.js 自己不认 OSC 52，内容以前就停在
  * tmux 缓冲区里——CLI 还提示「prefix + ]」粘贴，而我们的 tmux 连前缀键都没有。这里接住它写进
- * 系统剪贴板，CLI 那句提示改不了，所以另弹一条「已复制」。
+ * 系统剪贴板，CLI 那句提示改不了，所以另弹一条「已复制」。shell 里拖选、双击选词是 tmux 自己
+ * 的复制（set-clipboard external），走的也是这条路。
  *
  * 只写不读：查询剪贴板（Pd 为「?」）一律不回应，否则容器里的程序能读走本机剪贴板。程序直接
- * 打印的 OSC 52 被 tmux（set-clipboard off）挡在外面，cat 一个文件改不了剪贴板；而
+ * 打印的 OSC 52 被 tmux 挡在外面（external 不收，只有 on 才收），cat 一个文件改不了剪贴板；而
  * `tmux load-buffer -w` 谁都能跑，所以还要求用户刚在终端里点过、拖过或按过键（3 秒内），
  * 免得 Agent 在用户不注意时改写本机剪贴板、等用户粘贴进自己电脑的终端。
  *
  * Chrome / Firefox 允许页面在获焦时直接写剪贴板；Safari 只认点击当时写，请求从 WebSocket
- * 过来已经不在手势里，于是终端底部浮出一条「复制到剪贴板」，点一下在手势里写。 */
+ * 过来已经不在手势里，于是终端底部浮出一条「复制到剪贴板」，点一下在手势里写。
+ *
+ * 另一半是快捷键。Windows / Linux 上 xterm 把 Ctrl+V、Ctrl+C 一律当控制字符发给程序（^V、^C），
+ * 浏览器的粘贴、复制根本不发生；Win+V 剪贴板历史选中后，系统也是替人按一次 Ctrl+V。这里照
+ * Windows Terminal 的做法：Ctrl+V 交还浏览器原生粘贴（文字走 xterm 的括号粘贴，图片走 term.ts
+ * 的上传），xterm 有选区时 Ctrl+C 复制并清掉选区，没有选区照旧是中断。^V 在这里本来没用处：
+ * Claude Code 拿它读的是容器里的剪贴板，读不到用户电脑上的图片。Mac 上复制粘贴用 Cmd，Ctrl
+ * 组合键照旧发给程序。 */
 "use strict";
 
 import { setText, t as i18nText } from "./i18n.js";
@@ -124,9 +132,41 @@ function wireOffer(refocusTerm: () => void) {
   $("term-copy-close").addEventListener("click", () => { hideOffer(); refocus(); });
 }
 
+/** 与 xterm 判断 Mac 的口径一致；每次现算，测试里可以换 platform */
+const isMac = () => /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+
+/** 在按键当时执行复制：xterm 自己的 copy 监听把选区写进剪贴板，HTTP 下也可用 */
+function copySelection(term: XtermTerminal) {
+  const text = term.getSelection();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { ok = false; }
+  term.clearSelection();
+  if (ok) copied(text);
+  else if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => copied(text), () => toast(i18nText("浏览器拒绝写入剪贴板"), true));
+  else toast(i18nText("浏览器拒绝写入剪贴板"), true);
+}
+
+let passedKey = false; // 这次 keydown 交给了浏览器，随后的 keypress 也别让 xterm 取消（Firefox）
+
+/** 返回 false 时 xterm 不处理这次按键。按虚拟键码认（与 xterm 一致），俄文等布局下 e.key 不是 v */
+function clipboardKey(term: XtermTerminal, e: KeyboardEvent) {
+  if (e.type === "keypress") return !passedKey;
+  if (e.type !== "keydown") return true;
+  passedKey = false;
+  if (!e.ctrlKey || e.altKey || e.shiftKey || e.metaKey || isMac()) return true;
+  if (e.keyCode === 86) passedKey = true;
+  else if (e.keyCode === 67 && term.hasSelection()) {
+    e.preventDefault();
+    copySelection(term);
+    passedKey = true;
+  }
+  return !passedKey;
+}
+
 /** 挂到一个 xterm 实例上；监听随 term.element 一起销毁 */
 export function attachTermClipboard(term: XtermTerminal, refocus: () => void) {
   wireOffer(refocus);
+  term.attachCustomKeyEventHandler((e) => clipboardKey(term, e));
   const el = term.element;
   if (el) {
     const mark = () => { lastInteraction = performance.now(); };
