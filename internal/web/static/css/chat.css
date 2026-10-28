@@ -706,6 +706,26 @@ details.think.streaming .think-body::after {
 @media (max-width: 760px) {
   .chat-conn { margin: 6px 8px 0; }
 }
+/* 顶部栏收起后（head-fold.ts）线程栏最左的空间名：悬停或点击浮出顶部栏 */
+.wb-peek {
+  position: relative; display: inline-flex; align-items: center; gap: 7px;
+  flex: 0 1 auto; min-width: 0; max-width: 240px; margin-right: 6px;
+  padding: 5px 10px 5px 6px;
+  border: 0; border-radius: var(--radius-pill); background: none;
+  color: var(--text); font-size: 12.5px; font-weight: 600;
+}
+.wb-peek::after {
+  content: ""; position: absolute; right: -7px; top: 9px; bottom: 9px;
+  width: 1px; background: var(--line);
+}
+.wb-peek:hover, .wb-peek[aria-expanded="true"] { background: var(--panel); }
+.wb-peek-avatar { display: inline-flex; flex: none; }
+.wb-peek .agent-avatar .led { width: 7px; height: 7px; right: -3px; bottom: -3px; }
+.wb-peek-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-peek-arrow { flex: none; opacity: .55; transition: transform 0.15s ease, opacity 0.15s ease; }
+.wb-peek:hover .wb-peek-arrow { opacity: 1; }
+.wb-peek[aria-expanded="true"] .wb-peek-arrow { transform: rotate(180deg); opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .wb-peek-arrow { transition: none; } }
 .thread-cur {
   display: inline-flex; align-items: center; gap: 7px;
   min-width: 0;

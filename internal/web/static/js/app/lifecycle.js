@@ -3,6 +3,7 @@ import { S, bus } from "../state.js";
 import { initWorkspaceFilter } from "../features/workspaces/filter.js";
 import { initWorkspaceCreation } from "../features/workspaces/create.js";
 import { initFirstTask } from "../features/workspaces/first-task.js";
+import { initHeadFold } from "../features/workspaces/head-fold.js";
 import { initOnboarding } from "../onboarding.js";
 import { initChat } from "../chat.js";
 import { initSettings } from "../settings.js";
@@ -46,7 +47,7 @@ export function initApplication() {
     };
     const start = () => {
         disposers.splice(0).reverse().forEach(dispose => dispose());
-        disposers = [initWorkspaceFilter(renderSidebar), initOnboarding(), initWorkspaceCreation(), initChat(), initFirstTask(), initMCP(), initSettings(), initUpdates(), initPricing(), initRemoteBrowser(), initThemes(), initExtensionsPage(), initAnnouncement(), initUsageLive()];
+        disposers = [initWorkspaceFilter(renderSidebar), initOnboarding(), initWorkspaceCreation(), initChat(), initFirstTask(), initHeadFold(), initMCP(), initSettings(), initUpdates(), initPricing(), initRemoteBrowser(), initThemes(), initExtensionsPage(), initAnnouncement(), initUsageLive()];
     };
     bus.addEventListener("signed-in", start, { signal: lifetime.signal });
     bus.addEventListener("signed-out", stop, { signal: lifetime.signal });

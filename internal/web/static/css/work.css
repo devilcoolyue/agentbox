@@ -99,6 +99,30 @@
 @media (prefers-reduced-motion: reduce) { .wb-state.state-changed, .wb-avatar .led.state-changed, .wb-avatar .led.on.state-changed { animation: none; } }
 .wb-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 
+/* ---- 顶部栏收起（head-fold.ts）：对话进行中把标题行与标签栏收成 0 高，线程栏顶到最上；
+ * 悬停或点击线程栏左侧的空间名，整块以浮层从上方滑出，盖在对话上、不挤动正在看的内容。
+ * 高度用 grid 0fr↔1fr 过渡。浮层压在正文上，底色用不透明的 --panel-solid（玻璃风格的
+ * --page 是透明的）。窄屏标题已并入顶栏，不收，线程栏也不出空间名。 ---- */
+.wb-top { display: grid; grid-template-rows: 1fr; flex: none; }
+.wb-top-in { min-height: 0; }
+.wb-peek[hidden] { display: none; }
+@media (min-width: 761px) {
+  .workbench.head-folded .wb-top {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 52;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.2s var(--ease-out), box-shadow 0.2s ease;
+  }
+  .workbench.head-folded .wb-top-in { overflow: hidden; background: var(--panel-solid); }
+  .workbench.head-folded .wb-head { background: transparent; }
+  .workbench.head-folded.head-peek .wb-top {
+    grid-template-rows: 1fr;
+    box-shadow: var(--shadow-lg);
+  }
+}
+@media (min-width: 761px) and (prefers-reduced-motion: reduce) {
+  .workbench.head-folded .wb-top { transition: none; }
+}
+
 /* 运行状态胶囊：首页最近空间用。运行中=绿，休眠=警告黄，已停止=灰 */
 .state-pill {
   display: inline-flex; align-items: center; gap: 6px; flex: none;

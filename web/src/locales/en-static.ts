@@ -869,6 +869,7 @@ export default {
   "默认暂停阈值（5 小时额度 %）": "Default pause threshold (five-hour limit %)",
   "开启保活的空间在 Claude 订阅的 5 小时额度用到暂停阈值时暂停对话，把剩下的额度留给保活，重置后自动继续；用户可在空间里调整或关闭。": "Workspaces keeping caches pause their chat when the Claude subscription's five-hour limit reaches the pause threshold, leaving the rest for the keepalive, and carry on after the reset. Users can change or turn it off per workspace.",
   "收起通告": "Dismiss announcement",
+  "展开顶部栏": "Show top bar",
   "系统通告": "Announcements",
   "向所有登录用户在页面顶部显示一条通告，例如提前告知发版维护。同一时间只有一条，重新发布会替换旧的；发版通告到点后显示「正在发版」，新版本启动后自动变成「已升级」，10 分钟后消失。": "Show every signed-in user a banner at the top of the page, for example to warn of an upcoming release. There is one at a time; posting again replaces it. A release banner says \"releasing\" once its time comes, turns into \"upgraded\" when the new version starts, and disappears 10 minutes later.",
   "当前通告": "Current announcement",

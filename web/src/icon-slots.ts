@@ -45,6 +45,8 @@ export const ICON_SLOTS = {
   "nav.logout": { group: "nav", label: "退出登录", base: "logout" },
   "nav.themes": { group: "nav", label: "管理主题", icon: "tabler:palette" },
   "nav.sidebar": { group: "nav", label: "收起侧边栏", base: "panel-left" },
+  "wb.fold": { group: "nav", label: "收起顶部栏", icon: "tabler:layout-navbar-collapse" },
+  "wb.pin": { group: "nav", label: "固定显示顶部栏", icon: "tabler:layout-navbar-expand" },
 
   // ── 工作空间标签 ──
   "tab.chat": { group: "tab", label: "对话", icon: "tabler:message-circle" },

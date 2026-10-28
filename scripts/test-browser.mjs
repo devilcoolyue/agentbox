@@ -33,6 +33,7 @@ import { chatCodexItemsSmoke } from './test-chat-codex-items.mjs';
 import { chatClaudeToolsSmoke } from './test-chat-claude-tools.mjs';
 import { chatHistorySettingsSmoke, chatPagesSmoke } from './test-chat-pages.mjs';
 import { chatOutlineSmoke } from './test-chat-outline.mjs';
+import { headFoldSmoke } from './test-head-fold.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
 import { terminalClipboardSmoke } from './test-term-clipboard.mjs';
@@ -413,6 +414,7 @@ export async function smoke(page) {
    await page.locator('#chat-input').waitFor({state:'visible'});
    await chatPagesSmoke(page,{session:'fixture-space',closeChat:()=>chatSocket.close()});
    await chatOutlineSmoke(page,{session:'fixture-space',send:msg=>chatSocket.send(JSON.stringify(msg))});
+   await headFoldSmoke(page,{setHistory:entries=>{historyEntries=entries;historyCosts={};},setStatus:status=>{sessions=[{...sessions[0],status}];}});
    assert.deepEqual(errors,[]); return;
   }
   // A dialog's close event arrives in a later task. Reopening the shared confirmation before the previous one
@@ -906,6 +908,7 @@ export async function smoke(page) {
   await chatClaudeToolsSmoke(page,{setHistory:(entries,costs={})=>{historyEntries=entries;historyCosts=costs;},send:msg=>chatSocket.send(JSON.stringify(msg)),socket:()=>chatSocket,setAgent:agent=>{sessions=[{...sessions[0],agent}];}});
   await chatPagesSmoke(page,{session:'fixture-space',closeChat:()=>chatSocket.close()});
   await chatOutlineSmoke(page,{session:'fixture-space',send:msg=>chatSocket.send(JSON.stringify(msg))});
+  await headFoldSmoke(page,{setHistory:entries=>{historyEntries=entries;historyCosts={};},setStatus:status=>{sessions=[{...sessions[0],status}];}});
   await page.locator('.tab[data-tab="files"]').click();
   await at('#/sessions/fixture-space/files','#tab-files');
   await page.reload();

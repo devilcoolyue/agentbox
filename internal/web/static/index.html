@@ -358,6 +358,8 @@
         </div>
 
         <div id="workbench" class="workbench hidden">
+          <!-- 顶部栏（标题行 + 标签栏）：对话进行中自动收起，悬停或点线程栏左侧的空间名再浮出（head-fold.ts） -->
+          <div id="wb-top" class="wb-top"><div class="wb-top-in">
           <header class="wb-head">
             <div class="wb-title">
               <span id="wb-avatar" class="wb-avatar"></span>
@@ -369,8 +371,25 @@
               <button id="btn-start" class="btn btn-sm btn-primary" data-icon="play" aria-label="启动工作空间" data-tip="启动工作空间" data-i18n-text="[&quot;启动&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;启动工作空间&quot;,&quot;data-tip&quot;:&quot;启动工作空间&quot;}">启动</button>
               <button id="btn-stop" class="btn btn-sm btn-danger" data-icon="stop" aria-label="停止工作空间" data-tip="停止工作空间，保留文件与对话" data-i18n-text="[&quot;停止&quot;]" data-i18n-attrs="{&quot;aria-label&quot;:&quot;停止工作空间&quot;,&quot;data-tip&quot;:&quot;停止工作空间，保留文件与对话&quot;}">停止</button>
               <button id="btn-wb-more" class="btn btn-sm" data-icon="more" aria-label="工作空间更多操作" aria-haspopup="menu" aria-expanded="false" data-tip="更多操作" data-i18n-attrs="{&quot;aria-label&quot;:&quot;工作空间更多操作&quot;,&quot;data-tip&quot;:&quot;更多操作&quot;}"></button>
+              <button id="btn-wb-fold" type="button" class="btn btn-sm hidden"></button>
             </div>
           </header>
+
+          <nav class="tabs">
+            <button class="tab active" data-tab="chat">
+              <svg class="tab-ic" width="15" height="15" data-icon="tab.chat" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;对话&quot;]">对话</span></button>
+            <button class="tab" data-tab="term">
+              <svg class="tab-ic" width="15" height="15" data-icon="tab.terminal" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;终端&quot;]">终端</span></button>
+            <button class="tab" data-tab="browser"><svg class="tab-ic" width="15" height="15" data-icon="tab.browser" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;浏览器&quot;]">浏览器</span></button>
+            <button class="tab" data-tab="files">
+              <svg class="tab-ic" width="15" height="15" data-icon="tab.files" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;文件&quot;]">文件</span></button>
+            <button class="tab" data-tab="changes">
+              <svg class="tab-ic" width="15" height="15" data-icon="tab.changes" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;变更&quot;]">变更</span></button>
+            <button class="tab" data-tab="skills" id="tab-btn-skills">
+              <svg class="tab-ic" width="15" height="15" data-icon="tab.skills" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;技能&quot;]">技能</span></button>
+            <button class="tab" data-tab="mcp" id="tab-btn-mcp"><svg class="tab-ic" width="15" height="15" data-icon="tab.mcp" aria-hidden="true"></svg><span class="t">MCP</span></button>
+          </nav>
+          </div></div>
 
           <div id="guide-spotlight" popover="manual" aria-hidden="true"></div>
           <section id="workspace-guide" class="workspace-guide" popover="manual" role="dialog" aria-labelledby="guide-title" aria-describedby="guide-note">
@@ -386,20 +405,6 @@
             </div>
             <div class="guide-bottom"><button id="guide-back" data-icon="arrow-left" type="button" class="btn btn-sm" data-i18n="上一步">上一步</button><button id="guide-next" type="button" data-icon="arrow-right" class="btn btn-sm btn-primary" data-i18n="下一步">下一步</button></div>
           </section>
-          <nav class="tabs">
-            <button class="tab active" data-tab="chat">
-              <svg class="tab-ic" width="15" height="15" data-icon="tab.chat" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;对话&quot;]">对话</span></button>
-            <button class="tab" data-tab="term">
-              <svg class="tab-ic" width="15" height="15" data-icon="tab.terminal" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;终端&quot;]">终端</span></button>
-            <button class="tab" data-tab="browser"><svg class="tab-ic" width="15" height="15" data-icon="tab.browser" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;浏览器&quot;]">浏览器</span></button>
-            <button class="tab" data-tab="files">
-              <svg class="tab-ic" width="15" height="15" data-icon="tab.files" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;文件&quot;]">文件</span></button>
-            <button class="tab" data-tab="changes">
-              <svg class="tab-ic" width="15" height="15" data-icon="tab.changes" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;变更&quot;]">变更</span></button>
-            <button class="tab" data-tab="skills" id="tab-btn-skills">
-              <svg class="tab-ic" width="15" height="15" data-icon="tab.skills" aria-hidden="true"></svg><span class="t" data-i18n-text="[&quot;技能&quot;]">技能</span></button>
-            <button class="tab" data-tab="mcp" id="tab-btn-mcp"><svg class="tab-ic" width="15" height="15" data-icon="tab.mcp" aria-hidden="true"></svg><span class="t">MCP</span></button>
-          </nav>
 
           <section id="tab-mcp" class="pane hidden">
             <div class="mcp-toolbar">
@@ -425,6 +430,10 @@
           <section id="tab-chat" class="pane">
             <!-- 对话切换栏：当前对话标题（点击打开历史面板）+ 新对话入口 -->
             <div class="thread-bar">
+              <!-- 顶部栏收起时出现：空间头像与名称，悬停或点击浮出顶部栏 -->
+              <button id="wb-peek" type="button" class="wb-peek" hidden aria-expanded="false" aria-controls="wb-top" aria-label="展开顶部栏" data-i18n-attrs="{&quot;aria-label&quot;:&quot;展开顶部栏&quot;}">
+                <span id="wb-peek-avatar" class="wb-peek-avatar"></span><span id="wb-peek-name" class="wb-peek-name"></span><svg class="wb-peek-arrow" width="12" height="12" data-icon="chevron" aria-hidden="true"></svg>
+              </button>
               <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话" data-i18n-attrs="{&quot;data-tip&quot;:&quot;历史对话：查看、切换并继续之前的对话&quot;}">
                 <span id="thread-title" class="t" data-i18n-text="[&quot;新对话&quot;]">新对话</span>
               </button>

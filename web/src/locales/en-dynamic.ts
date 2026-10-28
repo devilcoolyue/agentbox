@@ -2734,6 +2734,8 @@ export default {
   "Git": "Git",
   "管理主题": "Manage themes",
   "收起侧边栏": "Collapse sidebar",
+  "收起顶部栏": "Collapse top bar",
+  "固定显示顶部栏": "Keep top bar visible",
   "MCP": "MCP",
   "图标管理": "Icons",
   "工具调用（通用）": "Tool call (generic)",
