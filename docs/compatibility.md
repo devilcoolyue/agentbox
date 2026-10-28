@@ -51,6 +51,8 @@ v0.1.17 从 schema 19 迁移至 22（20 请求计时、21 缓存保活、22 五�
 
 v0.1.18 从 schema 22 迁移至 23（终端计费），`compatibility_epoch` 仍为 1，只加列加表；v0.1.17 及更早的二进制不能直接打开新库，回退须恢复升级前兼容备份到新目录，升级后的终端扣款流水不会保留。新增配置项 `container.egress`、`container.unbound_egress`、`container.egress_exempt_users` 与 `proxy_bridge.dynamic_ports`，旧版忽略并在再次保存时丢掉；默认开放出网，行为不变。Claude 订阅账号空间里的 `.claude/.credentials.json` 改为只含访问令牌，由服务端续期并推送，Claude Code 2.1.280 与 2.1.310 在下一次请求前读到新令牌。现有网页、abox-link、聊天、终端和配对接口兼容，新增 `GET /api/sessions/{id}/outline`、历史分页参数 `after` / `until`、系统通告与按用户存储上限接口（`GET /api/storage/quotas`、`PUT /api/users/{name}/storage`），`/api/usage/live` 推送连接在登录后常驻。默认固定镜像不变；tmux `set-clipboard external` 由服务端在每次接入终端时设置，不需要重建镜像。Desktop 0.1.2 能力不变，本次不发布新桌面包。
 
+v0.1.19 从 schema 23 迁移至 24（并行线程），`compatibility_epoch` 仍为 1，只改 `chat_requests` 的活动与排队索引；v0.1.18 及更早的二进制不能直接打开新库，回退须恢复升级前兼容备份到新目录，升级后接收的回执与排队消息不会保留。同一空间最多 3 条线程同时运行回合；`GET .../chat/requests` 新增 `pendings`，`pending` 保持原义供旧客户端读取，线程内的 WS 事件增加 `thread` 字段、连接 `status` 增加 `threads`、删除线程广播 `thread_deleted`，旧客户端忽略这些字段。新增错误码 `chat_parallel_limit`，Desktop 0.1.2 按通用错误显示。网页终端标签复用桌面客户端的项目终端接口，在工作区根目录项目下创建终端，桌面客户端可见。无新增配置项，默认固定镜像不变，本次不发布新桌面包。
+
 客户端按能力发现显示扩展入口，旧服务端返回 404 或页面时进入基础模式；鉴权错误、网络故障和无效响应不会冒充基础模式。新桌面包不会自动升级服务端。
 
 v0.1.9 的 schema 10 只新增项目和终端元数据，不移动空间文件。升级前保存并验证配套备份；v0.1.8 不能直接打开已迁移数据库，回退必须恢复兼容备份到新目录，并保全升级后的文件变化。桌面本地状态另使用 schema 5，不与服务端 schema 混用。详见[数据库迁移与回退](architecture/database-migrations.md)。

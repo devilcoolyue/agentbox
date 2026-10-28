@@ -8,7 +8,13 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.18](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.18)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.19](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.19)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.19：并行对话线程、多终端标签与折叠顶栏
+
+同一空间最多 3 条对话线程可以同时运行网页回合，各自独立的 CLI 进程与上下文、共用同一份工作区文件；一条线程在跑时照样能新建、切换线程并在别处发消息，后台线程完成、出错或提问时弹出提示，超过上限的消息自动排队。终端上方新增标签栏，可同时开多个 Shell 或直接启动 Agent 的终端，互不顶号，桌面客户端开的终端也会列出。电脑上空间运行中时工作台标题行与标签栏自动收起，悬停空间名以水滴形变展开，可用图钉固定。分项内容见 [CHANGELOG](../CHANGELOG.md)。
+
+从 v0.1.18 升级会执行 schema 23 → 24 迁移，只改聊天回执索引；v0.1.18 及更早的二进制不能打开新库，回退须恢复兼容备份到新目录。聊天接口向后兼容，新增 `pendings`、事件 `thread` 字段与错误码 `chat_parallel_limit`；无新增配置项，无需更新 Agent 镜像，详见[包内升级说明](../deploy/downloads/README.md#升级至-v0119)。本次发布两个 Linux 服务端包、五个平台 abox-link、`release.json` 与 `SHA256SUMS`，不发布新桌面包。
 
 ### v0.1.18：对话刻度、系统通告与受限出网
 
