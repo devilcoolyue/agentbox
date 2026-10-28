@@ -106,7 +106,7 @@ try {
       await page.waitForFunction(() => document.querySelector('#wb-name').textContent === 'Project 042');
       await page.locator('#chat-input').waitFor({ state: 'visible' });
       await search.fill('missing'); await count(0);
-      assert.equal(await page.locator('#wb-name').innerText(), 'Project 042');
+      assert.equal(await page.locator('#wb-name').textContent(), 'Project 042'); // the folded top bar is visibility:hidden, so innerText would be empty
       await page.locator('#btn-threads').click(); await page.locator('#tp-search').fill('two');
       await page.waitForFunction(() => document.querySelectorAll('#tp-list .tp-open').length === 1 && document.querySelector('#tp-list .tp-title')?.textContent === 'Thread two');
       await page.keyboard.press('Escape');
