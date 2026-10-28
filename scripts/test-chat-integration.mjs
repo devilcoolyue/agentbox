@@ -134,7 +134,9 @@ try {
   ws.onmessage = event => { const message = JSON.parse(event.data); if (message.type === 'error') { clearTimeout(timer); ws.close(); resolve(message); } };
  }));
  assert.equal(rejectedLegacy.code, 'chat_pending');
- assert.equal((await api('/sessions/space-a/chat/threads/thread-two/activate', {})).status, 409);
+ // The uncertain receipt fences its own thread only; other threads stay usable (parallel threads).
+ assert.equal((await api('/sessions/space-a/chat/threads/thread-two/activate', {})).status, 200);
+ assert.equal((await api('/sessions/space-a/chat/threads/thread-one/activate', {})).status, 200);
  assert.equal((await api('/sessions/space-a/chat/requests/' + crash.id, crash.input, 'PUT')).status, 200);
  await action(crash.id, '已查看，继续'); await confirm(); await state(crash.id, 'reviewed'); assert.equal((await turns()).length, beforeCrash);
  const after = await send('explicit new task after review'); await finish(after.input.text); await state(after.id, 'completed'); await accounting(after.id);
