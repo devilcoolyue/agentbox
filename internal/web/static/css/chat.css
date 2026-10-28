@@ -730,6 +730,14 @@ details.think.streaming .think-body::after {
 .wb-peek-arrow { flex: none; opacity: .55; transition: transform 0.15s ease, opacity 0.15s ease; }
 .wb-peek:hover .wb-peek-arrow { opacity: 1; }
 .wb-peek[aria-expanded="true"] .wb-peek-arrow { transform: rotate(180deg); opacity: 1; }
+/* 当前标签页徽标：跟在空间名后面，颜色同选中标签；换标签时旧图标往上淡出、新图标从下面弹上来（head-fold.ts） */
+.wb-peek-tab {
+  display: inline-grid; place-items: center; flex: none;
+  width: 22px; height: 22px; border-radius: calc(7px * var(--radius-scale));
+  background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--amber);
+  overflow: hidden;
+}
+.wb-peek-tab > svg { grid-area: 1 / 1; }
 @media (prefers-reduced-motion: reduce) { .wb-peek-arrow { transition: none; } }
 .thread-cur {
   display: inline-flex; align-items: center; gap: 7px;

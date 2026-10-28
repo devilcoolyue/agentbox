@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { emulateMotion } from './playwright-launch.mjs';
 
 // Workbench top bar folding (features/workspaces/head-fold.ts): a running workspace with a
 // conversation folds the title row and tabs away; hovering or clicking the workspace name in
@@ -17,6 +18,9 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
  }
  const workbench = page.locator('#workbench'), peek = page.locator('#wb-peek'), fold = page.locator('#btn-wb-fold');
  const topHeight = () => page.locator('#wb-top').evaluate(e => e.getBoundingClientRect().height);
+ // the floating bar: title row and tabs drawn over the content inside the droplet shape
+ const overlay = () => page.locator('#wb-top .wb-top-in').evaluate(e => { const s = getComputedStyle(e); return {shown: s.visibility === 'visible' && Number(s.opacity) > 0.99, height: e.getBoundingClientRect().height}; });
+ const badgeTab = () => page.locator('#wb-peek-tab').evaluate(e => e.firstElementChild ? e.dataset.tab : '');
  const logTop = () => page.locator('#chat-log').evaluate(e => Math.round(e.getBoundingClientRect().top));
  const has = (cls, on) => page.waitForFunction(([cls, on]) => document.getElementById('workbench').classList.contains(cls) === on, [cls, on]);
  const open = async () => { await page.goto(page.url().replace(/#.*$/, '') + '#/sessions/fixture-space/chat'); await page.reload(); await page.locator('#chat-log .msg.user').last().waitFor(); };
@@ -31,6 +35,8 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
   await has('head-folded', true);
   assert.ok(await topHeight() < 1, 'folded top bar takes no height');
   assert.equal(await page.locator('#wb-top .wb-top-in').evaluate(e => e.inert), true, 'folded bar is out of the tab order');
+  assert.equal((await overlay()).shown, false, 'folded bar is not drawn');
+  assert.equal(await badgeTab(), 'chat', 'the name carries the current tab icon');
   await peek.waitFor({state:'visible'});
   assert.equal(await page.locator('#wb-peek-name').textContent(), 'Fixture workspace');
   assert.equal(await peek.getAttribute('aria-expanded'), 'false');
@@ -40,12 +46,15 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
   // Hover floats the bar over the log; the conversation underneath does not move.
   await peek.hover();
   await has('head-peek', true);
-  assert.ok(await topHeight() > 60, 'peek shows title row and tabs');
+  const peeked = await overlay();
+  assert.ok(peeked.shown && peeked.height > 60, 'peek shows title row and tabs');
+  assert.ok(await topHeight() < 1, 'peeking takes no room in the layout');
   assert.equal(await logTop(), foldedTop, 'the overlay must not push the conversation');
   assert.equal(await peek.getAttribute('aria-expanded'), 'true');
   assert.equal(await page.locator('#wb-top .wb-top-in').evaluate(e => e.inert), false);
   await page.locator('#btn-stop').waitFor({state:'visible'});
-  assert.equal(await fold.getAttribute('aria-label'), '固定显示顶部栏');
+  assert.equal(await fold.getAttribute('aria-label'), '固定顶部栏');
+  assert.equal(await fold.locator('svg').getAttribute('data-icon-slot'), 'wb.pin');
   await page.screenshot({path:'output/playwright/head-fold-peek.png'});
   await page.locator('.tab[data-tab="files"]').hover(); // moving into the overlay keeps it open
   await page.waitForTimeout(400);
@@ -74,6 +83,8 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
    await has('head-folded', true);
    await page.locator(`${host} > #wb-peek`).waitFor({state:'visible'});
    assert.ok(await topHeight() < 1, `${tab}: folded top bar takes no height`);
+   assert.equal(await badgeTab(), tab, `${tab}: the badge follows the tab`);
+   assert.equal((await overlay()).shown, false, `${tab}: the overlay is gone`);
    assert.equal(await page.locator('.wb-peek-host').count(), 1, `${tab}: only the current toolbar makes room`);
    const [p, h] = await Promise.all([peek.boundingBox(), page.locator(host).boundingBox()]);
    assert.ok(p.y >= h.y - 1 && p.y + p.height <= h.y + h.height + 1, `${tab}: the name sits inside the toolbar row`);
@@ -103,7 +114,8 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
   await open();
   await page.waitForTimeout(100);
   assert.equal(await workbench.evaluate(e => e.classList.contains('head-folded')), false, 'pin survives a reload');
-  assert.equal(await fold.getAttribute('aria-label'), '收起顶部栏');
+  assert.equal(await fold.getAttribute('aria-label'), '取消固定');
+  assert.equal(await fold.locator('svg').getAttribute('data-icon-slot'), 'wb.unpin');
   await page.screenshot({path:'output/playwright/head-fold-pinned.png'});
   await fold.click();
   await has('head-folded', true);
@@ -114,6 +126,40 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
   assert.equal(await peek.isVisible(), false);
   assert.ok(await page.locator('.tabs').evaluate(e => e.getBoundingClientRect().height) > 30);
   await page.setViewportSize({width:1280,height:800});
+
+  // With motion: the bar drips out of the name and settles open, retracts into the name, and the
+  // pin's dock / undock animations both land in the right layout. Frames go to output/playwright.
+  await emulateMotion(page, 'no-preference');
+  try {
+   const content = () => page.locator('#wb-top .wb-top-in').evaluate(e => Number(getComputedStyle(e).opacity));
+   const settled = (shown) => page.waitForFunction(shown => { const e = document.querySelector('#wb-top .wb-top-in'), s = getComputedStyle(e);
+    return shown ? s.visibility === 'visible' && s.opacity === '1' && !e.style.filter : s.visibility === 'hidden'; }, shown, {timeout:5000});
+   await peek.hover();
+   await page.waitForFunction(() => getComputedStyle(document.getElementById('wb-drop')).visibility === 'visible');
+   await page.waitForTimeout(90);
+   assert.ok(await content() < 1, 'the bar fades in while the droplet grows');
+   await page.screenshot({path:'output/playwright/head-fold-motion-drip.png'});
+   await settled(true);
+   assert.equal(await logTop(), foldedTop, 'the animated overlay does not move the conversation either');
+   await page.screenshot({path:'output/playwright/head-fold-motion-open.png'});
+   await page.mouse.move(700, 650);
+   await page.waitForTimeout(420);
+   assert.equal(await page.locator('#wb-drop').evaluate(e => getComputedStyle(e).visibility), 'visible', 'collapsing takes its time');
+   await page.screenshot({path:'output/playwright/head-fold-motion-retract.png'});
+   await settled(false);
+   await peek.hover();
+   await settled(true);
+   await fold.click();
+   await has('head-folded', false);
+   assert.ok(await logTop() > foldedTop + 60, 'docking ends in the normal layout');
+   assert.equal(await page.locator('#wb-top').evaluate(e => e.style.height), '', 'no layout leftovers after docking');
+   await fold.click();
+   await has('head-folded', true);
+   await settled(false);
+   assert.equal(await logTop(), foldedTop, 'undocking slides the content back up');
+  } finally {
+   await emulateMotion(page, 'reduce');
+  }
 
   // Stopped: the start button is the point of the bar, keep it.
   setStatus('stopped');
@@ -131,5 +177,5 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
   await page.evaluate(() => localStorage.removeItem('agentbox_head_fold')).catch(() => {});
   await page.setViewportSize({width:1280,height:900});
  }
- console.log('Head fold: running conversation folds the top bar, hover/click/keyboard peek over the log, every tab folds with the name in its toolbar, remembered pin, phone, stopped and empty states passed');
+ console.log('Head fold: running conversation folds the top bar, hover/click/keyboard peek over the log, every tab folds with the name and tab badge in its toolbar, pin icons, remembered pin, phone, stopped and empty states passed');
 }

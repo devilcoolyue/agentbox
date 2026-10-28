@@ -99,28 +99,40 @@
 @media (prefers-reduced-motion: reduce) { .wb-state.state-changed, .wb-avatar .led.state-changed, .wb-avatar .led.on.state-changed { animation: none; } }
 .wb-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 
-/* ---- 顶部栏收起（head-fold.ts）：对话进行中把标题行与标签栏收成 0 高，线程栏顶到最上；
- * 悬停或点击线程栏左侧的空间名，整块以浮层从上方滑出，盖在对话上、不挤动正在看的内容。
- * 高度用 grid 0fr↔1fr 过渡。浮层压在正文上，底色用不透明的 --panel-solid（玻璃风格的
- * --page 是透明的）。窄屏标题已并入顶栏，不收，线程栏也不出空间名。 ---- */
-.wb-top { display: grid; grid-template-rows: 1fr; flex: none; }
-.wb-top-in { min-height: 0; }
+/* ---- 顶部栏收起（head-fold.ts）：空间运行中把标题行与标签栏收起，各标签页的工具栏顶到最上；
+ * 悬停或点击工具栏左侧的空间名，顶部栏像水滴一样从空间名处滴出、铺开成浮在内容上的卡片，
+ * 收回时缩成一小滴被空间名吸回去。形状由脚本用弹簧逐帧算：#wb-drop 里的水滴块画底色，
+ * .wb-top-in 绝对定位在卡片位置、按水滴当前形状裁切；#wb-top 只剩固定 / 取消固定时
+ * 推开下方内容的占位高度。#wb-goo 滤镜把空间名下的锚点和水滴融成一滴并补投影。
+ * 浮层压在正文上，底色用不透明的 --panel-solid（玻璃风格的 --page 是透明的）。
+ * 窄屏标题已并入顶栏，不收（脚本也按同一断点判断）。 ---- */
+.wb-top { flex: none; }
 .wb-peek[hidden] { display: none; }
+/* 已固定：标题行的图钉是实心琥珀色，点它取消固定 */
+#btn-wb-fold.pinned { color: var(--amber); }
+.wb-goo-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+#wb-goo feDropShadow { flood-color: rgb(0 0 0 / .45); }
+:root[data-theme="light"] #wb-goo feDropShadow { flood-color: rgb(45 38 24 / .17); }
+.wb-drop { display: none; }
 @media (min-width: 761px) {
-  .workbench.head-folded .wb-top {
-    position: absolute; top: 0; left: 0; right: 0; z-index: 52;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows 0.2s var(--ease-out), box-shadow 0.2s ease;
+  .workbench.head-folded .wb-drop {
+    display: block; position: absolute; inset: 0; z-index: 52;
+    pointer-events: none; visibility: hidden; filter: url(#wb-goo);
   }
-  .workbench.head-folded .wb-top-in { overflow: hidden; background: var(--panel-solid); }
+  .wb-drop > span { position: absolute; left: 0; top: 0; background: var(--panel-solid); }
+  .wb-drop-pill { opacity: 0; transition: opacity 0.18s ease; }
+  .wb-drop-pill.show { opacity: 1; }
+  /* 铺满成整条顶部栏（固定动画的终点）：去掉水滴滤镜的投影，换成与常态相同的底边线 */
+  .workbench.head-folded .wb-drop.docked { filter: none; }
+  .wb-drop.docked .wb-drop-blob { box-shadow: 0 1px 0 var(--line); }
+  .workbench.head-folded .wb-top-in {
+    position: absolute; left: 0; top: 0; z-index: 53;
+    visibility: hidden; transform-origin: 18% 0;
+  }
   .workbench.head-folded .wb-head { background: transparent; }
-  .workbench.head-folded.head-peek .wb-top {
-    grid-template-rows: 1fr;
-    box-shadow: var(--shadow-lg);
-  }
-}
-@media (min-width: 761px) and (prefers-reduced-motion: reduce) {
-  .workbench.head-folded .wb-top { transition: none; }
+  .workbench.head-folded .tabs { border-bottom-color: transparent; }
+  /* 空间名压在浮层之上：内容浮现时它淡出让位，收回时再露出来接住水滴 */
+  .workbench.head-folded .wb-peek { z-index: 54; }
 }
 
 /* 运行状态胶囊：首页最近空间用。运行中=绿，休眠=警告黄，已停止=灰 */

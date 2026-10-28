@@ -358,7 +358,17 @@
         </div>
 
         <div id="workbench" class="workbench hidden">
-          <!-- 顶部栏（标题行 + 标签栏）：对话进行中自动收起，悬停或点线程栏左侧的空间名再浮出（head-fold.ts） -->
+          <!-- 顶部栏（标题行 + 标签栏）：空间运行中自动收起，悬停或点各标签页工具栏左侧的空间名，
+               从空间名处像水滴一样展开成浮层（head-fold.ts）。收起时 #wb-top 只是给固定动画让位的占位，
+               内容 .wb-top-in 绝对定位在浮层位置，底色由 #wb-drop 的水滴形状提供。 -->
+          <svg class="wb-goo-defs" width="0" height="0" aria-hidden="true" focusable="false">
+            <filter id="wb-goo" x="-10%" y="-40%" width="120%" height="200%" color-interpolation-filters="sRGB">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+              <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -10" result="goo"/>
+              <feDropShadow in="goo" dx="0" dy="12" stdDeviation="14"/>
+            </filter>
+          </svg>
+          <div id="wb-drop" class="wb-drop" aria-hidden="true"><span class="wb-drop-pill"></span><span class="wb-drop-blob"></span></div>
           <div id="wb-top" class="wb-top"><div class="wb-top-in">
           <header class="wb-head">
             <div class="wb-title">
@@ -430,9 +440,9 @@
           <section id="tab-chat" class="pane">
             <!-- 对话切换栏：当前对话标题（点击打开历史面板）+ 新对话入口 -->
             <div class="thread-bar">
-              <!-- 顶部栏收起时出现：空间头像与名称，悬停或点击浮出顶部栏 -->
+              <!-- 顶部栏收起时出现：空间头像、名称与当前标签页图标，悬停或点击浮出顶部栏 -->
               <button id="wb-peek" type="button" class="wb-peek" hidden aria-expanded="false" aria-controls="wb-top" aria-label="展开顶部栏" data-i18n-attrs="{&quot;aria-label&quot;:&quot;展开顶部栏&quot;}">
-                <span id="wb-peek-avatar" class="wb-peek-avatar"></span><span id="wb-peek-name" class="wb-peek-name"></span><svg class="wb-peek-arrow" width="12" height="12" data-icon="chevron" aria-hidden="true"></svg>
+                <span id="wb-peek-avatar" class="wb-peek-avatar"></span><span id="wb-peek-name" class="wb-peek-name"></span><span id="wb-peek-tab" class="wb-peek-tab"></span><svg class="wb-peek-arrow" width="12" height="12" data-icon="chevron" aria-hidden="true"></svg>
               </button>
               <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话" data-i18n-attrs="{&quot;data-tip&quot;:&quot;历史对话：查看、切换并继续之前的对话&quot;}">
                 <span id="thread-title" class="t" data-i18n-text="[&quot;新对话&quot;]">新对话</span>
