@@ -70,7 +70,7 @@ func TestInvalidEffortRejectedBeforeDockerAndUserLog(t *testing.T) {
 	if _, err := s.cfg.UpdateAccount("shared", config.AccountPatch{ModelReasoning: &policies}); err != nil {
 		t.Fatal(err)
 	}
-	room := s.chat.room(sess.ID)
+	room := s.chat.room(sess.ID).activeTurn(t)
 	room.tryBegin()
 	// Docker is nil. This must return an error before startup or inference.
 	room.runTurn("must not run", sess.DefaultModel, "high", "effort")
@@ -82,7 +82,7 @@ func TestInvalidEffortRejectedBeforeDockerAndUserLog(t *testing.T) {
 	if strings.Contains(string(raw), `"kind":"user"`) || !strings.Contains(string(raw), `"code":"chat_options_invalid"`) {
 		t.Fatalf("invalid request was logged as a user turn: %s", raw)
 	}
-	if room.state() != "idle" {
+	if room.room.state() != "idle" {
 		t.Fatal("rejected request left room running")
 	}
 }

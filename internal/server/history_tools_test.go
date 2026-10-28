@@ -114,7 +114,7 @@ func TestHistorySendsSlimToolResults(t *testing.T) {
 		{Kind: "event", Event: json.RawMessage(readResult)},
 		{Kind: "event", Event: json.RawMessage(`{"type":"result","subtype":"success"}`)},
 	} {
-		if err := room.appendLog(e); err != nil {
+		if err := room.appendLog("", e); err != nil {
 			t.Fatal(err)
 		}
 	}

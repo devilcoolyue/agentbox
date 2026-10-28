@@ -34,7 +34,7 @@ func appendEntries(t *testing.T, s *Server, sess store.Session, entries ...logEn
 	t.Helper()
 	room := s.chat.room(sess.ID)
 	for _, e := range entries {
-		if err := room.appendLog(e); err != nil {
+		if err := room.appendLog("", e); err != nil {
 			t.Fatal(err)
 		}
 	}

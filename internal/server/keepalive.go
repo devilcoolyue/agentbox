@@ -572,7 +572,7 @@ func (s *Server) keepCache(id string, plan keepalivePlan) (usage.PromptCache, bo
 		if resume != plan.point.Conversation {
 			return keepaliveStopped("the thread no longer continues the conversation")
 		}
-		if s.chatTurnRunning(id) {
+		if s.chatTurnRunning(id, plan.thread) {
 			return keepaliveStopped("a turn is running")
 		}
 	}
@@ -670,8 +670,9 @@ func (r keepaliveResult) String() string {
 	return fmt.Sprintf("result %s, is_error %v: %q", r.subtype, r.isError, r.text)
 }
 
-// chatTurnRunning reports whether the workspace's chat room runs a turn.
-func (s *Server) chatTurnRunning(id string) bool {
+// chatTurnRunning reports whether the thread runs a turn; with no thread,
+// whether any thread of the workspace does.
+func (s *Server) chatTurnRunning(id, thread string) bool {
 	if s.chat == nil {
 		return false
 	}
@@ -681,7 +682,8 @@ func (s *Server) chatTurnRunning(id string) bool {
 	if room == nil {
 		return false
 	}
-	room.mu.Lock()
-	defer room.mu.Unlock()
-	return room.running
+	if thread == "" {
+		return room.anyRunning()
+	}
+	return room.threadRunning(thread)
 }

@@ -5,6 +5,8 @@
 package agent
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -330,6 +332,16 @@ func TitleOutput(agentType, out string) (title string, usage []byte) {
 // InterruptCommand kills the current chat turn, if any.
 func InterruptCommand() []string {
 	return []string{"/bin/sh", "-c", "kill -INT $(cat " + PidFile + " 2>/dev/null) 2>/dev/null || true"}
+}
+
+// ChatPidFile is the pid file of one chat thread's CLI. Threads of a workspace
+// run side by side, so each needs its own for a stop signal to reach only it.
+func ChatPidFile(thread string) string {
+	if thread == "" {
+		return PidFile
+	}
+	sum := sha256.Sum256([]byte(thread))
+	return "/tmp/.agentbox-chat-" + hex.EncodeToString(sum[:8]) + ".pid"
 }
 
 // InterruptCommandFor targets a CLI started with ChatExtras.PidFile.

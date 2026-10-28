@@ -43,9 +43,9 @@ func TestChatMetadataLiveAndHistory(t *testing.T) {
 		room.attach(cw)
 		defer room.detach(cw)
 		for _, turn := range turns {
-			room.recordChat(logEntry{Kind: "user", Text: "fixture prompt", Turn: &turn}, "user_message", "")
+			room.activeTurn(t).recordChat(logEntry{Kind: "user", Text: "fixture prompt", Turn: &turn}, "user_message", "")
 		}
-		room.recordChat(logEntry{Kind: "event", Event: json.RawMessage(`{"type":"assistant","message":{"model":"reported-model","content":[{"type":"text","text":"answer"}]}}`)}, "agent_event", "")
+		room.activeTurn(t).recordChat(logEntry{Kind: "event", Event: json.RawMessage(`{"type":"assistant","message":{"model":"reported-model","content":[{"type":"text","text":"answer"}]}}`)}, "agent_event", "")
 	}))
 	defer server.Close()
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
@@ -101,7 +101,7 @@ func TestHistoryWindowRetainsTurnMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	room := s.chat.room(sess.ID)
-	room.recordChat(logEntry{Kind: "user", Text: "large prompt", Turn: &chatTurnMetadata{ID: "long-turn", Model: "fixture", Effort: "low", Control: "effort"}}, "user_message", "")
+	room.activeTurn(t).recordChat(logEntry{Kind: "user", Text: "large prompt", Turn: &chatTurnMetadata{ID: "long-turn", Model: "fixture", Effort: "low", Control: "effort"}}, "user_message", "")
 	path := s.threadPath(sess, s.activeThread(sess))
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {

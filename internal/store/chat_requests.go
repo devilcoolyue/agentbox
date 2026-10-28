@@ -171,7 +171,7 @@ func (s *Store) AcceptChatRequest(u User, session, id string, in ChatRequestInpu
 	return s.acceptChatRequest(u, session, id, in, ChatAccepted, "")
 }
 
-// QueueChatRequest accepts a follow-up behind the session's running or
+// QueueChatRequest accepts a follow-up behind its thread's running or
 // unreviewed turn. Like AcceptChatRequest, only fresh=true may be dispatched,
 // and only by taking it from the queue in order.
 func (s *Store) QueueChatRequest(u User, session, id string, in ChatRequestInput) (ChatRequest, bool, error) {
@@ -221,8 +221,9 @@ func (s *Store) acceptChatRequest(u User, session, id string, in ChatRequestInpu
 		return ChatRequest{}, false, err
 	}
 	if state == ChatAccepted {
+		// Threads run independently; only the request's own thread is checked.
 		var n int
-		if err = tx.QueryRow("SELECT count(*) FROM chat_requests WHERE session_id=? AND ("+chatRequestActive+" OR state='queued')", session).Scan(&n); err != nil {
+		if err = tx.QueryRow("SELECT count(*) FROM chat_requests WHERE session_id=? AND thread_id=? AND ("+chatRequestActive+" OR state='queued')", session, in.ThreadID).Scan(&n); err != nil {
 			return ChatRequest{}, false, err
 		}
 		if n != 0 {
@@ -249,11 +250,11 @@ func (s *Store) acceptChatRequest(u User, session, id string, in ChatRequestInpu
 	return c, true, nil
 }
 
-// NextQueuedChatRequest is the session's oldest queued request and its owner,
+// NextQueuedChatRequest is the thread's oldest queued request and its owner,
 // an internal dispatch read like PendingChatRequest; sql.ErrNoRows when none.
-func (s *Store) NextQueuedChatRequest(session string) (ChatRequest, User, error) {
+func (s *Store) NextQueuedChatRequest(session, thread string) (ChatRequest, User, error) {
 	var name, epoch string
-	row := s.db.QueryRow("SELECT user,user_created_at,"+chatRequestColumns+" FROM chat_requests WHERE session_id=? AND state='queued' ORDER BY created_at, rowid LIMIT 1", session)
+	row := s.db.QueryRow("SELECT user,user_created_at,"+chatRequestColumns+" FROM chat_requests WHERE session_id=? AND thread_id=? AND state='queued' ORDER BY created_at, rowid LIMIT 1", session, thread)
 	var c ChatRequest
 	var raw string
 	err := row.Scan(&name, &epoch, &c.RequestID, &c.SessionID, &c.ThreadID, &c.TurnID, &raw, &c.State, &c.ErrorCode, &c.Revision, &c.CreatedAt, &c.UpdatedAt, &c.MergedInto, &c.Fingerprint)
@@ -268,6 +269,25 @@ func (s *Store) NextQueuedChatRequest(session string) (ChatRequest, User, error)
 		return c, User{}, sql.ErrNoRows // a replaced user's leftovers never run
 	}
 	return c, u, nil
+}
+
+// QueuedChatThreads lists a session's threads with queued requests, the one
+// whose oldest request has waited longest first, so dispatch keeps their order.
+func (s *Store) QueuedChatThreads(session string) ([]string, error) {
+	rows, err := s.db.Query("SELECT thread_id FROM chat_requests WHERE session_id=? AND state='queued' GROUP BY thread_id ORDER BY min(created_at), min(rowid)", session)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // QueuedChatSessions lists sessions with queued requests, for dispatch after
@@ -408,7 +428,7 @@ func (s *Store) VisitChatAttachmentInputs(user string, visit func(ChatRequestInp
 }
 
 // DeleteChatThreadRequests retains ID fences before the transcript is removed.
-// The server also holds the room, preventing legacy or receipt turns from racing.
+// The server also holds the thread, preventing legacy or receipt turns from racing.
 func (s *Store) DeleteChatThreadRequests(u User, session, thread string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -422,7 +442,7 @@ func (s *Store) DeleteChatThreadRequests(u User, session, thread string) error {
 		return err
 	}
 	var n int
-	if err = tx.QueryRow("SELECT count(*) FROM chat_requests WHERE session_id=? AND "+chatRequestActive, session).Scan(&n); err != nil {
+	if err = tx.QueryRow("SELECT count(*) FROM chat_requests WHERE session_id=? AND thread_id=? AND "+chatRequestActive, session, thread).Scan(&n); err != nil {
 		return err
 	}
 	if n != 0 {
@@ -437,8 +457,27 @@ func (s *Store) DeleteChatThreadRequests(u User, session, thread string) error {
 
 // PendingChatRequest is an internal room admission gate, not an authorized API
 // read. Callers must fail closed on errors other than sql.ErrNoRows.
-func (s *Store) PendingChatRequest(session string) (ChatRequest, error) {
-	return scanChatRequest(s.db.QueryRow("SELECT "+chatRequestColumns+" FROM chat_requests WHERE session_id=? AND "+chatRequestActive, session))
+func (s *Store) PendingChatRequest(session, thread string) (ChatRequest, error) {
+	return scanChatRequest(s.db.QueryRow("SELECT "+chatRequestColumns+" FROM chat_requests WHERE session_id=? AND thread_id=? AND "+chatRequestActive, session, thread))
+}
+
+// PendingChatRequests lists the session's active or unreviewed requests, one
+// per thread at most, oldest first. Like PendingChatRequest, an internal read.
+func (s *Store) PendingChatRequests(session string) ([]ChatRequest, error) {
+	rows, err := s.db.Query("SELECT "+chatRequestColumns+" FROM chat_requests WHERE session_id=? AND "+chatRequestActive+" ORDER BY created_at, rowid", session)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ChatRequest
+	for rows.Next() {
+		c, err := scanChatRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func chatTransitionAllowed(from, to string) bool {

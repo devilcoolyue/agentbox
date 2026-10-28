@@ -41,7 +41,7 @@ func TestChatCostMatchesSettlementLiveAndHistory(t *testing.T) {
 			}
 			s.chat = newChatManager(s)
 			room := s.chat.room(sess.ID)
-			room.recordChat(logEntry{Kind: "user", Text: "fixture", Turn: &chatTurnMetadata{ID: "turn", Model: "fixture"}}, "user_message", "")
+			room.activeTurn(t).recordChat(logEntry{Kind: "user", Text: "fixture", Turn: &chatTurnMetadata{ID: "turn", Model: "fixture"}}, "user_message", "")
 			tid := s.activeThread(sess)
 			base := store.UsageEvent{User: sess.User, SessionID: sess.ID, ThreadID: tid, TurnID: "turn", Agent: tc.agent, Model: "fixture", Kind: store.UsageKindChat}
 			var tally usageTally

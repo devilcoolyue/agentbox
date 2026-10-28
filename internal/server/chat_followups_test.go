@@ -172,10 +172,11 @@ const toolStepLine = `{"type":"assistant","session_id":"provider-session","messa
 
 func waitSteerable(t *testing.T, room *chatRoom) {
 	t.Helper()
+	turn := room.activeTurn(t)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		room.mu.Lock()
-		ready := room.steer != nil
+		ready := turn.steer != nil
 		room.mu.Unlock()
 		if ready {
 			return

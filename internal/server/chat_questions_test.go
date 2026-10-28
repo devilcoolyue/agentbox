@@ -278,7 +278,7 @@ func TestChatQuestionInterruptWithdrawsQuestion(t *testing.T) {
 	receiptFrom(t, f.request("PUT", "requests/"+id, "alice", f.input))
 	room := f.s.chat.room(f.sess.ID)
 	waitQuestion(t, room, "toolu_1")
-	if err := room.interruptRequest(context.Background(), id, true); err != nil {
+	if err := room.activeTurn(t).interruptRequest(context.Background(), id, true); err != nil {
 		t.Fatal(err)
 	}
 	if c := f.wait(t, id); c.State != store.ChatInterrupted {

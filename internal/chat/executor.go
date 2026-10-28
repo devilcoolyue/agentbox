@@ -177,7 +177,7 @@ func (e Executor) appServerTurn(ctx context.Context, turn Turn) (fallback bool, 
 	if err != nil {
 		return false, err
 	}
-	stream, err := e.Backend.ExecStream(ctx, turn.ContainerID, agent.AppServerCommand(), env)
+	stream, err := e.Backend.ExecStream(ctx, turn.ContainerID, agent.AppServerCommandFor(turn.Extras.PidFile), env)
 	if err != nil {
 		return false, errors.New("exec失败: " + err.Error())
 	}

@@ -428,6 +428,8 @@
               <button id="btn-threads" class="thread-cur" data-tip="历史对话：查看、切换并继续之前的对话" data-i18n-attrs="{&quot;data-tip&quot;:&quot;历史对话：查看、切换并继续之前的对话&quot;}">
                 <span id="thread-title" class="t" data-i18n-text="[&quot;新对话&quot;]">新对话</span>
               </button>
+              <!-- 同一空间的其他对话还在运行时出现：几个在跑，点开对话列表（chat-threads.ts） -->
+              <button id="thread-running" type="button" class="thread-running hidden"><span id="thread-running-text"></span></button>
               <button id="chat-network" type="button" class="chat-network hidden" aria-label="内网状态，查看连接详情" data-i18n-attrs="{&quot;aria-label&quot;:&quot;内网状态，查看连接详情&quot;}">
                 <span class="chat-network-dot" aria-hidden="true"></span>
                 <span data-i18n-text="[&quot;内网&quot;]">内网</span><span id="chat-network-status" class="chat-network-status" data-i18n-text="[&quot;离线&quot;]">离线</span>

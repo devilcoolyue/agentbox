@@ -237,6 +237,13 @@
               "type": "null"
             }
           ]
+        },
+        "pendings": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/ChatRequestReceipt"
+          }
         }
       },
       "required": [

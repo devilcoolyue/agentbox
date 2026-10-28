@@ -46,6 +46,15 @@ func AppServerCommand() []string {
 	return []string{"/bin/sh", "-c", "echo $$ >" + PidFile + "; exec codex app-server"}
 }
 
+// AppServerCommandFor 把 PID 记到指定文件：同一空间并行的对话各有一份，
+// 中断只打到本对话的 app-server。空或不合法时退回默认文件。
+func AppServerCommandFor(pidFile string) []string {
+	if !pidFileRe.MatchString(pidFile) {
+		return AppServerCommand()
+	}
+	return []string{"/bin/sh", "-c", "echo $$ >" + pidFile + "; exec codex app-server"}
+}
+
 // CodexTurn 描述经 app-server 跑的一个无头对话回合。
 type CodexTurn struct {
 	Prompt                string

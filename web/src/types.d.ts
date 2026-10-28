@@ -1615,6 +1615,10 @@ export interface ChatMessage extends APIProblem {
   delegation?: DelegationView;
   /** delegation_event：跑腿模型的一条完整记录 */
   entry?: HistoryEntry;
+  /** 事件所属的对话线程（同一空间的几个对话可以同时运行）；没有就是空间级事件 */
+  thread?: string;
+  /** 连接时的 status：各个正在运行的对话已进行多久、在等什么 */
+  threads?: Record<string, { elapsed_ms?: number; phase?: string }>;
 }
 
 export interface ResourceLimits { max_running: number; max_running_per_user: number; min_free_bytes: number; }

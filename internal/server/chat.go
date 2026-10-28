@@ -24,7 +24,13 @@ import (
 // titleTimeout bounds the one-shot model call that names a new thread.
 const titleTimeout = 90 * time.Second
 
-// --- chat manager: one room per session, broadcasting to all open tabs ---
+// --- chat manager: one room per session, broadcasting to all open tabs.
+// Each thread of a session has its own turn slot (chatTurn); up to
+// maxParallelChats of them run at once, each its own CLI process. ---
+
+// maxParallelChats bounds the turns one workspace runs at the same time: every
+// running thread is a CLI process in the same container, sharing its memory.
+const maxParallelChats = 3
 
 type chatManager struct {
 	srv   *Server
@@ -63,16 +69,11 @@ type chatRoom struct {
 	srv    *Server
 	sessID string
 
-	mu              sync.Mutex
-	conns           map[*connWriter]bool
-	running         bool
-	startedAt       time.Time // when the running turn was admitted; drives the page's elapsed counter
-	phase           string    // what the running turn waits on before its CLI runs (chatPhaseStarting), or ""
-	turnDone        chan struct{}
-	stop            func() // 当前回合的优雅中断（app-server 回合设置）；nil 时走 SIGINT
-	requestID       string
-	userInterrupted bool
-	submitMu        sync.Mutex // receipt admission, orphan recovery and explicit review
+	mu        sync.Mutex
+	conns     map[*connWriter]bool
+	turns     map[string]*chatTurn // thread → its turn slot
+	exclusive bool                 // an account switch holds the whole workspace: no turn starts
+	submitMu  sync.Mutex           // receipt admission, orphan recovery and explicit review
 
 	// fileMu guards the session's on-disk chat state: thread transcripts,
 	// the active-thread pointer and the one-time legacy migration.
@@ -88,8 +89,155 @@ type chatRoom struct {
 	commands          []agent.SlashCommand
 
 	questions map[string]*roomQuestion // under mu; see chat_questions.go
-	steer     chat.Steer               // under mu; set while the running turn takes follow-ups
 }
+
+// chatTurn is one thread's turn slot. At most one turn runs in a thread; the
+// thread's transcript, resume id and CLI pid file belong to it alone, so other
+// threads of the workspace run beside it. Fields are guarded by room.mu.
+type chatTurn struct {
+	room   *chatRoom
+	thread string
+
+	running         bool
+	held            bool      // a thread operation (delete) owns the slot without running a turn
+	startedAt       time.Time // when the running turn was admitted; drives the page's elapsed counter
+	phase           string    // what the running turn waits on before its CLI runs (chatPhaseStarting), or ""
+	turnDone        chan struct{}
+	stop            func() // 当前回合的优雅中断（app-server 回合设置）；nil 时走 SIGINT
+	requestID       string
+	userInterrupted bool
+	steer           chat.Steer // set while the running turn takes follow-ups
+}
+
+// turn returns the thread's slot, creating it on first use.
+func (r *chatRoom) turn(thread string) *chatTurn {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.turnLocked(thread)
+}
+
+func (r *chatRoom) turnLocked(thread string) *chatTurn {
+	if r.turns == nil {
+		r.turns = map[string]*chatTurn{}
+	}
+	t := r.turns[thread]
+	if t == nil {
+		t = &chatTurn{room: r, thread: thread}
+		r.turns[thread] = t
+	}
+	return t
+}
+
+// runningLocked lists the running turns; the caller holds mu.
+func (r *chatRoom) runningLocked() []*chatTurn {
+	var out []*chatTurn
+	for _, t := range r.turns {
+		if t.running {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// anyRunning reports whether any thread of the workspace runs a turn.
+func (r *chatRoom) anyRunning() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.runningLocked()) > 0
+}
+
+// threadRunning reports whether the thread runs a turn.
+func (r *chatRoom) threadRunning(thread string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t := r.turns[thread]
+	return t != nil && t.running
+}
+
+// runningStatus describes every running turn for a page that joins: how long
+// each has run (not a start time, so a page with a wrong clock still counts
+// right) and what it waits on.
+func (r *chatRoom) runningStatus() map[string]any {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := map[string]any{}
+	for _, t := range r.runningLocked() {
+		st := map[string]any{"elapsed_ms": time.Since(t.startedAt).Milliseconds()}
+		if t.phase != "" {
+			st["phase"] = t.phase
+		}
+		out[t.thread] = st
+	}
+	return out
+}
+
+// beginExclusive holds the whole workspace (an account switch): it fails while
+// any thread runs or is held, and no turn starts until endExclusive.
+func (r *chatRoom) beginExclusive() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.exclusive {
+		return errChatBusy
+	}
+	for _, t := range r.turns {
+		if t.running || t.held {
+			return errChatBusy
+		}
+	}
+	r.exclusive = true
+	return nil
+}
+
+func (r *chatRoom) endExclusive() {
+	r.mu.Lock()
+	r.exclusive = false
+	r.mu.Unlock()
+	r.kickQueue()
+}
+
+// hold takes the thread's slot for a thread operation (delete) without running
+// a turn; it fails while the thread runs.
+func (t *chatTurn) hold() error {
+	r := t.room
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if t.running || t.held || r.exclusive {
+		return errChatBusy
+	}
+	t.held = true
+	return nil
+}
+
+func (t *chatTurn) unhold() {
+	r := t.room
+	r.mu.Lock()
+	t.held = false
+	r.mu.Unlock()
+	r.kickQueue()
+}
+
+// tagged marks an event with the thread it belongs to, so pages showing
+// another thread file it under that thread instead of rendering it.
+type threadTagged struct {
+	thread string
+	value  any
+}
+
+func (v threadTagged) MarshalJSON() ([]byte, error) {
+	raw, err := json.Marshal(v.value)
+	if err != nil || len(raw) < 2 || raw[0] != '{' {
+		return raw, err
+	}
+	tag, _ := json.Marshal(v.thread)
+	out := append([]byte(`{"thread":`), tag...)
+	if string(raw) != "{}" {
+		out = append(out, ',')
+	}
+	return append(out, raw[1:]...), nil
+}
+
+// broadcast sends a thread's event to every page of the workspace.
+func (t *chatTurn) broadcast(v any) { t.room.broadcast(threadTagged{t.thread, v}) }
 
 func (r *chatRoom) broadcast(v any) {
 	r.mu.Lock()
@@ -118,18 +266,10 @@ func (r *chatRoom) detach(c *connWriter) {
 }
 
 func (r *chatRoom) state() string {
-	state, _ := r.status()
-	return state
-}
-
-// status is the room state plus, while running, when the turn began.
-func (r *chatRoom) status() (string, time.Time) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.running {
-		return "running", r.startedAt
+	if r.anyRunning() {
+		return "running"
 	}
-	return "idle", time.Time{}
+	return "idle"
 }
 
 // chatPhaseStarting is the running turn starting its stopped workspace, which
@@ -138,57 +278,66 @@ const chatPhaseStarting = "starting"
 
 // setPhase records what the running turn waits on and tells the pages, so a
 // turn that first starts its workspace says so instead of looking stuck.
-func (r *chatRoom) setPhase(phase string) {
+func (t *chatTurn) setPhase(phase string) {
+	r := t.room
 	r.mu.Lock()
-	if !r.running || r.phase == phase {
+	if !t.running || t.phase == phase {
 		r.mu.Unlock()
 		return
 	}
-	r.phase = phase
+	t.phase = phase
 	r.mu.Unlock()
-	r.broadcast(map[string]any{"type": "status", "state": "running", "phase": phase})
+	t.broadcast(map[string]any{"type": "status", "state": "running", "phase": phase})
 }
 
-// tryBegin marks the room busy; returns false if a turn is already running.
-func (r *chatRoom) tryBegin() bool {
-	return r.begin() == nil
+// tryBegin marks the thread busy; returns false if it cannot start a turn now.
+func (t *chatTurn) tryBegin() bool {
+	return t.begin() == nil
 }
 
 var errChatBusy = errors.New("chat room busy")
 
-func (r *chatRoom) begin() error {
+// errChatParallel is the workspace already running maxParallelChats threads.
+var errChatParallel = errors.New("too many threads running")
+
+func (t *chatTurn) begin() error {
+	r := t.room
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.running {
+	if t.running || t.held || r.exclusive {
 		return errChatBusy
 	}
+	if len(r.runningLocked()) >= maxParallelChats {
+		return errChatParallel
+	}
 	if r.srv != nil && r.srv.store != nil {
-		if _, err := r.srv.store.PendingChatRequest(r.sessID); err == nil {
+		if _, err := r.srv.store.PendingChatRequest(r.sessID, t.thread); err == nil {
 			return store.ErrChatPending
 		} else if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 	}
-	r.running, r.startedAt, r.phase = true, time.Now(), ""
-	r.requestID, r.userInterrupted = "", false
-	r.turnDone = make(chan struct{})
+	t.running, t.startedAt, t.phase = true, time.Now(), ""
+	t.requestID, t.userInterrupted = "", false
+	t.turnDone = make(chan struct{})
 	return nil
 }
 
-// end releases the room and lets a queued follow-up start.
-func (r *chatRoom) end() {
-	r.release()
-	r.kickQueue()
+// end releases the thread and lets queued follow-ups (of any thread) start.
+func (t *chatTurn) end() {
+	t.release()
+	t.room.kickQueue()
 }
 
-func (r *chatRoom) release() {
+func (t *chatTurn) release() {
+	r := t.room
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.running = false
-	r.requestID, r.phase = "", ""
-	if r.turnDone != nil {
-		close(r.turnDone)
-		r.turnDone = nil
+	t.running = false
+	t.requestID, t.phase = "", ""
+	if t.turnDone != nil {
+		close(t.turnDone)
+		t.turnDone = nil
 	}
 }
 
@@ -202,10 +351,10 @@ type chatTurnMetadata = chat.TurnMetadata
 type logEntry = chat.Entry
 
 // History and live clients see the same timestamp and settings snapshot.
-func (r *chatRoom) recordChat(e logEntry, messageType string, retryText string) error {
+func (t *chatTurn) recordChat(e logEntry, messageType string, retryText string) error {
 	e.TS = time.Now()
-	err := r.appendLog(e)
-	r.broadcast(struct {
+	err := t.room.appendLog(t.thread, e)
+	t.broadcast(struct {
 		logEntry
 		Type      string `json:"type"`
 		RetryText string `json:"retry_text,omitempty"`
@@ -213,7 +362,9 @@ func (r *chatRoom) recordChat(e logEntry, messageType string, retryText string) 
 	return err
 }
 
-func (r *chatRoom) appendLog(e logEntry) error {
+// appendLog appends to the thread's transcript; every turn writes its own
+// thread, whichever one the pages show. An empty thread is the active one.
+func (r *chatRoom) appendLog(thread string, e logEntry) error {
 	sess, ok := r.srv.store.Get(r.sessID)
 	if !ok {
 		return errSessionGone
@@ -224,10 +375,13 @@ func (r *chatRoom) appendLog(e logEntry) error {
 		log.Printf("chat threads %s: %v", r.sessID, err)
 		return err
 	}
-	tid, err := r.srv.ensureActiveThread(sess)
-	if err != nil {
-		log.Printf("chat threads %s: %v", r.sessID, err)
-		return err
+	tid := thread
+	if tid == "" {
+		var err error
+		if tid, err = r.srv.ensureActiveThread(sess); err != nil {
+			log.Printf("chat threads %s: %v", r.sessID, err)
+			return err
+		}
 	}
 	if e.TS.IsZero() {
 		e.TS = time.Now()
@@ -277,19 +431,21 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 		conn.Close()
 	}()
 
-	// A page joining mid-turn gets how long the turn has run, not a start
-	// time, so its counter is right even when its clock is off.
-	status := map[string]any{"type": "status"}
-	state, started := room.status()
-	status["state"] = state
-	if !started.IsZero() {
-		status["elapsed_ms"] = time.Since(started).Milliseconds()
+	// A page joining mid-turn gets how long each running thread's turn has
+	// run, not a start time, so its counter is right even when its clock is
+	// off. Pages from before parallel threads read the top level, which
+	// describes the active thread.
+	running := room.runningStatus()
+	status := map[string]any{"type": "status", "state": "idle", "threads": running}
+	room.fileMu.Lock()
+	active := s.activeThread(sess)
+	room.fileMu.Unlock()
+	if st, ok := running[active].(map[string]any); ok {
+		status["state"] = "running"
+		for k, v := range st {
+			status[k] = v
+		}
 	}
-	room.mu.Lock()
-	if room.running && room.phase != "" {
-		status["phase"] = room.phase
-	}
-	room.mu.Unlock()
 	_ = cw.send(status)
 	if _, paused := s.quotaPause(sess); paused {
 		_ = cw.send(room.quotaPauseMessage())
@@ -325,6 +481,7 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 			Model         string `json:"model"`
 			Effort        string `json:"effort"`
 			EffortControl string `json:"effort_control"`
+			Thread        string `json:"thread"`
 		}
 		if err := conn.ReadJSON(&msg); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
@@ -360,17 +517,32 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 				reject(chatRequestErrorCode(errChatPaused))
 				continue
 			}
-			if err := room.begin(); err != nil {
+			// This legacy path names no thread: it runs in the active one.
+			tid, err := room.activeThreadEnsured()
+			if err != nil {
+				reject(classifyProblem(err, "internal_error"))
+				continue
+			}
+			turn := room.turn(tid)
+			if err := turn.begin(); err != nil {
 				reject(chatRequestErrorCode(err))
 				continue
 			}
-			if !s.spawn(func() { room.runTurnContext(turnContext, msg.Text, msg.Model, msg.Effort, msg.EffortControl) }) {
-				room.end()
+			if !s.spawn(func() { turn.runTurnContext(turnContext, msg.Text, msg.Model, msg.Effort, msg.EffortControl) }) {
+				turn.end()
 				reject("server_stopping")
 				return
 			}
 		case "interrupt":
-			room.interrupt()
+			thread := msg.Thread
+			if thread == "" || !threadIDRe.MatchString(thread) {
+				room.fileMu.Lock()
+				thread = s.activeThread(sess)
+				room.fileMu.Unlock()
+			}
+			if thread != "" {
+				room.turn(thread).interrupt()
+			}
 		}
 	}
 }
@@ -378,16 +550,31 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 // runTurn executes one headless agent turn: start container if needed, feed
 // the prompt on stdin, stream JSONL events to every attached client, record
 // the provider session id for resume.
-func (r *chatRoom) runTurn(text, model, effort string, controls ...string) {
-	r.runTurnContext(operationContext(r.srv.workContext()), text, model, effort, controls...)
+func (t *chatTurn) runTurn(text, model, effort string, controls ...string) {
+	t.runTurnContext(operationContext(t.room.srv.workContext()), text, model, effort, controls...)
 }
 
-func (r *chatRoom) runTurnContext(parent context.Context, text, model, effort string, controls ...string) {
-	r.runTurnObserved(parent, text, model, effort, nil, controls...)
+func (t *chatTurn) runTurnContext(parent context.Context, text, model, effort string, controls ...string) {
+	t.runTurnObserved(parent, text, model, effort, nil, controls...)
 }
 
-func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort string, receipt *chatReceiptTurn, controls ...string) {
-	defer r.end()
+// activeThreadEnsured is the active thread, created when there is none yet.
+func (r *chatRoom) activeThreadEnsured() (string, error) {
+	sess, ok := r.srv.store.Get(r.sessID)
+	if !ok {
+		return "", errSessionGone
+	}
+	r.fileMu.Lock()
+	defer r.fileMu.Unlock()
+	if err := r.srv.migrateThreads(sess); err != nil {
+		return "", err
+	}
+	return r.srv.ensureActiveThread(sess)
+}
+
+func (t *chatTurn) runTurnObserved(parent context.Context, text, model, effort string, receipt *chatReceiptTurn, controls ...string) {
+	r := t.room
+	defer t.end()
 	var observer chat.Observation
 	if receipt != nil {
 		observer = receipt
@@ -396,7 +583,7 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 	if len(controls) > 0 {
 		control = controls[0]
 	}
-	service := chat.Service{Runtime: chatRuntime{r}, Usage: r.srv.usageService()}
+	service := chat.Service{Runtime: chatRuntime{t}, Usage: r.srv.usageService()}
 	in := chat.Input{SessionID: r.sessID, Text: text, Model: model, Effort: effort, Control: control, Timeout: r.srv.turnTimeout()}
 	if receipt != nil && receipt.receipt.Request != nil {
 		in.Suggestions = receipt.receipt.Request.Suggestions
@@ -406,7 +593,7 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 	if receipt != nil && receipt.receipt.Request != nil && receipt.receipt.Request.Delegation != nil {
 		// The grant lives exactly as long as this turn; closing it cancels any
 		// running worker before the room is released.
-		grant, err := r.srv.openDelegation(r, receipt.owner, receipt.receipt)
+		grant, err := r.srv.openDelegation(t, receipt.owner, receipt.receipt)
 		if err != nil {
 			receipt.Fail(err, classifyProblem(err, "delegation_unavailable"))
 			receipt.Finish()
@@ -417,33 +604,34 @@ func (r *chatRoom) runTurnObserved(parent context.Context, text, model, effort s
 			in.Extras, in.Timeout, in.Preface = grant.extras, r.srv.delegationTurnTimeout(), delegation.TurnReminder()
 		}
 	}
+	// The thread's own pid file: a stop signal must reach this thread's CLI,
+	// never another thread's running beside it.
+	in.Extras.PidFile = agent.ChatPidFile(t.thread)
 	service.Run(parent, in, observer)
 }
 
-func (r *chatRoom) setStop(f func()) {
-	r.mu.Lock()
-	r.stop = f
-	r.mu.Unlock()
+func (t *chatTurn) setStop(f func()) {
+	t.room.mu.Lock()
+	t.stop = f
+	t.room.mu.Unlock()
 }
 
-func (r *chatRoom) setSteer(f chat.Steer) {
-	r.mu.Lock()
-	r.steer = f
-	r.mu.Unlock()
+func (t *chatTurn) setSteer(f chat.Steer) {
+	t.room.mu.Lock()
+	t.steer = f
+	t.room.mu.Unlock()
 }
 
-// preTurnTitleState resolves the active thread and reports whether this turn is
-// its first user message with no title yet — the trigger for title generation.
-func (r *chatRoom) preTurnTitleState(sess store.Session) (tid string, firstTurn bool) {
+// preTurnTitleState reports the turn's thread and whether this turn is its
+// first user message with no title yet — the trigger for title generation.
+func (t *chatTurn) preTurnTitleState(sess store.Session) (tid string, firstTurn bool) {
+	r := t.room
 	r.fileMu.Lock()
 	defer r.fileMu.Unlock()
 	if err := r.srv.migrateThreads(sess); err != nil {
 		return "", false
 	}
-	tid, err := r.srv.ensureActiveThread(sess)
-	if err != nil {
-		return "", false
-	}
+	tid = t.thread
 	_, userTurns, hasTitle := r.srv.threadTitleSource(sess, tid)
 	// 尚无标题、且这是线程最初的消息（含首条失败后的一次重试）时才触发，
 	// 既保证只据开场消息生成，也不会每轮都白跑一次模型。
@@ -557,37 +745,38 @@ func sanitizeTitle(s string) string {
 	return s
 }
 
-func (r *chatRoom) interrupt() {
+func (t *chatTurn) interrupt() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = r.interruptRequest(ctx, "", true)
+	_ = t.interruptRequest(ctx, "", true)
 }
 
-func (r *chatRoom) interruptContext(ctx context.Context) {
-	_ = r.interruptRequest(ctx, "", false)
+func (t *chatTurn) interruptContext(ctx context.Context) {
+	_ = t.interruptRequest(ctx, "", false)
 }
 
-func (r *chatRoom) interruptRequest(ctx context.Context, id string, user bool) error {
+func (t *chatTurn) interruptRequest(ctx context.Context, id string, user bool) error {
 	// app-server 回合注册了协议内的优雅中断，优先用它
+	r := t.room
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.running || id != "" && r.requestID != id {
+	if !t.running || id != "" && t.requestID != id {
 		return store.ErrChatConflict
 	}
-	if user && r.userInterrupted {
+	if user && t.userInterrupted {
 		return nil
 	} // Lost acknowledgement must not send a second SIGINT.
 	if user {
-		r.userInterrupted = true
+		t.userInterrupted = true
 	}
 	// A worker the main agent is waiting for stops first; the main agent then
 	// sees its delegate call end instead of hanging on it.
 	if r.srv != nil {
-		r.srv.interruptDelegation(r.sessID)
+		r.srv.interruptDelegation(r.sessID, t.thread)
 	}
-	// Keep room ownership until the signal is sent. Otherwise a late interrupt
-	// could target a newer turn's PID after this turn releases the room.
-	stop := r.stop
+	// Keep slot ownership until the signal is sent. Otherwise a late interrupt
+	// could target a newer turn's PID after this turn releases the thread.
+	stop := t.stop
 	if stop != nil {
 		stop()
 		return nil
@@ -596,7 +785,11 @@ func (r *chatRoom) interruptRequest(ctx context.Context, id string, user bool) e
 	if !ok || sess.ContainerID == "" {
 		return nil
 	}
-	if err := r.srv.dock.ExecFireAndForget(ctx, sess.ContainerID, agent.InterruptCommand()); err != nil {
+	cmd, err := agent.InterruptCommandFor(agent.ChatPidFile(t.thread))
+	if err != nil {
+		return err
+	}
+	if err := r.srv.dock.ExecFireAndForget(ctx, sess.ContainerID, cmd); err != nil {
 		log.Printf("interrupt %s: %v", r.sessID, err)
 		return err
 	}
@@ -627,15 +820,15 @@ func itoa(n int) string {
 
 func (m *chatManager) interruptAll(ctx context.Context) {
 	type activeTurn struct {
-		room *chatRoom
+		turn *chatTurn
 		done <-chan struct{}
 	}
 	m.mu.Lock()
 	var turns []activeTurn
 	for _, room := range m.rooms {
 		room.mu.Lock()
-		if room.running {
-			turns = append(turns, activeTurn{room, room.turnDone})
+		for _, t := range room.runningLocked() {
+			turns = append(turns, activeTurn{t, t.turnDone})
 		}
 		room.mu.Unlock()
 	}
@@ -645,7 +838,7 @@ func (m *chatManager) interruptAll(ctx context.Context) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			turn.room.interruptContext(ctx)
+			turn.turn.interruptContext(ctx)
 			select {
 			case <-turn.done:
 			case <-ctx.Done():

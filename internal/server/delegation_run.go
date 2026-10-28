@@ -376,7 +376,7 @@ func (r delegationRuntime) Record(e chat.Entry, kind, _ string) error {
 	if err != nil {
 		return err
 	}
-	t.g.room.broadcast(map[string]any{"type": "delegation_event", "id": t.d.ID, "entry": e})
+	t.g.chat.broadcast(map[string]any{"type": "delegation_event", "id": t.d.ID, "entry": e})
 	root, err := t.g.srv.openDataDir(t.g.srv.sessionDir(t.owner))
 	if err != nil {
 		return err
@@ -389,7 +389,7 @@ func (r delegationRuntime) Record(e chat.Entry, kind, _ string) error {
 }
 func (r delegationRuntime) Emit(value any) {
 	if m, ok := value.(map[string]any); ok && m["type"] == "agent_event" {
-		r.t.g.room.broadcast(map[string]any{"type": "delegation_stream", "id": r.t.d.ID, "event": m["event"]})
+		r.t.g.chat.broadcast(map[string]any{"type": "delegation_stream", "id": r.t.d.ID, "event": m["event"]})
 	}
 }
 func (r delegationRuntime) Problem(ctx context.Context, operation string, err error, fallback string) protocol.APIProblem {
@@ -397,6 +397,7 @@ func (r delegationRuntime) Problem(ctx context.Context, operation string, err er
 }
 func (r delegationRuntime) Stopping() bool { return r.t.g.srv.stopping() }
 func (r delegationRuntime) Interrupt()     { r.t.halt() }
+func (r delegationRuntime) Conversation(sess store.Session, _ string) string { return sess.ChatSession }
 func (r delegationRuntime) ProviderSession(_ store.Session, id string) error {
 	return r.t.g.srv.store.SaveDelegationProviderSession(r.t.d.ID, id)
 }

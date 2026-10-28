@@ -51,7 +51,7 @@ func writeTurns(t *testing.T, s *Server, sess store.Session, sizes ...int) strin
 	room := s.chat.room(sess.ID)
 	for i, n := range sizes {
 		id := fmt.Sprintf("turn-%d", i)
-		if err := room.appendLog(logEntry{Kind: "user", Text: id, Turn: &chatTurnMetadata{ID: id, Model: "fixture"}}); err != nil {
+		if err := room.appendLog("", logEntry{Kind: "user", Text: id, Turn: &chatTurnMetadata{ID: id, Model: "fixture"}}); err != nil {
 			t.Fatal(err)
 		}
 		for j := range n {
@@ -60,7 +60,7 @@ func writeTurns(t *testing.T, s *Server, sess store.Session, sizes ...int) strin
 				fmt.Sprintf(`{"type":"assistant","message":{"content":[{"type":"text","text":%q}]}}`, text),
 				fmt.Sprintf(`{"type":"user","message":{"content":[{"type":"tool_result","content":%q}]}}`, strings.Repeat("x", 64)),
 			} {
-				if err := room.appendLog(logEntry{Kind: "event", Event: json.RawMessage(ev)}); err != nil {
+				if err := room.appendLog("", logEntry{Kind: "event", Event: json.RawMessage(ev)}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -248,16 +248,16 @@ func TestHistorySkipsStoredThinkingProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	room := s.chat.room(sess.ID)
-	if err := room.appendLog(logEntry{Kind: "user", Text: "turn-0", Turn: &chatTurnMetadata{ID: "turn-0", Model: "fixture"}}); err != nil {
+	if err := room.appendLog("", logEntry{Kind: "user", Text: "turn-0", Turn: &chatTurnMetadata{ID: "turn-0", Model: "fixture"}}); err != nil {
 		t.Fatal(err)
 	}
 	for i := range 3 * historyPage.MaxEntries {
 		ev := fmt.Sprintf(`{"type":"system","subtype":"thinking_tokens","estimated_tokens":%d,"estimated_tokens_delta":1}`, i+1)
-		if err := room.appendLog(logEntry{Kind: "event", Event: json.RawMessage(ev)}); err != nil {
+		if err := room.appendLog("", logEntry{Kind: "event", Event: json.RawMessage(ev)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := room.appendLog(logEntry{Kind: "event", Event: json.RawMessage(`{"type":"assistant","message":{"content":[{"type":"text","text":"turn-0 answer 0"}]}}`)}); err != nil {
+	if err := room.appendLog("", logEntry{Kind: "event", Event: json.RawMessage(`{"type":"assistant","message":{"content":[{"type":"text","text":"turn-0 answer 0"}]}}`)}); err != nil {
 		t.Fatal(err)
 	}
 

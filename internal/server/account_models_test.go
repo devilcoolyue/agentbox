@@ -330,7 +330,7 @@ func TestAccountModelListLimitsWorkspaceChoices(t *testing.T) {
 		t.Fatalf("session view reports a model the account does not offer: %q", got.DefaultModel)
 	}
 
-	runtime := chatRuntime{room: &chatRoom{srv: s, sessID: sess.ID}}
+	runtime := chatRuntime{&chatTurn{room: &chatRoom{srv: s, sessID: sess.ID}}}
 	if _, err := runtime.Options(t.Context(), sess, "gpt-5.5", "", "", false); !errors.Is(err, chat.ErrOptions) {
 		t.Fatalf("model outside the list accepted: %v", err)
 	}

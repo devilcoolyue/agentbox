@@ -510,3 +510,24 @@ func TestCodexLiveOutputIsBounded(t *testing.T) {
 		t.Fatalf("实时输出转发了 %d 字节，上限 %d", sent, liveOutputBytes)
 	}
 }
+
+// Threads of a workspace run side by side; each records its CLI's pid in its
+// own valid file, so a stop reaches only that thread.
+func TestChatPidFilePerThread(t *testing.T) {
+	a, b := ChatPidFile("20261028-064323-a7dcad"), ChatPidFile("Legacy_Thread-ID")
+	if a == b || !pidFileRe.MatchString(a) || !pidFileRe.MatchString(b) || a == PidFile {
+		t.Fatal(a, b)
+	}
+	if ChatPidFile("") != PidFile {
+		t.Fatal("no thread keeps the default file")
+	}
+	if cmd := AppServerCommandFor(a); !strings.Contains(cmd[2], "echo $$ >"+a+";") {
+		t.Fatal(cmd)
+	}
+	if cmd := AppServerCommandFor("/etc/passwd"); !strings.Contains(cmd[2], PidFile) {
+		t.Fatal("an invalid file reached the shell", cmd)
+	}
+	if _, err := InterruptCommandFor(a); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -186,6 +186,14 @@
       "retryable": true
     },
     {
+      "code": "chat_parallel_limit",
+      "http_status": 409,
+      "error": "同时运行的对话已达上限",
+      "hint": "这个工作空间已有 3 个对话在运行，请等其中一个完成或中断后再发送。",
+      "action": "wait",
+      "retryable": true
+    },
+    {
       "code": "question_closed",
       "http_status": 409,
       "error": "这个问题已经结束",

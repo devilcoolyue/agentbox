@@ -331,12 +331,13 @@ func (s *Server) handleSwitchAccount(w http.ResponseWriter, r *http.Request, ses
 		writeJSON(w, http.StatusOK, s.view(sess))
 		return
 	}
+	// The switch restarts the container: no thread may run or start meanwhile.
 	room := s.chat.room(sess.ID)
-	if err := room.begin(); err != nil {
+	if err := room.beginExclusive(); err != nil {
 		writeProblem(w, r, "session.account", chatRequestErrorCode(err))
 		return
 	}
-	defer room.end()
+	defer room.endExclusive()
 	if !s.beginCreationWork(sess.ID) {
 		writeProblem(w, r, "session.account", "import_pending")
 		return

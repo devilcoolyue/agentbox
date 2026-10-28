@@ -185,7 +185,7 @@ The server needs Docker access and permission to set mounted directory ownership
 | **Persistent storage** | SQLite state and ledger, project files, home directories, shared files, and JSONL chat history |
 | **Optional abox-link** | Connect private services reachable from your computer through an explicit allowlist |
 
-Chat and terminal share files, **not an automatic conversation context**. Each workspace supports multiple chat threads and one active Web chat turn at a time (later messages queue); long threads open at the newest messages and load earlier ones as you scroll up. Each user's `/shared` directory is available across their workspaces. Stopping a container retains files and history but ends its processes.
+Chat and terminal share files, **not an automatic conversation context**. Each workspace supports multiple chat threads, and up to three of them can run Web chat turns at the same time (messages sent to a running thread, or past that limit, queue); long threads open at the newest messages and load earlier ones as you scroll up. Each user's `/shared` directory is available across their workspaces. Stopping a container retains files and history but ends its processes.
 
 ## Choose your entry point
 

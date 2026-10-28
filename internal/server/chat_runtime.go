@@ -15,19 +15,33 @@ import (
 	"agentbox/internal/store"
 )
 
-// chatRuntime adapts a room's persistence and lifecycle to the chat service.
-// HTTP authorization and persistent acceptance still precede room ownership.
-type chatRuntime struct{ room *chatRoom }
+// chatRuntime adapts a thread's persistence and lifecycle to the chat service.
+// HTTP authorization and persistent acceptance still precede thread ownership.
+type chatRuntime struct{ turn *chatTurn }
+
+func (a chatRuntime) room() *chatRoom { return a.turn.room }
 
 func (a chatRuntime) Hold() func() {
-	activity := a.room.srv.workspaces().Activity()
-	activity.Hold(a.room.sessID)
-	return func() { activity.Release(a.room.sessID) }
+	activity := a.room().srv.workspaces().Activity()
+	activity.Hold(a.room().sessID)
+	return func() { activity.Release(a.room().sessID) }
 }
-func (a chatRuntime) Session() (store.Session, bool)        { return a.room.srv.store.Get(a.room.sessID) }
-func (a chatRuntime) Thread(s store.Session) (string, bool) { return a.room.preTurnTitleState(s) }
+func (a chatRuntime) Session() (store.Session, bool)        { return a.room().srv.store.Get(a.room().sessID) }
+func (a chatRuntime) Thread(s store.Session) (string, bool) { return a.turn.preTurnTitleState(s) }
+
+// Conversation keeps the active thread on the session's recorded conversation
+// exactly as before; another thread resumes the one its transcript names.
+func (a chatRuntime) Conversation(sess store.Session, thread string) string {
+	r := a.room()
+	r.fileMu.Lock()
+	defer r.fileMu.Unlock()
+	if thread == "" || r.srv.activeThread(sess) == thread {
+		return sess.ChatSession
+	}
+	return r.srv.threadResumeID(sess, thread)
+}
 func (a chatRuntime) Options(ctx context.Context, sess store.Session, model, effort, control string, started bool) (agent.TurnOptions, error) {
-	s := a.room.srv
+	s := a.room().srv
 	acct, err := s.sessionAccount(sess)
 	if err != nil {
 		return agent.TurnOptions{}, err
@@ -58,7 +72,7 @@ func (a chatRuntime) Options(ctx context.Context, sess store.Session, model, eff
 		return options, fmt.Errorf("%w: %v", chat.ErrOptions, err)
 	}
 	if sess.Agent == config.AgentClaude && effort != "" && options.Control == "effort" {
-		help, err := a.room.cliHelp(ctx, sess)
+		help, err := a.room().cliHelp(ctx, sess)
 		if err != nil || !strings.Contains(help, "--effort") {
 			return options, chat.ErrOptions
 		}
@@ -69,7 +83,7 @@ func (a chatRuntime) PromptSuggestions(ctx context.Context, sess store.Session) 
 	if sess.Agent != config.AgentClaude {
 		return false
 	}
-	help, err := a.room.cliHelp(ctx, sess)
+	help, err := a.room().cliHelp(ctx, sess)
 	return err == nil && strings.Contains(help, "--prompt-suggestions")
 }
 
@@ -79,11 +93,11 @@ func (a chatRuntime) Questions(ctx context.Context, sess store.Session) bool {
 	if sess.Agent != config.AgentClaude {
 		return false
 	}
-	help, err := a.room.cliHelp(ctx, sess)
+	help, err := a.room().cliHelp(ctx, sess)
 	return err == nil && strings.Contains(help, "--permission-prompt-tool") && strings.Contains(help, "--input-format") && strings.Contains(help, "--replay-user-messages")
 }
 func (a chatRuntime) Question(q agent.Question) (<-chan agent.Answer, func()) {
-	return a.room.offerQuestion(q)
+	return a.room().offerQuestion(q)
 }
 
 // cliHelp caches the Claude CLI's --help per container: the image is fixed at
@@ -104,12 +118,12 @@ func (r *chatRoom) cliHelp(ctx context.Context, sess store.Session) (string, err
 	return help, nil
 }
 func (a chatRuntime) Start(ctx context.Context, sess store.Session) (store.Session, error) {
-	s := a.room.srv
+	s := a.room().srv
 	if sess.Status != store.StatusRunning {
 		// The user's message is recorded only once the container is up;
 		// until then the page says the workspace is starting.
-		a.room.setPhase(chatPhaseStarting)
-		defer a.room.setPhase("")
+		a.turn.setPhase(chatPhaseStarting)
+		defer a.turn.setPhase("")
 	}
 	sess, err := s.startSession(ctx, sess)
 	if err != nil {
@@ -123,7 +137,7 @@ func (a chatRuntime) Start(ctx context.Context, sess store.Session) (store.Sessi
 	return sess, nil
 }
 func (a chatRuntime) Attachments(sess store.Session, paths []string) error {
-	s := a.room.srv
+	s := a.room().srv
 	s.attachmentMu.Lock()
 	defer s.attachmentMu.Unlock()
 	valid, err := s.validateChatAttachments(sess, paths)
@@ -138,57 +152,74 @@ func (a chatRuntime) Attachments(sess store.Session, paths []string) error {
 	return nil
 }
 func (a chatRuntime) Record(e chat.Entry, kind, retry string) error {
-	return a.room.recordChat(e, kind, retry)
+	return a.turn.recordChat(e, kind, retry)
 }
-func (a chatRuntime) Emit(value any) { a.room.broadcast(value) }
+func (a chatRuntime) Emit(value any) { a.turn.broadcast(value) }
 func (a chatRuntime) Problem(ctx context.Context, operation string, err error, fallback string) protocol.APIProblem {
-	return a.room.srv.turnProblem(ctx, operation, err, fallback)
+	return a.room().srv.turnProblem(ctx, operation, err, fallback)
 }
-func (a chatRuntime) Stopping() bool { return a.room.srv.stopping() }
+func (a chatRuntime) Stopping() bool { return a.room().srv.stopping() }
 func (a chatRuntime) Interrupt() {
 	go func() {
-		ctx, cancel := context.WithTimeout(a.room.srv.workContext(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(a.room().srv.workContext(), 10*time.Second)
 		defer cancel()
-		a.room.interruptContext(ctx)
+		a.turn.interruptContext(ctx)
 	}()
 }
+
+// ProviderSession records the conversation in the thread's transcript. The
+// session keeps the active thread's, so it changes only while this thread is
+// the active one; activating a thread restores its own from the transcript.
 func (a chatRuntime) ProviderSession(sess store.Session, id string) error {
-	_, writeErr := a.room.srv.store.Update(sess.ID, func(s *store.Session) { s.ChatSession = id })
+	r := a.room()
+	var writeErr error
+	r.fileMu.Lock()
+	active := r.srv.activeThread(sess) == a.turn.thread
+	if active {
+		_, writeErr = r.srv.store.Update(sess.ID, func(s *store.Session) { s.ChatSession = id })
+	}
+	r.fileMu.Unlock()
 	if writeErr != nil {
 		log.Printf("save chat session id %s: %v", sess.ID, writeErr)
 	}
-	return errors.Join(writeErr, a.room.appendLog(logEntry{Kind: "chat_session", Text: id}))
+	return errors.Join(writeErr, r.appendLog(a.turn.thread, logEntry{Kind: "chat_session", Text: id}))
 }
 func (a chatRuntime) Executor(sess store.Session) chat.Executor {
-	r := a.room
-	return chat.Executor{Backend: r.srv.dock, Environment: func() ([]string, error) { return r.srv.execEnv(sess) }, SetStop: r.setStop, SetSteer: r.setSteer,
-		Interrupted: func() bool { r.mu.Lock(); defer r.mu.Unlock(); return r.userInterrupted }, Log: log.Printf,
+	t, r := a.turn, a.room()
+	return chat.Executor{Backend: r.srv.dock, Environment: func() ([]string, error) { return r.srv.execEnv(sess) }, SetStop: t.setStop, SetSteer: t.setSteer,
+		Interrupted: func() bool { r.mu.Lock(); defer r.mu.Unlock(); return t.userInterrupted }, Log: log.Printf,
 		Signal: func() {
 			ctx, cancel := context.WithTimeout(r.srv.workContext(), 10*time.Second)
 			defer cancel()
-			if err := r.srv.dock.ExecFireAndForget(ctx, sess.ContainerID, agent.InterruptCommand()); err != nil {
+			cmd, err := agent.InterruptCommandFor(agent.ChatPidFile(t.thread))
+			if err == nil {
+				err = r.srv.dock.ExecFireAndForget(ctx, sess.ContainerID, cmd)
+			}
+			if err != nil {
 				log.Printf("interrupt fallback %s: %v", r.sessID, err)
 			}
 		}}
 }
-func (a chatRuntime) Permission() string { return a.room.srv.cfg.GetPermissionMode() }
+func (a chatRuntime) Permission() string { return a.room().srv.cfg.GetPermissionMode() }
 func (a chatRuntime) PublishCost(thread, turn string, running bool) {
-	a.room.publishTurnCost(thread, turn, running)
+	a.room().publishTurnCost(thread, turn, running)
 }
 func (a chatRuntime) TurnEnded(o chat.TurnOutcome) {
-	a.room.srv.emitTurnEnded(o)
-	a.room.srv.noteChatCache(o)
+	r := a.room()
+	r.srv.emitTurnEnded(o)
+	r.srv.noteChatCache(o)
 	if o.Code == chat.ChatQuotaPaused {
-		a.room.mu.Lock()
-		id := a.room.requestID
-		a.room.mu.Unlock()
-		a.room.srv.spawn(func() { a.room.queueQuotaResume(id) })
+		r.mu.Lock()
+		id := a.turn.requestID
+		r.mu.Unlock()
+		r.srv.spawn(func() { r.queueQuotaResume(id) })
 	}
 }
 func (a chatRuntime) FiveHour(w agent.RateWindow) bool {
-	sess, ok := a.room.srv.store.Get(a.room.sessID)
-	return ok && a.room.srv.noteFiveHour(sess, w)
+	sess, ok := a.room().srv.store.Get(a.room().sessID)
+	return ok && a.room().srv.noteFiveHour(sess, w)
 }
 func (a chatRuntime) Title(thread, text string) {
-	a.room.srv.spawn(func() { a.room.generateTitle(thread, text) })
+	r := a.room()
+	r.srv.spawn(func() { r.generateTitle(thread, text) })
 }

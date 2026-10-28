@@ -67,10 +67,14 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
   for(const row of views.values())if(row.session===context?.session)result.set(row.id,row);
   for(const row of storage.rows(context?.session))if(row.session===context?.session)result.set(row.id,row);
   for(const row of result.values()){const c=known.get(key(row.session,row.id));if(c&&c.revision>=row.revision){row.revision=c.revision;row.state=c.state;}}
-  return [...result.values()].filter(row=>row.thread===context?.thread||row.state==="unconfirmed"||receiptActive(row.state)||row.state!=="completed"&&(row.draft||row.input)).sort((a,b)=>b.created-a.created);
+  // Threads run side by side: another thread's messages show here only when
+  // they need the user (unsent or an unknown outcome), not while they run.
+  return [...result.values()].filter(row=>row.thread===context?.thread||row.state==="unconfirmed"||row.state==="uncertain"||row.state!=="completed"&&!receiptActive(row.state)&&row.state!=="queued"&&(row.draft||row.input)).sort((a,b)=>b.created-a.created);
  };
- // A follow-up may go while a turn runs; never past an unconfirmed send or an unreviewed outcome.
- const blocked=(follow=false)=>!owns()||unsupported||enabled&&(!scope||!context||loading||queryFailed||scopeChanged||rows().some(r=>r.state==="unconfirmed"||(follow?r.state==="uncertain":receiptActive(r.state))));
+ const mine=()=>rows().filter(row=>row.thread===context?.thread);
+ // A follow-up may go while a turn runs; never past an unconfirmed send or an
+ // unreviewed outcome of this thread. Other threads run on their own.
+ const blocked=(follow=false)=>!owns()||unsupported||enabled&&(!scope||!context||loading||queryFailed||scopeChanged||mine().some(r=>r.state==="unconfirmed"||(follow?r.state==="uncertain":receiptActive(r.state))));
  const say=(message:string,error=false)=>{notice=message;noticeError=error;noticeTranslated=false;render();};
  const apply=(c:ChatRequestReceipt)=>{
   const id=key(c.session_id,c.request_id),old=known.get(id);
@@ -106,11 +110,13 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
   if(refreshing){again=true;return;}
   refreshing=true;const {session}=context,generation=epoch,signal=viewAbort.signal;
   try{
-   const result=await api<ChatRequestList>(endpoint(session)+"?pending_only=1",{signal:AbortSignal.any([signal,AbortSignal.timeout(12000)])});
+   const result=await api<ChatRequestList>(endpoint(session)+"?pending_only=1&thread="+encodeURIComponent(context.thread),{signal:AbortSignal.any([signal,AbortSignal.timeout(12000)])});
    if(!current(session,generation))return;
    if(result?.version!==1||typeof result.scope!=="string"||!Array.isArray(result.requests)||result.requests.length>50||!Object.hasOwn(result,"pending")||result.pending!==null&&(!result.pending||typeof result.pending!=="object"||Array.isArray(result.pending)))throw Error(t("消息状态响应无效，请重新查询。"));
    if(result.scope!==scope){scopeChanged=true;throw Error(t("消息所属的实例或登录身份已变化"));}
    if(result.pending)apply(receipt(result.pending,session));
+   // Other threads' running turns, so their rows settle when they finish.
+   for(const value of Array.isArray(result.pendings)?result.pendings:[])if(value?.request_id!==result.pending?.request_id)apply(receipt(value,session));
    // The queue: every page shows it; one that left the list ran or was withdrawn.
    const listed=new Set<string>();
    for(const value of result.requests){const c=receipt(value,session);listed.add(c.request_id);apply(c);}
@@ -319,7 +325,7 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
   socketStatus(state:string){socketState=state==="running"?"running":"idle";},
   executionState(){
    if(!owns()||!enabled||loading)return;
-   const items=rows();
+   const items=mine();
    if(items.some(r=>["accepted","starting","running"].includes(r.state)))return "running";
    if(items.some(r=>r.state==="unconfirmed"))return;
    if(items.some(r=>r.state==="uncertain"&&known.has(key(r.session,r.id))))return "idle";
@@ -340,7 +346,7 @@ export function initChatOutbox(hooks:{changed:()=>void;connected:()=>boolean;mov
    if(!row?.input)return;
    return {id:row.id,text:row.input.text,turn:known.get(key(row.session,row.id))?.turn_id||""};
   },
-  interrupt(){if(!owns())return true;const row=rows().find(r=>["accepted","starting","running"].includes(r.state));if(row){void act(row,"interrupt");return true;}return false;},
+  interrupt(){if(!owns())return true;const row=mine().find(r=>["accepted","starting","running"].includes(r.state));if(row){void act(row,"interrupt");return true;}return false;},
   async send(input:ChatRequestInput,draft:Draft,unchanged:()=>boolean){
    if(!enabled||!guard()||!context)return false;
    const {session,thread}=context,generation=epoch;

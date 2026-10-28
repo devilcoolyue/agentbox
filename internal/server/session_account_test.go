@@ -67,7 +67,7 @@ func TestSwitchAccountRejectsForeignAndCrossAgentAccounts(t *testing.T) {
 
 func TestSwitchAccountWaitsForRunningTurnAndImport(t *testing.T) {
 	s, sess := switchAccountServer(t)
-	room := s.chat.room(sess.ID)
+	room := s.chat.room(sess.ID).activeTurn(t)
 	if err := room.begin(); err != nil {
 		t.Fatal(err)
 	}
@@ -103,10 +103,10 @@ func TestSwitchAccountRebindsAndReleasesReservations(t *testing.T) {
 		t.Fatalf("view = %+v", view)
 	}
 	// The room and import slot are free again once the switch returns.
-	if err := s.chat.room(sess.ID).begin(); err != nil {
+	if err := s.chat.room(sess.ID).activeTurn(t).begin(); err != nil {
 		t.Fatalf("chat room left reserved: %v", err)
 	}
-	s.chat.room(sess.ID).end()
+	s.chat.room(sess.ID).activeTurn(t).end()
 	if !s.beginCreationWork(sess.ID) {
 		t.Fatal("import slot left reserved")
 	}

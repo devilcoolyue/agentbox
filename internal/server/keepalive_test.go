@@ -283,7 +283,7 @@ func TestKeepCacheLeavesWhatItMustNotTouch(t *testing.T) {
 	other.account = "previous" // the workspace switched accounts
 	skip("other account", other)
 
-	room := f.s.chat.room(f.sess.ID)
+	room := f.s.chat.room(f.sess.ID).turn(f.thread)
 	if err := room.begin(); err != nil {
 		t.Fatal(err)
 	}
@@ -312,6 +312,15 @@ func TestKeepCacheLeavesWhatItMustNotTouch(t *testing.T) {
 		t.Fatal(err)
 	}
 	skip("balance exhausted", f.plan())
+	// Another thread running beside it does not hold this thread's keepalive.
+	beside := f.s.chat.room(f.sess.ID).turn("another-thread")
+	if err := beside.begin(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.s.keepCache(f.sess.ID, f.plan()); err != nil && strings.Contains(err.Error(), "a turn is running") {
+		t.Fatal("another thread's turn held this thread's keepalive:", err)
+	}
+	beside.end()
 }
 
 // Plans follow the workspace's own setting; the latest point waits for it.
@@ -734,7 +743,7 @@ func TestShutdownKeepsTheCacheOfTheTurnItInterrupts(t *testing.T) {
 	if _, ok := s.keepalive.point(key); ok {
 		t.Fatal("a failed turn left its point")
 	}
-	room := s.chat.room(f.sess.ID)
+	room := s.chat.room(f.sess.ID).turn(f.thread)
 	if !room.tryBegin() {
 		t.Fatal("cannot begin fixture turn")
 	}

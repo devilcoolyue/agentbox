@@ -1,9 +1,7 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,7 +56,7 @@ func TestFiveHourPauseStopsTurnQueuesResumeAndHoldsUntilReset(t *testing.T) {
 	var resume store.ChatRequest
 	waitFor(t, func() bool {
 		var err error
-		resume, _, err = f.s.store.NextQueuedChatRequest(f.sess.ID)
+		resume, _, err = f.s.store.NextQueuedChatRequest(f.sess.ID, f.input.ThreadID)
 		return err == nil
 	})
 	in := resume.Request
@@ -157,7 +155,7 @@ func TestFiveHourWindowsOutliveRestart(t *testing.T) {
 			t.Fatalf("%+v paused", k)
 		}
 	}
-	if _, _, err := s.store.NextQueuedChatRequest(sess.ID); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatal(err)
+	if threads, err := s.store.QueuedChatThreads(sess.ID); err != nil || len(threads) != 0 {
+		t.Fatal(threads, err)
 	}
 }

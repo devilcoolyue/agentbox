@@ -115,7 +115,7 @@ func TestMCPSyncDeferredDuringActiveTurn(t *testing.T) {
 	s, sess := newTestServer(t)
 	sess.Agent = "claude"
 	s.chat = newChatManager(s)
-	room := s.chat.room(sess.ID)
+	room := s.chat.room(sess.ID).turn("thread")
 	room.running = true
 	// An invalid data root would fail any sync; active turns must skip it.
 	s.cfg.DataDir = "/does-not-exist-agentbox-mcp-test"

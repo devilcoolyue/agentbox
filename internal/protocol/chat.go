@@ -15,6 +15,10 @@ type ChatRequestList struct {
 	Scope    string              `json:"scope"`
 	Requests []store.ChatRequest `json:"requests"`
 	Pending  *store.ChatRequest  `json:"pending"`
+	// Pendings lists every thread's active or unreviewed request: threads of
+	// a workspace run side by side. Pending is the requested thread's, or the
+	// oldest when no thread is named.
+	Pendings []store.ChatRequest `json:"pendings,omitempty"`
 }
 type ChatRequestEvent struct {
 	Type    string            `json:"type"`

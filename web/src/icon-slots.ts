@@ -86,6 +86,7 @@ export const ICON_SLOTS = {
   "chat.tool-move": { group: "chat", label: "移动文件", icon: "tabler:file-arrow-right" },
   "chat.tool-web": { group: "chat", label: "网页搜索", icon: "tabler:world-search" },
   "chat.tool-agent": { group: "chat", label: "子 Agent", icon: "tabler:robot" },
+  "chat.thread-running": { group: "chat", label: "对话运行中", icon: "tabler:loader-2" },
   "chat.tool-mcp": { group: "chat", label: "MCP 工具", icon: "tabler:plug-connected" },
   "chat.tool-custom": { group: "chat", label: "其他工具", icon: "tabler:puzzle" },
   "chat.tool-image": { group: "chat", label: "查看图片", icon: "tabler:photo" },

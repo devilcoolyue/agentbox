@@ -46,7 +46,9 @@ func (s *Server) admitChat(ctx context.Context, room *chatRoom, sessID string, u
 		if err = s.migrateThreads(current); err != nil {
 			return err
 		}
-		if s.activeThread(current) != input.ThreadID {
+		// Any thread of the workspace may run, the page's own included when
+		// another page made a different one active; a deleted one may not.
+		if !s.threadExists(current, input.ThreadID) {
 			return chatRequestProblem("chat_thread_changed")
 		}
 		s.attachmentMu.Lock()
@@ -64,16 +66,17 @@ func (s *Server) admitChat(ctx context.Context, room *chatRoom, sessID string, u
 	})
 }
 
-// startReceipt hands an accepted receipt to its turn. The caller holds the
-// room (begin) and submitMu; on error the receipt is already failed and the
-// caller releases the room.
-func (r *chatRoom) startReceipt(u store.User, receipt store.ChatRequest) error {
+// startReceipt hands an accepted receipt to its thread's turn. The caller
+// holds the thread (begin) and submitMu; on error the receipt is already
+// failed and the caller releases the thread.
+func (t *chatTurn) startReceipt(u store.User, receipt store.ChatRequest) error {
+	r := t.room
 	r.mu.Lock()
-	r.requestID = receipt.RequestID
+	t.requestID = receipt.RequestID
 	r.mu.Unlock()
 	ctx := operationContext(r.srv.workContext())
-	observer := &chatReceiptTurn{room: r, owner: u, receipt: receipt, outcome: store.ChatUncertain, code: "execution_incomplete"}
-	if r.srv.spawn(func() { r.runReceiptTurn(ctx, observer) }) {
+	observer := &chatReceiptTurn{turn: t, owner: u, receipt: receipt, outcome: store.ChatUncertain, code: "execution_incomplete"}
+	if r.srv.spawn(func() { t.runReceiptTurn(ctx, observer) }) {
 		return nil
 	}
 	failed, err := r.srv.store.AdvanceChatRequest(u, receipt.SessionID, receipt.RequestID, receipt.Revision, store.ChatFailed, "server_stopping")
@@ -91,28 +94,47 @@ func (r *chatRoom) kickQueue() {
 	}
 }
 
-// dispatchQueue starts the oldest queued request once the room is free and no
-// unreviewed turn blocks it. Turn ends, reviews and startup call it; a request
-// the workspace no longer admits (thread switched, quota, account) fails
-// without running and the next one is tried. A five-hour pause holds the
-// queue; the window's reset dispatches it (quota_pause.go).
+// dispatchQueue starts queued requests: each thread's oldest, once that thread
+// is free and no unreviewed turn blocks it, while the workspace has room for
+// another running thread. Threads are tried in the order their requests
+// waited. Turn ends, reviews and startup call it; a request the workspace no
+// longer admits (thread deleted, quota, account) fails without running and
+// the thread's next one is tried. A five-hour pause holds every queue; the
+// window's reset dispatches them (quota_pause.go).
 func (r *chatRoom) dispatchQueue() {
 	s := r.srv
 	r.submitMu.Lock()
 	defer r.submitMu.Unlock()
+	threads, err := s.store.QueuedChatThreads(r.sessID)
+	if err != nil {
+		log.Printf("chat queue %s: %v", r.sessID, err)
+		return
+	}
+	for _, thread := range threads {
+		if r.dispatchThread(thread) == errChatParallel {
+			return // every slot is taken; the next turn to end dispatches again
+		}
+	}
+}
+
+// dispatchThread starts the thread's oldest queued request; the caller holds
+// submitMu. errChatParallel reports the workspace full.
+func (r *chatRoom) dispatchThread(thread string) error {
+	s := r.srv
+	t := r.turn(thread)
 	for {
-		c, u, err := s.store.NextQueuedChatRequest(r.sessID)
+		c, u, err := s.store.NextQueuedChatRequest(r.sessID, thread)
 		if err != nil {
 			if !errors.Is(err, sql.ErrNoRows) {
 				log.Printf("chat queue %s: %v", r.sessID, err)
 			}
-			return
+			return nil
 		}
 		if _, paused := s.quotaPaused(r.sessID); paused {
-			return
+			return nil
 		}
-		if r.begin() != nil {
-			return // running or awaiting review; its end or review dispatches again
+		if err := t.begin(); err != nil {
+			return err // running or awaiting review; its end or review dispatches again
 		}
 		var next store.ChatRequest
 		err = s.admitChat(operationContext(s.workContext()), r, r.sessID, u, *c.Request, func() error {
@@ -121,23 +143,23 @@ func (r *chatRoom) dispatchQueue() {
 			return err
 		})
 		if err != nil {
-			r.release()
+			t.release()
 			if errors.Is(err, store.ErrChatConflict) {
 				continue
 			}
 			failed, ferr := s.store.AdvanceChatRequest(u, r.sessID, c.RequestID, c.Revision, store.ChatFailed, chatRequestErrorCode(err))
 			if ferr != nil {
 				log.Printf("chat queue %s request_id=%s: %v", r.sessID, c.RequestID, ferr)
-				return
+				return nil
 			}
 			r.broadcast(protocol.Event(failed))
 			continue
 		}
 		r.broadcast(protocol.Event(next))
-		if r.startReceipt(u, next) != nil {
-			r.release()
+		if t.startReceipt(u, next) != nil {
+			t.release()
 		}
-		return
+		return nil
 	}
 }
 
@@ -153,9 +175,10 @@ func (s *Server) dispatchQueuedChats() {
 	}
 }
 
-// queueWaiting reports earlier follow-ups, which a later one must not overtake.
-func (s *Server) queueWaiting(session string) bool {
-	_, _, err := s.store.NextQueuedChatRequest(session)
+// queueWaiting reports earlier follow-ups of the thread, which a later one
+// must not overtake.
+func (s *Server) queueWaiting(session, thread string) bool {
+	_, _, err := s.store.NextQueuedChatRequest(session, thread)
 	return err == nil
 }
 
@@ -178,12 +201,13 @@ func (s *Server) queueChatRequest(w http.ResponseWriter, r *http.Request, room *
 	writeJSON(w, 202, protocol.Response(receipt, false))
 }
 
-// steerRequest hands a follow-up to the running interactive turn. false means
-// the turn cannot take it and the caller queues it instead. The receipt is
-// committed while the turn's input is held open, then written to it.
-func (r *chatRoom) steerRequest(ctx context.Context, u store.User, sessID, id string, input store.ChatRequestInput) (store.ChatRequest, bool, error) {
+// steerRequest hands a follow-up to the thread's running interactive turn.
+// false means the turn cannot take it and the caller queues it instead. The
+// receipt is committed while the turn's input is held open, then written to it.
+func (t *chatTurn) steerRequest(ctx context.Context, u store.User, sessID, id string, input store.ChatRequestInput) (store.ChatRequest, bool, error) {
+	r := t.room
 	r.mu.Lock()
-	steer, into := r.steer, r.requestID
+	steer, into := t.steer, t.requestID
 	r.mu.Unlock()
 	if steer == nil || into == "" {
 		return store.ChatRequest{}, false, nil

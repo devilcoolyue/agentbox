@@ -104,6 +104,10 @@ export const problemMessages: Record<string, readonly [string, string]> = {
     "上一条消息仍在处理中",
     "请等待当前回合完成，或先中断当前回合。"
   ],
+  "chat_parallel_limit": [
+    "同时运行的对话已达上限",
+    "这个工作空间已有 3 个对话在运行，请等其中一个完成或中断后再发送。"
+  ],
   "question_closed": [
     "这个问题已经结束",
     "可能已在其他页面回答、超时后自动跳过，或者回合已经结束。"

@@ -198,7 +198,7 @@ func TestShutdownClosesProxyCONNECTAndTunnelSession(t *testing.T) {
 func TestShutdownAllowsProtocolInterruptToFinishBeforeCancellation(t *testing.T) {
 	s, _ := newTestServer(t)
 	s.chat = newChatManager(s)
-	room := s.chat.room("synthetic-turn")
+	room := s.chat.room("synthetic-turn").turn("thread")
 	if !room.tryBegin() {
 		t.Fatal("cannot begin fixture turn")
 	}

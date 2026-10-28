@@ -319,7 +319,7 @@ func (s *Server) syncMCPOnStart(ctx context.Context, sess store.Session) error {
 	if sess.Agent != "claude" {
 		return nil
 	}
-	if s.chatTurnRunning(sess.ID) {
+	if s.chatTurnRunning(sess.ID, "") {
 		return nil
 	}
 	return s.syncMCP(ctx, sess)

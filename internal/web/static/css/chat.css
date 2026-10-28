@@ -720,6 +720,19 @@ details.think.streaming .think-body::after {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .thread-cur svg { flex: none; display: block; }
+/* 同一空间别的对话还在跑：标题旁的小胶囊，点开对话列表（chat-threads.ts） */
+.thread-running {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  padding: 3px 9px; border: 0; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--amber); font-size: 12px; white-space: nowrap; cursor: pointer;
+}
+.thread-running:hover { background: color-mix(in srgb, var(--amber) 20%, transparent); }
+.thread-running:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.thread-running .ui-icon, .tp-spin { animation: rot 1.2s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .thread-running .ui-icon, .tp-spin { animation: none; }
+}
 /* 内网是对话的辅助状态入口，与历史标题同级，避免做成主操作按钮。 */
 .chat-network {
   position: relative; display: inline-flex; align-items: center; gap: 6px; flex: none;
@@ -818,6 +831,7 @@ details.think.streaming .think-body::after {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tp-item.on .tp-title { color: var(--amber); }
+.tp-item.running .tp-open > .ui-icon { color: var(--amber); }
 .tp-meta { color: var(--muted); font-size: 11px; }
 .tp-del {
   flex: none; align-self: center;

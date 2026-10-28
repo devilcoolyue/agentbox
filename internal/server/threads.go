@@ -41,6 +41,20 @@ func newThreadID(ts time.Time) string {
 	return ts.UTC().Format("20060102-150405") + "-" + hex.EncodeToString(b)
 }
 
+// threadExists reports whether a message may run in the thread: it is on disk
+// (sent to, or a draft that asked for its identity) or is the active thread.
+// The caller holds the room's fileMu.
+func (s *Server) threadExists(sess store.Session, tid string) bool {
+	if !threadIDRe.MatchString(tid) {
+		return false
+	}
+	if s.activeThread(sess) == tid {
+		return true
+	}
+	_, err := os.Stat(s.threadPath(sess, tid))
+	return err == nil
+}
+
 func (s *Server) chatsDir(sess store.Session) string {
 	return filepath.Join(s.sessionDir(sess), "chats")
 }
@@ -520,18 +534,25 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, sess stor
 	forward := q.Has("after")
 	older := q.Has("before") || forward
 	tid := s.activeThread(sess)
+	requested := false
 	if older {
 		tid = q.Get("thread")
 		if !threadIDRe.MatchString(tid) {
 			writeProblem(w, r, "chat.history", "invalid_request")
 			return
 		}
+	} else if want := q.Get("thread"); want != "" && s.threadExists(sess, want) {
+		// A page keeps showing its own thread when another page made a
+		// different one active; a deleted one falls back to the active thread.
+		tid, requested = want, true
 	}
 	// New composers request a stable identity even for a not-yet-sent thread.
 	// The legacy response/empty-thread behavior stays available to old clients.
 	if !older && q.Get("draft_context") == "1" {
 		var err error
-		tid, err = s.ensureActiveThread(sess)
+		if !requested {
+			tid, err = s.ensureActiveThread(sess)
+		}
 		if err != nil {
 			writeProblem(w, r, "chat.history", "internal_error")
 			return
@@ -666,24 +687,20 @@ func (s *Server) handleThreadList(w http.ResponseWriter, r *http.Request, sess s
 
 // handleThreadNew starts a fresh conversation thread and makes it active.
 // The previous thread keeps its transcript and resume id, so it can be
-// switched back to at any time. Occupying the room prevents a turn from
-// racing in and appending to the wrong thread.
+// switched back to at any time. Turns write their own threads, so this works
+// while other threads run.
 func (s *Server) handleThreadNew(w http.ResponseWriter, r *http.Request, sess store.Session) {
 	room := s.chat.room(sess.ID)
-	if err := room.begin(); err != nil {
-		writeChatRequestError(w, r, err)
-		return
-	}
-	defer room.end()
 	room.fileMu.Lock()
 	defer room.fileMu.Unlock()
 	if err := s.migrateThreads(sess); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// 当前已是没发过消息的空对话：直接复用，不堆积空线程
+	// 当前已是没发过消息的空对话：直接复用，不堆积空线程。正在跑首条消息的
+	// （还在启动空间、消息尚未落盘）看着也是空的，不能复用。
 	active := s.activeThread(sess)
-	if active != "" {
+	if active != "" && !room.threadRunning(active) {
 		if _, err := os.Stat(s.threadPath(sess, active)); os.IsNotExist(err) || s.draftOnlyThread(sess, active) {
 			writeJSON(w, http.StatusOK, map[string]any{"id": active, "created": false})
 			return
@@ -692,7 +709,7 @@ func (s *Server) handleThreadNew(w http.ResponseWriter, r *http.Request, sess st
 	// 之前开过、没发消息就切走的空对话也复用（连带它的本机草稿），
 	// 历史列表里不会因为来回切换而攒出一串空对话
 	tid := s.draftThread(sess, active)
-	if tid == "" {
+	if tid == "" || room.threadRunning(tid) {
 		tid = newThreadID(time.Now())
 	}
 	if err := s.setActiveThread(sess, tid); err != nil {
@@ -715,12 +732,8 @@ func (s *Server) handleThreadActivate(w http.ResponseWriter, r *http.Request, se
 		writeErr(w, http.StatusBadRequest, "无效的对话 id")
 		return
 	}
+	// Turns write their own threads: switching works while threads run.
 	room := s.chat.room(sess.ID)
-	if err := room.begin(); err != nil {
-		writeChatRequestError(w, r, err)
-		return
-	}
-	defer room.end()
 	room.fileMu.Lock()
 	defer room.fileMu.Unlock()
 	if err := s.migrateThreads(sess); err != nil {
@@ -796,12 +809,13 @@ func (s *Server) handleThreadDelete(w http.ResponseWriter, r *http.Request, sess
 		return
 	}
 	room := s.chat.room(sess.ID)
-	// 统一占房：执行中删除当前对话会抽掉正在写的文件，一律等回合结束
-	if err := room.begin(); err != nil {
+	// 占住这条对话：执行中删除会抽掉正在写的文件，等它的回合结束；其他对话照常跑
+	turn := room.turn(tid)
+	if err := turn.hold(); err != nil {
 		writeChatRequestError(w, r, err)
 		return
 	}
-	defer room.end()
+	defer turn.unhold()
 	room.fileMu.Lock()
 	defer room.fileMu.Unlock()
 	if err := s.migrateThreads(sess); err != nil {
@@ -819,6 +833,8 @@ func (s *Server) handleThreadDelete(w http.ResponseWriter, r *http.Request, sess
 		return
 	}
 	s.threadIndexes.drop(s.threadPath(sess, tid))
+	// Pages showing the deleted thread move on; others keep their own.
+	room.broadcast(map[string]any{"type": "thread_deleted", "id": tid})
 	active := s.activeThread(sess)
 	if active == tid {
 		// 当前对话被删：切到最近的一条，没有就回到空白新对话

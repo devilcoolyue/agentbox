@@ -22,7 +22,7 @@ func TestChatServicePanicSettlesBeforeUncertainReceiptAndRoomRelease(t *testing.
 	if _, err := f.s.store.Grant(f.u.Name, 1000, "synthetic", "", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	room := f.s.chat.room(f.sess.ID)
+	room := f.s.chat.room(f.sess.ID).activeTurn(t)
 	if err := room.begin(); err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestChatServicePanicSettlesBeforeUncertainReceiptAndRoomRelease(t *testing.
 		t.Fatal(err)
 	}
 	room.requestID = row.RequestID
-	observer := &chatReceiptTurn{room: room, owner: f.u, receipt: row, outcome: store.ChatUncertain, code: "execution_incomplete"}
+	observer := &chatReceiptTurn{turn: room, owner: f.u, receipt: row, outcome: store.ChatUncertain, code: "execution_incomplete"}
 	f.unblock()
 	func() {
 		defer room.end()
@@ -44,7 +44,7 @@ func TestChatServicePanicSettlesBeforeUncertainReceiptAndRoomRelease(t *testing.
 	}
 	rows := f.s.store.ListUsage(store.UsageFilter{User: f.u.Name})
 	quota, _ := f.s.store.GetQuota(f.u.Name)
-	if len(rows) != 1 || rows[0].CostMicroUSD != 150 || quota.BalanceMicroUSD != 850 || room.state() != "idle" || f.invocations.Load() != 1 {
+	if len(rows) != 1 || rows[0].CostMicroUSD != 150 || quota.BalanceMicroUSD != 850 || room.room.state() != "idle" || f.invocations.Load() != 1 {
 		t.Fatal("panic lost settlement or released ownership incorrectly", rows, quota)
 	}
 }

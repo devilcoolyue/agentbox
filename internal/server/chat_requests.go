@@ -40,6 +40,8 @@ func chatRequestErrorCode(err error) string {
 		return "invalid_request"
 	case errors.Is(err, errChatBusy):
 		return "chat_busy"
+	case errors.Is(err, errChatParallel):
+		return "chat_parallel_limit"
 	case errors.Is(err, sql.ErrNoRows):
 		return "chat_request_not_found"
 	default:
@@ -112,8 +114,9 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 		writeJSON(w, 200, protocol.Response(receipt, true))
 		return
 	}
+	turn := room.turn(input.ThreadID)
 	if input.Delivery == store.DeliverySteer {
-		receipt, steered, err := room.steerRequest(r.Context(), u, sess.ID, id, input)
+		receipt, steered, err := turn.steerRequest(r.Context(), u, sess.ID, id, input)
 		if err != nil {
 			writeChatRequestError(w, r, err)
 			return
@@ -124,19 +127,21 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 			return
 		}
 	}
-	err = room.begin()
-	if err == nil && input.Delivery != "" && s.queueWaiting(sess.ID) {
-		room.release() // earlier follow-ups run first
+	err = turn.begin()
+	if err == nil && input.Delivery != "" && s.queueWaiting(sess.ID, input.ThreadID) {
+		turn.release() // earlier follow-ups run first
 		err = errChatBusy
 	}
 	if err == nil {
 		if _, paused := s.quotaPaused(sess.ID); paused {
-			room.release() // a follow-up waits for the five-hour reset
+			turn.release() // a follow-up waits for the five-hour reset
 			err = errChatPaused
 		}
 	}
 	if err != nil {
-		if input.Delivery != "" && (errors.Is(err, errChatBusy) || errors.Is(err, store.ErrChatPending) || errors.Is(err, errChatPaused)) {
+		// A follow-up waits its turn: behind its thread's turn, the five-hour
+		// reset, or a free slot when the workspace runs its most threads.
+		if input.Delivery != "" && (errors.Is(err, errChatBusy) || errors.Is(err, store.ErrChatPending) || errors.Is(err, errChatPaused) || errors.Is(err, errChatParallel)) {
 			s.queueChatRequest(w, r, room, sess, u, id, input)
 			return
 		}
@@ -146,7 +151,7 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 	scheduled := false
 	defer func() {
 		if !scheduled {
-			room.end()
+			turn.end()
 		}
 	}()
 	var receipt store.ChatRequest
@@ -166,7 +171,7 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 		writeChatRequestError(w, r, err)
 		return
 	}
-	if err = room.startReceipt(u, receipt); err != nil {
+	if err = turn.startReceipt(u, receipt); err != nil {
 		writeChatRequestError(w, r, err)
 		return
 	}
@@ -174,13 +179,15 @@ func (s *Server) handleChatRequestPut(w http.ResponseWriter, r *http.Request, se
 	writeJSON(w, 202, protocol.Response(receipt, false))
 }
 
-// Caller holds submitMu. Work owns running from before acceptance until after
-// accounting/finalization; a persisted active receipt without that owner cannot
-// be automatically dispatched. This also handles ambiguous commit errors.
+// Caller holds submitMu. Work owns its thread's running from before acceptance
+// until after accounting/finalization; a persisted active receipt without that
+// owner cannot be automatically dispatched. This also handles ambiguous commit
+// errors.
 func (room *chatRoom) recoverOrphan(u store.User, c store.ChatRequest) (store.ChatRequest, error) {
 	room.mu.Lock()
 	defer room.mu.Unlock()
-	if room.running || c.State != store.ChatAccepted && c.State != store.ChatStarting && c.State != store.ChatRunning {
+	t := room.turns[c.ThreadID]
+	if t != nil && t.running || c.State != store.ChatAccepted && c.State != store.ChatStarting && c.State != store.ChatRunning {
 		return c, nil
 	}
 	next, err := room.srv.store.AdvanceChatRequest(u, c.SessionID, c.RequestID, c.Revision, store.ChatUncertain, "execution_incomplete")
@@ -216,8 +223,14 @@ func (s *Server) handleChatRequestList(w http.ResponseWriter, r *http.Request, s
 	room := s.chat.room(sess.ID)
 	room.submitMu.Lock()
 	defer room.submitMu.Unlock()
-	var pending *store.ChatRequest
-	if c, err := s.store.PendingChatRequest(sess.ID); err == nil {
+	var pendings []store.ChatRequest
+	chosen := -1 // the named thread's, else the oldest
+	active, err := s.store.PendingChatRequests(sess.ID)
+	if err != nil {
+		writeChatRequestError(w, r, err)
+		return
+	}
+	for _, c := range active {
 		c, err = s.store.ChatRequest(reqUser(r), sess.ID, c.RequestID)
 		if err != nil {
 			writeChatRequestError(w, r, err)
@@ -229,14 +242,17 @@ func (s *Server) handleChatRequestList(w http.ResponseWriter, r *http.Request, s
 			return
 		}
 		if c.State == store.ChatAccepted || c.State == store.ChatStarting || c.State == store.ChatRunning || c.State == store.ChatUncertain {
-			pending = &c
+			pendings = append(pendings, c)
+			if chosen < 0 || c.ThreadID == thread {
+				chosen = len(pendings) - 1
+			}
 		}
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		writeChatRequestError(w, r, err)
-		return
+	}
+	var pending *store.ChatRequest
+	if chosen >= 0 {
+		pending = &pendings[chosen]
 	}
 	var rows []store.ChatRequest
-	var err error
 	if r.URL.Query().Get("pending_only") != "1" {
 		rows, err = s.store.RecentChatRequests(reqUser(r), sess.ID, thread)
 	} else {
@@ -247,7 +263,7 @@ func (s *Server) handleChatRequestList(w http.ResponseWriter, r *http.Request, s
 		writeChatRequestError(w, r, err)
 		return
 	}
-	writeJSON(w, 200, protocol.ChatRequestList{Version: protocol.ChatVersion, Scope: s.chatRequestScope(reqUser(r)), Requests: rows, Pending: pending})
+	writeJSON(w, 200, protocol.ChatRequestList{Version: protocol.ChatVersion, Scope: s.chatRequestScope(reqUser(r)), Requests: rows, Pending: pending, Pendings: pendings})
 }
 
 func (s *Server) handleChatRequestAction(w http.ResponseWriter, r *http.Request, sess store.Session) {
@@ -303,21 +319,18 @@ func (s *Server) handleChatRequestAction(w http.ResponseWriter, r *http.Request,
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		if err = room.interruptRequest(ctx, id, true); err != nil {
+		if err = room.turn(c.ThreadID).interruptRequest(ctx, id, true); err != nil {
 			writeChatRequestError(w, r, err)
 			return
 		}
 	} else if input.Action == "review" {
-		room.mu.Lock()
-		busy := room.running
-		room.mu.Unlock()
-		if busy {
-			writeChatRequestError(w, r, errChatBusy)
-			return
-		}
 		c, err := s.store.ChatRequest(u, sess.ID, id)
 		if err != nil {
 			writeChatRequestError(w, r, err)
+			return
+		}
+		if room.threadRunning(c.ThreadID) {
+			writeChatRequestError(w, r, errChatBusy)
 			return
 		}
 		// Repeated review with the last observed revision is a read-only replay.
@@ -345,7 +358,7 @@ func (s *Server) handleChatRequestAction(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, 200, protocol.Response(c))
 }
 
-func (room *chatRoom) runReceiptTurn(ctx context.Context, turn *chatReceiptTurn) {
+func (t *chatTurn) runReceiptTurn(ctx context.Context, turn *chatReceiptTurn) {
 	in := turn.receipt.Request
-	room.runTurnObserved(ctx, in.Text, in.Model, in.Effort, turn, in.EffortControl)
+	t.runTurnObserved(ctx, in.Text, in.Model, in.Effort, turn, in.EffortControl)
 }

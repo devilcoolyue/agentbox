@@ -13,7 +13,7 @@ import (
 // chatReceiptTurn observes the existing execution/settlement path. It never
 // invokes a second runner or reconstructs usage after a lost acknowledgement.
 type chatReceiptTurn struct {
-	room                        *chatRoom
+	turn                        *chatTurn
 	owner                       store.User
 	receipt                     store.ChatRequest
 	outcome, code               string
@@ -23,13 +23,13 @@ type chatReceiptTurn struct {
 }
 
 func (t *chatReceiptTurn) Advance(state string) bool {
-	c, err := t.room.srv.store.AdvanceChatRequest(t.owner, t.receipt.SessionID, t.receipt.RequestID, t.receipt.Revision, state, "")
+	c, err := t.turn.room.srv.store.AdvanceChatRequest(t.owner, t.receipt.SessionID, t.receipt.RequestID, t.receipt.Revision, state, "")
 	if err != nil {
 		t.outcome, t.code = store.ChatUncertain, "receipt_write_failed"
 		return false // Never start external work after a failed stage commit.
 	}
 	t.receipt = c
-	t.room.broadcast(protocol.Event(c))
+	t.turn.room.broadcast(protocol.Event(c))
 	return true
 }
 
@@ -44,9 +44,9 @@ func (t *chatReceiptTurn) Terminal(state string) {
 }
 
 func (t *chatReceiptTurn) Interrupted() bool {
-	t.room.mu.Lock()
-	defer t.room.mu.Unlock()
-	return t.room.userInterrupted
+	t.turn.room.mu.Lock()
+	defer t.turn.room.mu.Unlock()
+	return t.turn.userInterrupted
 }
 
 func (s *Server) isStopping() bool {
@@ -69,7 +69,7 @@ func (t *chatReceiptTurn) Fail(err error, code string) {
 	switch {
 	case t.receipt.State == store.ChatAccepted || t.receipt.State == store.ChatStarting:
 		t.outcome = store.ChatFailed
-	case t.room.srv.isStopping():
+	case t.turn.room.srv.isStopping():
 		// Shutdown is not the user confirming an interrupt nor a CLI error.
 		t.outcome = store.ChatUncertain
 	case (code == chat.ChatTurnTimedOut || code == chat.ChatQuotaPaused) && t.Interrupted():
@@ -94,7 +94,7 @@ func (t *chatReceiptTurn) Fail(err error, code string) {
 func (t *chatReceiptTurn) Completed(ctx context.Context) {
 	// Evaluate cancellation before defer cancel runs. Shutdown is not the user
 	// confirming an interrupt, even if its stop signal produced a terminal event.
-	if ctx.Err() != nil || t.room.srv.isStopping() || t.ambiguous {
+	if ctx.Err() != nil || t.turn.room.srv.isStopping() || t.ambiguous {
 		return
 	}
 	switch t.terminal {
@@ -115,8 +115,8 @@ func (t *chatReceiptTurn) Completed(ctx context.Context) {
 	}
 }
 
-// Registered before usage's defer and after room.end's defer, so persistence
-// and accounting finish before the room is released. A panic cannot publish a
+// Registered before usage's defer and after the turn's end defer, so persistence
+// and accounting finish before the thread is released. A panic cannot publish a
 // successful receipt; no prompt, raw provider error or panic value is logged.
 func (t *chatReceiptTurn) Finish() {
 	if recover() != nil {
@@ -138,7 +138,7 @@ func (t *chatReceiptTurn) Finish() {
 		// The code alone is what the user sees; keep the reason findable.
 		log.Printf("chat receipt uncertain request_id=%s code=%s", t.receipt.RequestID, t.code)
 	}
-	c, err := t.room.srv.store.AdvanceChatRequest(t.owner, t.receipt.SessionID, t.receipt.RequestID, t.receipt.Revision, t.outcome, t.code)
+	c, err := t.turn.room.srv.store.AdvanceChatRequest(t.owner, t.receipt.SessionID, t.receipt.RequestID, t.receipt.Revision, t.outcome, t.code)
 	if err != nil {
 		// The persisted active state continues to block admission. Query/restart
 		// recovery exposes it as uncertain; a deleted receipt stays a tombstone.
@@ -146,13 +146,13 @@ func (t *chatReceiptTurn) Finish() {
 		return
 	}
 	t.receipt = c
-	t.room.broadcast(protocol.Event(c))
+	t.turn.room.broadcast(protocol.Event(c))
 }
 
 // A final receipt must not outrun its transcript writes. Sync the file and its
 // directory before committing completed/interrupted; failed sync stays unknown.
 func (t *chatReceiptTurn) syncHistory() error {
-	r := t.room
+	r := t.turn.room
 	r.fileMu.Lock()
 	defer r.fileMu.Unlock()
 	sess, ok := r.srv.store.Get(r.sessID)

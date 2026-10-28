@@ -57,14 +57,14 @@ var delegationAllowedTools = []string{"mcp__agentbox__delegate", "mcp__agentbox_
 
 type delegationRegistry struct {
 	mu     sync.Mutex
-	grants map[string]*delegationGrant // owner session → the running turn's grant
+	grants map[string]*delegationGrant // owner session → the running turn's grant (one thread at a time)
 }
 
 // delegationGrant is the capability one main agent turn holds. It ends with
 // the turn: the bridge closes and a running worker is interrupted.
 type delegationGrant struct {
 	srv      *Server
-	room     *chatRoom
+	chat     *chatTurn // the delegating thread
 	owner    store.User
 	session  string
 	thread   string
@@ -179,15 +179,23 @@ func delegationTools() []map[string]any {
 // openDelegation prepares the delegate tool for one accepted turn. A nil
 // grant without error means the turn runs as an ordinary chat (non-Claude
 // workspace or an empty roster after rechecking access and tags).
-func (s *Server) openDelegation(room *chatRoom, u store.User, receipt store.ChatRequest) (*delegationGrant, error) {
+func (s *Server) openDelegation(turn *chatTurn, u store.User, receipt store.ChatRequest) (*delegationGrant, error) {
 	opts := receipt.Request.Delegation
-	sess, ok := s.store.Get(room.sessID)
+	sess, ok := s.store.Get(turn.room.sessID)
 	if !ok {
 		return nil, errSessionGone
 	}
 	workers := s.delegationWorkers(u, opts.Workers)
 	if sess.Agent != config.AgentClaude || len(workers) == 0 {
-		room.broadcast(map[string]any{"type": "delegation_notice", "code": "delegation_unavailable_this_turn"})
+		turn.broadcast(map[string]any{"type": "delegation_notice", "code": "delegation_unavailable_this_turn"})
+		return nil, nil
+	}
+	// Workers share the workspace with the main agent, which waits for them
+	// so the files have one writer. One delegating thread per workspace keeps
+	// that true for delegation; another thread's message runs as an ordinary
+	// turn instead of failing.
+	if s.delegationBusy(sess.ID) {
+		turn.broadcast(map[string]any{"type": "delegation_notice", "code": "delegation_busy_this_turn"})
 		return nil, nil
 	}
 	jev := false
@@ -220,7 +228,7 @@ func (s *Server) openDelegation(room *chatRoom, u store.User, receipt store.Chat
 	}
 	endpoint := "http://" + net.JoinHostPort(pb.Host, fmt.Sprint(ln.Addr().(*net.TCPAddr).Port))
 	ctx, cancel := context.WithCancel(s.workContext())
-	g := &delegationGrant{srv: s, room: room, owner: u, session: sess.ID, thread: receipt.ThreadID, turn: receipt.TurnID,
+	g := &delegationGrant{srv: s, chat: turn, owner: u, session: sess.ID, thread: receipt.ThreadID, turn: receipt.TurnID,
 		refs: opts.Workers, workers: workers, jev: jev, ticket: oauthRandom(), ctx: ctx, cancel: cancel, deadline: time.Now().Add(s.delegationTurnTimeout())}
 	tools, _ := json.Marshal(delegationTools())
 	mcp, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"agentbox": map[string]any{
@@ -245,9 +253,23 @@ func (s *Server) openDelegation(room *chatRoom, u store.User, receipt store.Chat
 	if s.delegations.grants == nil {
 		s.delegations.grants = map[string]*delegationGrant{}
 	}
+	if s.delegations.grants[sess.ID] != nil {
+		// Another thread opened its grant while this one was set up.
+		s.delegations.mu.Unlock()
+		g.shutdown()
+		turn.broadcast(map[string]any{"type": "delegation_notice", "code": "delegation_busy_this_turn"})
+		return nil, nil
+	}
 	s.delegations.grants[sess.ID] = g
 	s.delegations.mu.Unlock()
 	return g, nil
+}
+
+// delegationBusy reports whether a thread of the workspace holds a grant.
+func (s *Server) delegationBusy(session string) bool {
+	s.delegations.mu.Lock()
+	defer s.delegations.mu.Unlock()
+	return s.delegations.grants[session] != nil
 }
 
 // close interrupts a running worker, lets it record its outcome, then tears
@@ -297,11 +319,13 @@ func (s *Server) delegationTurnTimeout() time.Duration {
 	return max(s.turnTimeout(), delegationTurnMinimum)
 }
 
-func (s *Server) interruptDelegation(session string) {
+// interruptDelegation stops the worker of the thread's turn, if it delegates;
+// a grant held by another thread of the workspace is left alone.
+func (s *Server) interruptDelegation(session, thread string) {
 	s.delegations.mu.Lock()
 	g := s.delegations.grants[session]
 	s.delegations.mu.Unlock()
-	if g == nil {
+	if g == nil || g.thread != thread {
 		return
 	}
 	g.mu.Lock()
@@ -510,9 +534,9 @@ func (g *delegationGrant) publish(d store.Delegation, persist bool) {
 	if err != nil {
 		return
 	}
-	g.room.broadcast(map[string]any{"type": "delegation", "delegation": view})
+	g.chat.broadcast(map[string]any{"type": "delegation", "delegation": view})
 	if persist {
-		if err := g.room.appendLog(logEntry{Kind: "delegation", Event: raw}); err != nil {
+		if err := g.chat.room.appendLog(g.thread, logEntry{Kind: "delegation", Event: raw}); err != nil {
 			log.Printf("delegation %s history: %v", d.ID, err)
 		}
 	}

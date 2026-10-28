@@ -64,6 +64,9 @@ type Runtime interface {
 	// without counting as one. It must not block.
 	Interrupt()
 	ProviderSession(store.Session, string) error
+	// Conversation is the provider conversation the thread continues, or ""
+	// for a new one. Threads of a workspace run side by side, each its own.
+	Conversation(sess store.Session, thread string) string
 	// PromptSuggestions reports whether the started container's CLI can
 	// predict the next prompt; an older image would reject the flag.
 	PromptSuggestions(context.Context, store.Session) bool
@@ -322,7 +325,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 	}
 
 	// 记录发消息前该线程的状态：首条消息且尚无标题时，回合成功后据首条
-	// 消息让模型生成一个简洁标题。房间占用期间线程不会被切换，tid 稳定，
+	// 消息让模型生成一个简洁标题。回合占着自己的线程，tid 稳定，
 	// 用量流水也挂在它上面。
 	tid, firstTurn := r.Thread(sess)
 	outcome.ThreadID = tid
@@ -425,7 +428,7 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 
 	// 两条路径共用的行处理：JSON 事件落盘并广播（增量只广播），
 	// 顺带提取 provider 会话 id 供续聊；非 JSON 行按原文透传。
-	chatID := sess.ChatSession
+	chatID := r.Conversation(sess, tid)
 	if in.Fresh {
 		chatID = in.Resume
 	}

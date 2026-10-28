@@ -24,7 +24,7 @@ func (r *chatRoom) publishTurnCost(threadID, turnID string, running bool) {
 	if running {
 		msg["running"] = true
 	}
-	r.broadcast(msg)
+	r.broadcast(threadTagged{threadID, msg})
 }
 
 type usageTally = usage.Tally

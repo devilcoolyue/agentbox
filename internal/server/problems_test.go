@@ -331,7 +331,7 @@ func TestProblemsStartupThroughWorkspace(t *testing.T) {
 			if strings.Contains(p.Error+p.Hint, "synthetic-private") {
 				t.Fatal("runtime detail leaked")
 			}
-			room := s.chat.room(sess.ID)
+			room := s.chat.room(sess.ID).activeTurn(t)
 			// Now use valid defaults so the same startup error is persisted for history.
 			room.runTurn("synthetic-private-prompt", "", "")
 			history := httptest.NewRecorder()

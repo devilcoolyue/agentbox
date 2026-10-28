@@ -45,6 +45,7 @@ export interface ChatRequestList {
   scope: string;
   requests: Array<ChatRequestReceipt>;
   pending: ChatRequestReceipt | null;
+  pendings?: Array<ChatRequestReceipt>;
 }
 export interface ChatRequestEvent {
   type: "chat_request";

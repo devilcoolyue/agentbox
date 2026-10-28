@@ -3,8 +3,9 @@ import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js"
  * 切回继续。顶部切换栏显示当前对话标题（也是历史面板入口），右侧滑出面板
  * 列出全部对话：点击切换续聊、可新建 / 删除。服务端按线程记录 provider
  * 会话 id，切回旧对话自动携带原上下文；早期迁移数据挖不出 id 的，继续时
- * 从空白上下文开始并给出提示。切换成功后服务端广播给同会话的其它页面，
- * 本端与广播都汇入 bus 的 thread-changed 事件，由 chat.ts 重载对话流。 */
+ * 从空白上下文开始并给出提示。本端切换经 bus 的 thread-changed 事件由 chat.ts
+ * 重载对话流。同一空间的几个对话可以同时运行（features/chat/running.ts）：运行中
+ * 照样能切换、新建，列表和切换栏标出正在跑的对话；别的页面切换不会把本页带走。 */
 "use strict";
 import { S, emit } from "./state.js";
 import { $, fmtSize, fmtTime, toast, askConfirm, askPrompt } from "./util.js";
@@ -12,6 +13,7 @@ import { api } from "./api.js";
 import { svgIcon, USER_ATTACH_RE } from "./chat-render.js";
 import { setTip } from "./tip.js";
 import { keepCount, skelBar, skelShell } from "./skeleton.js";
+import { onRunningChange, runningIDs, runningThread } from "./features/chat/running.js";
 /* 预览文案：附件占位符只留类别名，不展示容器内路径 */
 function previewText(s) {
     return String(s || "").replace(USER_ATTACH_RE, "[$1]") || i18nText("（无文字消息）");
@@ -27,6 +29,7 @@ export function setThreadBar(thread) {
     S.thread = thread && thread.id ? thread : null;
     titled = false; // 已登记 S.thread 后改由下面的 id 比对把关
     setTextRender($("thread-title"), () => S.thread?.title ? previewText(S.thread.title) : i18nText("新对话"));
+    renderRunningBadge();
 }
 /* 空的新对话发出首条消息后，标题立即跟上，不必等下一次历史加载。标题只由开场
  * 消息决定，之后每轮消息都不该再动它 —— 已有正式标题时让位。 */
@@ -45,6 +48,9 @@ export function noteThreadTitle(text) {
  * 已登记 S.thread 时则要 id 对上，避免改到已切走的其它线程。
  * 面板若开着，其列表会在下次打开时按最新元数据刷新。 */
 export function applyThreadTitle(id, title) {
+    const known = allThreads.find((t) => t.id === id);
+    if (known)
+        known.title = title;
     if (S.thread && S.thread.id !== id)
         return;
     if (S.thread)
@@ -70,8 +76,27 @@ async function openThreadPanel() {
 /* 最近一次拉到的列表：搜索过滤在本地做，重度用户攒下几十条也不必每敲一个字
  * 就打一次接口 */
 let allThreads = [];
-let activeID = "";
 let listSeq = 0;
+/* 提示里用的对话名：列表里有就用标题，没有（还没打开过列表）就说「另一个对话」 */
+export function threadTitleOf(id) {
+    if (S.thread?.id === id && S.thread.title)
+        return previewText(S.thread.title);
+    const t = allThreads.find((x) => x.id === id);
+    return t?.title ? previewText(t.title) : i18nText("另一个对话");
+}
+/* 切换栏：别的对话还在跑时，标题旁标出有几个 */
+function renderRunningBadge() {
+    const others = runningIDs().filter((id) => id !== S.thread?.id).length;
+    const badge = $("thread-running");
+    badge.classList.toggle("hidden", others === 0);
+    setTextRender($("thread-running-text"), () => i18nText("{p0} 个运行中", { p0: String(others) }));
+    setTip(badge, others ? () => i18nText("另有 {p0} 个对话正在运行，打开对话列表查看", { p0: String(others) }) : null);
+}
+onRunningChange(() => {
+    renderRunningBadge();
+    if (panelOpen())
+        renderList();
+});
 /* 只认最后一次请求的结果。会话按 id 比对：8 秒一次的轮询会把 S.current 换成
  * 新对象，按对象比对时请求一旦跨过轮询就被当成过期丢掉，骨架屏永远不退。 */
 async function refreshList() {
@@ -83,11 +108,10 @@ async function refreshList() {
     list.replaceChildren(threadsSkeleton(keepCount(list, ".tp-item", 5)));
     $("tp-count").textContent = "";
     try {
-        const { threads, active } = await api(`/sessions/${sess.id}/chat/threads`, { signal: AbortSignal.timeout(15000) });
+        const { threads } = await api(`/sessions/${sess.id}/chat/threads`, { signal: AbortSignal.timeout(15000) });
         if (seq !== listSeq || S.current?.id !== sess.id || !panelOpen())
             return;
         allThreads = threads;
-        activeID = active;
         renderList();
     }
     catch (e) {
@@ -131,7 +155,8 @@ function renderList() {
     setTextRender($("tp-count"), () => q
         ? i18nText("{p0} / {p1} 条", { p0: String(shown.length), p1: String(allThreads.length) })
         : allThreads.length + i18nText(" 条"));
-    list.replaceChildren(...shown.map((t) => threadItem(t, t.id === activeID)));
+    // 「当前」是本页正在看的对话：别的页面可能看着另一个
+    list.replaceChildren(...shown.map((t) => threadItem(t, t.id === S.thread?.id)));
 }
 $("tp-search").addEventListener("input", renderList);
 /* 历史对话骨架：图标位、标题、时间一行一条，与 threadItem 同高 */
@@ -152,19 +177,24 @@ function threadsSkeleton(count) {
     return wrap;
 }
 function threadItem(t, on) {
+    const run = runningThread(t.id);
     const row = document.createElement("div");
-    row.className = "tp-item" + (on ? " on" : "");
+    row.className = "tp-item" + (on ? " on" : "") + (run ? " running" : "");
     const open = document.createElement("button");
     open.type = "button";
     open.className = "tp-open";
-    open.appendChild(svgIcon("clock", 15));
-    setTip(open, () => on ? i18nText("当前对话") : i18nText("切换到这条对话继续"));
+    // 正在运行的对话用转圈的图标，一眼看出哪几条在跑
+    const glyph = svgIcon(run ? "chat.thread-running" : "clock", 15);
+    if (run)
+        glyph.classList.add("tp-spin");
+    open.appendChild(glyph);
+    setTip(open, () => on ? i18nText("当前对话") : run ? i18nText("正在运行，切过去查看进度") : i18nText("切换到这条对话继续"));
     const title = document.createElement("span");
     title.className = "tp-title";
     title.textContent = previewText(t.title);
     const meta = document.createElement("span");
     meta.className = "tp-meta";
-    setTextRender(meta, () => [fmtTime(t.updated || t.ts), i18nText("{p0} 轮", { p0: String(t.turns || 0) }), t.size ? fmtSize(t.size) : "", on ? i18nText("当前") : ""]
+    setTextRender(meta, () => [run ? i18nText("运行中") : "", fmtTime(t.updated || t.ts), i18nText("{p0} 轮", { p0: String(t.turns || 0) }), t.size ? fmtSize(t.size) : "", on ? i18nText("当前") : ""]
         .filter(Boolean).join(" · "));
     open.append(title, meta);
     open.addEventListener("click", () => { if (on)
@@ -218,15 +248,16 @@ async function renameThread(t) {
     }
 }
 /* ---- 动作 ---- */
-function busy() {
-    if (S.chatState !== "running")
+/* 运行中的对话不能删：它的回合还在往记录里写 */
+function busy(id) {
+    if (!runningThread(id) && !(S.thread?.id === id && S.chatState === "running"))
         return false;
-    toast(i18nText("Agent 执行中，请先等待完成或中断"), true);
+    toast(i18nText("这个对话正在运行，请先等待完成或中断"), true);
     return true;
 }
 async function switchThread(t) {
     const sess = S.current;
-    if (!sess || busy())
+    if (!sess)
         return;
     try {
         const res = await api(`/sessions/${sess.id}/chat/threads/${t.id}/activate`, { method: "POST" });
@@ -242,7 +273,7 @@ async function switchThread(t) {
 }
 export async function newThread() {
     const sess = S.current;
-    if (!sess || busy())
+    if (!sess)
         return;
     try {
         const res = await api(`/sessions/${sess.id}/chat/threads`, { method: "POST" });
@@ -264,7 +295,7 @@ async function delThread(t) {
     if (!sess)
         return;
     const isCur = !!(S.thread && S.thread.id === t.id);
-    if (isCur && busy())
+    if (busy(t.id))
         return;
     const name = previewText(t.title);
     const ok = await askConfirm(() => i18nText("删除对话「{p0}」？", { p0: String(name.length > 24 ? name.slice(0, 24) + "…" : name) }), {
@@ -286,6 +317,8 @@ async function delThread(t) {
 $("btn-threads").prepend(svgIcon("clock", 15));
 $("btn-threads").append(svgIcon("chevron", 11));
 $("btn-threads").addEventListener("click", openThreadPanel);
+$("thread-running").prepend(svgIcon("chat.thread-running", 13));
+$("thread-running").addEventListener("click", openThreadPanel);
 $("btn-thread-new").addEventListener("click", newThread);
 $("tp-new").addEventListener("click", newThread);
 $("tp-close").addEventListener("click", closeThreadPanel);

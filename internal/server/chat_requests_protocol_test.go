@@ -333,7 +333,10 @@ func TestChatReceiptHTTPConcurrentReplayExecutesAndChargesOnce(t *testing.T) {
 	}
 }
 
-func TestChatReceiptUnknownOutcomeBlocksLegacyAndThreadsUntilReview(t *testing.T) {
+// An unknown outcome blocks its own thread until review: legacy sends and new
+// requests there wait, while new threads and switching go on (threads run
+// side by side and each writes its own transcript).
+func TestChatReceiptUnknownOutcomeBlocksItsThreadUntilReview(t *testing.T) {
 	for _, tc := range []struct {
 		name, output string
 		corrupt      bool
@@ -353,13 +356,6 @@ func TestChatReceiptUnknownOutcomeBlocksLegacyAndThreadsUntilReview(t *testing.T
 			if tc.corrupt && f.inspections.Load() != 0 {
 				t.Fatal("scanner error ignored and exit code checked")
 			}
-			for _, suffix := range []string{"threads", "threads/" + f.input.ThreadID + "/activate"} {
-				w := f.request("POST", suffix, "alice", nil)
-				if w.Code != 409 {
-					t.Fatal("thread change escaped pending receipt", w.Code, w.Body.String())
-				}
-				assertProblem(t, w.Body.Bytes(), "chat_pending")
-			}
 			srv := httptest.NewServer(f.h)
 			defer srv.Close()
 			conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/api/sessions/"+f.sess.ID+"/chat", http.Header{"Authorization": []string{"Bearer alice"}})
@@ -377,6 +373,16 @@ func TestChatReceiptUnknownOutcomeBlocksLegacyAndThreadsUntilReview(t *testing.T
 			}
 			if err = conn.ReadJSON(&message); err != nil || message["code"] != "chat_pending" {
 				t.Fatal(message, err)
+			}
+			if w := f.request("PUT", "requests/"+newOperationID(), "alice", f.input); w.Code != 409 {
+				t.Fatal("a second request ran in the unreviewed thread", w.Code, w.Body.String())
+			} else {
+				assertProblem(t, w.Body.Bytes(), "chat_pending")
+			}
+			for _, suffix := range []string{"threads", "threads/" + f.input.ThreadID + "/activate"} {
+				if w := f.request("POST", suffix, "alice", nil); w.Code != 200 {
+					t.Fatal("thread change blocked by another thread's receipt", w.Code, w.Body.String())
+				}
 			}
 			w := f.request("POST", "requests/"+id, "alice", map[string]any{"action": "review", "revision": c.Revision - 1, "scope": f.input.Scope})
 			if w.Code != 409 {
@@ -417,7 +423,7 @@ func TestChatReceiptExitedFailureDoesNotBlock(t *testing.T) {
 			if c.State != store.ChatFailed || c.ErrorCode != chatTurnFailed {
 				t.Fatal("exited failure not final", c)
 			}
-			if _, err := f.s.store.PendingChatRequest(f.sess.ID); !errors.Is(err, sql.ErrNoRows) {
+			if _, err := f.s.store.PendingChatRequest(f.sess.ID, f.input.ThreadID); !errors.Is(err, sql.ErrNoRows) {
 				t.Fatal("failure kept the admission gate", err)
 			}
 			w := f.request("POST", "requests/"+id, "alice", map[string]any{"action": "review", "revision": c.Revision, "scope": f.input.Scope})
@@ -510,7 +516,7 @@ func TestChatReceiptUserInterruptAndShutdownRemainDistinct(t *testing.T) {
 			}
 			room := f.s.chat.room(f.sess.ID)
 			if shutdown {
-				room.interruptContext(context.Background())
+				room.activeTurn(t).interruptContext(context.Background())
 			} else {
 				c := receiptFrom(t, f.request("GET", "requests/"+id, "alice", nil))
 				for range 3 {
@@ -557,7 +563,7 @@ func TestShutdownNamesWhatEndedTheTurn(t *testing.T) {
 				l.mu.Lock()
 				l.stopping, l.upgrading = true, upgrading
 				l.mu.Unlock()
-				f.s.chat.room(f.sess.ID).interruptContext(context.Background())
+				f.s.chat.room(f.sess.ID).activeTurn(t).interruptContext(context.Background())
 				f.unblock()
 				c := f.wait(t, id)
 				code := "server_restarted"
@@ -786,7 +792,7 @@ func TestChatReceiptHistorySyncRejectsLinks(t *testing.T) {
 	if err := os.Symlink(outside, path); err != nil {
 		t.Fatal(err)
 	}
-	turn := &chatReceiptTurn{room: f.s.chat.room(f.sess.ID), owner: f.u, receipt: store.ChatRequest{ThreadID: f.input.ThreadID}}
+	turn := &chatReceiptTurn{turn: f.s.chat.room(f.sess.ID).activeTurn(t), owner: f.u, receipt: store.ChatRequest{ThreadID: f.input.ThreadID}}
 	if err := turn.syncHistory(); err == nil {
 		t.Fatal("receipt synced a linked transcript outside the root")
 	}

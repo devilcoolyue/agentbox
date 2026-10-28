@@ -9,7 +9,7 @@ import (
 
 // SchemaVersion changes only with a committed, ordered migration. Versions
 // predating this framework use user_version=0, including partially upgraded DBs.
-const SchemaVersion = 23
+const SchemaVersion = 24
 
 //go:embed migrations/001_baseline.sql
 var baselineSQL string
@@ -67,6 +67,9 @@ var quotaPauseSQL string
 
 //go:embed migrations/023_terminal_billing.sql
 var terminalBillingSQL string
+
+//go:embed migrations/024_parallel_chats.sql
+var parallelChatsSQL string
 
 type migration struct {
 	version int
@@ -128,6 +131,7 @@ func migrations() []migration {
 			_, err := tx.Exec("INSERT INTO terminal_billing (id, since) VALUES (1, ?)", usageTimestamp(time.Now()))
 			return err
 		}},
+		{24, func(tx *sql.Tx) error { _, err := tx.Exec(parallelChatsSQL); return err }},
 	}
 }
 func migrate(db *sql.DB) error { return runMigrations(db, migrations()) }

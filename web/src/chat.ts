@@ -15,7 +15,7 @@ import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { refreshAll } from "./data.js";
 import { chip, renderUserTurn, renderSteer, interruptedChip, problemChip, svgIcon, USER_ATTACH_RE } from "./chat-render.js";
 import { observeAnswer } from "./chat-footer.js";
-import { setThreadBar, noteThreadTitle, applyThreadTitle } from "./chat-threads.js";
+import { setThreadBar, noteThreadTitle, applyThreadTitle, threadTitleOf } from "./chat-threads.js";
 import { agentIcon, agentAvatar } from "./brand.js";
 import { BUDGETS, EFFORT_LABELS, allowedLevels, defaultReasoning, canKeepEffort } from "./reasoning.js";
 import { setTip } from "./tip.js";
@@ -53,10 +53,13 @@ import {initComposerDrafts} from "./features/chat/drafts.js";
 import type {Draft,DraftAttachment} from "./features/chat/draft-store.js";
 import {initChatOutbox} from "./features/chat/outbox.js";
 import {createSuggestion,suggestionOf,latestSuggestion,suggestionsEnabled,setSuggestionsEnabled} from "./features/chat/suggestion.js";
+import {MAX_PARALLEL_CHATS,noteThreadState,resetRunning,runningCount,runningThread,setRunningSnapshot} from "./features/chat/running.js";
 let drafts:ReturnType<typeof initComposerDrafts>|undefined;
 let delegationComposer:ReturnType<typeof initDelegationComposer>|undefined;
 let outbox:ReturnType<typeof initChatOutbox>|undefined;
 let composerThread="";
+/* 本页正在看的对话。同一空间的几个对话可以同时运行，别的页面切到别的对话也不跟着走 */
+const viewThread=()=>composerThread||S.thread?.id||"";
 const legacyDraftVersions=new Map<string,number>();
 const connection = new ChatConnection({
  message: data => { try { handleChatMsg(JSON.parse(data)); } catch (_) {} },
@@ -181,6 +184,7 @@ export function chatTeardown() {
   keepaliveChip.reset();
   tasks.reset();
   outline.reset();
+  resetRunning();
   setChatStatus("idle");
 }
 
@@ -213,7 +217,33 @@ function updateScrollBottomButton() {
 
 
 
+/* 别的对话的事件：只记运行状态，结束或提问时提示一句，不往当前对话流里画 */
+function backgroundThreadMsg(thread: string, msg: ChatMessage) {
+  if (msg.type === "question") {
+    toast(i18nText("对话「{p0}」在等你回答问题", { p0: threadTitleOf(thread) }));
+  } else if (msg.type === "status" && msg.state === "idle") {
+    toast(i18nText("对话「{p0}」已完成", { p0: threadTitleOf(thread) }));
+    refreshAll();
+  } else if (msg.type === "status" && msg.state === "error") {
+    toast(i18nText("对话「{p0}」执行出错，切过去查看详情", { p0: threadTitleOf(thread) }), true);
+    refreshAll();
+  }
+}
+
 function handleChatMsg(msg: ChatMessage) {
+  // 连接（含重连）时的快照列着所有正在运行的对话；顶层只描述服务端的当前对话，
+  // 本页看的若是另一个，就按快照里它自己的状态来。
+  if (msg.type === "status" && msg.threads && typeof msg.threads === "object") {
+    setRunningSnapshot(msg.threads);
+    const own = viewThread();
+    if (own) {
+      const mine = msg.threads[own];
+      msg = mine ? { ...msg, state: "running", elapsed_ms: mine.elapsed_ms, phase: mine.phase } : { ...msg, state: "idle", elapsed_ms: undefined, phase: undefined };
+    }
+  }
+  const thread = typeof msg.thread === "string" ? msg.thread : "";
+  if (thread && msg.type === "status" && msg.state) noteThreadState(thread, msg.state, msg.phase);
+  if (thread && thread !== viewThread()) { backgroundThreadMsg(thread, msg); return; }
   switch (msg.type) {
     case "chat_request":
       if(msg.version===1)outbox?.message(msg.receipt);
@@ -266,7 +296,9 @@ function handleChatMsg(msg: ChatMessage) {
       if (msg.id) delegationLiveEntry(msg.id, msg.entry);
       break;
     case "delegation_notice":
-      toast(i18nText("本条消息未启用委派：当前没有可用的跑腿模型，已按普通对话处理。"));
+      toast(msg.code === "delegation_busy_this_turn"
+        ? i18nText("本条消息未启用委派：另一个对话正在使用委派，已按普通对话处理。")
+        : i18nText("本条消息未启用委派：当前没有可用的跑腿模型，已按普通对话处理。"));
       break;
     case "turn_cost":
       if (msg.cost && msg.cost.turn_id === live.context.turn?.id) {
@@ -276,9 +308,13 @@ function handleChatMsg(msg: ChatMessage) {
       }
       break;
     case "thread":
-      // 另一个页面切换 / 新建 / 删除了对话线程；本端发起的操作已通过
-      // thread-changed 重载过（S.thread 已对上），据此跳过重复加载
-      if (!S.thread || S.thread.id !== msg.id) reloadThread();
+      // 另一个页面切换 / 新建了对话线程。几个对话可以同时运行，本页留在自己看的对话上；
+      // 还没有任何对话（空间刚建好）时才跟过去
+      if (!viewThread()) reloadThread();
+      break;
+    case "thread_deleted":
+      // 本页看的对话在别处被删了：回到服务端的当前对话
+      if (msg.id && msg.id === viewThread()) reloadThread();
       break;
     case "thread_title":
       // 服务端异步生成好了线程标题
@@ -426,7 +462,8 @@ const sender = new ChatSender({
   const questions=S.chatQuestions===1&&sessionAgent()==="claude";
   // Sent while a turn runs: queue it after the turn or steer the running turn.
   // During a five-hour pause it queues until the reset.
-  const delivery=sendingFollow||(pausedQueue()?"queue":undefined);
+  // When the workspace already runs its most threads, a new turn waits for a free slot.
+  const delivery=sendingFollow||(pausedQueue()||parallelFull()?"queue":undefined);
   // Claude Code leaves its task list off for Claude 5; turning it on costs tokens, so only on request.
   const taskTools=S.chatTasks===1&&sessionAgent()==="claude"&&taskToolsEnabled();
   const input={scope:S.chatScope,thread_id:composerThread,text,...pick,attachments:draft.attachments.map(a=>a.path),...(delegation?{delegation}:{}),...(suggestions?{suggestions}:{}),...(questions?{questions}:{}),...(delivery?{delivery}:{}),...(taskTools?{tasks:true}:{})};
@@ -460,6 +497,8 @@ const followupsOpen = () => S.chatState === "running" && S.chatFollowups === 1 &
 /* 5 小时额度暂停（server/quota_pause.go）：重置前发送的消息排队，重置后自动执行 */
 let quotaPause: QuotaPause | null = null;
 const pausedQueue = () => quotaPause && quotaPause.resets_at > Date.now() && S.chatFollowups === 1 && !!outbox?.enabled && !outbox.unsupported ? quotaPause : null;
+/* 空间里已有 3 个对话在跑（服务端上限）：本对话空闲时发出的消息排队，有空位自动开始 */
+const parallelFull = () => S.chatState !== "running" && !runningThread(viewThread()) && runningCount() >= MAX_PARALLEL_CHATS && S.chatFollowups === 1 && !!outbox?.enabled && !outbox.unsupported;
 async function sendFollow(mode: FollowMode) {
  if (!followupsOpen() || sendingFollow) return;
  sendingFollow = mode;
@@ -482,7 +521,8 @@ function sendInterrupt() {
   if(outbox?.unsupported)return;
   if(outbox?.enabled&&outbox.interrupt())return;
   if (connection.ready) {
-    connection.send(JSON.stringify({ type: "interrupt" }));
+    // 只停本页看的这个对话；同一空间里别的对话照常跑
+    connection.send(JSON.stringify({ type: "interrupt", thread: viewThread() }));
   }
 }
 
@@ -1138,6 +1178,8 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
   const query = new URLSearchParams();
   if (S.draftProtocol === 1) query.set("draft_context", "1");
   if (keep) { query.set("thread", keep.thread); query.set("from", String(keep.start)); }
+  // 重连补拉留在本页看的对话上（服务端的当前对话可能已被别的页面换掉）
+  else if (silent && viewThread()) query.set("thread", viewThread());
   const qs = query.toString(); // 不用 .size：Safari 16 没有
   let draftThread = "", kept = false;
   const result = await history.load(sess.id, `/sessions/${sess.id}/history`+(qs?"?"+qs:""), async ({active_thread,thread}) => {
@@ -1173,6 +1215,7 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
     keepaliveChip.soon(0);
     suggestion.set(latestSuggestion(entries));
     const id = active_thread || thread?.id;
+    syncThreadRunState(id || "");
     tasks.reset();
     tasks.replay(entries, id);
     // 服务端发现游标失效或范围过大时退回最新一页，阅读位置随之失效
@@ -1191,6 +1234,20 @@ export async function loadHistory(opts: { silent?: boolean } = {}) {
   if (result.state === "loaded") {
     log.scrollTop = wasAtBottom || (keep && !kept) ? log.scrollHeight : prevScroll;
     updateScrollBottomButton();
+  }
+}
+
+/* 切到（或重载）一个对话：执行状态与计时按它自己的来——别的对话可能正在跑，这个可能没在跑，
+ * 反过来也一样 */
+function syncThreadRunState(id: string) {
+  const run = id ? runningThread(id) : undefined;
+  if (run) {
+    turnStartedAt = run.startedAt;
+    setWorkingLabel(run.phase === "starting" ? () => i18nText("正在启动工作空间") + "…" : thinkingLabel);
+    if (S.chatState !== "running") setChatStatus("running");
+  } else if (S.chatState === "running" && !outbox?.pending()) {
+    turnStartedAt = 0;
+    setChatStatus("idle");
   }
 }
 
@@ -1355,7 +1412,7 @@ export function initChat() {
    applyComposerDraft({...value,attachments:value.attachments.map(a=>({...a,valid:false}))});void drafts?.validate();
    return true;
   },
-  followed:how=>toast(how==="steered"?i18nText("已插入当前任务，当前步骤结束后生效"):pausedQueue()?i18nText("已排队，5 小时额度重置后自动执行"):i18nText("已排队，这一轮结束后自动执行")),
+  followed:how=>toast(how==="steered"?i18nText("已插入当前任务，当前步骤结束后生效"):pausedQueue()?i18nText("已排队，5 小时额度重置后自动执行"):S.chatState!=="running"&&runningCount()>=MAX_PARALLEL_CHATS?i18nText("已有 3 个对话在运行，已排队，空出位置后自动执行"):i18nText("已排队，这一轮结束后自动执行")),
   paused:()=>!!pausedQueue(),
  });
  window.matchMedia("(max-width: 760px)").addEventListener("change", updateChatPlaceholder, { signal: lifetime.signal });

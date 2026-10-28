@@ -142,7 +142,7 @@ func TestChatRequestStageCASAndUnknownReview(t *testing.T) {
 	if _, err = s.AdvanceChatRequest(u, sess.ID, c.RequestID, c.Revision, ChatCompleted, ""); !errors.Is(err, ErrChatConflict) {
 		t.Fatal("stale worker overwrote restart recovery", err)
 	}
-	pending, err := s.PendingChatRequest(sess.ID)
+	pending, err := s.PendingChatRequest(sess.ID, input.ThreadID)
 	if err != nil || pending.State != ChatUncertain || pending.ErrorCode != "server_restarted" {
 		t.Fatal("restart lost uncertainty", pending, err)
 	}
@@ -156,7 +156,7 @@ func TestChatRequestStageCASAndUnknownReview(t *testing.T) {
 	if reviewed.ErrorCode != "server_restarted" {
 		t.Fatal("review erased uncertainty reason")
 	}
-	if _, err = s.PendingChatRequest(sess.ID); !errors.Is(err, sql.ErrNoRows) {
+	if _, err = s.PendingChatRequest(sess.ID, input.ThreadID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal("review did not release admission gate", err)
 	}
 	if old, fresh, err := s.AcceptChatRequest(u, sess.ID, c.RequestID, input); err != nil || fresh || old.State != ChatReviewed {
@@ -342,7 +342,7 @@ func TestChatRequestWriteFailureAndDeleteAreAtomic(t *testing.T) {
 	if _, fresh, err := s.AcceptChatRequest(u, sess.ID, "request", input); err == nil || fresh {
 		t.Fatal("failed persistence granted execution permission", fresh, err)
 	}
-	if _, err := s.PendingChatRequest(sess.ID); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := s.PendingChatRequest(sess.ID, input.ThreadID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal("failed transaction left receipt", err)
 	}
 	if _, err := s.db.Exec("DROP TRIGGER chat_insert_failure"); err != nil {
@@ -683,7 +683,7 @@ func TestChatRequestQueueAndSteer(t *testing.T) {
 	if _, _, err = s.AcceptChatRequest(u, sess.ID, "jump", input); !errors.Is(err, ErrChatPending) {
 		t.Fatal("ordinary send overtook the queue", err)
 	}
-	next, owner, err := s.NextQueuedChatRequest(sess.ID)
+	next, owner, err := s.NextQueuedChatRequest(sess.ID, queued.ThreadID)
 	if err != nil || next.RequestID != "a" || owner.Name != u.Name {
 		t.Fatal(next, err)
 	}
@@ -699,6 +699,56 @@ func TestChatRequestQueueAndSteer(t *testing.T) {
 	}
 	if ids, err := s.QueuedChatSessions(); err != nil || len(ids) != 0 {
 		t.Fatal("withdrawn request still queued", ids, err)
+	}
+}
+
+// Threads of one session run independently: each may hold one active request
+// and its own queue, while a second request in the same thread still waits.
+func TestChatRequestThreadsRunIndependently(t *testing.T) {
+	s, u, sess, input := chatRequestFixture(t)
+	other := input
+	other.ThreadID = "other"
+	a, fresh, err := s.AcceptChatRequest(u, sess.ID, "a", input)
+	if err != nil || !fresh {
+		t.Fatal(a, fresh, err)
+	}
+	b, fresh, err := s.AcceptChatRequest(u, sess.ID, "b", other)
+	if err != nil || !fresh {
+		t.Fatal("a second thread was blocked by the first", b, fresh, err)
+	}
+	if _, _, err = s.AcceptChatRequest(u, sess.ID, "c", input); !errors.Is(err, ErrChatPending) {
+		t.Fatal("two active requests in one thread", err)
+	}
+	if pending, err := s.PendingChatRequest(sess.ID, "other"); err != nil || pending.RequestID != "b" {
+		t.Fatal(pending, err)
+	}
+	if list, err := s.PendingChatRequests(sess.ID); err != nil || len(list) != 2 || list[0].RequestID != "a" || list[1].RequestID != "b" {
+		t.Fatal(list, err)
+	}
+	queued := other
+	queued.Delivery = DeliveryQueue
+	if _, _, err = s.QueueChatRequest(u, sess.ID, "q1", queued); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	first := input
+	first.Delivery = DeliveryQueue
+	if _, _, err = s.QueueChatRequest(u, sess.ID, "q2", first); err != nil {
+		t.Fatal(err)
+	}
+	if threads, err := s.QueuedChatThreads(sess.ID); err != nil || len(threads) != 2 || threads[0] != "other" || threads[1] != "thread" {
+		t.Fatal("threads not in queue order", threads, err)
+	}
+	if next, _, err := s.NextQueuedChatRequest(sess.ID, "thread"); err != nil || next.RequestID != "q2" {
+		t.Fatal(next, err)
+	}
+	// Deleting a thread waits only for that thread's turn.
+	advanceChat(t, s, u, a, ChatStarting, ChatRunning, ChatCompleted)
+	if err = s.DeleteChatThreadRequests(u, sess.ID, "thread"); err != nil {
+		t.Fatal("idle thread blocked by another thread's turn", err)
+	}
+	if err = s.DeleteChatThreadRequests(u, sess.ID, "other"); !errors.Is(err, ErrChatPending) {
+		t.Fatal("running thread deleted", err)
 	}
 }
 

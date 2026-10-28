@@ -205,9 +205,9 @@ func (r *chatRoom) quotaPauseMessage() map[string]any {
 	return msg
 }
 
-// queueQuotaResume queues a "继续" after the request the pause stopped, with
-// its settings. Follow-ups the user queued already carry on instead, and a
-// conversation that moved to another thread is left alone.
+// queueQuotaResume queues a "继续" after the request the pause stopped, in its
+// thread and with its settings. Follow-ups the user queued in that thread
+// already carry on instead, and a deleted thread is left alone.
 func (r *chatRoom) queueQuotaResume(requestID string) {
 	s := r.srv
 	sess, ok := s.store.Get(r.sessID)
@@ -221,15 +221,15 @@ func (r *chatRoom) queueQuotaResume(requestID string) {
 	r.submitMu.Lock()
 	defer r.submitMu.Unlock()
 	stopped, err := s.store.ChatRequest(u, sess.ID, requestID)
-	if err != nil || stopped.Request == nil || s.queueWaiting(sess.ID) {
+	if err != nil || stopped.Request == nil || s.queueWaiting(sess.ID, stopped.ThreadID) {
 		return
 	}
 	in := *stopped.Request
 	in.Text, in.Attachments, in.Delivery, in.Scope = quotaResumeText, nil, store.DeliveryQueue, s.chatRequestScope(u)
 	r.fileMu.Lock()
-	thread := s.activeThread(sess)
+	exists := s.threadExists(sess, in.ThreadID)
 	r.fileMu.Unlock()
-	if in.Scope == "" || thread != in.ThreadID {
+	if in.Scope == "" || !exists {
 		return
 	}
 	c, fresh, err := s.store.QueueChatRequest(u, sess.ID, newOperationID(), in)

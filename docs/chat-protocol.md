@@ -45,20 +45,20 @@ v0.1.11 已实现服务端协议和原执行器接入。浏览器现已接入冻
 | 接口 | 返回 |
 | --- | --- |
 | `GET .../chat/requests/{request}` | `{version:1, receipt}`；查不到为 `chat_request_not_found` / 404 |
-| `GET .../chat/requests?thread=<可选线程>` | `{version:1, scope, requests, pending}`；requests 为最新 50 条，pending 独立返回当前空间的活动/待核对回执，不受线程过滤影响；pending_only=1 时 requests 只含该空间排队中的回执（按顺序，最多 50 条），供网页轮询显示和撤回，避免反复下载历史正文 |
+| `GET .../chat/requests?thread=<可选线程>` | `{version:1, scope, requests, pending, pendings}`；requests 为最新 50 条；pendings 列出空间里各线程的活动/待核对回执（每条线程至多一条，按时间），pending 是其中所给线程的那条，没给线程或该线程没有时取最早一条（旧客户端照旧只读它）；pending_only=1 时 requests 只含该空间排队中的回执（按顺序，最多 50 条），供网页轮询显示和撤回，避免反复下载历史正文 |
 
 回执字段为 `request_id/session_id/thread_id/turn_id/request/state/error_code/revision/created_at/updated_at`，引导消息另有 `merged_into`。`request` 保存冻结输入，删除/放弃的围栏为 null；`error_code` 为固定标识，不含 provider 原始错误、凭证或宿主路径。turn_id 从接收起稳定，沿原用量路径用于回合归属。
 
 | state | 含义 |
 | --- | --- |
-| queued | 回合运行中发来的跟进（`delivery`），已持久接收，排在当前回合（及更早的排队消息）之后；不占活动名额，可撤回 |
+| queued | 回合运行中发来的跟进（`delivery`），已持久接收，排在本线程当前回合（及更早的排队消息）之后，或空间已有 3 条线程在运行时等空位；不占活动名额，可撤回 |
 | accepted | 已持久接收，尚未进入启动阶段 |
 | starting | 正在准备空间和选项，尚未进入模型调用阶段 |
 | running | 已持久登记即将调用模型；该阶段发生断线/错误时不能推断没有执行 |
 | completed | 收到 provider 明确成功结束信号，执行路径正常收尾，已完成原用量 flush 和转录同步 |
 | failed | 明确失败且执行已结束。`error_code` 为 `turn_failed` 时表示 CLI 已运行后自报错误或以非零状态退出：进程已不在运行，但可能改动了部分文件；其余代码表示在模型调用阶段之前失败、没有执行。都不阻止新 ID |
 | interrupted | 用户请求中断且得到结束证据；不代表回滚文件或扣款 |
-| uncertain | 可能已执行、部分执行或结果/结算无法确认，阻止新的回合及线程变更 |
+| uncertain | 可能已执行、部分执行或结果/结算无法确认，阻止本线程新的回合（其他线程照常） |
 | reviewed | 用户已明确核对未知结果，允许以新 ID 开始后续工作；不把旧结果改成成功、不重跑旧 ID |
 | abandoned / deleted | 阻止迟到重放的永久 ID 围栏 |
 
@@ -77,9 +77,9 @@ v0.1.11 已实现服务端协议和原执行器接入。浏览器现已接入冻
 
 ## 跟进：排队与引导
 
-`/api/me` 返回 `chat_followups:1` 时，网页在回合运行中可以继续发送，输入带 `"delivery":"queue"` 或 `"steer"`（随正文冻结、参与指纹，不带时与旧请求指纹一致）。不带 delivery 的普通发送在忙时仍返回 `chat_busy`，空闲但队列非空时返回 `chat_pending`，不能插到排队消息前面。
+`/api/me` 返回 `chat_followups:1` 时，网页在回合运行中可以继续发送，输入带 `"delivery":"queue"` 或 `"steer"`（随正文冻结、参与指纹，不带时与旧请求指纹一致）。不带 delivery 的普通发送在本线程忙时仍返回 `chat_busy`，空闲但本线程队列非空时返回 `chat_pending`，不能插到排队消息前面；空间已有 3 条线程在运行时返回 `chat_parallel_limit`（网页此时自动带 `queue` 发送）。
 
-- **排队**：空间空闲且没有更早的排队消息时直接作为普通回合执行；否则记为 `queued` 并广播。每个回合结束（`room.end`）、核对 uncertain 之后以及服务启动时，按创建顺序取下一条：重新检查额度、账号、模型、当前线程和附件后改为 accepted 并执行；不再满足的记为 failed（如 `chat_thread_changed`），不执行，继续取下一条。待核对的 uncertain 会挡住整个队列，直到用户核对。排队回执随数据库持久保存，服务重启不丢；删除线程、空间或用户时与其他回执一起清空正文。
+- **排队**：本线程空闲、没有更早的排队消息且空间还有空位时直接作为普通回合执行；否则记为 `queued` 并广播。每个回合结束、核对 uncertain 之后以及服务启动时，按各线程最早排队消息的先后逐条线程派发：重新检查额度、账号、模型、线程仍存在和附件后改为 accepted 并执行；不再满足的记为 failed（如线程已删除时的 `chat_thread_changed`），不执行，继续取该线程的下一条；空位用完即停，等下一个回合结束。待核对的 uncertain 只挡住本线程的队列，直到用户核对。排队回执随数据库持久保存，服务重启不丢；删除线程、空间或用户时与其他回执一起清空正文。
 - **引导**：只对正在运行、输入仍开着的 Claude 交互回合（即带 `questions` 的回合）生效。服务端在持有该回合输入锁时提交回执（直接记为 completed，`merged_into` 为运行中请求 ID，turn_id 为空），再写入 `{"type":"user",…,"priority":"next"}`；CLI 在当前工具步骤结束后接收，若模型已经结束则作为同一进程的下一轮执行。交互回合带 `--replay-user-messages`，CLI 接收时回显该消息，服务端据此在历史中、实际生效的位置记一条 `kind:"steer"`（`{id,text,state:"applied"}`）；回合结束仍未回显的记为 `dropped`，不重发。回显行和控制消息都不落盘。回合不接受输入时（没有回合、一次性回合、Codex、`result` 之后已关闭输入），引导自动按排队处理。
 - 两种跟进都复用原回执的重放、指纹和查询规则；同一 ID 重试不会重复排队或重复写入 CLI。
 - **后台任务**：模型用 `run_in_background` 启动的命令在 `result` 之后仍让 CLI 进程开着，结束时 CLI 把结果交回模型再答一段，同一回合内可能有多个 `result`。这段时间回合仍是 running，排队消息继续等待；引导因输入已关闭改为排队。网页据 `system` 的 `background_tasks_changed`（当前全部后台任务）、`task_started`、`task_updated`、`task_notification` 在执行指示上显示「等待后台任务结束：<描述>」，结束通知在对话里留一行。
@@ -88,7 +88,15 @@ v0.1.11 已实现服务端协议和原执行器接入。浏览器现已接入冻
 
 用户请求中断后，CLI 以失败的 `result` 结束（交互回合是 `error_during_execution`，进程退出码 1；一次性回合是 SIGINT）。服务端在该 `result` 的历史条目上加 `state:"interrupted"`，并以 `{kind:"status", state:"interrupted"}` 收尾，不再记 `status:error`/`chat_failed`。网页对带此标记的 result 不显示错误，只在 status 处显示一行「已中断」。回执本身按上文仍记 interrupted/`operation_cancelled`。没有用户中断的失败 result 照常显示为错误。旧网页忽略这个新 status，回合同样视为结束。
 
-状态变更通过 WS 增补 `{type:"chat_request", version:1, receipt}` 广播；旧客户端忽略该消息。广播丢失时 GET 是恢复入口。旧 WS、线程新建/切换/删除也检查持久活动状态，不能用换线程绕过待核对记录。读取历史和文件仍可用。
+状态变更通过 WS 增补 `{type:"chat_request", version:1, receipt}` 广播；旧客户端忽略该消息。广播丢失时 GET 是恢复入口。旧 WS 发送落在当前线程，同样检查它的持久活动状态。读取历史和文件仍可用。
+
+## 并行线程
+
+同一空间最多 3 条线程（`maxParallelChats`）可以同时运行回合，每条是容器里独立的 CLI 进程。服务端每条线程一个回合槽（`chat.go` 的 `chatTurn`）：回合写自己线程的转录，用自己的 provider 会话续聊（是当前线程时仍读写空间记录的 `chat_session`，否则读转录里最后一条 `chat_session`），PID 记在按线程区分的文件里，中断只打到本线程的 CLI；委派同一空间同时只给一条线程（另一条的消息照常执行，并推送 `delegation_notice`、`code:"delegation_busy_this_turn"`）。新建、切换线程不再等待运行中的回合，删除只等被删线程自己的回合；切换账号要求整个空间没有回合在跑或开始。
+
+- 线程内的事件（`status`、`user_message`、`agent_event`、`turn_cost`、提问、委派等）在 WS 消息里带 `"thread":"<线程 id>"`；回执广播靠 `receipt.thread_id` 区分。网页只画自己正在看的线程，其余只记运行状态并在完成、出错或提问时提示。旧网页不认这个字段。
+- 连接时的 `status` 增加 `threads`：`{"<线程 id>": {"elapsed_ms": …, "phase": …}}` 列出所有在跑的线程；顶层 `state`/`elapsed_ms`/`phase` 仍描述服务端的当前线程，供旧网页使用。
+- 删除线程时广播 `{type:"thread_deleted", id}`，正看着它的页面回到当前线程；新建/切换仍广播 `{type:"thread", id}`，新网页不再跟随别的页面换线程。`GET .../history` 不翻页时也接受 `thread=<id>`（线程存在才生效），页面重连补拉时留在自己的线程上。
 
 ## 保留与备份
 
