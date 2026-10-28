@@ -893,4 +893,6 @@ export default {
     "数据上限（GB）": "Data limit (GB)",
     "缓存上限（GB）": "Cache limit (GB)",
     "留空使用默认上限。不能低于已用空间；调高会占用存储总预算，保存后立即生效。": "Leave blank to use the default. A limit can't go below what is already used; raising it takes from the total storage budget and applies as soon as you save.",
+    "终端标签": "Terminal tabs",
+    "新建终端": "New terminal",
 };

@@ -40,8 +40,6 @@ export const S = {
     gitSec: "guide",
     extSel: "",
     tab: "chat",
-    termWS: null,
-    termWSGen: 0,
     termTips: null,
     timeZone: "Asia/Shanghai",
     chatHistoryTimeoutSec: 120,

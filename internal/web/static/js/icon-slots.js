@@ -41,6 +41,10 @@ export const ICON_SLOTS = {
     "tab.changes": { group: "tab", label: "变更", icon: "tabler:git-compare" },
     "tab.skills": { group: "tab", label: "技能", icon: "tabler:sparkles" },
     "tab.mcp": { group: "tab", label: "MCP", icon: "tabler:plug-connected" },
+    "term.new": { group: "tab", label: "新建终端标签", base: "plus" },
+    "term.close": { group: "tab", label: "关闭终端标签", base: "close" },
+    "term.shell": { group: "tab", label: "Shell 终端", base: "tool" },
+    "term.agent": { group: "tab", label: "Agent 终端", base: "sparkles" },
     // ── 系统设置导航 ──
     "settings.accounts": { group: "settings", label: "账号池", icon: "tabler:users" },
     "settings.proxies": { group: "settings", label: "IP 代理", icon: "tabler:network" },

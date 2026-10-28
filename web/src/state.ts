@@ -73,13 +73,11 @@ export interface AppState {
   /** 扩展页当前选中的扩展 ID（"" = 列表） */
   extSel: string;
   tab: Tab;
-  termWS: WebSocket | null;
-  /** 终端连接代际：切换/收尾/手动重连时自增，作废旧连接的重连定时器 */
-  termWSGen: number;
   /** 终端提示语配置 { tips, interval_sec, animation }（/me 下发，全用户可见） */
   termTips: TerminalTips | null;
   /** 系统界面时区；老服务端兜底到中国标准时间 */
   timeZone: string;
+  /** 当前终端标签的 xterm 与 FitAddon（term.ts 维护，测试与诊断从这里取） */
   term: XtermTerminal | null;
   fit: XtermFitAddon | null;
   filePath: string;
@@ -125,8 +123,6 @@ export const S: AppState = {
   gitSec: "guide",
   extSel: "",
   tab: "chat",
-  termWS: null,
-  termWSGen: 0,
   termTips: null,
   timeZone: "Asia/Shanghai",
   chatHistoryTimeoutSec: 120,

@@ -593,6 +593,13 @@
                 </button>
               </div>
             </div>
+            <!-- 终端标签：主终端 + 独立终端（Shell / Agent，各自一个 tmux 服务），term.ts 渲染 -->
+            <div class="term-tabs">
+              <div id="term-tablist" class="term-tablist" role="tablist" aria-label="终端标签" data-i18n-attrs="{&quot;aria-label&quot;:&quot;终端标签&quot;}"></div>
+              <button id="term-new" class="term-new" type="button" aria-haspopup="menu" data-tip="新建终端" aria-label="新建终端" data-i18n-attrs="{&quot;data-tip&quot;:&quot;新建终端&quot;,&quot;aria-label&quot;:&quot;新建终端&quot;}">
+                <svg width="16" height="16" data-icon="term.new" aria-hidden="true"></svg>
+              </button>
+            </div>
             <div class="term-body">
               <div id="term-mount" class="term-mount"></div>
               <!-- 终端程序复制的文字（OSC 52），浏览器不让脚本直接写剪贴板时（Safari）点这里写入；term-clipboard.ts -->

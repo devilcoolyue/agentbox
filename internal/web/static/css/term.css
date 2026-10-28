@@ -90,6 +90,49 @@
 .term-reconnect svg { width: 18px; height: 18px; }
 /* 连接中 / 重连中：图标转圈（复用 base.css 的 rot 关键帧） */
 .term-reconnect.busy svg { animation: rot 1s linear infinite; }
+/* ---- 终端标签：主终端 + 独立终端（term.ts）。深色条与下面的终端连成一片，配色只用 --term-* 令牌 ---- */
+.term-tabs {
+  display: flex; align-items: flex-end; gap: 4px;
+  padding: 4px 8px 0;
+  background: var(--term-bg);
+  border-bottom: 1px solid var(--term-sel);
+  color-scheme: dark;
+}
+.term-tablist {
+  display: flex; gap: 2px; min-width: 0;
+  overflow-x: auto; scrollbar-width: none;
+}
+.term-tablist::-webkit-scrollbar { display: none; }
+.term-tab {
+  display: inline-flex; align-items: center; flex: none;
+  border-radius: calc(6px * var(--radius-scale)) calc(6px * var(--radius-scale)) 0 0;
+  color: color-mix(in srgb, var(--term-fg) 60%, transparent);
+}
+.term-tab:hover { color: var(--term-fg); background: color-mix(in srgb, var(--term-sel) 50%, transparent); }
+.term-tab.active { color: var(--term-fg); background: var(--term-sel); }
+.term-tab-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 10px;
+  border: 0; background: none; color: inherit;
+  font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
+}
+.term-tab-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; margin-right: 4px; padding: 0;
+  border: 0; border-radius: calc(4px * var(--radius-scale));
+  background: none; color: inherit; opacity: .6; cursor: pointer;
+}
+.term-tab-x:hover { opacity: 1; background: color-mix(in srgb, var(--term-fg) 15%, transparent); }
+.term-new {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: calc(6px * var(--radius-scale));
+  background: none; color: color-mix(in srgb, var(--term-fg) 60%, transparent); cursor: pointer;
+}
+.term-new:hover, .term-new[aria-expanded="true"] { color: var(--term-fg); background: color-mix(in srgb, var(--term-sel) 50%, transparent); }
+.term-tab-btn:focus-visible, .term-tab-x:focus-visible, .term-new:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+/* 每个标签一个挂载容器，xterm 撑满它 */
+.term-pane { height: 100%; }
 /* 终端显示区容器：挂载点 + 连接加载态覆盖层共用定位上下文 */
 .term-body {
   flex: 1; min-height: 0;

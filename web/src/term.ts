@@ -1,11 +1,11 @@
-import { setText, setTextRender, t as i18nText } from "./i18n.js";
-/* term：终端页 —— xterm 实例、PTY WebSocket（含自动重连）、连接状态与顶栏提示轮播、
- * 终端内粘贴图片上传。 */
+import { setAttrRender, setText, setTextRender, t as i18nText } from "./i18n.js";
+/* term：终端页 —— 终端标签（主终端 + 独立终端）、各自的 xterm 实例与 PTY WebSocket（含自动重连）、
+ * 连接状态与顶栏提示轮播、终端内粘贴图片上传。 */
 "use strict";
 
 import { S, bus } from "./state.js";
 import type { TerminalTips, UsageEvents, UsageTotals } from "./types.js";
-import { $, isMobile, openLightbox, toast } from "./util.js";
+import { $, askConfirm, isMobile, openLightbox, toast } from "./util.js";
 import { api, wsURL, imgURLFromPath, uploadAttachment } from "./api.js";
 import { fmtUSD } from "./quota.js";
 import { fmtTokens } from "./usage-math.js";
@@ -15,7 +15,9 @@ import { setTip } from "./tip.js";
 import { attachTermInputDebug, traceTermEvent, traceTermInput } from "./term-input-debug.js";
 import { attachTouchScroll } from "./term-touch.js";
 import { attachTermClipboard, resetTermClipboard } from "./term-clipboard.js";
-import { menuJustDismissed, openMenuAt } from "./menu.js";
+import { bindMenu, menuJustDismissed, openMenuAt } from "./menu.js";
+import { svgIcon } from "./icons.js";
+import { agentKey, agentName } from "./brand.js";
 import { enter, leave } from "./motion.js";
 import { type UsageChange, usageLiveConnected, watchUsageLive } from "./usage-live.js";
 import { chipRefresher, openKeepalive, termChipState } from "./features/workspaces/keepalive.js";
@@ -52,16 +54,127 @@ const termTheme = () => ({
   selectionBackground: token("--term-sel"),
 });
 window.addEventListener("agentbox-theme-change", () => {
-  if (S.term) S.term.options.theme = termTheme();
+  for (const p of panes.values()) if (p.term) p.term.options.theme = termTheme();
 });
 
 /** 顶栏状态：connecting/connected/reconnecting 各有专属文案，其余一律按 closed 处理 */
 type ConnState = "connecting" | "connected" | "reconnecting" | "closed";
 
-/* ---------------- 连接状态展示（顶栏右侧：状态点 + 文案 + 重连钮） ---------------- */
+/* ---------------- 终端标签 ----------------
+ * 「主终端」是原来的 /term：默认 tmux socket 的 main 会话，每个空间一个，不能关。其余标签是
+ * 独立终端（client-terminals，与桌面客户端同一套接口）：每个一个 tmux 服务，开 Shell 或直接
+ * 启动 Claude / Codex，彼此不顶号，可以同时跑。网页新建的都挂在工作区根目录（`.`）这个项目下；
+ * 桌面在其他项目里开的也一并列出，标签后面带项目名。
+ * 每个标签各有 xterm、WebSocket 和重连计时；active 指向当前标签，粘贴、上传、手机辅助键只作用于它。 */
+interface TermPane {
+  key: string;                 // "main" 或独立终端 ID
+  kind: "main" | "shell" | "agent";
+  project: string;             // 非根目录项目的名字（标签后缀），根目录为空
+  host: HTMLDivElement;        // #term-mount 里属于这个标签的容器
+  tab: HTMLDivElement;         // 标签栏里的一项
+  term: XtermTerminal | null;  // 第一次切到这个标签才创建：隐藏的容器量不出字宽
+  fit: XtermFitAddon | null;
+  ws: WebSocket | null;
+  gen: number;                 // 连接代际；旧连接的 onopen/onclose 据此作废
+  timer: ReturnType<typeof setTimeout> | null;
+  attempt: number;
+  state: ConnState;
+  refused: string;             // 服务端拒绝的原话（4000–4999），状态栏照原样显示
+}
 
-function setConnStatus(state: ConnState) {
+interface ClientProject { id: string; name: string; path: string; }
+interface ClientTerminal { id: string; project_id: string; kind: string; state: string; }
+
+const MAIN = "main";
+const panes = new Map<string, TermPane>();
+let active: TermPane | null = null;
+let panesFor = ""; // 这些标签属于哪个空间；换空间时整体收尾
+let listGen = 0;   // 独立终端列表的请求代际，旧空间/旧请求的结果丢弃
+
+const termOf = () => active?.term ?? null;
+const AGENT_SHORT = { claude: "Claude", codex: "Codex" } as const;
+
+function paneLabel(p: TermPane): string {
+  if (p.kind === "main") return i18nText("主终端");
+  // 标签放不下「Claude Code」「Codex CLI」全名，用短名；新建菜单里仍是全名
+  const name = p.kind === "agent" ? AGENT_SHORT[agentKey(S.current?.agent || "")] : "Shell";
+  const same = [...panes.values()].filter((x) => x.kind === p.kind);
+  const label = `${name} ${same.indexOf(p) + 1}`;
+  return p.project ? `${label} · ${p.project}` : label;
+}
+
+function addPane(key: string, kind: TermPane["kind"], project: string): TermPane {
+  const host = document.createElement("div");
+  host.className = "term-pane hidden";
+  $("term-mount").append(host);
+  const tab = document.createElement("div");
+  tab.className = "term-tab";
+  tab.setAttribute("role", "presentation");
+  const p: TermPane = { key, kind, project, host, tab, term: null, fit: null, ws: null, gen: 0, timer: null, attempt: 0, state: "closed", refused: "" };
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "term-tab-btn";
+  btn.setAttribute("role", "tab");
+  btn.append(svgIcon(kind === "agent" ? "term.agent" : "term.shell", 14), document.createElement("span"));
+  btn.addEventListener("click", () => activatePane(p));
+  tab.append(btn);
+  if (kind !== "main") {
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "term-tab-x";
+    x.append(svgIcon("term.close", 12));
+    setAttrRender(x, "aria-label", () => i18nText("关闭 {name}", { name: paneLabel(p) }));
+    setTip(x, () => i18nText("关闭终端"));
+    x.addEventListener("click", () => void closePane(p));
+    tab.append(x);
+  }
+  panes.set(key, p);
+  return p;
+}
+
+function removePane(p: TermPane) {
+  dropPane(p);
+  p.term?.dispose();
+  p.host.remove();
+  p.tab.remove();
+  panes.delete(p.key);
+  if (active === p) {
+    active = null;
+    const main = panes.get(MAIN);
+    if (main && S.tab === "term") activatePane(main);
+    else {
+      active = main ?? null;
+      S.term = active?.term ?? null;
+      S.fit = active?.fit ?? null;
+      renderConn();
+    }
+  }
+}
+
+function renderTabs() {
+  $("term-tablist").replaceChildren(...[...panes.values()].map((p) => p.tab));
+  for (const p of panes.values()) {
+    const btn = p.tab.querySelector<HTMLButtonElement>(".term-tab-btn")!;
+    setTextRender(btn.querySelector("span")!, () => paneLabel(p));
+    btn.setAttribute("aria-selected", String(p === active));
+    p.tab.classList.toggle("active", p === active);
+    p.host.classList.toggle("hidden", p !== active);
+  }
+}
+
+/* ---------------- 连接状态展示（顶栏右侧：状态点 + 文案 + 重连钮），只显示当前标签 ---------------- */
+
+function setConnStatus(p: TermPane, state: ConnState) {
+  p.state = state;
+  if (state !== "closed") p.refused = "";
+  if (p === active) renderConn();
+}
+
+function renderConn() {
+  let state = active?.state ?? "closed";
   syncTermKeys(state === "connected");
+  // 大遮罩只在首次/手动连接时出现；重连时终端画面还在，只在顶栏提示
+  $("term-loading").classList.toggle("hidden", state !== "connecting");
   const dot = $("term-conn-dot");
   const st = $("term-state");
   const btn = $("term-reconnect");
@@ -70,13 +183,14 @@ function setConnStatus(state: ConnState) {
   switch (state) {
     case "connecting":   cls = "warn"; text = "连接中…"; break;
     case "connected":    cls = "good"; text = "shell 已连接"; break;
-    case "reconnecting": cls = "warn"; text = reconnectAttempt > 1 ? "重连中…（第 {p0} 次）" : "重连中…"; break;
+    case "reconnecting": cls = "warn"; text = (active?.attempt ?? 0) > 1 ? "重连中…（第 {p0} 次）" : "重连中…"; break;
     default:             cls = "bad"; state = "closed"; text = "已断开，点右侧按钮重连"; break;
   }
   if (dot) dot.className = "t-dot " + cls;
   // Bind only this generic label. An explicit diagnostic replacing it owns its
   // text, so switching language cannot overwrite a raw server refusal reason.
-  setText(st, text, { p0: String(reconnectAttempt) });
+  setText(st, text, { p0: String(active?.attempt ?? 0) });
+  if (active?.refused) st.textContent = active.refused;
   st.dataset.state = state;
   if (btn) btn.classList.toggle("busy", state === "connecting" || state === "reconnecting");
 }
@@ -85,70 +199,79 @@ function setConnStatus(state: ConnState) {
 
 // 退避序列（毫秒），封顶后一直用最后一档；成功连上或手动重连时归零。
 const RECONNECT_BACKOFF = [1000, 2000, 3000, 5000, 8000, 10000];
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let reconnectAttempt = 0;
 
-function clearReconnect() {
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+function clearReconnect(p: TermPane) {
+  if (p.timer) { clearTimeout(p.timer); p.timer = null; }
 }
 
 // 断线后排一次重连——仅当用户仍停留在终端页时才自动重连，切走了就停在「已断开」，
-// 回到终端页（setTab → openTerm）会重新拉起。
-function scheduleReconnect() {
-  if (S.tab !== "term" || !S.current) { setConnStatus("closed"); return; }
-  const delay = RECONNECT_BACKOFF[Math.min(reconnectAttempt, RECONNECT_BACKOFF.length - 1)];
-  reconnectAttempt++;
-  setConnStatus("reconnecting");
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    if (S.tab !== "term" || !S.current) { setConnStatus("closed"); return; }
-    connectTermWS(true);
+// 回到终端页（setTab → openTerm）会重新拉起。后台标签照样重连，切回来时画面是新的。
+function scheduleReconnect(p: TermPane) {
+  if (S.tab !== "term" || !S.current) { setConnStatus(p, "closed"); return; }
+  const delay = RECONNECT_BACKOFF[Math.min(p.attempt, RECONNECT_BACKOFF.length - 1)];
+  p.attempt++;
+  setConnStatus(p, "reconnecting");
+  p.timer = setTimeout(() => {
+    p.timer = null;
+    if (S.tab !== "term" || !S.current || panes.get(p.key) !== p) { setConnStatus(p, "closed"); return; }
+    connectPane(p, true);
   }, delay);
 }
 
 /* ---------------- 终端实例与 WebSocket ---------------- */
 
-// 仅断开连接（停止容器时）：作废重连、关连接，保留终端画面与回滚缓冲。
-export function termDisconnect() {
-  S.termWSGen++;
-  clearReconnect();
-  reconnectAttempt = 0;
-  if (S.termWS) { S.termWS.close(); S.termWS = null; }
-  $("term-loading").classList.add("hidden");
-  setConnStatus("closed");
+// 作废这个标签的连接与在途重连，保留画面与回滚缓冲。
+function dropPane(p: TermPane) {
+  p.gen++;
+  clearReconnect(p);
+  p.attempt = 0;
+  if (p.ws) { try { p.ws.close(); } catch (_) {} p.ws = null; }
 }
 
-// 完全收尾（切换/删除会话时）：连实例一起销毁。
+// 仅断开连接（停止容器时）：作废重连、关连接，保留终端画面与回滚缓冲。
+export function termDisconnect() {
+  for (const p of panes.values()) {
+    dropPane(p);
+    setConnStatus(p, "closed");
+  }
+  if (!active) renderConn();
+}
+
+// 完全收尾（切换/删除会话时）：连实例和标签一起销毁。
 export function termTeardown() {
   termDisconnect();
   resetTermClipboard();
-  if (S.term) { S.term.dispose(); S.term = null; S.fit = null; }
+  for (const p of panes.values()) { p.term?.dispose(); p.host.remove(); }
+  panes.clear();
+  active = null;
+  S.term = S.fit = null;
+  panesFor = "";
+  listGen++;
+  $("term-tablist").replaceChildren();
+  renderConn();
   fitTermViewport();
 }
 
-// 手动重连：作废旧连接与在途重连，保留已有终端实例（不丢回滚），立即重新连接。
+// 手动重连：作废旧连接与在途重连，保留已有终端实例（不丢回滚），立即重新连接当前标签。
 export function termReconnect() {
   if (!S.current) return;
-  S.termWSGen++;
-  clearReconnect();
-  reconnectAttempt = 0;
-  if (S.termWS) { try { S.termWS.close(); } catch (_) {} S.termWS = null; }
-  ensureTerm();
-  if (!S.term) return;
-  connectTermWS(false);
+  if (!active || panesFor !== S.current.id) { openTerm(); return; }
+  dropPane(active);
+  activatePane(active);
 }
 
 // Chrome（macOS 实测）对聚焦中的 textarea 切换过 readOnly（disableStdin 的底层实现）
 // 后，IME 可能就此失灵——打拼音直接上屏字母，点页面别处再点回终端才恢复。这里主动做
 // 一轮 blur→focus 刷新 IME 上下文；textarea 本就没聚焦时直接 focus，与原行为一致。
 function refocusTerm() {
-  if (!S.term) return;
-  const ta = S.term.textarea;
+  const term = termOf();
+  if (!term) return;
+  const ta = term.textarea;
   if (ta && document.activeElement === ta) {
     ta.blur();
-    requestAnimationFrame(() => { if (S.term) S.term.focus(); });
+    requestAnimationFrame(() => termOf()?.focus());
   } else {
-    S.term.focus();
+    term.focus();
   }
 }
 
@@ -226,13 +349,12 @@ function bridgeDroppedInput(host: HTMLElement, ta: HTMLTextAreaElement) {
   });
 }
 
-// 创建 xterm 实例（若尚不存在）：渲染器、图片路径链接、输入/尺寸回调都在这里挂一次，
-// 之后跨重连复用同一实例，回调动态读取 S.termWS，避免重复叠加监听。
-function ensureTerm() {
-  if (S.term) return;
+// 创建这个标签的 xterm 实例（若尚不存在）：渲染器、图片路径链接、输入/尺寸回调都在这里挂一次，
+// 之后跨重连复用同一实例，回调动态读取 p.ws，避免重复叠加监听。
+function ensureTerm(p: TermPane) {
+  if (p.term) return;
   if (!TerminalClass) {
-    $("term-loading").classList.add("hidden");
-    setConnStatus("closed");
+    setConnStatus(p, "closed");
     setText($("term-state"), "xterm.js 加载失败");
     return;
   }
@@ -244,8 +366,8 @@ function ensureTerm() {
   });
   const fit = new FitAddonClass!();
   term.loadAddon(fit);
-  $("term-mount").replaceChildren();
-  term.open($("term-mount"));
+  p.host.replaceChildren();
+  term.open(p.host);
   // GPU 渲染器：方块/半格字形按整格实心填充（customGlyphs 默认开），
   // 像素图（如 Claude 小人）与制表线严丝合缝，接近原生终端的细腻度。
   // 必须在 term.open 之后加载；WebGL 不可用或上下文丢失时自动回退默认 DOM 渲染。
@@ -257,8 +379,8 @@ function ensureTerm() {
     } catch (_) { /* 保持默认 DOM 渲染 */ }
   }
   fit.fit();
-  S.term = term;
-  S.fit = fit;
+  p.term = term;
+  p.fit = fit;
   fitTermViewport();
   attachTermClipboard(term, refocusTerm);
 
@@ -282,6 +404,7 @@ function ensureTerm() {
     swallowTap: menuJustDismissed,
   });
   term.onData((d) => {
+    if (p !== active) return; // 只有当前标签收得到键盘，防御一下
     dataSeq++;
     traceTermInput("xterm", d);
     // 焦点上报不是用户按键，不能消耗一次性的 Ctrl / Alt。
@@ -292,8 +415,8 @@ function ensureTerm() {
     }
   });
   term.onResize(({ cols, rows }) => {
-    if (S.termWS && S.termWS.readyState === WebSocket.OPEN) {
-      S.termWS.send(JSON.stringify({ type: "resize", cols, rows }));
+    if (p.ws && p.ws.readyState === WebSocket.OPEN) {
+      p.ws.send(JSON.stringify({ type: "resize", cols, rows }));
     }
   });
 
@@ -318,80 +441,193 @@ function ensureTerm() {
   }
 }
 
+function paneURL(p: TermPane, sessID: string) {
+  return p.kind === "main" ? `/sessions/${sessID}/term` : `/sessions/${sessID}/client-terminals/${p.key}/stream`;
+}
+
 // 拉起 PTY WebSocket。isReconnect 为 true 时不弹大遮罩（终端画面还在），只在顶栏提示重连中。
-function connectTermWS(isReconnect: boolean) {
+function connectPane(p: TermPane, isReconnect: boolean) {
   const sess = S.current;
-  if (!sess || !S.term) return;
-  clearReconnect();
-  const gen = ++S.termWSGen; // 本次连接的代际；旧连接的 onopen/onclose 据此作废
+  if (!sess || !p.term) return;
+  clearReconnect(p);
+  const gen = ++p.gen;
+  setConnStatus(p, isReconnect ? "reconnecting" : "connecting");
 
-  if (!isReconnect) {
-    $("term-loading").classList.remove("hidden"); // 大遮罩仅首次/手动连接时出现
-  }
-  setConnStatus(isReconnect ? "reconnecting" : "connecting");
-
-  const ws = new WebSocket(wsURL(`/sessions/${sess.id}/term`));
+  const ws = new WebSocket(wsURL(paneURL(p, sess.id)));
   ws.binaryType = "arraybuffer";
-  S.termWS = ws;
+  p.ws = ws;
 
   ws.onopen = () => {
-    if (gen !== S.termWSGen) { ws.close(); return; } // 已被更新的连接取代
-    reconnectAttempt = 0;
-    S.term!.write(RESET_INPUT_MODES); // 复位上一个程序遗留的鼠标上报/备用屏等模式，再接新 bash
-    $("term-loading").classList.add("hidden");
-    setConnStatus("connected");
-    ws.send(JSON.stringify({ type: "resize", cols: S.term!.cols, rows: S.term!.rows }));
-    if (S.fit) S.fit.fit();
-    refocusTerm(); // 重连场景顺带刷新 IME 上下文
+    if (gen !== p.gen) { ws.close(); return; } // 已被更新的连接取代
+    p.attempt = 0;
+    p.term!.write(RESET_INPUT_MODES); // 复位上一个程序遗留的鼠标上报/备用屏等模式，再接新 bash
+    setConnStatus(p, "connected");
+    ws.send(JSON.stringify({ type: "resize", cols: p.term!.cols, rows: p.term!.rows }));
+    if (p === active) {
+      p.fit?.fit();
+      refocusTerm(); // 重连场景顺带刷新 IME 上下文
+    }
     refreshAll(); // 终端会自动拉起容器，刷新状态灯
   };
   ws.onmessage = (e) => {
-    if (!S.term) return;
-    S.term.write(typeof e.data === "string" ? e.data : new Uint8Array(e.data));
+    p.term?.write(typeof e.data === "string" ? e.data : new Uint8Array(e.data));
   };
   ws.onclose = (e) => {
-    if (gen !== S.termWSGen) return; // 被 teardown/disconnect/手动重连接管，忽略
-    S.termWS = null;
-    $("term-loading").classList.add("hidden"); // 连接失败时不能留着转圈
-    // 4000–4999 是服务端的应用私有关闭码（目前只有额度用尽一种）：reason 是写给
+    if (gen !== p.gen) return; // 被 teardown/disconnect/手动重连接管，忽略
+    p.ws = null;
+    // 独立终端可能已在别处（另一个页面、桌面客户端）关掉，重新对一次列表，关掉的标签直接收起
+    if (p.kind !== "main") void syncPanes();
+    // 4000–4999 是服务端的应用私有关闭码（额度用尽、账号不可用、独立终端已关闭）：reason 是写给
     // 人看的一句话，写进终端画面并顶到状态栏。绝不自动重连——理由不会因为重试
     // 而改变，只会被同一句话再挡一次。
     if (e && e.code >= 4000 && e.code < 5000) {
       const why = e.reason || i18nText("连接已被服务端拒绝");
-      if (S.term) S.term.write("\r\n\x1b[31m" + why + "\x1b[0m\r\n");
-      setConnStatus("closed");
-      $("term-state").textContent = why;
+      p.term?.write("\r\n\x1b[31m" + why + "\x1b[0m\r\n");
+      p.refused = why;
+      setConnStatus(p, "closed");
       return;
     }
     // 干净关闭（1000，服务端在 shell 进程退出时发）意味着：用户主动 exit，
-    // 或本终端被另一处打开的终端顶掉（tmux attach -D）。这两种都不该自动重连
+    // 或本终端被另一处打开的终端顶掉（tmux attach -D / -d）。这两种都不该自动重连
     // ——尤其后者，自动重连会把对方再顶掉，两个页面无限拉锯。停在「已断开」，
     // 想连点右侧按钮。网络类异常断开（1006 等）才走自动重连。
-    if (e && e.code === 1000) { setConnStatus("closed"); return; }
-    scheduleReconnect();
+    if (e && e.code === 1000) { setConnStatus(p, "closed"); return; }
+    scheduleReconnect(p);
   };
+}
+
+// 切到某个标签：第一次切到才创建 xterm 并连接；已连上只重排尺寸，断开了（未在等重连）就重新连。
+function activatePane(p: TermPane) {
+  active = p;
+  renderTabs();
+  renderConn();
+  ensureTerm(p);
+  S.term = p.term;
+  S.fit = p.fit;
+  if (!p.term) return; // xterm 加载失败，ensureTerm 已提示
+  if ((p.ws && p.ws.readyState <= WebSocket.OPEN) || p.timer) {
+    requestAnimationFrame(() => {
+      if (active !== p) return;
+      p.fit?.fit();
+      refocusTerm();
+    });
+    return;
+  }
+  p.attempt = 0;
+  connectPane(p, false);
 }
 
 // 进入终端页时调用：已有活动连接则只重排字形，否则（新开 / 断开后重进）拉起 shell。
 export function openTerm() {
   const sess = S.current; if (!sess) return;
-  // 连接中或已连上：不重建，避免切标签页把正在跑的会话打断，只需重新贴合尺寸
-  if (S.termWS && S.termWS.readyState <= WebSocket.OPEN) {
-    if (S.fit) requestAnimationFrame(() => S.fit!.fit());
+  if (panesFor !== sess.id) {
+    termTeardown();
+    panesFor = sess.id;
+    active = addPane(MAIN, "main", "");
+  }
+  void syncPanes();
+  activatePane(active ?? panes.get(MAIN)!);
+}
+
+// 对齐服务端的独立终端列表：新出现的（别处开的）加标签，已关闭的收起。旧服务端没有这组接口时只留主终端。
+async function syncPanes() {
+  const sess = S.current; if (!sess) return;
+  const gen = ++listGen;
+  let terms: ClientTerminal[], projects: ClientProject[];
+  try {
+    [terms, projects] = await Promise.all([
+      api<ClientTerminal[]>(`/sessions/${sess.id}/client-terminals`),
+      api<ClientProject[]>(`/sessions/${sess.id}/client-projects`),
+    ]);
+  } catch (_) { return; }
+  if (gen !== listGen || panesFor !== sess.id || !Array.isArray(terms) || !Array.isArray(projects)) return;
+  const names = new Map(projects.map((x) => [x.id, x.path === "." ? "" : x.name]));
+  const open = terms.filter((t) => t.state === "open" && (t.kind === "shell" || t.kind === "agent"));
+  const keep = new Set(open.map((t) => t.id));
+  for (const p of [...panes.values()]) {
+    if (p.kind !== "main" && !keep.has(p.key)) removePane(p);
+  }
+  for (const t of open) {
+    if (!panes.has(t.id)) addPane(t.id, t.kind as TermPane["kind"], names.get(t.project_id) ?? "");
+  }
+  renderTabs();
+}
+
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+// 网页新建的独立终端都挂在工作区根目录这个项目下；没有就建一个（与桌面客户端共用，桌面里也看得到）。
+async function rootProject(id: string): Promise<ClientProject> {
+  const find = async () => (await api<ClientProject[]>(`/sessions/${id}/client-projects`)).find((x) => x.path === ".");
+  const found = await find();
+  if (found) return found;
+  try {
+    return await api<ClientProject>(`/sessions/${id}/client-projects`, {
+      method: "POST", headers: JSON_HEADERS,
+      body: JSON.stringify({ name: i18nText("工作区"), path: ".", arguments: [] }),
+    });
+  } catch (err) {
+    const again = await find(); // 另一个页面同时建好了（同路径 409）
+    if (again) return again;
+    throw err;
+  }
+}
+
+let creating = false;
+async function newPane(kind: "shell" | "agent") {
+  const sess = S.current;
+  if (!sess || creating) return;
+  creating = true;
+  try {
+    const project = await rootProject(sess.id);
+    const t = await api<ClientTerminal>(`/sessions/${sess.id}/client-terminals`, {
+      method: "POST", headers: JSON_HEADERS,
+      body: JSON.stringify({ project_id: project.id, kind }),
+    });
+    if (panesFor !== sess.id) return;
+    const p = panes.get(t.id) ?? addPane(t.id, kind, "");
+    activatePane(p);
+  } catch (err) {
+    toast(i18nText("新建终端失败：{p0}", { p0: (err as Error).message }), true);
+  } finally {
+    creating = false;
+  }
+}
+
+async function closePane(p: TermPane) {
+  const sess = S.current;
+  if (!sess || p.kind === "main") return;
+  const ok = await askConfirm(() => i18nText("关闭「{name}」？", { name: paneLabel(p) }), {
+    get title() { return i18nText("关闭终端"); },
+    get hint() { return i18nText("终端里正在运行的程序会被结束，屏幕上的内容不会保留。"); },
+    danger: true,
+    get okLabel() { return i18nText("关闭"); },
+    icon: "term.close",
+  });
+  if (!ok || panes.get(p.key) !== p) return;
+  try {
+    await api(`/sessions/${sess.id}/client-terminals/${p.key}`, { method: "DELETE" });
+  } catch (err) {
+    toast(i18nText("关闭终端失败：{p0}", { p0: (err as Error).message }), true);
     return;
   }
-  clearReconnect();
-  reconnectAttempt = 0;
-  ensureTerm();
-  if (!S.term) return; // xterm 加载失败，ensureTerm 已提示
-  connectTermWS(false);
+  if (panes.get(p.key) === p) {
+    removePane(p);
+    renderTabs();
+  }
 }
 
 $("term-reconnect").addEventListener("click", termReconnect);
+bindMenu($("term-new"), () => {
+  const agent = agentName(S.current?.agent || "");
+  return [
+    { label: i18nText("Shell 终端"), icon: "term.shell", tip: i18nText("在工作区根目录新开一个 Shell"), run: () => void newPane("shell") },
+    { label: i18nText("{agent} 终端", { agent }), icon: "term.agent", tip: i18nText("在工作区根目录直接启动 {agent}", { agent }), run: () => void newPane("agent") },
+  ];
+});
 
 // 侧栏收起也会改变终端宽度，但不会触发 window.resize。
 new ResizeObserver(([entry]) => {
-  if (S.fit && S.tab === "term" && entry.contentRect.width && entry.contentRect.height) S.fit.fit();
+  if (active?.fit && S.tab === "term" && entry.contentRect.width && entry.contentRect.height) active.fit.fit();
 }).observe($("term-mount"));
 
 /* ---------------- 手机辅助键 ---------------- */
@@ -413,13 +649,14 @@ function renderTermModifiers() {
 
 function syncTermKeys(connected = keysConnected) {
   keysConnected = connected;
-  termKeys.disabled = !connected || !!S.term?.options.disableStdin;
+  termKeys.disabled = !connected || !!termOf()?.options.disableStdin;
   if (termKeys.disabled) resetTermModifiers();
 }
 
 function sendTermInput(data: string) {
-  if (!S.term || S.term.options.disableStdin || S.termWS?.readyState !== WebSocket.OPEN) return;
-  S.termWS.send(ENC.encode(data));
+  const ws = active?.ws;
+  if (!active?.term || active.term.options.disableStdin || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(ENC.encode(data));
 }
 
 function modifiedTermInput(data: string): string {
@@ -441,11 +678,12 @@ function modifiedTermInput(data: string): string {
 termKeys.addEventListener("mousedown", (event) => event.preventDefault());
 termKeys.addEventListener("click", (event) => {
   const button = (event.target as Element).closest<HTMLButtonElement>("button");
-  if (!button || termKeys.disabled || !S.term) return;
+  const term = termOf();
+  if (!button || termKeys.disabled || !term) return;
   if (button.id === "term-keyboard") {
     resetTermModifiers();
-    if (document.activeElement === S.term.textarea) S.term.textarea?.blur();
-    else S.term.focus();
+    if (document.activeElement === term.textarea) term.textarea?.blur();
+    else term.focus();
     return;
   }
   const mod = button.dataset.termMod;
@@ -460,7 +698,7 @@ termKeys.addEventListener("click", (event) => {
     if (arrows[key]) {
       const modifier = 1 + (termModifiers.alt ? 2 : 0) + (termModifiers.ctrl ? 4 : 0);
       data = modifier > 1 ? `\x1b[1;${modifier}${arrows[key]}`
-        : `\x1b${S.term.modes.applicationCursorKeysMode ? "O" : "["}${arrows[key]}`;
+        : `\x1b${term.modes.applicationCursorKeysMode ? "O" : "["}${arrows[key]}`;
       resetTermModifiers();
     } else if (key === "interrupt" || key === "shift-tab") {
       data = fixed[key]!;
@@ -470,21 +708,21 @@ termKeys.addEventListener("click", (event) => {
     }
     sendTermInput(data);
   }
-  S.term.focus();
+  term.focus();
 });
 
 const touchTerminal = matchMedia("(max-width: 760px), (pointer: coarse)");
 function fitTermViewport() {
   const viewport = window.visualViewport;
-  const active = !!S.term && S.view === "work" && S.tab === "term" && touchTerminal.matches;
+  const on = !!termOf() && S.view === "work" && S.tab === "term" && touchTerminal.matches;
   const app = $("app");
   // 放大页面时保留浏览器的平移与缩放行为。
-  app.classList.toggle("term-viewport", active && !!viewport && viewport.scale === 1);
-  if (active && viewport) {
+  app.classList.toggle("term-viewport", on && !!viewport && viewport.scale === 1);
+  if (on && viewport) {
     app.style.setProperty("--term-viewport-height", `${viewport.height}px`);
     app.style.setProperty("--term-viewport-top", `${viewport.offsetTop}px`);
   }
-  if (!active) resetTermModifiers();
+  if (!on) resetTermModifiers();
 }
 window.visualViewport?.addEventListener("resize", fitTermViewport);
 window.visualViewport?.addEventListener("scroll", fitTermViewport);
@@ -639,24 +877,26 @@ function termUploadUI() {
       ? i18nText("图片上传中… ({p0}/{p1})", { p0: String(termUpload.done + 1), p1: String(termUpload.total) })
       : i18nText("图片上传中…"));
   }
-  if (S.term) {
-    S.term.options.disableStdin = on;
+  const term = termOf();
+  if (term) {
+    term.options.disableStdin = on;
     if (!on) refocusTerm(); // disableStdin 切过 readOnly，须刷新 IME 上下文
   }
   syncTermKeys();
 }
 
 async function uploadTermImages(files: Blob[]) {
+  const pane = active; // 路径送回开始上传时的那个标签
   termUpload.total += files.length;
   termUploadUI();
   for (const f of files) {
     try {
       const res = await uploadAttachment(f);
-      if (S.termWS && S.termWS.readyState === WebSocket.OPEN) {
-        S.termWS.send(ENC.encode(res.path + " "));
+      if (pane?.ws && pane.ws.readyState === WebSocket.OPEN) {
+        pane.ws.send(ENC.encode(res.path + " "));
       }
     } catch (err) {
-      if (S.term) S.term.write(i18nText("\r\n\u001b[31m图片上传失败: {p0}\u001b[0m\r\n", { p0: String((err as Error).message) }));
+      pane?.term?.write(i18nText("\r\n\u001b[31m图片上传失败: {p0}\u001b[0m\r\n", { p0: String((err as Error).message) }));
     }
     termUpload.done++;
     if (termUpload.done === termUpload.total) { termUpload.total = 0; termUpload.done = 0; }
@@ -714,7 +954,7 @@ function openPasteMenu(x: number, y: number) {
 }
 
 async function pasteOnRelease(x: number, y: number) {
-  if (await pasteClipboard(true) === "refused" && S.term && !termKeys.disabled) openPasteMenu(x, y);
+  if (await pasteClipboard(true) === "refused" && termOf() && !termKeys.disabled) openPasteMenu(x, y);
 }
 
 /* 被拒得这么快就不是人点掉了系统气泡，而是浏览器根本没给机会（这次不算手势） */
@@ -750,9 +990,10 @@ async function pasteClipboard(onRelease = false): Promise<"pasted" | "refused" |
     return "failed";
   }
   traceTermEvent("clipboard-read", { ok: true, text: text.length, images: images.length, ms: Math.round(performance.now() - started), onRelease });
-  if (!S.term || !S.current || termKeys.disabled) return "failed";
+  const term = termOf();
+  if (!term || !S.current || termKeys.disabled) return "failed";
   if (images.length) void uploadTermImages(images);
-  else if (text) S.term.paste(text);
+  else if (text) term.paste(text);
   else toast(i18nText("剪贴板里没有文字或图片"));
   return "pasted";
 }

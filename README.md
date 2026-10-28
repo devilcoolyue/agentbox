@@ -50,7 +50,7 @@ You bring the server and your own Claude / Codex subscription, API key, or compa
 
 ### The original CLI, files and Git
 
-- **Terminal:** Shell, Claude Code or Codex in a tmux session that survives reconnects, with touch scrolling, long-press paste and copy-to-clipboard.
+- **Terminal:** Shell, Claude Code or Codex in a tmux session that survives reconnects; open several terminal tabs to run agents side by side on the same project files; touch scrolling, long-press paste and copy-to-clipboard.
 - **Files:** browse, edit, upload archives and download from the project and `/shared`; preview Markdown and HTML as rendered pages.
 - **Git:** review per-file diffs and commit; fetch, pull, preview a push and open a PR / MR over HTTPS tokens, SSH or GitHub / GitLab OAuth. Long network operations run in the background.
 

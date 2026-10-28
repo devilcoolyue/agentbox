@@ -36,6 +36,7 @@ import { chatOutlineSmoke } from './test-chat-outline.mjs';
 import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
 import { terminalClipboardSmoke } from './test-term-clipboard.mjs';
+import { terminalTabsSmoke } from './test-term-tabs.mjs';
 import { motionSmoke } from './test-motion.mjs';
 import {browserEngine,cancelledFetchError,launchBrowser,recordNavigations} from './playwright-launch.mjs';
 
@@ -1018,6 +1019,7 @@ export async function smoke(page) {
   assert.equal(await key('interrupt').isDisabled(),true);
   await page.setViewportSize({width:1280,height:900});
   assert.equal(await page.locator('#term-keys').isVisible(),false,'desktop toolbar should stay hidden');
+  await terminalTabsSmoke(page, {session:'fixture-space', agentName:'Codex CLI', agentShort:'Codex'});
   await remoteBrowserSmoke(page);
   sessions = [{...sessions[0], agent:"claude"}];
   await mcpSmoke(page);

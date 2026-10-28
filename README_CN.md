@@ -50,7 +50,7 @@
 
 ### 原版 CLI、文件与 Git
 
-- **终端：** Shell、Claude Code 或 Codex 跑在持久 tmux 会话里，断线重连不丢；支持触屏滚动、长按粘贴和复制到本机剪贴板。
+- **终端：** Shell、Claude Code 或 Codex 跑在持久 tmux 会话里，断线重连不丢；可开多个终端标签并行跑几个 Agent，共用同一份项目文件；支持触屏滚动、长按粘贴和复制到本机剪贴板。
 - **文件：** 在项目与 `/shared` 中浏览、编辑、上传压缩包和下载；Markdown 与 HTML 可切换为渲染预览。
 - **Git：** 逐文件查看 diff 并提交；通过 HTTPS Token、SSH 或 GitHub / GitLab OAuth 获取、拉取、预览推送并创建 PR / MR，耗时的网络操作在后台执行。
 

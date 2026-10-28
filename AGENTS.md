@@ -644,6 +644,15 @@ data/
   欠费还是网络抖动，于是无限退避重连。前端 `term.js` 见 4000–4999 就把 reason 写进
   终端画面并停止自动重连。控制帧上限 125 字节，reason 由 `truncReason` 按 rune 截断。
 - 断开只停得住新的输入：tmux detach 不杀进程；额度见底时由上一条停掉终端里的 Agent。
+- 网页终端标签（`term.ts` 的 `TermPane`）：第一个标签是主终端（上面的 `/term`），其余复用桌面的
+  `client-terminals` 接口（见「桌面项目与终端」），每个一个 tmux 服务，可并行、互不顶号。网页新建的挂在
+  path 为 `.` 的项目下（有就复用，含桌面建的 `Root`；没有就建，名字「工作区」，同路径 409 时重读）；
+  进终端页和独立标签断开时 GET 列表对齐，别处关掉的标签收起，桌面在其他项目开的也列出（标签带项目名），
+  只在第一次切到时才建 xterm 并连接（隐藏容器量不出字宽，也免得把桌面那边顶下线）。每个标签各有
+  WebSocket、代际与重连计时；`S.term`/`S.fit` 指向当前标签（测试经它读缓冲区），粘贴、上传、手机辅助键
+  只作用于当前标签。服务端以 4005 关闭（终端已关闭）与其他 4000–4999 一样不自动重连。回归
+  `scripts/test-term-tabs.mjs`（经 `test-browser.mjs`，合成 API）；放在终端用例最后，结束时只剩主终端——
+  前面的用例按「页面只有一个 xterm」写选择器。
 - 程序复制的文字（`term-clipboard.ts`）：Claude Code 在 tmux 里复制走 `tmux load-buffer -w`，tmux 经 OSC 52 交给 xterm；shell 里拖选、双击/三击是 tmux 自己的复制，靠 `set-clipboard external` 同样经 OSC 52 送出（off 时只进 tmux 缓冲区）。该项除了写在 `images/agent/tmux.conf`，服务端每次接入（主终端 `termCommand`、桌面独立终端 attach）都在 tmux 命令后串一句 `set -s set-clipboard external`（`termws.go` 的 `tmuxClipboard`）：网页镜像更新不会重新拷 tmux.conf，老镜像与已在跑的 tmux 服务也照样生效。xterm.js 不认 52，由 `parser.registerOscHandler(52)` 写进浏览器剪贴板。只写不读（查询不回应），只认用户在终端里按下/拖选/按键后 3 秒内的请求，防 Agent 静默改写本机剪贴板；`set-clipboard` 不能开成 on——external 下程序直接打印的 OSC 52 仍不转发、也不进缓冲区。Safari 不允许无手势写入，退回终端底部「复制到剪贴板」条在点击里写。
 - 复制粘贴快捷键（同一模块的 `attachCustomKeyEventHandler`）：Windows / Linux 上 xterm 把 Ctrl+V、Ctrl+C 当 ^V、^C 发给程序，浏览器粘贴/复制不发生，Win+V 剪贴板历史（系统代按 Ctrl+V）同样失效。现在 Ctrl+V 交还浏览器原生粘贴（文字括号粘贴、图片走上传），xterm 有选区（Shift+拖选）时 Ctrl+C 复制并清选区，否则仍是中断；按虚拟键码认，Mac（Cmd 复制粘贴）不拦。代价是程序收不到 ^V（Claude Code 的读图片快捷键在容器里本就读不到用户剪贴板；vim 列选择改用 Ctrl+Q）。回归 `scripts/test-term-clipboard.mjs`。
 - xterm 6 会丢掉 iOS 中文键盘直接上屏的标点（「，」等，上游 xtermjs/xterm.js#3070），也不认连按标点键时 iOS 不带按键事件的删除/替换（「，。？！」循环）。`term.ts` 的 `bridgeDroppedInput` 在 xterm 所有发送时机（keydown、keypress、229 差分定时器、输入事件）都过去后，若这次按键 xterm 一字未发且不在组字，才按 textarea 前后差异补发（先退格再插入，最多删 8 个字符）；升级 xterm 后若上游已修复（PR #5614），删掉它并保留 `test-browser.mjs` 的「恰好发送一次」断言。真机事件顺序用地址参数 `?imedebug` 打开 `term-input-debug.ts` 的诊断面板，上传到 `/shared/.file/`（只在开启期间记录，含期间输入的字符）。
