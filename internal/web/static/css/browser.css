@@ -1,6 +1,8 @@
 #tab-browser { display:flex; flex-direction:column; min-height:0; background:var(--page); container:browser-work / inline-size; }
 #tab-browser:fullscreen { height:100vh; width:100vw; }
 .browser-toolbar { display:grid; grid-template-columns:auto minmax(180px,1fr) auto auto; align-items:center; gap:12px; padding:10px 16px 6px; flex:none; }
+/* 顶部栏收起时最前面多一个空间名（head-fold.ts），网格让出一列 */
+.browser-toolbar.wb-peek-host { grid-template-columns:auto auto minmax(180px,1fr) auto auto; }
 .browser-lifecycle,.browser-shortcuts,.browser-display { display:flex; align-items:center; gap:4px; }
 .browser-lifecycle { padding-right:10px; border-right:1px solid var(--line); }
 :root #tab-browser .btn.browser-tool { --action-size:36px; --action-inset:0px; border-radius:calc(8px * var(--radius-scale)); }
@@ -39,6 +41,7 @@
 .browser-clipboard textarea { flex:1; min-width:0; resize:vertical; max-height:140px; }
 @container browser-work (max-width:850px) {
  .browser-toolbar { grid-template-columns:auto 1fr auto; gap:6px 10px; padding:8px 12px 6px; }
+ .browser-toolbar.wb-peek-host { grid-template-columns:auto auto 1fr auto; }
  .browser-address { grid-row:2; grid-column:1 / -1; }
  .browser-shortcuts { justify-content:flex-end; }
  .browser-status { padding-left:14px; }

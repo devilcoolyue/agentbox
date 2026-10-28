@@ -706,10 +706,11 @@ details.think.streaming .think-body::after {
 @media (max-width: 760px) {
   .chat-conn { margin: 6px 8px 0; }
 }
-/* 顶部栏收起后（head-fold.ts）线程栏最左的空间名：悬停或点击浮出顶部栏 */
+/* 顶部栏收起后（head-fold.ts）当前标签页工具栏最左的空间名（对话页在线程栏）：悬停或点击浮出顶部栏。
+ * 右侧分隔线距空间名 7px，外边距补到与后面内容共 14px 左右（各工具栏的 gap 不同） */
 .wb-peek {
   position: relative; display: inline-flex; align-items: center; gap: 7px;
-  flex: 0 1 auto; min-width: 0; max-width: 240px; margin-right: 6px;
+  flex: 0 1 auto; min-width: 0; max-width: 240px; margin-right: 2px;
   padding: 5px 10px 5px 6px;
   border: 0; border-radius: var(--radius-pill); background: none;
   color: var(--text); font-size: 12.5px; font-weight: 600;
@@ -718,6 +719,10 @@ details.think.streaming .think-body::after {
   content: ""; position: absolute; right: -7px; top: 9px; bottom: 9px;
   width: 1px; background: var(--line);
 }
+.thread-bar > .wb-peek, .mcp-scope-group > .wb-peek { margin-right: 6px; }
+/* 终端顶栏只有 3px 上下留白，空间名跟着收薄，不把这一行撑高 */
+.term-bar > .wb-peek { padding-block: 2px; }
+.term-bar > .wb-peek::after { top: 5px; bottom: 5px; }
 .wb-peek:hover, .wb-peek[aria-expanded="true"] { background: var(--panel); }
 .wb-peek-avatar { display: inline-flex; flex: none; }
 .wb-peek .agent-avatar .led { width: 7px; height: 7px; right: -3px; bottom: -3px; }

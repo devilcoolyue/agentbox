@@ -5,8 +5,8 @@ import { resolve } from 'node:path';
 // Workbench top bar folding (features/workspaces/head-fold.ts): a running workspace with a
 // conversation folds the title row and tabs away; hovering or clicking the workspace name in
 // the thread bar floats them over the log without moving it; the pin keeps them shown and is
-// remembered per browser. Stopped workspaces, the empty greeting, other tabs and phones keep
-// the bar. No provider calls.
+// remembered per browser. Every tab folds, with the name in its first toolbar. Stopped
+// workspaces, the empty chat greeting and phones keep the bar. No provider calls.
 export async function headFoldSmoke(page, { setHistory, setStatus }) {
  const history = [];
  for (let i = 0; i < 6; i++) {
@@ -62,16 +62,36 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
   await has('head-peek', false);
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'wb-peek');
 
-  // A tab chosen from the overlay leaves the chat: the bar is back in place, and folds again on return.
-  await peek.click();
+  // Every tab folds the same way: a tab chosen from the overlay closes it, the name moves into that
+  // tab's first toolbar (its left group where the toolbar is justified) and the content gets the room.
+  const hosts = {term:'#tab-term > .term-bar', browser:'#tab-browser > .browser-toolbar', files:'#tab-files .files-left', changes:'#tab-changes > .changes-bar', chat:'#tab-chat > .thread-bar'};
+  for (const [tab, host] of Object.entries(hosts)) {
+   await peek.click();
+   await has('head-peek', true);
+   await page.locator(`.tab[data-tab="${tab}"]`).click();
+   await page.locator(`#tab-${tab}`).waitFor({state:'visible'});
+   await has('head-peek', false);
+   await has('head-folded', true);
+   await page.locator(`${host} > #wb-peek`).waitFor({state:'visible'});
+   assert.ok(await topHeight() < 1, `${tab}: folded top bar takes no height`);
+   assert.equal(await page.locator('.wb-peek-host').count(), 1, `${tab}: only the current toolbar makes room`);
+   const [p, h] = await Promise.all([peek.boundingBox(), page.locator(host).boundingBox()]);
+   assert.ok(p.y >= h.y - 1 && p.y + p.height <= h.y + h.height + 1, `${tab}: the name sits inside the toolbar row`);
+   if (tab !== 'chat') await page.screenshot({path:`output/playwright/head-fold-${tab}.png`});
+  }
+  // Hover works away from the chat too, and the overlay covers the toolbar instead of moving it.
+  await page.locator('.tab[data-tab="files"]').evaluate(e => e.click());
+  await page.locator('#tab-files #wb-peek').waitFor({state:'visible'});
+  const barTop = () => page.locator('#tab-files > .files-bar').evaluate(e => Math.round(e.getBoundingClientRect().top));
+  const filesTop = await barTop();
+  await peek.hover();
   await has('head-peek', true);
-  await page.locator('.tab[data-tab="files"]').click();
-  await page.locator('#tab-files').waitFor({state:'visible'});
-  await has('head-folded', false);
-  assert.equal(await peek.isVisible(), false);
-  assert.equal(await fold.isVisible(), false, 'the fold toggle belongs to the chat tab');
-  await page.locator('.tab[data-tab="chat"]').click();
-  await has('head-folded', true);
+  assert.equal(await barTop(), filesTop);
+  await fold.waitFor({state:'visible'});
+  await page.mouse.move(640, 600);
+  await has('head-peek', false);
+  await page.locator('.tab[data-tab="chat"]').evaluate(e => e.click());
+  await page.locator('#tab-chat > .thread-bar > #wb-peek').waitFor({state:'visible'});
 
   // Pin from the overlay: stays shown, remembered across reloads; the same button folds again.
   await peek.click();
@@ -111,5 +131,5 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
   await page.evaluate(() => localStorage.removeItem('agentbox_head_fold')).catch(() => {});
   await page.setViewportSize({width:1280,height:900});
  }
- console.log('Head fold: running conversation folds the top bar, hover/click/keyboard peek over the log, tab switch, remembered pin, phone, stopped and empty states passed');
+ console.log('Head fold: running conversation folds the top bar, hover/click/keyboard peek over the log, every tab folds with the name in its toolbar, remembered pin, phone, stopped and empty states passed');
 }

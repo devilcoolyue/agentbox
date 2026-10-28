@@ -1,9 +1,10 @@
-/* head-fold：对话进行中收起工作台顶部栏（标题行 + 标签栏），把高度让给对话流。
+/* head-fold：空间运行中收起工作台顶部栏（标题行 + 标签栏），把高度让给对话、终端、文件等内容。
  * - 只在电脑宽度生效（窄屏标题已并入顶栏，收起样式写在 work.css 的宽屏媒体查询里）；
- * - 空间运行中、对话页且不是空对话的问候页时收起；已停止或休眠（顶部有「启动」）、正在启动/停止、
- *   切到终端、文件等页，或首次引导打开时照常显示；
- * - 收起后线程栏最左侧出现空间名：鼠标悬停或点击，顶部栏以浮层盖在对话上方滑出，
- *   移开或点别处收回；浮层里的按钮可「固定显示」，标题行的同一按钮再「收起」。
+ * - 各标签页都收；对话页的空对话问候页、已停止或休眠（顶部有「启动」）、正在启动/停止，
+ *   或首次引导打开时照常显示；
+ * - 收起后当前标签页第一行工具栏的最左侧出现空间名（对话页是线程栏）：鼠标悬停或点击，
+ *   顶部栏以浮层盖在内容上方滑出，移开或点别处收回；浮层里的按钮可「固定显示」，
+ *   标题行的同一按钮再「收起」。
  * 固定与否是个人偏好，只存在当前浏览器的 localStorage，与对话刻度偏好同一口径。 */
 "use strict";
 import { S, bus } from "../../state.js";
@@ -17,6 +18,17 @@ const KEY = "agentbox_head_fold";
 const HOVER_OPEN_MS = 120;
 /** 移出浮层后多久收回：斜着移向菜单、气泡时不至于一闪就没 */
 const HOVER_CLOSE_MS = 280;
+/** 各标签页放空间名的位置：第一行工具栏里靠左的那一组，排在最前。两端对齐的工具栏
+ * （文件、MCP）放进左侧那组，不然空间名会把左组挤到中间。 */
+const PEEK_HOSTS = {
+    chat: "#tab-chat > .thread-bar",
+    term: "#tab-term > .term-bar",
+    browser: "#tab-browser > .browser-toolbar",
+    files: "#tab-files > .files-bar > .files-left",
+    changes: "#tab-changes > .changes-bar",
+    skills: "#tab-skills > .skills-bar > .skills-left",
+    mcp: "#tab-mcp > .mcp-toolbar > .mcp-scope-group",
+};
 function pinned() {
     try {
         return localStorage.getItem(KEY) === "off";
@@ -33,9 +45,19 @@ export function initHeadFold() {
     let folded = false, open = false, keep = pinned(), timer = 0, toggleKey = "", peekKey = "";
     // 窄屏标题已并入顶栏，标签栏要常在：断点与 work.css 的窄屏布局一致
     const wide = matchMedia("(min-width: 761px)");
-    const eligible = () => wide.matches && S.current?.status === "running" && S.tab === "chat"
-        && $("chat-hero").classList.contains("hidden") && !busy.classList.contains("show")
+    const eligible = () => wide.matches && S.current?.status === "running" && !!PEEK_HOSTS[S.tab]
+        && (S.tab !== "chat" || $("chat-hero").classList.contains("hidden")) && !busy.classList.contains("show")
         && !guide.matches(":popover-open");
+    // 空间名跟着当前标签页走：同一个节点挪进该页的工具栏，宿主加 .wb-peek-host 供个别布局（浏览器的网格）让位
+    const placePeek = () => {
+        const host = document.querySelector(PEEK_HOSTS[S.tab] || "");
+        const previous = peek.parentElement;
+        if (host && previous !== host) {
+            previous?.classList.remove("wb-peek-host");
+            host.prepend(peek);
+        }
+        peek.parentElement?.classList.toggle("wb-peek-host", folded);
+    };
     const clearTimer = () => { clearTimeout(timer); timer = 0; };
     const setOpen = (value) => {
         clearTimer();
@@ -84,6 +106,7 @@ export function initHeadFold() {
             peek.hidden = !folded;
             inner.inert = folded && !open;
         }
+        placePeek();
         renderPeek();
         renderToggle();
     };
@@ -166,7 +189,7 @@ export function initHeadFold() {
         if (open && next && !top.contains(next) && next !== peek && !(next instanceof Element && next.closest(".menu-pop")))
             setOpen(false);
     }, options);
-    // 浮层里点了标签：切到别的页时顶部栏回到常态；点的还是对话就收回浮层
+    // 浮层里点了标签：切过去后收回浮层，空间名随之挪进新标签页的工具栏
     top.addEventListener("click", (e) => {
         if (open && e.target.closest(".tab"))
             setOpen(false);
@@ -194,6 +217,7 @@ export function initHeadFold() {
         folded = false;
         workbench.classList.remove("head-folded", "head-peek");
         peek.hidden = true;
+        peek.parentElement?.classList.remove("wb-peek-host");
         peek.setAttribute("aria-expanded", "false");
         inner.inert = false;
         toggle.classList.add("hidden");
