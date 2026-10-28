@@ -206,7 +206,10 @@ export function initHeadFold() {
     for (const s of springs) s.target = 0;
     push = animated ? height : 0;
     absorbed = !animated;
-    if (animated) animate(); else render();
+    // 先同步画出起始帧（铺满、推开内容），再交给逐帧动画：否则加上 .head-folded 后到第一帧之间，
+    // 浮层按样式默认隐藏、占位高度为空，内容会先往上跳一帧再被推回去
+    render();
+    if (animated) animate();
   };
   const leaveFold = () => {
     cancelAnimationFrame(raf); raf = 0;

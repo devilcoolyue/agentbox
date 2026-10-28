@@ -133,7 +133,9 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
   try {
    const content = () => page.locator('#wb-top .wb-top-in').evaluate(e => Number(getComputedStyle(e).opacity));
    const settled = (shown) => page.waitForFunction(shown => { const e = document.querySelector('#wb-top .wb-top-in'), s = getComputedStyle(e);
-    return shown ? s.visibility === 'visible' && s.opacity === '1' && !e.style.filter : s.visibility === 'hidden'; }, shown, {timeout:5000});
+    // collapsed means the whole thing: overlay and droplet hidden and the dock spacer back to zero height
+    return shown ? s.visibility === 'visible' && s.opacity === '1' && !e.style.filter
+     : s.visibility === 'hidden' && getComputedStyle(document.getElementById('wb-drop')).visibility === 'hidden' && document.getElementById('wb-top').getBoundingClientRect().height < 0.5; }, shown, {timeout:5000});
    await peek.hover();
    await page.waitForFunction(() => getComputedStyle(document.getElementById('wb-drop')).visibility === 'visible');
    await page.waitForTimeout(90);
@@ -153,7 +155,10 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
    await has('head-folded', false);
    assert.ok(await logTop() > foldedTop + 60, 'docking ends in the normal layout');
    assert.equal(await page.locator('#wb-top').evaluate(e => e.style.height), '', 'no layout leftovers after docking');
-   await fold.click();
+   // read the layout in the same task as the click: the first undock frame must still be the docked
+   // layout, not a frame where the bar is gone and the content jumps up before being pushed back
+   const undockTop = await fold.evaluate(b => { b.click(); return Math.round(document.getElementById('chat-log').getBoundingClientRect().top); });
+   assert.ok(undockTop > foldedTop + 60, `undocking starts from the docked layout, not a jump up (${undockTop})`);
    await has('head-folded', true);
    await settled(false);
    assert.equal(await logTop(), foldedTop, 'undocking slides the content back up');
