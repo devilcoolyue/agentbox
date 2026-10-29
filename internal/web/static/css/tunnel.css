@@ -51,7 +51,7 @@
   overflow-x: auto; white-space: pre;
   user-select: all;
 }
-.tun-pair-copy { flex: none; width: 36px; height: 36px; padding: 0; }
+.tun-pair-copy { flex: none; width: 36px; height: 36px; min-height: 0; padding: 0; }
 .tun-cmd-foot {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
   margin-top: 8px;

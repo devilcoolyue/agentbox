@@ -79,7 +79,7 @@
 .term-state[data-state="closed"] { color: var(--red); }
 .term-reconnect {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; padding: 0;
+  width: 26px; height: 26px; min-height: 0; padding: 0;
   border: 0; background: none; color: var(--muted);
   cursor: pointer; flex: none;
   transition: color .15s, transform .12s;

@@ -295,7 +295,7 @@
   background: none; border: none; border-radius: calc(6px * var(--radius-scale));
   color: var(--muted);
   font-family: var(--sans); font-size: 12px;
-  padding: 3px 8px;
+  padding: 3px 8px; min-height: 0;
 }
 .cb-copy:hover { color: var(--text); background: var(--panel-2); }
 .cb-copy:disabled { color: var(--green); cursor: default; background: none; }
@@ -342,13 +342,16 @@
 .chip.has-open .name { flex: none; }
 .chip.has-open .sum { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .chip.has-open .chip-open { flex: none; }
+/* 同时带 .btn：base.css 的 min-height: 38px 会压过这里的 height，必须清掉，
+ * 否则这颗按钮比所在的 12px 工具行高出一倍多 */
 .chip-open {
-  margin-left: 9px; padding: 0 8px; height: 18px;
+  margin-left: 9px; padding: 0 7px; height: 18px; min-height: 0; gap: 4px;
   border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
   border-radius: calc(9px * var(--radius-scale)); background: transparent;
   color: var(--amber); font: inherit; font-size: 11px; line-height: 16px;
   vertical-align: 1px; cursor: pointer;
 }
+.chip-open > svg { width: 12px; height: 12px; }
 .chip-open:hover, .chip-open:focus-visible {
   background: color-mix(in srgb, var(--amber) 12%, transparent); outline: none;
 }
