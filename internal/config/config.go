@@ -354,10 +354,10 @@ type Config struct {
 	ChatHistoryTimeoutSec int64                    `json:"chat_history_timeout_sec"`
 	DesktopSync           bool                     `json:"desktop_sync_enabled"`
 	Decision              DecisionConfig           `json:"decision"`
-	IdleTimeoutMin        int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
-	TurnTimeoutMin        int64                    `json:"turn_timeout_min"` // 单轮对话的时长上限（分钟），到时自动中断；0 为默认
+	IdleTimeoutMin        int64                    `json:"idle_timeout_min"`   // 会话空闲自动停机的分钟数；0 表示关闭
+	TurnTimeoutMin        int64                    `json:"turn_timeout_min"`   // 单轮对话的时长上限（分钟），到时自动中断；0 为默认
 	MaxParallelChats      int64                    `json:"max_parallel_chats"` // 一个空间同时运行的对话线程数；0 为默认
-	TimeZone              string                   `json:"timezone"`         // IANA 时区；用于界面时间与用量筛选
+	TimeZone              string                   `json:"timezone"`           // IANA 时区；用于界面时间与用量筛选
 	Container             ContainerLimits          `json:"container"`
 	Tunnel                TunnelConfig             `json:"tunnel"`
 	ProxyBridge           ProxyBridgeConfig        `json:"proxy_bridge"`
