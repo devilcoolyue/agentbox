@@ -52,7 +52,7 @@
 | `agent_image_missing` | 管理员构建/安装配置中指定的镜像 |
 | `workspace_start_failed` | 未归类的启动失败；管理员通过编号与环境检查排查 |
 | `chat_busy` | 等待当前回合完成或先中断 |
-| `chat_parallel_limit` | 空间已有 3 个对话同时运行；等其中一个完成或中断（运行中继续发送的消息会排队，有空位时自动开始） |
+| `chat_parallel_limit` | 空间同时运行的对话已达上限（`max_parallel_chats`，默认 3）；等其中一个完成或中断（运行中继续发送的消息会排队，有空位时自动开始） |
 | `chat_options_invalid` | 调整模型/推理参数，检查 CLI 兼容性 |
 | `chat_failed` | 先检查历史与工作区结果，避免盲目重做已经执行的工作 |
 | `chat_request_conflict` | 消息 ID 内容或状态修订冲突，先查询原回执 |

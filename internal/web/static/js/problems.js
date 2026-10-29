@@ -101,7 +101,7 @@ export const problemMessages = {
     ],
     "chat_parallel_limit": [
         "同时运行的对话已达上限",
-        "这个工作空间已有 3 个对话在运行，请等其中一个完成或中断后再发送。"
+        "这个工作空间同时运行的对话已达上限，请等其中一个完成或中断后再发送。"
     ],
     "question_closed": [
         "这个问题已经结束",

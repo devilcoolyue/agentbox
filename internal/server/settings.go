@@ -33,6 +33,7 @@ type settingsView struct {
 	DesktopSync           bool                            `json:"desktop_sync_enabled"`
 	IdleTimeoutMin        int64                           `json:"idle_timeout_min"`
 	TurnTimeoutMin        int64                           `json:"turn_timeout_min"`
+	MaxParallelChats      int                             `json:"max_parallel_chats"`
 	TimeZone              string                          `json:"timezone"`
 	Container             config.ContainerLimits          `json:"container"`
 	Models                map[string][]config.ModelOption `json:"models"`
@@ -64,6 +65,7 @@ func (s *Server) settingsView() settingsView {
 		DesktopSync:           s.cfg.GetDesktopSyncEnabled(),
 		IdleTimeoutMin:        s.cfg.GetIdleTimeoutMin(),
 		TurnTimeoutMin:        int64(s.cfg.GetTurnTimeout() / time.Minute),
+		MaxParallelChats:      s.cfg.GetMaxParallelChats(),
 		TimeZone:              s.cfg.GetTimeZone(),
 		Container:             s.cfg.GetContainer(),
 		Models:                s.cfg.GetModels(),
@@ -136,6 +138,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if patch.CacheKeepalive != nil {
 		s.reconcileAllKeepalive()
+	}
+	if patch.MaxParallelChats != nil {
+		s.chat.parallelLimitChanged()
 	}
 	if patch.ProxyBridge != nil || patch.Container != nil {
 		// 受限出网要求桥接常驻（未绑代理的账号也经它出网）；换绑定地址同样热生效：重绑失败只记日志，代理列表接口里会显示当前状态。

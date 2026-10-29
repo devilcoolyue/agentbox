@@ -1,4 +1,4 @@
-/* 并行对话：同一空间的几个对话可以同时运行（服务端 chat.go 的 chatTurn，最多 3 个）。
+/* 并行对话：同一空间的几个对话可以同时运行（服务端 chat.go 的 chatTurn，上限见 maxParallelChats）。
  * 这里记着哪些对话正在跑、从什么时候开始、在等什么——来自连接时的 status 快照和带 thread 的
  * status 事件，供对话列表、切换栏标记，以及切回某个对话时恢复执行状态与计时。 */
 
@@ -9,8 +9,17 @@ export interface RunningThread {
   phase?: string;
 }
 
-/** 与服务端 maxParallelChats 一致：超过时新消息排队，空出位置后自动开始 */
-export const MAX_PARALLEL_CHATS = 3;
+/** 服务端的同时运行上限（系统设置 max_parallel_chats）：连接时的 status 与改设置后的 chat_limit
+ * 带来；超过时新消息排队，空出位置后自动开始。旧服务端不发，按 3 */
+let maxParallel = 3;
+
+export function maxParallelChats(): number {
+  return maxParallel;
+}
+
+export function setMaxParallelChats(n: unknown) {
+  if (typeof n === "number" && Number.isInteger(n) && n > 0) maxParallel = n;
+}
 
 const running = new Map<string, RunningThread>();
 const listeners = new Set<() => void>();

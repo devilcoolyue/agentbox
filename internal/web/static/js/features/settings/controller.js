@@ -488,6 +488,7 @@ export function createSettingsController() {
         $("set-free-gib").value = String((st.resources?.min_free_bytes || 0) / (1024 ** 3));
         $("set-idle").value = String(st.idle_timeout_min);
         $("set-turn-timeout").value = String(st.turn_timeout_min ?? 120);
+        $("set-max-parallel").value = String(st.max_parallel_chats ?? 3);
         const keep = st.cache_keepalive;
         $("set-keepalive").classList.toggle("hidden", !keep); // 旧服务端没有这一项
         if (keep) {
@@ -855,6 +856,8 @@ export function createSettingsController() {
                 patch: () => ({ idle_timeout_min: Number(inputVal("set-idle")) }) },
             { id: "turn-timeout", get label() { return i18nText("单轮对话时长上限"); }, fields: ["set-turn-timeout"],
                 patch: () => valid("set-turn-timeout") ? { turn_timeout_min: Number(inputVal("set-turn-timeout")) } : null },
+            { id: "max-parallel", get label() { return i18nText("同时运行的对话数"); }, fields: ["set-max-parallel"],
+                patch: () => valid("set-max-parallel") ? { max_parallel_chats: Number(inputVal("set-max-parallel")) } : null },
             { id: "keepalive", get label() { return i18nText("对话缓存保活"); }, fields: ["set-ka-allowed", "set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval", "set-ka-pause"],
                 patch: () => valid("set-ka-min", "set-ka-hours", "set-ka-limit", "set-ka-interval", "set-ka-pause") ? {
                     cache_keepalive: {

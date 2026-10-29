@@ -92,10 +92,10 @@ v0.1.11 已实现服务端协议和原执行器接入。浏览器现已接入冻
 
 ## 并行线程
 
-同一空间最多 3 条线程（`maxParallelChats`）可以同时运行回合，每条是容器里独立的 CLI 进程。服务端每条线程一个回合槽（`chat.go` 的 `chatTurn`）：回合写自己线程的转录，用自己的 provider 会话续聊（是当前线程时仍读写空间记录的 `chat_session`，否则读转录里最后一条 `chat_session`），PID 记在按线程区分的文件里，中断只打到本线程的 CLI；委派同一空间同时只给一条线程（另一条的消息照常执行，并推送 `delegation_notice`、`code:"delegation_busy_this_turn"`）。新建、切换线程不再等待运行中的回合，删除只等被删线程自己的回合；切换账号要求整个空间没有回合在跑或开始。
+同一空间最多 `max_parallel_chats` 条线程（默认 3，范围 1–10，见[配置](configuration.md)）可以同时运行回合，每条是容器里独立的 CLI 进程。服务端每条线程一个回合槽（`chat.go` 的 `chatTurn`）：回合写自己线程的转录，用自己的 provider 会话续聊（是当前线程时仍读写空间记录的 `chat_session`，否则读转录里最后一条 `chat_session`），PID 记在按线程区分的文件里，中断只打到本线程的 CLI；委派同一空间同时只给一条线程（另一条的消息照常执行，并推送 `delegation_notice`、`code:"delegation_busy_this_turn"`）。新建、切换线程不再等待运行中的回合，删除只等被删线程自己的回合；切换账号要求整个空间没有回合在跑或开始。
 
 - 线程内的事件（`status`、`user_message`、`agent_event`、`turn_cost`、提问、委派等）在 WS 消息里带 `"thread":"<线程 id>"`；回执广播靠 `receipt.thread_id` 区分。网页只画自己正在看的线程，其余只记运行状态并在完成、出错或提问时提示。旧网页不认这个字段。
-- 连接时的 `status` 增加 `threads`：`{"<线程 id>": {"elapsed_ms": …, "phase": …}}` 列出所有在跑的线程；顶层 `state`/`elapsed_ms`/`phase` 仍描述服务端的当前线程，供旧网页使用。
+- 连接时的 `status` 增加 `threads`：`{"<线程 id>": {"elapsed_ms": …, "phase": …}}` 列出所有在跑的线程；顶层 `state`/`elapsed_ms`/`phase` 仍描述服务端的当前线程，供旧网页使用。同一条 `status` 带 `max_parallel`（当前上限）；管理员修改上限后向所有打开的空间广播 `{type:"chat_limit", max_parallel}`，并为排队等空位的消息重新派发。网页据此判断发送时是否直接排队，没收到时按 3。
 - 删除线程时广播 `{type:"thread_deleted", id}`，正看着它的页面回到当前线程；新建/切换仍广播 `{type:"thread", id}`，新网页不再跟随别的页面换线程。`GET .../history` 不翻页时也接受 `thread=<id>`（线程存在才生效），页面重连补拉时留在自己的线程上。
 
 ## 保留与备份

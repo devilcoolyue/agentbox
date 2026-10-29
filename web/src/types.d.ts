@@ -790,6 +790,7 @@ export interface Settings {
   idle_timeout_min: number;
   /** 单轮对话的时长上限（分钟）；旧服务端没有这一项 */
   turn_timeout_min?: number;
+  max_parallel_chats?: number;
   /** 控制台显示与使用记录筛选使用的 IANA 时区 */
   timezone: string;
   container: ContainerLimits;
@@ -1619,6 +1620,8 @@ export interface ChatMessage extends APIProblem {
   thread?: string;
   /** 连接时的 status：各个正在运行的对话已进行多久、在等什么 */
   threads?: Record<string, { elapsed_ms?: number; phase?: string }>;
+  /** status / chat_limit：空间同时运行的对话上限（系统设置 max_parallel_chats） */
+  max_parallel?: number;
 }
 
 export interface ResourceLimits { max_running: number; max_running_per_user: number; min_free_bytes: number; }

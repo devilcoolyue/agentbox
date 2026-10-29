@@ -14,7 +14,7 @@ import (
 
 // A page that connects mid-turn learns how long each running thread's turn has
 // run, so its elapsed counter does not restart from zero. Threads run side by
-// side up to maxParallelChats; an account switch holds them all.
+// side up to max_parallel_chats; an account switch holds them all.
 func TestChatRoomStatusReportsRunningThreads(t *testing.T) {
 	r := &chatRoom{conns: map[*connWriter]bool{}}
 	if st := r.runningStatus(); len(st) != 0 || r.state() != "idle" {
@@ -40,7 +40,7 @@ func TestChatRoomStatusReportsRunningThreads(t *testing.T) {
 	if err := r.beginExclusive(); err != errChatBusy {
 		t.Fatal("account switch while threads run", err)
 	}
-	for i := 2; i < maxParallelChats; i++ {
+	for i := 2; i < config.DefaultMaxParallelChats; i++ {
 		if err := r.turn(string(rune('c' + i))).begin(); err != nil {
 			t.Fatal(err)
 		}

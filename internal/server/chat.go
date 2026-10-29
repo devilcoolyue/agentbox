@@ -26,11 +26,7 @@ const titleTimeout = 90 * time.Second
 
 // --- chat manager: one room per session, broadcasting to all open tabs.
 // Each thread of a session has its own turn slot (chatTurn); up to
-// maxParallelChats of them run at once, each its own CLI process. ---
-
-// maxParallelChats bounds the turns one workspace runs at the same time: every
-// running thread is a CLI process in the same container, sharing its memory.
-const maxParallelChats = 3
+// maxParallelChats() of them run at once, each its own CLI process. ---
 
 type chatManager struct {
 	srv   *Server
@@ -40,6 +36,32 @@ type chatManager struct {
 
 func newChatManager(s *Server) *chatManager {
 	return &chatManager{srv: s, rooms: map[string]*chatRoom{}}
+}
+
+// maxParallelChats bounds the turns one workspace runs at the same time
+// (max_parallel_chats): every running thread is a CLI process in the same
+// container, sharing its memory.
+func (r *chatRoom) maxParallelChats() int {
+	if r.srv == nil || r.srv.cfg == nil {
+		return config.DefaultMaxParallelChats
+	}
+	return r.srv.cfg.GetMaxParallelChats()
+}
+
+// parallelLimitChanged tells open pages the new limit and, when it grew,
+// starts queued requests that were waiting for a free slot.
+func (m *chatManager) parallelLimitChanged() {
+	n := m.srv.cfg.GetMaxParallelChats()
+	m.mu.Lock()
+	rooms := make([]*chatRoom, 0, len(m.rooms))
+	for _, r := range m.rooms {
+		rooms = append(rooms, r)
+	}
+	m.mu.Unlock()
+	for _, r := range rooms {
+		r.broadcast(map[string]any{"type": "chat_limit", "max_parallel": n})
+		r.kickQueue()
+	}
 }
 
 func (m *chatManager) room(sessID string) *chatRoom {
@@ -297,7 +319,7 @@ func (t *chatTurn) tryBegin() bool {
 
 var errChatBusy = errors.New("chat room busy")
 
-// errChatParallel is the workspace already running maxParallelChats threads.
+// errChatParallel is the workspace already running maxParallelChats() threads.
 var errChatParallel = errors.New("too many threads running")
 
 func (t *chatTurn) begin() error {
@@ -307,7 +329,7 @@ func (t *chatTurn) begin() error {
 	if t.running || t.held || r.exclusive {
 		return errChatBusy
 	}
-	if len(r.runningLocked()) >= maxParallelChats {
+	if len(r.runningLocked()) >= r.maxParallelChats() {
 		return errChatParallel
 	}
 	if r.srv != nil && r.srv.store != nil {
@@ -436,7 +458,7 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 	// off. Pages from before parallel threads read the top level, which
 	// describes the active thread.
 	running := room.runningStatus()
-	status := map[string]any{"type": "status", "state": "idle", "threads": running}
+	status := map[string]any{"type": "status", "state": "idle", "threads": running, "max_parallel": room.maxParallelChats()}
 	room.fileMu.Lock()
 	active := s.activeThread(sess)
 	room.fileMu.Unlock()

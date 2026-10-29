@@ -356,6 +356,7 @@ type Config struct {
 	Decision              DecisionConfig           `json:"decision"`
 	IdleTimeoutMin        int64                    `json:"idle_timeout_min"` // 会话空闲自动停机的分钟数；0 表示关闭
 	TurnTimeoutMin        int64                    `json:"turn_timeout_min"` // 单轮对话的时长上限（分钟），到时自动中断；0 为默认
+	MaxParallelChats      int64                    `json:"max_parallel_chats"` // 一个空间同时运行的对话线程数；0 为默认
 	TimeZone              string                   `json:"timezone"`         // IANA 时区；用于界面时间与用量筛选
 	Container             ContainerLimits          `json:"container"`
 	Tunnel                TunnelConfig             `json:"tunnel"`
@@ -396,6 +397,7 @@ func Load(path string) (*Config, error) {
 		ChatHistoryTimeoutSec: 120,
 		IdleTimeoutMin:        30, // 缺省 30 分钟空闲即停机；config 里显式写 0 可关闭
 		TurnTimeoutMin:        DefaultTurnTimeoutMin,
+		MaxParallelChats:      DefaultMaxParallelChats,
 		TimeZone:              DefaultTimeZone,
 		Container: ContainerLimits{
 			MemoryMB:  2048,
@@ -544,6 +546,9 @@ func (c *Config) validateLocked() error {
 	}
 	if c.TurnTimeoutMin != 0 && (c.TurnTimeoutMin < MinTurnTimeoutMin || c.TurnTimeoutMin > MaxTurnTimeoutMin) {
 		return fmt.Errorf("turn_timeout_min must be between %d and %d", MinTurnTimeoutMin, MaxTurnTimeoutMin)
+	}
+	if c.MaxParallelChats != 0 && (c.MaxParallelChats < 1 || c.MaxParallelChats > MaxParallelChatsLimit) {
+		return fmt.Errorf("max_parallel_chats must be between 1 and %d", MaxParallelChatsLimit)
 	}
 	if _, err := time.LoadLocation(c.TimeZone); err != nil {
 		return fmt.Errorf("timezone %q invalid: %w", c.TimeZone, err)
@@ -737,6 +742,7 @@ type persistConfig struct {
 	Decision              DecisionConfig           `json:"decision"`
 	IdleTimeoutMin        int64                    `json:"idle_timeout_min"`
 	TurnTimeoutMin        int64                    `json:"turn_timeout_min"`
+	MaxParallelChats      int64                    `json:"max_parallel_chats"`
 	TimeZone              string                   `json:"timezone"`
 	Container             ContainerLimits          `json:"container"`
 	Tunnel                TunnelConfig             `json:"tunnel"`
@@ -778,6 +784,7 @@ func (c *Config) saveLocked() error {
 		Decision:              c.Decision.normalized(),
 		IdleTimeoutMin:        c.IdleTimeoutMin,
 		TurnTimeoutMin:        c.TurnTimeoutMin,
+		MaxParallelChats:      c.MaxParallelChats,
 		TimeZone:              c.TimeZone,
 		Container:             c.Container,
 		Tunnel:                c.Tunnel,
@@ -915,6 +922,25 @@ func (c *Config) GetTurnTimeout() time.Duration {
 		return DefaultTurnTimeoutMin * time.Minute
 	}
 	return time.Duration(c.TurnTimeoutMin) * time.Minute
+}
+
+// Bounds of the chat threads one workspace runs at once. Every running thread
+// is a CLI process in the same container, sharing its memory and CPUs, so the
+// default stays small; deployments giving workspaces more memory raise it.
+const (
+	DefaultMaxParallelChats = 3
+	MaxParallelChatsLimit   = 10
+)
+
+// GetMaxParallelChats returns how many chat threads of one workspace may run
+// turns at the same time. Configs built in code without Load use the default.
+func (c *Config) GetMaxParallelChats() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.MaxParallelChats == 0 {
+		return DefaultMaxParallelChats
+	}
+	return int(c.MaxParallelChats)
 }
 
 // GetTimeZone returns the configured IANA timezone. The fallback also covers
@@ -1146,6 +1172,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 		Decision:              c.Decision.normalized(),
 		IdleTimeoutMin:        c.IdleTimeoutMin,
 		TurnTimeoutMin:        c.TurnTimeoutMin,
+		MaxParallelChats:      c.MaxParallelChats,
 		TimeZone:              c.TimeZone,
 		Container:             c.Container,
 		Tunnel:                c.Tunnel,
@@ -1200,6 +1227,7 @@ func (c *Config) mutate(fn func(*Config) error) error {
 	c.Decision = work.Decision.Clone()
 	c.IdleTimeoutMin = work.IdleTimeoutMin
 	c.TurnTimeoutMin = work.TurnTimeoutMin
+	c.MaxParallelChats = work.MaxParallelChats
 	c.TimeZone = work.TimeZone
 	c.Container = work.Container
 	c.Resources = work.Resources
@@ -1239,6 +1267,7 @@ type SettingsPatch struct {
 	DesktopSync           *bool                    `json:"desktop_sync_enabled"`
 	IdleTimeoutMin        *int64                   `json:"idle_timeout_min"`
 	TurnTimeoutMin        *int64                   `json:"turn_timeout_min"`
+	MaxParallelChats      *int64                   `json:"max_parallel_chats"`
 	TimeZone              *string                  `json:"timezone"`
 	Container             *ContainerLimits         `json:"container"`
 	Models                map[string][]ModelOption `json:"models"`
@@ -1292,6 +1321,9 @@ func (c *Config) ApplySettings(p SettingsPatch) error {
 		}
 		if p.TurnTimeoutMin != nil {
 			w.TurnTimeoutMin = *p.TurnTimeoutMin
+		}
+		if p.MaxParallelChats != nil {
+			w.MaxParallelChats = *p.MaxParallelChats
 		}
 		if p.TimeZone != nil {
 			w.TimeZone = strings.TrimSpace(*p.TimeZone)

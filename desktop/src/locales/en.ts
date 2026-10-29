@@ -85,7 +85,7 @@ export default {
   "请稍后再登录；忘记密码请联系管理员。": "Try signing in later. Contact an administrator if you forgot your password.",
   "请稍后重新连接并核对任务状态。": "Reconnect later and check the task status.",
   "请等待当前回合完成，或先中断当前回合。": "Wait for the current turn to finish, or interrupt it first.",
-  "这个工作空间已有 3 个对话在运行，请等其中一个完成或中断后再发送。": "Three conversations are already running in this workspace. Wait for one to finish or stop it, then send again.",
+  "这个工作空间同时运行的对话已达上限，请等其中一个完成或中断后再发送。": "This workspace is already running as many conversations as allowed. Wait for one to finish or stop it, then send again.",
   "请继续原创建流程，或明确开始新的创建。": "Continue the original creation, or explicitly start a new one.",
   "请联系实例管理员处理。": "Contact your instance administrator.",
   "请联系管理员充值后再继续。": "Ask an administrator to add credit before continuing.",

@@ -43,3 +43,31 @@ func TestTurnTimeoutSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestMaxParallelChatsSettings(t *testing.T) {
+	c := writeConfig(t, `{"auth_token":"fixture-secret"}`)
+	if c.GetMaxParallelChats() != DefaultMaxParallelChats {
+		t.Fatal("a missing setting must default to three threads")
+	}
+	n := int64(6)
+	if err := c.ApplySettings(SettingsPatch{MaxParallelChats: &n}); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := Load(c.path)
+	if err != nil || reloaded.GetMaxParallelChats() != 6 {
+		t.Fatalf("setting lost after reload: %v", err)
+	}
+	for _, invalid := range []int64{-1, MaxParallelChatsLimit + 1} {
+		if err := c.ApplySettings(SettingsPatch{MaxParallelChats: &invalid}); err == nil {
+			t.Fatalf("accepted invalid limit: %d", invalid)
+		}
+		if c.GetMaxParallelChats() != 6 {
+			t.Fatal("invalid patch changed memory")
+		}
+	}
+	for _, bound := range []int64{1, MaxParallelChatsLimit} {
+		if err := c.ApplySettings(SettingsPatch{MaxParallelChats: &bound}); err != nil {
+			t.Fatalf("valid boundary %d rejected: %v", bound, err)
+		}
+	}
+}

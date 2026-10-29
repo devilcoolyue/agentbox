@@ -101,6 +101,17 @@ export async function chatParallelSmoke(page, { setHistory, send, setThread }) {
  assert.equal(await page.locator('#dlg-ask[open]').count(), 0);
  await page.keyboard.press('Escape');
 
+ // The limit comes from the server (max_parallel_chats): the join status
+ // carries it and a settings change pushes chat_limit; junk keeps the last.
+ const limit = () => page.evaluate(async () => (await import('/_v/{{BUILD}}/js/features/chat/running.js')).maxParallelChats());
+ send({type:'chat_limit', max_parallel:5});
+ await until(async () => (await limit()) === 5, 'chat_limit not applied');
+ send({type:'chat_limit', max_parallel:0});
+ send({type:'status', state:'idle', threads:{}, max_parallel:4});
+ await until(async () => (await limit()) === 4, 'status max_parallel not applied');
+ send({type:'status', state:'idle', threads:{}, max_parallel:3});
+ await until(async () => (await limit()) === 3, 'limit not restored');
+
  // Clean up: no thread runs, the fixture thread is cleared.
  send({type:'status', state:'idle', threads:{}});
  await page.unroute('**/api/sessions/*/chat/threads**', threadsRoute);
@@ -108,5 +119,5 @@ export async function chatParallelSmoke(page, { setHistory, send, setThread }) {
  setHistory([]);
  await reloadThread();
  await badge.waitFor({state:'hidden'});
- console.log('Chat parallel: other threads marked not drawn, list running rows, switch while running restores state and timer, finish toast, join snapshot per thread, running thread not deletable passed');
+ console.log('Chat parallel: other threads marked not drawn, list running rows, switch while running restores state and timer, finish toast, join snapshot per thread, running thread not deletable, server-set limit passed');
 }

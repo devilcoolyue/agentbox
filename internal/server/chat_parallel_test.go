@@ -157,13 +157,13 @@ func TestChatThreadsRunSideBySide(t *testing.T) {
 	}
 }
 
-// The workspace runs at most maxParallelChats threads. A plain send beyond it
+// The workspace runs at most max_parallel_chats threads (3 by default). A plain send beyond it
 // is refused; a follow-up waits in its queue and starts when a slot frees.
 func TestChatParallelLimitQueuesFollowUps(t *testing.T) {
 	f := newAgentReceiptFixture(t, config.AgentClaude, claudeSuggestionOutput, false)
 	room := f.s.chat.room(f.sess.ID)
 	var busy []*chatTurn
-	for i := 0; i < maxParallelChats; i++ {
+	for i := 0; i < config.DefaultMaxParallelChats; i++ {
 		other := room.turn("busy-" + string(rune('a'+i)))
 		if err := other.begin(); err != nil {
 			t.Fatal(err)
@@ -238,4 +238,59 @@ func TestChatThreadConversationsStayApart(t *testing.T) {
 	if got := (chatRuntime{active}).Conversation(sess, active.thread); got != "conv-active" {
 		t.Fatal("active thread resumes", got)
 	}
+}
+
+// max_parallel_chats is read on every admission: raising it starts a request
+// queued for a free slot without waiting for a running turn to end, and
+// lowering it refuses new turns while the running ones carry on.
+func TestChatParallelLimitFollowsSettings(t *testing.T) {
+	f := newAgentReceiptFixture(t, config.AgentClaude, claudeSuggestionOutput, false)
+	room := f.s.chat.room(f.sess.ID)
+	var busy []*chatTurn
+	for i := 0; i < config.DefaultMaxParallelChats; i++ {
+		other := room.turn("busy-" + string(rune('a'+i)))
+		if err := other.begin(); err != nil {
+			t.Fatal(err)
+		}
+		busy = append(busy, other)
+	}
+	in := f.input
+	in.Delivery = store.DeliveryQueue
+	id := newOperationID()
+	if c := receiptFrom(t, f.request("PUT", "requests/"+id, "alice", in)); c.State != store.ChatQueued {
+		t.Fatal("follow-up not queued at the limit", c)
+	}
+	// The kick after queueing finds every slot taken; it must be done before
+	// the limit grows, or it would start the request by itself.
+	time.Sleep(300 * time.Millisecond)
+	if c, err := f.s.store.ChatRequest(f.u, f.sess.ID, id); err != nil || c.State != store.ChatQueued {
+		t.Fatal("follow-up left the queue with every slot taken", c.State, err)
+	}
+	four := int64(4)
+	if err := f.s.cfg.ApplySettings(config.SettingsPatch{MaxParallelChats: &four}); err != nil {
+		t.Fatal(err)
+	}
+	f.s.chat.parallelLimitChanged()
+	f.unblock()
+	if c := f.wait2(t, id, room); c.State != store.ChatCompleted {
+		t.Fatal("raised limit did not start the queued request", c)
+	}
+
+	one := int64(1)
+	if err := f.s.cfg.ApplySettings(config.SettingsPatch{MaxParallelChats: &one}); err != nil {
+		t.Fatal(err)
+	}
+	if err := room.turn("late").begin(); err != errChatParallel {
+		t.Fatal("ran past a lowered limit", err)
+	}
+	for _, other := range busy {
+		if !room.threadRunning(other.thread) {
+			t.Fatal("lowering the limit stopped a running turn")
+		}
+		other.end()
+	}
+	if err := room.turn("late").begin(); err != nil {
+		t.Fatal("a free slot under the lowered limit was refused", err)
+	}
+	room.turn("late").end()
 }

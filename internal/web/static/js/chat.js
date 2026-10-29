@@ -44,7 +44,7 @@ import { followMode, followupDefault, setFollowupDefault } from "./features/chat
 import { initComposerDrafts } from "./features/chat/drafts.js";
 import { initChatOutbox } from "./features/chat/outbox.js";
 import { createSuggestion, suggestionOf, latestSuggestion, suggestionsEnabled, setSuggestionsEnabled } from "./features/chat/suggestion.js";
-import { MAX_PARALLEL_CHATS, noteThreadState, resetRunning, runningCount, runningThread, setRunningSnapshot } from "./features/chat/running.js";
+import { maxParallelChats, noteThreadState, setMaxParallelChats, resetRunning, runningCount, runningThread, setRunningSnapshot } from "./features/chat/running.js";
 let drafts;
 let delegationComposer;
 let outbox;
@@ -230,6 +230,12 @@ function backgroundThreadMsg(thread, msg) {
     }
 }
 function handleChatMsg(msg) {
+    if (msg.type === "chat_limit") {
+        setMaxParallelChats(msg.max_parallel);
+        return;
+    }
+    if (msg.type === "status" && msg.max_parallel !== undefined)
+        setMaxParallelChats(msg.max_parallel);
     // 连接（含重连）时的快照列着所有正在运行的对话；顶层只描述服务端的当前对话，
     // 本页看的若是另一个，就按快照里它自己的状态来。
     if (msg.type === "status" && msg.threads && typeof msg.threads === "object") {
@@ -563,8 +569,8 @@ const followupsOpen = () => S.chatState === "running" && S.chatFollowups === 1 &
 /* 5 小时额度暂停（server/quota_pause.go）：重置前发送的消息排队，重置后自动执行 */
 let quotaPause = null;
 const pausedQueue = () => quotaPause && quotaPause.resets_at > Date.now() && S.chatFollowups === 1 && !!outbox?.enabled && !outbox.unsupported ? quotaPause : null;
-/* 空间里已有 3 个对话在跑（服务端上限）：本对话空闲时发出的消息排队，有空位自动开始 */
-const parallelFull = () => S.chatState !== "running" && !runningThread(viewThread()) && runningCount() >= MAX_PARALLEL_CHATS && S.chatFollowups === 1 && !!outbox?.enabled && !outbox.unsupported;
+/* 空间里在跑的对话已达服务端上限（系统设置可调，默认 3）：本对话空闲时发出的消息排队，有空位自动开始 */
+const parallelFull = () => S.chatState !== "running" && !runningThread(viewThread()) && runningCount() >= maxParallelChats() && S.chatFollowups === 1 && !!outbox?.enabled && !outbox.unsupported;
 async function sendFollow(mode) {
     if (!followupsOpen() || sendingFollow)
         return;
@@ -1579,7 +1585,7 @@ export function initChat() {
             void drafts?.validate();
             return true;
         },
-        followed: how => toast(how === "steered" ? i18nText("已插入当前任务，当前步骤结束后生效") : pausedQueue() ? i18nText("已排队，5 小时额度重置后自动执行") : S.chatState !== "running" && runningCount() >= MAX_PARALLEL_CHATS ? i18nText("已有 3 个对话在运行，已排队，空出位置后自动执行") : i18nText("已排队，这一轮结束后自动执行")),
+        followed: how => toast(how === "steered" ? i18nText("已插入当前任务，当前步骤结束后生效") : pausedQueue() ? i18nText("已排队，5 小时额度重置后自动执行") : S.chatState !== "running" && runningCount() >= maxParallelChats() ? i18nText("已有 {p0} 个对话在运行，已排队，空出位置后自动执行", { p0: String(maxParallelChats()) }) : i18nText("已排队，这一轮结束后自动执行")),
         paused: () => !!pausedQueue(),
     });
     window.matchMedia("(max-width: 760px)").addEventListener("change", updateChatPlaceholder, { signal: lifetime.signal });
