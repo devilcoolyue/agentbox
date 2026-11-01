@@ -1,0 +1,954 @@
+#!/usr/bin/env python3
+"""abox-remote: run commands, long jobs and file transfers on the user's own machine over SSH.
+
+Shipped by agentbox in every workspace home (built-in home template). The machine is
+normally reached through the abox-link tunnel as self.abox-link, so no LAN address is
+needed. Nothing is installed on the remote side: each call sends a small sh or
+PowerShell runtime along with the request. Design: docs/architecture/remote-host.md.
+"""
+import argparse
+import base64
+import hashlib
+import json
+import os
+import posixpath
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+import tarfile
+import time
+
+STATE = os.environ.get("ABOX_REMOTE_HOME") or ("/shared/.abox-remote" if os.path.isdir("/shared") else os.path.expanduser("~/.abox-remote"))
+HOSTS = os.path.join(STATE, "hosts.json")
+SELF_HOST = "self.abox-link"
+BIG_FILE = 32 << 20  # single files above this use the resumable ranged transfer
+CHUNK = 8 << 20
+WARN_BYTES = 1 << 30
+
+EXIT_CANCELED, EXIT_LOST, EXIT_TIMEOUT, EXIT_SSH = 130, 69, 124, 255
+
+
+def die(msg, code=1):
+    print(f"abox-remote: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def note(msg):
+    print(msg, file=sys.stderr, flush=True)
+
+
+# ---------------------------------------------------------------- remote runtimes
+#
+# POSIX: the runtime travels as the argument of `sh -c`, so stdin stays free for
+# file data. The login shell must accept POSIX quoting (sh, bash, zsh, dash).
+
+SH_RUNTIME = r'''
+set -u
+die() { printf 'abox-remote: %s\n' "$*" >&2; exit 97; }
+case $ROOT in
+  "~") ROOT=$HOME ;;
+  "~/"*) ROOT=$HOME/${ROOT#"~/"} ;;
+  /*) ;;
+  *) ROOT=$HOME/$ROOT ;;
+esac
+mkdir -p "$ROOT/.abox-remote/jobs" 2>/dev/null || die "cannot create $ROOT"
+cd "$ROOT" || die "cannot enter $ROOT"
+J=$ROOT/.abox-remote/jobs
+case $OP in exec|start|cancel)
+  printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$OP" "$(printf '%s' "${ID:-} ${CMD:-}" | tr '\n' ' ' | cut -c1-500)" >>"$ROOT/.abox-remote/audit.log" ;;
+esac
+sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+jesc() { printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+pstart() { ps -o lstart= -p "$1" 2>/dev/null | tr -s ' '; }
+num() { v=$(cat "$1" 2>/dev/null); case $v in ''|*[!0-9-]*) echo null ;; *) echo "$v" ;; esac; }
+jstate() {
+  d=$J/$1
+  if [ -f "$d/exit" ]; then
+    if [ -f "$d/canceled" ]; then echo canceled; elif [ "$(cat "$d/exit")" = 0 ]; then echo succeeded; else echo failed; fi
+    return
+  fi
+  if [ -f "$d/pid" ]; then
+    p=$(cat "$d/pid")
+    if kill -0 "$p" 2>/dev/null && [ "$(pstart "$p")" = "$(cat "$d/pstart" 2>/dev/null)" ]; then echo running; return; fi
+  fi
+  if [ -f "$d/canceled" ]; then echo canceled; else echo lost; fi
+}
+jstatus() {
+  d=$J/$1
+  [ -d "$d" ] || die "no job $1"
+  printf '{"id":"%s","name":"%s","state":"%s","exit":%s,"started":%s,"ended":%s}\n' \
+    "$1" "$(jesc "$(cat "$d/name" 2>/dev/null)")" "$(jstate "$1")" "$(num "$d/exit")" "$(num "$d/started")" "$(num "$d/ended")"
+}
+detach() {
+  if command -v setsid >/dev/null 2>&1; then
+    nohup setsid "$@" </dev/null >/dev/null 2>&1 &
+  elif command -v perl >/dev/null 2>&1; then
+    nohup perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or die' "$@" </dev/null >/dev/null 2>&1 &
+  else
+    nohup "$@" </dev/null >/dev/null 2>&1 &
+  fi
+}
+case $OP in
+probe)
+  printf '{"os":"%s","root":"%s"}\n' "$(jesc "$(uname -s)")" "$(jesc "$ROOT")"
+  [ -w "$ROOT" ] || die "$ROOT is not writable"
+  ;;
+exec)
+  exec sh -c "$CMD" </dev/null
+  ;;
+start)
+  d=$J/$ID
+  mkdir "$d" || die "job $ID already exists"
+  printf '%s' "$NAME" >"$d/name"
+  printf '%s\n' "$CMD" >"$d/cmd.sh"
+  date +%s >"$d/started"
+  cat >"$d/run.sh" <<'RUNNER'
+d=$1; cd "$2" || exit 97
+echo $$ >"$d/pid.tmp"; ps -o lstart= -p $$ 2>/dev/null | tr -s ' ' >"$d/pstart"; mv "$d/pid.tmp" "$d/pid"
+sh "$d/cmd.sh" >"$d/out.log" 2>"$d/err.log" </dev/null
+c=$?
+date +%s >"$d/ended"; echo $c >"$d/exit.tmp"; mv "$d/exit.tmp" "$d/exit"
+RUNNER
+  detach sh "$d/run.sh" "$d" "$ROOT"
+  i=0
+  while [ ! -f "$d/pid" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+  [ -f "$d/pid" ] || die "job $ID did not start"
+  jstatus "$ID"
+  ;;
+status) jstatus "$ID" ;;
+list)
+  for d in $(ls -1 "$J" 2>/dev/null | tail -n "$N"); do jstatus "$d"; done
+  ;;
+log)
+  d=$J/$ID
+  [ -d "$d" ] || die "no job $ID"
+  for f in out.log err.log; do
+    if [ -s "$d/$f" ]; then printf -- '--- %s\n' "$f"; tail -n "$N" "$d/$f"; fi
+  done
+  ;;
+cancel)
+  d=$J/$ID
+  [ -d "$d" ] || die "no job $ID"
+  if [ "$(jstate "$ID")" = running ]; then
+    touch "$d/canceled"
+    p=$(cat "$d/pid")
+    # The runner leads its own process group (setsid); dash's kill takes no "--".
+    kill -TERM -"$p" 2>/dev/null || { pkill -TERM -P "$p" 2>/dev/null; kill -TERM "$p" 2>/dev/null; }
+    i=0
+    while kill -0 "$p" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+    kill -KILL -"$p" 2>/dev/null || kill -KILL "$p" 2>/dev/null
+  fi
+  jstatus "$ID"
+  ;;
+stat)
+  if [ -d "$P" ]; then echo '{"type":"dir"}'
+  elif [ -f "$P" ]; then printf '{"type":"file","size":%s}\n' "$(wc -c <"$P" | tr -d ' ')"
+  else echo '{"type":"none"}'; fi
+  ;;
+partsize)
+  if [ -f "$P.abox-part" ]; then wc -c <"$P.abox-part" | tr -d ' '; else echo 0; fi
+  ;;
+write)
+  mkdir -p "$(dirname "$P")" || die "cannot create $(dirname "$P")"
+  [ "$OFF" = 0 ] && : >"$P.abox-part"
+  cat >>"$P.abox-part"
+  ;;
+commit)
+  [ "$(sha "$P.abox-part")" = "$SHA" ] || { rm -f "$P.abox-part"; die "checksum mismatch for $P; push again"; }
+  mv -f "$P.abox-part" "$P"
+  ;;
+read) tail -c +"$((OFF + 1))" "$P" ;;
+hash) sha "$P" ;;
+untar)
+  mkdir -p "$P" || die "cannot create $P"
+  tar xzf - -C "$P"
+  ;;
+tar)
+  cd "$(dirname "$P")" && tar czf - "$(basename "$P")"
+  ;;
+*) die "unknown op $OP" ;;
+esac
+'''
+
+# Windows: the SSH command line is a short fixed bootstrap (cmd.exe caps command
+# lines at 8191 characters). It reads "<length>\n<UTF-8 script>" from stdin and
+# runs the script; whatever follows on stdin is file data for the op.
+
+PS_BOOT = r'''$in=[Console]::OpenStandardInput()
+$h=New-Object System.Collections.Generic.List[byte]
+while(($c=$in.ReadByte()) -ne 10){if($c -lt 0){exit 98};$h.Add([byte]$c)}
+$n=[int][Text.Encoding]::ASCII.GetString($h.ToArray());$b=New-Object byte[] $n;$o=0
+while($o -lt $n){$r=$in.Read($b,$o,$n-$o);if($r -le 0){exit 98};$o+=$r}
+$global:AboxIn=$in
+. ([scriptblock]::Create([Text.Encoding]::UTF8.GetString($b)))'''
+
+PS_RUNTIME = r'''
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+# pwsh 7 colors error records even when stderr is a pipe; logs should stay plain.
+if ($PSStyle) { $PSStyle.OutputRendering = 'PlainText'; $PSStyle.Formatting.Error = ''; $PSStyle.Formatting.ErrorAccent = '' }
+$utf8 = New-Object Text.UTF8Encoding $false
+[Console]::OutputEncoding = $utf8
+function Fail([string]$m) { [Console]::Error.WriteLine("abox-remote: $m"); exit 97 }
+$OnWindows = ($PSVersionTable.PSVersion.Major -lt 6) -or $IsWindows
+if ($ROOT -eq '~') { $ROOT = $HOME }
+elseif ($ROOT -match '^~[\\/]') { $ROOT = Join-Path $HOME $ROOT.Substring(2) }
+elseif (-not [IO.Path]::IsPathRooted($ROOT)) { $ROOT = Join-Path $HOME $ROOT }
+$J = Join-Path $ROOT '.abox-remote/jobs'
+try { [void][IO.Directory]::CreateDirectory($J) } catch { Fail "cannot create $ROOT" }
+Set-Location -LiteralPath $ROOT
+[Environment]::CurrentDirectory = $ROOT
+if ('exec', 'start', 'cancel' -contains $OP) {
+  $what = ("$(Get-Variable ID -ValueOnly -ErrorAction SilentlyContinue) $(Get-Variable CMD -ValueOnly -ErrorAction SilentlyContinue)" -replace '[\r\n]+', ' ')
+  if ($what.Length -gt 500) { $what = $what.Substring(0, 500) }
+  [IO.File]::AppendAllText((Join-Path $ROOT '.abox-remote/audit.log'), ([DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ') + " $OP $what`n"))
+}
+function Out-Line([string]$s) { [Console]::Out.Write($s + "`n") }
+function Read-Opt([string]$p) { if (Test-Path -LiteralPath $p) { ([IO.File]::ReadAllText($p)).Trim() } else { $null } }
+function Write-Atomic([string]$p, [string]$v) { [IO.File]::WriteAllText("$p.tmp", $v); Move-Item -LiteralPath "$p.tmp" -Destination $p -Force }
+function Job-Dir([string]$id) { $d = Join-Path $J $id; if (-not (Test-Path -LiteralPath $d)) { Fail "no job $id" }; $d }
+function Job-Alive([string]$d) {
+  $p = Read-Opt (Join-Path $d 'pid'); if (-not $p) { return $false }
+  $proc = Get-Process -Id ([int]$p) -ErrorAction SilentlyContinue
+  if (-not $proc) { return $false }
+  # Same pid and start time = same process (not a reused pid). Linux .NET derives
+  # StartTime from jiffies, so allow a second of jitter.
+  try { return [Math]::Abs($proc.StartTime.ToUniversalTime().Ticks - [long](Read-Opt (Join-Path $d 'pstart'))) -lt 10000000 } catch { return $false }
+}
+function Job-State([string]$d) {
+  $exit = Read-Opt (Join-Path $d 'exit')
+  $canceled = Test-Path -LiteralPath (Join-Path $d 'canceled')
+  if ($null -ne $exit) { if ($canceled) { return 'canceled' }; if ($exit -eq '0') { return 'succeeded' }; return 'failed' }
+  if (Job-Alive $d) { return 'running' }
+  if ($canceled) { return 'canceled' }
+  'lost'
+}
+function Job-Status([string]$id) {
+  $d = Job-Dir $id
+  $o = [ordered]@{ id = $id; name = (Read-Opt (Join-Path $d 'name')); state = (Job-State $d) }
+  foreach ($k in 'exit', 'started', 'ended') { $v = Read-Opt (Join-Path $d $k); $o[$k] = $(if ($null -ne $v) { [long]$v } else { $null }) }
+  Out-Line (ConvertTo-Json -Compress -InputObject $o)
+}
+function Ps-Exe { (Get-Process -Id $PID).Path }
+function Spawn([string]$exe, [string[]]$argv, [string]$cwd) {
+  if (-not $OnWindows) {
+    $q = ($argv | ForEach-Object { "'" + ($_ -replace "'", "'\''") + "'" }) -join ' '
+    & /bin/sh -c ("cd '" + ($cwd -replace "'", "'\''") + "' && nohup setsid '$exe' $q </dev/null >/dev/null 2>&1 &")
+    return
+  }
+  if (-not ('AboxSpawn' -as [type])) {
+    Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices; using System.Text;
+public static class AboxSpawn {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  struct SI { public int cb; public string r, d, t; public int x, y, xs, ys, xc, yc, fa, fl; public short sw, r2; public IntPtr r3, i, o, e; }
+  [StructLayout(LayoutKind.Sequential)] struct PI { public IntPtr hp, ht; public int pid, tid; }
+  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+  static extern bool CreateProcessW(string app, StringBuilder cmd, IntPtr pa, IntPtr ta, bool inherit, uint flags, IntPtr env, string cwd, ref SI si, out PI pi);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+  public static int Start(string cmd, string cwd, bool breakaway) {
+    SI si = new SI(); si.cb = Marshal.SizeOf(typeof(SI)); PI pi;
+    uint f = 0x08000000u | 0x00000200u | (breakaway ? 0x01000000u : 0u);
+    if (!CreateProcessW(null, new StringBuilder(cmd), IntPtr.Zero, IntPtr.Zero, false, f, IntPtr.Zero, cwd, ref si, out pi)) return -Marshal.GetLastWin32Error();
+    CloseHandle(pi.hp); CloseHandle(pi.ht); return pi.pid;
+  }
+}
+"@
+  }
+  # Windows paths hold no quotes; only trailing backslashes need doubling so the
+  # closing quote is not escaped (a root such as D:\).
+  $line = (@($exe) + $argv | ForEach-Object { '"' + ($_ -replace '(\\+)$', '$1$1') + '"' }) -join ' '
+  # sshd puts the session in a job object that is killed on disconnect; breaking
+  # away keeps the job alive. Fall back (with a warning) where the job forbids it.
+  $r = [AboxSpawn]::Start($line, $cwd, $true)
+  if ($r -eq -5) { [Console]::Error.WriteLine('abox-remote: warning: cannot break away from the SSH job; the job may stop if the connection drops'); $r = [AboxSpawn]::Start($line, $cwd, $false) }
+  if ($r -lt 0) { Fail "CreateProcess failed: error $(-$r)" }
+}
+function Open-Part([string]$p, [long]$off) {
+  $dir = Split-Path -Parent $p; if ($dir) { [void][IO.Directory]::CreateDirectory($dir) }
+  $f = New-Object IO.FileStream ("$p.abox-part"), ([IO.FileMode]::OpenOrCreate), ([IO.FileAccess]::Write)
+  $f.SetLength($off); [void]$f.Seek($off, 'Begin'); $f
+}
+function Sha([string]$p) { (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLower() }
+function Run-Tar([string[]]$a) { & tar @a; if ($LASTEXITCODE) { Fail "tar exited with $LASTEXITCODE" } }
+
+switch ($OP) {
+  'probe' {
+    $os = $(if ($OnWindows) { 'Windows' } else { (& uname -s) })
+    Out-Line (ConvertTo-Json -Compress -InputObject ([ordered]@{ os = $os; root = $ROOT; shell = (Ps-Exe); ps = $PSVersionTable.PSVersion.ToString() }))
+    $t = Join-Path $ROOT '.abox-remote/.probe'; try { [IO.File]::WriteAllText($t, 'ok'); Remove-Item -LiteralPath $t } catch { Fail "$ROOT is not writable" }
+  }
+  'exec' {
+    $global:LASTEXITCODE = 0
+    $ErrorActionPreference = 'Continue'
+    # Error records (including native stderr lines) go out as their plain message.
+    try {
+      . ([scriptblock]::Create($CMD)) 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { [Console]::Error.WriteLine($_.ToString()) } else { $_ } } |
+        Out-String -Stream -Width 4096  # without a console the width is 0 and tables render empty
+    } catch { [Console]::Error.WriteLine($_.ToString()); exit 1 }
+    exit $(if ($LASTEXITCODE) { $LASTEXITCODE } elseif ($?) { 0 } else { 1 })
+  }
+  'start' {
+    $d = Join-Path $J $ID
+    if (Test-Path -LiteralPath $d) { Fail "job $ID already exists" }
+    [void][IO.Directory]::CreateDirectory($d)
+    [IO.File]::WriteAllText((Join-Path $d 'name'), $NAME)
+    $head = "`$ErrorActionPreference = 'Stop'`n`$ProgressPreference = 'SilentlyContinue'`nif (`$PSStyle) { `$PSStyle.OutputRendering = 'PlainText'; `$PSStyle.Formatting.Error = ''; `$PSStyle.Formatting.ErrorAccent = '' }`n[Console]::OutputEncoding = New-Object Text.UTF8Encoding `$false`n" +
+      "if (`$PSVersionTable.PSVersion -ge [version]'7.3') { `$PSNativeCommandUseErrorActionPreference = `$true }`n" +
+      "trap { [Console]::Error.WriteLine('error: ' + `$_.Exception.Message + '  (at: ' + `$_.InvocationInfo.Line.Trim() + ')'); exit `$(if (`$LASTEXITCODE) { `$LASTEXITCODE } else { 1 }) }`n"
+    [IO.File]::WriteAllText((Join-Path $d 'cmd.ps1'), $head + "& {`n" + $CMD + "`n} | Out-String -Stream -Width 4096`nexit [int]`$LASTEXITCODE`n", (New-Object Text.UTF8Encoding $true))
+    [IO.File]::WriteAllText((Join-Path $d 'started'), [string][DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+    $runner = @'
+param([string]$D, [string]$Root)
+$me = Get-Process -Id $PID
+[IO.File]::WriteAllText("$D/pstart", [string]$me.StartTime.ToUniversalTime().Ticks)
+[IO.File]::WriteAllText("$D/pid.tmp", [string]$PID); Move-Item -LiteralPath "$D/pid.tmp" -Destination "$D/pid" -Force
+$psi = New-Object Diagnostics.ProcessStartInfo $me.Path
+$psi.Arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + (Join-Path $D 'cmd.ps1') + '"'
+$psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.RedirectStandardInput = $true
+$psi.WorkingDirectory = $Root; $psi.CreateNoWindow = $true
+$p = [Diagnostics.Process]::Start($psi); $p.StandardInput.Close()
+$o = [IO.File]::Create("$D/out.log"); $e = [IO.File]::Create("$D/err.log")
+$t1 = $p.StandardOutput.BaseStream.CopyToAsync($o); $t2 = $p.StandardError.BaseStream.CopyToAsync($e)
+$p.WaitForExit(); $t1.Wait(); $t2.Wait(); $o.Close(); $e.Close()
+[IO.File]::WriteAllText("$D/ended", [string][DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+[IO.File]::WriteAllText("$D/exit.tmp", [string]$p.ExitCode); Move-Item -LiteralPath "$D/exit.tmp" -Destination "$D/exit" -Force
+'@
+    [IO.File]::WriteAllText((Join-Path $d 'runner.ps1'), $runner, (New-Object Text.UTF8Encoding $true))
+    Spawn (Ps-Exe) @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $d 'runner.ps1'), $d, $ROOT) $ROOT
+    for ($i = 0; $i -lt 100 -and -not (Test-Path -LiteralPath (Join-Path $d 'pid')); $i++) { Start-Sleep -Milliseconds 100 }
+    if (-not (Test-Path -LiteralPath (Join-Path $d 'pid'))) { Fail "job $ID did not start" }
+    Job-Status $ID
+  }
+  'status' { Job-Status $ID }
+  'list' { Get-ChildItem -LiteralPath $J -Directory | Sort-Object Name | Select-Object -Last ([int]$N) | ForEach-Object { Job-Status $_.Name } }
+  'log' {
+    $d = Job-Dir $ID
+    foreach ($f in 'out.log', 'err.log') {
+      $p = Join-Path $d $f
+      if ((Test-Path -LiteralPath $p) -and (Get-Item -LiteralPath $p).Length) {
+        Out-Line "--- $f"
+        $lines = [IO.File]::ReadAllText($p) -split "[`r`n]+" | Where-Object { $_.Trim() }
+        $lines | Select-Object -Last ([int]$N) | ForEach-Object { Out-Line $_ }
+      }
+    }
+  }
+  'cancel' {
+    $d = Job-Dir $ID
+    if ((Job-State $d) -eq 'running') {
+      [IO.File]::WriteAllText((Join-Path $d 'canceled'), '')
+      $p = [int](Read-Opt (Join-Path $d 'pid'))
+      if ($OnWindows) { & taskkill.exe /PID $p /T /F *> $null } else { & /bin/kill -TERM -- "-$p" 2>$null; if ($LASTEXITCODE) { & /bin/kill -TERM $p } }
+      for ($i = 0; $i -lt 50 -and (Job-Alive $d); $i++) { Start-Sleep -Milliseconds 100 }
+      if (-not $OnWindows -and (Job-Alive $d)) { & /bin/kill -KILL -- "-$p" 2>$null }
+    }
+    Job-Status $ID
+  }
+  'stat' {
+    if (Test-Path -LiteralPath $P -PathType Container) { Out-Line '{"type":"dir"}' }
+    elseif (Test-Path -LiteralPath $P -PathType Leaf) { Out-Line ('{"type":"file","size":' + (Get-Item -LiteralPath $P).Length + '}') }
+    else { Out-Line '{"type":"none"}' }
+  }
+  'partsize' { if (Test-Path -LiteralPath "$P.abox-part") { Out-Line ([string](Get-Item -LiteralPath "$P.abox-part").Length) } else { Out-Line '0' } }
+  'write' { $f = Open-Part $P ([long]$OFF); try { $global:AboxIn.CopyTo($f) } finally { $f.Close() } }
+  'commit' {
+    if ((Sha "$P.abox-part") -ne $SHA) { Remove-Item -LiteralPath "$P.abox-part"; Fail "checksum mismatch for $P; push again" }
+    Move-Item -LiteralPath "$P.abox-part" -Destination $P -Force
+  }
+  'read' {
+    $f = [IO.File]::OpenRead((Resolve-Path -LiteralPath $P).Path)
+    try { [void]$f.Seek([long]$OFF, 'Begin'); $o = [Console]::OpenStandardOutput(); $f.CopyTo($o); $o.Flush() } finally { $f.Close() }
+  }
+  'hash' { Out-Line (Sha $P) }
+  'untar' {
+    [void][IO.Directory]::CreateDirectory((Join-Path $ROOT $P))
+    $tmp = Join-Path $ROOT ('.abox-remote/in-' + [guid]::NewGuid().ToString('N') + '.tgz')
+    $f = [IO.File]::Create($tmp)
+    try { $global:AboxIn.CopyTo($f) } finally { $f.Close() }
+    try { Run-Tar @('-xzf', $tmp, '-C', (Join-Path $ROOT $P)) } finally { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }
+  }
+  'tar' {
+    $tmp = Join-Path $ROOT ('.abox-remote/out-' + [guid]::NewGuid().ToString('N') + '.tgz')
+    $full = Join-Path $ROOT $P
+    try {
+      Run-Tar @('-czf', $tmp, '-C', (Split-Path -Parent $full), (Split-Path -Leaf $full))
+      $f = [IO.File]::OpenRead($tmp); try { $o = [Console]::OpenStandardOutput(); $f.CopyTo($o); $o.Flush() } finally { $f.Close() }
+    } finally { Remove-Item -LiteralPath $tmp -ErrorAction SilentlyContinue }
+  }
+  default { Fail "unknown op $OP" }
+}
+'''
+
+
+# ---------------------------------------------------------------- configuration
+
+def load_hosts():
+    try:
+        with open(HOSTS, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"default": "", "hosts": {}}
+
+
+def save_hosts(cfg):
+    os.makedirs(STATE, mode=0o700, exist_ok=True)
+    tmp = HOSTS + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, HOSTS)
+
+
+def pick_host(name):
+    cfg = load_hosts()
+    name = name or os.environ.get("ABOX_REMOTE_HOST") or cfg.get("default") or ""
+    if not name and len(cfg["hosts"]) == 1:
+        name = next(iter(cfg["hosts"]))
+    if not name:
+        die("no machine configured; run: abox-remote setup <name>" if not cfg["hosts"] else "several machines configured; pass -H <name>")
+    h = cfg["hosts"].get(name)
+    if not h:
+        die(f"unknown machine {name!r}; configured: {', '.join(cfg['hosts']) or 'none'}")
+    h = dict(h, name=name)
+    return h
+
+
+def key_path(name):
+    return os.path.join(STATE, "keys", name)
+
+
+def check_rel(p):
+    """Remote paths are relative to the machine's root; refuse escapes."""
+    p = p.replace("\\", "/")
+    if p.startswith("/") or (len(p) > 1 and p[1] == ":") or p.startswith("~"):
+        die(f"remote path must be relative to the machine's root: {p}")
+    norm = posixpath.normpath(p)
+    if norm == ".." or norm.startswith("../"):
+        die(f"remote path leaves the machine's root: {p}")
+    return norm
+
+
+# ---------------------------------------------------------------- transport
+
+def ssh_base(h):
+    return ["ssh", "-F", "/dev/null",
+            "-i", key_path(h["name"]), "-o", "IdentitiesOnly=yes",
+            "-o", "UserKnownHostsFile=" + os.path.join(STATE, "known_hosts"),
+            "-o", "StrictHostKeyChecking=" + ("accept-new" if h.get("tofu") else "yes"),
+            "-o", "BatchMode=yes", "-o", "ConnectTimeout=15",
+            "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4",
+            # Per container, not /shared: a master left behind by a stopped
+            # workspace must not block the others.
+            "-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/abox-remote-%C", "-o", "ControlPersist=60",
+            "-p", str(h.get("port", 22)), "-T", f"{h['user']}@{h['host']}"]
+
+
+def ps_quote(v):
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def remote(h, op, *, stdin=None, stdout=subprocess.PIPE, quiet=False, **params):
+    """Start one runtime op on the machine; returns the Popen (stdin open when stdin=PIPE)."""
+    params = dict(params, OP=op, ROOT=h.get("root") or "agentbox")
+    if h.get("os") == "windows":
+        head = "".join(f"${k} = {ps_quote(v)}\n" for k, v in params.items())
+        script = (head + PS_RUNTIME).encode("utf-8")
+        boot = base64.b64encode(PS_BOOT.encode("utf-16-le")).decode()
+        cmd = f"{h.get('ps') or 'powershell'} -NoLogo -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -EncodedCommand {boot}"
+        p = subprocess.Popen(ssh_base(h) + [cmd], stdin=subprocess.PIPE, stdout=stdout, stderr=subprocess.DEVNULL if quiet else None)
+        p.stdin.write(b"%d\n" % len(script) + script)
+        p.stdin.flush()
+        if stdin is None:
+            p.stdin.close()
+        return p
+    head = "".join(f"{k}={shlex.quote(str(v))}\n" for k, v in params.items())
+    cmd = "sh -c " + shlex.quote(head + SH_RUNTIME)
+    return subprocess.Popen(ssh_base(h) + [cmd], stdin=stdin if stdin is not None else subprocess.DEVNULL, stdout=stdout,
+                            stderr=subprocess.DEVNULL if quiet else None)
+
+
+def call(h, op, quiet=False, **params):
+    """Run an op to completion and return (exit code, stdout text)."""
+    p = remote(h, op, quiet=quiet, **params)
+    out = p.stdout.read()
+    return p.wait(), out.decode("utf-8", "replace")
+
+
+def call_json(h, op, **params):
+    code, out = call(h, op, **params)
+    if code == EXIT_SSH:
+        die("cannot reach the machine (ssh failed); run: abox-remote doctor", EXIT_SSH)
+    if code:
+        sys.exit(code)
+    try:
+        return [json.loads(l) for l in out.splitlines() if l.strip()]
+    except ValueError:
+        die(f"unexpected reply from the machine for {op}: {out.strip()[:200]}")
+
+
+# ---------------------------------------------------------------- setup / doctor
+
+GUIDE = """
+Public key for {name}; authorize this exact line on your machine ("restrict" turns off
+port, agent and X11 forwarding for this key):
+
+restrict {pub}
+
+Recommended: a dedicated normal account for agentbox that can only write its root
+folder, with sshd listening on 127.0.0.1 only (abox-link connects on loopback).
+
+  Linux    sudo apt install openssh-server   (or your distro's package)
+           sudo useradd -m {user}; append the line above to ~{user}/.ssh/authorized_keys
+           optional: ListenAddress 127.0.0.1 in /etc/ssh/sshd_config, then restart sshd
+  macOS    System Settings > General > Sharing > Remote Login (allow only that user);
+           append the line above to ~{user}/.ssh/authorized_keys
+  Windows  in an administrator PowerShell:
+             Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+             Set-Service sshd -StartupType Automatic; Start-Service sshd
+             New-LocalUser {user}     (a standard user, not an administrator)
+           append the line above to C:\\Users\\{user}\\.ssh\\authorized_keys
+           (administrator accounts use C:\\ProgramData\\ssh\\administrators_authorized_keys)
+           optional: ListenAddress 127.0.0.1 in C:\\ProgramData\\ssh\\sshd_config, Restart-Service sshd
+
+Then in abox-link tick "Allow agentbox to connect to this device over SSH"
+(it allows {host}:{port}) and run:  abox-remote doctor{flag}
+"""
+
+
+def cmd_setup(a):
+    cfg = load_hosts()
+    old = cfg["hosts"].get(a.name, {})
+    h = {"host": a.host or old.get("host") or SELF_HOST, "port": a.port or old.get("port") or 22,
+         "user": a.user or old.get("user") or "agentbox", "root": a.root or old.get("root") or "agentbox",
+         "os": old.get("os", ""), "ps": old.get("ps", ""), "tofu": old.get("tofu", True)}
+    os.makedirs(os.path.join(STATE, "keys"), mode=0o700, exist_ok=True)
+    k = key_path(a.name)
+    if not os.path.exists(k):
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", f"agentbox-{a.name}", "-f", k], check=True)
+    cfg["hosts"][a.name] = h
+    if a.default or not cfg.get("default"):
+        cfg["default"] = a.name
+    save_hosts(cfg)
+    with open(k + ".pub", encoding="utf-8") as f:
+        pub = f.read().strip()
+    flag = "" if cfg["default"] == a.name else f" -H {a.name}"
+    print(GUIDE.format(name=a.name, pub=pub, user=h["user"], host=h["host"], port=h["port"], flag=flag))
+
+
+def banner(host, port):
+    try:
+        with socket.create_connection((host, port), timeout=10) as s:
+            s.settimeout(10)
+            return s.recv(256)
+    except socket.gaierror:
+        return None
+    except OSError:
+        return b""
+
+
+def cmd_doctor(a):
+    h = pick_host(a.host)
+    ok = lambda m: print("ok   " + m)
+    bad = lambda m, code=1: (print("FAIL " + m), sys.exit(code))
+    print(f"{h['name']}: {h['user']}@{h['host']}:{h.get('port', 22)}, root {h.get('root') or 'agentbox'}")
+    b = banner(h["host"], h.get("port", 22))
+    if b is None:
+        bad(f"cannot resolve {h['host']}: transparent intranet access is off in this workspace, or the rule is not allowed in abox-link")
+    if not b.startswith(b"SSH-"):
+        bad("no SSH greeting: the abox-link tunnel is offline, the target is not allowed in abox-link, or sshd is not running on the machine")
+    ok("tunnel and sshd: " + b.decode("ascii", "replace").strip())
+    if not os.path.exists(key_path(h["name"])):
+        bad(f"no key; run: abox-remote setup {h['name']}")
+    probe = subprocess.run(ssh_base(h) + ["echo abox-remote-ok"], capture_output=True, text=True)
+    if "abox-remote-ok" not in probe.stdout:
+        err = probe.stderr.strip().splitlines()[-1:] or ["?"]
+        bad("login failed: " + err[0] + "  (is the public key from `abox-remote setup` authorized for this user?)")
+    ok("login")
+    cfg = load_hosts()
+    rec = cfg["hosts"][h["name"]]
+    rec["tofu"] = False  # host key is pinned from now on
+    uname = subprocess.run(ssh_base(h) + ["uname -s"], capture_output=True, text=True)
+    # Git for Windows puts a uname on PATH; its login shell is still cmd or PowerShell.
+    if uname.returncode == 0 and uname.stdout.strip() and not uname.stdout.strip().upper().startswith(("MINGW", "MSYS", "CYGWIN")):
+        rec["os"], rec["ps"] = "posix", ""
+    else:
+        rec["os"] = "windows"
+        for ps in ("pwsh", "powershell"):
+            if subprocess.run(ssh_base(h) + [f"{ps} -NoProfile -NonInteractive -Command exit 0"], capture_output=True).returncode == 0:
+                rec["ps"] = ps
+                break
+        else:
+            bad("the machine is neither POSIX nor has PowerShell")
+    save_hosts(cfg)
+    h.update(rec)
+    info = call_json(h, "probe")[0]
+    ok(f"system {info.get('os')}" + (f", PowerShell {info.get('ps')}" if h["os"] == "windows" else ""))
+    ok(f"root {info.get('root')} is writable")
+
+
+# ---------------------------------------------------------------- commands and jobs
+
+def command_text(parts):
+    if parts and parts[0] == "--":
+        parts = parts[1:]
+    if not parts:
+        die("missing command")
+    return " ".join(parts)
+
+
+def cmd_exec(a):
+    h = pick_host(a.host)
+    p = remote(h, "exec", stdout=None, CMD=command_text(a.command))
+    code = p.wait()
+    if code == EXIT_SSH:
+        note("abox-remote: ssh failed or the connection dropped; run: abox-remote doctor")
+    sys.exit(code)
+
+
+def last_file(h):
+    return os.path.join(STATE, "last-" + h["name"])
+
+
+def job_id(h, given):
+    if given:
+        return given
+    try:
+        with open(last_file(h), encoding="utf-8") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        die("no job started yet; pass a job id")
+
+
+def show(st):
+    took = ""
+    if st.get("started"):
+        took = f"  {int((st.get('ended') or time.time()) - st['started'])}s"
+    code = "" if st.get("exit") is None else f"  exit {st['exit']}"
+    print(f"{st['id']}  {st['state']}{code}{took}")
+
+
+def cmd_run(a):
+    h = pick_host(a.host)
+    name = "".join(c if c.isalnum() or c in "-_" else "-" for c in a.name)[:40] or "job"
+    jid = time.strftime("%m%d-%H%M%S-") + name
+    st = call_json(h, "start", ID=jid, NAME=a.name, CMD=command_text(a.command))[0]
+    with open(last_file(h), "w", encoding="utf-8") as f:
+        f.write(jid)
+    print(jid)
+    if st["state"] != "running":
+        show(st)
+
+
+def cmd_status(a):
+    h = pick_host(a.host)
+    show(call_json(h, "status", ID=job_id(h, a.id))[0])
+
+
+def cmd_list(a):
+    h = pick_host(a.host)
+    for st in call_json(h, "list", N=a.n):
+        show(st)
+
+
+def cmd_log(a):
+    h = pick_host(a.host)
+    code, out = call(h, "log", ID=job_id(h, a.id), N=a.n)
+    sys.stdout.write(out)
+    sys.exit(code)
+
+
+def cmd_cancel(a):
+    h = pick_host(a.host)
+    show(call_json(h, "cancel", ID=job_id(h, a.id))[0])
+
+
+def final_code(st):
+    return {"succeeded": 0, "canceled": EXIT_CANCELED, "lost": EXIT_LOST}.get(st["state"], st.get("exit") or 1)
+
+
+def cmd_wait(a):
+    h = pick_host(a.host)
+    jid = job_id(h, a.id)
+    deadline = time.time() + a.timeout if a.timeout else None
+    delays, i, dropped = [2, 5, 15, 30], 0, False
+    while True:
+        # Polls stay quiet while the link is down; one line below says so.
+        code, out = call(h, "status", ID=jid, quiet=dropped)
+        if code == 0:
+            if dropped:
+                note("abox-remote: reconnected")
+                dropped = False
+            st = json.loads(out.strip().splitlines()[-1])
+            if st["state"] not in ("running", "starting"):
+                show(st)
+                lc, log = call(h, "log", ID=jid, N=a.n)
+                sys.stdout.write(log)
+                sys.stdout.flush()
+                if st["state"] == "lost":
+                    note("abox-remote: the job stopped without recording an exit code (killed, crashed, or the machine restarted); read the log before rerunning")
+                sys.exit(final_code(st))
+        elif code == EXIT_SSH:
+            if not dropped:
+                note("abox-remote: connection lost, retrying (the job keeps running on the machine)")
+                dropped = True
+        else:
+            sys.exit(code)
+        if deadline and time.time() >= deadline:
+            note(f"abox-remote: {jid} is still running; wait again later")
+            sys.exit(EXIT_TIMEOUT)
+        delay = delays[min(i, len(delays) - 1)]
+        i += 1
+        time.sleep(min(delay, max(1, deadline - time.time())) if deadline else delay)
+
+
+# ---------------------------------------------------------------- transfers
+
+def sha256_file(path):
+    d = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(CHUNK), b""):
+            d.update(b)
+    return d.hexdigest()
+
+
+def tree_size(paths):
+    total = 0
+    for p in paths:
+        if os.path.isfile(p):
+            total += os.path.getsize(p)
+        for root, _, files in os.walk(p):
+            total += sum(os.path.getsize(os.path.join(root, f)) for f in files if os.path.isfile(os.path.join(root, f)))
+    return total
+
+
+def warn_size(n):
+    if n > WARN_BYTES:
+        note(f"abox-remote: {n / (1 << 30):.1f} GiB goes through the agentbox server; keep large data on the machine when you can")
+
+
+def retrying(what, attempt):
+    for i in range(5):
+        code = attempt()
+        if code == 0:
+            return
+        if code != EXIT_SSH:
+            sys.exit(code)
+        note(f"abox-remote: {what} interrupted, resuming ({i + 1}/5)")
+        time.sleep(3)
+    die(f"{what} failed after 5 attempts", EXIT_SSH)
+
+
+def push_file(h, local, dest):
+    size = os.path.getsize(local)
+    warn_size(size)
+
+    def attempt():
+        code, out = call(h, "partsize", P=dest)
+        if code:
+            return code
+        off = int(out.strip() or 0)
+        off = off if off <= size else 0
+        p = remote(h, "write", stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, P=dest, OFF=off)
+        try:
+            with open(local, "rb") as f:
+                f.seek(off)
+                shutil.copyfileobj(f, p.stdin, CHUNK)
+            p.stdin.close()
+        except BrokenPipeError:
+            pass
+        return p.wait()
+
+    retrying("upload", attempt)
+    code, _ = call(h, "commit", P=dest, SHA=sha256_file(local))
+    if code:
+        sys.exit(code)
+
+
+def pull_file(h, src, local, size):
+    warn_size(size)
+    part = local + ".abox-part"
+
+    def attempt():
+        off = os.path.getsize(part) if os.path.exists(part) else 0
+        if off > size:
+            off = 0
+            os.remove(part)
+        p = remote(h, "read", P=src, OFF=off)
+        with open(part, "ab") as f:
+            shutil.copyfileobj(p.stdout, f, CHUNK)
+        return p.wait()
+
+    retrying("download", attempt)
+    code, out = call(h, "hash", P=src)
+    if code:
+        sys.exit(code)
+    if out.strip() != sha256_file(part):
+        os.remove(part)
+        die(f"checksum mismatch for {src}; the remote file may have changed, pull again")
+    os.replace(part, local)
+
+
+def safe_members(tf, dest):
+    base = os.path.realpath(dest)
+    for m in tf:
+        name = m.name.replace("\\", "/")
+        target = os.path.realpath(os.path.join(base, name))
+        if name.startswith("/") or (target != base and not target.startswith(base + os.sep)):
+            die(f"refusing archive entry outside the destination: {m.name}")
+        if m.issym() or m.islnk():
+            link = os.path.realpath(os.path.join(os.path.dirname(target), m.linkname))
+            if not link.startswith(base + os.sep):
+                die(f"refusing link outside the destination: {m.name} -> {m.linkname}")
+        if m.isdev() or m.isfifo():
+            continue
+        m.mode &= 0o777
+        yield m
+
+
+def cmd_push(a):
+    h = pick_host(a.host)
+    dest = check_rel(a.to or ".")
+    for p in a.paths:
+        if not os.path.exists(p):
+            die(f"no such file: {p}")
+    if len(a.paths) == 1 and os.path.isfile(a.paths[0]) and os.path.getsize(a.paths[0]) > BIG_FILE:
+        push_file(h, a.paths[0], posixpath.join(dest, os.path.basename(a.paths[0])))
+        return
+    warn_size(tree_size(a.paths))
+    p = remote(h, "untar", stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, P=dest)
+    try:
+        with tarfile.open(fileobj=p.stdin, mode="w|gz") as tf:
+            for path in a.paths:
+                tf.add(path, arcname=os.path.basename(os.path.normpath(path)))
+        p.stdin.close()
+    except BrokenPipeError:
+        pass
+    code = p.wait()
+    if code:
+        die("upload failed" + (" (connection dropped)" if code == EXIT_SSH else ""), code)
+
+
+def cmd_pull(a):
+    h = pick_host(a.host)
+    src = check_rel(a.path)
+    st = call_json(h, "stat", P=src)[0]
+    if st["type"] == "none":
+        die(f"no such remote path: {src}")
+    if st["type"] == "file" and st["size"] > BIG_FILE:
+        local = a.local or os.path.basename(src)
+        if os.path.isdir(local):
+            local = os.path.join(local, os.path.basename(src))
+        pull_file(h, src, local, st["size"])
+        return
+    dest = a.local or "."
+    if st["type"] == "file" and not os.path.isdir(dest):
+        dest_dir, rename = os.path.dirname(dest) or ".", os.path.basename(dest)
+    else:
+        dest_dir, rename = dest, None
+    os.makedirs(dest_dir, exist_ok=True)
+    p = remote(h, "tar", P=src)
+    with tarfile.open(fileobj=p.stdout, mode="r|gz") as tf:
+        for m in safe_members(tf, dest_dir):
+            if rename and m.isfile():
+                m.name = rename
+            tf.extract(m, dest_dir)
+    code = p.wait()
+    if code:
+        die("download failed" + (" (connection dropped)" if code == EXIT_SSH else ""), code)
+
+
+def cmd_hosts(a):
+    cfg = load_hosts()
+    for name, h in cfg["hosts"].items():
+        mark = "*" if name == cfg.get("default") else " "
+        print(f"{mark} {name}  {h['user']}@{h['host']}:{h.get('port', 22)}  root={h.get('root')}  os={h.get('os') or '?'}")
+
+
+# ---------------------------------------------------------------- CLI
+
+HELP = """Run work on your own machine from an agentbox workspace.
+
+  abox-remote setup <name> [--user U] [--root DIR]   create a key and print setup steps
+  abox-remote doctor                                  check tunnel, sshd, login, root
+  abox-remote exec -- <command>                       short command in the root folder
+  abox-remote run <name> -- <command>                 background job; prints its id
+  abox-remote wait [id] [--timeout S]                 wait for a job (reconnects); exit = job's
+  abox-remote status|log|cancel [id]                  default id: the last job started here
+  abox-remote list                                    recent jobs
+  abox-remote push <local>... [--to DIR]              upload into the root (or DIR under it)
+  abox-remote pull <remote> [local]                   download a file or folder
+
+Commands run with sh on Linux/macOS and PowerShell on Windows, in the root
+folder (default ~/agentbox). Jobs survive disconnects; their logs live in
+<root>/.abox-remote/jobs/<id>/. -H <name> picks a machine when several exist.
+Exit codes: wait returns the job's code, 130 canceled, 69 lost, 124 timeout,
+255 machine unreachable.
+"""
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="abox-remote", description=HELP, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("-H", "--host", help="machine name from setup")
+    sub = ap.add_subparsers(dest="cmd", required=True, metavar="command")
+
+    s = sub.add_parser("setup", help="add or update a machine")
+    s.add_argument("name")
+    s.add_argument("--address", dest="host_addr", help=f"SSH address (default {SELF_HOST})")
+    s.add_argument("--port", type=int)
+    s.add_argument("--user")
+    s.add_argument("--root", help="working folder on the machine, relative to its home (default agentbox)")
+    s.add_argument("--default", action="store_true", help="make it the default machine")
+    s.set_defaults(fn=lambda a: cmd_setup(argparse.Namespace(**{**vars(a), "host": a.host_addr})))
+
+    sub.add_parser("doctor", help="check the connection step by step").set_defaults(fn=cmd_doctor)
+    sub.add_parser("hosts", help="list configured machines").set_defaults(fn=cmd_hosts)
+
+    s = sub.add_parser("exec", help="run a short command")
+    s.add_argument("command", nargs=argparse.REMAINDER)
+    s.set_defaults(fn=cmd_exec)
+
+    s = sub.add_parser("run", help="start a background job")
+    s.add_argument("name")
+    s.add_argument("command", nargs=argparse.REMAINDER)
+    s.set_defaults(fn=cmd_run)
+
+    for name, fn in (("status", cmd_status), ("cancel", cmd_cancel)):
+        s = sub.add_parser(name, help=f"{name} a job")
+        s.add_argument("id", nargs="?")
+        s.set_defaults(fn=fn)
+
+    s = sub.add_parser("log", help="tail a job's output")
+    s.add_argument("id", nargs="?")
+    s.add_argument("-n", type=int, default=40)
+    s.set_defaults(fn=cmd_log)
+
+    s = sub.add_parser("wait", help="wait for a job to finish")
+    s.add_argument("id", nargs="?")
+    s.add_argument("--timeout", type=int, default=0, help="seconds; 0 waits forever")
+    s.add_argument("-n", type=int, default=20, help="log lines to print at the end")
+    s.set_defaults(fn=cmd_wait)
+
+    s = sub.add_parser("list", help="recent jobs")
+    s.add_argument("-n", type=int, default=20)
+    s.set_defaults(fn=cmd_list)
+
+    s = sub.add_parser("push", help="upload files or folders")
+    s.add_argument("paths", nargs="+")
+    s.add_argument("--to")
+    s.set_defaults(fn=cmd_push)
+
+    s = sub.add_parser("pull", help="download a file or folder")
+    s.add_argument("path")
+    s.add_argument("local", nargs="?")
+    s.set_defaults(fn=cmd_pull)
+
+    a = ap.parse_args()
+    try:
+        a.fn(a)
+    except KeyboardInterrupt:
+        sys.exit(EXIT_CANCELED)
+
+
+if __name__ == "__main__":
+    main()

@@ -20,7 +20,7 @@ agentbox 的首页提供功能概览与最短上手路径，本目录解释日�
 | 启用或开发扩展 | [扩展与 SPI 协议](architecture/extensions-spi.md)（管理员「扩展」菜单；官方扩展「循环保护」作用于 Claude / Codex 的 API Key 与中转账号，「Webhook 通知」推送空间与回合事件） |
 | 区分服务端、镜像和桌面更新 | [三类更新与生效范围](update-components.md) → [兼容矩阵](compatibility.md) → [升级与回退](releases.md) |
 | 访问本地数据库或公司内网 | [出口代理与内网隧道](networking.md) |
-| 把编译、渲染等重活交给自己的机器 | [本机算力扩展 abox-remote](architecture/remote-host.md)（一期设计稿，尚未实现） |
+| 把编译、渲染等重活交给自己的机器 | [本机算力扩展 abox-remote](architecture/remote-host.md)（一期：`self.abox-link` 本机目标、`abox-remote` 工具与 `remote-host` 技能） |
 | 接入脚本或参与开发 | [API 参考](api.md) → [开发指南](development.md) → [统一验证](verification.md) |
 | 核对当前支持与待验收范围 | [能力/版本/验证清单](capabilities.md) |
 | 参与开源重构 | [重构设计与实施计划](architecture/opensource-refactor.md) |

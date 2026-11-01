@@ -55,6 +55,8 @@ type Service struct {
 	mu              sync.Mutex
 	starts          sessionLock
 	locks           map[string]sessionLock
+	builtinOnce     sync.Once
+	builtinErr      error
 }
 
 func New(cfg *config.Config, st Store, dock Runtime, account func(store.Session) (config.Account, error), syncCredentials func(context.Context, config.Account, store.Session) error) *Service {
@@ -104,6 +106,29 @@ func (s *Service) HomeDir(sess store.Session) string {
 // feature off; see agent.SeedHomeTemplate for the merge rules.
 func (s *Service) HomeTemplateDir() string {
 	return filepath.Join(s.cfg.DataDir, "home-template")
+}
+
+// BuiltinTemplateDir is where the platform's own template layer (abox-remote
+// and its skill, embedded in the binary) is written out, once per process. It
+// is regenerated on every start and not backed up.
+func (s *Service) BuiltinTemplateDir() string {
+	return filepath.Join(s.cfg.DataDir, "builtin-template")
+}
+
+// templateDirs lists the layers for a session start, lowest priority first.
+// The built-in layer only applies with the tunnel on: abox-remote reaches the
+// user's machine through it, so without a tunnel its skill would only mislead.
+func (s *Service) templateDirs(user string) []string {
+	dirs := []string{s.HomeTemplateDir(), s.UserTemplateDir(user)}
+	if !s.cfg.GetTunnel().Enabled {
+		return dirs
+	}
+	s.builtinOnce.Do(func() { s.builtinErr = agent.WriteBuiltinTemplate(s.BuiltinTemplateDir()) })
+	if s.builtinErr != nil {
+		log.Printf("write built-in home template: %v", s.builtinErr)
+		return dirs
+	}
+	return append([]string{s.BuiltinTemplateDir()}, dirs...)
 }
 
 // UserTemplateDir is the same idea scoped to one user, layered on top of the
@@ -242,8 +267,7 @@ func (s *Service) start(ctx context.Context, id string, wake bool) (store.Sessio
 	// Before credentials: a stray credential file in the template must never
 	// outrank the account pool. A broken template shouldn't block the session
 	// from coming up either, so failures are logged and the start continues.
-	if err := agent.SeedHomeTemplate(s.HomeDir(cur), dockerx.AgentUID, dockerx.AgentGID,
-		s.HomeTemplateDir(), s.UserTemplateDir(cur.User)); err != nil {
+	if err := agent.SeedHomeTemplate(s.HomeDir(cur), dockerx.AgentUID, dockerx.AgentGID, s.templateDirs(cur.User)...); err != nil {
 		log.Printf("seed home template %s: %v", cur.ID, err)
 	}
 	if err := agent.SeedCredentials(cur.Agent, s.HomeDir(cur), acct.CredentialsDir, dockerx.AgentUID, dockerx.AgentGID); err != nil {

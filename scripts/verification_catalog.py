@@ -23,6 +23,7 @@ STEPS = [
     *[step('policy.'+name, 'offline', ['{python}','scripts/test-'+name+'.py'], 'Local synthetic policy regression; not real systemd or installation.') for name in ['browser-runtime','deployment','update','install','uninstall','image-policy','repair-claude-cumulative']],
     step('policy.tool-storage', 'offline', ['{python}','scripts/test-tool-storage.py'], 'Shared-tool publisher integrity, atomic publication and archive/symlink boundaries.'),
     step('policy.shell', 'offline', ['{python}','scripts/verify.py','_shell'], 'Shell syntax checks.'),
+    step('policy.abox-remote', 'offline', ['{python}','-I','scripts/test-abox-remote.py'], 'abox-remote sh runtime (and PowerShell when pwsh is installed) over a local transport; no SSH, tunnel or real Windows.'),
     step('policy.verification-stability', 'offline', ['{python}','scripts/test-verification-stability.py'], 'Synthetic sample aggregation and uncached-test policy; not twenty real CI runs.'),
     step('runner', 'offline', ['{python}','scripts/test-verification.py'], 'Runner evidence, environment isolation and failure/cancellation regression.'),
     *[step('browser.'+name, 'browser', ['node','scripts/test-'+name+'.mjs'], 'Real browser with synthetic API; no Docker or provider.', requires=['node_modules/.bin/tsc']) for name in ['browser','onboarding','chat-drafts','chat-outbox','chat-suggestions','chat-questions','chat-followups','chat-delegation','workspace-filter','git','preview','web-i18n','link-i18n']],

@@ -7,10 +7,11 @@
 agentbox 提供 Claude 技能文件的管理界面；Claude MCP 另有独立管理页；完整插件仍由容器内原版 CLI 管理，也可按原生方式安装（`claude mcp add -s user …`、
 `~/.claude/skills/<名字>/SKILL.md`、`/plugin` 等）。但**新建工作空间的 home 从独立空目录开始**，
 装在工作空间里的东西只属于那个工作空间。要预置给多个工作空间，用 home 模板 —— 它在每次工作空间启动时
-叠加到 `/home/agent`，分两层，后者盖前者：
+叠加到 `/home/agent`，按下表从上到下叠加，后者盖前者（内置层只在启用内网隧道时才有）：
 
 | 模板 | 位置 | 影响范围 | 谁维护 |
 |---|---|---|---|
+| 内置模板 | 随 agentbox 二进制发布，启动时写到 `data/builtin-template/` | 隧道启用时的所有工作空间 | 平台（目前是 `abox-remote` 和 `remote-host` 技能，见[本机算力扩展](architecture/remote-host.md)） |
 | 服务器模板 | `data/home-template/` | **所有用户的所有工作空间** | 管理员，宿主机上改 |
 | 用户模板 | `data/users/<user>/home-template/` | 该用户的所有工作空间 | 用户自己，网页「技能」页签或宿主机 |
 

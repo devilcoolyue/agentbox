@@ -1,4 +1,6 @@
 # Loaded by /etc/bash.bashrc before the user's ~/.bashrc.
+# Tools from the built-in home template (abox-remote) live in ~/.local/bin.
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac
 case $- in
   *i*) ;;
   *) return ;;
