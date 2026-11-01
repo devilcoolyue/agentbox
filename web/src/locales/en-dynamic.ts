@@ -1565,6 +1565,8 @@ export default {
   "客户端使用兼容模式；在新版 abox-link 中开启透明内网访问。": "Client uses compatibility mode. Enable transparent intranet access in the latest abox-link.",
   "对话与终端可直接访问下列目标，无需配置代理。支持 IPv4 / TCP。": "Chat and terminals can access these targets directly without proxy configuration. Supports IPv4 / TCP.",
   "尚未配置透明访问目标": "No transparent access targets configured",
+  "升级 abox-link 后可勾选「允许 agentbox 通过 SSH 连接本机」。": " Update abox-link to allow agentbox to connect to that device over SSH.",
+  "本机 {p0}": "This device {p0}",
   "网络就绪": "Network ready",
   "正在准备网络": "Preparing network",
   "在线隧道用户：": "Users with online tunnels: ",

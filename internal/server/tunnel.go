@@ -53,6 +53,7 @@ type connInfo struct {
 	Since       time.Time
 	Remote      string
 	Transparent bool
+	SelfTarget  bool // the link dials tunnel.SelfHost on its own loopback
 }
 
 func newTunnelHub() *tunnelHub {
@@ -580,6 +581,7 @@ func (s *Server) handleTunnelWS(w http.ResponseWriter, r *http.Request) {
 	s.tunnels.mu.Lock()
 	info := s.tunnels.info[user]
 	info.Transparent = transparent
+	info.SelfTarget = hasFeature(r.Header.Get(tunnel.FeaturesHeader), tunnel.SelfFeature)
 	s.tunnels.info[user] = info
 	s.tunnels.mu.Unlock()
 	s.network.connectMu.Unlock()
@@ -640,6 +642,16 @@ func (s *Server) tunnelEnvList(sess store.Session) []string {
 	return env
 }
 
+// hasFeature reports whether a comma-separated features header lists want.
+func hasFeature(header, want string) bool {
+	for _, f := range strings.Split(header, ",") {
+		if strings.TrimSpace(f) == want {
+			return true
+		}
+	}
+	return false
+}
+
 // handleTunnelStatus reports the caller's own tunnel state for the UI: feature
 // switch, proxy address, live connection facts and active port maps. Admins
 // additionally see which users are online.
@@ -659,6 +671,7 @@ func (s *Server) handleTunnelStatus(w http.ResponseWriter, r *http.Request) {
 		out["since"] = ci.Since.UnixMilli()
 		out["remote"] = ci.Remote
 		out["client_transparent"] = ci.Transparent
+		out["client_self_target"] = ci.SelfTarget
 	}
 	maps := s.tunnels.mapsFor(u.Name)
 	views := make([]map[string]any, 0, len(maps))

@@ -28,6 +28,8 @@ export default {
   "可填网段": "Use a subnet such as",
   "、主机名": ", a hostname such as",
   "或带端口的地址": "or a host and port such as",
+  "允许 agentbox 通过 SSH 连接本机": "Allow agentbox to connect to this device over SSH",
+  "放行 self.abox-link:22，容器用这个名字连本机的 SSH 服务，不需要知道本机 IP；本机要先开启 SSH 服务": "Allows self.abox-link:22. The workspace uses this name to reach the SSH service on this device without knowing its IP address. Turn on the SSH service on this device first.",
   "。": ".",
   "还没有规则 — 容器现在到不了任何内网地址。": "No targets allowed yet. Containers cannot access your private network.",
   "添加规则": "Add target",

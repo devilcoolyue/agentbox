@@ -32,6 +32,7 @@ function localizedAttribute(el, attr, source) {
 
 
 const $ = (id) => document.getElementById(id);
+const SELF_SSH = "self.abox-link:22"; // 与 internal/tunnel.SelfHost 对应
 
 // This panel is embedded in its own binary, so its small icon set is standalone.
 const actionIcons = {
@@ -238,6 +239,7 @@ function renderOptions() {
   $("opt-auto").checked = v.auto_connect;
  $("opt-transparent").checked = !!v.transparent;
   $("opt-insecure").checked = v.insecure;
+  $("opt-self-ssh").checked = v.allow.includes(SELF_SSH);
 
   const boot = state.autostart || {};
   $("opt-boot").checked = !!boot.installed;
@@ -309,6 +311,11 @@ $("btn-toggle").addEventListener("click", async () => {
 $("btn-add-allow").addEventListener("click", () => edit((d) => d.allow.push("")));
 $("btn-add-map").addEventListener("click", () => edit((d) => d.maps.push("=")));
 
+/* 本机 SSH 只是一条放行规则；勾选与否等价于规则列表里有没有这一条 */
+$("opt-self-ssh").addEventListener("change", (e) => edit((d) => {
+  d.allow = d.allow.filter((r) => r !== SELF_SSH);
+  if (e.target.checked) d.allow.push(SELF_SSH);
+}));
 $("opt-transparent").addEventListener("change", (e) => edit((d) => { d.transparent = e.target.checked; }));
 $("opt-auto").addEventListener("change", (e) => edit((d) => { d.auto_connect = e.target.checked; }));
 $("opt-insecure").addEventListener("change", (e) => edit((d) => { d.insecure = e.target.checked; }));

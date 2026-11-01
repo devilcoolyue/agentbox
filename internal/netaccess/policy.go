@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"agentbox/internal/tunnel"
 )
 
 const (
@@ -92,6 +94,11 @@ func splitRule(entry string) (string, string, error) {
 	host = strings.TrimSuffix(host, ".")
 	if len(host) == 0 || len(host) > 253 || host == "localhost" || strings.HasSuffix(host, ".localhost") {
 		return "", "", fmt.Errorf("无效内网域名: %q", entry)
+	}
+	// abox-link dials the reserved self name on its own loopback; a port-less
+	// grant would expose every local service, so the port is mandatory.
+	if host == tunnel.SelfHost && port == "" {
+		return "", "", fmt.Errorf("本机目标必须带端口，例如 %s:22", tunnel.SelfHost)
 	}
 	for _, label := range strings.Split(host, ".") {
 		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {

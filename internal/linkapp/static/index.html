@@ -93,6 +93,10 @@
         <div id="allow-list" class="rules"
              data-empty="还没有规则 — 容器现在到不了任何内网地址。" data-i18n-data-empty="还没有规则 — 容器现在到不了任何内网地址。"></div>
         <button class="ghost add" id="btn-add-allow" data-icon="plus" data-i18n>添加规则</button>
+        <label class="check">
+          <input type="checkbox" id="opt-self-ssh">
+          <span><span data-i18n>允许 agentbox 通过 SSH 连接本机</span> <span class="hint" data-i18n>放行 self.abox-link:22，容器用这个名字连本机的 SSH 服务，不需要知道本机 IP；本机要先开启 SSH 服务</span></span>
+        </label>
       </section>
 
       <section class="card">

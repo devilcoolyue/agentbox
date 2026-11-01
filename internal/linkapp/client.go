@@ -130,6 +130,7 @@ func dialTunnel(ctx context.Context, cfg Config, maps []tunnel.MapSpec) (*yamux.
 	}
 	hdr := http.Header{}
 	hdr.Set("Authorization", "Bearer "+cfg.Token)
+	hdr.Set(tunnel.FeaturesHeader, tunnel.SelfFeature)
 	if cfg.Transparent {
 		rules, err := netaccess.NormalizeRules(cfg.Allow)
 		if err != nil {

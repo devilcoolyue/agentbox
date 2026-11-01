@@ -20,6 +20,19 @@ type Rule struct {
 // Whitelist is an ordered set of allow rules; empty means allow nothing.
 type Whitelist []Rule
 
+// SelfHost is a reserved name for the machine running abox-link. The link
+// dials it on loopback, so a workspace can SSH back to this machine without
+// knowing (or chasing) its LAN address. A rule for it must name a port:
+// loopback commonly hosts unauthenticated dev servers and databases.
+const SelfHost = "self.abox-link"
+
+// SelfFeature is advertised in FeaturesHeader by links that understand
+// SelfHost, so the server UI can tell an old client apart.
+const (
+	FeaturesHeader = "X-Abox-Link-Features"
+	SelfFeature    = "self-target"
+)
+
 // ParseWhitelist turns "--allow" strings (CIDR, host, or host:port) into rules.
 func ParseWhitelist(entries []string) (Whitelist, error) {
 	var rules Whitelist
@@ -44,6 +57,9 @@ func ParseWhitelist(entries []string) (Whitelist, error) {
 			rules = append(rules, Rule{Host: strings.ToLower(host), Port: port})
 			continue
 		}
+		if strings.EqualFold(strings.TrimSuffix(e, "."), SelfHost) {
+			return nil, fmt.Errorf("%s needs a port, e.g. %s:22", SelfHost, SelfHost)
+		}
 		rules = append(rules, Rule{Host: strings.ToLower(e)})
 	}
 	if len(rules) == 0 {
@@ -60,7 +76,18 @@ func ParseWhitelist(entries []string) (Whitelist, error) {
 // host:port and dialing may re-resolve the name (consistent with the rule).
 // lookupIP is injectable so tests need no real DNS.
 func (w Whitelist) resolveAndCheck(host, port string, lookupIP func(string) ([]net.IP, error)) (bool, string) {
-	hostL := strings.ToLower(host)
+	hostL := strings.TrimSuffix(strings.ToLower(host), ".")
+
+	// The reserved self name never reaches DNS or CIDR rules: only an explicit
+	// self rule with this exact port admits it, and it always means loopback.
+	if hostL == SelfHost {
+		for _, r := range w {
+			if r.CIDR == nil && r.Host == SelfHost && r.Port == port {
+				return true, net.JoinHostPort("127.0.0.1", port)
+			}
+		}
+		return false, ""
+	}
 
 	needIPs := false
 	for _, r := range w {

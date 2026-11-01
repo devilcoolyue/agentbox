@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentbox/internal/netaccess"
+	"agentbox/internal/tunnel"
 	"github.com/gorilla/websocket"
 )
 
@@ -20,7 +21,8 @@ func TestTransparentCapabilityNegotiation(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				raw, err := base64.RawURLEncoding.DecodeString(r.Header.Get(netaccess.RulesHeader))
 				var rules []string
-				if err != nil || json.Unmarshal(raw, &rules) != nil || r.Header.Get(netaccess.CapabilityHeader) != netaccess.Protocol {
+				if err != nil || json.Unmarshal(raw, &rules) != nil || r.Header.Get(netaccess.CapabilityHeader) != netaccess.Protocol ||
+					r.Header.Get(tunnel.FeaturesHeader) != tunnel.SelfFeature {
 					http.Error(w, "bad rules", 400)
 					return
 				}

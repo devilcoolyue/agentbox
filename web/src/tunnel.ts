@@ -97,8 +97,9 @@ function renderPage() {
 
   setTextRender($("tun-guide-mode"), () => st.transparent ? i18nText("新版客户端默认使用透明模式；旧配置请勾选「透明内网访问」，保存并启动。等待工作空间显示「网络就绪」后，对话与终端可直接使用放行的内网地址。") : i18nText("客户端在线后，Agent 可通过代理或端口映射访问放行目标；断开后暂停访问。"));
  $("tun-network").classList.toggle("hidden", !st.transparent);
- setTextRender($("tun-network-note"), () => st.network_error || (!st.connected ? i18nText("隧道离线，已配置的内网目标暂停访问。") : !st.client_transparent ? i18nText("客户端使用兼容模式；在新版 abox-link 中开启透明内网访问。") : i18nText("对话与终端可直接访问下列目标，无需配置代理。支持 IPv4 / TCP。") ));
- setTextRender($("tun-network-rules"), () => (st.rules || []).join(" · ") || i18nText("尚未配置透明访问目标"));
+ setTextRender($("tun-network-note"), () => st.network_error || (!st.connected ? i18nText("隧道离线，已配置的内网目标暂停访问。") : !st.client_transparent ? i18nText("客户端使用兼容模式；在新版 abox-link 中开启透明内网访问。") : i18nText("对话与终端可直接访问下列目标，无需配置代理。支持 IPv4 / TCP。") + (st.client_self_target ? "" : i18nText("升级 abox-link 后可勾选「允许 agentbox 通过 SSH 连接本机」。")) ));
+ // self.abox-link 是 abox-link 所在机器的保留名，客户端把它拨到自己的回环地址
+ setTextRender($("tun-network-rules"), () => (st.rules || []).map(r => r.startsWith("self.abox-link:") ? i18nText("本机 {p0}", { p0: r }) : r).join(" · ") || i18nText("尚未配置透明访问目标"));
  const workspaces = $("tun-network-workspaces"); workspaces.replaceChildren();
  for (const item of st.workspaces || []) {
   const row = document.createElement("p");

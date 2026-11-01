@@ -865,6 +865,7 @@ data/
 - `tunnel.transparent` 未指定时默认 true，JSON 必须保留显式 false（不能 omitempty），保证兼容模式保存后不会重载成透明模式；客户端同样默认 true，CLI 用 `--transparent=false` 选择兼容。总开关 disabled 时不启动辅助网络。
 - `tunnel.transparent` 启用工作空间透明 IPv4/TCP：`internal/netaccess` 管理规则、虚拟 DNS 与辅助进程，`internal/server/netaccess.go` 管理按用户策略和按空间认证的控制端口，`internal/dockerx/netaccess.go` 管理无用户目录挂载的网络辅助容器。仅辅助容器有 NET_ADMIN，Agent 仍为 UID 1000。
 - 客户端 `--transparent` / 面板开关通过能力协商上报规范化放行规则。透明授权仍由客户端白名单最终检查；账号 HTTP 桥接必须按实际工作空间归属选择隧道，不能仅按共享账号分流。
+- `self.abox-link:<端口>`（`tunnel.SelfHost`）是 abox-link 本机的保留名：服务端当普通域名分配虚拟地址，客户端 `resolveAndCheck` 只认带同一端口的 self 规则并改拨 `127.0.0.1`，不查 DNS、不被网段规则命中；`splitRule`/`ParseWhitelist` 拒绝不带端口的 self 规则。客户端在 `X-Abox-Link-Features: self-target` 上报能力，状态接口返回 `client_self_target`。设计见 `docs/architecture/remote-host.md`。
 - `data/users/<user>/network.json` 保留历史捕获目标与不复用的域名虚拟 IP。掉线、规则撤销、服务重启不能删除捕获规则后静默直连。透明模式退出前停止空间，让网络命名空间重建；不要热清空规则。
 - 透明模式不依赖说明文件或专用代理 env；旧客户端仍保留兼容代理。配置、部署和验收见 `docs/architecture/transparent-network.md`、`docs/networking.md`。真实合成容器测试用 `scripts/test-transparent-network.py`。
 

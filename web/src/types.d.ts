@@ -1225,6 +1225,8 @@ export interface TunnelMap {
 export interface TunnelStatus {
  transparent?: boolean;
  client_transparent?: boolean;
+ /** 客户端能把 self.abox-link 拨到它自己的回环地址 */
+ client_self_target?: boolean;
  network_error?: string;
  rules?: string[];
  workspaces?: {session: string; name: string; ready: boolean; error?: string}[];

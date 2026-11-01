@@ -37,7 +37,7 @@ func TestPolicyIsolationAndRevocation(t *testing.T) {
 	}
 }
 func TestPolicyValidation(t *testing.T) {
-	for _, s := range []string{"0.0.0.0/0", "127.0.0.1", "localhost:80", "169.254.1.1", "198.18.1.1", "::1", "2001:db8::/32", "foo;touch bad", "*.corp", "db.corp:0", "10.2.3.4/99"} {
+	for _, s := range []string{"0.0.0.0/0", "127.0.0.1", "localhost:80", "169.254.1.1", "198.18.1.1", "::1", "2001:db8::/32", "foo;touch bad", "*.corp", "db.corp:0", "10.2.3.4/99", "self.abox-link"} {
 		if _, err := Merge(Policy{}, []string{s}); err == nil {
 			t.Errorf("accepted %q", s)
 		}
@@ -45,5 +45,14 @@ func TestPolicyValidation(t *testing.T) {
 	p, _ := Merge(Policy{}, []string{"10.20.0.0/16"})
 	if p.CheckConflicts([]netip.Prefix{netip.MustParsePrefix("10.20.1.0/24")}) == nil {
 		t.Fatal("missed bridge conflict")
+	}
+	// The self name is an ordinary virtual-address domain on the server side;
+	// only abox-link knows it means its own loopback.
+	p, err := Merge(Policy{}, []string{"SELF.abox-link:22"})
+	if err != nil || p.Domains["self.abox-link"] == "" || !p.Allows("self.abox-link:22") {
+		t.Fatalf("self rule = %+v, %v", p, err)
+	}
+	if target, _ := p.Target(p.Domains["self.abox-link"] + ":22"); target != "self.abox-link:22" {
+		t.Fatalf("self target = %q", target)
 	}
 }
