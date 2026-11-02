@@ -1,10 +1,7 @@
 package server
 
 import (
-	"bufio"
 	"encoding/json"
-	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -12,9 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
-
-	"agentbox/internal/dockerx"
 	"agentbox/internal/store"
 )
 
@@ -157,109 +151,63 @@ func TestLoginUserAgentIsBoundedAndPrintable(t *testing.T) {
 	}
 }
 
-// Only the page's explicit report moves the time. Bytes on the input channel
-// don't: xterm's automatic answers to a running program arrive exactly like a
-// keystroke, so counting them would call an unattended agent an active user.
-func TestTerminalActivityComesOnlyFromExplicitReports(t *testing.T) {
-	s, sess, _ := clientTestServer(t)
-	server, client := net.Pipe()
-	t.Cleanup(func() { _ = client.Close() })
-	pty := dockerx.NewPTY("exec-fixture", server, bufio.NewReader(server), func() { _ = server.Close() })
-	received := make(chan []byte, 8)
-	go func() {
-		buf := make([]byte, 256)
-		for {
-			n, err := client.Read(buf)
-			if err != nil {
-				if err != io.EOF {
-					close(received)
-				}
-				return
-			}
-			received <- append([]byte{}, buf[:n]...)
-		}
-	}()
-	srv := httptest.NewServer(s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.bridgeTermPTY(w, r, sess, pty)
-	})))
-	t.Cleanup(srv.Close)
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"?token=client-fixture-alice", nil)
+func lastActiveOf(t *testing.T, s *Server, name string) int64 {
+	t.Helper()
+	users, err := s.store.ListUserActivity()
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = conn.Close() })
+	for _, u := range users {
+		if u.Name == name {
+			return u.LastActiveAt
+		}
+	}
+	t.Fatalf("%s not listed", name)
+	return 0
+}
 
-	lastActive := func() int64 {
-		t.Helper()
-		users, err := s.store.ListUserActivity()
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, u := range users {
-			if u.Name == "alice" {
-				return u.LastActiveAt
-			}
-		}
-		t.Fatal("alice not listed")
-		return 0
+// A report moves only the sender's own time and gives nothing back: the data is
+// for administrators, not for whoever is reporting.
+func TestActivityReportRecordsTheTokenOwnerAndAnswersNothing(t *testing.T) {
+	s, handler := pairingFixture(t)
+	if w := clientRequest(handler, "", "POST", "/api/me/activity", ""); w.Code != http.StatusUnauthorized {
+		t.Fatal("without a login:", w.Code)
 	}
-	// A cursor position answer, as xterm sends with nobody at the keyboard.
-	if err := conn.WriteMessage(websocket.BinaryMessage, []byte("\x1b[1;1R")); err != nil {
-		t.Fatal(err)
+	if got := lastActiveOf(t, s, "alice"); got != 0 {
+		t.Fatalf("anonymous report recorded: %d", got)
 	}
-	select {
-	case got := <-received:
-		if string(got) != "\x1b[1;1R" {
-			t.Fatalf("pty got %q", got)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("input never reached the pty")
+	before := time.Now().UnixMilli()
+	w := clientRequest(handler, "alice", "POST", "/api/me/activity", `{"user":"bob"}`)
+	if w.Code != http.StatusNoContent || w.Body.Len() != 0 {
+		t.Fatalf("report = %d %q", w.Code, w.Body)
 	}
-	if got := lastActive(); got != 0 {
-		t.Fatalf("terminal input bytes counted as activity: %d", got)
+	if got := lastActiveOf(t, s, "alice"); got < before {
+		t.Fatalf("alice = %d, want at least %d", got, before)
 	}
+	if got := lastActiveOf(t, s, "bob"); got != 0 {
+		t.Fatalf("the body named another user and moved their time: %d", got)
+	}
+}
 
-	if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"activity"}`)); err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for lastActive() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("activity report never recorded")
+// A page spamming reports costs one write per gap, not one per request, and one
+// user's reports don't hold back another's.
+func TestActivityGateLimitsWritesPerUser(t *testing.T) {
+	var g activityGate
+	start := time.Now()
+	for _, c := range []struct {
+		user  string
+		after time.Duration
+		want  bool
+	}{
+		{"alice", 0, true},
+		{"alice", time.Second, false},
+		{"bob", time.Second, true},
+		{"alice", activityMinGap - time.Millisecond, false},
+		{"alice", activityMinGap, true},
+		{"alice", activityMinGap + time.Second, false},
+	} {
+		if got := g.allow(c.user, start.Add(c.after)); got != c.want {
+			t.Errorf("%s at +%v: allow = %v", c.user, c.after, got)
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	first := lastActive()
-
-	// A page spamming reports costs one write per gap, not one per frame.
-	time.Sleep(5 * time.Millisecond)
-	for range 3 {
-		if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"activity"}`)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := conn.WriteMessage(websocket.BinaryMessage, []byte("x")); err != nil {
-		t.Fatal(err)
-	}
-	<-received // every frame above has been read
-	time.Sleep(20 * time.Millisecond)
-	if got := lastActive(); got != first {
-		t.Fatalf("report inside the gap moved the time: %d -> %d", first, got)
-	}
-
-	// Junk on the control channel is ignored, and the terminal stays up.
-	if err := conn.WriteMessage(websocket.TextMessage, []byte(`not json`)); err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.WriteMessage(websocket.BinaryMessage, []byte("y")); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case got := <-received:
-		if string(got) != "y" {
-			t.Fatalf("pty got %q", got)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("terminal stopped after a malformed control frame")
 	}
 }

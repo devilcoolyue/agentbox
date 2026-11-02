@@ -9,7 +9,7 @@ import (
 
 // SchemaVersion changes only with a committed, ordered migration. Versions
 // predating this framework use user_version=0, including partially upgraded DBs.
-const SchemaVersion = 25
+const SchemaVersion = 26
 
 //go:embed migrations/001_baseline.sql
 var baselineSQL string
@@ -74,6 +74,9 @@ var parallelChatsSQL string
 //go:embed migrations/025_login_activity.sql
 var loginActivitySQL string
 
+//go:embed migrations/026_user_activity_any_page.sql
+var userActivityAnyPageSQL string
+
 type migration struct {
 	version int
 	apply   func(*sql.Tx) error
@@ -136,6 +139,7 @@ func migrations() []migration {
 		}},
 		{24, func(tx *sql.Tx) error { _, err := tx.Exec(parallelChatsSQL); return err }},
 		{25, func(tx *sql.Tx) error { _, err := tx.Exec(loginActivitySQL); return err }},
+		{26, func(tx *sql.Tx) error { _, err := tx.Exec(userActivityAnyPageSQL); return err }},
 	}
 }
 func migrate(db *sql.DB) error { return runMigrations(db, migrations()) }

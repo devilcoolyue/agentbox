@@ -905,7 +905,7 @@ export default {
     "使用趋势图，用左右方向键查看各时段的数值": "Usage trend chart. Use the left and right arrow keys to read each period.",
     "更多指标": "More metrics",
     "登录与活跃": "Logins & activity",
-    "最后活跃只统计用户在终端页面的点击和输入，Agent 自己运行不算。登录记录保留 180 天，只有管理员能看到。": "Last active counts only a user's clicks and typing on the terminal page, not time an agent spends running by itself. Login records are kept for 180 days and only administrators can see them.",
+    "最后活跃统计用户在网页上的点击和输入，所有页面都算，Agent 自己运行不算。登录记录保留 180 天，只有管理员能看到。": "Last active counts a user's clicks and typing on any page of the web console, not time an agent spends running by itself. Login records are kept for 180 days and only administrators can see them.",
     "用户活跃": "User activity",
     "角色": "Role",
     "最后活跃": "Last active",

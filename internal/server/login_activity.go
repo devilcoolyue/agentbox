@@ -1,5 +1,6 @@
-// 管理员「登录与活跃」面板：登录记录与用户最后一次在终端页面人为操作的时间。
-// 读接口全部走 s.admin，普通用户拿不到这些数据，也没有任何接口回显自己的记录。
+// 管理员「登录与活跃」面板：登录记录与用户最后一次在网页上人为操作的时间。
+// 读接口全部走 s.admin，普通用户拿不到这些数据，也没有任何接口回显自己的记录；
+// 上报接口什么都不返回。
 package server
 
 import (
@@ -7,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -14,9 +16,9 @@ import (
 )
 
 const (
-	// termActivityMinGap caps database writes per terminal connection, whatever
-	// the browser sends. The page reports at most every 15s (term-activity.ts).
-	termActivityMinGap = 10 * time.Second
+	// activityMinGap caps database writes per user, whatever the browser sends.
+	// Each tab reports at most every 15s (human-activity.ts).
+	activityMinGap = 10 * time.Second
 
 	loginEventsDefaultLimit = 50
 	loginEventsMaxLimit     = 200
@@ -49,15 +51,37 @@ func loginUserAgent(r *http.Request) string {
 	return clean
 }
 
-// noteTermActivity records a human action reported over a terminal connection,
-// off the read loop so a busy database never delays the keystrokes behind it.
-// The user is whoever authenticated this connection.
-func (s *Server) noteTermActivity(user string, at time.Time) {
-	s.spawn(func() {
-		if err := s.store.TouchTerminalActivity(user, at); err != nil {
-			log.Printf("terminal activity for %q: %v", user, err)
+// activityGate holds back reports arriving inside activityMinGap of the last
+// write for that user. Memory is bounded by the number of accounts.
+type activityGate struct {
+	mu   sync.Mutex
+	last map[string]time.Time
+}
+
+func (g *activityGate) allow(user string, now time.Time) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if now.Sub(g.last[user]) < activityMinGap {
+		return false
+	}
+	if g.last == nil {
+		g.last = map[string]time.Time{}
+	}
+	g.last[user] = now
+	return true
+}
+
+// handleActivityReport records that the signed-in user just clicked or typed on
+// a page. The page decides what counts (human-activity.ts); the user is whoever
+// the token belongs to. Answers nothing: this data is for administrators.
+func (s *Server) handleActivityReport(w http.ResponseWriter, r *http.Request) {
+	user, now := reqUser(r).Name, time.Now()
+	if s.activity.allow(user, now) {
+		if err := s.store.TouchUserActivity(user, now); err != nil {
+			log.Printf("user activity for %q: %v", user, err)
 		}
-	})
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleUserActivity(w http.ResponseWriter, r *http.Request) {

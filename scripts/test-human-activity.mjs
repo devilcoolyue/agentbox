@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { watchTermActivity } from '../internal/web/static/js/term-activity.js';
+import { watchHumanActivity } from '../internal/web/static/js/human-activity.js';
 
 // Throttling of the human-action report behind the admin "last active" time. The
 // browser side (only real events count, agent output doesn't) is in
@@ -9,7 +9,7 @@ const human = { isTrusted: true }, scripted = { isTrusted: false };
 function harness(t, connected = () => true) {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_000_000 });
   const listeners = new Map(), sent = [];
-  watchTermActivity({ addEventListener(type, fn, options) { listeners.set(type, { fn, options }); } }, () => {
+  watchHumanActivity({ addEventListener(type, fn, options) { listeners.set(type, { fn, options }); } }, () => {
     if (!connected()) return false;
     sent.push(Date.now());
     return true;
@@ -52,7 +52,7 @@ test('scripted events never count', t => {
   assert.deepEqual(h.sent, []);
 });
 
-test('an action while disconnected is not reported later, and does not start a window', t => {
+test('an action while signed out is not reported later, and does not start a window', t => {
   let up = false;
   const h = harness(t, () => up);
   h.act();
@@ -60,7 +60,7 @@ test('an action while disconnected is not reported later, and does not start a w
   assert.deepEqual(h.sent, []);
   up = true;
   t.mock.timers.tick(60_000);
-  assert.deepEqual(h.sent, [], 'reconnecting alone is not activity');
+  assert.deepEqual(h.sent, [], 'signing in alone is not activity');
   h.act();
   assert.equal(h.sent.length, 1);
 });

@@ -447,12 +447,6 @@ type PTY struct {
 
 func (p *PTY) Close() { p.closer() }
 
-// NewPTY wraps an established connection, for callers that bridge something
-// other than a Docker exec (tests, chiefly).
-func NewPTY(execID string, conn net.Conn, reader *bufio.Reader, closer func()) *PTY {
-	return &PTY{ExecID: execID, Conn: conn, Reader: reader, closer: closer}
-}
-
 // extraEnv carries per-account variables (e.g. ANTHROPIC_BASE_URL): container
 // env is frozen at creation, so exec-time injection is what makes account env
 // edits reach containers that already exist.

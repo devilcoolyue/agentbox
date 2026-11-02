@@ -38,7 +38,7 @@ import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
 import { terminalClipboardSmoke } from './test-term-clipboard.mjs';
 import { terminalTabsSmoke } from './test-term-tabs.mjs';
-import { terminalActivitySmoke, userActivitySmoke } from './test-user-activity.mjs';
+import { humanActivitySmoke, userActivitySmoke } from './test-user-activity.mjs';
 import { chatParallelSmoke } from './test-chat-parallel.mjs';
 import { motionSmoke } from './test-motion.mjs';
 import {browserEngine,cancelledFetchError,launchBrowser,recordNavigations} from './playwright-launch.mjs';
@@ -85,18 +85,15 @@ export async function smoke(page) {
  await page.routeWebSocket('**/api/sessions/*/chat?*', ws => { chatSocket=ws; ws.onMessage(data => chatMessages.push(JSON.parse(data))); });
  let usageLiveSocket;
  await page.routeWebSocket('**/api/usage/live?*', ws => { usageLiveSocket = ws; });
- const terminalInput = [], terminalControl = []; let terminalSocket;
+ const terminalInput = []; let terminalSocket;
  await page.routeWebSocket('**/api/sessions/*/term?*', ws => {
   terminalSocket = ws;
-  ws.onMessage(data => {
-   if (typeof data !== 'string') { terminalInput.push(data.toString()); return; }
-   const control = JSON.parse(data);
-   if (control.type !== 'resize') terminalControl.push(control);
-  });
+  ws.onMessage(data => { if (typeof data !== 'string') terminalInput.push(data.toString()); });
  });
  await page.route('**/api/**', async route => {
   const u = new URL(route.request().url()), path=u.pathname;
   let body={};
+  if (path === '/api/me/activity' && !/^Bearer \S/.test(route.request().headers().authorization||'')) errors.push('activity reported without a login');
   if (path === '/api/login') body={token:'synthetic-browser-token'};
   else if(path === '/api/me') body=me;
   else if(path === '/api/git/connections') body=[];
@@ -1119,7 +1116,7 @@ export async function smoke(page) {
   await page.locator('#term-spend .ts-tok').filter({hasText:'1.2B tok'}).waitFor();
   assert.match(await page.locator('#term-spend').getAttribute('data-tip'), /合计 1,184,000,000 tokens。/);
   usageRows = savedUsageRows;
-  await terminalActivitySmoke(page,()=>terminalSocket,terminalInput,terminalControl);
+  await humanActivitySmoke(page,()=>terminalSocket,terminalInput);
   const key = name => page.locator(`[data-term-key="${name}"]`);
   const modifier = name => page.locator(`[data-term-mod="${name}"]`);
   const lastInput = async expected => {

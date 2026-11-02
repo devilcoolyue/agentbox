@@ -18,7 +18,7 @@
     "test:outline": "node --test scripts/test-outline.mjs",
     "test:feature-lifetimes": "node --test scripts/test-feature-lifetimes.mjs",
     "test:icons": "node --test scripts/test-icons.mjs",
-    "test:term-activity": "node --test scripts/test-term-activity.mjs"
+    "test:human-activity": "node --test scripts/test-human-activity.mjs"
   },
   "devDependencies": {
     "typescript": "~7.0.2"

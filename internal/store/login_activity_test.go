@@ -67,11 +67,11 @@ func TestLoginEventsPurgeOnlyPastRetention(t *testing.T) {
 func TestUserActivityListsEveryAccountMostRecentFirst(t *testing.T) {
 	st := loginActivityStore(t, "alice", "bob", "carol")
 	now := time.UnixMilli(1_800_000_000_000)
-	if err := st.TouchTerminalActivity("bob", now); err != nil {
+	if err := st.TouchUserActivity("bob", now); err != nil {
 		t.Fatal(err)
 	}
-	// Writes run off the read loop, so one can arrive late: it must not rewind.
-	if err := st.TouchTerminalActivity("bob", now.Add(-time.Minute)); err != nil {
+	// Tabs report independently, so one can arrive late: it must not rewind.
+	if err := st.TouchUserActivity("bob", now.Add(-time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.RecordLogin(LoginEvent{User: "alice", At: 10, Method: LoginPassword, IP: "203.0.113.1"}); err != nil {
@@ -102,7 +102,7 @@ func TestDeletedUserLeavesNoLoginOrActivityRows(t *testing.T) {
 	if err := st.RecordLogin(LoginEvent{User: "alice", At: 1, Method: LoginPassword}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.TouchTerminalActivity("alice", time.Now()); err != nil {
+	if err := st.TouchUserActivity("alice", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.DeleteUser("alice"); err != nil {
@@ -111,7 +111,7 @@ func TestDeletedUserLeavesNoLoginOrActivityRows(t *testing.T) {
 	if err := st.RecordLogin(LoginEvent{User: "alice", At: 2, Method: LoginPassword}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.TouchTerminalActivity("alice", time.Now()); err != nil {
+	if err := st.TouchUserActivity("alice", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CreateUser(User{Name: "alice", Role: RoleUser, PassHash: "x"}); err != nil {

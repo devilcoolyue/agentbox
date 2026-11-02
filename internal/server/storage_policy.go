@@ -26,6 +26,7 @@ var storageExemptRoutes = map[string]bool{
 // They run down to the floor instead of stopping at the reserve; quotas still
 // bound what a turn writes. Every other route keeps the full reserve.
 var storageRoutineRoutes = map[string]bool{
+	"POST /api/me/activity":                               true,
 	"POST /api/sessions/{id}/start":                       true,
 	"PUT /api/sessions/{id}/chat/requests/{request}":      true,
 	"POST /api/sessions/{id}/chat/requests/{request}":     true,

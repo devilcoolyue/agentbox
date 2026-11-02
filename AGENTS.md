@@ -891,7 +891,7 @@ data/
 
 - 「系统设置 → 登录与活跃」（`server/login_activity.go`、`store/login_activity.go`，前端 `features/settings/user-activity.ts`）。读接口 `GET /api/user-activity`、`GET /api/login-events` 全部走 `s.admin`；不要把这些字段加进 `/api/me` 或任何普通用户能读到的接口，用户看不到自己的记录是需求本身。
 - 登录记录：每发放一个登录令牌记一行（密码登录 `password`、桌面端配对 `desktop`、abox-link 配对 `abox-link`），新增发放令牌的路径要补 `recordLogin`。失败的登录不记，用户名框里可能是输错位置的密码。写失败只打日志，不挡登录。IP 取 `clientIP`，保留 180 天（`tokenJanitor` 顺带清理）；删除用户时一并删除，同名新账号不继承。
-- 最后活跃 = 用户最后一次在终端页面点击或输入。**不能**用终端 WS 的二进制帧判断：程序查询光标位置、设备属性时 xterm 也从 `onData` 自动应答，焦点、鼠标上报同样走这条路，无人值守的 Agent 会被算成在操作。所以由 `term-activity.ts` 在 `#tab-term` 捕获阶段监听 `isTrusted` 的 pointerdown/keydown/input/paste/drop，经终端 WS 发 `{"type":"activity"}` 控制帧；页面每 15 秒最多一次（窗口内的操作在窗口结束时补报，时间最多晚一个窗口），服务端每连接再限 10 秒一次写库。上报值由浏览器决定，用户可以自己伪造，只能当参考，不是审计证据。对话页操作不计入；桌面客户端（`desktop/`）有自己的终端实现，还没有上报。回归 `scripts/test-user-activity.mjs`、`scripts/test-term-activity.mjs`、`TestTerminalActivityComesOnlyFromExplicitReports`。
+- 最后活跃 = 用户最后一次在网页上点击或输入，所有页面都算。只认浏览器的真实事件：`human-activity.ts` 在 `document` 捕获阶段监听 `isTrusted` 的 pointerdown/keydown/input/paste/drop，经 `POST /api/me/activity` 上报（不走 `api()`：不闪进度条、失败不打扰用户）。**不能**改用业务信号：Agent 流式输出、终端里跑命令都不是人在操作；xterm 的 `onData` 尤其不行，程序查询光标位置、设备属性时它会自动应答，焦点、鼠标上报同样走这条路。每个标签页 15 秒最多报一次（窗口内的操作在窗口结束时补报，时间最多晚一个窗口），服务端每用户再限 10 秒一次写库（`activityGate`）。上报值由浏览器决定，用户可以自己伪造，只能当参考，不是审计证据。滚动、鼠标移动不算；iframe 里的操作（HTML 预览 `#fv-frame`）事件传不出来，也不算。桌面客户端（`desktop/`）有自己的界面，还没有上报。回归 `scripts/test-user-activity.mjs`、`scripts/test-human-activity.mjs`、`TestActivityReportRecordsTheTokenOwnerAndAnswersNothing`。
 
 ### 系统通告
 

@@ -139,8 +139,7 @@ func shellQuote(s string) string {
 
 // handleTermWS bridges a browser xterm.js to a TTY exec inside the session
 // container. Protocol: binary frames are raw terminal bytes in both
-// directions; text frames are JSON control messages ({"type":"resize",...},
-// {"type":"activity"}).
+// directions; text frames are JSON control messages ({"type":"resize",...}).
 //
 // 余额见底的用户进不来。终端里的 claude/codex 是容器内进程，输出直接进 PTY，
 // 服务端看不到用量事件，既记不了账也扣不了钱——不挡的话，对话页扣光额度后切到
@@ -298,7 +297,6 @@ func (s *Server) bridgeTermPTY(w http.ResponseWriter, r *http.Request, sess stor
 	}()
 
 	// browser -> container
-	var lastActivity time.Time
 	for {
 		mt, data, err := conn.ReadMessage()
 		if err != nil {
@@ -325,22 +323,9 @@ func (s *Server) bridgeTermPTY(w http.ResponseWriter, r *http.Request, sess stor
 				Cols uint   `json:"cols"`
 				Rows uint   `json:"rows"`
 			}
-			if err := json.Unmarshal(data, &ctl); err != nil {
-				continue
-			}
-			switch {
-			case ctl.Type == "resize" && ctl.Cols > 0 && ctl.Rows > 0:
+			if err := json.Unmarshal(data, &ctl); err == nil && ctl.Type == "resize" && ctl.Cols > 0 && ctl.Rows > 0 {
 				if err := s.dock.ResizePTY(r.Context(), pty.ExecID, ctl.Cols, ctl.Rows); err != nil {
 					log.Printf("resize %s: %v", sess.ID, err)
-				}
-			case ctl.Type == "activity":
-				// Binary frames can't stand in for this: xterm answers terminal
-				// queries and reports focus through the same channel, so a program
-				// running by itself would look like someone typing. The page sends
-				// this only for real clicks and keystrokes (term-activity.ts).
-				if now := time.Now(); now.Sub(lastActivity) >= termActivityMinGap {
-					lastActivity = now
-					s.noteTermActivity(reqUser(r).Name, now)
 				}
 			}
 		}

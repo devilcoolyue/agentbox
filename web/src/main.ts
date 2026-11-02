@@ -9,6 +9,7 @@ import { S } from "./state.js";
 import { enhanceSelects } from "./select.js";
 import { initInk } from "./ink.js";
 import { initLoadingBar } from "./loading-bar.js";
+import { watchHumanActivity } from "./human-activity.js";
 import "./util.js";
 import "./tip.js";
 import "./theme.js";
@@ -45,6 +46,13 @@ initInk();
 initLoadingBar();
 
 initApplication();
+
+// 不走 api()：这是后台上报，不该闪进度条，失败也不该打扰用户；登录失效由其他请求处理。
+watchHumanActivity(document, () => {
+  if (!S.token) return false;
+  void fetch("/api/me/activity", { method: "POST", headers: { Authorization: "Bearer " + S.token } }).catch(() => {});
+  return true;
+});
 
 if (S.token) tryEnter();
 else showLogin();

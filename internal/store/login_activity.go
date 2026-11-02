@@ -73,13 +73,13 @@ func (s *Store) PurgeLoginEvents(now time.Time) (int64, error) {
 	return res.RowsAffected()
 }
 
-// TouchTerminalActivity moves a user's last human terminal action forward.
-// Writes run off the terminal's read loop, so an older one can land after a
-// newer one and must not move the time back.
-func (s *Store) TouchTerminalActivity(user string, at time.Time) error {
-	_, err := s.db.Exec(`INSERT INTO user_activity(user, last_terminal_at)
+// TouchUserActivity moves a user's last human action forward. Several tabs report
+// independently, so an older write can land after a newer one and must not move
+// the time back.
+func (s *Store) TouchUserActivity(user string, at time.Time) error {
+	_, err := s.db.Exec(`INSERT INTO user_activity(user, last_active_at)
 		SELECT name, ? FROM users WHERE name = ?
-		ON CONFLICT(user) DO UPDATE SET last_terminal_at = MAX(last_terminal_at, excluded.last_terminal_at)`,
+		ON CONFLICT(user) DO UPDATE SET last_active_at = MAX(last_active_at, excluded.last_active_at)`,
 		at.UnixMilli(), user)
 	return err
 }
@@ -96,11 +96,11 @@ type UserActivity struct {
 
 // ListUserActivity returns every account, the most recently active first.
 func (s *Store) ListUserActivity() ([]UserActivity, error) {
-	rows, err := s.db.Query(`SELECT u.name, u.role, COALESCE(a.last_terminal_at, 0), COALESCE(l.at, 0), COALESCE(l.ip, '')
+	rows, err := s.db.Query(`SELECT u.name, u.role, COALESCE(a.last_active_at, 0), COALESCE(l.at, 0), COALESCE(l.ip, '')
 		FROM users u
 		LEFT JOIN user_activity a ON a.user = u.name
 		LEFT JOIN login_events l ON l.id = (SELECT MAX(id) FROM login_events WHERE user = u.name)
-		ORDER BY COALESCE(a.last_terminal_at, 0) DESC, COALESCE(l.at, 0) DESC, u.name`)
+		ORDER BY COALESCE(a.last_active_at, 0) DESC, COALESCE(l.at, 0) DESC, u.name`)
 	if err != nil {
 		return nil, err
 	}

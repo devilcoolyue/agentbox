@@ -169,7 +169,8 @@ type Server struct {
 
 	marketMu sync.Mutex // 串行化官方市场的 git 抓取（拉仓库、装技能）
 
-	logins *loginGuard // per-IP failed-login throttle
+	logins   *loginGuard  // per-IP failed-login throttle
+	activity activityGate // per-user write throttle for activity reports
 
 	mon *monState // 上一帧计数器快照，供监控页按轮询间隔算 CPU 速率
 
@@ -385,6 +386,7 @@ func (s *Server) routes() *http.ServeMux {
 	mux.Handle("POST /api/session-creations/{request}/upload", s.auth(http.HandlerFunc(s.handleProjectUpload)))
 	mux.Handle("POST /api/session-creations/{request}/git", s.auth(http.HandlerFunc(s.handleProjectGit)))
 	mux.Handle("POST /api/me/password", s.auth(http.HandlerFunc(s.handleChangePassword)))
+	mux.Handle("POST /api/me/activity", s.auth(http.HandlerFunc(s.handleActivityReport)))
 	mux.Handle("GET /api/me/git", s.auth(http.HandlerFunc(s.handleGitProfile)))
 	mux.Handle("GET /api/git/connections", s.auth(http.HandlerFunc(s.handleGitConnections)))
 	mux.Handle("GET /api/git/connections/{connection}/shares", s.admin(http.HandlerFunc(s.handleGitShares)))
