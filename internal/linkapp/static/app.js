@@ -95,6 +95,7 @@ function render() {
   $("card-status").classList.toggle("hidden", !paired);
   $("panel-body").classList.toggle("hidden", !paired);
   $("hdr-acct").textContent = paired ? state.user + " @ " + hostOf(state.server) : "";
+  $("hdr-version").textContent = state.version || "";
 
   const st = state.status || { state: "stopped" };
   const look = ST[st.state] || ST.stopped;

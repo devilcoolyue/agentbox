@@ -497,11 +497,17 @@ restrict {pub}
 
 Recommended: a dedicated normal account for agentbox that can only write its root
 folder, with sshd listening on 127.0.0.1 only (abox-link connects on loopback).
+A separate account does not hide your own files by itself: on macOS normal users share
+the staff group and home folders are group-readable, and some Linux distros make homes
+world-readable. Run `chmod 700 ~` from your own account so this one cannot read yours.
+The .ssh folder (700) and authorized_keys (600) must be owned by that user.
 
   Linux    sudo apt install openssh-server   (or your distro's package)
            sudo useradd -m {user}; append the line above to ~{user}/.ssh/authorized_keys
            optional: ListenAddress 127.0.0.1 in /etc/ssh/sshd_config, then restart sshd
-  macOS    System Settings > General > Sharing > Remote Login (allow only that user);
+  macOS    System Settings > General > Sharing > Remote Login (not Remote Management,
+           which controls the screen); add that user under "Allow access for" and check
+           with: dseditgroup -o checkmember -m {user} com.apple.access_ssh
            append the line above to ~{user}/.ssh/authorized_keys
   Windows  in an administrator PowerShell:
              Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
@@ -547,6 +553,17 @@ def banner(host, port):
         return b""
 
 
+def login_hint(err):
+    """Point at the likely cause of a failed login, from ssh's last error line."""
+    # sshd drops the connection when the key is fine but the account may not log in, so
+    # asking about the key here sends people the wrong way.
+    if "Connection closed" in err:
+        return ("the machine ended the login, often after accepting the key; on macOS allow this user "
+                "under System Settings > General > Sharing > Remote Login (not Remote Management), "
+                "elsewhere check the machine's sshd log")
+    return "is the public key from `abox-remote setup` authorized for this user?"
+
+
 def cmd_doctor(a):
     h = pick_host(a.host)
     ok = lambda m: print("ok   " + m)
@@ -563,7 +580,7 @@ def cmd_doctor(a):
     probe = subprocess.run(ssh_base(h) + ["echo abox-remote-ok"], capture_output=True, text=True)
     if "abox-remote-ok" not in probe.stdout:
         err = probe.stderr.strip().splitlines()[-1:] or ["?"]
-        bad("login failed: " + err[0] + "  (is the public key from `abox-remote setup` authorized for this user?)")
+        bad("login failed: " + err[0] + "  (" + login_hint(err[0]) + ")")
     ok("login")
     cfg = load_hosts()
     rec = cfg["hosts"][h["name"]]

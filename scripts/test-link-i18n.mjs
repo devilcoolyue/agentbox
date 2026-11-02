@@ -27,6 +27,7 @@ export async function linkI18nSmoke(page) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   let state = {
+    version: 'v0.0.0-fixture',
     paired: false, running: false, user: '保存', server: 'https://example.invalid',
     allow: ['db.example:5432'], maps: ['3306=10.0.1.5:3306'], auto_connect: true,
     transparent: true, insecure: false, autostart: { supported: true, installed: false, detail: '已保存' },
@@ -80,6 +81,7 @@ export async function linkI18nSmoke(page) {
     await page.locator('#card-status').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#st-title').textContent(), '隧道已連線');
     assert.equal(await page.locator('#hdr-acct').textContent(), '保存 @ example.invalid');
+    assert.equal(await page.locator('#hdr-version').textContent(), 'v0.0.0-fixture');
     assert.equal(await page.locator('#boot-detail').textContent(), '已保存');
     assert.equal(await page.locator('#log script').count(), 0);
     assert.match(await page.locator('#log').textContent(), /已保存 <script>/);

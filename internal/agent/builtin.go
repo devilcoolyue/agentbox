@@ -26,9 +26,9 @@ var builtinTemplate embed.FS
 // builtinTemplateDigest, which TestBuiltinTemplateDigest checks) is what pushes
 // changed files out to existing sessions; a file the user edited in a session
 // after that moment is kept.
-var BuiltinTemplateTime = time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+var BuiltinTemplateTime = time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC)
 
-const builtinTemplateDigest = "15b91fab0550dee321426f2bf057e942d6d8bc36e81cc780b8e58e5a08a301d2"
+const builtinTemplateDigest = "f086ac288f9c749b204378e22e0d2d814917a6650e7a687c6c13d3fe939f544f"
 
 // BuiltinTemplateDigest hashes the embedded tree (paths and contents).
 func BuiltinTemplateDigest() string {

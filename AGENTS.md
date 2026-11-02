@@ -963,6 +963,7 @@ data/
 - 两套前端互相独立：主控制台在 `internal/web/static`（进 `agentbox`），abox-link 面板在
   `internal/linkapp/static`（进 `abox-link`）。改了面板要重跑 `scripts/build-clients.sh`
   才能让下载按钮发新版；主控制台不受影响，服务端也不用重启。
+- 面板端口被占时，`RunPanel` 用 `/api/state` 的 `version` 判断：同版本交给已有实例并打开它的面板；不同版本（旧版没有这个字段，读到空串）不开浏览器，打印 `replaceNotice` 并等回车后退出。开浏览器会让旧面板盖住提示，看起来像新版没生效；别退回成一律交接。`--daemon` 不打印提示，交给操作系统重试。
 - 改 abox-link 面板前先读 `app.js`：它按 id 直接抓 DOM（`wire`、`wire-rules`、`st-title`、
   `card-pair`、`allow-list`、`savebar` 等），并自己拼类名（`$("wire").className = "wire " + cls`）。
   动 `index.html` 结构时这些 id 必须留着，样式也别挂在被 JS 覆写的类上，否则轮询下一轮就被抹掉。

@@ -17,6 +17,10 @@ import tarfile
 import tempfile
 import time
 
+# The tool sits inside the tree go:embed packs into the server, and a bytecode cache
+# written beside it would ship to every workspace.
+sys.dont_write_bytecode = True
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(REPO, "internal", "agent", "builtin", ".local", "bin", "abox-remote")
 
@@ -132,6 +136,20 @@ def unsafe_archive(mod, work):
     raise AssertionError("archive entry outside the destination was accepted")
 
 
+def setup_guidance(mod):
+    # Both came from a real macOS setup: the two sharing switches look alike, and a separate
+    # account could still read the owner's home through the staff group.
+    guide = mod.GUIDE.format(name="m", pub="ssh-ed25519 AAAA", user="agentbox", host="self.abox-link", port=22, flag="")
+    expect("Remote Login (not Remote Management" in guide, "guide must name the right macOS switch")
+    expect("checkmember -m agentbox com.apple.access_ssh" in guide, "guide must show how to check the allow list")
+    expect("chmod 700 ~" in guide, "guide must say how to hide the owner's home")
+    # A dropped login is not a key problem; a refused key still is.
+    closed = mod.login_hint("Connection closed by 198.18.0.1 port 22")
+    expect("Remote Login" in closed and "public key" not in closed, closed)
+    denied = mod.login_hint("agentbox@self.abox-link: Permission denied (publickey,password).")
+    expect("public key" in denied, denied)
+
+
 def main():
     base = tempfile.mkdtemp(prefix="abox-remote-test-")
     try:
@@ -144,6 +162,7 @@ def main():
         os.makedirs(os.path.join(base, "state"))
         mod.save_hosts(hosts)
         unsafe_archive(mod, base)
+        setup_guidance(mod)
         for name in hosts["hosts"]:
             work = os.path.join(base, "work-" + name)
             os.makedirs(work)

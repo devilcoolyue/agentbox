@@ -46,6 +46,6 @@ abox-remote pull proj/out/report.txt           # 取回结果
 
 ## 接入（告诉用户）
 
-1. 在 abox-link 面板勾选「允许 agentbox 通过 SSH 连接本机」，保存；本机开启 SSH 服务。
-2. 在工作空间执行 `abox-remote setup <名字> --user <本机账号>`。它会打印公钥和各系统的设置步骤：推荐给 agentbox 单独建一个普通账号，只让它写工作目录。
+1. 在 abox-link 面板勾选「允许 agentbox 通过 SSH 连接本机」，保存（面板里没有这个选项就是旧版，先升级 abox-link）；本机开启 SSH 服务。macOS 开的是「远程登录」，不是「远程管理」，并要把账号加进它的允许访问名单。
+2. 在工作空间执行 `abox-remote setup <名字> --user <本机账号>`。它会打印公钥和各系统的设置步骤：推荐给 agentbox 单独建一个普通账号，只让它写工作目录。单独建账号还不够：macOS 的普通账号都在 staff 组，主目录默认组内可读，提醒用户在自己的账号里执行 `chmod 700 ~`。
 3. 用户把公钥加进那个账号的 `authorized_keys` 后，执行 `abox-remote doctor`。

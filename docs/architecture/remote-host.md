@@ -149,6 +149,7 @@ Skill 要点：何时用、先 `doctor`（失败原样转告用户，不绕过�
 
 - **最大的风险是 Agent 在用户本机上执行任意命令**（Agent 常以跳过权限确认的方式运行，还可能被提示注入）。一期的对策：
   - 接入指引**推荐给 agentbox 单独建一个普通账号**，只给 `root` 目录的写权限；用自己的账号也行，但要明确告知风险。
+  - 单独建账号不等于隔离：macOS 的普通账号都在 `staff` 组，主目录默认 `drwxr-x---`，这个账号能进入并列出用户的主目录（2026-11-02 实机确认），部分 Linux 发行版的主目录对所有人可读。指引要求用户在自己的账号里执行 `chmod 700 ~`。`exec` 的命令不受路径护栏限制，所以边界只能靠账号权限。
   - `setup` 打印的授权行带 `restrict` 选项，关掉这把密钥的端口转发、agent 转发和 X11 转发；指引还建议 sshd 只监听 127.0.0.1（abox-link 走回环连接，局域网就连不到它）。
   - 本机 abox-link 的审计日志记录每条连接；`abox-remote` 把执行过的命令追加到远端 `<root>/.abox-remote/audit.log`。
   - 要撤销：在面板里关掉开关，或者删掉 `authorized_keys` 里那一行。两者都立即生效。
@@ -171,11 +172,14 @@ Skill 要点：何时用、先 `doctor`（失败原样转告用户，不绕过�
 - 手工：用户态 sshd（127.0.0.1:2222）上跑通 setup → doctor → exec/run/wait/cancel/push/pull；在任务运行中停掉 sshd 再拉起，任务照常完成，`wait` 自动重连。pwsh 7.4（Linux）上跑通 Windows 运行时除脱离作业对象和 taskkill 以外的部分；`AboxSpawn` 的 C# 能编译。
 - abox-link 面板：`browser.link-i18n` 通过。
 
+已完成（2026-11-02，macOS 15.6.1 Apple 芯片，经生产隧道）：`doctor` 全部通过；exec、run/wait/log、失败退出码、cancel（`pgrep` 确认进程已结束，走的是没有 setsid 时的 perl 分支）；关闭 SSH 主连接后任务继续；push/pull 目录、中文和空格文件名、10 MB 校验一致。
+
+实机踩到的坑已写进 `setup` 指引：macOS 要开「远程登录」而不是「远程管理」，账号要加进允许名单；否则密钥通过后 sshd 直接断开，表现为 `Connection closed`，不是 `Permission denied`，`doctor` 据此给不同提示。
+
 待做：
 
 - Windows 真机：在 OpenSSH 会话里起任务后断开，确认任务继续；`taskkill` 取消；PowerShell 5.1；中文文件名经 `tar.exe` 往返；DefaultShell 分别为 cmd 和 PowerShell 两种情况。
-- macOS 真机：没有 setsid 时走 perl 的分支，确认取消能杀掉整组进程。
-- 经真实隧道的端到端：新版 abox-link 勾选本机 SSH，在工作空间里 `doctor` 通过。
+- 经真实隧道的断线：任务运行中停掉隧道再恢复，确认任务继续、`wait` 自动重连。
 - 种子用户：请 hyxsbcjg 在一个新项目上试用，对比他现在那套的体验和稳定性。
 
 ## 已定决策（2026-11-01）

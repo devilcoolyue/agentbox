@@ -123,6 +123,8 @@ code {
   color: var(--muted); font-size: 12px;
   padding-left: 9px; border-left: 1px solid var(--line);
 }
+/* 版本号挂在品牌旁：升级后先看这里，确认跑的是不是刚下载的那个 */
+.brand-ver { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .acct { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .acct-name {
   font-family: var(--ui); font-size: 12px; color: var(--muted);
@@ -459,6 +461,11 @@ input[type=text]:focus, textarea:focus {
 .toast.bad { border-color: var(--red-line); color: var(--red); }
 
 /* ---------- 窄屏 ---------- */
+
+/* 版本号很长，放不下时宁可不显示，也别把语言和账号挤到第二行；--version 随时能查 */
+@media (max-width: 1040px) {
+  .brand-ver { display: none; }
+}
 
 @media (max-width: 900px) {
   .desk { grid-template-columns: 1fr; }

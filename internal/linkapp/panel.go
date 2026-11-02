@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"agentbox/internal/buildinfo"
 )
 
 // Panel is the local control console: a small HTTP server on the loopback
@@ -110,6 +112,7 @@ func (p *Panel) handleState(w http.ResponseWriter, r *http.Request) {
 func (p *Panel) state() map[string]any {
 	cfg := p.Config()
 	return map[string]any{
+		"version":      buildinfo.Version,
 		"paired":       cfg.Paired(),
 		"transparent":  cfg.Transparent,
 		"server":       cfg.Server,
