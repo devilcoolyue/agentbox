@@ -905,4 +905,5 @@ export default {
   "趋势指标": "Trend metric",
   "请求": "Requests",
   "使用趋势图，用左右方向键查看各时段的数值": "Usage trend chart. Use the left and right arrow keys to read each period.",
+  "更多指标": "More metrics",
 } satisfies Record<string, string>;

@@ -2973,4 +2973,6 @@ export default {
   "请求": "Requests",
   "这个时间范围内没有记录": "No records in this time range",
   "读取使用趋势失败": "Could not load the usage trend",
+  "总请求数": "Total requests",
+  "每条记录对应一次模型请求，共 {p0} 个回合；升级前按回合合并保存的旧行算一次": "Each record is one model request, across {p0} turns. Older rows merged per turn before the upgrade count as one.",
 } satisfies Record<string, string>;

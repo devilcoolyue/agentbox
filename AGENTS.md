@@ -555,6 +555,7 @@ data/
   页面由筛选/合计、独立滚动的明细、常驻底部分页组成，不能把滚动放回 `.usage-body`。
   默认每页 20 条，可选 50 / 100 条；翻页/改筛选重置列表滚动位置，自动轮询保留位置。
   页大小只影响明细请求，合计与 CSV 仍按整个筛选范围计算。
+- 合计条（`usage.ts` 的 `SUMMARY_MAIN` / `SUMMARY_DETAIL`）：卡片只建一次、之后原地改数字，轮询和推送重建节点会丢掉 `?` 的键盘焦点；退出时 `buildSummary` 换新节点，带账号数据的提示随旧节点丢弃。命中率共用 `cacheHitText`，四个桶的顺序让缓存读取落在命中率正下方。
 - **使用趋势图**（`server/usagetrend.go` + `store/usage_trend.go` + `web/src/usage-trend.ts`，照 cc-switch 的
   `get_daily_trends` / `UsageTrendChart`）：`GET /api/usage/trend` 与明细共用 `usageFilterFrom`，范围一致、普通用户钉死自己。
   SQLite 不认 IANA 时区，所以 SQL 只按 UTC 刻钟分组（`UsageSlots`，时区偏移都是 15 分钟的倍数），Go 再折叠成

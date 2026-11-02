@@ -189,6 +189,38 @@ export async function smoke(page) {
   await page.locator('#sec-container').waitFor({state:'visible'});
   assert.equal(new URL(page.url()).hash,'#/settings/container','login preserves destination');
   assert.equal(await page.locator('#login-btn').isDisabled(),false);
+  async function usageSummarySmoke() {
+  const texts=sel=>page.locator(sel).allInnerTexts();
+  await page.waitForFunction(()=>document.querySelector('#us-main .us-value')?.textContent);
+  assert.deepEqual(await texts('#us-main .us-label'),['总花费','总请求数','总 Token','缓存命中率']);
+  // 80 read of 110 input + 80 read + 10 write: output never enters the rate.
+  assert.deepEqual(await texts('#us-main .us-value'),['$0.00','3','3.2K','40.0%']);
+  // Four tiles in one row, with the toggle beside them.
+  const tops=await page.locator('#us-main .us-item').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().top));
+  assert.equal(new Set(tops).size,1);
+  const more=page.locator('#us-more'),lastCard=await page.locator('#us-main .us-item').nth(3).boundingBox();
+  assert.ok((await more.boundingBox()).x>=lastCard.x+lastCard.width,'toggle sits to the right of the cards');
+  assert.equal(await page.locator('#us-detail .us-item').first().isVisible(),false,'the buckets start tucked away');
+  assert.equal(await more.getAttribute('aria-expanded'),'false');
+  await more.click();
+  assert.equal(await more.getAttribute('aria-expanded'),'true');
+  assert.deepEqual(await texts('#us-detail .us-label'),['输入','输出','缓存写入','缓存读取']);
+  assert.deepEqual(await texts('#us-detail .us-value'),['110','3.0K','10','80']);
+  // Cache read lines up under the hit rate, as the reference does.
+  const under=await page.locator('#us-detail .us-item').nth(3).boundingBox(),rate=await page.locator('#us-main .us-item').nth(3).boundingBox();
+  assert.ok(Math.abs(under.x-rate.x)<1&&Math.abs(under.width-rate.width)<1,'second row aligns with the cards');
+  assert.ok(under.y>rate.y+rate.height,'second row sits below the cards');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_usage_more_metrics')),'open');
+  // The card tip carries the exact number, the ? explains the definition.
+  assert.equal(await page.locator('#us-main .us-item').nth(2).getAttribute('data-tip'),'3,200');
+  assert.match(await page.locator('#us-main .us-help').nth(1).getAttribute('data-tip'),/不含输出 token/);
+  assert.equal(await page.locator('#us-main .us-help').nth(1).getAttribute('aria-label'),'缓存命中率');
+  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-summary-desktop.png',animations:'disabled'});
+  await more.click();
+  assert.equal(await page.locator('#us-detail .us-item').first().isVisible(),false);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_usage_more_metrics')),'closed');
+  }
+
   async function usageTrendSmoke() {
   const trendTexts=sel=>page.locator(sel).allInnerTexts();
   const box=sel=>page.locator(sel).boundingBox();
@@ -332,6 +364,7 @@ export async function smoke(page) {
   await page.locator('#usage-sub').filter({hasText:'终端全量扫描'}).waitFor();
   await page.locator('#usage-rows .u-hit').first().waitFor();
   assert.deepEqual(await page.locator('#usage-rows .u-hit .u-v').allTextContents(),['80.0%','0.0%','—']);
+  await usageSummarySmoke();
   await usageTrendSmoke();
   // The reasoning effort a web turn was sent with sits under its model.
   assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['Extra High','Medium (13000)']);
@@ -340,9 +373,12 @@ export async function smoke(page) {
   for (let i=0; !usageLiveSocket && i<100; i++) await new Promise(r=>setTimeout(r,50));
   assert.ok(usageLiveSocket,'usage page opened the live usage socket');
   const liveRows=await page.locator('#usage-rows tr').count(),liveTrendReads=usageTrendReads;
+  await page.locator('#us-main .us-help').first().focus();
   usageRows.unshift({...usageRows[0],id:99,turn_id:'turn-live',kind:'terminal'});
   usageLiveSocket.send(JSON.stringify({type:'usage',sessions:['fixture-space']}));
   await page.waitForFunction(n=>document.querySelectorAll('#usage-rows tr').length===n,liveRows+1);
+  assert.equal(await page.locator('#us-main .us-value').nth(1).innerText(),'4','the summary updates in place');
+  assert.equal(await page.evaluate(()=>document.activeElement?.classList.contains('us-help')),true,'a live refresh keeps keyboard focus on the summary');
   assert.ok(usageTrendReads>liveTrendReads,'a pushed usage notice refreshes the chart too');
   usageRows.shift();
   usageLiveSocket.send(JSON.stringify({type:'usage',sessions:null}));
@@ -357,7 +393,7 @@ export async function smoke(page) {
   // Actions stay on the filter title row and the token card sums all four buckets.
   assert.equal(await page.locator('.uf-head .uf-actions #uf-export').count(),1);
   assert.equal(await page.locator('#uf-fields .uf-actions').count(),0);
-  assert.equal(await page.locator('.us-item').nth(1).locator('.us-label').innerText(),'总 Token');
+  assert.equal(await page.locator('#us-main .us-item').nth(2).locator('.us-label').innerText(),'总 Token');
   const downloaded=page.waitForEvent('download');
   await page.locator('#uf-export').click();
   const csv=await readFile(await (await downloaded).path(),'utf8');
@@ -485,7 +521,7 @@ export async function smoke(page) {
   assert.equal(await page.locator('#usage-rows tr').nth(2).locator('.u-seq').innerText(),'合并 27 次');
   assert.equal(await secondUsage.locator('.u-lat .u-v').innerText(),'—','later requests of a turn carry no turn latency');
   assert.match(await firstUsage.locator('.u-time .u-v').innerText(),/^\d\d:\d\d:\d\d/,'request rows show seconds');
-  assert.equal(await page.locator('.us-item').nth(4).locator('.us-value').innerText(),'7.0M','summary cards abbreviate token totals');
+  assert.equal(await page.locator('#us-detail .us-item').nth(3).locator('.us-value').textContent(),'7.0M','summary cards abbreviate token totals');
   const requestDownload=page.waitForEvent('download');
   await page.locator('#uf-export').click();
   const requestLines=(await readFile(await(await requestDownload).path(),'utf8')).trim().split('\r\n').map(line=>line.split(','));
@@ -529,6 +565,9 @@ export async function smoke(page) {
   await page.locator('.topbar .usage-zone').waitFor({state:'visible'});
   if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-cache-mobile.png',animations:'disabled'});
   assert.ok(await page.locator('#usage-trend').evaluate(el=>el.scrollWidth<=el.clientWidth),'chart must not overflow a phone');
+  assert.ok(await page.locator('#usage-summary').evaluate(el=>el.scrollWidth<=el.clientWidth),'summary must not overflow a phone');
+  const phoneCards=await page.locator('#us-main .us-item').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().top));
+  assert.ok(phoneCards[0]===phoneCards[1]&&phoneCards[2]===phoneCards[3]&&phoneCards[2]>phoneCards[0],'cards stack two by two on a phone');
   await page.setViewportSize({width:1280,height:900});
   usageRows=[];
   usageTrend={granularity:'hour',buckets:[],timezone:'Asia/Shanghai'};

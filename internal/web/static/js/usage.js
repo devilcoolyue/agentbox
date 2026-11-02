@@ -704,36 +704,85 @@ window.addEventListener("agentbox-language-change", () => {
     renderCost(activeCost);
     body.scrollTop = scrollTop;
 });
-function renderSummary(data) {
-    const box = $("usage-summary");
-    box.replaceChildren();
-    const t = data.total;
-    // token 合计动辄上千万，卡片里按 K/M/B 缩写，悬停给完整数字。
-    const exact = (n, note) => () => num(n) + (note ? " · " + note() : "");
-    // 总量与每行的「合计」同一口径：四个桶相加。回合数退到悬停提示里。
-    const tokens = t.input_tokens + t.output_tokens + t.cache_read_tokens + t.cache_write_tokens;
-    const items = [
-        ["总花费", fmtUSD(t.cost_micro_usd, 2), () => i18nText("筛选范围内所有行的费用之和")],
-        ["总 Token", fmtTokens(tokens), exact(tokens, () => i18nText("输入 + 输出 + 缓存读取 + 缓存写入；{p0} 个回合，{p1} 条记录", { p0: String(num(t.turns)), p1: String(num(t.rows)) }))],
-        ["输入", fmtTokens(t.input_tokens), exact(t.input_tokens, () => i18nText("未命中缓存的输入 token"))],
-        ["输出", fmtTokens(t.output_tokens), exact(t.output_tokens)],
-        ["缓存读取", fmtTokens(t.cache_read_tokens), exact(t.cache_read_tokens, () => i18nText("命中缓存的输入，计价远低于新输入"))],
-        ["缓存写入", fmtTokens(t.cache_write_tokens), exact(t.cache_write_tokens)],
-    ];
-    for (const [label, value, tip] of items) {
-        const card = document.createElement("div");
-        card.className = "us-item";
-        if (tip)
-            setTip(card, tip);
-        const l = document.createElement("div");
-        l.className = "us-label";
-        setText(l, label);
-        const v = document.createElement("div");
-        v.className = "us-value mono";
-        v.textContent = value;
-        card.append(l, v);
-        box.appendChild(card);
+const tokenSum = (t) => t.input_tokens + t.output_tokens + t.cache_read_tokens + t.cache_write_tokens;
+const SUMMARY_MAIN = [
+    { label: "总花费", value: (t) => fmtUSD(t.cost_micro_usd, 2),
+        tip: (t) => fmtUSD(t.cost_micro_usd) + " · " + i18nText("筛选范围内所有行的费用之和") },
+    { label: "总请求数", value: (t) => num(t.rows),
+        tip: (t) => i18nText("每条记录对应一次模型请求，共 {p0} 个回合；升级前按回合合并保存的旧行算一次", { p0: num(t.turns) }) },
+    // 总量与每行的「合计」同一口径：四个桶相加。
+    { label: "总 Token", value: (t) => fmtTokens(tokenSum(t)), tip: (t) => num(tokenSum(t)),
+        help: (t) => i18nText("输入 + 输出 + 缓存读取 + 缓存写入；{p0} 个回合，{p1} 条记录", { p0: num(t.turns), p1: num(t.rows) }) },
+    { label: "缓存命中率", value: cacheHitText,
+        help: () => i18nText("缓存读取 ÷（未缓存输入 + 缓存读取 + 缓存写入）；不含输出 token，无输入时显示 —") },
+];
+const SUMMARY_DETAIL = [
+    { label: "输入", value: (t) => fmtTokens(t.input_tokens), tip: (t) => num(t.input_tokens) + " · " + i18nText("未命中缓存的输入 token") },
+    { label: "输出", value: (t) => fmtTokens(t.output_tokens), tip: (t) => num(t.output_tokens) },
+    { label: "缓存写入", value: (t) => fmtTokens(t.cache_write_tokens), tip: (t) => num(t.cache_write_tokens) },
+    { label: "缓存读取", value: (t) => fmtTokens(t.cache_read_tokens), tip: (t) => num(t.cache_read_tokens) + " · " + i18nText("命中缓存的输入，计价远低于新输入") },
+];
+let summaryCards = [];
+function summaryCard(cell) {
+    const card = document.createElement("div");
+    card.className = "us-item";
+    const label = document.createElement("div");
+    label.className = "us-label";
+    const name = document.createElement("span");
+    setText(name, cell.label);
+    label.append(name);
+    let help;
+    if (cell.help) {
+        help = document.createElement("span");
+        help.className = "us-help";
+        help.tabIndex = 0;
+        help.dataset.tipTap = "";
+        help.append(svgIcon("help", 13));
+        setAttrRender(help, "aria-label", () => i18nText(cell.label));
+        label.append(help);
     }
+    const value = document.createElement("div");
+    value.className = "us-value mono";
+    card.append(label, value);
+    return { cell, card, value, help };
+}
+/* 退出时也走这里：换一批新节点，旧节点上绑着账号数据的提示随之丢弃，切语言也不会再渲染出来。 */
+function buildSummary() {
+    const main = SUMMARY_MAIN.map(summaryCard), detail = SUMMARY_DETAIL.map(summaryCard);
+    $("us-main").replaceChildren(...main.map((c) => c.card));
+    $("us-detail").replaceChildren(...detail.map((c) => c.card));
+    summaryCards = [...main, ...detail];
+}
+function renderSummary(data) {
+    const t = data.total;
+    for (const { cell, card, value, help } of summaryCards) {
+        value.textContent = cell.value(t);
+        if (cell.tip)
+            setTip(card, () => cell.tip(t));
+        if (help)
+            setTip(help, () => cell.help(t));
+    }
+}
+const MORE_METRICS_KEY = "agentbox_usage_more_metrics";
+function setMoreMetrics(open, remember = true) {
+    $("usage-summary").classList.toggle("more", open);
+    $("us-more").setAttribute("aria-expanded", String(open));
+    if (remember)
+        try {
+            localStorage.setItem(MORE_METRICS_KEY, open ? "open" : "closed");
+        }
+        catch (_) { }
+}
+function initSummary() {
+    buildSummary();
+    $("us-more").append(svgIcon("chevron-up", 14));
+    let saved = null;
+    try {
+        saved = localStorage.getItem(MORE_METRICS_KEY);
+    }
+    catch (_) { }
+    setMoreMetrics(saved === "open", false);
+    $("us-more").addEventListener("click", () => setMoreMetrics(!$("usage-summary").classList.contains("more")));
 }
 function renderPager(data) {
     const total = data.total.rows;
@@ -955,6 +1004,7 @@ function csvCell(v) {
 for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind"])
     $(id).addEventListener("change", reload);
 initFiltersOpen();
+initSummary();
 initUsageTrend({ rangeLabel: () => dateRange.label(), load: () => void loadTrend() });
 syncSort();
 $("usage-sort-asc").addEventListener("click", () => setSort(true));
@@ -1040,7 +1090,8 @@ function clearUsageDisplay() {
     rowMotion.reset();
     if (costDlg().open)
         costDlg().close();
-    for (const id of ["usage-rows", "usage-summary", "usage-pages", "cost-head", "cost-rows", "cost-note"])
+    buildSummary();
+    for (const id of ["usage-rows", "usage-pages", "cost-head", "cost-rows", "cost-note"])
         $(id).replaceChildren();
     for (const id of ["usage-page", "uf-active", "usage-sub"])
         $(id).textContent = "";
