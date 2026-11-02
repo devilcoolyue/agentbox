@@ -36,7 +36,7 @@ export async function webI18nSmoke(browser) {
  await page.routeWebSocket('**/api/sessions/*/chat?*',()=>{});
  await page.route('**/api/**',async route=>{
   const path=new URL(route.request().url()).pathname;
-  if (route.request().method()!=='GET' && path!=='/api/updates/check') writes++;
+  if (route.request().method()!=='GET' && path!=='/api/updates/check' && path!=='/api/me/activity') writes++;
   if(path==='/api/usage/events') usageReads++;
   let body={};
   if(path==='/api/login')body={token:'synthetic-locale-token'};

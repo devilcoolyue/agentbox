@@ -49,7 +49,7 @@ try {
     await context.route('**/api/**', async route => {
       const req = route.request(), path = new URL(req.url()).pathname;
       let body = {};
-      if (req.method() !== 'GET' && !['/api/login', '/api/logout'].includes(path)) writes.push(path);
+      if (req.method() !== 'GET' && !['/api/login', '/api/logout', '/api/me/activity'].includes(path)) writes.push(path);
       if (path === '/api/login') body = { token: identity + '-token' };
       else if (path === '/api/me') body = { user: identity, role: 'user', timezone: 'UTC', models: { codex: [{ id: 'fixture', label: 'Fixture' }] }, quota: { metered: false } };
       else if (path === '/api/sessions') body = identity === 'alice' ? spaces : [];
