@@ -454,6 +454,25 @@ export interface AnnouncementInput {
   starts_at: number;
   duration_min: number;
 }
+export interface UserActivity {
+  name: string;
+  role: string;
+  last_active_at: number;
+  last_login_at: number;
+  last_login_ip: string;
+}
+export interface LoginEvent {
+  id: number;
+  user: string;
+  at: number;
+  method: string;
+  ip: string;
+  user_agent: string;
+}
+export interface LoginEvents {
+  events: LoginEvent[];
+  has_more: boolean;
+}
 export interface AnnouncementActivity {
   online: { user: string; pages: number }[];
   workspaces: {

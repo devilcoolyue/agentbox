@@ -21,6 +21,7 @@ import { agentKey, agentName } from "./brand.js";
 import { enter, leave } from "./motion.js";
 import { type UsageChange, usageLiveConnected, watchUsageLive } from "./usage-live.js";
 import { chipRefresher, openKeepalive, termChipState } from "./features/workspaces/keepalive.js";
+import { watchTermActivity } from "./term-activity.js";
 
 const TerminalClass = window.Terminal && (window.Terminal.Terminal || window.Terminal);
 const FitAddonClass = window.FitAddon && (window.FitAddon.FitAddon || window.FitAddon);
@@ -658,6 +659,13 @@ function sendTermInput(data: string) {
   if (!active?.term || active.term.options.disableStdin || !ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(ENC.encode(data));
 }
+
+watchTermActivity($("tab-term"), () => {
+  const ws = active?.ws;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+  ws.send(JSON.stringify({ type: "activity" }));
+  return true;
+});
 
 function modifiedTermInput(data: string): string {
   const { ctrl, alt } = termModifiers;

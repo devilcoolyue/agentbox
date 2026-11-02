@@ -475,6 +475,11 @@
   padding: 14px 16px; border-bottom: 1px solid var(--line);
 }
 .mon-card-head h3 { margin: 0; white-space: nowrap; }
+.ua-events-head { align-items: center; }
+.ua-filter { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.mon-table td.ua-client { max-width: 26em; overflow: hidden; text-overflow: ellipsis; }
+.ua-more-row { display: flex; justify-content: center; padding: 10px; }
+.ua-more-row:has(> .hidden) { display: none; }
 .mon-table-wrap { overflow-x: auto; }
 .mon-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .mon-table th, .mon-table td { padding: 9px 14px; text-align: left; white-space: nowrap; }

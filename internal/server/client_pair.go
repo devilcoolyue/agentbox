@@ -3,6 +3,8 @@ package server
 import (
 	"net/http"
 	"strings"
+
+	"agentbox/internal/store"
 )
 
 func (s *Server) clientPairStore() *pairStore {
@@ -51,6 +53,7 @@ func (s *Server) handleClientPairRedeem(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	s.logins.success(ip)
+	s.recordLogin(r, user.Name, store.LoginDesktop)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]string{"token": token, "user": user.Name, "role": user.Role})
 }

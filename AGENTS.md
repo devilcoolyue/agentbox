@@ -887,6 +887,12 @@ data/
   终端里的 agent 永远看不到代理变量。运行中的窗格改不了，须重连后新开 tmux 窗口；在旧 Shell 内仅重启 agent 仍会继承旧环境。
 - 端口映射按来源 IP 鉴权：只有属主用户自己的容器（和宿主机）能连映射端口。
 
+### 登录与活跃
+
+- 「系统设置 → 登录与活跃」（`server/login_activity.go`、`store/login_activity.go`，前端 `features/settings/user-activity.ts`）。读接口 `GET /api/user-activity`、`GET /api/login-events` 全部走 `s.admin`；不要把这些字段加进 `/api/me` 或任何普通用户能读到的接口，用户看不到自己的记录是需求本身。
+- 登录记录：每发放一个登录令牌记一行（密码登录 `password`、桌面端配对 `desktop`、abox-link 配对 `abox-link`），新增发放令牌的路径要补 `recordLogin`。失败的登录不记，用户名框里可能是输错位置的密码。写失败只打日志，不挡登录。IP 取 `clientIP`，保留 180 天（`tokenJanitor` 顺带清理）；删除用户时一并删除，同名新账号不继承。
+- 最后活跃 = 用户最后一次在终端页面点击或输入。**不能**用终端 WS 的二进制帧判断：程序查询光标位置、设备属性时 xterm 也从 `onData` 自动应答，焦点、鼠标上报同样走这条路，无人值守的 Agent 会被算成在操作。所以由 `term-activity.ts` 在 `#tab-term` 捕获阶段监听 `isTrusted` 的 pointerdown/keydown/input/paste/drop，经终端 WS 发 `{"type":"activity"}` 控制帧；页面每 15 秒最多一次（窗口内的操作在窗口结束时补报，时间最多晚一个窗口），服务端每连接再限 10 秒一次写库。上报值由浏览器决定，用户可以自己伪造，只能当参考，不是审计证据。对话页操作不计入；桌面客户端（`desktop/`）有自己的终端实现，还没有上报。回归 `scripts/test-user-activity.mjs`、`scripts/test-term-activity.mjs`、`TestTerminalActivityComesOnlyFromExplicitReports`。
+
 ### 系统通告
 
 - 单条全站横幅（`internal/announce` + `server/announcement.go`，前端 `announcement.ts` 横幅、`announcement-admin.ts` 设置页，用户文档 `docs/announcements.md`）。存 `<data_dir>/announcement.json` 而不是 SQLite：一条记录不值得一次 schema 迁移，迁移会让回退旧版本先得恢复备份。文件**刻意不进系统备份**，恢复不能带回过期的「即将发版」。

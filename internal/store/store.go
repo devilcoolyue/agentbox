@@ -408,6 +408,12 @@ func (s *Store) DeleteUser(name string) error {
 	if _, err := tx.Exec("DELETE FROM request_timings WHERE user = ?", name); err != nil {
 		return err
 	}
+	if _, err := tx.Exec("DELETE FROM login_events WHERE user = ?", name); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM user_activity WHERE user = ?", name); err != nil {
+		return err
+	}
 	if _, err := tx.Exec("DELETE FROM git_profiles WHERE user = ?", name); err != nil {
 		return err
 	}

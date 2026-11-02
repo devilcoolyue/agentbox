@@ -799,6 +799,7 @@
             <button data-sec="interface" data-icon="settings.interface" data-i18n-text="[&quot;界面与提示&quot;]">界面与提示</button>
             <button data-sec="icons" data-settings-admin data-icon="settings.icons" data-i18n-text="[&quot;图标管理&quot;]">图标管理</button>
             <button data-sec="security" data-settings-admin data-icon="settings.security" data-i18n-text="[&quot;安全与访问&quot;]">安全与访问</button>
+            <button data-sec="logins" data-settings-admin data-icon="settings.logins" data-i18n-text="[&quot;登录与活跃&quot;]">登录与活跃</button>
             <button data-sec="announce" data-settings-admin data-icon="settings.announce" data-i18n-text="[&quot;系统通告&quot;]">系统通告</button>
             <button data-sec="monitor" data-settings-admin data-icon="settings.monitor" data-i18n-text="[&quot;运维监控&quot;]">运维监控</button>
             <button data-sec="about" data-settings-admin data-icon="settings.about" data-i18n-text="[&quot;关于与更新&quot;]">关于与更新</button>
@@ -1452,6 +1453,59 @@
                     <tbody id="mon-storage-tbody"></tbody>
                   </table>
                 </div>
+              </div>
+            </section>
+
+            <!-- 登录与活跃：仅管理员；逻辑在 features/settings/user-activity.ts -->
+            <section id="sec-logins" class="set-section hidden">
+              <div class="sec-intro">
+                <div>
+                  <h2 data-i18n="登录与活跃">登录与活跃</h2>
+                  <p data-i18n="最后活跃只统计用户在终端页面的点击和输入，Agent 自己运行不算。登录记录保留 180 天，只有管理员能看到。">最后活跃只统计用户在终端页面的点击和输入，Agent 自己运行不算。登录记录保留 180 天，只有管理员能看到。</p>
+                </div>
+                <button id="ua-refresh" type="button" class="btn btn-sm" data-icon="refresh" data-i18n="刷新">刷新</button>
+              </div>
+              <div class="card mon-card">
+                <div class="mon-card-head">
+                  <h3 data-i18n="用户活跃">用户活跃</h3>
+                </div>
+                <div class="mon-table-wrap">
+                  <table class="mon-table">
+                    <thead>
+                      <tr>
+                        <th data-i18n="用户">用户</th>
+                        <th data-i18n="角色">角色</th>
+                        <th data-i18n="最后活跃">最后活跃</th>
+                        <th data-i18n="最后登录">最后登录</th>
+                        <th data-i18n="登录 IP">登录 IP</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ua-users-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="card mon-card">
+                <div class="mon-card-head ua-events-head">
+                  <h3 data-i18n="登录记录">登录记录</h3>
+                  <label class="ua-filter"><span data-i18n="筛选用户">筛选用户</span>
+                    <select id="ua-user"><option value="" data-i18n="全部用户">全部用户</option></select>
+                  </label>
+                </div>
+                <div class="mon-table-wrap">
+                  <table class="mon-table">
+                    <thead>
+                      <tr>
+                        <th data-i18n="时间">时间</th>
+                        <th data-i18n="用户">用户</th>
+                        <th data-i18n="登录方式">登录方式</th>
+                        <th>IP</th>
+                        <th data-i18n="客户端">客户端</th>
+                      </tr>
+                    </thead>
+                    <tbody id="ua-events-tbody"></tbody>
+                  </table>
+                </div>
+                <div class="ua-more-row"><button id="ua-more" type="button" class="btn btn-sm hidden" data-icon="arrow-down" data-i18n="加载更多">加载更多</button></div>
               </div>
             </section>
 

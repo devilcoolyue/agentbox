@@ -170,6 +170,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logins.success(ip)
+	s.recordLogin(r, u.Name, store.LoginPassword)
 	writeJSON(w, http.StatusOK, map[string]string{"token": tok, "user": u.Name, "role": u.Role})
 }
 
@@ -236,7 +237,8 @@ func (g *loginGuard) success(key string) {
 	delete(g.entries, key)
 }
 
-// clientIP returns the key used to throttle logins and pairing. Forwarding
+// clientIP returns the address used to throttle logins and pairing, and the one
+// shown in the admin's login records. Forwarding
 // headers are honored only from a loopback or private peer (the reverse proxy
 // in front of agentbox), and only their last X-Forwarded-For entry: that is
 // the address the proxy appended itself. Entries to its left are whatever the
@@ -265,13 +267,17 @@ func clientIP(r *http.Request) string {
 	return peer
 }
 
-// tokenJanitor periodically deletes login tokens past their TTL.
+// tokenJanitor periodically deletes login tokens past their TTL, and login
+// records past their retention.
 func (s *Server) tokenJanitor() {
 	for s.workContext().Err() == nil {
 		if n, err := s.store.PurgeExpiredTokens(); err != nil {
 			log.Printf("token janitor: %v", err)
 		} else if n > 0 {
 			log.Printf("token janitor: purged %d expired token(s)", n)
+		}
+		if _, err := s.store.PurgeLoginEvents(time.Now()); err != nil {
+			log.Printf("login record purge: %v", err)
 		}
 		if !waitInterval(s.workContext(), 6*time.Hour) {
 			return

@@ -409,6 +409,8 @@ func (s *Server) routes() *http.ServeMux {
 	mux.Handle("PUT /api/sessions/{id}/git/bindings", s.auth(s.withSession(s.handleGitBindings)))
 	mux.Handle("PUT /api/me/git", s.auth(http.HandlerFunc(s.handleGitProfile)))
 	mux.Handle("GET /api/users", s.admin(http.HandlerFunc(s.handleUserList)))
+	mux.Handle("GET /api/user-activity", s.admin(http.HandlerFunc(s.handleUserActivity)))
+	mux.Handle("GET /api/login-events", s.admin(http.HandlerFunc(s.handleLoginEvents)))
 	mux.Handle("POST /api/users", s.admin(http.HandlerFunc(s.handleUserCreate)))
 	mux.Handle("DELETE /api/users/{name}", s.admin(http.HandlerFunc(s.handleUserDelete)))
 	mux.Handle("POST /api/users/{name}/password", s.admin(http.HandlerFunc(s.handleUserSetPassword)))

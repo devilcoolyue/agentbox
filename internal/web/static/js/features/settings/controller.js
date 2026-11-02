@@ -12,6 +12,7 @@ import { bindSaveBar, confirmDiscard, defineGroups, dirtyGroups, holdDirty, reba
 import { actionButton } from "../../icons.js";
 import { openIconManager, leaveIconManager } from "../../icon-manager.js";
 import { openAnnouncementAdmin, leaveAnnouncementAdmin } from "../../announcement-admin.js";
+import { openUserActivity, leaveUserActivity } from "./user-activity.js";
 import { setSelectValue } from "../../select.js";
 import { S, bus, emit } from "../../state.js";
 import { $, btnBusy as baseBusy, btnDone as baseDone, toast as baseToast, fmtTime, askConfirm, askPrompt, keepScroll } from "../../util.js";
@@ -38,7 +39,7 @@ for (const h of document.querySelectorAll("h3[data-agent]")) {
     h.classList.add("agent-h3", "agent-" + agentKey(h.dataset.agent));
     h.prepend(agentIcon(h.dataset.agent, 15));
 }
-export const SET_SECS = ["accounts", "proxies", "container", "models", "decision", "interface", "icons", "security", "announce", "monitor", "about"];
+export const SET_SECS = ["accounts", "proxies", "container", "models", "decision", "interface", "icons", "security", "logins", "announce", "monitor", "about"];
 /** 模型管理里的标签页；价格（原「价目表」分区）是其中之一。 */
 export const MODEL_TABS = ["accounts", "pricing", "system"];
 export function createSettingsController() {
@@ -120,6 +121,10 @@ export function createSettingsController() {
             openAnnouncementAdmin(lifetime.signal);
         else
             leaveAnnouncementAdmin();
+        if (name === "logins")
+            openUserActivity(lifetime.signal);
+        else
+            leaveUserActivity();
         if (name === "security")
             loadUsers();
         if (name === "monitor")

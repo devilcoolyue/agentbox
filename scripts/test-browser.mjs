@@ -38,6 +38,7 @@ import { assertActionIcons, fileActionSmoke } from './test-actions.mjs';
 import { terminalTouchSmoke } from './test-term-touch.mjs';
 import { terminalClipboardSmoke } from './test-term-clipboard.mjs';
 import { terminalTabsSmoke } from './test-term-tabs.mjs';
+import { terminalActivitySmoke, userActivitySmoke } from './test-user-activity.mjs';
 import { chatParallelSmoke } from './test-chat-parallel.mjs';
 import { motionSmoke } from './test-motion.mjs';
 import {browserEngine,cancelledFetchError,launchBrowser,recordNavigations} from './playwright-launch.mjs';
@@ -84,10 +85,14 @@ export async function smoke(page) {
  await page.routeWebSocket('**/api/sessions/*/chat?*', ws => { chatSocket=ws; ws.onMessage(data => chatMessages.push(JSON.parse(data))); });
  let usageLiveSocket;
  await page.routeWebSocket('**/api/usage/live?*', ws => { usageLiveSocket = ws; });
- const terminalInput = []; let terminalSocket;
+ const terminalInput = [], terminalControl = []; let terminalSocket;
  await page.routeWebSocket('**/api/sessions/*/term?*', ws => {
   terminalSocket = ws;
-  ws.onMessage(data => { if (typeof data !== 'string') terminalInput.push(data.toString()); });
+  ws.onMessage(data => {
+   if (typeof data !== 'string') { terminalInput.push(data.toString()); return; }
+   const control = JSON.parse(data);
+   if (control.type !== 'resize') terminalControl.push(control);
+  });
  });
  await page.route('**/api/**', async route => {
   const u = new URL(route.request().url()), path=u.pathname;
@@ -625,6 +630,8 @@ export async function smoke(page) {
   await keepaliveSmoke(page,base);
   await announcementSmoke(page,()=>usageLiveSocket);
   if (process.env.AGENTBOX_BROWSER_ONLY_ANNOUNCEMENT === '1') { assert.deepEqual(errors,[]); return; }
+  await userActivitySmoke(page);
+  if (process.env.AGENTBOX_BROWSER_ONLY_USER_ACTIVITY === '1') { assert.deepEqual(errors,[]); return; }
   if (process.env.AGENTBOX_BROWSER_ONLY_SWITCH_ACCOUNT === '1') { assert.deepEqual(errors,[]); return; }
   await accountModelsSmoke(page,base);
   if (process.env.AGENTBOX_BROWSER_ONLY_ACCOUNT_MODELS === '1') { assert.deepEqual(errors,[]); return; }
@@ -1112,6 +1119,7 @@ export async function smoke(page) {
   await page.locator('#term-spend .ts-tok').filter({hasText:'1.2B tok'}).waitFor();
   assert.match(await page.locator('#term-spend').getAttribute('data-tip'), /合计 1,184,000,000 tokens。/);
   usageRows = savedUsageRows;
+  await terminalActivitySmoke(page,()=>terminalSocket,terminalInput,terminalControl);
   const key = name => page.locator(`[data-term-key="${name}"]`);
   const modifier = name => page.locator(`[data-term-mod="${name}"]`);
   const lastInput = async expected => {
@@ -1243,6 +1251,13 @@ export async function smoke(page) {
   await at('#/settings/interface','#set-local-saving');
   assert.equal(await page.locator('#sec-security').isVisible(),false);
   assert.deepEqual(await page.locator('#set-nav button:not(.hidden)').evaluateAll(nodes=>nodes.map(node=>node.dataset.sec)),['interface']);
+  // Login records and last-active times are for administrators only: no entry, no section, not even a request.
+  let activityReads=0;
+  page.on('request',request=>{if(/\/api\/(user-activity|login-events)/.test(request.url()))activityReads++;});
+  await page.goto(base + '/#/settings/logins');
+  await at('#/settings/interface','#set-local-saving');
+  assert.equal(await page.locator('#sec-logins').isVisible(),false);
+  assert.equal(activityReads,0,'ordinary user requested login records');
   await page.goto(base + '/#/sessions/%E0%A4%A/files');
   await at('#/','#empty'); // Malformed URL must not break initialization.
   assert.equal(await page.locator('#version-badge').isVisible(),false);

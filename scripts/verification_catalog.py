@@ -19,7 +19,7 @@ STEPS = [
     step('go.server', 'offline', ['{python}', 'scripts/verify.py', '_go_server'], 'Server tests; Linux non-root uses sudo -n only for the test executable.'),
     step('web.types', 'offline', ['npm', 'run', 'check'], 'TypeScript type checking.', requires=['node_modules/.bin/tsc']),
     step('web.artifacts', 'offline', ['{python}', 'scripts/verify.py', '_web_artifacts'], 'Rebuild and compare complete JS inventory/bytes with the starting worktree.', requires=['node_modules/.bin/tsc']),
-    *[step('web.'+name, 'offline', ['npm','run','test:'+name], 'Synthetic '+name+' contract/catalog checks.') for name in ['i18n','problems','diagnostics','drafts','outbox','contracts','chat-history','outline','feature-lifetimes','icons']],
+    *[step('web.'+name, 'offline', ['npm','run','test:'+name], 'Synthetic '+name+' contract/catalog checks.') for name in ['i18n','problems','diagnostics','drafts','outbox','contracts','chat-history','outline','feature-lifetimes','icons','term-activity']],
     *[step('policy.'+name, 'offline', ['{python}','scripts/test-'+name+'.py'], 'Local synthetic policy regression; not real systemd or installation.') for name in ['browser-runtime','deployment','update','install','uninstall','image-policy','repair-claude-cumulative']],
     step('policy.tool-storage', 'offline', ['{python}','scripts/test-tool-storage.py'], 'Shared-tool publisher integrity, atomic publication and archive/symlink boundaries.'),
     step('policy.shell', 'offline', ['{python}','scripts/verify.py','_shell'], 'Shell syntax checks.'),
@@ -102,10 +102,10 @@ EXTERNAL = {
     'desktop/src-tauri/src/credentials.rs': 'native/manual: AGENTBOX_CREDENTIAL_TEST=1 touches the OS credential store; isolated runner only',
 }
 
-BROWSER_HELPERS = ['feature-lifetimes-browser','actions','chat-footer','chat-context','chat-commands','chat-mentions','chat-tasks','chat-codex-items','chat-claude-tools','chat-pages','chat-outline','head-fold','diagnostics-browser','image-updates','update-components','mcp','pricing','problems-browser','remote-browser','responsive','skins','themes','icon-manager','switch-account','keepalive','account-models','user-picker','user-storage','term-touch','term-clipboard','term-tabs','chat-parallel','motion','extensions','announcement']
+BROWSER_HELPERS = ['feature-lifetimes-browser','actions','chat-footer','chat-context','chat-commands','chat-mentions','chat-tasks','chat-codex-items','chat-claude-tools','chat-pages','chat-outline','head-fold','diagnostics-browser','image-updates','update-components','mcp','pricing','problems-browser','remote-browser','responsive','skins','themes','icon-manager','switch-account','keepalive','account-models','user-picker','user-storage','term-touch','term-clipboard','term-tabs','chat-parallel','motion','extensions','announcement','user-activity']
 COVERED = {f'scripts/test-{name}.mjs':'browser.browser' for name in BROWSER_HELPERS}
 COVERED['scripts/test-remote-browser-live.mjs']='docker.remote-browser'
 COVERED['desktop/scripts/test-legacy-browser.mjs']='desktop.compat'
 
 # npm wrappers are catalogued here as parents, not duplicated in the self-test.
-COVERED.update({f'scripts/test-{name}.mjs': 'web.'+name for name in ['i18n','problems','diagnostics','drafts','outbox','contracts','chat-history','outline','feature-lifetimes','icons']})
+COVERED.update({f'scripts/test-{name}.mjs': 'web.'+name for name in ['i18n','problems','diagnostics','drafts','outbox','contracts','chat-history','outline','feature-lifetimes','icons','term-activity']})

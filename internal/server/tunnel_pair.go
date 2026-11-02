@@ -221,5 +221,6 @@ func (s *Server) handleTunnelPairRedeem(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusUnauthorized, "配对码无效或已过期，请重新生成")
 		return
 	}
+	s.recordLogin(r, user.Name, store.LoginLink)
 	writeJSON(w, http.StatusOK, map[string]string{"user": user.Name, "token": tok})
 }

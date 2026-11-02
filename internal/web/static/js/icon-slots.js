@@ -57,6 +57,7 @@ export const ICON_SLOTS = {
     "settings.icons": { group: "settings", label: "图标管理", icon: "tabler:icons" },
     "settings.security": { group: "settings", label: "安全与访问", icon: "tabler:shield-lock" },
     "settings.announce": { group: "settings", label: "系统通告", icon: "tabler:speakerphone" },
+    "settings.logins": { group: "settings", label: "登录与活跃", icon: "tabler:history" },
     "settings.monitor": { group: "settings", label: "运维监控", icon: "tabler:activity" },
     "settings.about": { group: "settings", label: "关于与更新", icon: "tabler:info-circle" },
     // ── 对话 ──

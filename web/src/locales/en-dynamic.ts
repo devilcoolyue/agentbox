@@ -2976,4 +2976,11 @@ export default {
   "读取使用趋势失败": "Could not load the usage trend",
   "总请求数": "Total requests",
   "每条记录对应一次模型请求，共 {p0} 个回合；升级前按回合合并保存的旧行算一次": "Each record is one model request, across {p0} turns. Older rows merged per turn before the upgrade count as one.",
+  "登录与活跃": "Logins & activity",
+  "暂无记录": "No records yet",
+  "全部用户": "All users",
+  "桌面端配对": "Desktop pairing",
+  "abox-link 配对": "abox-link pairing",
+  "读取用户活跃记录失败：": "Could not load user activity: ",
+  "读取登录记录失败：": "Could not load login records: ",
 } satisfies Record<string, string>;
