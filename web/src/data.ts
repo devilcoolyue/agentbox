@@ -2,6 +2,7 @@
  * 由 shell（侧栏）、sessions（工作台头部）、settings（账号池）各自刷新。 */
 "use strict";
 
+import { warnLowStorage } from "./storage-alert.js";
 import { Poller } from "./shared/poller.js";
 import { S, emit } from "./state.js";
 import { api } from "./api.js";
@@ -18,6 +19,7 @@ export async function refreshAll(signal?: AbortSignal) {
     S.sessions = sessions;
     S.accounts = accounts;
     S.quota = me.quota || null;
+    warnLowStorage(me.storage_low);
     if (me.timezone && me.timezone !== S.timeZone) {
       S.timeZone = me.timezone;
       emit("timezone-updated");

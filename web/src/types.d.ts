@@ -543,6 +543,8 @@ export interface GitProfile {
 
 /** GET /api/me */
 export interface Me {
+  /** 仅管理员：低于预警线（保留值的两倍）的磁盘。 */
+  storage_low?: { disks: { roles: string[]; available: number }[]; reserve_bytes: number };
   chat_history_timeout_sec?: number;
   draft_scope?:string;
   draft_protocol?:number;

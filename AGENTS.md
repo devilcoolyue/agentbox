@@ -1230,6 +1230,7 @@ data/
 - 项目配额按实例及用户创建身份区分 data/cache，不能按共享 UID 1000 限额；新用户和存量根均须准备。挂载 UUID/项目配额能力在创建 data_dir 前验证；root 服务必须去除 CAP_SYS_RESOURCE，防止服务端写入绕过。
 - ext4 属主可清继承标记，quota-managed 容器必须带 ioctl seccomp 限制，保留 Chromium 沙箱；不得仅凭 setquota 成功宣称硬限额。上传/导入暂存放在服务拥有的用户父目录，保持同项目重命名且计入配额。
 - 缓存回收在 workspace 启动锁内确认所有已知容器停止，限 Go 编译/npm 下载缓存，不碰私有模块/浏览器/profile/SDK；扫描不完整不得继续删除。发布保留持部署锁并保护 current、引用和回退版本。
+- 磁盘写入准入分三档（`internal/server/storage_policy.go`）：`storageExemptRoutes` 永远放行，`storageRoutineRoutes` 只守下限 `ResourceLimits.FloorBytes`，其余路由守完整 `min_free_bytes`。两张表按 `r.Pattern` 匹配，改路由要同步（`TestStorageRouteTablesMatchRegisteredRoutes` 会查）；只有确实几乎不写盘或用于止损的路由才能加进去。缓存回收按用户跳过（`workspace.MaintainUser`），不要退回“有一个空间运行就全部跳过”。
 - 专题与验收见 docs/storage-capacity.md、docs/milestones/storage.md；Linux 实测入口 linux.storage-quota 使用独立临时 loop 文件系统，不能对生产目录运行。
 
 ### 主管委派

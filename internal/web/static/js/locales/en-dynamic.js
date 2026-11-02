@@ -551,6 +551,7 @@ export default {
     " 核 · 负载 ": " cores · load ",
     "主机内存": "Host memory",
     "共 {p0} · {p1}% 已用": "Total {p0}·{p1}% used",
+    "磁盘空间偏低：{p0} 仅剩 {p1}。低于 {p2} 后将停止新建空间和上传，请尽快清理。": "Disk space is low: {p0} has only {p1} left. Below {p2}, new workspaces and uploads stop. Free up space soon.",
     "数据盘将满，尽快清理": "The data disk is almost full, clean it up as soon as possible",
     "数据目录所在磁盘": "The disk where the data directory is located",
     "磁盘水位": "Disk usage",

@@ -16,8 +16,8 @@ import (
 var ownerRE = regexp.MustCompile(`^[a-f0-9]{64}$`)
 var platformRE = regexp.MustCompile(`^linux-(amd64|arm64)-[a-z0-9]+-[a-z0-9.]+$`)
 
-// CleanCaches is called only under the workspace start gate with every known
-// container stopped. No module cache, browser, profile, or SDK is eligible.
+// CleanCaches is called only under the workspace start gate with every container
+// of this owner stopped. No module cache, browser, profile, or SDK is eligible.
 func CleanCaches(ctx context.Context, tools, owner string, target int64, age time.Duration) ([]string, error) {
 	if !ownerRE.MatchString(owner) {
 		return nil, errors.New("invalid cache owner")

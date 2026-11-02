@@ -333,6 +333,10 @@ func sameHostOrigin(r *http.Request) bool {
 }
 
 func (s *Server) Handler() http.Handler {
+	return operationHandler(s.admit(s.routes()))
+}
+
+func (s *Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/login", s.handleLogin)
@@ -569,7 +573,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.Handle("/", staticHandler())
 
-	return operationHandler(s.admit(mux))
+	return mux
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -778,7 +782,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		scope = importFingerprint([]string{"chat-drafts-v1", instance, u.Name, u.CreatedAt.UTC().Format(time.RFC3339Nano)})
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]any{
+	me := map[string]any{
 		"draft_scope":         scope,
 		"draft_protocol":      1,
 		"chat_protocol":       1,
@@ -802,7 +806,14 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"chat_history_timeout_sec": s.cfg.GetChatHistoryTimeoutSec(),
 		// 自己的额度：metered 为 false 就是不限额，前端不必显示余额。
 		"quota": viewQuota(u.Name, q, metered),
-	})
+	}
+	// Only an admin can act on this, and disk levels are not for ordinary users.
+	if u.Role == store.RoleAdmin {
+		if low := s.lowStorageDisks(); len(low) > 0 {
+			me["storage_low"] = map[string]any{"disks": low, "reserve_bytes": s.cfg.GetResources().MinFreeBytes}
+		}
+	}
+	writeJSON(w, http.StatusOK, me)
 }
 
 // handlePing answers a tiny, unauthenticated request the client uses to gauge

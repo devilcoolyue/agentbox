@@ -105,7 +105,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 		}
 		release, admitted := s.reserveStorageWrite(r)
 		if !admitted {
-			writeErr(w, http.StatusInsufficientStorage, "磁盘可用空间不足，请稍后重试或联系管理员")
+			refuseStorageWrite(w, r)
 			return
 		}
 		defer release()

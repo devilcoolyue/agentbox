@@ -6,6 +6,7 @@ import type { SystemInfo, Monitor, ContainerStat, QuotaUsage, UserStorage } from
 import { agentIcon, agentName } from "../../brand.js";
 import { setTip } from "../../tip.js";
 import { Poller } from "../../shared/poller.js";
+import { diskLabel } from "../../storage-alert.js";
 import { skelBar, skelShell, skelTableRows } from "../../skeleton.js";
 /* ---------------- 关于 ---------------- */
 
@@ -152,9 +153,8 @@ function renderMonitorTiles(m: Monitor) {
   ];
   // 数据盘写满会连带拖垮 SQLite 与所有会话，水位单独给一格（读不到则不显示）。
   if (h.disks?.length) {
- const names:Record<string,string>={system:i18nText("系统盘"),data:i18nText("用户数据"),tools:i18nText("工具与缓存")};
  for(const disk of h.disks){
- const label=disk.roles.map(role=>names[role]||role).join(" / ");
+ const label=diskLabel(disk.roles);
  const pct=disk.total?disk.used/disk.total*100:0;
  tiles.push(monTile(label,disk.error?i18nText("读取失败"):fmtBytes(disk.used),disk.error?"":i18nText("共 {p0} · 可用 {p1} · {p2}% 已用",{p0:String(fmtBytes(disk.total)),p1:String(fmtBytes(disk.available)),p2:String(pct.toFixed(0))}),disk.error?undefined:pct));
  }

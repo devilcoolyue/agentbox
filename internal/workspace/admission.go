@@ -22,7 +22,13 @@ func (s *Service) admit(ctx context.Context, current store.Session) error {
 		if err := syscall.Statfs(s.cfg.DataDir, &stat); err != nil {
 			return err
 		}
-		if stat.Bavail*uint64(stat.Bsize) < uint64(limits.MinFreeBytes) {
+		// Waking an existing workspace adds almost nothing to the disk; only a
+		// workspace's first start is held to the full reserve.
+		required := limits.MinFreeBytes
+		if current.ContainerID != "" {
+			required = limits.FloorBytes()
+		}
+		if stat.Bavail*uint64(stat.Bsize) < uint64(required) {
 			return ErrDiskSpace
 		}
 	}
