@@ -2969,4 +2969,8 @@ export default {
   "另有 {p0} 个对话正在运行，打开对话列表查看": "{p0} other conversations are running. Open the list to see them.",
   "正在运行，切过去查看进度": "Running. Open it to follow along.",
   "这个对话正在运行，请先等待完成或中断": "This conversation is running. Wait for it to finish or stop it first.",
+  "使用趋势": "Usage trend",
+  "请求": "Requests",
+  "这个时间范围内没有记录": "No records in this time range",
+  "读取使用趋势失败": "Could not load the usage trend",
 } satisfies Record<string, string>;

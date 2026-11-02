@@ -414,6 +414,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/users/{name}/credits", s.admin(http.HandlerFunc(s.handleCreditGrant)))
 	mux.Handle("GET /api/usage", s.auth(http.HandlerFunc(s.handleUsageReport)))
 	mux.Handle("GET /api/usage/events", s.auth(http.HandlerFunc(s.handleUsageEvents)))
+	mux.Handle("GET /api/usage/trend", s.auth(http.HandlerFunc(s.handleUsageTrend)))
 	mux.Handle("GET /api/usage/live", s.auth(http.HandlerFunc(s.handleUsageLive)))
 	mux.Handle("GET /api/accounts", s.auth(http.HandlerFunc(s.handleAccounts)))
 	mux.Handle("POST /api/accounts", s.admin(http.HandlerFunc(s.handleAccountCreate)))

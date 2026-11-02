@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -504,4 +505,199 @@ func TestUsageRowsCarryTurnPosition(t *testing.T) {
 			}
 		}
 	}
+}
+
+// usageTrendResp 只解出断言要用的部分。
+type usageTrendResp struct {
+	Granularity string             `json:"granularity"`
+	Buckets     []usageTrendBucket `json:"buckets"`
+	Zone        string             `json:"timezone"`
+}
+
+func getUsageTrend(t *testing.T, s *Server, url, user, role string) usageTrendResp {
+	t.Helper()
+	w := httptest.NewRecorder()
+	s.handleUsageTrend(w, asUser(httptest.NewRequest(http.MethodGet, url, nil), user, role))
+	if w.Code != http.StatusOK {
+		t.Fatalf("HTTP %d：%s", w.Code, w.Body.String())
+	}
+	var got usageTrendResp
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+// 接口层：柱子按系统时区切、加起来等于同一筛选下的合计，普通用户看不到别人的量。
+func TestUsageTrendFollowsFilterAndScope(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.cfg.TimeZone = "Asia/Shanghai"
+	day := func(hh, mm int) time.Time {
+		return time.Date(2026, 9, 19, hh, mm, 0, 0, time.FixedZone("CST", 8*3600))
+	}
+	// 上海 09:50 和 10:05 在 UTC 里是 01:50 和 02:05：同一 UTC 日、不同本地钟点。
+	evs := []store.UsageEvent{
+		{TS: day(9, 50), User: "alice", SessionID: "s1", TurnID: "t1", Agent: "claude", Kind: store.UsageKindChat,
+			InputTokens: 1, OutputTokens: 2, CacheReadTokens: 3, CacheWriteTokens: 4, CostMicroUSD: 500},
+		{TS: day(9, 55), User: "alice", SessionID: "s1", TurnID: "t1", Agent: "claude", Kind: store.UsageKindChat,
+			InputTokens: 10, CostMicroUSD: 100},
+		{TS: day(10, 5), User: "bob", SessionID: "s2", TurnID: "t2", Agent: "codex", Kind: store.UsageKindChat,
+			OutputTokens: 7, CostMicroUSD: 9},
+		{TS: day(11, 0).AddDate(0, 0, 1), User: "alice", SessionID: "s1", TurnID: "t3", Agent: "claude", Kind: store.UsageKindChat,
+			InputTokens: 99},
+	}
+	if err := s.store.InsertUsage(evs...); err != nil {
+		t.Fatal(err)
+	}
+
+	const url = "/api/usage/trend?since=2026-09-19T00:00&until=2026-09-20T00:00"
+	got := getUsageTrend(t, s, url, "root", store.RoleAdmin)
+	if got.Granularity != trendHour || len(got.Buckets) != 24 || got.Zone != "Asia/Shanghai" {
+		t.Fatalf("应按小时铺满一整天 24 桶：%s %d %s", got.Granularity, len(got.Buckets), got.Zone)
+	}
+	nine, ten := got.Buckets[9], got.Buckets[10]
+	if nine.Start != "2026-09-19T09:00" || nine.Requests != 2 || nine.InputTokens != 11 || nine.OutputTokens != 2 ||
+		nine.CacheReadTokens != 3 || nine.CacheWriteTokens != 4 || nine.CostMicroUSD != 600 {
+		t.Fatalf("09:00 桶不对：%+v", nine)
+	}
+	if ten.Start != "2026-09-19T10:00" || ten.Requests != 1 || ten.OutputTokens != 7 || ten.CostMicroUSD != 9 {
+		t.Fatalf("10:00 桶不对：%+v", ten)
+	}
+	if empty := got.Buckets[0]; empty.Start != "2026-09-19T00:00" || empty.Requests != 0 {
+		t.Fatalf("没有消耗的钟点也要有空桶：%+v", empty)
+	}
+	sum := 0
+	for _, b := range got.Buckets {
+		sum += b.Requests
+	}
+	if total := getUsageEvents(t, s, url, "root", store.RoleAdmin).Total.Rows; sum != total || sum != 3 {
+		t.Fatalf("柱子之和 %d 应等于明细合计 %d（且排除范围外的行）", sum, total)
+	}
+
+	own := getUsageTrend(t, s, url+"&user=bob", "alice", store.RoleUser)
+	if b := own.Buckets[9]; b.Requests != 2 {
+		t.Fatalf("普通用户应只看到自己的 09:00：%+v", b)
+	}
+	if b := own.Buckets[10]; b.Requests != 0 {
+		t.Fatalf("普通用户不能看到别人的 10:00：%+v", b)
+	}
+	if b := getUsageTrend(t, s, url+"&agent=codex", "root", store.RoleAdmin).Buckets[10]; b.Requests != 1 {
+		t.Fatalf("agent 筛选应生效：%+v", b)
+	}
+	if none := getUsageTrend(t, s, url+"&model=none", "root", store.RoleAdmin); len(none.Buckets) != 0 {
+		t.Fatalf("没有记录时不出桶，JSON 也不能是 null：%+v", none)
+	}
+}
+
+// slotAt 造一个 UTC 刻钟槽。
+func slotAt(ts string, requests int) store.UsageSlot {
+	at, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		panic(err)
+	}
+	return store.UsageSlot{Start: at, Requests: requests}
+}
+
+func TestFoldUsageTrendBuckets(t *testing.T) {
+	zone := func(name string) *time.Location {
+		loc, err := time.LoadLocation(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return loc
+	}
+	shanghai := zone("Asia/Shanghai")
+	at := func(y int, m time.Month, d, hh, mm int, loc *time.Location) time.Time {
+		return time.Date(y, m, d, hh, mm, 0, 0, loc)
+	}
+	starts := func(bs []usageTrendBucket) []string {
+		out := make([]string, len(bs))
+		for i, b := range bs {
+			out[i] = b.Start
+		}
+		return out
+	}
+	total := func(bs []usageTrendBucket) int {
+		n := 0
+		for _, b := range bs {
+			n += b.Requests
+		}
+		return n
+	}
+
+	t.Run("当天只画到现在", func(t *testing.T) {
+		g, b := foldUsageTrend([]store.UsageSlot{slotAt("2026-11-02T05:45:00Z", 1)},
+			at(2026, 11, 2, 0, 0, shanghai), at(2026, 11, 3, 0, 0, shanghai), at(2026, 11, 2, 13, 53, shanghai), shanghai)
+		if g != trendHour || len(b) != 14 || b[13].Start != "2026-11-02T13:00" || b[13].Requests != 1 {
+			t.Fatalf("%s %v", g, b)
+		}
+	})
+	t.Run("24 小时滚动范围也按钟点切", func(t *testing.T) {
+		now := at(2026, 11, 2, 13, 53, shanghai)
+		g, b := foldUsageTrend([]store.UsageSlot{slotAt("2026-11-02T05:45:00Z", 1)},
+			now.Add(-24*time.Hour), now.Add(time.Minute), now, shanghai)
+		if g != trendHour || b[0].Start != "2026-11-01T13:00" || b[len(b)-1].Start != "2026-11-02T13:00" || len(b) != 25 {
+			t.Fatalf("%s %v", g, starts(b))
+		}
+	})
+	t.Run("半小时时区按本地钟点切", func(t *testing.T) {
+		kolkata := zone("Asia/Kolkata")
+		// 01:15Z = 06:45 IST，01:30Z = 07:00 IST：相邻两个 UTC 刻钟分属两个本地钟点。
+		g, b := foldUsageTrend([]store.UsageSlot{slotAt("2026-11-02T01:15:00Z", 1), slotAt("2026-11-02T01:30:00Z", 2)},
+			at(2026, 11, 2, 6, 0, kolkata), at(2026, 11, 2, 8, 0, kolkata), at(2026, 11, 3, 0, 0, kolkata), kolkata)
+		if g != trendHour || len(b) != 2 || b[0].Start != "2026-11-02T06:00" || b[0].Requests != 1 || b[1].Requests != 2 {
+			t.Fatalf("%s %+v", g, b)
+		}
+	})
+	t.Run("夏令时一天多一个钟点", func(t *testing.T) {
+		ny := zone("America/New_York")
+		g, b := foldUsageTrend([]store.UsageSlot{slotAt("2026-11-01T12:00:00Z", 1)},
+			at(2026, 11, 1, 0, 0, ny), at(2026, 11, 2, 0, 0, ny), at(2026, 11, 5, 0, 0, ny), ny)
+		if g != trendHour || len(b) != 25 {
+			t.Fatalf("%s %d", g, len(b))
+		}
+	})
+	t.Run("超过两天按日历天并补空桶", func(t *testing.T) {
+		// 上界开区间：until 是 11-03 00:00 时，最后一桶是 11-02，不是 11-03。
+		g, b := foldUsageTrend([]store.UsageSlot{slotAt("2026-10-30T15:45:00Z", 1), slotAt("2026-10-30T16:00:00Z", 2)},
+			at(2026, 10, 30, 0, 0, shanghai), at(2026, 11, 3, 0, 0, shanghai), at(2026, 11, 5, 0, 0, shanghai), shanghai)
+		want := []string{"2026-10-30T00:00", "2026-10-31T00:00", "2026-11-01T00:00", "2026-11-02T00:00"}
+		if g != trendDay || !slices.Equal(starts(b), want) || b[0].Requests != 1 || b[1].Requests != 2 {
+			t.Fatalf("%s %+v", g, b)
+		}
+	})
+	t.Run("全部范围从第一条记录起", func(t *testing.T) {
+		g, b := foldUsageTrend([]store.UsageSlot{slotAt("2026-11-02T01:00:00Z", 1)},
+			time.Time{}, time.Time{}, at(2026, 11, 2, 13, 53, shanghai), shanghai)
+		if g != trendHour || b[0].Start != "2026-11-02T09:00" || len(b) != 5 {
+			t.Fatalf("%s %v", g, starts(b))
+		}
+	})
+	t.Run("起点远早于数据时不铺几十年空桶", func(t *testing.T) {
+		g, b := foldUsageTrend([]store.UsageSlot{slotAt("2026-10-20T01:00:00Z", 1)},
+			at(1, 1, 1, 0, 0, time.UTC), time.Time{}, at(2026, 11, 2, 13, 53, shanghai), shanghai)
+		if g != trendDay || b[0].Start != "2026-10-20T00:00" || len(b) != 14 {
+			t.Fatalf("%s %v", g, starts(b))
+		}
+	})
+	t.Run("超过半年按月", func(t *testing.T) {
+		g, b := foldUsageTrend([]store.UsageSlot{slotAt("2025-12-31T16:00:00Z", 1), slotAt("2026-10-31T16:00:00Z", 2)},
+			time.Time{}, time.Time{}, at(2026, 11, 2, 13, 53, shanghai), shanghai)
+		if g != trendMonth || len(b) != 11 || b[0].Start != "2026-01-01T00:00" || b[10].Start != "2026-11-01T00:00" ||
+			b[0].Requests != 1 || b[10].Requests != 2 {
+			t.Fatalf("%s %+v", g, b)
+		}
+	})
+	t.Run("未来时刻的行也要装进轴里", func(t *testing.T) {
+		g, b := foldUsageTrend([]store.UsageSlot{slotAt("2026-11-02T05:00:00Z", 1), slotAt("2026-11-02T08:00:00Z", 2)},
+			at(2026, 11, 2, 0, 0, shanghai), at(2026, 11, 3, 0, 0, shanghai), at(2026, 11, 2, 13, 53, shanghai), shanghai)
+		if g != trendHour || total(b) != 3 || b[len(b)-1].Start != "2026-11-02T16:00" || b[len(b)-1].Requests != 2 {
+			t.Fatalf("%s %+v", g, b)
+		}
+	})
+	t.Run("没有记录", func(t *testing.T) {
+		if _, b := foldUsageTrend(nil, at(1, 1, 1, 0, 0, time.UTC), time.Time{}, time.Now(), shanghai); b == nil || len(b) != 0 {
+			t.Fatalf("%v", b)
+		}
+	})
 }

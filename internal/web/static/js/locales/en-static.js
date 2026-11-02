@@ -900,4 +900,7 @@ export default {
     "留空使用默认上限。不能低于已用空间；调高会占用存储总预算，保存后立即生效。": "Leave blank to use the default. A limit can't go below what is already used; raising it takes from the total storage budget and applies as soon as you save.",
     "终端标签": "Terminal tabs",
     "新建终端": "New terminal",
+    "趋势指标": "Trend metric",
+    "请求": "Requests",
+    "使用趋势图，用左右方向键查看各时段的数值": "Usage trend chart. Use the left and right arrow keys to read each period.",
 };

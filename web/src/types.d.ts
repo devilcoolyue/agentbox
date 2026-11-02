@@ -401,6 +401,25 @@ export interface UsageEvents {
   timezone: string;
 }
 
+/** GET /api/usage/trend 的一根柱子。金额同样是微美元整数。 */
+export interface UsageTrendBucket {
+  /** 这一桶的起点：系统时区下的墙上时间 YYYY-MM-DDTHH:mm */
+  start: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  cost_micro_usd: number;
+}
+
+export interface UsageTrend {
+  granularity: "hour" | "day" | "month";
+  /** 连续的桶，没有消耗的时段也有一项；筛选范围内没有任何记录时为空 */
+  buckets: UsageTrendBucket[];
+  timezone: string;
+}
+
 /** GET /api/usage/live 推送的一条用量变更通知（usageLiveNotice）。只带空间 ID；
  *  sessions 为 null 表示变更太多、没有逐个列出。 */
 export interface UsageLiveNotice {

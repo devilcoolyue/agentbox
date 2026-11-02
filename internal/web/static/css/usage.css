@@ -28,7 +28,7 @@
   overflow: hidden;
 }
 /* 只有明细占用剩余高度；分页不进入滚动容器，也不覆盖末尾记录。 */
-.usage-filters, .usage-summary, .usage-pager { flex: none; }
+.usage-filters, .usage-summary, .usage-trend, .usage-pager { flex: none; }
 
 /* ---- 筛选条 ---- */
 
@@ -103,6 +103,80 @@
 .us-item:first-child { padding-left: 0; border-left: 0; }
 /* 金额全站统一：正文色 + 等宽数字。绿色表示成功、琥珀表示主操作，都不该给钱 */
 .us-item:first-child .us-value { color: var(--text-hi); font-size: 25px; margin-top: 0; font-family: var(--mono); }
+
+/* ---- 使用趋势 ---- */
+
+/* 柱子不用琥珀和绿：琥珀表示主操作，绿色表示成功（见上面金额那条）。--info 在各主题下
+ * 偏亮，往面板色收一点，柱子不至于是整页最抢眼的东西。 */
+#view-usage { --chart-bar: color-mix(in oklab, var(--info) 82%, var(--panel-solid)); --ut-plot-h: 104px; }
+
+.usage-trend {
+  padding: 10px 16px 6px;
+  border: 1px solid var(--line); border-radius: calc(10px * var(--radius-scale)); background: var(--panel);
+}
+.usage-trend.collapsed { padding-bottom: 10px; }
+.usage-trend.collapsed :is(.ut-chart, .ut-legend, .ut-metric) { display: none; }
+.usage-trend.collapsed .uf-caret { transform: none; }
+.ut-head { display: flex; align-items: center; gap: 14px; min-height: 28px; }
+.ut-toggle {
+  flex: 0 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0; text-align: left;
+  background: none; border: 0;
+  color: var(--muted); font-size: 12.5px;
+}
+.ut-toggle:hover { color: var(--text); }
+.ut-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 500; }
+.ut-legend { flex: none; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.ut-swatch { flex: none; width: 9px; height: 9px; border-radius: calc(2px * var(--radius-scale)); background: var(--chart-bar); }
+.ut-metric { flex: none; margin-left: auto; }
+.ut-metric .scope-btn { min-height: 26px; padding: 2px 10px; }
+
+.ut-chart {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: var(--ut-plot-h) 22px; column-gap: 8px;
+  margin-top: 10px;
+  transition: opacity var(--dur-fast) ease;
+}
+.ut-chart.busy { opacity: 0.55; }
+/* 高度为 0 的刻度：文字正好骑在网格线上，列宽仍由最长的标签撑开 */
+.ut-y {
+  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end;
+  font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.ut-y.only-zero { justify-content: flex-end; }
+.ut-y span { height: 0; line-height: 0; white-space: nowrap; }
+.ut-plot { position: relative; min-width: 0; touch-action: pan-y; border-radius: calc(2px * var(--radius-scale)); }
+.ut-plot:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+.ut-grid { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line-soft); }
+.ut-grid.base { border-top-color: var(--line); }
+.ut-slots { position: absolute; inset: 0; display: flex; }
+.ut-slot { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.ut-slot.on { background: color-mix(in srgb, var(--text) 8%, transparent); }
+/* 用量差几个数量级很常见，再小的非零值也要留一道看得见的痕迹 */
+.ut-bar {
+  width: min(72%, 36px); min-height: 2px;
+  border-radius: calc(3px * var(--radius-scale)) calc(3px * var(--radius-scale)) 0 0;
+  background: var(--chart-bar);
+}
+.ut-note {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--muted);
+}
+.ut-note[hidden] { display: none; }
+.ut-tip {
+  position: absolute; top: 4px; z-index: 2; pointer-events: none;
+  padding: 7px 10px;
+  border: 1px solid var(--line); border-radius: calc(8px * var(--radius-scale));
+  background: var(--panel-solid); box-shadow: var(--shadow-sm);
+  font-size: 12px; white-space: nowrap;
+}
+.ut-tip[hidden] { display: none; }
+.ut-tip-head { font-weight: 600; color: var(--text); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+.ut-tip-row { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.ut-tip-row b { margin-left: 14px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.ut-x { grid-column: 2; position: relative; min-width: 0; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ut-x span { position: absolute; top: 6px; white-space: nowrap; }
 
 /* ---- 明细表 ---- */
 
@@ -350,6 +424,14 @@
   .us-value { font-size: 15px; margin-top: 2px; }
   .us-item:first-child .us-value { font-size: 19px; }
 
+  /* 窄屏指标按钮已经写着当前指标，图例只会挤占标题 */
+  #view-usage { --ut-plot-h: 72px; }
+  .usage-trend { padding: 8px 12px 4px; }
+  .usage-trend.collapsed { padding-bottom: 8px; }
+  .ut-legend { display: none; }
+  .ut-head { gap: 10px; }
+  .ut-y, .ut-x { font-size: 10.5px; }
+
   .usage-pager { flex-direction: column; gap: 10px; padding: 10px 12px; font-size: 11px; }
   .usage-page-info { width: 100%; justify-content: space-between; gap: 8px; }
   .usage-page-button { min-width: 32px; height: 36px; padding: 0 6px; }
@@ -410,6 +492,14 @@
   .u-tk-lines { justify-items: end; }
 }
 
+/* 笔记本一屏：图压矮、间距收紧，把高度留给明细。窄屏的间距另有一套，还要避开安全区。 */
+@media (max-height: 860px) and (min-width: 761px) {
+  #view-usage { --ut-plot-h: 72px; }
+  .usage-body { gap: 10px; padding-top: 12px; padding-bottom: 12px; }
+  .usage-summary { padding: 8px 0; }
+  .us-item { min-height: 36px; }
+}
+
 /* 手机横屏和矮窗口为列表留空间，筛选仍可在自身区域滚动操作。 */
 @media (max-height: 700px) {
   .usage-head { padding-top: 10px; padding-bottom: 10px; }
@@ -418,8 +508,9 @@
   .uf-fields { max-height: 22dvh; }
   .usage-summary { padding: 8px 0; }
   .us-item { min-height: 36px; }
+  #view-usage { --ut-plot-h: 60px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .uf-caret, .usage-table tbody tr, .usage-page-button { transition: none; }
+  .uf-caret, .ut-chart, .usage-table tbody tr, .usage-page-button { transition: none; }
 }

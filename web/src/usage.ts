@@ -19,7 +19,7 @@ import { cacheHitText, fmtSpeed, fmtTokens, outputSpeed } from "./usage-math.js"
 import { setSelectValue } from "./select.js";
 
 import { S, bus } from "./state.js";
-import type { UsageEventRow, UsageEvents } from "./types.js";
+import type { UsageEventRow, UsageEvents, UsageTrend } from "./types.js";
 import { $, toast, startDownload, fmtTime, keepScroll } from "./util.js";
 import { DateRangePicker } from "./date-range.js";
 import { api } from "./api.js";
@@ -29,6 +29,7 @@ import { agentIcon, agentName } from "./brand.js";
 import { setTip } from "./tip.js";
 import { ListMotion } from "./motion.js";
 import { watchUsageLive } from "./usage-live.js";
+import { clearUsageTrend, initUsageTrend, markUsageTrendBusy, renderUsageTrend, showUsageTrendError, usageTrendOpen } from "./usage-trend.js";
 
 const usageAgentName=(agent:string)=>agent==="decision"?i18nText("决策插件"):agentName(agent);
 const usageAgentIcon=(agent:string,size:number)=>agent==="decision"?svgIcon("sliders",size):agentIcon(agent,size);
@@ -877,10 +878,27 @@ async function load() {
   }
 }
 
+/* 趋势图和明细分开读：翻页不用动它，它读失败也不该连累明细，所以错误只显示在图里，
+ * 不弹提示——轮询时明细那边已经会报一次了。序号丢弃过期的响应。收起时不读。 */
+let trendSeq = 0;
+
+async function loadTrend() {
+  if (!usageTrendOpen()) return;
+  const seq = ++trendSeq;
+  try {
+    const data = await api<UsageTrend>("/usage/trend?" + query(readFilters()));
+    if (seq === trendSeq) renderUsageTrend(data);
+  } catch (_) {
+    if (seq === trendSeq) showUsageTrendError();
+  }
+}
+
 /* 改筛选条件要回到第一页：留在第 5 页上换条件，多半直接落进空页。 */
 function reload() {
   offset = 0;
   resetScroll = true;
+  markUsageTrendBusy();
+  void loadTrend();
   void load();
 }
 
@@ -891,6 +909,7 @@ export async function openUsageView() {
   setTextRender($("usage-sub"), () => S.role === "admin"
     ? i18nText("查看所有用户的用量与费用，每行对应一次模型请求。")
     : i18nText("查看你的用量与费用，每行对应一次模型请求。"));
+  void loadTrend();
   await load();
 }
 
@@ -960,6 +979,7 @@ function csvCell(v: string | number) {
 for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind"]) $(id).addEventListener("change", reload);
 
 initFiltersOpen();
+initUsageTrend({ rangeLabel: () => dateRange.label(), load: () => void loadTrend() });
 syncSort();
 $("usage-sort-asc").addEventListener("click", () => setSort(true));
 $("usage-sort-desc").addEventListener("click", () => setSort(false));
@@ -989,7 +1009,7 @@ bus.addEventListener("timezone-updated", () => {
 
 // 「跟随当前时刻」在使用记录页每 30 秒重新取值；固定历史区间不轮询。
 setInterval(() => {
-  if (S.view === "usage" && !document.hidden && dateRange.value().followNow) void load();
+  if (S.view === "usage" && !document.hidden && dateRange.value().followNow) { void loadTrend(); void load(); }
 }, 30000);
 
 /* 用量落库的推送（usage-live.ts）：使用记录页开着就连上，收到变更按当前筛选重读，
@@ -1007,7 +1027,7 @@ function liveReload() {
   liveTimer = setTimeout(() => {
     liveTimer = null;
     liveAt = Date.now();
-    if (S.view === "usage") void load();
+    if (S.view === "usage") { void loadTrend(); void load(); }
   }, Math.max(0, liveAt + LIVE_MIN_GAP_MS - Date.now()));
 }
 bus.addEventListener("view-changed", () => watchUsageLive("usage", S.view === "usage"));
@@ -1020,6 +1040,8 @@ document.addEventListener("visibilitychange", () => {
 // changes never trigger API reads, mutate filters, or reopen a closed dialog.
 function clearUsageDisplay() {
   usageGeneration++;
+  trendSeq++;
+  clearUsageTrend();
   if (liveTimer) { clearTimeout(liveTimer); liveTimer = null; }
   liveMissed = false;
   last = null;

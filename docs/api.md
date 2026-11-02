@@ -127,6 +127,11 @@ GET    /api/usage/events            消耗明细流水（使用记录页）；�
                                     一行 = 一次模型请求；turn_seq/turn_requests 是同回合第几次/共几次，
                                     merged_requests 是升级前按回合合并的旧行合并了几次；
                                     api_ttft_ms/api_duration_ms 是 CLI 实测的这一次请求的首字/耗时（没有时省略）
+GET    /api/usage/trend             使用趋势（使用记录页的柱状图）；筛选同明细接口，不分页
+                                    返回 granularity（hour/day/month）+ 连续的 buckets + timezone；
+                                    每个 bucket 带 start（系统时区墙上时间 YYYY-MM-DDTHH:mm）、requests、
+                                    四个 token 桶与 cost_micro_usd；两天内按小时，半年内按天，更长按月；
+                                    没有消耗的时段也有一项，范围里没有任何记录时 buckets 为空数组
 ```
 
 明细接口 `/api/usage/events` 的 `kind=delegation` 筛选跑腿模型的消耗，`kind=chat` 只筛普通对话（不含跑腿），`kind=decision` 保留独立决策调用（含委派时的 Jev 判断）。跑腿用量入账时就记在属主空间与主线程下，行上带 `delegation_id`；`kind=delegation` 只是对 `kind=chat` 且有委派 ID 的行的只读投影，不改写结算记录或重复扣费。

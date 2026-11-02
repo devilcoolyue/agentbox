@@ -555,6 +555,13 @@ data/
   页面由筛选/合计、独立滚动的明细、常驻底部分页组成，不能把滚动放回 `.usage-body`。
   默认每页 20 条，可选 50 / 100 条；翻页/改筛选重置列表滚动位置，自动轮询保留位置。
   页大小只影响明细请求，合计与 CSV 仍按整个筛选范围计算。
+- **使用趋势图**（`server/usagetrend.go` + `store/usage_trend.go` + `web/src/usage-trend.ts`，照 cc-switch 的
+  `get_daily_trends` / `UsageTrendChart`）：`GET /api/usage/trend` 与明细共用 `usageFilterFrom`，范围一致、普通用户钉死自己。
+  SQLite 不认 IANA 时区，所以 SQL 只按 UTC 刻钟分组（`UsageSlots`，时区偏移都是 15 分钟的倍数），Go 再折叠成
+  `config.timezone` 的钟点/日历桶；别改成按 UTC 小时分组（半小时时区会错位），也别把全部行读进 Go。折叠用按序双指针，
+  柱子之和恒等于合计。范围上限在未来时只画到现在（「当天」不铺后面的空位），两天内按小时、半年内按天、更长按月；
+  `start` 是墙上时间字符串，前端只切片不换算时区。前端无图表依赖，柱子是 flex 里的 div，只有横轴刻度随 ResizeObserver
+  重排；换指标不重新请求、翻页不读趋势、收起时不读。窄屏和高度 ≤760px 首次默认收起，手动切换后按浏览器记忆。
   计费方式并入费用列；窄屏明细纵向展示，字段名来自 `<td>` 的 `data-l`。缓存命中率与 CSV 共用 `usage-math.ts`，分母为未缓存输入 + 缓存读 + 缓存写，无输入显示 —，输出不进分母。
 - **每行「费用」旁的 `?` 是费用明细弹窗**（`usage.ts` 的 `openCost` + `dlg-cost`）：把
   四个 token 桶各自的 `token × 单价` 摊开，末尾对上实收金额，脚注写清计价算法。单价

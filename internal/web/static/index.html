@@ -1691,6 +1691,34 @@
 
           <div id="usage-summary" class="usage-summary"></div>
 
+          <section id="usage-trend" class="usage-trend" aria-labelledby="ut-title">
+            <div class="ut-head">
+              <button type="button" id="ut-toggle" class="ut-toggle" aria-expanded="true" aria-controls="ut-chart">
+                <span class="uf-caret" aria-hidden="true"></span>
+                <span id="ut-title" class="ut-title"></span>
+              </button>
+              <span class="ut-legend"><i class="ut-swatch" aria-hidden="true"></i><span id="ut-legend-name"></span></span>
+              <div id="ut-metric" class="scope-switch ut-metric" role="group" aria-label="趋势指标" data-i18n-attrs="{&quot;aria-label&quot;:&quot;趋势指标&quot;}">
+                <button type="button" class="scope-btn" data-metric="tokens">Token</button>
+                <button type="button" class="scope-btn" data-metric="requests" data-i18n-text="[&quot;请求&quot;]">请求</button>
+                <button type="button" class="scope-btn" data-metric="cost" data-i18n-text="[&quot;费用&quot;]">费用</button>
+              </div>
+            </div>
+            <div id="ut-chart" class="ut-chart">
+              <div id="ut-y" class="ut-y" aria-hidden="true"></div>
+              <div id="ut-plot" class="ut-plot" role="group" tabindex="0" aria-label="使用趋势图，用左右方向键查看各时段的数值" data-i18n-attrs="{&quot;aria-label&quot;:&quot;使用趋势图，用左右方向键查看各时段的数值&quot;}">
+                <i class="ut-grid" style="top:0"></i><i class="ut-grid" style="top:50%"></i><i class="ut-grid base" style="top:100%"></i>
+                <div id="ut-slots" class="ut-slots"></div>
+                <div id="ut-note" class="ut-note" hidden></div>
+                <div id="ut-tip" class="ut-tip" role="status" hidden>
+                  <div id="ut-tip-head" class="ut-tip-head"></div>
+                  <div class="ut-tip-row"><i class="ut-swatch" aria-hidden="true"></i><span id="ut-tip-name"></span><b id="ut-tip-value"></b></div>
+                </div>
+              </div>
+              <div id="ut-x" class="ut-x" aria-hidden="true"></div>
+            </div>
+          </section>
+
           <div class="usage-table-frame">
             <div id="usage-table-scroll" class="usage-table-wrap" role="region" aria-label="使用记录明细" tabindex="0" data-i18n-attrs="{&quot;aria-label&quot;:&quot;使用记录明细&quot;}">
               <table class="usage-table">

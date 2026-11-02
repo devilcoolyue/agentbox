@@ -80,6 +80,7 @@ export async function smoke(page) {
  let sessions = [{id:'fixture-space',name:'Fixture workspace',agent:'codex',account_id:'fixture',account_label:'Fixture',status:'stopped',default_model:'fixture'}];
  const chatMessages = []; let chatSocket, historyEntries = [], historyCosts = {}, historyThread = null;
  let usageRows = [];
+ let usageTrend = {granularity:'hour',buckets:[],timezone:'Asia/Shanghai'}, usageTrendFail = false, usageTrendReads = 0, usageTrendQuery;
  await page.routeWebSocket('**/api/sessions/*/chat?*', ws => { chatSocket=ws; ws.onMessage(data => chatMessages.push(JSON.parse(data))); });
  let usageLiveSocket;
  await page.routeWebSocket('**/api/usage/live?*', ws => { usageLiveSocket = ws; });
@@ -149,6 +150,10 @@ export async function smoke(page) {
   } else if(path==='/api/monitor') {
    monitorCalls++;
    body={now:Date.now(),window_ms:0,process:{rss:0,heap_alloc:0,goroutines:1,uptime_ms:100},host:{cpu_count:1,load1:0,mem_total:0,mem_used:0,disks:[{roles:['system'],total:30*2**30,used:19*2**30,available:11*2**30},{roles:['data','tools'],total:49*2**30,used:35*2**30,available:14*2**30}]},summary:{total:0,running:0,cpu_percent:0,mem_usage:0},containers:[]};
+  } else if(path==='/api/usage/trend') {
+   usageTrendQuery=u.searchParams; usageTrendReads++;
+   if(usageTrendFail) { await route.fulfill({status:500,json:{error:'boom'}}); return; }
+   body=usageTrend;
   } else if(path==='/api/usage/events') {
    const kind=u.searchParams.get('kind'),rows=usageRows.filter(row=>!kind||row.kind===kind);
    const sum=key=>rows.reduce((n,row)=>n+(row[key]||0),0);
@@ -184,7 +189,139 @@ export async function smoke(page) {
   await page.locator('#sec-container').waitFor({state:'visible'});
   assert.equal(new URL(page.url()).hash,'#/settings/container','login preserves destination');
   assert.equal(await page.locator('#login-btn').isDisabled(),false);
+  async function usageTrendSmoke() {
+  const trendTexts=sel=>page.locator(sel).allInnerTexts();
+  const box=sel=>page.locator(sel).boundingBox();
+  // Starts collapsed when the page loaded in a short window, which leaves the height to the table.
+  if(await page.locator('#ut-toggle').getAttribute('aria-expanded')==='false') await page.locator('#ut-toggle').click();
+  await page.waitForFunction(()=>document.querySelectorAll('#ut-slots .ut-slot').length===14);
+  assert.equal(await page.locator('#ut-slots .ut-bar').count(),2,'empty hours keep their slot but draw no bar');
+  assert.match(await page.locator('#ut-title').innerText(),/^使用趋势 · 当天$/);
+  // Axis steps follow the reference chart: 2.14M tops out at 3M with a 1.5M midline.
+  assert.deepEqual(await trendTexts('#ut-y span'),['3M','1.5M','0']);
+  assert.equal(await page.evaluate(async()=>{const {axisTop}=await import('/_v/{{BUILD}}/js/usage-trend.js');return [1,2,3,5,13,1910000,2138741,4200].map(axisTop).join();}),'2,2,4,6,16,2000000,3000000,5000');
+  const plot=await box('#ut-plot'),tall=await box('#ut-slots .ut-slot:nth-child(14) .ut-bar'),tiny=await box('#ut-slots .ut-slot:nth-child(10) .ut-bar');
+  assert.ok(Math.abs(tall.height-plot.height*2138741/3000000)<1.5,'bar height is proportional to the axis');
+  assert.ok(tiny.height>=2&&tiny.height<3,'a near-zero value still leaves a visible mark');
+  assert.ok(Math.abs(tall.y+tall.height-plot.y-plot.height)<1,'bars grow from the baseline');
+  // Tick labels stay inside the chart and never touch each other.
+  const ticks=await page.locator('#ut-x span').evaluateAll(els=>els.map(e=>{const r=e.getBoundingClientRect();return {text:e.textContent,left:r.left,right:r.right};}));
+  assert.equal(ticks[0].text,'00:00');
+  assert.ok(ticks.length>=4,'wide charts show several ticks');
+  assert.ok(ticks[0].left>=plot.x-0.5&&ticks.at(-1).right<=plot.x+plot.width+0.5,'edge tick labels are pulled inside the chart');
+  ticks.slice(1).forEach((tick,i)=>assert.ok(tick.left>=ticks[i].right+4,`ticks ${ticks[i].text} and ${tick.text} overlap`));
+
+  // The whole column is the hit target, even for an hour with no bar at all.
+  const emptyHour=await box('#ut-slots .ut-slot:nth-child(3)');
+  await page.mouse.move(emptyHour.x+emptyHour.width/2,emptyHour.y+10);
+  await page.locator('#ut-tip').waitFor({state:'visible'});
+  assert.equal(await page.locator('#ut-tip-head').innerText(),'2026/11/02 02:00');
+  assert.equal(await page.locator('#ut-tip-value').innerText(),'0');
+  // The tooltip flips to the left of the last column instead of covering its bar.
+  await page.mouse.move(tall.x+tall.width/2,tall.y+tall.height/2);
+  await page.waitForFunction(()=>document.querySelector('#ut-tip-head').textContent==='2026/11/02 13:00');
+  assert.deepEqual(await page.locator('#ut-tip-name').innerText(),'Token');
+  assert.equal(await page.locator('#ut-tip-value').innerText(),'2,138,741');
+  assert.equal(await page.locator('#ut-slots .ut-slot.on').count(),1);
+  const tipBox=await box('#ut-tip'),onBox=await box('#ut-slots .ut-slot.on');
+  assert.ok(tipBox.x+tipBox.width<=onBox.x,'tooltip sits beside the hovered column');
+  if(process.env.AGENTBOX_USAGE_SCREENSHOTS) {
+   await page.screenshot({path:'output/playwright/usage-trend-desktop.png',animations:'disabled'});
+   await page.evaluate(()=>{document.documentElement.dataset.theme='dark';});
+   await page.screenshot({path:'output/playwright/usage-trend-dark.png',animations:'disabled'});
+   await page.evaluate(()=>{document.documentElement.dataset.theme='light';});
+  }
+
+  // Switching metric redraws locally: same buckets, no new request.
+  const reads=usageTrendReads;
+  await page.locator('#ut-metric [data-metric="cost"]').click();
+  assert.deepEqual(await trendTexts('#ut-y span'),['$3','$1.5','$0']);
+  await page.locator('#ut-metric [data-metric="requests"]').click();
+  assert.deepEqual(await trendTexts('#ut-y span'),['16','8','0']);
+  assert.equal(await page.locator('#ut-legend-name').innerText(),'请求');
+  assert.equal(await page.locator('#ut-metric [data-metric="requests"]').getAttribute('aria-pressed'),'true');
+  assert.equal(usageTrendReads,reads,'switching metric must not refetch');
+
+  // Keyboard reaches the same readout as the pointer.
+  await page.mouse.move(0,0);
+  await page.locator('#ut-tip').waitFor({state:'hidden'});
+  await page.locator('#ut-metric [data-metric="cost"]').focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  await page.locator('#ut-tip').waitFor({state:'visible'});
+  assert.equal(await page.locator('#ut-tip-value').innerText(),'$2.8800');
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await page.locator('#ut-tip-head').innerText(),'2026/11/02 12:00');
+  await page.keyboard.press('Escape');
+  await page.locator('#ut-tip').waitFor({state:'hidden'});
+  await page.locator('#ut-metric [data-metric="tokens"]').click();
+
+  // Multi-day hourly and daily axes label the change of day.
+  const stored=usageTrend;
+  usageTrend={...stored,buckets:Array.from({length:38},(_,i)=>{const hour=(i+10)%24;return {...stored.buckets[0],start:`2026-11-0${i+10<24?1:2}T${String(hour).padStart(2,'0')}:00`};})};
+  await page.locator('#uf-refresh').click();
+  await page.waitForFunction(()=>document.querySelectorAll('#ut-slots .ut-slot').length===38);
+  assert.ok((await trendTexts('#ut-x span')).includes('11/02'),'hourly axis marks midnight with the date');
+  usageTrend={...stored,granularity:'month',buckets:['2025-12','2026-01'].map(m=>({...stored.buckets[0],start:m+'-01T00:00'}))};
+  await page.locator('#uf-refresh').click();
+  await page.waitForFunction(()=>document.querySelectorAll('#ut-slots .ut-slot').length===2);
+  assert.deepEqual(await trendTexts('#ut-x span'),['2025/12','2026/01']);
+
+  // No records and a failed read both explain themselves inside the chart, without a toast.
+  usageTrend={...stored,buckets:[]};
+  await page.locator('#uf-refresh').click();
+  await page.locator('#ut-note').filter({hasText:'这个时间范围内没有记录'}).waitFor();
+  assert.deepEqual(await trendTexts('#ut-y span'),['0']);
+  usageTrendFail=true;
+  await page.locator('#uf-refresh').click();
+  await page.locator('#ut-note').filter({hasText:'读取使用趋势失败'}).waitFor();
+  assert.equal(await page.locator('#ut-chart.busy').count(),0);
+  assert.equal(await page.locator('.toast').filter({hasText:'读取使用趋势失败'}).count(),0);
+  usageTrendFail=false;
+  // A body of the wrong shape counts as a failed read and must not poison later redraws.
+  usageTrend={};
+  await page.locator('#uf-refresh').click();
+  await page.waitForFunction(()=>!document.querySelector('#ut-chart').classList.contains('busy'));
+  await page.setViewportSize({width:1200,height:900});
+  await page.setViewportSize({width:1280,height:900});
+  await page.locator('#ut-note').filter({hasText:'读取使用趋势失败'}).waitFor();
+  usageTrend=stored;
+  await page.locator('#uf-refresh').click();
+  await page.waitForFunction(()=>document.querySelectorAll('#ut-slots .ut-slot').length===14&&document.querySelector('#ut-note').hidden);
+
+  // A failed refresh keeps the chart on screen.
+  usageTrendFail=true;
+  await page.locator('#uf-refresh').click();
+  await page.waitForFunction(()=>!document.querySelector('#ut-chart').classList.contains('busy'));
+  assert.equal(await page.locator('#ut-slots .ut-bar').count(),2);
+  assert.equal(await page.locator('#ut-note').isVisible(),false);
+  usageTrendFail=false;
+
+  // Collapsed means collapsed: no reads until it is reopened, and the choice is remembered.
+  await page.locator('#ut-toggle').click();
+  assert.equal(await page.locator('#ut-chart').isVisible(),false);
+  assert.equal(await page.locator('#ut-toggle').getAttribute('aria-expanded'),'false');
+  const closedReads=usageTrendReads;
+  await page.locator('#uf-refresh').click();
+  await page.waitForFunction(()=>document.querySelector('#usage-table-scroll').getAttribute('aria-busy')==='false');
+  assert.equal(usageTrendReads,closedReads);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_usage_trend')),'closed');
+  await page.locator('#ut-toggle').click();
+  await page.waitForFunction(n=>document.querySelectorAll('#ut-slots .ut-slot').length===n,14);
+  assert.equal(usageTrendReads,closedReads+1);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_usage_trend')),'open');
+
+  // The table still gets the space the chart leaves on a small laptop screen.
+  await page.setViewportSize({width:1280,height:800});
+  assert.ok((await box('#usage-table-scroll')).height>=140,'table keeps room next to the chart');
+  await page.setViewportSize({width:1280,height:900});
+  }
+
   async function usageSmoke() {
+  usageTrend = {granularity:'hour',timezone:'Asia/Shanghai',buckets:Array.from({length:14},(_,hour)=>{
+    const [input_tokens,requests,cost_micro_usd]=hour===13?[2138741,13,2880000]:hour===9?[500,1,1000]:[0,0,0];
+    return {start:`2026-11-02T${String(hour).padStart(2,'0')}:00`,requests,input_tokens,output_tokens:0,cache_read_tokens:0,cache_write_tokens:0,cost_micro_usd};
+  })};
   usageRows = [
     {input_tokens:10,cache_read_tokens:80,cache_write_tokens:10,provider:'firstParty',effort:'xhigh',effort_control:'effort'},
     {input_tokens:100,cache_read_tokens:0,cache_write_tokens:0,kind:'title'},
@@ -195,16 +332,18 @@ export async function smoke(page) {
   await page.locator('#usage-sub').filter({hasText:'终端全量扫描'}).waitFor();
   await page.locator('#usage-rows .u-hit').first().waitFor();
   assert.deepEqual(await page.locator('#usage-rows .u-hit .u-v').allTextContents(),['80.0%','0.0%','—']);
+  await usageTrendSmoke();
   // The reasoning effort a web turn was sent with sits under its model.
   assert.deepEqual(await page.locator('#usage-rows .u-effort').allInnerTexts(),['Extra High','Medium (13000)']);
   assert.match(await page.locator('#usage-rows tr').first().locator('.u-sub:has(.u-effort)').innerText(),/官方直连[\s\S]*Extra High/);
   // A pushed usage notice reloads the page at once, without the refresh button or the poll.
   for (let i=0; !usageLiveSocket && i<100; i++) await new Promise(r=>setTimeout(r,50));
   assert.ok(usageLiveSocket,'usage page opened the live usage socket');
-  const liveRows=await page.locator('#usage-rows tr').count();
+  const liveRows=await page.locator('#usage-rows tr').count(),liveTrendReads=usageTrendReads;
   usageRows.unshift({...usageRows[0],id:99,turn_id:'turn-live',kind:'terminal'});
   usageLiveSocket.send(JSON.stringify({type:'usage',sessions:['fixture-space']}));
   await page.waitForFunction(n=>document.querySelectorAll('#usage-rows tr').length===n,liveRows+1);
+  assert.ok(usageTrendReads>liveTrendReads,'a pushed usage notice refreshes the chart too');
   usageRows.shift();
   usageLiveSocket.send(JSON.stringify({type:'usage',sessions:null}));
   await page.waitForFunction(n=>document.querySelectorAll('#usage-rows tr').length===n,liveRows);
@@ -257,6 +396,7 @@ export async function smoke(page) {
   await page.locator('#uf-kind').selectOption('delegation',{force:true});
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===2);
   assert.deepEqual(await page.locator('#usage-rows .u-sess').allInnerTexts(),['Owner project','deleted-owner']);
+  assert.equal(usageTrendQuery.get('kind'),'delegation','the chart follows the same filter as the table');
   await page.locator('#uf-kind').selectOption('',{force:true});
   await page.waitForFunction(()=>document.querySelectorAll('#usage-rows tr').length===6);
   // Terminal effort comes from the transcript, and survives display and CSV export.
@@ -388,8 +528,10 @@ export async function smoke(page) {
   await page.evaluate(()=>{location.hash='#/usage';});
   await page.locator('.topbar .usage-zone').waitFor({state:'visible'});
   if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-cache-mobile.png',animations:'disabled'});
+  assert.ok(await page.locator('#usage-trend').evaluate(el=>el.scrollWidth<=el.clientWidth),'chart must not overflow a phone');
   await page.setViewportSize({width:1280,height:900});
   usageRows=[];
+  usageTrend={granularity:'hour',buckets:[],timezone:'Asia/Shanghai'};
   }
   if (process.env.AGENTBOX_BROWSER_ONLY_USAGE === '1') {
    await page.setViewportSize({width:1280,height:900});
