@@ -122,9 +122,10 @@ export async function headFoldSmoke(page, { setHistory, setStatus }) {
   assert.equal(await page.evaluate(() => localStorage.getItem('agentbox_head_fold')), null);
 
   // Phones keep their own layout: no workspace name in the thread bar, tabs stay in place.
+  // WebKit applies the new viewport asynchronously: wait for the phone layout instead of reading it once.
   await page.setViewportSize({width:390,height:800});
-  assert.equal(await peek.isVisible(), false);
-  assert.ok(await page.locator('.tabs').evaluate(e => e.getBoundingClientRect().height) > 30);
+  await peek.waitFor({state:'hidden'});
+  await page.waitForFunction(() => document.querySelector('.tabs').getBoundingClientRect().height > 30);
   await page.setViewportSize({width:1280,height:800});
 
   // With motion: the bar drips out of the name and settles open, retracts into the name, and the
