@@ -324,6 +324,7 @@ data/
 - Claude 工具行（`features/chat/claude-tools.ts`）照 Claude Code 终端画：`● 显示名(主参数)`（Edit→Update、WebFetch→Fetch、Grep/Glob→Search、MCP→`server - tool (MCP)`），下面 `⎿` 引出结果摘要（Write/Update 的带行号内容与 diff 点开才显示；Wrote N lines、Added/removed、Received N bytes (200 OK)、Did 1 search in 6s、Done (N tool uses · tokens · 时长)）；连续的 Read/Grep/Glob 与普通 Bash（按命令程序名归成读/列/搜/运行，后台命令除外）折成一行摘要（标题前是操作类型图标：命令/读/搜/列，混合为扳手），进行中逐秒走、下面跟当前那条；点开先列出各条调用，单条再点开才是 ctrl+o 详细视图（子 Agent 里的调用同理）。连着的思考块与 `tool_progress` 心跳（长命令每 30 秒一条）由 `features/chat/folds.ts` 在 `TurnWriter.place` 插入前收成一行「思考过程 · N 段」「心跳检查 · N 次」，点开是列表、每条再点开看全文或原始事件；流式中的思考块不收。子 Agent 的调用（`parent_tool_use_id`）收进它那一行，ToolSearch 不显示。tool_use 先画进行中，同 id 的 tool_result 原地更新（实时有完整 `tool_use_result`，历史是上面的精简副本）。英文文案照 CLI 原文。回归 `scripts/test-chat-claude-tools.mjs`，夹具 `scripts/fixtures/claude-cli-2.1-events.json` 是 2.1.280/2.1.304 的真实 stream-json（已去掉 ID 与本机路径）。
 - `stream_event`/增量事件只广播不落盘；完整事件落盘并广播。provider 会话 id 用 `agent.ExtractSessionID` 提取，写入 `chat_session` 供 `--resume`/thread resume。
 - 用户中断：Codex app-server 优先协议内 `turn/interrupt`，否则用容器里的 PID 文件发 SIGINT。
+- 回答正文的 Markdown 由 `chat-render.ts` 的 `formatText` 自己解析（不是 CommonMark 库）：块级 `$$…$$` / `\[…\]` 走 `tryDisplayMath`，列表项里缩进的同类块也要整段交给它，逐行 `appendInline` 会把分隔符和公式体拆散、漏成原样 LaTeX。回归 `scripts/test-chat-markdown.mjs`（`browser.chat-markdown`，真实浏览器 + 内置 KaTeX）。
 
 ### 用量计量
 
