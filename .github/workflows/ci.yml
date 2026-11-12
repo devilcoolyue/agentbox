@@ -24,7 +24,7 @@ jobs:
 
       - name: Browser lifecycle regression (synthetic API)
         run: |
-          npm install --prefix "$RUNNER_TEMP/browser-tools" --no-package-lock --no-audit --no-fund playwright@1.58.2
+          npm install --prefix "$RUNNER_TEMP/browser-tools" --no-package-lock --no-audit --no-fund playwright@1.63.0
           "$RUNNER_TEMP/browser-tools/node_modules/.bin/playwright" install --with-deps chromium
           python3 scripts/verify.py run browser --playwright-module "$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" --report-dir output/verification/browser
       - name: Preserve web verification evidence
@@ -37,7 +37,8 @@ jobs:
 
   # 同一批核心场景（主控制台、首次使用、草稿、待确认发送）在 WebKit 中再跑一遍，
   # 断言不变；不替代真机 Safari / iOS。Playwright 1.58.2 自带的 WebKit 26.0 在本机
-  # 复现过渲染帧停滞和渲染进程崩溃，这里单独用 1.63.0（WebKit 26.6）。
+  # 复现过渲染帧停滞和渲染进程崩溃，所以 WebKit 用 1.63.0（WebKit 26.6）。Chromium
+  # 各 job 也已统一到 1.63.0：ubuntu-latest 换成 26.04 后，1.58.2 装不上浏览器依赖。
   web-webkit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -76,7 +77,7 @@ jobs:
           node-version: 22
       - name: Prepare browser and isolated Linux test base
         run: |
-          npm install --prefix "$RUNNER_TEMP/browser-tools" --no-package-lock --no-audit --no-fund playwright@1.58.2
+          npm install --prefix "$RUNNER_TEMP/browser-tools" --no-package-lock --no-audit --no-fund playwright@1.63.0
           "$RUNNER_TEMP/browser-tools/node_modules/.bin/playwright" install --with-deps chromium
           docker pull alpine:3.22
       - name: Real server and browser reliability (synthetic CLI, no paid models)

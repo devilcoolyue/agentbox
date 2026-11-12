@@ -250,7 +250,7 @@ jobs:
         run: |
           docker build -t agentbox-client-test:compat -f internal/server/testdata/client.Dockerfile internal/server/testdata
           docker pull alpine:3
-          npm install --prefix "$RUNNER_TEMP/compat-browser" --no-package-lock playwright@1.58.2
+          npm install --prefix "$RUNNER_TEMP/compat-browser" --no-package-lock playwright@1.63.0
           "$RUNNER_TEMP/compat-browser/node_modules/.bin/playwright" install --with-deps chromium
       - name: Frozen server migration, old browser and abox-link against current server
         env:
