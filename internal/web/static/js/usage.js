@@ -24,9 +24,10 @@ import { showView } from "./shell.js";
 import { fmtUSD } from "./quota.js";
 import { agentIcon, agentName } from "./brand.js";
 import { setTip } from "./tip.js";
+import { trackInk } from "./ink.js";
 import { ListMotion } from "./motion.js";
 import { watchUsageLive } from "./usage-live.js";
-import { clearUsageTrend, initUsageTrend, markUsageTrendBusy, renderUsageTrend, showUsageTrendError, usageTrendOpen } from "./usage-trend.js";
+import { clearUsageTrend, initUsageTrend, markUsageTrendBusy, renderUsageTrend, setUsageTrendMetric, showUsageTrendError, usageTrendMetric, usageTrendOpen } from "./usage-trend.js";
 const usageAgentName = (agent) => agent === "decision" ? i18nText("决策插件") : agentName(agent);
 const usageAgentIcon = (agent, size) => agent === "decision" ? svgIcon("sliders", size) : agentIcon(agent, size);
 let pageSize = 20;
@@ -706,14 +707,14 @@ window.addEventListener("agentbox-language-change", () => {
 });
 const tokenSum = (t) => t.input_tokens + t.output_tokens + t.cache_read_tokens + t.cache_write_tokens;
 const SUMMARY_MAIN = [
-    { label: "总花费", value: (t) => fmtUSD(t.cost_micro_usd, 2),
+    { label: "总花费", metric: "cost", value: (t) => fmtUSD(t.cost_micro_usd, 2),
         tip: (t) => fmtUSD(t.cost_micro_usd) + " · " + i18nText("筛选范围内所有行的费用之和") },
-    { label: "总请求数", value: (t) => num(t.rows),
+    { label: "总请求数", metric: "requests", value: (t) => num(t.rows),
         tip: (t) => i18nText("每条记录对应一次模型请求，共 {p0} 个回合；升级前按回合合并保存的旧行算一次", { p0: num(t.turns) }) },
     // 总量与每行的「合计」同一口径：四个桶相加。
-    { label: "总 Token", value: (t) => fmtTokens(tokenSum(t)), tip: (t) => num(tokenSum(t)),
+    { label: "总 Token", metric: "tokens", value: (t) => fmtTokens(tokenSum(t)), tip: (t) => num(tokenSum(t)),
         help: (t) => i18nText("输入 + 输出 + 缓存读取 + 缓存写入；{p0} 个回合，{p1} 条记录", { p0: num(t.turns), p1: num(t.rows) }) },
-    { label: "缓存命中率", value: cacheHitText,
+    { label: "缓存命中率", metric: "hit", value: cacheHitText,
         help: () => i18nText("缓存读取 ÷（未缓存输入 + 缓存读取 + 缓存写入）；不含输出 token，无输入时显示 —") },
 ];
 const SUMMARY_DETAIL = [
@@ -723,14 +724,36 @@ const SUMMARY_DETAIL = [
     { label: "缓存读取", value: (t) => fmtTokens(t.cache_read_tokens), tip: (t) => num(t.cache_read_tokens) + " · " + i18nText("命中缓存的输入，计价远低于新输入") },
 ];
 let summaryCards = [];
+let summarySeq = 0;
 function summaryCard(cell) {
     const card = document.createElement("div");
     card.className = "us-item";
     const label = document.createElement("div");
     label.className = "us-label";
-    const name = document.createElement("span");
-    setText(name, cell.label);
-    label.append(name);
+    const value = document.createElement("div");
+    value.className = "us-value mono";
+    let pick;
+    if (cell.metric) {
+        const metric = cell.metric;
+        // 读屏念「总花费 $16.45，按下」：数值挂 aria-describedby，按钮名字只是指标名。
+        value.id = "us-v-" + ++summarySeq;
+        pick = document.createElement("button");
+        pick.type = "button";
+        pick.className = "us-pick";
+        pick.dataset.metric = metric;
+        pick.setAttribute("aria-controls", "ut-chart");
+        pick.setAttribute("aria-describedby", value.id);
+        setText(pick, cell.label);
+        pick.addEventListener("click", () => { if (setUsageTrendMetric(metric))
+            void loadTrend(); });
+        card.classList.add("us-metric");
+        label.append(pick);
+    }
+    else {
+        const name = document.createElement("span");
+        setText(name, cell.label);
+        label.append(name);
+    }
     let help;
     if (cell.help) {
         help = document.createElement("span");
@@ -741,17 +764,28 @@ function summaryCard(cell) {
         setAttrRender(help, "aria-label", () => i18nText(cell.label));
         label.append(help);
     }
-    const value = document.createElement("div");
-    value.className = "us-value mono";
     card.append(label, value);
-    return { cell, card, value, help };
+    return { cell, card, value, help, pick };
+}
+/* 选中态写在整格上（.active 给 ink.ts 量下划线位置），按钮上同步 aria-pressed。 */
+function syncPicked(metric) {
+    for (const { cell, card, pick } of summaryCards) {
+        if (!pick)
+            continue;
+        const on = cell.metric === metric;
+        card.classList.toggle("active", on);
+        pick.setAttribute("aria-pressed", String(on));
+    }
 }
 /* 退出时也走这里：换一批新节点，旧节点上绑着账号数据的提示随之丢弃，切语言也不会再渲染出来。 */
 function buildSummary() {
     const main = SUMMARY_MAIN.map(summaryCard), detail = SUMMARY_DETAIL.map(summaryCard);
-    $("us-main").replaceChildren(...main.map((c) => c.card));
+    // 下划线（ink.ts 挂上的 .ink）跟着宿主走，换卡片时留着它。
+    const ink = $("us-main").querySelector(":scope > .ink");
+    $("us-main").replaceChildren(...main.map((c) => c.card), ...(ink ? [ink] : []));
     $("us-detail").replaceChildren(...detail.map((c) => c.card));
     summaryCards = [...main, ...detail];
+    syncPicked(usageTrendMetric());
 }
 function renderSummary(data) {
     const t = data.total;
@@ -767,6 +801,7 @@ const MORE_METRICS_KEY = "agentbox_usage_more_metrics";
 function setMoreMetrics(open, remember = true) {
     $("usage-summary").classList.toggle("more", open);
     $("us-more").setAttribute("aria-expanded", String(open));
+    setTip($("us-more"), () => i18nText(open ? "收起指标" : "更多指标"));
     if (remember)
         try {
             localStorage.setItem(MORE_METRICS_KEY, open ? "open" : "closed");
@@ -775,6 +810,7 @@ function setMoreMetrics(open, remember = true) {
 }
 function initSummary() {
     buildSummary();
+    trackInk($("us-main"));
     $("us-more").append(svgIcon("chevron-up", 14));
     let saved = null;
     try {
@@ -1005,7 +1041,7 @@ for (const id of ["uf-user", "uf-agent", "uf-model", "uf-kind"])
     $(id).addEventListener("change", reload);
 initFiltersOpen();
 initSummary();
-initUsageTrend({ rangeLabel: () => dateRange.label(), load: () => void loadTrend() });
+initUsageTrend({ load: () => void loadTrend(), onMetric: syncPicked });
 syncSort();
 $("usage-sort-asc").addEventListener("click", () => setSort(true));
 $("usage-sort-desc").addEventListener("click", () => setSort(false));

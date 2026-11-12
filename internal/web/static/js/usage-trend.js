@@ -4,35 +4,51 @@
  * 令牌。只有横轴刻度要按宽度决定疏密，由 ResizeObserver 重排。桶由服务端按系统时区切好，
  * start 是墙上时间字符串（见 usagetrend.go），这里只做字符串切片，不碰浏览器时区。
  *
- * 取数归 usage.ts（它持有筛选条件和翻页），这里只管画和交互；换指标不用重新请求。 */
+ * 取数归 usage.ts（它持有筛选条件和翻页），这里只管画和交互；换指标不用重新请求。
+ * 指标由上方合计卡的四个主指标选（照 cc-switch：点哪个数，图就画哪个），这里只持有状态。 */
 "use strict";
 import { t as i18nText, setText, setTextRender } from "./i18n.js";
 import { fmtUSD } from "./quota.js";
+import { cacheHitText } from "./usage-math.js";
 import { $ } from "./util.js";
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 const plain = (n) => n.toLocaleString("en-US");
-/* 金额全程是微美元整数，只有落到文字这一步才换成美元（同 quota.ts）。 */
+/* 金额全程是微美元整数，只有落到文字这一步才换成美元（同 quota.ts）。
+ * value 为 null 表示这一格没有可算的值（命中率在没有输入时），不画柱子、提示写 —。
+ * top 缺省按数据取好读的轴顶（axisTop）；命中率是百分比，轴顶钉在 100%。 */
 const METRICS = {
     // Token 与表格的「合计」、汇总条的「总 Token」同一口径：四个桶相加。
     tokens: {
         label: () => "Token",
         value: (b) => b.input_tokens + b.output_tokens + b.cache_read_tokens + b.cache_write_tokens,
         tick: (v) => compact.format(v),
-        exact: plain,
+        exact: (b) => plain(METRICS.tokens.value(b)),
     },
     requests: {
         label: () => i18nText("请求"),
         value: (b) => b.requests,
         tick: (v) => compact.format(v),
-        exact: plain,
+        exact: (b) => plain(b.requests),
     },
     cost: {
         label: () => i18nText("费用"),
         value: (b) => b.cost_micro_usd,
         tick: (v) => "$" + (v / 1e6).toLocaleString("en-US", { maximumFractionDigits: 6 }),
-        exact: (v) => fmtUSD(v),
+        exact: (b) => fmtUSD(b.cost_micro_usd),
+    },
+    // 与合计卡、明细那一列同一个算法（cacheHitText），每格只看这一格自己的输入。
+    hit: {
+        label: () => i18nText("缓存命中率"),
+        value: (b) => {
+            const input = b.input_tokens + b.cache_read_tokens + b.cache_write_tokens;
+            return input > 0 ? 100 * b.cache_read_tokens / input : null;
+        },
+        tick: (v) => v + "%",
+        exact: (b) => cacheHitText(b),
+        top: () => 100,
     },
 };
+const GRANULARITY = { hour: "按小时", day: "按天", month: "按月" };
 const METRIC_KEY = "agentbox_usage_trend_metric";
 const OPEN_KEY = "agentbox_usage_trend";
 const box = $("usage-trend");
@@ -46,11 +62,10 @@ const tip = $("ut-tip");
 const tipHead = $("ut-tip-head");
 const tipName = $("ut-tip-name");
 const tipValue = $("ut-tip-value");
-const metricBox = $("ut-metric");
 let metric = "tokens";
 let data = null;
 let active = -1;
-let rangeLabel = () => "";
+let onMetric = () => { };
 /* ---------------- 纵轴 ---------------- */
 /* 纵轴固定三个刻度（0、一半、顶），所以「一半」也要是好读的数；指标都是整数，一半也得是
  * 整数，否则单次请求的图上会出现 0.5 次。 */
@@ -129,14 +144,17 @@ function renderXAxis() {
 function render() {
     const def = METRICS[metric];
     const buckets = data?.buckets || [];
-    const top = axisTop(Math.max(0, ...buckets.map(def.value)));
+    const values = buckets.map(def.value);
+    const known = values.filter((v) => v !== null);
+    const max = Math.max(0, ...known);
+    const top = !known.length ? 0 : def.top ? def.top(max) : axisTop(max);
     renderYAxis(top);
     slotsEl.replaceChildren(...buckets.map((b, i) => {
         const slot = document.createElement("div");
         slot.className = "ut-slot";
         slot.dataset.i = String(i);
-        const value = def.value(b);
-        if (value > 0) {
+        const value = values[i];
+        if (value !== null && value > 0) {
             const bar = document.createElement("div");
             bar.className = "ut-bar";
             bar.style.height = (value / top) * 100 + "%";
@@ -160,7 +178,7 @@ function setActive(i) {
     }
     slot.classList.add("on");
     tipHead.textContent = tooltipLabel(bucket.start, data.granularity);
-    tipValue.textContent = METRICS[metric].exact(METRICS[metric].value(bucket));
+    tipValue.textContent = METRICS[metric].exact(bucket);
     tip.hidden = false;
     // 默认摆在这一格右边，放不下就翻到左边，不挡住正在看的柱子。
     const gap = 8, width = plot.clientWidth, tipWidth = tip.offsetWidth;
@@ -170,8 +188,8 @@ function setActive(i) {
 }
 /* ---------------- 对外接口 ---------------- */
 export function usageTrendOpen() { return !box.classList.contains("collapsed"); }
-// 标题写着当前时间范围，范围随筛选变，每次取数都要重新绑定。
-const syncTitle = () => setTextRender($("ut-title"), () => i18nText("使用趋势") + " · " + rangeLabel());
+// 标题写「指标 · 粒度」，粒度随数据变（两天内按小时……），每次取数和换指标都要重新绑定。
+const syncTitle = () => setTextRender($("ut-title"), () => METRICS[metric].label() + (data?.buckets.length ? " · " + i18nText(GRANULARITY[data.granularity] || "按小时") : ""));
 export function renderUsageTrend(next) {
     // 响应不一定是这个形状（比如前面还有一层代理）：坏数据不能进状态，否则之后每次重排都崩。
     if (!Array.isArray(next?.buckets)) {
@@ -205,17 +223,34 @@ export function clearUsageTrend() {
     active = -1;
     chart.classList.remove("busy");
     note.hidden = true;
+    syncTitle();
     render();
 }
 /* ---------------- 指标切换与折叠 ---------------- */
 function syncMetric() {
-    for (const button of metricBox.querySelectorAll("[data-metric]")) {
-        const on = button.dataset.metric === metric;
-        button.classList.toggle("active", on);
-        button.setAttribute("aria-pressed", String(on));
+    setTextRender(tipName, () => METRICS[metric].label());
+    syncTitle();
+    onMetric(metric);
+}
+export function usageTrendMetric() { return metric; }
+/** 合计卡上点了某个主指标：换图（不重新取数），收起着就顺手展开——点它就是想看这条趋势。
+ *  返回 true 表示刚展开、调用方需要取数。 */
+export function setUsageTrendMetric(next) {
+    if (!Object.hasOwn(METRICS, next))
+        return false;
+    const opened = !usageTrendOpen();
+    if (opened)
+        setOpen(true);
+    if (next !== metric) {
+        metric = next;
+        try {
+            localStorage.setItem(METRIC_KEY, metric);
+        }
+        catch (_) { }
+        syncMetric();
+        render();
     }
-    for (const el of [$("ut-legend-name"), tipName])
-        setTextRender(el, () => METRICS[metric].label());
+    return opened;
 }
 function setOpen(open, remember = true) {
     box.classList.toggle("collapsed", !open);
@@ -237,22 +272,9 @@ export function initUsageTrend(opts) {
     catch (_) { }
     if (savedMetric && Object.hasOwn(METRICS, savedMetric))
         metric = savedMetric;
-    rangeLabel = opts.rangeLabel;
+    onMetric = opts.onMetric;
     syncMetric();
-    syncTitle();
     setOpen(savedOpen ? savedOpen === "open" : !window.matchMedia("(max-width: 760px), (max-height: 760px)").matches, false);
-    metricBox.addEventListener("click", (e) => {
-        const next = e.target.closest("[data-metric]")?.dataset.metric;
-        if (!next || next === metric)
-            return;
-        metric = next;
-        try {
-            localStorage.setItem(METRIC_KEY, metric);
-        }
-        catch (_) { }
-        syncMetric();
-        render();
-    });
     $("ut-toggle").addEventListener("click", () => {
         setOpen(!usageTrendOpen());
         if (usageTrendOpen())

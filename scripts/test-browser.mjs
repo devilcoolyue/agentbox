@@ -197,11 +197,17 @@ export async function smoke(page) {
   assert.deepEqual(await texts('#us-main .us-label'),['总花费','总请求数','总 Token','缓存命中率']);
   // 80 read of 110 input + 80 read + 10 write: output never enters the rate.
   assert.deepEqual(await texts('#us-main .us-value'),['$0.00','3','3.2K','40.0%']);
-  // Four tiles in one row, with the toggle beside them.
+  // Four metrics in one row of the card the chart shares; the round toggle sits centred on the divider below them.
   const tops=await page.locator('#us-main .us-item').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().top));
   assert.equal(new Set(tops).size,1);
   const more=page.locator('#us-more'),lastCard=await page.locator('#us-main .us-item').nth(3).boundingBox();
-  assert.ok((await more.boundingBox()).x>=lastCard.x+lastCard.width,'toggle sits to the right of the cards');
+  const card=await page.locator('#usage-stats').boundingBox(),divider=await page.locator('.us-divider').boundingBox();
+  assert.ok(await page.locator('#usage-stats #ut-chart').count(),'chart lives in the same card as the metrics');
+  const toggleBox=await more.boundingBox(),toggleMid={x:toggleBox.x+toggleBox.width/2,y:toggleBox.y+toggleBox.height/2};
+  assert.ok(Math.abs(toggleMid.x-(card.x+card.width/2))<1,'toggle is centred on the card');
+  assert.ok(Math.abs(toggleMid.y-divider.y)<1.5&&divider.y>=lastCard.y+lastCard.height-0.5,'toggle rides the divider under the metrics');
+  assert.ok(Math.abs(toggleBox.width-toggleBox.height)<0.5&&toggleBox.width<=32,'toggle is a small round button');
+  assert.equal(await more.getAttribute('aria-label'),'更多指标');
   assert.equal(await page.locator('#us-detail .us-item').first().isVisible(),false,'the buckets start tucked away');
   assert.equal(await more.getAttribute('aria-expanded'),'false');
   await more.click();
@@ -212,12 +218,17 @@ export async function smoke(page) {
   const under=await page.locator('#us-detail .us-item').nth(3).boundingBox(),rate=await page.locator('#us-main .us-item').nth(3).boundingBox();
   assert.ok(Math.abs(under.x-rate.x)<1&&Math.abs(under.width-rate.width)<1,'second row aligns with the cards');
   assert.ok(under.y>rate.y+rate.height,'second row sits below the cards');
+  const openToggle=await more.boundingBox();
+  assert.ok(openToggle.y+openToggle.height/2>=under.y+under.height-0.5,'the toggle moves down under the second row');
+  assert.equal(await more.getAttribute('data-tip'),'收起指标');
   assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_usage_more_metrics')),'open');
   // The card tip carries the exact number, the ? explains the definition.
   assert.equal(await page.locator('#us-main .us-item').nth(2).getAttribute('data-tip'),'3,200');
   assert.match(await page.locator('#us-main .us-help').nth(1).getAttribute('data-tip'),/不含输出 token/);
   assert.equal(await page.locator('#us-main .us-help').nth(1).getAttribute('aria-label'),'缓存命中率');
   if(process.env.AGENTBOX_USAGE_SCREENSHOTS) await page.screenshot({path:'output/playwright/usage-summary-desktop.png',animations:'disabled'});
+  // The secondary buckets are figures, not chart switches.
+  assert.equal(await page.locator('#us-detail .us-pick').count(),0);
   await more.click();
   assert.equal(await page.locator('#us-detail .us-item').first().isVisible(),false);
   assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_usage_more_metrics')),'closed');
@@ -230,7 +241,18 @@ export async function smoke(page) {
   if(await page.locator('#ut-toggle').getAttribute('aria-expanded')==='false') await page.locator('#ut-toggle').click();
   await page.waitForFunction(()=>document.querySelectorAll('#ut-slots .ut-slot').length===14);
   assert.equal(await page.locator('#ut-slots .ut-bar').count(),2,'empty hours keep their slot but draw no bar');
-  assert.match(await page.locator('#ut-title').innerText(),/^使用趋势 · 当天$/);
+  assert.equal(await page.locator('#ut-title').innerText(),'Token · 按小时');
+  // Total tokens is the charted metric until another figure is picked; a dark underline marks it.
+  const picked=()=>page.locator('#us-main .us-item.active .us-pick').getAttribute('data-metric');
+  const underlineUnder=async n=>{
+   const tile=await box(`#us-main .us-item:nth-child(${n+1})`),ink=await box('#us-main > .ink');
+   const style=await page.locator('#us-main > .ink').evaluate(e=>{const c=getComputedStyle(e);return {width:c.borderBottomWidth,style:c.borderBottomStyle};});
+   assert.deepEqual(style,{width:'2px',style:'solid'});
+   assert.ok(Math.abs(ink.x-tile.x)<1&&Math.abs(ink.width-tile.width)<1&&Math.abs(ink.y+ink.height-tile.y-tile.height)<1,`underline sits under metric ${n}`);
+  };
+  assert.equal(await picked(),'tokens');
+  assert.deepEqual(await page.locator('#us-main .us-pick').evaluateAll(els=>els.map(e=>e.getAttribute('aria-pressed'))),['false','false','true','false']);
+  await underlineUnder(2);
   // Axis steps follow the reference chart: 2.14M tops out at 3M with a 1.5M midline.
   assert.deepEqual(await trendTexts('#ut-y span'),['3M','1.5M','0']);
   assert.equal(await page.evaluate(async()=>{const {axisTop}=await import('/_v/{{BUILD}}/js/usage-trend.js');return [1,2,3,5,13,1910000,2138741,4200].map(axisTop).join();}),'2,2,4,6,16,2000000,3000000,5000');
@@ -266,21 +288,46 @@ export async function smoke(page) {
    await page.evaluate(()=>{document.documentElement.dataset.theme='light';});
   }
 
-  // Switching metric redraws locally: same buckets, no new request.
+  // Picking a figure redraws locally: same buckets, no new request. The whole tile is the target, not just its name.
   const reads=usageTrendReads;
-  await page.locator('#ut-metric [data-metric="cost"]').click();
+  await page.locator('#us-main .us-pick[data-metric="cost"]').click();
   assert.deepEqual(await trendTexts('#ut-y span'),['$3','$1.5','$0']);
-  await page.locator('#ut-metric [data-metric="requests"]').click();
+  assert.equal(await page.locator('#ut-title').innerText(),'费用 · 按小时');
+  const requestsValue=await box('#us-main .us-item:nth-child(2) .us-value');
+  await page.mouse.click(requestsValue.x+requestsValue.width/2,requestsValue.y+requestsValue.height/2);
   assert.deepEqual(await trendTexts('#ut-y span'),['16','8','0']);
-  assert.equal(await page.locator('#ut-legend-name').innerText(),'请求');
-  assert.equal(await page.locator('#ut-metric [data-metric="requests"]').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('#ut-title').innerText(),'请求 · 按小时');
+  assert.equal(await page.locator('#us-main .us-pick[data-metric="requests"]').getAttribute('aria-pressed'),'true');
+  assert.equal(await picked(),'requests');
+  await underlineUnder(1);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_usage_trend_metric')),'requests');
+  // The ? keeps its own tip instead of switching the chart.
+  await page.locator('#us-main .us-item:nth-child(4) .us-help').click();
+  assert.equal(await picked(),'requests','the ? is not part of the switch');
+  // The hit rate is charted per bucket with the same formula as the summary; hours without input draw nothing.
+  await page.locator('#us-main .us-pick[data-metric="hit"]').click();
+  assert.deepEqual(await trendTexts('#ut-y span'),['100%','50%','0%']);
+  assert.equal(await page.locator('#ut-title').innerText(),'缓存命中率 · 按小时');
+  assert.equal(await page.locator('#ut-slots .ut-bar').count(),1,'0% and no-input hours leave no bar');
+  const hitBar=await box('#ut-slots .ut-slot:nth-child(14) .ut-bar');
+  assert.ok(Math.abs(hitBar.height-plot.height*0.935)<1.5,'hit-rate bar is a share of 100%');
+  await page.mouse.move(hitBar.x+hitBar.width/2,hitBar.y+hitBar.height/2);
+  await page.waitForFunction(()=>document.querySelector('#ut-tip-head').textContent==='2026/11/02 13:00');
+  assert.equal(await page.locator('#ut-tip-value').innerText(),'93.5%');
+  assert.equal(await page.locator('#ut-tip-name').innerText(),'缓存命中率');
+  await page.mouse.move(emptyHour.x+emptyHour.width/2,emptyHour.y+10);
+  await page.waitForFunction(()=>document.querySelector('#ut-tip-head').textContent==='2026/11/02 02:00');
+  assert.equal(await page.locator('#ut-tip-value').innerText(),'—');
+  await underlineUnder(3);
   assert.equal(usageTrendReads,reads,'switching metric must not refetch');
 
   // Keyboard reaches the same readout as the pointer.
   await page.mouse.move(0,0);
   await page.locator('#ut-tip').waitFor({state:'hidden'});
-  await page.locator('#ut-metric [data-metric="cost"]').focus();
+  await page.locator('#us-main .us-pick[data-metric="cost"]').focus();
   await page.keyboard.press('Enter');
+  assert.equal(await picked(),'cost','the metric buttons work from the keyboard');
+  await page.locator('#ut-toggle').focus();
   await page.keyboard.press('Tab');
   await page.locator('#ut-tip').waitFor({state:'visible'});
   assert.equal(await page.locator('#ut-tip-value').innerText(),'$2.8800');
@@ -288,7 +335,7 @@ export async function smoke(page) {
   assert.equal(await page.locator('#ut-tip-head').innerText(),'2026/11/02 12:00');
   await page.keyboard.press('Escape');
   await page.locator('#ut-tip').waitFor({state:'hidden'});
-  await page.locator('#ut-metric [data-metric="tokens"]').click();
+  await page.locator('#us-main .us-pick[data-metric="tokens"]').click();
 
   // Multi-day hourly and daily axes label the change of day.
   const stored=usageTrend;
@@ -344,6 +391,15 @@ export async function smoke(page) {
   await page.waitForFunction(n=>document.querySelectorAll('#ut-slots .ut-slot').length===n,14);
   assert.equal(usageTrendReads,closedReads+1);
   assert.equal(await page.evaluate(()=>localStorage.getItem('agentbox_usage_trend')),'open');
+  // Picking a figure while the chart is folded opens it on that metric, with one read.
+  await page.locator('#ut-toggle').click();
+  await page.locator('#us-main .us-pick[data-metric="requests"]').click();
+  assert.equal(await page.locator('#ut-toggle').getAttribute('aria-expanded'),'true');
+  await page.waitForFunction(n=>document.querySelectorAll('#ut-slots .ut-slot').length===n,14);
+  assert.equal(usageTrendReads,closedReads+2);
+  assert.deepEqual(await trendTexts('#ut-y span'),['16','8','0']);
+  await page.locator('#us-main .us-pick[data-metric="tokens"]').click();
+  assert.equal(usageTrendReads,closedReads+2,'picking while open never refetches');
 
   // The table still gets the space the chart leaves on a small laptop screen.
   await page.setViewportSize({width:1280,height:800});
@@ -353,8 +409,9 @@ export async function smoke(page) {
 
   async function usageSmoke() {
   usageTrend = {granularity:'hour',timezone:'Asia/Shanghai',buckets:Array.from({length:14},(_,hour)=>{
-    const [input_tokens,requests,cost_micro_usd]=hour===13?[2138741,13,2880000]:hour===9?[500,1,1000]:[0,0,0];
-    return {start:`2026-11-02T${String(hour).padStart(2,'0')}:00`,requests,input_tokens,output_tokens:0,cache_read_tokens:0,cache_write_tokens:0,cost_micro_usd};
+    // 13:00 keeps 2,138,741 tokens in all, 2M of them cache reads: a 93.5% hit rate. 09:00 has input but no reads.
+    const [input_tokens,cache_read_tokens,requests,cost_micro_usd]=hour===13?[138741,2000000,13,2880000]:hour===9?[500,0,1,1000]:[0,0,0,0];
+    return {start:`2026-11-02T${String(hour).padStart(2,'0')}:00`,requests,input_tokens,output_tokens:0,cache_read_tokens,cache_write_tokens:0,cost_micro_usd};
   })};
   usageRows = [
     {input_tokens:10,cache_read_tokens:80,cache_write_tokens:10,provider:'firstParty',effort:'xhigh',effort_control:'effort'},
@@ -570,6 +627,11 @@ export async function smoke(page) {
   assert.ok(await page.locator('#usage-summary').evaluate(el=>el.scrollWidth<=el.clientWidth),'summary must not overflow a phone');
   const phoneCards=await page.locator('#us-main .us-item').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().top));
   assert.ok(phoneCards[0]===phoneCards[1]&&phoneCards[2]===phoneCards[3]&&phoneCards[2]>phoneCards[0],'cards stack two by two on a phone');
+  // The underline follows the picked tile into the second row.
+  const phoneTile=await page.locator('#us-main .us-item.active').boundingBox(),phoneInk=await page.locator('#us-main > .ink').boundingBox();
+  assert.ok(Math.abs(phoneInk.x-phoneTile.x)<1&&Math.abs(phoneInk.y+phoneInk.height-phoneTile.y-phoneTile.height)<1,'underline under the picked tile on a phone');
+  const phoneToggle=await page.locator('#us-more').boundingBox();
+  assert.ok(phoneToggle.width>=30,'toggle is easier to hit on a phone');
   await page.setViewportSize({width:1280,height:900});
   usageRows=[];
   usageTrend={granularity:'hour',buckets:[],timezone:'Asia/Shanghai'};
