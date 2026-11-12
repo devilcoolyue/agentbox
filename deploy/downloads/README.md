@@ -15,7 +15,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 默认安装最新正式版本。固定版本或只监听本机：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.19 --listen 127.0.0.1:8180
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.20 --listen 127.0.0.1:8180
 ```
 
 要求 Linux x86_64 / arm64、systemd 和本机 Docker Engine。Ubuntu 22.04+、Debian 12+ 自动安装缺失依赖和 Docker；其他发行版需预装 Python 3.9+、Git、curl、CA 证书、tzdata 和 Docker。服务端使用预编译包，宿主机无需 Go 或 Node。
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/uninstall.sh | sudo bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.19
+curl -fsSL https://raw.githubusercontent.com/devilcoolyue/agentbox/main/install.sh | sudo bash -s -- --version v0.1.20
 ```
 
 新安装会生成新密码，旧数据保留在备份中，不自动导入。只预览卸载计划用 `--dry-run`；确定不需要数据时加 `--purge --yes` 永久删除本次安装的配置、凭证及工作区（不删除以前的卸载备份）。没有 `--yes` 时从终端询问确认。
@@ -65,13 +65,13 @@ sudo systemctl restart agentbox
 
 ```bash
 sha256sum --ignore-missing -c SHA256SUMS
-tar -xzf agentbox_v0.1.19_linux_arm64.tar.gz
+tar -xzf agentbox_v0.1.20_linux_arm64.tar.gz
 ```
 
 必须确认所选安装包校验为 `OK`。SHA-256 检查完整性，不是独立数字签名。新安装可以运行解压包中的安装器，仍会下载并验证所选版本：
 
 ```bash
-sudo bash agentbox_v0.1.19_linux_arm64/install.sh --version v0.1.19
+sudo bash agentbox_v0.1.20_linux_arm64/install.sh --version v0.1.20
 ```
 
 后续升级时，将新包解压到新的目录，使用包内工具（把路径和版本替换为实际值）：
@@ -82,6 +82,14 @@ sudo python3 /绝对路径/新版本包/deploy/release.py activate --version vX.
 ```
 
 升级会检查配置和数据库兼容性、备份、切换版本并重启服务，HTTP/WebSocket 会短暂断开；失败不会自动回滚。不要覆盖已有版本目录。工作空间镜像单独管理，服务端升级不自动更新镜像。回退也使用 `activate`，只允许兼容当前数据库的版本。
+
+### 升级至 v0.1.20
+
+本版让工作空间经内网隧道把编译、渲染等重活交给自己的电脑（`self.abox-link` 与自带的 `abox-remote`），系统设置新增仅管理员可见的「登录与活跃」，使用记录新增趋势图与缓存命中率，同时运行的对话线程数可在「系统设置 → 容器与资源」调整（默认 3）；数据盘空间不足时不再把用户锁在外面；Go 升级到 1.26.11 修复 GO-2026-6859；完整分类说明见 [v0.1.20 Release](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.20)。
+
+从 v0.1.19 升级会执行 schema 24 → 25 → 26 迁移（更早版本连续执行到 26），只新增登录记录与最后活跃两张表并改一个列名，不改已有数据。升级前先保存并验证备份；**v0.1.19 及更早的二进制不能直接打开 schema 26 数据库**，回退须恢复升级前兼容备份到新目录，升级后的登录记录与最后活跃不会保留。新增配置项 `max_parallel_chats`，旧版忽略并在再次保存时丢掉。无需更新空间镜像；`self.abox-link` 与升级提示需要本版的 abox-link 客户端。
+
+请先结束当前网页任务，升级会备份并重启服务，完成后刷新页面。从 v0.1.18 或更新版本升级时可用 `--announce-minutes` 先向在线用户预告。标准 Linux/systemd 版本目录安装可使用「关于与更新 → 升级并重启」，或在 Bash 中执行下文 v0.1.15 的命令并把 `version` 改为 `v0.1.20`。
 
 ### 升级至 v0.1.19
 

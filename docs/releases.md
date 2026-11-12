@@ -8,7 +8,13 @@
 
 2026-09-28 源码公开前清理了历史中的生产域名，相关提交与标签的哈希因此改变。此前发布包的 `build.json` / `--version` 仍记录清理前构建提交，不能直接用它在新源码仓库定位；已有附件与 SHA256SUMS 未重新打包或修改。历史版本源码请按对应版本标签查阅，后续新包使用公开仓库的提交哈希。
 
-当前服务端正式版本为 [v0.1.19](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.19)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+当前服务端正式版本为 [v0.1.20](https://github.com/devilcoolyue/agentbox/releases/tag/v0.1.20)；桌面安装包仍为独立的 [Desktop 0.1.2](https://github.com/devilcoolyue/agentbox/releases/tag/desktop-v0.1.2)。一键安装默认下载最新服务端正式版本；桌面测试包独立发布，不占用服务端 `releases/latest`。
+
+### v0.1.20：把重活交给自己的电脑、登录与活跃面板、用量趋势
+
+工作空间可以经内网隧道使用自己的电脑：abox-link 新增保留名 `self.abox-link` 表示运行它的这台机器，开启隧道后空间自带 `abox-remote`，在本机执行命令、跑能挺过断线的长任务、双向传文件，配套的 `remote-host` 技能告诉 Agent 何时、如何使用。系统设置新增仅管理员可见的「登录与活跃」，列出每个用户的最后活跃、最后登录与登录记录；使用记录的合计与新增的趋势柱状图合成一张卡，可切换总花费、请求数、Token 与缓存命中率。同时运行的对话线程数改为可配置（`max_parallel_chats`，默认 3）。数据盘低于预留值时停止空间与登出永远放行、唤醒与发消息放宽到 1 GiB，不再把用户锁在外面；列表项里的跨行展示公式正常渲染。Go 升级到 1.26.11 修复 GO-2026-6859。分项内容见 [CHANGELOG](../CHANGELOG.md)。
+
+从 v0.1.19 升级会执行 schema 24 → 26 迁移，只加表并改一个列名；v0.1.19 及更早的二进制不能打开新库，回退须恢复兼容备份到新目录。新增配置项 `max_parallel_chats` 与接口 `GET /api/usage/trend`、`POST /api/me/activity`、`GET /api/user-activity`、`GET /api/login-events`，现有接口兼容；无需更新 Agent 镜像，详见[包内升级说明](../deploy/downloads/README.md#升级至-v0120)。本次发布两个 Linux 服务端包、五个平台 abox-link、`release.json` 与 `SHA256SUMS`，不发布新桌面包。
 
 ### v0.1.19：并行对话线程、多终端标签与折叠顶栏
 
