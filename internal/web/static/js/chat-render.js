@@ -563,6 +563,13 @@ function renderList(parent, lines, i) {
             break; // 有序/无序切换，交回上层重开列表
         }
         else if (li && /^\s+\S/.test(lines[i])) {
+            // 缩进的块级公式（独占行的 $$ / \[ 跨行到闭合）整段并入当前项；
+            // 逐行走 appendInline 会把分隔符和公式体拆散，漏成原样 LaTeX 文本
+            const dm = tryDisplayMath(li, lines, i, () => { });
+            if (dm !== -1) {
+                i = dm;
+                continue;
+            }
             // 缩进续行并入当前项
             li.appendChild(document.createTextNode("\n"));
             appendInline(li, lines[i].trim());
