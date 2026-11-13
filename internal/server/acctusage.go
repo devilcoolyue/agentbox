@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,7 +46,15 @@ type acctUsageView struct {
 	Plan         string        `json:"plan,omitempty"`
 	Windows      []usageWindow `json:"windows"`
 	Extra        *usageExtra   `json:"extra,omitempty"`
-	FetchedAt    string        `json:"fetched_at"`
+	// FetchedAt 是数据的时间：对话响应最近一次报的时间，或官方接口查到的时间。
+	FetchedAt string `json:"fetched_at,omitempty"`
+	// Source 说明较新的那份数据从哪来：responses（对话响应附带）或 upstream
+	// （官方额度接口）。
+	Source string `json:"source,omitempty"`
+	// ThrottledUntil：官方接口在 429 冷却中，到这个时间前刷新不会去打它。
+	ThrottledUntil string `json:"throttled_until,omitempty"`
+	// RefreshError：这次刷新官方接口失败了（429 以外），返回的是已有数据。
+	RefreshError string `json:"refresh_error,omitempty"`
 }
 
 // 上游返回的窗口结构。utilization 是 0-100 的浮点，账号没有该窗口时整个
@@ -113,45 +122,20 @@ func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request, sess
 		return
 	}
 
-	client, err := s.acctClient(acct, 20*time.Second)
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	// 令牌过期就自己续，不把用户推回「先发一轮对话」的手动流程。
-	if cred.Expiring() {
-		if cred, err = s.ensureClaudeCred(r.Context(), acct, false); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
-			return
-		}
-	}
-
-	raw, code, err := fetchOAuthUsage(r.Context(), client, cred.AccessToken)
-	// 凭证里的 expiresAt 不是唯一真相：令牌可能被上游提前作废，也可能这份文件
-	// 本身就落后于容器里那份。撞上 401 就强制续一次再打一遍。
-	if code == http.StatusUnauthorized {
-		if fresh, ferr := s.ensureClaudeCred(r.Context(), acct, true); ferr == nil {
-			cred = fresh
-			raw, code, err = fetchOAuthUsage(r.Context(), client, cred.AccessToken)
-		}
-	}
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, "请求额度接口失败: "+err.Error())
-		return
-	}
-	if code == http.StatusUnauthorized {
-		writeErr(w, http.StatusBadGateway, "凭证已失效，请到「系统设置 → 账号」重新登录该账号")
-		return
-	}
-	if code != http.StatusOK {
-		writeErr(w, http.StatusBadGateway, fmt.Sprintf("额度接口返回 HTTP %d: %s", code, truncate(string(raw), 200)))
-		return
-	}
-
-	var u oauthUsageResp
-	if err := json.Unmarshal(raw, &u); err != nil {
-		writeErr(w, http.StatusBadGateway, "额度响应解析失败")
-		return
+	// 默认只用手上的数据（对话响应附带的窗口、上次查官方接口的结果）；
+	// 用户点刷新、或者什么都没有时才去打官方接口。
+	refresh := r.URL.Query().Get("refresh") == "1"
+	st := s.acctUsage.state(acct.ID)
+	_, _, _, _, have := mergeUsage(st, time.Now())
+	var fetchErr error
+	if refresh || !have {
+		fetchErr = s.acctUsage.fetchUpstream(acct.ID, time.Now, func() upstreamResult {
+			// 发起刷新的请求断开了也让这次查询做完，同账号在等它的请求要用。
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
+			defer cancel()
+			return s.queryOAuthUsage(ctx, acct, cred)
+		})
+		st = s.acctUsage.state(acct.ID)
 	}
 
 	out := acctUsageView{
@@ -159,20 +143,97 @@ func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request, sess
 		AccountLabel: acct.Label,
 		Plan:         cred.SubscriptionType,
 		Windows:      []usageWindow{},
-		FetchedAt:    time.Now().UTC().Format(time.RFC3339),
 	}
+	if until := st.upstream.blockedUntil; time.Now().Before(until) {
+		out.ThrottledUntil = until.UTC().Format(time.RFC3339)
+	}
+	windows, extra, source, at, ok := mergeUsage(st, time.Now())
+	var throttled errUsageThrottled
+	switch {
+	case ok:
+		out.Windows, out.Extra, out.Source = windows, extra, source
+		out.FetchedAt = at.UTC().Format(time.RFC3339)
+		if fetchErr != nil && !errors.As(fetchErr, &throttled) {
+			out.RefreshError = fetchErr.Error()
+		}
+	case errors.As(fetchErr, &throttled):
+		// 什么数据都没有、官方接口又在冷却：照样 200，让页面说明什么时候能再查。
+	case fetchErr != nil:
+		code := http.StatusBadGateway
+		var credErr usageCredError
+		if errors.As(fetchErr, &credErr) {
+			code = http.StatusBadRequest // 凭证本身的问题，要人去处理，不是上游故障
+		}
+		writeErr(w, code, fetchErr.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// queryOAuthUsage 打一次官方额度接口并解析，令牌快过期或被上游作废时先续期。
+func (s *Server) queryOAuthUsage(ctx context.Context, acct config.Account, cred credentials.ClaudeCred) upstreamResult {
+	client, err := s.acctClient(acct, 20*time.Second)
+	if err != nil {
+		return upstreamResult{err: err}
+	}
+	// 令牌过期就自己续，不把用户推回「先发一轮对话」的手动流程。
+	if cred.Expiring() {
+		if cred, err = s.ensureClaudeCred(ctx, acct, false); err != nil {
+			return upstreamResult{err: usageCredError{err}}
+		}
+	}
+
+	raw, code, header, err := fetchOAuthUsage(ctx, client, cred.AccessToken)
+	// 凭证里的 expiresAt 不是唯一真相：令牌可能被上游提前作废，也可能这份文件
+	// 本身就落后于容器里那份。撞上 401 就强制续一次再打一遍。
+	if code == http.StatusUnauthorized {
+		if fresh, ferr := s.ensureClaudeCred(ctx, acct, true); ferr == nil {
+			raw, code, header, err = fetchOAuthUsage(ctx, client, fresh.AccessToken)
+		}
+	}
+	switch {
+	case err != nil:
+		return upstreamResult{err: errors.New("请求额度接口失败: " + err.Error())}
+	case code == http.StatusUnauthorized:
+		return upstreamResult{err: errors.New("凭证已失效，请到「系统设置 → 账号」重新登录该账号")}
+	case code == http.StatusTooManyRequests:
+		return upstreamResult{retryAfter: usageRetryAfter(header, time.Now())}
+	case code != http.StatusOK:
+		return upstreamResult{err: fmt.Errorf("额度接口返回 HTTP %d: %s", code, truncate(string(raw), 200))}
+	}
+	windows, extra, err := parseOAuthUsage(raw)
+	if err != nil {
+		return upstreamResult{err: err}
+	}
+	return upstreamResult{windows: windows, extra: extra}
+}
+
+// usageCredError 是续期凭证失败：要人去重新登录，而不是上游的临时故障。
+type usageCredError struct{ err error }
+
+func (e usageCredError) Error() string { return e.err.Error() }
+func (e usageCredError) Unwrap() error { return e.err }
+
+// parseOAuthUsage 把官方额度接口的响应归一成窗口列表与额外用量。
+func parseOAuthUsage(raw []byte) ([]usageWindow, *usageExtra, error) {
+	var u oauthUsageResp
+	if err := json.Unmarshal(raw, &u); err != nil {
+		return nil, nil, errors.New("额度响应解析失败")
+	}
+	windows := []usageWindow{}
 	for _, spec := range usageWindowLabels {
 		win := spec.pick(&u)
 		if win == nil || win.Utilization == nil {
 			continue
 		}
-		out.Windows = append(out.Windows, usageWindow{
+		windows = append(windows, usageWindow{
 			Key:      spec.key,
 			Label:    spec.label,
 			Percent:  *win.Utilization,
 			ResetsAt: win.ResetsAt,
 		})
 	}
+	var extra *usageExtra
 	if e := u.ExtraUsage; e != nil && e.IsEnabled {
 		// 金额按 decimal_places 缩放：monthly_limit=3500 + decimal_places=2 是 $35.00。
 		scale := 1.0
@@ -191,26 +252,25 @@ func (s *Server) handleAccountUsage(w http.ResponseWriter, r *http.Request, sess
 		if e.MonthlyLimit != nil {
 			x.Limit = *e.MonthlyLimit / scale
 		}
-		out.Extra = &x
+		extra = &x
 	}
-
-	writeJSON(w, http.StatusOK, out)
+	return windows, extra, nil
 }
 
 // fetchOAuthUsage 打一次额度接口，返回响应体与状态码。拆出来是因为 401 之后
 // 要用续期出来的新令牌原样重打一遍。
-func fetchOAuthUsage(ctx context.Context, client *http.Client, accessToken string) ([]byte, int, error) {
+func fetchOAuthUsage(ctx context.Context, client *http.Client, accessToken string) ([]byte, int, http.Header, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, claudeOAuthUsage, nil)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("anthropic-beta", claudeOAuthBeta)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	return raw, resp.StatusCode, nil
+	return raw, resp.StatusCode, resp.Header, nil
 }
 
 // claudeCred 是账号池 .credentials.json 里 claudeAiOauth 的可用字段。

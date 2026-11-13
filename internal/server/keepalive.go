@@ -616,6 +616,9 @@ func (s *Server) keepCache(id string, plan keepalivePlan) (usage.PromptCache, bo
 				if w, ok := agent.FiveHourWindow(line); ok {
 					s.noteFiveHour(sess, w)
 				}
+				if ws, ok := agent.UsageWindows(line); ok {
+					s.acctUsage.noteLocal(sess.AccountID, ws, time.Now())
+				}
 			}
 		}}
 	started := time.Now()

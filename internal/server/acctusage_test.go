@@ -18,8 +18,8 @@ import (
 // 一份按真实 /api/oauth/usage 响应裁下来的样本：pro 账号只有 five_hour 和
 // seven_day 有值，按模型细分的周窗口是 null，另外还有一批内部代号窗口。
 const usageSample = `{
-  "five_hour":  {"utilization": 22.0, "resets_at": "2026-08-10T14:19:59.117705+00:00"},
-  "seven_day":  {"utilization": 4.0,  "resets_at": "2026-08-15T08:59:59.117725+00:00"},
+  "five_hour":  {"utilization": 22.0, "resets_at": "2099-08-10T14:19:59.117705+00:00"},
+  "seven_day":  {"utilization": 4.0,  "resets_at": "2099-08-15T08:59:59.117725+00:00"},
   "seven_day_opus": null,
   "seven_day_sonnet": null,
   "tangelo": {"utilization": 99.0, "resets_at": null},

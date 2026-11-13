@@ -157,6 +157,14 @@ func TestAdapterReadsFiveHourWindowAndRequests(t *testing.T) {
 			t.Fatalf("%s: window %+v", tc.raw, e.FiveHour)
 		}
 	}
+	// Every unified window is kept for the account usage view, model-scoped ones included.
+	e, _ := a.Decode([]byte(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.3,"resetsAt":1794579600},"seven_day":{"utilization":0.46,"resetsAt":1794646800},"seven_day_fable":{"utilization":0.071,"resetsAt":1794646800},"broken":{"resetsAt":1}}}}`))
+	if len(e.Windows) != 3 || e.Windows["five_hour"].Percent != 30 || e.Windows["seven_day"].Percent != 46 || e.Windows["seven_day_fable"].Percent != 7.1 || e.Windows["seven_day"].ResetsAt.Unix() != 1794646800 {
+		t.Fatalf("windows = %+v", e.Windows)
+	}
+	if e, _ := a.Decode([]byte(`{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1791263400,"rateLimitType":"five_hour"}}`)); e.Windows != nil {
+		t.Fatalf("windows without unifiedWindows = %+v", e.Windows)
+	}
 	if e, _ := a.Decode([]byte(`{"type":"system","subtype":"status","status":"requesting"}`)); !e.Requesting {
 		t.Fatal("request start not marked")
 	}

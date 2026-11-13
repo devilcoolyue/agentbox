@@ -1,14 +1,15 @@
 import { setText, setTextRender, t as i18nText } from "./i18n.js";
 /* acct-usage：查看当前会话所用 Claude 账号的订阅额度。
  *
- * 数据来自服务端代查的官方 /usage 接口（见 server/acctusage.go），展示的东西
- * 与 CLI 里 claude-hud 状态栏、/usage 命令是同一份：5 小时窗口 + 周窗口的
- * 使用率和重置时间。只读，不做任何写操作。 */
+ * 打开时用服务端手上的数据：对话响应附带的窗口用量（和 CLI 状态栏、claude-hud
+ * 是同一份，不花额外请求），以及上次查官方 /usage 接口的结果。点「刷新」才让
+ * 服务端去查官方接口——它限流很紧，限流期间服务端不再去查，照样返回已有数据并
+ * 告知冷却到几点（见 server/acctusage_cache.go）。只读，不做任何写操作。 */
 "use strict";
 
 import { S } from "./state.js";
 import type { AccountUsage, UsageWindow } from "./types.js";
-import { $, btnBusy, btnDone, fmtClock } from "./util.js";
+import { $, btnBusy, btnDone, fmtClock, fmtDateTime } from "./util.js";
 import { api } from "./api.js";
 import { keepCount, skelBar, skelShell } from "./skeleton.js";
 
@@ -91,6 +92,36 @@ function extraRow(x: NonNullable<AccountUsage["extra"]>) {
   return row;
 }
 
+/* 数据时间：当天的只报钟点，隔得久的带上日期，免得把昨天的数字当成刚查的。 */
+function fmtWhen(iso: string) {
+  const t = new Date(iso);
+  return Date.now() - t.getTime() > 12 * 3600_000 ? fmtDateTime(t, false) : fmtClock(t, false);
+}
+
+/* 底部说明：数据时间 + 来源。 */
+function fetchedText(u: AccountUsage) {
+  if (!u.fetched_at) return "";
+  const src = u.source === "responses" ? i18nText("来自对话响应") : u.source === "upstream" ? i18nText("来自官方额度接口") : "";
+  return i18nText("更新于 ") + fmtWhen(u.fetched_at) + (src ? " · " + src : "");
+}
+
+/* 窗口列表下方的提示：官方接口限流中、或这次刷新失败。 */
+function noticeRow(u: AccountUsage) {
+  const msg = document.createElement("div");
+  msg.className = "au-msg";
+  if (u.refresh_error) {
+    msg.classList.add("err");
+    setText(msg, "刷新失败：{p0}。显示的是已有数据。", { p0: u.refresh_error });
+    return msg;
+  }
+  if (u.throttled_until) {
+    const until = u.throttled_until;
+    setTextRender(msg, () => i18nText("官方额度接口限流中，{p0} 后才能再刷新。", { p0: fmtWhen(until) }));
+    return msg;
+  }
+  return null;
+}
+
 function render(u: AccountUsage) {
   $("au-label").textContent = u.account_label || u.account_id;
   const plan = $("au-plan");
@@ -102,14 +133,17 @@ function render(u: AccountUsage) {
   if (!u.windows.length) {
     const empty = document.createElement("div");
     empty.className = "au-msg";
-    setText(empty, "该账号暂时没有可显示的限额窗口");
+    if (u.throttled_until && !u.fetched_at) setText(empty, "还没有这个账号的用量数据。网页对话的下一次回复会带上最新用量，届时再打开即可。");
+    else setText(empty, "该账号暂时没有可显示的限额窗口");
     body.appendChild(empty);
   } else {
     for (const w of u.windows) body.appendChild(winRow(w));
   }
   if (u.extra && u.extra.enabled) body.appendChild(extraRow(u.extra));
+  const notice = noticeRow(u);
+  if (notice) body.appendChild(notice);
 
-  setTextRender($("au-fetched"), () => i18nText("更新于 ") + fmtClock(u.fetched_at, false));
+  setTextRender($("au-fetched"), () => fetchedText(u));
 }
 
 /* 打开时正在查的会话。查询期间用户可能切走，回来的数据就不该再往弹窗里塞。 */
@@ -137,14 +171,15 @@ function skeletonRows(count: number) {
   return wrap;
 }
 
-async function load() {
+/* refresh 为真时让服务端去查官方额度接口，否则只用它手上的数据。 */
+async function load(refresh = false) {
   const sid = forSession;
   const body = $("au-body");
   body.replaceChildren(skeletonRows(keepCount(body, ".au-row", 2)));
   $("au-fetched").replaceChildren(skelBar("8em", "inline text"));
 
   try {
-    const u = await api<AccountUsage>(`/sessions/${sid}/account/usage`);
+    const u = await api<AccountUsage>(`/sessions/${sid}/account/usage` + (refresh ? "?refresh=1" : ""));
     if (forSession !== sid) return;
     render(u);
   } catch (e) {
@@ -175,7 +210,7 @@ $("au-refresh").addEventListener("click", async () => {
   const btn = $<HTMLButtonElement>("au-refresh");
   btnBusy(btn, () => i18nText("查询中…"));
   try {
-    await load();
+    await load(true);
   } finally {
     btnDone(btn);
   }

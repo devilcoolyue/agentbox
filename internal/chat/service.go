@@ -88,6 +88,9 @@ type Runtime interface {
 	// FiveHour records the subscription's five-hour window a model response
 	// reported and says whether the workspace pauses at it. It must not block.
 	FiveHour(agent.RateWindow) bool
+	// UsageWindows records every subscription window a model response
+	// reported, for the account usage view. It must not block.
+	UsageWindows(map[string]agent.RateWindow)
 }
 
 // ChatTurnTimedOut is the problem code of a turn its time limit stopped.
@@ -470,6 +473,9 @@ func (s Service) Run(parent context.Context, in Input, receipt Observation) {
 			if n := tally.Settled(); n != settled {
 				settled = n
 				r.PublishCost(tid, turnID, true)
+			}
+			if event.Windows != nil {
+				r.UsageWindows(event.Windows)
 			}
 			if event.FiveHour != nil && r.FiveHour(*event.FiveHour) {
 				pauseDue = true

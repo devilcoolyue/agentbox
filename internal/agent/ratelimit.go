@@ -49,3 +49,33 @@ func FiveHourWindow(line []byte) (RateWindow, bool) {
 	}
 	return RateWindow{}, false
 }
+
+// UsageWindows reads every window a Claude rate_limit_event reported under
+// unifiedWindows, keyed the way the CLI names them (five_hour, seven_day, and
+// any model-scoped weekly window). These are the numbers the CLI hands its
+// status line: they ride on every model response, so reading them costs no
+// request of the rate-limited usage endpoint.
+func UsageWindows(line []byte) (map[string]RateWindow, bool) {
+	var ev struct {
+		Type string `json:"type"`
+		Info struct {
+			Windows map[string]*struct {
+				Utilization *float64 `json:"utilization"`
+				ResetsAt    int64    `json:"resetsAt"`
+			} `json:"unifiedWindows"`
+		} `json:"rate_limit_info"`
+	}
+	if json.Unmarshal(line, &ev) != nil || ev.Type != RateLimitType {
+		return nil, false
+	}
+	out := map[string]RateWindow{}
+	for key, w := range ev.Info.Windows {
+		// Bounded: the stream is the CLI's, but keys end up in API responses.
+		if w == nil || w.Utilization == nil || w.ResetsAt <= 0 || key == "" || len(key) > 64 || len(out) >= 16 {
+			continue
+		}
+		percent := math.Round(*w.Utilization*10000) / 100
+		out[key] = RateWindow{Percent: min(max(percent, 0), 100), ResetsAt: time.Unix(w.ResetsAt, 0)}
+	}
+	return out, len(out) > 0
+}

@@ -36,6 +36,9 @@ type Event struct {
 	// FiveHour is the subscription's five-hour window a Claude
 	// rate_limit_event reported, nil otherwise.
 	FiveHour *RateWindow
+	// Windows is every subscription window a Claude rate_limit_event
+	// reported (UsageWindows), nil otherwise.
+	Windows map[string]RateWindow
 }
 type Adapter interface {
 	Type() string
@@ -93,6 +96,9 @@ func (a cliAdapter) Decode(line []byte) (Event, bool) {
 		case probe.Type == RateLimitType:
 			if w, ok := FiveHourWindow(line); ok {
 				e.FiveHour = &w
+			}
+			if ws, ok := UsageWindows(line); ok {
+				e.Windows = ws
 			}
 		}
 	}

@@ -28,7 +28,7 @@
 GET    /api/sessions                工作空间列表（每项带 extensions：作用于本空间的扩展 [{id, name, groups}]，groups 为 model / workspace / chat）
 GET    /api/sessions/{id}           单个工作空间详情（同上）
 GET    /api/sessions/{id}/models    当前空间的候选模型、推理能力与发现状态（不保证上游调用权限）；restricted/default_model 见账号可用模型，client_effort 是账号 CLI 配置的默认原生强度
-GET    /api/sessions/{id}/account/usage  当前空间账号的订阅额度（校验账号使用权限）
+GET    /api/sessions/{id}/account/usage  当前空间账号的订阅额度（校验账号使用权限；默认只用对话响应附带的窗口与缓存，?refresh=1 才查官方接口，限流时返回 throttled_until）
 POST   /api/sessions                新建 {name, agent, account_id}
 POST   /api/sessions/{id}/start     启动容器（幂等）
 POST   /api/sessions/{id}/stop      停止容器（数据保留）

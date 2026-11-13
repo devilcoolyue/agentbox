@@ -395,8 +395,8 @@ func (r delegationRuntime) Emit(value any) {
 func (r delegationRuntime) Problem(ctx context.Context, operation string, err error, fallback string) protocol.APIProblem {
 	return r.t.g.srv.turnProblem(ctx, operation, err, fallback)
 }
-func (r delegationRuntime) Stopping() bool { return r.t.g.srv.stopping() }
-func (r delegationRuntime) Interrupt()     { r.t.halt() }
+func (r delegationRuntime) Stopping() bool                                   { return r.t.g.srv.stopping() }
+func (r delegationRuntime) Interrupt()                                       { r.t.halt() }
 func (r delegationRuntime) Conversation(sess store.Session, _ string) string { return sess.ChatSession }
 func (r delegationRuntime) ProviderSession(_ store.Session, id string) error {
 	return r.t.g.srv.store.SaveDelegationProviderSession(r.t.d.ID, id)
@@ -429,3 +429,10 @@ func (r delegationRuntime) TurnEnded(chat.TurnOutcome) {}
 // FiveHour: a worker runs only while its main turn does; that turn pauses.
 func (r delegationRuntime) FiveHour(agent.RateWindow) bool { return false }
 func (r delegationRuntime) Title(string, string)           {}
+
+// UsageWindows: a worker's responses report its account's windows like any other.
+func (r delegationRuntime) UsageWindows(ws map[string]agent.RateWindow) {
+	if sess, ok := r.Session(); ok {
+		r.t.g.srv.acctUsage.noteLocal(sess.AccountID, ws, time.Now())
+	}
+}

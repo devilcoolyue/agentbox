@@ -219,6 +219,12 @@ func (a chatRuntime) FiveHour(w agent.RateWindow) bool {
 	sess, ok := a.room().srv.store.Get(a.room().sessID)
 	return ok && a.room().srv.noteFiveHour(sess, w)
 }
+func (a chatRuntime) UsageWindows(ws map[string]agent.RateWindow) {
+	r := a.room()
+	if sess, ok := r.srv.store.Get(r.sessID); ok {
+		r.srv.acctUsage.noteLocal(sess.AccountID, ws, time.Now())
+	}
+}
 func (a chatRuntime) Title(thread, text string) {
 	r := a.room()
 	r.srv.spawn(func() { r.generateTitle(thread, text) })

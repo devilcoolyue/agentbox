@@ -151,6 +151,7 @@ type Server struct {
 	usageTel   usageTelemetryState // per-request timing from the CLIs; see usage_telemetry.go
 	keepalive  keepaliveState      // prompt caches kept warm while users are away; see keepalive.go
 	quota      quotaWindows        // subscriptions' five-hour windows; see quota_pause.go
+	acctUsage  acctUsageCache      // subscription windows for the account usage view; see acctusage_cache.go
 	quotaStops quotaTerminalStops  // terminal agents stopped once the balance runs out; see quota_terminal.go
 
 	codexPairs    codexPairing  // Codex requests waiting for their completion record

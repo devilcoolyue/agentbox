@@ -510,7 +510,14 @@ export interface AccountUsage {
   plan?: string;
   windows: UsageWindow[];
   extra?: UsageExtra;
-  fetched_at: string;
+  /** 数据的时间；官方接口限流中、手上又没有数据时缺省 */
+  fetched_at?: string;
+  /** 较新那份数据的来源："responses"（对话响应附带）| "upstream"（官方额度接口） */
+  source?: string;
+  /** 官方额度接口在 429 冷却中，到这个时间（RFC3339）前刷新不会去查 */
+  throttled_until?: string;
+  /** 这次刷新官方接口失败（429 以外），显示的是已有数据 */
+  refresh_error?: string;
 }
 
 /* ---------------- 用户 ---------------- */
