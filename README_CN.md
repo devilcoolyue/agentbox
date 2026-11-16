@@ -171,6 +171,10 @@ sudo ./agentbox -config config.json
 
 </details>
 
+## 一键部署
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/AgentBox/)
+
 ## 整体架构
 
 **一个 Go 服务端，加上 SQLite 和 Docker。** 网页资源嵌入服务端二进制；每个工作空间有自己的容器，文件与历史保存在宿主机。

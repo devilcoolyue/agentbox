@@ -171,6 +171,10 @@ The server needs Docker access and permission to set mounted directory ownership
 
 </details>
 
+## One-Click Deploy
+
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/AgentBox/)
+
 ## How it works
 
 **One Go server, SQLite, and Docker.** The frontend is embedded in the server binary. Each workspace gets its own container; files and history persist on the host.
