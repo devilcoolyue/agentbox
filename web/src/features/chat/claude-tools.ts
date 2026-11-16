@@ -550,7 +550,8 @@ function renderTool(t: Tool) {
     b.dataset.htmlPreview = html;
     buttonLabel(b, () => i18nText("预览"), "chat.preview");
     setTip(b, () => i18nText("在预览窗口渲染 ") + html);
-    b.addEventListener("click", e => e.stopPropagation());
+    // 打开预览由 #chat-log 上的委托处理（preview.ts），点击必须冒泡上去；
+    // 不展开这一行靠下面 toggle 里认出按钮，而不是在这里 stopPropagation
     head.append(b);
   }
   if (expandable) {
@@ -559,7 +560,7 @@ function renderTool(t: Tool) {
     head.setAttribute("role", "button");
     head.setAttribute("aria-expanded", String(t.open));
     const toggle = () => { t.open = !t.open; renderTool(t); };
-    head.addEventListener("click", toggle);
+    head.addEventListener("click", e => { if (!(e.target as HTMLElement).closest("[data-html-preview]")) toggle(); });
     head.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
   }
   t.el.dataset.status = t.status;

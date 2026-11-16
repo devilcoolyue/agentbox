@@ -32,11 +32,17 @@ export async function chatClaudeToolsSmoke(page, { setHistory, send, socket, set
   {kind:'event', ts, event:{type:'assistant', message:{content:[{type:'tool_use', id:'toolu_slim', name:'Bash', input:{command:'npm test'}}]}}},
   {kind:'event', ts, event:{type:'user', message:{role:'user', content:[{type:'tool_result', tool_use_id:'toolu_slim', content:'ok 1\nok 2\nok 3\nok 4', omitted_lines:120}]}}},
   {kind:'event', ts, event:{type:'result', subtype:'success', duration_ms:1000}}, {kind:'status', ts, state:'idle'});
+ // A written .html file: its row carries the 预览 button.
+ entries.push({kind:'user', ts, text:'做个网页', turn:turn('html')},
+  {kind:'event', ts, event:{type:'assistant', message:{content:[{type:'tool_use', id:'toolu_html', name:'Write', input:{file_path:'/workspace/demo.html', content:'<h1>hi</h1>\n'}}]}}},
+  {kind:'event', ts, event:{type:'user', message:{role:'user', content:[{type:'tool_result', tool_use_id:'toolu_html', content:'File created successfully at: /workspace/demo.html'}]},
+   tool_use_result:{type:'create', filePath:'/workspace/demo.html', content:'<h1>hi</h1>\n', structuredPatch:[], userModified:false}}},
+  {kind:'event', ts, event:{type:'result', subtype:'success', duration_ms:1000}}, {kind:'status', ts, state:'idle'});
  setAgent('claude');
  setHistory(entries);
  await reload();
  const turns = page.locator('#chat-log .turn');
- await until(async () => await turns.count() === 4, 'four turns rendered');
+ await until(async () => await turns.count() === 5, 'five turns rendered');
  // One line per top-level tool element, as text, to compare with the terminal.
  const lines = n => turns.nth(n).locator(':scope > .turn-body > .tool-call').evaluateAll(list => list.map(r =>
   r.classList.contains('cc-group') ? r.querySelector('.cc-gsum').textContent : r.querySelector('.cc-head').textContent));
@@ -112,6 +118,18 @@ export async function chatClaudeToolsSmoke(page, { setHistory, send, socket, set
  await slim.locator('.cc-gitems .cc-head').click();
  assert.equal(await slim.locator('.cc-pre').textContent(), 'ok 1\nok 2\nok 3\nok 4');
  assert.equal(await slim.locator('.cc-out > .cc-line').last().textContent(), '… 还有 120 行', 'lines the page left out are counted');
+ // 预览 on a written .html opens the preview window (the click has to reach the
+ // #chat-log delegate in preview.ts) and leaves the row folded.
+ const html = turns.nth(4).locator('.cc-tool[data-tool="Write"]');
+ assert.equal(await html.locator('.cc-head').textContent(), '●Write(demo.html)预览');
+ await html.locator('.cc-head [data-html-preview]').click();
+ await page.locator('#dlg-file[open]').waitFor();
+ assert.equal(await page.locator('#fv-name').textContent(), 'demo.html');
+ assert.equal(await html.locator('.cc-num').count(), 0, 'opening the preview does not unfold the row');
+ await page.locator('#fv-close').click();
+ await page.locator('#dlg-file[open]').waitFor({state:'detached'});
+ await html.locator('.cc-head').click();
+ assert.equal(await html.locator('.cc-num').textContent(), '1 <h1>hi</h1>\n', 'the rest of the row still unfolds it');
  assert.equal(await page.locator('#chat-log [data-status="running"]').count(), 0, 'nothing runs once the history is over');
  await mkdir('output/playwright', {recursive:true});
  await turns.nth(0).screenshot({path:'output/playwright/chat-claude-tools-1.png', animations:'disabled'});
