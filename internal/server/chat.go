@@ -458,7 +458,9 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 	// off. Pages from before parallel threads read the top level, which
 	// describes the active thread.
 	running := room.runningStatus()
-	status := map[string]any{"type": "status", "state": "idle", "threads": running, "max_parallel": room.maxParallelChats()}
+	// heartbeat: this server answers the page's "ping" with a "pong", so the
+	// page can tell a socket that died without a close from a quiet one.
+	status := map[string]any{"type": "status", "state": "idle", "threads": running, "max_parallel": room.maxParallelChats(), "heartbeat": 1}
 	room.fileMu.Lock()
 	active := s.activeThread(sess)
 	room.fileMu.Unlock()
@@ -513,6 +515,8 @@ func (s *Server) handleChatWS(w http.ResponseWriter, r *http.Request, sess store
 		}
 		conn.SetReadDeadline(time.Now().Add(wsPongWait))
 		switch msg.Type {
+		case "ping":
+			_ = cw.send(map[string]any{"type": "pong"})
 		case "user_message":
 			if msg.Text == "" {
 				continue

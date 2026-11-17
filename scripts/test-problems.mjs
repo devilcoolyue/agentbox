@@ -80,3 +80,47 @@ test('WS connection references survive close callbacks and retries get new refer
   t.mock.timers.tick(30000);
   assert.equal(sockets.length,2,'explicit refusal should not retry');
 });
+
+test('a chat socket that stops answering is replaced without waiting for a close', t => {
+  t.mock.timers.enable({apis:['setTimeout','setInterval','Date']});
+  const original = globalThis.WebSocket;
+  const sockets=[];
+  class Socket {
+    static OPEN=1;
+    constructor(url) {this.url=url;this.readyState=0;this.sent=[];this.closed=false;sockets.push(this);}
+    close() {this.closed=true;}
+    send(value) {this.sent.push(value);}
+    open() {this.readyState=1;this.onopen();}
+  }
+  globalThis.WebSocket=Socket;
+  t.after(()=>{globalThis.WebSocket=original;});
+  const states=[];let reconnects=0;
+  const connection=new ChatConnection({message(){},state(...value){states.push(value[0]);},reconnect(){reconnects++;}},{interval:20000,silence:45000,probe:4000});
+  t.after(()=>connection.dispose());
+  connection.connect('ws://localhost/api/sessions/fixture/chat?token=synthetic');
+  sockets[0].open();
+  // A server that never said it answers pings is never probed.
+  connection.probe();t.mock.timers.tick(60000);
+  assert.deepEqual(sockets[0].sent,[]);assert.equal(sockets.length,1);
+  connection.heartbeat(true);
+  sockets[0].onmessage({data:'{"type":"status"}'});
+  // An answered probe keeps the socket.
+  connection.probe();
+  assert.deepEqual(sockets[0].sent,['{"type":"ping"}']);
+  sockets[0].onmessage({data:'{"type":"pong"}'});
+  t.mock.timers.tick(4000);
+  assert.equal(sockets.length,1);
+  // An unanswered one replaces it at once and reloads what was missed.
+  connection.probe();t.mock.timers.tick(4000);
+  assert.deepEqual(states.slice(-2),['closed','connecting']);assert.equal(sockets[0].closed,true);
+  assert.equal(sockets.length,2);
+  sockets[0].onmessage({data:'{"type":"late"}'});sockets[0].onclose({code:1006});
+  assert.equal(sockets.length,2);
+  sockets[1].open();
+  assert.equal(reconnects,1);assert.equal(states.at(-1),'connected');
+  // Without any probe, the timer notices the silence.
+  t.mock.timers.tick(20000);t.mock.timers.tick(20000);
+  assert.equal(sockets.length,2);
+  t.mock.timers.tick(20000);t.mock.timers.tick(0);
+  assert.equal(sockets.length,3);
+});

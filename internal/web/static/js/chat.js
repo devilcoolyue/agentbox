@@ -18,7 +18,8 @@ import { setSelectValue } from "./select.js";
  * 断线在移动端切网、挂后台时很常见，而一个回合可以跑上半小时，所以断开必须
  * 可见（状态条 + 手动重连），且重连成功后要把断线期间错过的事件补回来——
  * 服务端把完整事件落盘在线程 JSONL 里，重新拉一次历史即可对齐。
- * 连接本身还兼作「唤醒」：服务端 chat WS 会幂等地拉起已休眠的容器。 */
+ * 连接断了浏览器不一定知道（睡眠、切网后仍报告在线），而消息走 HTTP 不经过它，
+ * 所以连接层自己探活（features/chat/connection.ts），不应答就换一条。 */
 import { formatProblem } from "./problems.js";
 import { ChatSender } from "./features/chat/sender.js";
 import { createChatStream } from "./features/chat/stream.js";
@@ -230,6 +231,11 @@ function backgroundThreadMsg(thread, msg) {
     }
 }
 function handleChatMsg(msg) {
+    if (msg.type === "pong")
+        return; // 探活应答：连接层已记下「刚收到过消息」
+    // 连接时的状态快照说明服务端会不会应答探活；旧服务端不会，就不做探活
+    if (msg.type === "status" && msg.threads)
+        connection.heartbeat(msg.heartbeat === 1);
     if (msg.type === "chat_limit") {
         setMaxParallelChats(msg.max_parallel);
         return;
@@ -531,8 +537,10 @@ const sender = new ChatSender({
     connect: () => { chatAttempt = 0; connectChat(); },
     validate: async () => drafts ? await drafts.validate() : true,
     deliver: async (snapshot, current) => {
+        // 消息走 HTTP，回合的画面只靠对话连接推送：发出后确认一下连接还活着
         if (outbox?.enabled) {
             await outbox.send(snapshot.input, snapshot.draft, current);
+            connection.probe();
             return;
         }
         if (snapshot.input.delivery || !connection.ready || !current())
@@ -1569,8 +1577,12 @@ export function initChat() {
     });
     outbox = initChatOutbox({
         connected: () => connection.ready,
-        changed: () => { const state = outbox?.executionState(); if (state && S.chatState !== state)
+        // 回执说任务在跑、对话连接却没告诉过本页：连接可能已经断了而浏览器不知道，探一下
+        changed: () => { const state = outbox?.executionState(); if (state && S.chatState !== state) {
+            if (state === "running")
+                connection.probe();
             setChatStatus(state);
+        }
         else
             updateHero(); syncPendingUser(); },
         move: expected => { if (draftFingerprint(composerDraft()) === draftFingerprint(expected))
@@ -1590,6 +1602,11 @@ export function initChat() {
     });
     window.matchMedia("(max-width: 760px)").addEventListener("change", updateChatPlaceholder, { signal: lifetime.signal });
     updateChatPlaceholder();
+    // 页面挂后台、电脑睡眠或切网之后，连接可能已经断了而浏览器仍报告在线：回来时探一下
+    document.addEventListener("visibilitychange", () => { if (!document.hidden)
+        connection.probe(); }, { signal: lifetime.signal });
+    window.addEventListener("online", () => connection.probe(), { signal: lifetime.signal });
+    window.addEventListener("pageshow", () => connection.probe(), { signal: lifetime.signal });
     $("chat-reconnect").addEventListener("click", () => {
         if (!S.current)
             return;

@@ -1640,6 +1640,8 @@ export interface ChatMessage extends APIProblem {
   turn?: ChatTurnMetadata;
   /** 参数校验失败，回合未提交；可由用户修改后重试。 */
   retry_text?: string;
+  /** status（连接时下发）：1 = 服务端会用 pong 应答页面的 ping，页面据此探活 */
+  heartbeat?: number;
   /** status running（连接时下发）：本回合已进行的毫秒数，页面据此续上计时 */
   elapsed_ms?: number;
   /** quota_pause：空间因 5 小时额度暂停时的状态，null 表示没有暂停 */

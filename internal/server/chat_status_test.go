@@ -159,3 +159,34 @@ func TestChatRoomTellsPagesTheWorkspaceIsStarting(t *testing.T) {
 		t.Fatalf("the next turn inherited the phase: %v", m)
 	}
 }
+
+// Messages are sent over HTTP, so a page never writes to its chat socket and
+// cannot tell a dead one from a quiet one. The server says it answers pings
+// and does, which lets the page probe.
+func TestChatSocketAnswersPings(t *testing.T) {
+	f := newAgentReceiptFixture(t, config.AgentClaude, "", false)
+	srv := httptest.NewServer(f.h)
+	defer srv.Close()
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/api/sessions/"+f.sess.ID+"/chat", http.Header{"Authorization": []string{"Bearer alice"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var m map[string]any
+	if err := conn.ReadJSON(&m); err != nil || m["type"] != "status" || m["heartbeat"] != float64(1) {
+		t.Fatalf("first message = %v, %v; want a status with heartbeat 1", m, err)
+	}
+	if err := conn.WriteJSON(map[string]any{"type": "ping"}); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		m = nil
+		if err := conn.ReadJSON(&m); err != nil {
+			t.Fatal(err)
+		}
+		if m["type"] == "pong" {
+			return
+		}
+	}
+}
