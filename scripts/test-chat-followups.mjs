@@ -75,7 +75,14 @@ async function scenario(browser,{mobile}={}){
  await page.locator('#app').waitFor({state:'visible'});
  const input=page.locator('#chat-input'),follow=page.locator('#chat-follow');
  const open=async session=>{await page.evaluate(id=>{location.hash='#/sessions/'+id+'/chat';},session);await input.waitFor({state:'visible'});await page.waitForTimeout(300);};
- const cleared=()=>page.waitForFunction(()=>document.querySelector('#chat-input').value==='');
+ // The composer empties before the PUT reaches the route, so also wait for the
+ // PUT: otherwise puts.at(-1) can still be the previous send.
+ let counted=0;
+ const cleared=async()=>{
+  await page.waitForFunction(()=>document.querySelector('#chat-input').value==='');
+  for(const end=Date.now()+5000;puts.length<=counted&&Date.now()<end;)await new Promise(r=>setTimeout(r,20));
+  assert.ok(puts.length>counted,'send did not reach the server');counted=puts.length;
+ };
  const toast=text=>page.locator('.toast',{hasText:text}).first().waitFor();
  const enter=async(mod)=>{if(mobile)await follow.click();else await input.press(mod?'Control+Enter':'Enter');};
  const noOverflow=async()=>assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'page scrolls sideways');
