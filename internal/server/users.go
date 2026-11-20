@@ -136,7 +136,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
-	if s.logins.blocked(ip) {
+	// Atomic reserve: checks lockout AND pre-counts one failure in a single
+	// critical section, closing the TOCTOU race between checking and counting
+	// that allowed concurrent requests to bypass the rate limit.
+	if !s.logins.reserve(ip) {
 		writeProblem(w, r, "login", "login_rate_limited")
 		return
 	}
@@ -149,7 +152,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		stored = u.PassHash
 	}
 	if !verifyPassword(stored, req.Password) || !ok {
-		s.logins.fail(ip)
+		// The failure was already pre-counted by reserve(); just delay.
 		time.Sleep(loginFailDelay) // 拖慢在线爆破
 		writeProblem(w, r, "login", "invalid_credentials")
 		return
@@ -164,11 +167,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !issued {
-		s.logins.fail(ip)
+		// The failure was already pre-counted by reserve(); just delay.
 		time.Sleep(loginFailDelay)
 		writeProblem(w, r, "login", "invalid_credentials")
 		return
 	}
+	// Password verified and token issued: undo the pre-counted failure.
 	s.logins.success(ip)
 	s.recordLogin(r, u.Name, store.LoginPassword)
 	writeJSON(w, http.StatusOK, map[string]string{"token": tok, "user": u.Name, "role": u.Role})
@@ -177,6 +181,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 // loginGuard throttles repeated failed logins per client key (IP). It's a
 // soft lock: after loginMaxFails failures inside loginFailWindow the key is
 // blocked for loginLockDur, then the counter resets. A correct login clears it.
+//
+// Security: the guard uses an atomic reserve-then-resolve pattern to close the
+// TOCTOU race between checking and incrementing. reserve() performs the lock
+// check AND the failure count increment in a single critical section, so
+// concurrent requests from the same IP cannot all bypass the limit before any
+// failure is counted. After the (expensive) password verification completes,
+// the caller resolves the reservation: success() clears the IP's record, while
+// a no-op lets the already-incremented count stand.
 type loginGuard struct {
 	mu      sync.Mutex
 	entries map[string]*loginFail
@@ -200,6 +212,8 @@ var loginFailDelay = 400 * time.Millisecond
 
 func newLoginGuard() *loginGuard { return &loginGuard{entries: map[string]*loginFail{}} }
 
+// blocked reports whether the key is currently locked out. Used only where
+// an early rejection with no side-effect is needed (e.g. informational).
 func (g *loginGuard) blocked(key string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -207,11 +221,23 @@ func (g *loginGuard) blocked(key string) bool {
 	return e != nil && time.Now().Before(e.lockedUntil)
 }
 
-func (g *loginGuard) fail(key string) {
+// reserve atomically checks the lockout AND counts one failure attempt in
+// a single critical section. This eliminates the TOCTOU race where
+// concurrent requests could all pass a separate blocked() check before any
+// fail() was recorded.
+//
+// Returns true if the attempt is allowed (the failure was pre-counted).
+// Returns false if the key is currently locked out (no count change).
+//
+// On success (password verified), the caller MUST call success() to undo
+// the pre-counted failure and clear the record. On failure, the
+// pre-counted attempt stands -- no separate fail() call is needed.
+func (g *loginGuard) reserve(key string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := time.Now()
-	if len(g.entries) > 4096 { // bound memory under a distributed attack
+	// Bound memory under a distributed attack.
+	if len(g.entries) > 4096 {
 		for k, e := range g.entries {
 			if now.Sub(e.seen) > loginFailWindow && now.After(e.lockedUntil) {
 				delete(g.entries, k)
@@ -219,16 +245,24 @@ func (g *loginGuard) fail(key string) {
 		}
 	}
 	e := g.entries[key]
+	// If currently locked out, reject immediately without counting.
+	if e != nil && now.Before(e.lockedUntil) {
+		return false
+	}
+	// Reset the window if the entry is stale or absent.
 	if e == nil || now.Sub(e.seen) > loginFailWindow {
 		e = &loginFail{}
 		g.entries[key] = e
 	}
+	// Pre-count this attempt as a failure. If password verification
+	// succeeds later, success() will clear the entire record.
 	e.count++
 	e.seen = now
 	if e.count >= loginMaxFails {
 		e.lockedUntil = now.Add(loginLockDur)
 		e.count = 0
 	}
+	return true
 }
 
 func (g *loginGuard) success(key string) {

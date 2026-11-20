@@ -49,6 +49,8 @@ func extensionTestServer(t *testing.T, upstream string) (*Server, store.Session)
 	if err := s.store.Put(sess); err != nil {
 		t.Fatal(err)
 	}
+	// Allow loopback upstream in tests (httptest servers use 127.0.0.1).
+	s.modelGW.validateUpstream = func(string) error { return nil }
 	if err := s.initExtensions(); err != nil {
 		t.Fatal(err)
 	}
