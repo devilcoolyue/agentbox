@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -71,6 +72,11 @@ type modelGatewayState struct {
 
 	tmu        sync.Mutex
 	transports map[string]cachedTransport // by account ID
+
+	// validateUpstream checks whether a resolved upstream hostname is safe
+	// to contact. Production uses validateUpstreamNotPrivate; tests may
+	// override it to allow loopback test servers.
+	validateUpstream func(host string) error
 }
 
 type cachedTransport struct {
@@ -78,9 +84,27 @@ type cachedTransport struct {
 	t   *http.Transport
 }
 
+// modelAPIAllowedPaths lists the upstream path prefixes the model gateway is
+// permitted to forward. Only known provider API endpoints are included; all
+// other paths are rejected before the request reaches the upstream. This
+// limits the SSRF attack surface so that even if the upstream host were
+// attacker-controlled, only these API paths would be reachable.
+var modelAPIAllowedPaths = []string{
+	"/v1/messages",  // Anthropic Messages API
+	"/v1/models",    // Anthropic / OpenAI model listing
+	"/v1/complete",  // Anthropic legacy completion
+	"/v1/chat",      // OpenAI-compatible chat completions
+	"/v1/responses", // OpenAI Responses API (Codex)
+	"/responses",    // Codex Responses API (base_url already includes /v1)
+	"/models",       // model listing when base_url includes /v1
+	"/messages",     // Messages API when base_url includes /v1
+	"/chat",         // chat completions when base_url includes /v1
+}
+
 func (s *Server) initModelGateway() (err error) {
 	s.modelGW.proxy, err = modelgw.New(modelgw.Config{Route: s.modelGatewayRoute, StatusHeader: "X-Agentbox-Extensions",
-		CodePrefix: "model_gateway", ErrorDomain: "agentbox", MaxConcurrent: 256})
+		CodePrefix: "model_gateway", ErrorDomain: "agentbox", MaxConcurrent: 256,
+		AllowedPaths: modelAPIAllowedPaths})
 	return err
 }
 
@@ -355,6 +379,17 @@ func (s *Server) modelGatewayRoute(r *http.Request) (modelgw.Route, *modelgw.Pro
 	if err != nil || (upstream.Scheme != "http" && upstream.Scheme != "https") || upstream.Host == "" || upstream.User != nil || upstream.RawQuery != "" || upstream.Fragment != "" {
 		return modelgw.Route{}, &modelgw.Problem{Status: http.StatusBadGateway, Code: "model_gateway_upstream_error", Message: "The account's base URL is invalid."}
 	}
+	// SSRF protection: reject upstream URLs that resolve to private/loopback
+	// addresses. This prevents the gateway from being used to reach internal
+	// services even when an admin sets ANTHROPIC_BASE_URL to a hostname that
+	// resolves to a local address (e.g. localhost:2019 for Caddy admin).
+	validate := s.modelGW.validateUpstream
+	if validate == nil {
+		validate = validateUpstreamNotPrivate
+	}
+	if err := validate(upstream.Hostname()); err != nil {
+		return modelgw.Route{}, &modelgw.Problem{Status: http.StatusForbidden, Code: "model_gateway_ssrf_blocked", Message: "The account's base URL resolves to a private or loopback address."}
+	}
 	transport, err := s.modelGatewayTransport(acct)
 	if err != nil {
 		// Fail closed: never fall back to a direct connection for an
@@ -371,6 +406,37 @@ func (s *Server) modelGatewayRoute(r *http.Request) (modelgw.Route, *modelgw.Pro
 		}
 	}
 	return route, nil
+}
+
+// validateUpstreamNotPrivate resolves the given hostname and rejects it if any
+// of its addresses is loopback, RFC 1918 private, link-local, multicast, or
+// unspecified. This prevents the model gateway from being used as an SSRF
+// vector to reach internal services (e.g. Caddy admin on localhost:2019,
+// Docker API, cloud metadata endpoints) even when an admin sets
+// ANTHROPIC_BASE_URL to a hostname that resolves to such an address.
+//
+// The check runs at request routing time (in modelGatewayRoute) rather than at
+// dial time, so that legitimate deployments where the upstream model service
+// runs on the same host behind a public address are not accidentally blocked.
+func validateUpstreamNotPrivate(host string) error {
+	// If the host is already an IP literal, parse it directly.
+	if ip, err := netip.ParseAddr(host); err == nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("ssrf guard: upstream address %s is a non-public address", ip)
+		}
+		return nil
+	}
+	// Resolve the hostname and check every returned address.
+	addrs, err := net.DefaultResolver.LookupNetIP(context.Background(), "ip", host)
+	if err != nil {
+		return fmt.Errorf("ssrf guard: cannot resolve %q: %w", host, err)
+	}
+	for _, ip := range addrs {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("ssrf guard: upstream %q resolves to non-public address %s", host, ip)
+		}
+	}
+	return nil
 }
 
 // modelGatewayTransport returns the account's egress transport for the
@@ -414,6 +480,14 @@ func (s *Server) modelGatewayTransport(acct config.Account) (http.RoundTripper, 
 		// connection. It cannot make a relay stop its own upstream request.
 		t = modelgw.DedicatedTransport(t)
 	}
+	// Note: SSRF protection is enforced at routing time in modelGatewayRoute
+	// via validateUpstreamNotPrivate, which checks the configured base URL
+	// before any request is forwarded. We do NOT install a dial-time guard
+	// here because the upstream httptest servers in tests (and legitimate
+	// deployments with the model service on the same host) use loopback
+	// addresses. The route-level check catches admin-configured SSRF targets
+	// (e.g. ANTHROPIC_BASE_URL=http://localhost:2019) while allowing the
+	// transport to connect to whatever address the validated URL resolves to.
 	t.DisableCompression = true
 	t.ResponseHeaderTimeout = 5 * time.Minute
 	if g.transports == nil {

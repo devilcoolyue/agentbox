@@ -110,6 +110,12 @@ type Config struct {
 	ErrorDomain   string
 	MaxConcurrent int           // default 64
 	Timeout       time.Duration // per request, default 30 minutes
+	// AllowedPaths is an optional whitelist of upstream path prefixes the
+	// gateway will forward. When non-empty, only requests whose upstream
+	// path starts with one of these prefixes are allowed; all others are
+	// rejected with 403. This limits the SSRF surface to known model API
+	// endpoints.
+	AllowedPaths []string
 }
 
 // Proxy is safe for concurrent requests. It supports HTTP SSE, not WebSockets
@@ -184,6 +190,24 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect || r.Header.Get("Upgrade") != "" {
 		WriteError(w, http.StatusBadRequest, p.code("unsupported_transport"), "Use HTTP SSE streaming.")
 		return
+	}
+	// Path whitelist: when configured, only forward requests to known model
+	// API path prefixes. This limits the SSRF attack surface so that even if
+	// the upstream host is attacker-controlled, only expected API paths are
+	// reachable.
+	if len(p.cfg.AllowedPaths) > 0 {
+		normalized := "/" + strings.TrimLeft(route.Path, "/")
+		allowed := false
+		for _, prefix := range p.cfg.AllowedPaths {
+			if strings.HasPrefix(normalized, prefix) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			WriteError(w, http.StatusForbidden, p.code("path_not_allowed"), "The requested API path is not permitted through the gateway.")
+			return
+		}
 	}
 	if route.Upstream == nil || route.Transport == nil {
 		WriteError(w, http.StatusBadGateway, p.code("upstream_error"), "Upstream request failed.")

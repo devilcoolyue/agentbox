@@ -31,7 +31,9 @@ func (s *Server) handleClientPair(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleClientPairRedeem(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
-	if s.logins.blocked(ip) {
+	// Atomic reserve: checks lockout AND pre-counts one failure in a single
+	// critical section, closing the TOCTOU race (same fix as handleLogin).
+	if !s.logins.reserve(ip) {
 		writeErr(w, http.StatusTooManyRequests, "配对尝试过于频繁，请稍后重试")
 		return
 	}
@@ -48,10 +50,11 @@ func (s *Server) handleClientPairRedeem(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !ok {
-		s.logins.fail(ip)
+		// The failure was already pre-counted by reserve(); no extra fail() needed.
 		writeErr(w, http.StatusUnauthorized, "配对码无效或已过期，请重新生成")
 		return
 	}
+	// Pairing succeeded: undo the pre-counted failure.
 	s.logins.success(ip)
 	s.recordLogin(r, user.Name, store.LoginDesktop)
 	w.Header().Set("Cache-Control", "no-store")
