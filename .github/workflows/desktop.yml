@@ -78,7 +78,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           cargo test --locked --no-run --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
-          python scripts/check-windows-imports.py src-tauri/target/${{ matrix.target }}/debug/deps --report "${{ runner.temp }}/windows-imports.json"
+          python scripts/check-windows-imports.py src-tauri/target/${{ matrix.target }}/debug --report "${{ runner.temp }}/windows-imports.json"
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
       - name: Native credential store persistence and identity isolation
         env:

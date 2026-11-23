@@ -101,7 +101,8 @@ def main():
     args = parser.parse_args()
     if sys.platform != 'win32':
         raise SystemExit('Native Windows loader required')
-    binaries = sorted(args.directory.glob('agentbox_desktop-*.exe'))
+    # Recursive: cargo 1.100 moved test executables out of deps/ into build/<package>/<hash>/out/.
+    binaries = sorted(args.directory.rglob('agentbox_desktop-*.exe'))
     if not binaries:
         raise SystemExit('No compiled native desktop test executable')
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
