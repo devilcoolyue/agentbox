@@ -203,7 +203,7 @@ func TestProblemsInvalidLoginAndRateLimit(t *testing.T) {
 	}
 	r := httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"synthetic-user","password":"synthetic-private-password"}`))
 	for i := 0; i < loginMaxFails; i++ {
-		s.logins.fail(clientIP(r))
+		s.logins.attempt(clientIP(r))
 	}
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)

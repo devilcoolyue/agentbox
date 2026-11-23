@@ -136,7 +136,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
-	if s.logins.blocked(ip) {
+	if !s.logins.attempt(ip) { // counted now; success below clears it
 		writeProblem(w, r, "login", "login_rate_limited")
 		return
 	}
@@ -149,7 +149,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		stored = u.PassHash
 	}
 	if !verifyPassword(stored, req.Password) || !ok {
-		s.logins.fail(ip)
 		time.Sleep(loginFailDelay) // 拖慢在线爆破
 		writeProblem(w, r, "login", "invalid_credentials")
 		return
@@ -164,7 +163,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !issued {
-		s.logins.fail(ip)
 		time.Sleep(loginFailDelay)
 		writeProblem(w, r, "login", "invalid_credentials")
 		return
@@ -177,6 +175,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 // loginGuard throttles repeated failed logins per client key (IP). It's a
 // soft lock: after loginMaxFails failures inside loginFailWindow the key is
 // blocked for loginLockDur, then the counter resets. A correct login clears it.
+// An attempt that ends in a server error stays counted.
 type loginGuard struct {
 	mu      sync.Mutex
 	entries map[string]*loginFail
@@ -200,14 +199,11 @@ var loginFailDelay = 400 * time.Millisecond
 
 func newLoginGuard() *loginGuard { return &loginGuard{entries: map[string]*loginFail{}} }
 
-func (g *loginGuard) blocked(key string) bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	e := g.entries[key]
-	return e != nil && time.Now().Before(e.lockedUntil)
-}
-
-func (g *loginGuard) fail(key string) {
+// attempt admits one login attempt for key and counts it as a failure up
+// front; success clears it. Checking the lock and counting in one step is what
+// keeps the limit: password verification is slow, so a concurrent burst that
+// was only counted after failing would all be admitted first.
+func (g *loginGuard) attempt(key string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := time.Now()
@@ -219,6 +215,9 @@ func (g *loginGuard) fail(key string) {
 		}
 	}
 	e := g.entries[key]
+	if e != nil && now.Before(e.lockedUntil) {
+		return false
+	}
 	if e == nil || now.Sub(e.seen) > loginFailWindow {
 		e = &loginFail{}
 		g.entries[key] = e
@@ -229,6 +228,7 @@ func (g *loginGuard) fail(key string) {
 		e.lockedUntil = now.Add(loginLockDur)
 		e.count = 0
 	}
+	return true
 }
 
 func (g *loginGuard) success(key string) {

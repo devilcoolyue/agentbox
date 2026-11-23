@@ -30,16 +30,16 @@ func (s *Server) handleClientPair(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleClientPairRedeem(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r)
-	if s.logins.blocked(ip) {
-		writeErr(w, http.StatusTooManyRequests, "配对尝试过于频繁，请稍后重试")
-		return
-	}
 	var body struct {
 		Code string `json:"code"`
 	}
 	if err := decodeClientRequest(w, r, &body); err != nil {
 		writeClientError(w, err)
+		return
+	}
+	ip := clientIP(r)
+	if !s.logins.attempt(ip) { // counted now; success below clears it
+		writeErr(w, http.StatusTooManyRequests, "配对尝试过于频繁，请稍后重试")
 		return
 	}
 	user, token, ok, err := s.redeemPairing(s.clientPairStore(), strings.TrimSpace(body.Code))
@@ -48,7 +48,6 @@ func (s *Server) handleClientPairRedeem(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !ok {
-		s.logins.fail(ip)
 		writeErr(w, http.StatusUnauthorized, "配对码无效或已过期，请重新生成")
 		return
 	}
